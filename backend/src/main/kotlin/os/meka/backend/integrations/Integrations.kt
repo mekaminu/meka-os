@@ -36,6 +36,9 @@ import os.meka.core.domain.CarCheckFields
 import os.meka.core.domain.CarCheckRules
 import os.meka.core.domain.CarFields
 import os.meka.core.domain.CarRules
+import os.meka.core.domain.MailAccountRules
+import os.meka.core.domain.MailLabel
+import os.meka.core.domain.MailProviders
 import os.meka.core.sync.EntityRef
 import os.meka.core.sync.EntitySnapshot
 import os.meka.core.sync.Hlc
@@ -89,6 +92,11 @@ class Integrations(
     private val calendar: os.meka.core.domain.LocalCalendar = os.meka.backend.LondonCalendar,
     /** The car's MOT and tax from the DVLA (car on autopilot, slice 2; off until the DVLA keys are pasted). */
     private val cars: Map<String, CarLookupProvider> = emptyMap(),
+    /**
+     * Mail accounts (Inbox autopilot, slice 1): Gmail and Outlook, each signed in through its OAuth provider's client
+     * and callback. Slice 1 connects and checks the sign-in; nothing is read, moved or sent yet.
+     */
+    private val mail: Map<String, MailProvider> = emptyMap(),
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -111,12 +119,22 @@ class Integrations(
 
     /** [editing]: Allow editing (calendar editing): the provider is asked for its write scope as well. */
     fun start(householdId: String, provider: String, editing: Boolean = false): StartResult {
+        mail[provider]?.let { m -> return startMail(householdId, m) }
         val p = providers[provider] ?: return StartResult.UnknownProvider
         val client = clients.get(provider) ?: return StartResult.NotConfigured
         val state = token(24)
         val verifier = token(48)
         store.transaction { store.saveState(state, PendingConnect(householdId, provider, verifier, now(), editing)) }
         return StartResult.Url(p.authorizeUrl(client, redirectUri(provider), state, challenge(verifier), editing))
+    }
+
+    /** A mail account's sign-in: its OAuth provider's client and callback, the mail permissions only. */
+    private fun startMail(householdId: String, m: MailProvider): StartResult {
+        val client = clients.get(m.oauth) ?: return StartResult.NotConfigured
+        val state = token(24)
+        val verifier = token(48)
+        store.transaction { store.saveState(state, PendingConnect(householdId, m.id, verifier, now())) }
+        return StartResult.Url(m.authorizeUrl(client, redirectUri(m.oauth), state, challenge(verifier)))
     }
 
     sealed class CallbackResult {
@@ -133,10 +151,13 @@ class Integrations(
         if (state.isNullOrBlank()) return CallbackResult.Failed("The sign-in link was incomplete.")
         val pending = store.transaction { store.takeState(state) }
             ?: return CallbackResult.Failed("This sign-in link has expired or was already used. Start again from MEKA OS.")
-        if (pending.provider != provider || now() - pending.createdAtMs > STATE_TTL_MS) {
+        // A mail sign-in comes back through its OAuth provider's callback (google, microsoft).
+        val mailP = mail[pending.provider]
+        if ((mailP?.oauth ?: pending.provider) != provider || now() - pending.createdAtMs > STATE_TTL_MS) {
             return CallbackResult.Failed("This sign-in link has expired. Start again from MEKA OS.")
         }
         if (error != null || code.isNullOrBlank()) return CallbackResult.Failed("Sign-in was cancelled.")
+        if (mailP != null) return mailCallback(mailP, pending, code)
         val p = providers.getValue(provider)
         val client = clients.get(provider) ?: return CallbackResult.Failed("This provider is not set up on the server yet.")
         val tokens = p.exchangeCode(client, redirectUri(provider), code, pending.codeVerifier, pending.editing)
@@ -152,8 +173,35 @@ class Integrations(
         return CallbackResult.Connected(provider, email, id, canEdit, pending.editing)
     }
 
+    /** Completes a mail sign-in: every mail permission must have been granted; the first one is labelled for Meka. */
+    private fun mailCallback(m: MailProvider, pending: PendingConnect, code: String): CallbackResult {
+        val client = clients.get(m.oauth) ?: return CallbackResult.Failed("This provider is not set up on the server yet.")
+        val tokens = m.exchangeCode(client, redirectUri(m.oauth), code, pending.codeVerifier)
+        val refresh = tokens.refreshToken ?: return CallbackResult.Failed("The provider did not grant offline access. Try connecting again.")
+        if (tokens.scope != null && m.requiredScopes.any { !grants(tokens.scope, it) }) {
+            return CallbackResult.Failed(
+                "Mail access wasn't fully allowed. Connect again and keep every permission ticked: MEKA reads and tidies your mail and sends only when you tap Send.",
+            )
+        }
+        val email = m.accountEmail(tokens.accessToken).lowercase()
+        val enc = cipher.encrypt(refresh.toByteArray(), context(pending.householdId, m.id))
+        val id = store.transaction {
+            val accountId = store.upsertAccount(pending.householdId, m.id, email, enc, false, grantedAtMs = now()) { "acc" + token(12).lowercase().filter(Char::isLetterOrDigit) }
+            if (store.account(accountId)?.label == null) {
+                val taken = store.accounts(pending.householdId).filter { MailProviders.isMail(it.provider) }.mapNotNull { MailLabel.of(it.label) }
+                store.setLabel(pending.householdId, m.id, email, MailAccountRules.defaultLabel(m.id, taken).name)
+            }
+            accountId
+        }
+        return CallbackResult.Connected(m.id, email, id)
+    }
+
     fun accounts(householdId: String): List<WireCodec.IntegrationAccount> =
-        store.accounts(householdId).map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit) }
+        store.accounts(householdId).map { WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label) }
+
+    /** Names what a mail account is for (Personal · Business · Outlook). False for an unknown account, provider or label. */
+    fun setMailLabel(householdId: String, provider: String, email: String, label: String): Boolean =
+        provider in mail && MailLabel.of(label) != null && store.transaction { store.setLabel(householdId, provider, email.lowercase(), label) }
 
     /**
      * Stop editing on one account (calendar editing): from now on the server only reads it. Giving a permission up
@@ -237,6 +285,7 @@ class Integrations(
         lines[a.provider]?.let { source -> return syncLines(a, source) }
         travel[a.provider]?.let { source -> return syncTravel(a, source) }
         cars[a.provider]?.let { source -> return syncCar(a, source) }
+        mail[a.provider]?.let { m -> return syncMail(a, m) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
         val ctx = context(a.householdId, a.provider)
@@ -252,6 +301,29 @@ class Integrations(
             val wrote = apply(a, events, from, to)
             store.transaction { store.markSynced(a.id, now()) }
             if (wrote) runCatching { onChanged(a.householdId) }
+        } catch (e: ReconnectRequired) {
+            store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
+        } catch (e: Exception) {
+            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            throw e
+        }
+    }
+
+    /**
+     * A mail account's check (slice 1): the sign-in still works and the inbox can be read (its counts only). A
+     * revoked or expired sign-in turns the account to needs_reconnect, which Mail shows with Reconnect.
+     */
+    private fun syncMail(a: AccountRow, m: MailProvider) {
+        val client = clients.get(m.oauth) ?: return
+        val ctx = context(a.householdId, a.provider)
+        try {
+            val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
+            val tokens = m.refresh(client, refresh)
+            if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
+                store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
+            }
+            m.inbox(tokens.accessToken)
+            store.transaction { store.markSynced(a.id, now()) }
         } catch (e: ReconnectRequired) {
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
         } catch (e: Exception) {

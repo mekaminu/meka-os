@@ -282,5 +282,9 @@ private struct ShellSheetsD: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showAboutYou }, set: { model.showAboutYou = $0 })) {
                 AboutYouSheet(palette: palette)
             }
+            // Mail (Inbox autopilot, slice 1): connect Gmail and Outlook, label each account.
+            .sheet(isPresented: Binding(get: { model.showMail }, set: { model.showMail = $0 })) {
+                MailSheet(palette: palette)
+            }
     }
 }

@@ -311,6 +311,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.ACTIVITY) { ActivityPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.YOUR_DATA) { YourData(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.CALENDARS) { CalendarsPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.MAIL) { os.meka.android.mail.MailPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.FAMILY) { FamilyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.WATCH) { WatchPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.RECOVERY) { RecoveryKeyPane(core, onClose = { pane = null }) }

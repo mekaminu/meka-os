@@ -45,6 +45,7 @@ final class ShellNavTests: XCTestCase {
     @MainActor
     func testMoreReachesEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         XCTAssertFalse(ShellNav.more(connected: false).contains(.calendars))
+        XCTAssertFalse(ShellNav.more(connected: false).contains(.mail))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.family))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.watch))
         XCTAssertFalse(ShellNav.more(connected: false).contains(.recovery))
@@ -65,7 +66,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(ShellNav.lifeTiles().allSatisfy { $0.symbol != nil })
         XCTAssertEqual(ShellNav.daily().map(\.label), ["Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Life admin hour", "Review"])
         XCTAssertEqual(ShellNav.settings(connected: true).map(\.label),
-                       ["About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
+                       ["About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.watch))
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.recovery))
         XCTAssertEqual(MoreItem.allCases.filter { !ShellNav.opens($0) }, [.ai])

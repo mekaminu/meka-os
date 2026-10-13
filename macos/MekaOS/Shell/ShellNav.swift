@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -97,6 +97,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .voice: "MEKA's voice"
         case .talk: "Talk"
         case .calendars: "Calendars"
+        case .mail: MailAccountRules.shared.TITLE
         case .family: "Family"
         case .watch: "Watch"
         case .recovery: "Recovery key"
@@ -142,6 +143,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .voice: "How MEKA sounds in Talk, the brief and calls"
         case .talk: "⌥Space and the mic"
         case .calendars: "Connected accounts and feeds"
+        case .mail: MailAccountRules.shared.ROW_LINE
         case .family: "Share the shopping list with Jeanette"
         case .watch: "Link your Galaxy Watch to MEKA"
         case .recovery: RecoveryKeyRules.shared.ROW_LINE
@@ -160,7 +162,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .appointments, .leave, .gifts, .trips, .errands, .emergency, .facts: .life
         case .brief, .weekAhead, .news, .shutdown, .trainQueue, .lifeAdmin, .review: .daily
-        case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
+        case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
 
@@ -240,11 +242,13 @@ enum ShellNav {
         max(-1, min(1, to.rawValue - from.rawValue))
     }
 
-    /// Everything reachable from Ask's More; Calendars, Family, Watch and Recovery key only once this device is
+    /// Everything reachable from Ask's More; Calendars, Mail, Family, Watch and Recovery key only once this device is
     /// connected (they live on the server).
     static func more(connected: Bool) -> [MoreItem] {
-        MoreItem.allCases.filter { connected || ($0 != .calendars && $0 != .family && $0 != .watch && $0 != .recovery) }
+        MoreItem.allCases.filter { connected || !serverOnly.contains($0) }
     }
+
+    private static let serverOnly: Set<MoreItem> = [.calendars, .mail, .family, .watch, .recovery]
 
     /// The Life grid's tiles, in the core's order (both apps).
     static func lifeTiles() -> [MoreItem] {

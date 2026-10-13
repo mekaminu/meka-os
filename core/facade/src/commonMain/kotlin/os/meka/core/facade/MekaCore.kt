@@ -3356,7 +3356,8 @@ class MekaCore(
         val list = try { accountsApi?.accounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         // Offline keeps what was known: the server checks again before sending anything.
         list?.let(::rememberEditing)
-        val accounts = list ?: return emptyList()
+        // Mail accounts have their own pane (Inbox autopilot); Calendars lists calendars and feeds.
+        val accounts = list?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) } ?: return emptyList()
         // Each signed-in account is titled like its main calendar, with Meka's own name for it when he gave one.
         val names = onCore { eventActions.calendarNames() }
         // Whether each account's events come through (Meka's 10:48 screenshots): every mirrored event, hidden ones too.
@@ -3368,6 +3369,23 @@ class MekaCore(
                 eventsLine = os.meka.core.domain.CalendarAccountRules.eventsLine(it.provider, it.email, it.status, it.lastSyncAtMs != null, mirrored, now),
             )
         }
+    }
+
+    // ---- Mail (Inbox autopilot, slice 1) ----
+
+    /**
+     * The Mail pane: the connected mail accounts with their labels and what's left to connect. Null when the server
+     * couldn't be reached or this device isn't connected (the pane says so; nothing changed).
+     */
+    suspend fun mailAccounts(): os.meka.core.domain.MailAccountsView? {
+        val list = try { accountsApi?.mailAccounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return list?.let { os.meka.core.domain.MailAccountRules.view(it, nowMs()) }
+    }
+
+    /** Names what a mail account is for (Personal · Business · Outlook); the accounts as they are now, or null offline. */
+    suspend fun setMailLabel(provider: String, email: String, label: os.meka.core.domain.MailLabel): os.meka.core.domain.MailAccountsView? {
+        val list = try { accountsApi?.setMailLabel(provider, email, label.name) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return list?.let { os.meka.core.domain.MailAccountRules.view(it, nowMs()) }
     }
 
     private fun rememberEditing(accounts: List<ConnectedAccount>) {
@@ -3432,7 +3450,7 @@ class MekaCore(
         val names = onCore { eventActions.calendarNames() }
         val facts = HealthServerFacts(
             server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult) },
-            accounts?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
+            accounts?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) }?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
             ai, nowMs(),
         )
         onCore { lastHealthServer = facts }

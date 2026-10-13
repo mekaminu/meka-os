@@ -382,6 +382,11 @@ interface AccountsApi {
     suspend fun accounts(): List<ConnectedAccount>
     /** Gives up editing on one account; returns the accounts as they are now. */
     suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount>
+    /** The connected mail accounts with their labels (Inbox autopilot, slice 1). */
+    suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> = emptyList()
+    /** Names what a mail account is for; returns the mail accounts as they are now. */
+    suspend fun setMailLabel(provider: String, email: String, label: String): List<os.meka.core.domain.MailAccountFacts> =
+        throw UnsupportedOperationException("mail labels need MEKA's server")
 }
 
 /**
@@ -444,6 +449,15 @@ class HttpSyncTransport(
             .map(::account)
 
     private fun account(a: WireCodec.IntegrationAccount) = ConnectedAccount(a.provider, a.email, a.status, a.lastSyncAtMs, a.canEdit)
+
+    override suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> =
+        mail(WireCodec.decodeAccounts(post("/v1/integrations/list", "")))
+
+    override suspend fun setMailLabel(provider: String, email: String, label: String): List<os.meka.core.domain.MailAccountFacts> =
+        mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/label", WireCodec.encodeMailLabelChange(WireCodec.MailLabelChange(email, label)))))
+
+    private fun mail(list: List<WireCodec.IntegrationAccount>) = list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }
+        .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, it.label) }
 
     override suspend fun latestRelease(platform: String): AppRelease? {
         prepare() // release routes require the device's signing key on the server

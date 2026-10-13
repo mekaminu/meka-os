@@ -32,6 +32,9 @@ import os.meka.backend.integrations.NewsImages
 import os.meka.backend.integrations.PostgresNewsImageStore
 import os.meka.backend.integrations.EspnTeamFixtures
 import os.meka.backend.integrations.GoogleCalendar
+import os.meka.backend.integrations.GmailMail
+import os.meka.backend.integrations.OutlookMail
+import os.meka.core.domain.MailProviders
 import os.meka.backend.integrations.GovUkBankHolidays
 import os.meka.backend.integrations.HereWeather
 import os.meka.backend.integrations.TflLineStatus
@@ -374,6 +377,17 @@ fun Application.mekaSync(
                     if (!found) call.respondText("no such account", status = HttpStatusCode.NotFound)
                     else call.respondText(WireCodec.encodeAccounts(withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }), ContentType.Application.Json)
                 }
+            }
+
+            // Names what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook.
+            post("/v1/integrations/{provider}/label") {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val change = WireCodec.decodeMailLabelChange(body)
+                val provider = call.parameters["provider"].orEmpty()
+                val found = withContext(Dispatchers.IO) { integrations.setMailLabel(who.householdId, provider, change.email, change.label) }
+                if (!found) call.respondText("no such mail account", status = HttpStatusCode.NotFound)
+                else call.respondText(WireCodec.encodeAccounts(withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }), ContentType.Application.Json)
             }
 
             post("/v1/integrations/list") {
@@ -787,13 +801,15 @@ private const val PRIVACY_TEXT =
 internal fun connectedText(r: Integrations.CallbackResult.Connected): String {
     val who = "${providerName(r.provider)} (${r.email})"
     return when {
+        MailProviders.isMail(r.provider) ->
+            "$who is connected. MEKA reads and tidies it once sorting arrives in an update, and sends only when you tap Send. You can close this page."
         r.canEdit -> "$who is connected, and MEKA OS may now add and change events in it when you do so in the app. You can close this page."
         r.editingAsked -> "$who is connected, but read-only: editing wasn't allowed. To allow it, tap Allow editing again and keep the calendar permission ticked. You can close this page."
         else -> "$who is connected. Your calendar will appear in MEKA OS within a minute. You can close this page."
     }
 }
 
-private fun providerName(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Microsoft"; else -> p }
+private fun providerName(p: String) = when (p) { "google" -> "Google"; "microsoft" -> "Microsoft"; else -> MailProviders.name(p) }
 
 private fun html(s: String) = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
 
@@ -1013,6 +1029,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         // Car on autopilot, slice 2: off (and nothing sent) until Meka pastes the DVLA keys into the secret.
         cars = System.getenv("MEKA_CAR_DVLA_SECRET")?.takeIf { it.isNotBlank() }
             ?.let { listOf(DvlaCarLookup.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),
+        // Inbox autopilot, slice 1: mail signs in with the same Google and Microsoft OAuth clients as the calendars.
+        mail = listOf(GmailMail(), OutlookMail()).associateBy { it.id },
     )
 }
 
@@ -1113,7 +1131,7 @@ object Migrations {
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
         11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
         14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql", 16 to "/db/V16__recovery_key.sql",
-        17 to "/db/V17__fold_posture.sql", 18 to "/db/V18__notify_report.sql",
+        17 to "/db/V17__fold_posture.sql", 18 to "/db/V18__notify_report.sql", 19 to "/db/V19__mail_account_label.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

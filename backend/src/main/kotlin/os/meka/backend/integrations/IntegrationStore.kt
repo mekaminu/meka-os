@@ -29,6 +29,8 @@ data class AccountRow(
     val canEdit: Boolean = false,
     /** When the owner last signed in (Reliability first, item 2); null for accounts signed in before it was recorded. */
     val grantedAtMs: Long? = null,
+    /** A mail account's label (Inbox autopilot, slice 1: a `MailLabel` name); null elsewhere. */
+    val label: String? = null,
 )
 
 /** What the server last wrote for one mirrored event: per field, the op id and an encoded value. */
@@ -62,6 +64,8 @@ interface IntegrationStore {
     ): String
     /** Stop editing: the account goes back to read-only. Returns false when there's no such account. */
     fun stopEditing(householdId: String, provider: String, email: String): Boolean
+    /** Names what a mail account is for. Returns false when there's no such account. */
+    fun setLabel(householdId: String, provider: String, email: String, label: String): Boolean
     fun account(id: String): AccountRow?
     fun accounts(householdId: String): List<AccountRow>
     fun syncableAccounts(): List<AccountRow>
@@ -97,12 +101,17 @@ class InMemoryIntegrationStore(private val knownHouseholds: List<String> = empty
     @Synchronized override fun upsertAccount(householdId: String, provider: String, email: String, refreshTokenEnc: ByteArray, canEdit: Boolean, grantedAtMs: Long?, newId: () -> String): String {
         val existing = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email }
         val id = existing?.id ?: newId()
-        accounts[id] = AccountRow(id, householdId, provider, email, refreshTokenEnc, "ok", existing?.lastSyncAtMs, canEdit, grantedAtMs ?: existing?.grantedAtMs)
+        accounts[id] = AccountRow(id, householdId, provider, email, refreshTokenEnc, "ok", existing?.lastSyncAtMs, canEdit, grantedAtMs ?: existing?.grantedAtMs, existing?.label)
         return id
     }
     @Synchronized override fun stopEditing(householdId: String, provider: String, email: String): Boolean {
         val a = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email } ?: return false
         accounts[a.id] = a.copy(canEdit = false)
+        return true
+    }
+    @Synchronized override fun setLabel(householdId: String, provider: String, email: String, label: String): Boolean {
+        val a = accounts.values.firstOrNull { it.householdId == householdId && it.provider == provider && it.email == email } ?: return false
+        accounts[a.id] = a.copy(label = label)
         return true
     }
     @Synchronized override fun account(id: String) = accounts[id]
@@ -158,13 +167,13 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     }
 
     private fun query(sql: String, vararg args: String): List<AccountRow> = c { c ->
-        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit, granted_at FROM integration_account $sql").use { st ->
+        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit, granted_at, label FROM integration_account $sql").use { st ->
             args.forEachIndexed { i, a -> st.setString(i + 1, a) }
             st.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) add(AccountRow(
                         rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getBytes(5), rs.getString(6),
-                        rs.getTimestamp(7)?.time, rs.getBoolean(8), rs.getTimestamp(9)?.time,
+                        rs.getTimestamp(7)?.time, rs.getBoolean(8), rs.getTimestamp(9)?.time, rs.getString(10),
                     ))
                 }
             }
@@ -192,6 +201,13 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     override fun stopEditing(householdId: String, provider: String, email: String): Boolean = c { c ->
         c.prepareStatement("UPDATE integration_account SET can_edit = false, updated_at = now() WHERE household_id = ? AND provider = ? AND email = ?").use {
             it.setString(1, householdId); it.setString(2, provider); it.setString(3, email)
+            it.executeUpdate() > 0
+        }
+    }
+
+    override fun setLabel(householdId: String, provider: String, email: String, label: String): Boolean = c { c ->
+        c.prepareStatement("UPDATE integration_account SET label = ?, updated_at = now() WHERE household_id = ? AND provider = ? AND email = ?").use {
+            it.setString(1, label); it.setString(2, householdId); it.setString(3, provider); it.setString(4, email)
             it.executeUpdate() > 0
         }
     }

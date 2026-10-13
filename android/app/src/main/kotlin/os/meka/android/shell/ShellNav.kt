@@ -84,6 +84,7 @@ enum class MoreItem(
     VOICE("MEKA's voice", "How MEKA sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
     TALK("Talk", "The side button and your headphones", null, MoreGroup.SETTINGS),
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
+    MAIL(os.meka.core.domain.MailAccountRules.TITLE, os.meka.core.domain.MailAccountRules.ROW_LINE, null, MoreGroup.SETTINGS),
     FAMILY("Family", "Share the shopping list with Jeanette", null, MoreGroup.SETTINGS),
     WATCH("Watch", "Link your Galaxy Watch to MEKA", null, MoreGroup.SETTINGS),
     RECOVERY("Recovery key", os.meka.core.domain.RecoveryKeyRules.ROW_LINE, null, MoreGroup.SETTINGS),
@@ -123,10 +124,12 @@ object ShellNav {
 
     /**
      * Everything reachable from Ask's More (the tiles, Daily, the Settings row and what's in the Settings pane);
-     * Calendars, Family, Watch and Recovery key only once this device is connected (they live on MEKA's server).
+     * Calendars, Mail, Family, Watch and Recovery key only once this device is connected (they live on MEKA's server).
      */
     fun more(connected: Boolean): List<MoreItem> =
-        MoreItem.entries.filter { connected || (it != MoreItem.CALENDARS && it != MoreItem.FAMILY && it != MoreItem.WATCH && it != MoreItem.RECOVERY) }
+        MoreItem.entries.filter { connected || it !in SERVER_ONLY }
+
+    private val SERVER_ONLY = setOf(MoreItem.CALENDARS, MoreItem.MAIL, MoreItem.FAMILY, MoreItem.WATCH, MoreItem.RECOVERY)
 
     /** The Life grid's tiles, in the core's order (both apps). */
     fun lifeTiles(): List<MoreItem> =

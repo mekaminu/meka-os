@@ -2690,4 +2690,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(shown.localOk?.boolValue, true)
         XCTAssertEqual(MacNotifyRules.shared.TEST_TITLE, "MEKA test · from this Mac")
     }
+
+    func testMailAccountsReachSwift() async throws {
+        // Inbox autopilot, slice 1: the Mail sheet's rows and label chips come from the core; an unconnected core has
+        // no server to ask, so Mail says it couldn't reach it (nil).
+        let rules = MailAccountRules.shared
+        let v = rules.view(accounts: [
+            MailAccountFacts(provider: "gmail", email: "shop@example.com", status: "ok", lastSyncAtMs: nil, label: "BUSINESS"),
+            MailAccountFacts(provider: "gmail", email: "alex@example.com", status: "needs_reconnect", lastSyncAtMs: nil, label: nil),
+        ], nowMs: 0)
+        XCTAssertEqual(v.rows.map(\.title), ["Personal · Gmail", "Business · Gmail"])
+        XCTAssertTrue(v.rows[0].needsReconnect)
+        XCTAssertEqual(v.toConnect, "Still to connect: Outlook")
+        XCTAssertEqual(rules.LABELS.map(\.label), ["Personal", "Business", "Outlook"])
+        XCTAssertEqual(v.connects.map(\.label), ["Connect Gmail", "Connect Outlook"])
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "mail-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let mail = try await core.mailAccounts()
+        XCTAssertNil(mail)
+    }
 }

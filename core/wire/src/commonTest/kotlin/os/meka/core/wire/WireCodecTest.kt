@@ -76,11 +76,22 @@ class WireCodecTest {
             WireCodec.IntegrationAccount("google", "me@gmail.com", "ok", 1_790_000_000_000L),
             WireCodec.IntegrationAccount("microsoft", "me@outlook.com", "needs_reconnect", null),
             WireCodec.IntegrationAccount("google", "work@gmail.com", "ok", null, canEdit = true),
+            WireCodec.IntegrationAccount("gmail", "shop@example.com", "ok", null, label = "BUSINESS"),
         )
         assertEquals(accounts, WireCodec.decodeAccounts(WireCodec.encodeAccounts(accounts)))
         // An older server's list (no "edit") reads as read-only.
         assertEquals(false, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"google","email":"a@b.c","status":"ok"}]}""").single().canEdit)
         assertEquals("https://accounts.example/x?y=1", WireCodec.decodeConnectUrl(WireCodec.encodeConnectUrl("https://accounts.example/x?y=1")))
+    }
+
+    @Test
+    fun mailLabelChangesRoundTripAndOnlyLabelShapedNamesPass() {
+        val c = WireCodec.MailLabelChange("alex@example.com", "BUSINESS")
+        assertEquals(c, WireCodec.decodeMailLabelChange(WireCodec.encodeMailLabelChange(c)))
+        assertFailsWith<WireFormatException> { WireCodec.decodeMailLabelChange(WireCodec.encodeMailLabelChange(c.copy(label = "<b>"))) }
+        assertFailsWith<WireFormatException> { WireCodec.decodeMailLabelChange(WireCodec.encodeMailLabelChange(c.copy(email = "x"))) }
+        // An older server's list has no label.
+        assertEquals(null, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"gmail","email":"a@b.c","status":"ok"}]}""").single().label)
     }
 
     @Test

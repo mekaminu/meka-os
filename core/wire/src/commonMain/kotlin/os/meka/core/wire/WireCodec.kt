@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -146,7 +147,19 @@ object WireCodec {
         val provider: String, val email: String, val status: String, val lastSyncAtMs: Long?,
         /** The owner allowed MEKA to add and change events in this account (calendar editing). Additive: absent = false. */
         val canEdit: Boolean = false,
+        /** A mail account's label (Inbox autopilot, slice 1: a `MailLabel` name). Additive: absent = none set. */
+        val label: String? = null,
     )
+
+    /** Naming what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook. */
+    data class MailLabelChange(val email: String, val label: String)
+    fun encodeMailLabelChange(c: MailLabelChange): String = doc { put("email", c.email); put("label", c.label) }
+    fun decodeMailLabelChange(s: String): MailLabelChange = parse(s) { o ->
+        MailLabelChange(
+            o.str("email").also { if (it.length !in 3..320) throw WireFormatException("unexpected email") },
+            o.str("label").also { if (it.length !in 1..20 || !it.all { c -> c in 'A'..'Z' || c == '_' }) throw WireFormatException("unexpected label") },
+        )
+    }
 
     /**
      * Starting a connection (calendar editing): [editing] asks the provider for permission to change events as well as
@@ -179,6 +192,7 @@ object WireCodec {
                 put("provider", a.provider); put("email", a.email); put("status", a.status)
                 a.lastSyncAtMs?.let { put("lastSync", it) }
                 if (a.canEdit) put("edit", true)
+                a.label?.let { put("label", it) }
             }
         }))
     }
@@ -189,6 +203,7 @@ object WireCodec {
             IntegrationAccount(
                 a.str("provider"), a.str("email"), a.str("status"), a["lastSync"]?.jsonPrimitive?.long,
                 canEdit = a["edit"]?.jsonPrimitive?.booleanOrNull ?: false,
+                label = a["label"]?.jsonPrimitive?.contentOrNull,
             )
         }
     }

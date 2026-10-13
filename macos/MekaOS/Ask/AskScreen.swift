@@ -172,6 +172,7 @@ struct AskScreen: View {
         case .activity: model.showActivity = true
         case .yourData: model.showYourData = true
         case .calendars: model.showCalendars = true
+        case .mail: model.showMail = true
         case .family: model.showFamily = true
         case .watch: model.showWatch = true
         case .recovery: model.showRecovery = true

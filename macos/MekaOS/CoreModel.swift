@@ -295,6 +295,15 @@ final class CoreModel {
     private(set) var isConnected = false
     var showConnect = false
     var showCalendars = false
+    /// Ask → More → Settings → Mail (Inbox autopilot, slice 1): connect Gmail and Outlook, label each account.
+    var showMail = false
+    /// The mail accounts as the server last listed them; nil until read once (or when it couldn't be reached).
+    private(set) var mail: MailAccountsView?
+    /// The server couldn't be reached the last time Mail asked.
+    private(set) var mailOffline = false
+    /// A quiet line under the accounts (what the provider will ask, or the new label).
+    var mailNote: String?
+    var mailMessage: String?
     /// Ask → More → Family (family sharing slice 4): Jeanette's link to the shopping list.
     var showFamily = false
     /// Who can use the shopping list and each link's state, as the server last listed them; nil until read once.
@@ -894,6 +903,49 @@ final class CoreModel {
             calendarsNote = CalendarAccessRules.shared.stoppedLine(provider: provider)
         } else {
             calendarsMessage = "Couldn't reach your server. Editing is still on; try again."
+        }
+    }
+
+    // MARK: Mail (Inbox autopilot, slice 1)
+
+    func loadMail() async {
+        guard let core else { return }
+        let view = try? await core.mailAccounts()
+        mailOffline = view == nil
+        if let view { mail = view }
+    }
+
+    /// Opens Google's or Microsoft's sign-in page in the default browser; the server finishes the connection.
+    func connectMail(_ provider: String, note: String) async {
+        guard let core else { return }
+        MekaHaptics.light()
+        mailMessage = nil
+        mailNote = note
+        do {
+            switch onEnum(of: try await core.startConnect(provider: provider)) {
+            case .openBrowser(let o):
+                if let url = URL(string: o.url) { NSWorkspace.shared.open(url) }
+            case .notSetUp:
+                mailMessage = "Mail isn't set up on your server yet. Finish the registration steps, then try again."
+            case .failed(let f):
+                mailMessage = f.reason
+            }
+        } catch {
+            mailMessage = error.localizedDescription
+        }
+    }
+
+    /// Names what an account is for (Personal · Business · Outlook); only Strings and the label cross to the core.
+    func setMailLabel(provider: String, email: String, label: MailLabel) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        if let now = try? await core.setMailLabel(provider: provider, email: email, label: label) {
+            mail = now
+            mailOffline = false
+            mailNote = MailAccountRules.shared.labelledLine(label: label)
+        } else {
+            mailMessage = MailAccountRules.shared.OFFLINE
         }
     }
 

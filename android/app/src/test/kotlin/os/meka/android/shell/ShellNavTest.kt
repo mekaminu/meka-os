@@ -54,6 +54,7 @@ class ShellNavTest {
     @Test
     fun moreReachesEveryPlaceAndPaneCalendarsOnlyOnceConnected() {
         assertFalse(MoreItem.CALENDARS in ShellNav.more(connected = false))
+        assertFalse(MoreItem.MAIL in ShellNav.more(connected = false))
         assertFalse(MoreItem.FAMILY in ShellNav.more(connected = false))
         assertFalse(MoreItem.WATCH in ShellNav.more(connected = false))
         // Every place behind Ask is reachable from More.
@@ -78,7 +79,7 @@ class ShellNavTest {
             ShellNav.daily().map { it.label },
         )
         assertEquals(
-            listOf("About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
+            listOf("About you", "Work mode", "Protected time", "Notifications", "Appearance", "MEKA's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What MEKA may do", "MEKA's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
             ShellNav.settings(connected = true).map { it.label },
         )
         assertFalse(MoreItem.WATCH in ShellNav.settings(connected = false))

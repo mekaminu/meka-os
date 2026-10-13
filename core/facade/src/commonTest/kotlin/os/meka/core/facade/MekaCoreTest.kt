@@ -1431,6 +1431,53 @@ class MekaCoreTest {
         assertNull(accounts[1].eventsLine)
     }
 
+    /** The server's list with mail accounts in it (Inbox autopilot, slice 1). */
+    private inner class MailTransport(
+        var list: List<ConnectedAccount>,
+        var labels: MutableMap<String, String?>,
+        private val inner: FaultyTransport = FaultyTransport(service),
+    ) : SyncTransport by inner, AccountsApi {
+        var offline = false
+        override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart = ConnectStart.NotSetUp
+        override suspend fun accounts(): List<ConnectedAccount> { if (offline) error("offline"); return list }
+        override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> = list
+        override suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> {
+            if (offline) error("offline")
+            return list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }
+                .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, labels[it.email]) }
+        }
+        override suspend fun setMailLabel(provider: String, email: String, label: String): List<os.meka.core.domain.MailAccountFacts> {
+            labels[email] = label
+            return mailAccounts()
+        }
+    }
+
+    @Test
+    fun mailAccountsHaveTheirOwnPaneWithLabelsAndStayOutOfCalendars() = runTest {
+        val server = MailTransport(
+            listOf(
+                ConnectedAccount("google", "alex@example.com", "ok", null),
+                ConnectedAccount("gmail", "alex@example.com", "ok", null),
+                ConnectedAccount("gmail", "shop@example.com", "ok", null),
+                ConnectedAccount("outlook_mail", "alex@example.net", "needs_reconnect", null),
+            ),
+            mutableMapOf("alex@example.com" to "PERSONAL", "shop@example.com" to null, "alex@example.net" to "OUTLOOK"),
+        )
+        val fold = core("android", server)
+        // Calendars: the Google Calendar account only.
+        assertEquals(listOf("google"), fold.connectedAccounts().map { it.provider })
+        val mail = assertNotNull(fold.mailAccounts())
+        assertEquals(listOf("Personal · Gmail", "Business · Gmail", "Outlook · Outlook"), mail.rows.map { it.title })
+        assertTrue(mail.rows[2].needsReconnect)
+        // Meka relabels the business Gmail; the server keeps it.
+        val after = assertNotNull(fold.setMailLabel("gmail", "shop@example.com", os.meka.core.domain.MailLabel.BUSINESS))
+        assertEquals("BUSINESS", server.labels["shop@example.com"])
+        assertEquals(os.meka.core.domain.MailLabel.BUSINESS, after.rows.first { it.email == "shop@example.com" }.label)
+        // Offline: null, so the pane says it couldn't reach the server.
+        server.offline = true
+        assertNull(fold.mailAccounts())
+    }
+
     @Test
     fun calendarsSaysWhenAnAccountHasNoEventsComingThrough() = runTest {
         // Meka's 10:48 screenshots, 2026-10-09: Hotmail connected, nothing of it showing.
