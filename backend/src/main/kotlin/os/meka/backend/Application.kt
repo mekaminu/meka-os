@@ -44,6 +44,7 @@ import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
 import os.meka.backend.integrations.MicrosoftCalendar
 import os.meka.backend.integrations.PostgresIntegrationStore
+import os.meka.backend.integrations.PostgresMailStore
 import os.meka.backend.integrations.SecretsManagerOAuthClients
 import io.ktor.server.routing.post
 import io.ktor.server.routing.routing
@@ -1042,6 +1043,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
             ?.let { listOf(DvlaCarLookup.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),
         // Inbox autopilot, slice 1: mail signs in with the same Google and Microsoft OAuth clients as the calendars.
         mail = listOf(GmailMail(), OutlookMail()).associateBy { it.id },
+        // Slice 1c: the last 60 days' headers per mail account (never a body).
+        mailStore = PostgresMailStore(opStore),
     )
 }
 
@@ -1143,6 +1146,7 @@ object Migrations {
         11 to "/db/V11__speech_usage.sql", 12 to "/db/V12__sign_ins.sql", 13 to "/db/V13__family_invite.sql",
         14 to "/db/V14__ai_usage_day.sql", 15 to "/db/V15__app_update_failure.sql", 16 to "/db/V16__recovery_key.sql",
         17 to "/db/V17__fold_posture.sql", 18 to "/db/V18__notify_report.sql", 19 to "/db/V19__mail_account_label.sql",
+        20 to "/db/V20__mail_message.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

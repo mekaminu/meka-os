@@ -284,8 +284,9 @@ object ReleasePublisherCli {
                 "publisher-notifications" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Notifications::couldn't read them (${it.message?.take(120)})"); return@runBlocking 0 }
-                    notificationLines(l).forEach(::println)
+                    // About you first: GitHub keeps only a step's first 10 notices, and the trace alone fills them.
                     println(aboutYouLine(l))
+                    notificationLines(l).forEach(::println)
                     0
                 }
                 else -> {

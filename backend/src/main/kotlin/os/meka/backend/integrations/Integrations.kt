@@ -97,6 +97,8 @@ class Integrations(
      * and callback. Slice 1 connects and checks the sign-in; nothing is read, moved or sent yet.
      */
     private val mail: Map<String, MailProvider> = emptyMap(),
+    /** Slice 1c: each mail account's headers (last 60 days), kept current from the provider's change feed; null skips it. */
+    private val mailStore: MailStore? = null,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -218,6 +220,8 @@ class Integrations(
             m.revoke(refresh)
         }
         val done = store.transaction { store.disconnect(householdId, provider, a.email) }
+        // Slice 1c: the headers MEKA kept for it go too; signing in again lists the mail afresh.
+        if (done) runCatching { mailStore?.forget(a.id) }
         if (done) {
             store.account(a.id)?.let { runCatching { if (applySignIn(it)) onChanged(householdId) } }
         }
@@ -345,6 +349,7 @@ class Integrations(
                 store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
             }
             m.inbox(tokens.accessToken)
+            mailStore?.let { syncHeaders(a, m, tokens.accessToken, it) }
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: ReconnectRequired) {
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
@@ -352,6 +357,27 @@ class Integrations(
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
         }
+    }
+
+    /**
+     * Slice 1c: the account's change feed since the stored cursor (from scratch: the last [MAIL_WINDOW_MS]), then up to
+     * [HEADERS_PER_CHECK] pending headers read, then anything older than the window dropped. A cursor the provider has
+     * forgotten starts the account again. Headers only; nothing in the mailbox changes.
+     */
+    private fun syncHeaders(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val since = now() - MAIL_WINDOW_MS
+        val changes = try {
+            m.changes(token, ms.cursor(a.id), since)
+        } catch (e: MailCursorExpired) {
+            ms.forget(a.id)
+            m.changes(token, null, since)
+        }
+        ms.apply(a.householdId, a.id, changes)
+        for (id in ms.pending(a.id, HEADERS_PER_CHECK)) {
+            val h = m.header(token, id)
+            if (h == null) ms.remove(a.id, id) else ms.put(a.householdId, a.id, h)
+        }
+        ms.prune(a.id, since)
     }
 
     /**
@@ -892,6 +918,10 @@ class Integrations(
         const val SERVER_DEVICE = "server"
         const val STATE_TTL_MS = 15 * 60_000L
         const val WINDOW_BACK_MS = 24 * 3_600_000L
+        /** Inbox autopilot, slice 1c: the mail MEKA keeps headers for (Meka: the last 60 days). */
+        const val MAIL_WINDOW_MS = 60 * 24 * 3_600_000L
+        /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */
+        const val HEADERS_PER_CHECK = 300
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
         private const val MAX_TEXT = 500
         private const val MAX_NOTES = 2_000
