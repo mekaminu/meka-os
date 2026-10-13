@@ -92,7 +92,7 @@ class CollapsingHeaderTest {
 
     /** The face as drawn (bounds through its scale layer). */
     private fun faceWidthDp(): Float =
-        compose.onNodeWithTag(WATCH_FACE_TAG, useUnmergedTree = true).getBoundsInRoot().width.value
+        compose.onNodeWithTag(WATCH_FACE_TAG, useUnmergedTree = true).getBoundsInRoot().let { (it.right - it.left).value }
 
     @Test
     fun atRestTheFaceIsFullSizeAndThereIsNoBar() {
@@ -109,7 +109,8 @@ class CollapsingHeaderTest {
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         val bar = compose.onNodeWithTag(COMPACT_HEADER_TAG, useUnmergedTree = true).assertIsDisplayed().getUnclippedBoundsInRoot()
         // The header at rest is taller than the compact bar.
-        assertTrue("bar ${bar.height} is slim", bar.height.value < WatchFaceRules.COVER_DP + 24f)
+        val barHeight = (bar.bottom - bar.top).value
+        assertTrue("bar $barHeight is slim", barHeight < WatchFaceRules.COVER_DP + 24f)
         assertEquals(HeaderCollapseRules.COMPACT_DP.toFloat(), faceWidthDp(), 1.5f)
         // The clock is still drawn (and live) a second later.
         compose.mainClock.advanceTimeBy(1_000L)
