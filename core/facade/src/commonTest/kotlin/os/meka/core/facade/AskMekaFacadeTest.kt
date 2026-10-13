@@ -81,8 +81,9 @@ class AskMekaFacadeTest {
         assertEquals("Move the dentist to tomorrow morning", q)
         assertEquals("2026-10-08", ctx.dateIso)
         assertTrue(ctx.nowLine.endsWith("· 17:15"), ctx.nowLine)
-        // The task, and protected time's one "off" line (sent with every question, so "no" is an answer too).
-        assertEquals(listOf(AskItemKind.TASK, AskItemKind.PROTECTED), ctx.items.map { it.kind })
+        // The task, the commute's lines (an office day today and tomorrow, and the wake alarm) and protected time's one
+        // "off" line (both sent with every question, so "no" is an answer too).
+        assertEquals(listOf(AskItemKind.TASK) + List(4) { AskItemKind.COMMUTE } + AskItemKind.PROTECTED, ctx.items.map { it.kind })
         assertEquals("t1", ctx.items.first().ref)
         assertFalse(id in ctx.items.first().line)
 
