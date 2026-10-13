@@ -28,6 +28,7 @@ object NotifyDiagnosticsCodec {
     const val LATEST_PATH = "/v1/diagnostics/notifications/latest"
     const val TEST_PATH = "/v1/push/test"
     const val TRACE_MAX = 40
+    const val CALLS_MAX = 20
     const val CHANNELS_MAX = 24
     const val DETAIL_MAX = 120
     const val NAME_MAX = 40
@@ -56,7 +57,16 @@ object NotifyDiagnosticsCodec {
         val channels: List<Channel>,
         /** Newest first. */
         val trace: List<Entry>,
+        /** Spam calls still ring, slice 2: the phone's call screening; null from phones before it. */
+        val calls: Calls? = null,
     )
+
+    /**
+     * The call-screening diagnosis (spam calls still ring, slice 2): whether Navilife holds the Caller ID & spam role,
+     * the spam switch, whether it may read contacts and the call log, and the last [CALLS_MAX] screened calls (newest
+     * first; kind = the verdict, detail = a salted tag, never the number, and the reason).
+     */
+    data class Calls(val roleHeld: Boolean, val protection: Boolean, val lookups: Boolean, val screened: List<Entry>)
 
     /** The newest report and what the server knows of its last push to the device that sent it. */
     /**
@@ -145,6 +155,30 @@ object NotifyDiagnosticsCodec {
                 add(buildJsonObject { put("at", e.atMs); put("kind", clean(e.kind, 12)); put("detail", clean(e.detail, DETAIL_MAX)) })
             }
         })
+        r.calls?.let { c ->
+            put("calls", buildJsonObject {
+                put("role", c.roleHeld); put("protection", c.protection); put("lookups", c.lookups)
+                put("screened", buildJsonArray {
+                    c.screened.take(CALLS_MAX).forEach { e ->
+                        add(buildJsonObject { put("at", e.atMs); put("kind", clean(e.kind, 12)); put("detail", clean(e.detail, DETAIL_MAX)) })
+                    }
+                })
+            })
+        }
+    }
+
+    private fun entries(a: JsonArray?, max: Int): List<Entry> = (a ?: JsonArray(emptyList())).mapNotNull { e ->
+        val t = e as? JsonObject ?: return@mapNotNull null
+        val at = t.long("at")?.takeIf { it > 0 } ?: return@mapNotNull null
+        val kind = t.str("kind")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        Entry(at, clean(kind, 12), clean(t.str("detail").orEmpty(), DETAIL_MAX))
+    }.take(max)
+
+    private fun calls(o: JsonObject?): Calls? {
+        o ?: return null
+        fun flag(k: String) = (o[k] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
+        val role = flag("role") ?: return null
+        return Calls(role, flag("protection") ?: true, flag("lookups") ?: false, entries(o["screened"] as? JsonArray, CALLS_MAX))
     }
 
     private fun report(o: JsonObject): Report {
@@ -156,13 +190,11 @@ object NotifyDiagnosticsCodec {
             val on = (c["on"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull ?: return@mapNotNull null
             Channel(clean(id, NAME_MAX), clean(c.str("name") ?: id, NAME_MAX), on, c.long("last")?.takeIf { it > 0 })
         }.take(CHANNELS_MAX)
-        val trace = (o["trace"] as? JsonArray ?: throw IllegalArgumentException("trace")).mapNotNull { e ->
-            val t = e as? JsonObject ?: return@mapNotNull null
-            val at = t.long("at")?.takeIf { it > 0 } ?: return@mapNotNull null
-            val kind = t.str("kind")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-            Entry(at, clean(kind, 12), clean(t.str("detail").orEmpty(), DETAIL_MAX))
-        }.take(TRACE_MAX)
-        return Report(o.str("model")?.let { clean(it, MODEL_MAX) }?.takeIf { it.isNotBlank() }, sent, allowed, clean(o.str("phone") ?: "ALL", 12), channels, trace)
+        val trace = entries(o["trace"] as? JsonArray ?: throw IllegalArgumentException("trace"), TRACE_MAX)
+        return Report(
+            o.str("model")?.let { clean(it, MODEL_MAX) }?.takeIf { it.isNotBlank() }, sent, allowed, clean(o.str("phone") ?: "ALL", 12), channels, trace,
+            calls(o["calls"] as? JsonObject),
+        )
     }
 
     private fun JsonObject.str(k: String): String? = (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content

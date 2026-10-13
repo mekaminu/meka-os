@@ -61,6 +61,22 @@ class NotifyDiagnosticsFacadeTest {
     }
 
     @Test
+    fun theCallScreeningRidesAlongAndIsReasonEnoughToSend() = runTest {
+        val calls = os.meka.core.domain.CallScreenReport(
+            roleHeld = true, protection = true, lookups = false,
+            calls = List(25) { os.meka.core.domain.ScreenedCallEntry(now - 60_000L * (it + 1), "RING", "#00000$it · Call assistant off") },
+        )
+        assertTrue(core(api = true).reportNotifyTrace("SM-F000X", health.copy(trace = emptyList()), "ALL", calls))
+        val c = sent.single().calls!!
+        assertTrue(c.roleHeld)
+        assertFalse(c.lookups)
+        assertEquals(NotifyDiagnosticsCodec.CALLS_MAX, c.screened.size)
+        assertEquals(NotifyDiagnosticsCodec.Entry(now - 60_000, "RING", "#000000 · Call assistant off"), c.screened.first())
+        // No calls and no trace: nothing to send.
+        assertFalse(core(api = true).reportNotifyTrace("SM-F000X", health.copy(trace = emptyList()), "ALL", calls.copy(calls = emptyList())))
+    }
+
+    @Test
     fun theTestPushSaysWhatTheServerSaid() = runTest {
         assertEquals(PushTestResult.SENT, core(api = true).testPush())
         answer = "no_address"

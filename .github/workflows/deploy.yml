@@ -222,6 +222,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-notifications "${{ steps.decide.outputs.url }}"
 
+      # Whether calls reach Navilife's screening and why they rang (spam calls still ring, slice 2): the role, the
+      # switch and the last screened calls (salted tags, never numbers) as notices on this job.
+      - name: Phone call screening
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-calls "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

@@ -74,6 +74,16 @@ class MekaCallScreeningService : CallScreeningService() {
                 CallVerdict.BLOCK -> block(details)
                 else -> allow(details)
             }
+            // Spam calls still ring, slice 2: every screened call goes in the diagnosis log (a salted tag, never the
+            // number), so a build run can see why a call rang; then the report is sent when due.
+            runCatching {
+                val ctx = this@MekaCallScreeningService
+                CallScreenLog.record(
+                    ctx, details.handle?.schemeSpecificPart, decision?.atMs ?: System.currentTimeMillis(), decision?.decision, decision?.signals,
+                    runCatching { details.callerNumberVerificationStatus }.getOrNull(), meka.core.workMode.value.spamProtection,
+                )
+                os.meka.android.notify.NotifyTraceReporter.poke(meka)
+            }
             // Android has its answer; now, unhurried: a caller nobody knows gets "Unknown caller · Block?" afterwards,
             // and an auto-blocked one the quiet "Blocked … · it won't ring again" with Undo (spam calls still ring, slice 1).
             decision?.let { s ->

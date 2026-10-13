@@ -118,15 +118,19 @@ object NotifyTraceReporter {
         val now = System.currentTimeMillis()
         val through = prefs.getLong(KEY_THROUGH, 0L)
         val sentAt = prefs.getLong(KEY_SENT_AT, 0L).takeIf { it > 0 }
-        if (sending || !NotifyTraceReportRules.due(log.firstOrNull()?.atMs, through, sentAt, failedAtMs, now, force)) return
+        // Spam calls still ring, slice 2: a newly screened call is news too.
+        val newest = listOfNotNull(log.firstOrNull()?.atMs, os.meka.android.work.CallScreenLog.log(app).firstOrNull()?.atMs).maxOrNull()
+        if (sending || !NotifyTraceReportRules.due(newest, through, sentAt, failedAtMs, now, force)) return
         sending = true
         app.appScope.launch {
             try {
                 val health = NotifyTraceStore.health(app)
-                val ok = runCatching { app.core.reportNotifyTrace(Build.MODEL, health, app.governor.device.value.name) }.getOrDefault(false)
+                val calls = runCatching { os.meka.android.work.CallScreenLog.report(app) }.getOrNull()
+                val ok = runCatching { app.core.reportNotifyTrace(Build.MODEL, health, app.governor.device.value.name, calls) }.getOrDefault(false)
                 if (ok) {
                     failedAtMs = null
-                    prefs.edit().putLong(KEY_THROUGH, health.trace.firstOrNull()?.atMs ?: through).putLong(KEY_SENT_AT, System.currentTimeMillis()).apply()
+                    val sentThrough = listOfNotNull(health.trace.firstOrNull()?.atMs, calls?.calls?.firstOrNull()?.atMs, through).max()
+                    prefs.edit().putLong(KEY_THROUGH, sentThrough).putLong(KEY_SENT_AT, System.currentTimeMillis()).apply()
                 } else {
                     failedAtMs = System.currentTimeMillis()
                 }

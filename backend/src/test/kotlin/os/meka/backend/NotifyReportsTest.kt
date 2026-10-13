@@ -90,6 +90,29 @@ class NotifyReportsTest {
     }
 
     @Test
+    fun thePublisherPrintsTheCallScreeningAndSaysWhenThereIsNone() {
+        val calls = NotifyDiagnosticsCodec.Calls(
+            roleHeld = true, protection = true, lookups = false,
+            screened = listOf(NotifyDiagnosticsCodec.Entry(at, "RING", "#3fa2c1 · Call assistant off · net not checked · not a contact")),
+        )
+        val lines = ReleasePublisherCli.callLines(NotifyDiagnosticsCodec.Latest(report.copy(calls = calls)))
+        assertEquals(
+            "::notice title=Call screening (SM-F000X, sent 2026-10-13 20:42 UTC)::Caller ID & spam role held · protection on · " +
+                "contacts/call log NOT readable · 1 screened, last 2026-10-13 20:41 UTC",
+            lines.first(),
+        )
+        assertEquals("::notice title=Screened call::2026-10-13 20:41 UTC · RING · #3fa2c1 · Call assistant off · net not checked · not a contact", lines[1])
+        assertEquals(
+            listOf("::notice title=Call screening::the phone's report has no call screening (a build before spam calls slice 2)"),
+            ReleasePublisherCli.callLines(NotifyDiagnosticsCodec.Latest(report)),
+        )
+        assertEquals(
+            listOf("::notice title=Call screening::the phone hasn't sent its report yet"),
+            ReleasePublisherCli.callLines(NotifyDiagnosticsCodec.Latest(null)),
+        )
+    }
+
+    @Test
     fun thePublisherPrintsEachChannelsLastPostWhenThePhoneSendsThem() {
         val withPosts = report.copy(channels = listOf(
             NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, at - 60_000),

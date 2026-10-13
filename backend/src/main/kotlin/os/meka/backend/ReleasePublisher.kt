@@ -250,10 +250,13 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  *  - `publisher-notifications <url>`: prints the phone's notification report (notifications never seen, slice 2): one
  *    summary notice (allowed, MEKA's phone setting, channels off, the server's last push) and one per trace entry.
  *    Always exits 0.
+ *  - `publisher-calls <url>`: prints the phone's call screening (spam calls still ring, slice 2): one summary notice
+ *    (the Caller ID & spam role, the spam switch, contacts/call log readable) and one per screened call, newest
+ *    first, each a salted tag (never the number), the verdict and why. Always exits 0.
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -287,6 +290,12 @@ object ReleasePublisherCli {
                     // About you first: GitHub keeps only a step's first 10 notices, and the trace alone fills them.
                     println(aboutYouLine(l))
                     notificationLines(l).forEach(::println)
+                    0
+                }
+                "publisher-calls" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Call screening::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    callLines(l).forEach(::println)
                     0
                 }
                 else -> {
@@ -351,6 +360,22 @@ object ReleasePublisherCli {
                 r.channels.filter { it.lastPostMs == null }.takeIf { it.isNotEmpty() }?.let { n -> " · never: ${n.joinToString(", ") { it.name }}" }.orEmpty(),
         )
         return (listOf(head) + channelLine + r.trace.map { e -> "::notice title=Notification trace::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
+            .map { it.replace("%", "%25") }
+    }
+
+    /**
+     * Spam calls still ring, slice 2: the phone's call screening as notices (GitHub keeps a step's first 10, so the
+     * summary and the 9 newest calls show). A phone before slice 2 sends none.
+     */
+    fun callLines(l: NotifyDiagnosticsCodec.Latest): List<String> {
+        val r = l.report ?: return listOf("::notice title=Call screening::the phone hasn't sent its report yet")
+        val c = r.calls ?: return listOf("::notice title=Call screening::the phone's report has no call screening (a build before spam calls slice 2)")
+        val summary = os.meka.core.domain.CallScreenLogRules.summary(
+            os.meka.core.domain.CallScreenReport(c.roleHeld, c.protection, c.lookups, c.screened.map { os.meka.core.domain.ScreenedCallEntry(it.atMs, it.kind, it.detail) }),
+            ::utc,
+        )
+        val head = "::notice title=Call screening (${r.model ?: "phone"}, sent ${utc(r.sentAtMs)})::$summary"
+        return (listOf(head) + c.screened.map { e -> "::notice title=Screened call::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
             .map { it.replace("%", "%25") }
     }
 

@@ -57,6 +57,22 @@ class NotifyDiagnosticsCodecTest {
     }
 
     @Test
+    fun theCallScreeningTravelsCappedAndOlderReportsHaveNone() {
+        val calls = NotifyDiagnosticsCodec.Calls(
+            roleHeld = false, protection = true, lookups = true,
+            screened = listOf(NotifyDiagnosticsCodec.Entry(1_700_000_000_000, "BLOCK", "#3fa2c1 · On your block list · net failed")),
+        )
+        val r = report.copy(calls = calls)
+        assertEquals(r, NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(r)))
+        assertNull(NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(report)).calls)
+        val many = report.copy(calls = calls.copy(screened = List(30) { NotifyDiagnosticsCodec.Entry(1_000L + it, "RING", "#00000$it") }))
+        assertEquals(NotifyDiagnosticsCodec.CALLS_MAX, NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(many)).calls!!.screened.size)
+        // A calls block without the role reads as none rather than failing the whole report.
+        val odd = NotifyDiagnosticsCodec.encodeReport(report).dropLast(1) + ""","calls":{"protection":true}}"""
+        assertNull(NotifyDiagnosticsCodec.decodeReport(odd).calls)
+    }
+
+    @Test
     fun theTestAnswerIsOneOfTheKnownWords() {
         NotifyDiagnosticsCodec.RESULTS.forEach { assertEquals(it, NotifyDiagnosticsCodec.decodeTestAnswer(NotifyDiagnosticsCodec.encodeTestAnswer(it))) }
         assertEquals("failed", NotifyDiagnosticsCodec.decodeTestAnswer("""{"w":1,"result":"maybe"}"""))

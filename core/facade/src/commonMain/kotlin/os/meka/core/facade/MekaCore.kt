@@ -5490,13 +5490,23 @@ class MekaCore(
      * can read where notifications stop. [phone] is MEKA's own "This phone" setting ("ALL" · "DIGESTS" · "OFF").
      * Returns whether the server took it (false offline, not connected or on an older server; the phone tries later).
      */
-    suspend fun reportNotifyTrace(model: String?, health: os.meka.core.domain.NotificationHealth, phone: String): Boolean {
+    suspend fun reportNotifyTrace(
+        model: String?, health: os.meka.core.domain.NotificationHealth, phone: String,
+        calls: os.meka.core.domain.CallScreenReport? = null,
+    ): Boolean {
         val api = notifyDiagnosticsApi ?: return false
-        if (health.trace.isEmpty()) return false
+        // Spam calls still ring, slice 2: the call screening's diagnosis rides along, and is reason enough to send.
+        if (health.trace.isEmpty() && calls?.calls.isNullOrEmpty()) return false
         val report = os.meka.core.wire.NotifyDiagnosticsCodec.Report(
             model, nowMs(), health.allowed, phone,
             health.channels.map { os.meka.core.wire.NotifyDiagnosticsCodec.Channel(it.id, it.name, it.on, it.lastPostMs) },
             health.trace.take(os.meka.core.wire.NotifyDiagnosticsCodec.TRACE_MAX).map { os.meka.core.wire.NotifyDiagnosticsCodec.Entry(it.atMs, it.kind.name, it.detail) },
+            calls?.let { c ->
+                os.meka.core.wire.NotifyDiagnosticsCodec.Calls(
+                    c.roleHeld, c.protection, c.lookups,
+                    c.calls.take(os.meka.core.wire.NotifyDiagnosticsCodec.CALLS_MAX).map { os.meka.core.wire.NotifyDiagnosticsCodec.Entry(it.atMs, it.verdict, it.detail) },
+                )
+            },
         )
         return try { api.reportNotifyTrace(report) } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
     }
