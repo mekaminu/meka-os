@@ -7,9 +7,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +19,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -59,6 +63,9 @@ import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.MailAccountRow
 import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailAccountsView
+import os.meka.core.domain.MailAutopilotPanel
+import os.meka.core.domain.MailAutopilotPanelRules
+import os.meka.core.domain.MailTidyRow
 import os.meka.core.domain.MailLabel
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
@@ -72,6 +79,11 @@ import os.meka.core.facade.MekaCore
  * Slice 1b: an account whose Google sign-in ends within the day says so (accent) with Reconnect; **Disconnect** on each
  * account unfolds a question in place (expand spring, tick haptic) and Disconnect there (medium haptic) makes the server
  * forget the sign-in; the row leaves and the note says where to remove MEKA at the provider too. Reduced motion: fades.
+ *
+ * Slice 3b-2: **Autopilot** on top (its line and Turn off / Turn on; medium haptic, the line cross-fades), and under each
+ * account its tidies (time, what moved, the label) with **Undo** (light haptic); an asked Undo cross-fades to "Putting
+ * back at the next check…" and then the server's "Put back 6 emails in the inbox". The tidies unfold with the card's
+ * size spring; reduced motion: no spring, fades only.
  */
 @Composable
 fun MailPane(core: MekaCore, onClose: () -> Unit) {
@@ -118,6 +130,24 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         else { view = Result.success(now); note = MailAccountRules.labelledLine(label) }
     }
 
+    fun switchAutopilot(on: Boolean) = scope.launch {
+        haptics.medium()
+        message = null
+        val r = core.setMailAutopilot(on)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
+    fun undoTidy(id: String) = scope.launch {
+        haptics.light()
+        message = null
+        val r = core.undoMailTidy(id)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
     Column(
         Modifier.fillMaxSize().padding(MekaSpace.gutter).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -136,12 +166,14 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             else -> {
                 val v = current.getOrThrow()
                 v.emptyLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
                 v.rows.forEachIndexed { i, row ->
                     MailAccountCard(
-                        row, Modifier.appear(rememberAppearance(i)),
+                        row, Modifier.appear(rememberAppearance(i + 1)),
                         onReconnect = { v.connects.firstOrNull { it.provider == row.provider }?.let { connect(it.provider, it.note) } },
                         onLabel = { relabel(row, it) },
                         onDisconnect = { disconnect(row) },
+                        onUndo = { undoTidy(it) },
                     )
                 }
                 v.toConnect?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
@@ -162,12 +194,14 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 @Composable
 private fun MailAccountCard(
     row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
+    onUndo: (String) -> Unit,
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     var asking by rememberSaveable(row.provider, row.email) { mutableStateOf(false) }
     Column(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .animateContentSize(MekaMotion.expand(reduced)).padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -209,6 +243,8 @@ private fun MailAccountCard(
                 Text(it, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
+        // Slice 3b-2: what Autopilot tidied here, newest first, each with Undo.
+        row.tidies.forEach { t -> TidyLine(t) { onUndo(t.id) } }
         Row(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
@@ -232,6 +268,55 @@ private fun MailAccountCard(
                         modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = false }.minTouch())
                 }
             }
+        }
+    }
+}
+
+/** Autopilot's switch: what it does (or that it's off or paused) and Turn off / Turn on. */
+@Composable
+private fun AutopilotCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val dot by animateColorAsState(
+        if (panel.on && !panel.paused) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "autopilot-dot",
+    )
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
+            .semantics(mergeDescendants = true) { contentDescription = panel.title + ". " + panel.line },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+        Column(Modifier.weight(1f)) {
+            Text(panel.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(panel.line, animationSpec = MekaMotion.appear(reduced), label = "autopilot-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        Crossfade(panel.action, animationSpec = MekaMotion.appear(reduced), label = "autopilot-action") { a ->
+            Text(
+                a, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
+                    .clickable(role = Role.Button) { onSwitch() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
+        }
+    }
+}
+
+/** One tidy under its account: "09:05 · Tidied 3 emails · Personal", what moved, and Undo (or how the Undo went). */
+@Composable
+private fun TidyLine(t: MailTidyRow, onUndo: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xxs)) {
+        Column(Modifier.weight(1f)) {
+            Text("${t.time} · ${t.summary}", style = MekaType.caption, color = Meka.colors.textSecondary)
+            t.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            Crossfade(t.state, animationSpec = MekaMotion.appear(reduced), label = "tidy-state") { st ->
+                st?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+            }
+        }
+        if (t.canUndo) {
+            Text(MailAutopilotPanelRules.UNDO, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { onUndo() }.minTouch().padding(start = MekaSpace.m))
         }
     }
 }

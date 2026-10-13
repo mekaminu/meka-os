@@ -269,4 +269,49 @@ class ActivityTest {
         assertTrue(la.items().isEmpty())
         assertTrue(la.view().isEmpty)
     }
+
+    // ---- Inbox autopilot, slice 3b-2: the server's tidies in Activity, with Undo ----
+
+    @Test
+    fun aMailTidyShowsAsDoneForYouAndItsUndoAsksTheServer() {
+        val at = world.clock.nowMs
+        // As the server writes it (here from the Mac's replica, which syncs the same entity).
+        m.replica.commitLocal(EntityTypes.MAIL_TIDY, "mt1", MailAutopilotRules.batchFields(at, "Personal", mapOf(MailTidy.NEWSLETTER to 2)))
+        syncBoth()
+        val item = la.items().single { it.id == "mt1" }
+        assertEquals(ActivityKind.CHANGED, item.kind)
+        assertEquals("Tidied 2 emails · Personal", item.summary)
+        assertTrue(item.canUndo)
+        assertTrue(ActivityFilter.DONE_FOR_YOU.kinds.contains(item.kind))
+        world.clock.nowMs += 60_000
+        assertEquals(UndoOutcome.ASKED, la.undo("mt1"))
+        val asked = la.items().single { it.id == "mt1" }
+        assertFalse(asked.canUndo)
+        val row = la.view().days.flatMap { it.rows }.single { it.id == "mt1" }
+        assertEquals(MailAutopilotPanelRules.PUTTING_BACK, row.undoneLine)
+        assertEquals(UndoOutcome.ASKED, la.undo("mt1"))
+        syncBoth()
+        assertEquals(world.clock.nowMs, m.replica.entity(EntityTypes.MAIL_TIDY, "mt1")?.get(MailTidyBatchFields.UNDO_ASKED_AT)?.longOrNull)
+        // The server puts them back.
+        m.replica.commitLocal(EntityTypes.MAIL_TIDY, "mt1", mapOf(
+            MailTidyBatchFields.UNDONE_AT to (world.clock.nowMs + 60_000).fv(),
+            MailTidyBatchFields.UNDO_NOTE to MailAutopilotRules.undoneNote(2, 2).fv(),
+        ))
+        syncBoth()
+        val done = la.view().days.flatMap { it.rows }.single { it.id == "mt1" }
+        assertTrue(done.undoneLine!!.startsWith("Undone at "))
+        assertTrue(done.undoneLine!!.endsWith("Put back 2 emails in the inbox"))
+        assertEquals(UndoOutcome.UNDONE, la.undo("mt1"))
+    }
+
+    @Test
+    fun aMailTidyOlderThanThirtyDaysOffersNoUndo() {
+        val at = world.clock.nowMs
+        a.replica.commitLocal(EntityTypes.MAIL_TIDY, "mt2", MailAutopilotRules.batchFields(at, "Business", mapOf(MailTidy.ARCHIVE to 1)))
+        world.clock.nowMs += 31 * dayMs
+        val item = la.items().single { it.id == "mt2" }
+        assertFalse(item.canUndo)
+        assertEquals(UndoOutcome.NOT_UNDOABLE, la.undo("mt2"))
+        assertNull(a.replica.entity(EntityTypes.MAIL_TIDY, "mt2")?.get(MailTidyBatchFields.UNDO_ASKED_AT)?.longOrNull)
+    }
 }

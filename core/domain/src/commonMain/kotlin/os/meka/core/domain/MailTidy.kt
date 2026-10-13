@@ -150,8 +150,15 @@ object MailAutopilotRules {
     /** Undo is offered for 30 days (the Activity log's window). */
     const val UNDO_DAYS = 30
 
+    /**
+     * Slice 3b-2: absent = **on** (Meka's decision, 2026-10-12: newsletters and receipts auto-archived but shown to him;
+     * with Undo in Mail and Activity and the switch in Mail and What Navilife may do, it is on unless he turns it off).
+     * Each account's first day is still a dry run ([since]).
+     */
+    const val DEFAULT_ON = true
+
     fun read(fields: Map<String, FieldValue>?): MailAutopilotSetting = MailAutopilotSetting(
-        on = fields?.get(MailAutopilotFields.ON)?.boolOrNull == true,
+        on = fields?.get(MailAutopilotFields.ON)?.boolOrNull ?: DEFAULT_ON,
         changedAtMs = (fields?.get(MailAutopilotFields.CHANGED_AT) as? FieldValue.Int64)?.value?.takeIf { it > 0 },
     )
 
@@ -224,4 +231,104 @@ object MailAutopilotRules {
     /** An Undo the server should act on: asked, not done yet, within [UNDO_DAYS] of the tidy. */
     fun undoDue(b: MailTidyBatch, nowMs: Long): Boolean =
         b.undoAskedAtMs != null && b.undoneAtMs == null && nowMs - b.atMs <= UNDO_DAYS * 86_400_000L
+}
+
+// ---- Slice 3b-2: the apps' half — the switch, each account's tidies with Undo, Activity ----
+
+/** One tidy under its account in Mail. */
+data class MailTidyRow(
+    val id: String,
+    /** "12:40" today, else "Mon 12 Oct · 12:40". */
+    val time: String,
+    /** "Tidied 6 emails · Personal". */
+    val summary: String,
+    /** "3 newsletters → Navilife/Newsletters · …". */
+    val detail: String?,
+    val canUndo: Boolean,
+    /** "Putting back at the next check…" or the server's "Put back 6 emails in the inbox"; null while it stands. */
+    val state: String?,
+)
+
+/** Autopilot's switch at the top of Mail. */
+data class MailAutopilotPanel(
+    val on: Boolean,
+    val title: String,
+    val line: String,
+    /** "Turn off" · "Turn on". */
+    val action: String,
+    /** MEKA's kill switch is on: nothing moves whatever the switch says. */
+    val paused: Boolean,
+)
+
+object MailAutopilotPanelRules {
+    const val TITLE = "Autopilot"
+    const val TURN_OFF = "Turn off"
+    const val TURN_ON = "Turn on"
+    const val UNDO = "Undo"
+    const val ON_LINE = "On · newsletters, receipts, notifications and promos are archived as they arrive, each with Undo " +
+        "here and in Activity. Never mail from people, schools, banks or threads you wrote in. Each account's first day is a dry run."
+    const val OFF_LINE = "Off · new mail stays where it lands. Turn on to have Navilife tidy it as it arrives."
+    const val PAUSED_LINE = "Paused with everything Navilife does on its own · Resume in What Navilife may do"
+    const val PUTTING_BACK = "Putting back at the next check…"
+    /** How many of an account's tidies Mail lists (the last [SHOWN_DAYS] days); Activity keeps 30 days. */
+    const val SHOWN = 5
+    const val SHOWN_DAYS = 7
+
+    fun panel(setting: MailAutopilotSetting, paused: Boolean): MailAutopilotPanel = MailAutopilotPanel(
+        on = setting.on,
+        title = TITLE,
+        line = when {
+            paused && setting.on -> PAUSED_LINE
+            setting.on -> ON_LINE
+            else -> OFF_LINE
+        },
+        action = if (setting.on) TURN_OFF else TURN_ON,
+        paused = paused,
+    )
+
+    /** What switching says (Mail's note, What Navilife may do's undo bar). */
+    fun switchedLine(on: Boolean): String =
+        if (on) "Autopilot is on · new mail is tidied as it arrives, each with Undo"
+        else "Autopilot is off · new mail stays where it lands; what was tidied stays tidied (Undo is still there)"
+
+    /** The tidy's state line: put back (the server's note), asked (waiting for the server's next check), or null. */
+    fun state(b: MailTidyBatch): String? = when {
+        b.undoneAtMs != null -> b.undoNote ?: "Put back in the inbox"
+        b.undoAskedAtMs != null -> PUTTING_BACK
+        else -> null
+    }
+
+    /**
+     * The account's Autopilot line in Mail: off or paused, the dry run's "would tidy …" ([MailTidyRules.dryRunLine]);
+     * on, "Autopilot · on · tidied 12 today" (what still stands, put-back ones not counted) or "Autopilot · on ·
+     * nothing tidied today · new mail is tidied as it arrives".
+     */
+    fun accountLine(setting: MailAutopilotSetting, paused: Boolean, wouldTidy: Map<String, Int>?, todays: List<MailTidyBatch>): String? {
+        if (!setting.on || paused) return MailTidyRules.dryRunLine(wouldTidy)
+        val n = todays.filter { it.undoneAtMs == null && it.undoAskedAtMs == null }.sumOf { it.count }
+        return if (n > 0) "Autopilot · on · tidied $n today" else "Autopilot · on · nothing tidied today · new mail is tidied as it arrives"
+    }
+
+    /** The account's tidies, newest first: the last [SHOWN_DAYS] days, at most [SHOWN]. */
+    fun rows(batches: List<MailTidyBatch>, nowMs: Long, cal: LocalCalendar): List<MailTidyRow> {
+        val today = cal.epochDayOf(nowMs)
+        return batches.filter { today - cal.epochDayOf(it.atMs) in 0 until SHOWN_DAYS }
+            .sortedWith(compareByDescending<MailTidyBatch> { it.atMs }.thenBy { it.id })
+            .take(SHOWN)
+            .map { b ->
+                val day = cal.epochDayOf(b.atMs)
+                val clock = LocalClock.formatMinute(cal.minuteOfDay(b.atMs))
+                MailTidyRow(
+                    id = b.id,
+                    time = if (day == today) clock else "${CivilDate.shortLabel(day)} · $clock",
+                    summary = b.summary, detail = b.detail,
+                    canUndo = b.canUndo && nowMs - b.atMs <= MailAutopilotRules.UNDO_DAYS * 86_400_000L,
+                    state = state(b),
+                )
+            }
+    }
+
+    /** Today's tidies of one account (by its label as Mail shows it). */
+    fun todays(batches: List<MailTidyBatch>, account: String, nowMs: Long, cal: LocalCalendar): List<MailTidyBatch> =
+        batches.filter { it.account == account && cal.epochDayOf(it.atMs) == cal.epochDayOf(nowMs) }
 }

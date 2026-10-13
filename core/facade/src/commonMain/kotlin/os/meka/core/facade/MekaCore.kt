@@ -2966,6 +2966,13 @@ class MekaCore(
      * when the row offers nothing.
      */
     suspend fun resetTrust(kindKey: String): String? = onCore {
+        // Inbox autopilot (slice 3b-2): its row's Turn off / Turn on switches it.
+        if (kindKey == os.meka.core.domain.AutonomyRules.MAIL_AUTOPILOT) {
+            val on = !mailAutopilotSetting().on
+            writeMailAutopilot(on)
+            refresh()
+            return@onCore os.meka.core.domain.MailAutopilotPanelRules.switchedLine(on)
+        }
         val kind = os.meka.core.domain.TrustKind.of(kindKey) ?: return@onCore null
         val before = trust.reset(kind) ?: return@onCore null
         os.meka.core.domain.AutonomyRules.resetLine(kind, before)
@@ -3382,10 +3389,54 @@ class MekaCore(
         return list?.let { mailView(it) }
     }
 
-    /** The pane with the household's sign-ins (slice 1b: an account whose Google sign-in is ending says so). */
+    /** The accounts as the server last listed them, so the switch and Undo answer without asking it again. */
+    private var lastMailFacts: List<os.meka.core.domain.MailAccountFacts>? = null
+
+    /**
+     * The pane with the household's sign-ins (slice 1b: an account whose Google sign-in is ending says so) and, since
+     * slice 3b-2, Autopilot's switch and each account's tidies with Undo (read from the synced data).
+     */
     private suspend fun mailView(list: List<os.meka.core.domain.MailAccountFacts>): os.meka.core.domain.MailAccountsView {
-        val known = onCore { signIns.all() }
-        return os.meka.core.domain.MailAccountRules.view(list, nowMs(), known)
+        lastMailFacts = list
+        return onCore {
+            os.meka.core.domain.MailAccountRules.view(
+                list, nowMs(), signIns.all(), mailAutopilotSetting(), autonomy.paused(), activity.mailTidyBatches(), ZoneCalendar(timeZone),
+            )
+        }
+    }
+
+    private fun mailAutopilotSetting(): os.meka.core.domain.MailAutopilotSetting = os.meka.core.domain.MailAutopilotRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID)?.fields,
+    )
+
+    /** Writes Autopilot's switch (synced; the server reads it at its next check). False when it already was. */
+    private fun writeMailAutopilot(on: Boolean): Boolean {
+        val current = replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID)
+        if (current?.get(os.meka.core.domain.MailAutopilotFields.ON) != null && mailAutopilotSetting().on == on) return false
+        replica.commitLocal(
+            os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID,
+            os.meka.core.domain.MailAutopilotRules.fields(on, nowMs()),
+        )
+        return true
+    }
+
+    /**
+     * Inbox autopilot, slice 3b-2: Mail's switch. Synced (the server tidies only while it is on, after each account's
+     * dry-run day); What Navilife may do shows the same. Returns what Mail says ([MailAutopilotPanelRules.switchedLine])
+     * and the pane as it is now (null when the accounts were never listed on this device).
+     */
+    suspend fun setMailAutopilot(on: Boolean): MailSwitched {
+        onCore { if (writeMailAutopilot(on)) refresh() }
+        return MailSwitched(os.meka.core.domain.MailAutopilotPanelRules.switchedLine(on), lastMailFacts?.let { mailView(it) })
+    }
+
+    /**
+     * Undo on one of Autopilot's tidies (Mail or Activity): asks the server to put the emails back in the inbox at its
+     * next check (they are never tidied again). Returns what was said and the pane as it is now.
+     */
+    suspend fun undoMailTidy(id: String): MailSwitched {
+        val line = onCore { activity.undo(id).line.also { activityChanged() } }
+        return MailSwitched(line, lastMailFacts?.let { mailView(it) })
     }
 
     /**
@@ -5090,7 +5141,7 @@ class MekaCore(
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
-        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs())
+        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
@@ -5373,3 +5424,9 @@ internal class ZoneCalendar(private val timeZone: () -> TimeZone) : LocalCalenda
         return LocalDate(d.year, d.month, d.day).atTime(minuteOfDay / 60, minuteOfDay % 60).toInstant(timeZone()).toEpochMilliseconds()
     }
 }
+
+/**
+ * Inbox autopilot, slice 3b-2: what Mail's switch or a tidy's Undo said ([line]) and the Mail pane as it is now
+ * ([view], null when this device hasn't listed the accounts yet: the pane reads them again).
+ */
+data class MailSwitched(val line: String, val view: os.meka.core.domain.MailAccountsView?)

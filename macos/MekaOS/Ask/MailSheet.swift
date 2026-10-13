@@ -14,6 +14,10 @@ import SwiftUI
 /// Slice 1b: an account whose Google sign-in ends within the day says so in the accent with Reconnect; Disconnect on
 /// each row unfolds a question in place (expand spring, tick haptic) and Disconnect there (medium haptic) has the
 /// server forget the sign-in; the row leaves and the note says where to remove MEKA at the provider as well.
+///
+/// Slice 3b-2: **Autopilot** on top (its line and Turn off / Turn on, medium haptic) and under each account its tidies
+/// with **Undo** (light haptic); an asked Undo cross-fades to "Putting back at the next check…", then the server's note.
+/// Reduce Motion: cross-fades only.
 struct MailSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -31,6 +35,13 @@ struct MailSheet: View {
                     Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if let panel = view.autopilot {
+                    AutopilotPanelView(panel: panel, palette: palette) {
+                        let on = !panel.on
+                        Task { await model.setMailAutopilot(on) }
+                    }
+                    .staggeredAppear(2)
+                }
                 ForEach(Array(view.rows.enumerated()), id: \.element.email) { i, row in
                     MailAccountRowView(row: row, palette: palette, onReconnect: {
                         guard let c = view.connects.first(where: { $0.provider == row.provider }) else { return }
@@ -42,8 +53,10 @@ struct MailSheet: View {
                     }, onDisconnect: {
                         let provider = row.provider, email = row.email
                         Task { await model.disconnectMail(provider: provider, email: email) }
+                    }, onUndo: { id in
+                        Task { await model.undoMailTidy(id) }
                     })
-                    .staggeredAppear(i + 2)
+                    .staggeredAppear(i + 3)
                 }
                 if let left = view.toConnect {
                     Text(left).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -87,10 +100,44 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.title) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.sortedLine) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map(\.tidyLine) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.tidies.map { $0.state ?? "" } } ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
         .task { await model.loadMail() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
         }
+    }
+}
+
+/// Autopilot's switch: what it does (or that it's off or paused) and Turn off / Turn on.
+private struct AutopilotPanelView: View {
+    let panel: MailAutopilotPanel
+    let palette: MekaPalette
+    let onSwitch: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MekaSpace.xs) {
+            Circle().fill(panel.on && !panel.paused ? palette.accent : palette.hairline)
+                .frame(width: 10, height: 10)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.on)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(panel.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(panel.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            Spacer(minLength: MekaSpace.xs)
+            Button(panel.action, action: onSwitch)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xxs)
+                .background(Capsule().fill(palette.hairline))
+        }
+        .padding(MekaSpace.m)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
     }
 }
 
@@ -100,6 +147,7 @@ private struct MailAccountRowView: View {
     let onReconnect: () -> Void
     let onLabel: (MailLabel) -> Void
     let onDisconnect: () -> Void
+    let onUndo: (String) -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var asking = false
 
@@ -133,6 +181,33 @@ private struct MailAccountRowView: View {
                 Text(tidy).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .contentTransition(.opacity)
                     .transition(.opacity)
+            }
+            // Slice 3b-2: what Autopilot tidied here, newest first, each with Undo.
+            ForEach(row.tidies, id: \.id) { t in
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("\(t.time) · \(t.summary)").font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        if let detail = t.detail {
+                            Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        if let state = t.state {
+                            Text(state).font(MekaType.caption).foregroundStyle(palette.accent)
+                                .contentTransition(.opacity)
+                                .transition(.opacity)
+                        }
+                    }
+                    Spacer()
+                    if t.canUndo {
+                        let id = t.id
+                        Button(MailAutopilotPanelRules.shared.UNDO) { onUndo(id) }
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.itemMeta)
+                            .foregroundStyle(palette.accent)
+                    }
+                }
+                .padding(.top, MekaSpace.xxs)
+                .transition(.opacity)
             }
             HStack(spacing: MekaSpace.xs) {
                 ForEach(MailAccountRules.shared.LABELS, id: \.name) { label in

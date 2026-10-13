@@ -88,8 +88,11 @@ class MailTidyTest {
         assertEquals(connected + day, MailAutopilotRules.since(on, false, connected, connected + day))
         val later = MailAutopilotSetting(true, connected + 3 * day)
         assertEquals(connected + 3 * day, MailAutopilotRules.since(later, false, connected, connected + 4 * day))
-        // Absent setting reads as off.
-        assertEquals(MailAutopilotSetting(false, null), MailAutopilotRules.read(null))
+        // Slice 3b-2: absent reads as on (Meka's decision); each account's first day is still a dry run.
+        assertEquals(MailAutopilotSetting(true, null), MailAutopilotRules.read(null))
+        assertNull(MailAutopilotRules.since(MailAutopilotRules.read(null), false, connected, connected + day - 1))
+        assertEquals(connected + day, MailAutopilotRules.since(MailAutopilotRules.read(null), false, connected, connected + 2 * day))
+        assertEquals(MailAutopilotSetting(false, 6L), MailAutopilotRules.read(MailAutopilotRules.fields(false, 6L)))
         assertEquals(MailAutopilotSetting(true, 5L), MailAutopilotRules.read(MailAutopilotRules.fields(true, 5L)))
     }
 
@@ -115,5 +118,100 @@ class MailTidyTest {
         assertTrue(!MailAutopilotRules.undoDue(asked.copy(undoneAtMs = 80L), 90L))
         assertEquals("Put back 6 emails in the inbox", MailAutopilotRules.undoneNote(6, 6))
         assertEquals("Put back 4 of 6 · 2 had gone", MailAutopilotRules.undoneNote(4, 6))
+    }
+
+    // ---- Slice 3b-2: the apps' half ----
+
+    private val hour = 3_600_000L
+    private val today = 20_000L * 86_400_000L
+    private fun batch(id: String, atMs: Long, account: String = "Personal", count: Int = 3, asked: Long? = null, undone: Long? = null, note: String? = null) =
+        MailTidyBatch(id, atMs, account, "Tidied $count emails · $account", "3 newsletters → Navilife/Newsletters", count, asked, undone, note)
+
+    @Test
+    fun thePanelSaysWhatAutopilotDoesAndWhenItIsPaused() {
+        val on = MailAutopilotPanelRules.panel(MailAutopilotSetting(true, null), paused = false)
+        assertEquals(MailAutopilotPanelRules.ON_LINE, on.line)
+        assertEquals("Turn off", on.action)
+        assertEquals(MailAutopilotPanelRules.PAUSED_LINE, MailAutopilotPanelRules.panel(MailAutopilotSetting(true, null), paused = true).line)
+        val off = MailAutopilotPanelRules.panel(MailAutopilotSetting(false, 1L), paused = true)
+        assertEquals(MailAutopilotPanelRules.OFF_LINE, off.line)
+        assertEquals("Turn on", off.action)
+        assertTrue(MailAutopilotPanelRules.switchedLine(false).startsWith("Autopilot is off"))
+    }
+
+    @Test
+    fun anAccountLineCountsTodaysTidiesThatStillStand() {
+        val on = MailAutopilotSetting(true, null)
+        val now = today + 15 * hour
+        val todays = MailAutopilotPanelRules.todays(
+            listOf(batch("a", today + 9 * hour), batch("b", today + 10 * hour, count = 4), batch("c", today + 11 * hour, asked = now),
+                batch("d", today - hour), batch("e", today + 12 * hour, account = "Business")),
+            "Personal", now, LocalCalendar.UTC,
+        )
+        assertEquals(listOf("a", "b", "c"), todays.map { it.id })
+        assertEquals("Autopilot · on · tidied 7 today", MailAutopilotPanelRules.accountLine(on, false, null, todays))
+        assertEquals("Autopilot · on · nothing tidied today · new mail is tidied as it arrives", MailAutopilotPanelRules.accountLine(on, false, null, emptyList()))
+        // Off or paused: the dry run's line, as before.
+        val would = mapOf("NEWSLETTER" to 2)
+        assertEquals(MailTidyRules.dryRunLine(would), MailAutopilotPanelRules.accountLine(MailAutopilotSetting(false, 1L), false, would, todays))
+        assertEquals(MailTidyRules.dryRunLine(would), MailAutopilotPanelRules.accountLine(on, true, would, todays))
+    }
+
+    @Test
+    fun tidyRowsAreTheLastWeekNewestFirstWithUndoAndTheirState() {
+        val now = today + 15 * hour
+        val rows = MailAutopilotPanelRules.rows(
+            listOf(
+                batch("old", today - 8 * 86_400_000L),
+                batch("y", today - 14 * hour),
+                batch("t", today + 9 * hour + 5 * 60_000L),
+                batch("asked", today + 10 * hour, asked = now - 60_000L),
+                batch("done", today + 11 * hour, asked = now - 120_000L, undone = now - 60_000L, note = "Put back 3 emails in the inbox"),
+            ),
+            now, LocalCalendar.UTC,
+        )
+        assertEquals(listOf("done", "asked", "t", "y"), rows.map { it.id })
+        assertEquals("09:05", rows[2].time)
+        assertTrue(rows[3].time.endsWith(" · 10:00"), rows[3].time)
+        assertTrue(rows[2].canUndo)
+        assertEquals(null, rows[2].state)
+        assertTrue(!rows[1].canUndo)
+        assertEquals(MailAutopilotPanelRules.PUTTING_BACK, rows[1].state)
+        assertEquals("Put back 3 emails in the inbox", rows[0].state)
+        assertTrue(!rows[0].canUndo)
+    }
+
+    @Test
+    fun mailViewCarriesTheSwitchTheLinesAndTheTidies() {
+        val now = today + 15 * hour
+        val facts = listOf(
+            MailAccountFacts(MailProviders.GMAIL, "alex@example.com", "ok", now - 60_000L, "PERSONAL", mapOf("NEWSLETTER" to 3), mapOf("NEWSLETTER" to 3)),
+            MailAccountFacts(MailProviders.OUTLOOK, "alex@example.net", "ok", now - 60_000L, "OUTLOOK"),
+        )
+        val v = MailAccountRules.view(facts, now, emptyList(), MailAutopilotSetting(true, null), false, listOf(batch("t", today + 9 * hour)), LocalCalendar.UTC)
+        assertEquals(MailAutopilotPanelRules.ON_LINE, v.autopilot?.line)
+        assertEquals("Autopilot · on · tidied 3 today", v.rows[0].tidyLine)
+        assertEquals(listOf("t"), v.rows[0].tidies.map { it.id })
+        assertTrue(v.rows[1].tidies.isEmpty())
+        assertNull(MailAccountRules.view(emptyList(), now, emptyList(), MailAutopilotSetting(true, null), false, emptyList(), LocalCalendar.UTC).autopilot)
+        // The old overload keeps the dry-run line and no switch.
+        assertNull(MailAccountRules.view(facts, now).autopilot)
+    }
+
+    @Test
+    fun whatNavilifeMayDoHasTheAutopilotRow() {
+        val v = AutonomyRules.view(emptyMap(), AutonomySetting(false, null), LocalCalendar.UTC, today, MailAutopilotSetting(true, null))
+        val row = v.sections.flatMap { it.rows }.single { it.key == AutonomyRules.MAIL_AUTOPILOT }
+        assertEquals("Inbox autopilot", row.title)
+        assertEquals("Turn off", row.action)
+        assertTrue(row.onItsOwn)
+        assertEquals(AutonomyRules.NONE_LINE, v.summary)
+        val paused = AutonomyRules.view(emptyMap(), AutonomySetting(true, 1L), LocalCalendar.UTC, today, MailAutopilotSetting(true, null))
+        val p = paused.sections.flatMap { it.rows }.single { it.key == AutonomyRules.MAIL_AUTOPILOT }
+        assertEquals(AutonomyRules.PAUSED_LINE, p.line)
+        assertTrue(!p.onItsOwn)
+        val off = AutonomyRules.mailRow(MailAutopilotSetting(false, 1L), false)
+        assertEquals(AutonomyRules.MAIL_OFF_LINE, off.line)
+        assertEquals("Turn on", off.action)
     }
 }

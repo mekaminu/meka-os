@@ -964,6 +964,27 @@ final class CoreModel {
         }
     }
 
+    /// Inbox autopilot, slice 3b-2: Mail's switch (synced; the server tidies only while it's on). Only the Bool
+    /// crosses to the core; the line and the pane come back in one value.
+    func setMailAutopilot(_ on: Bool) async {
+        guard let core else { return }
+        MekaHaptics.medium()
+        mailMessage = nil
+        guard let r = try? await core.setMailAutopilot(on: on) else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
+    /// Undo on one of Autopilot's tidies: the server puts the emails back at its next check. Only the id crosses.
+    func undoMailTidy(_ id: String) async {
+        guard let core else { return }
+        MekaHaptics.light()
+        mailMessage = nil
+        guard let r = try? await core.undoMailTidy(id: id) else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
     // MARK: Calendar editing: Add event (slice 2b)
 
     /// Reads which accounts allow editing (the Calendar section asks when it appears).

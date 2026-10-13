@@ -141,4 +141,26 @@ class AutonomyFacadeTest {
         )
         assertTrue(AutonomyRules.LOCKED.all { it.locked && it.action == null && !it.onItsOwn })
     }
+
+    @Test
+    fun inboxAutopilotIsOnByDefaultAndItsRowSwitchesItOnBothDevices() = runTest {
+        val fold = core()
+        val mac = core("mac")
+        fold.syncNow()
+        assertEquals(AutonomyRules.MAIL_ON_LINE, fold.row(AutonomyRules.MAIL_AUTOPILOT).line)
+        assertEquals("Turn off", fold.row(AutonomyRules.MAIL_AUTOPILOT).action)
+        // It doesn't count as busy on a fresh install (nothing connected yet).
+        assertEquals(AutonomyRules.NONE_LINE, fold.autonomyView.value.summary)
+        assertTrue(fold.resetTrust(AutonomyRules.MAIL_AUTOPILOT)!!.startsWith("Autopilot is off"))
+        assertEquals(AutonomyRules.MAIL_OFF_LINE, fold.row(AutonomyRules.MAIL_AUTOPILOT).line)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Turn on", mac.row(AutonomyRules.MAIL_AUTOPILOT).action)
+        // Mail's switch: the accounts were never listed on this device, so the pane reads them again (null view).
+        val on = mac.setMailAutopilot(true)
+        assertTrue(on.line.startsWith("Autopilot is on"))
+        assertNull(on.view)
+        assertEquals("Turn off", mac.row(AutonomyRules.MAIL_AUTOPILOT).action)
+        // Undo on a tidy that isn't there says so.
+        assertEquals("This can't be undone", mac.undoMailTidy("nothing").line)
+    }
 }

@@ -509,7 +509,8 @@ class MailSyncTest {
             now += 60_000
             i.syncAccount(id)
         }
-        arrive("a") // never turned on
+        autopilotOn(ops, on = false); now += 1
+        arrive("a") // turned off (slice 3b-2: absent reads as on)
         autopilotOn(ops); now += 1
         device(ops, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID, AutonomyFields.PAUSED, FieldValue.Bool(true))
         arrive("b") // MEKA paused

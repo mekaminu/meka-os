@@ -114,8 +114,14 @@ data class ActivityItem(
     val undoNote: String?,
     /** [ActivityFields.ABOUT]: what a reminder was about; null otherwise. */
     val about: String? = null,
+    /**
+     * Inbox autopilot, slice 3b-2: a tidy MEKA's server did in his mailbox (a `mail_tidy` entity, [ActivityRules.mailTidyItem]).
+     * Its Undo is asked here ([undoAskedAtMs]) and done by the server at its next check, which writes [undoneAtMs].
+     */
+    val mailTidy: Boolean = false,
+    val undoAskedAtMs: Long? = null,
 ) {
-    val canUndo: Boolean get() = changes.isNotEmpty() && undoneAtMs == null
+    val canUndo: Boolean get() = undoneAtMs == null && (changes.isNotEmpty() || (mailTidy && undoAskedAtMs == null))
 }
 
 /** One row of the Activity screen. */
@@ -173,6 +179,8 @@ enum class UndoOutcome(val line: String) {
     PARTLY("Partly undone: you've changed some of it since"),
     CHANGED_SINCE("Nothing to undo: you've changed it since"),
     NOT_UNDOABLE("This can't be undone"),
+    /** Inbox autopilot (slice 3b-2): asked; the server puts the emails back at its next check. */
+    ASKED("Putting them back in the inbox at the next check"),
 }
 
 /** Pure rules, unit-tested without a replica. */
@@ -223,6 +231,21 @@ object ActivityRules {
             ActivityFields.SOURCE to FieldValue.Text(source),
         )
     }
+
+    // ---- Inbox autopilot (slice 3b-2) ----
+
+    const val MAIL_TIDY_WHY = "Inbox autopilot · newsletters, receipts, notifications and promos · switch it in Mail"
+    const val MAIL_TIDY_SOURCE = "mail_autopilot"
+
+    /** A tidy as an Activity row ("Done for you"): its Undo puts the emails back in the inbox. */
+    fun mailTidyItem(b: MailTidyBatch, nowMs: Long): ActivityItem = ActivityItem(
+        id = b.id, atMs = b.atMs, kind = ActivityKind.CHANGED,
+        summary = b.summary, detail = b.detail, why = MAIL_TIDY_WHY, source = MAIL_TIDY_SOURCE, level = null,
+        changes = emptyList(), undoneAtMs = b.undoneAtMs, undoNote = b.undoNote,
+        mailTidy = true,
+        // Past the 30 days the server no longer puts back: shown as asked so no Undo is offered.
+        undoAskedAtMs = b.undoAskedAtMs ?: (if (nowMs - b.atMs > MailAutopilotRules.UNDO_DAYS * 86_400_000L) b.atMs else null),
+    )
 
     // ---- Calendar edits (slice 2d) ----
 
@@ -479,7 +502,7 @@ object ActivityRules {
             val d = cal.epochDayOf(at)
             val whenText = LocalClock.formatMinute(cal.minuteOfDay(at)) + if (d != cal.epochDayOf(i.atMs)) " ${SearchRules.dayLabel(d, today).lowercaseIfRelative()}" else ""
             "Undone at $whenText" + (i.undoNote?.let { " · $it" } ?: "")
-        }
+        } ?: (if (i.mailTidy && i.undoAskedAtMs != null && i.undoAskedAtMs != i.atMs) MailAutopilotPanelRules.PUTTING_BACK else null)
         return ActivityRow(
             id = i.id,
             time = LocalClock.formatMinute(cal.minuteOfDay(i.atMs)),
@@ -506,7 +529,19 @@ class ActivityLog(
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
     /** Everything in the log: MEKA's own entries, then Meka's calendar edits (read from the edits themselves). */
-    fun items(): List<ActivityItem> = stored() + calendarEdits()
+    fun items(): List<ActivityItem> = stored() + calendarEdits() + mailTidies()
+
+    /** Inbox autopilot (slice 3b-2): each tidy the server did, read from the synced `mail_tidy` entity itself. */
+    private fun mailTidies(): List<ActivityItem> {
+        val now = nowMs()
+        return replica.entities(EntityTypes.MAIL_TIDY)
+            .mapNotNull { s -> MailAutopilotRules.readBatch(s.ref.entityId, s.fields) }
+            .map { ActivityRules.mailTidyItem(it, now) }
+    }
+
+    /** The tidies as Mail reads them. */
+    fun mailTidyBatches(): List<MailTidyBatch> = replica.entities(EntityTypes.MAIL_TIDY)
+        .mapNotNull { s -> MailAutopilotRules.readBatch(s.ref.entityId, s.fields) }
 
     private fun calendarEdits(): List<ActivityItem> {
         val now = nowMs()
@@ -641,6 +676,12 @@ class ActivityLog(
      */
     fun undo(id: String): UndoOutcome {
         val item = items().firstOrNull { it.id == id } ?: return UndoOutcome.NOT_UNDOABLE
+        if (item.mailTidy) {
+            if (item.undoneAtMs != null) return UndoOutcome.UNDONE
+            if (item.undoAskedAtMs != null) return if (item.undoAskedAtMs == item.atMs) UndoOutcome.NOT_UNDOABLE else UndoOutcome.ASKED
+            replica.commitLocal(EntityTypes.MAIL_TIDY, id, mapOf(MailTidyBatchFields.UNDO_ASKED_AT to nowMs().fv()))
+            return UndoOutcome.ASKED
+        }
         if (item.changes.isEmpty()) return UndoOutcome.NOT_UNDOABLE
         if (item.undoneAtMs != null) return UndoOutcome.UNDONE
         var restored = 0

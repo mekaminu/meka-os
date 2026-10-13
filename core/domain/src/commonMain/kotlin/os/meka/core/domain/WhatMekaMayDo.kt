@@ -135,6 +135,35 @@ object AutonomyRules {
         AutonomySection(LOCKED_LABEL, LOCKED),
     )
 
+    // ---- Inbox autopilot (slice 3b-2) ----
+
+    const val MAIL_LABEL = "Your mail"
+    /** The row's key; the apps send it to the facade's `resetTrust` like any row's action, which switches Autopilot. */
+    const val MAIL_AUTOPILOT = MailAutopilotRules.ENTITY_ID
+    const val MAIL_AUTOPILOT_TITLE = "Inbox autopilot"
+    const val MAIL_ON_LINE = "Archives newsletters, receipts, notifications and promos as they arrive · each with Undo in Mail and Activity"
+    const val MAIL_OFF_LINE = "Off · new mail stays where it lands"
+
+    fun mailRow(mail: MailAutopilotSetting, paused: Boolean) = AutonomyRow(
+        key = MAIL_AUTOPILOT,
+        title = MAIL_AUTOPILOT_TITLE,
+        line = when {
+            mail.on && paused -> PAUSED_LINE
+            mail.on -> MAIL_ON_LINE
+            else -> MAIL_OFF_LINE
+        },
+        locked = false,
+        action = if (mail.on) MailAutopilotPanelRules.TURN_OFF else MailAutopilotPanelRules.TURN_ON,
+        onItsOwn = mail.on && !paused,
+    )
+
+    /** With Inbox autopilot's row in its own section, between your lists and the locked rows. */
+    fun sections(states: Map<TrustKind, TrustState>, paused: Boolean, mail: MailAutopilotSetting): List<AutonomySection> = listOf(
+        AutonomySection(LISTS_LABEL, TrustKind.entries.map { trustRow(it, states[it] ?: TrustState(), paused) }),
+        AutonomySection(MAIL_LABEL, listOf(mailRow(mail, paused))),
+        AutonomySection(LOCKED_LABEL, LOCKED),
+    )
+
     fun summary(states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long): String {
         val trusted = states.count { it.value.trusted }
         if (setting.paused) {
@@ -157,6 +186,17 @@ object AutonomyRules {
         summary = summary(states, setting, cal, nowMs),
         pauseButton = if (setting.paused) RESUME else PAUSE,
         sections = sections(states, setting.paused),
+    )
+
+    /**
+     * With Inbox autopilot (slice 3b-2): its row in its own section. The summary still counts only your lists (Autopilot
+     * is on by default and does nothing until a mail account is connected, so it would read as busy on a fresh install).
+     */
+    fun view(states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long, mail: MailAutopilotSetting) = AutonomyView(
+        paused = setting.paused,
+        summary = summary(states, setting, cal, nowMs),
+        pauseButton = if (setting.paused) RESUME else PAUSE,
+        sections = sections(states, setting.paused, mail),
     )
 
     /** The undo bar's line after Pause / Resume. */

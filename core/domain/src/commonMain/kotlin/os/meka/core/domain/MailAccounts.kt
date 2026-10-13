@@ -70,6 +70,8 @@ data class MailAccountRow(
     val sortedLine: String? = null,
     /** Slice 3a: "Autopilot, dry run · would tidy 52 · …" ([MailTidyRules.dryRunLine]), or null before planning. */
     val tidyLine: String? = null,
+    /** Slice 3b-2: Autopilot's tidies in this account, newest first, each with Undo ([MailAutopilotPanelRules.rows]). */
+    val tidies: List<MailTidyRow> = emptyList(),
 )
 
 /** One "Connect …" button. */
@@ -84,6 +86,8 @@ data class MailAccountsView(
     val connects: List<MailConnect>,
     /** What's still to connect of the three he named ("Still to connect: Outlook · the business Gmail"), or null. */
     val toConnect: String?,
+    /** Slice 3b-2: Autopilot's switch, or null (an older caller, or nothing connected). */
+    val autopilot: MailAutopilotPanel? = null,
 )
 
 object MailAccountRules {
@@ -177,6 +181,27 @@ object MailAccountRules {
             connects = MailProviders.ALL.map { MailConnect(it, connectLabel(it), connectNote(it)) },
             toConnect = toConnect(rows),
         )
+    }
+
+    /**
+     * Slice 3b-2: with Autopilot's setting, the kill switch and the synced tidies: the switch on top (while an account is
+     * connected), each account's Autopilot line ("Autopilot · on · tidied 12 today") and its tidies with Undo.
+     */
+    fun view(
+        accounts: List<MailAccountFacts>, nowMs: Long, signIns: List<SignIn>,
+        autopilot: MailAutopilotSetting, paused: Boolean, batches: List<MailTidyBatch>, cal: LocalCalendar,
+    ): MailAccountsView {
+        val base = view(accounts, nowMs, signIns)
+        val facts = accounts.filter { MailProviders.isMail(it.provider) }
+        val rows = base.rows.map { r ->
+            val a = facts.firstOrNull { it.provider == r.provider && it.email == r.email }
+            val mine = batches.filter { it.account == r.label.label }
+            r.copy(
+                tidyLine = MailAutopilotPanelRules.accountLine(autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal)),
+                tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
+            )
+        }
+        return base.copy(rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused))
     }
 
     /** Of the three accounts he named: which kinds have no account yet. */
