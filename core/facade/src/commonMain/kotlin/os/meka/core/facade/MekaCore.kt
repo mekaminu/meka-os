@@ -1428,6 +1428,29 @@ class MekaCore(
         return VoiceNoteRead(tidy, people, outcome)
     }
 
+    /**
+     * Voice notes into actions, slice 3 (the Mac keeps its own notes, like the phone): [notes] newest first as Voice
+     * notes shows them, days and times in this device's time zone; [onMac] for the Mac's wording.
+     */
+    fun voiceNoteRows(notes: List<os.meka.core.domain.VoiceNote>, onMac: Boolean): List<os.meka.core.domain.VoiceNoteRow> {
+        val vn = os.meka.core.domain.VoiceNoteRules
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        return vn.ordered(notes).map { n ->
+            vn.row(n, cal.epochDayOf(n.atMs), cal.minuteOfDay(n.atMs), vn.expiresAtMs(n)?.let { cal.epochDayOf(it) }, today, onMac)
+        }
+    }
+
+    /** "Voice note · 14:02" for a note made at [atMs] (the subject its words are read under). */
+    fun voiceNoteSubject(atMs: Long): String =
+        os.meka.core.domain.VoiceNoteRules.subject(ZoneCalendar(timeZone).minuteOfDay(atMs))
+
+    /** Daily's Voice notes row for the notes this device keeps (null: the row's fixed words). */
+    fun voiceNotesLine(notes: List<os.meka.core.domain.VoiceNote>): os.meka.core.domain.DailyLine? {
+        val cal = ZoneCalendar(timeZone)
+        return os.meka.core.domain.DailyRules.voiceNotes(notes.size, notes.maxOfOrNull { it.atMs }?.let { cal.epochDayOf(it) }, cal.epochDayOf(nowMs()))
+    }
+
     private class MessageContext(val sender: String, val sentAt: String, val date: String, val now: String, val work: String)
 
     /** What an AI message call says besides the text: the sender's label, its time, today and Meka's work days. */

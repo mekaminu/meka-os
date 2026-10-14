@@ -92,6 +92,9 @@ final class CoreModel {
     private(set) var queue: QueueView?
     /// Ask → More → Train queue (also Today's "For the train" line).
     var showTrainQueue = false
+    /// Voice notes into actions, slice 3: the voice note sheet (recording one) and Ask → Daily → Voice notes.
+    var showVoiceNote = false
+    var showVoiceNotes = false
     /// The Sunday week ahead (V1, slice 1): the coming week day by day and the family sync (Ask → More → Week ahead,
     /// and Today's "Your week ahead · …" line on Sunday from 18:00). Read-only.
     private(set) var weekAhead: WeekAheadView?
@@ -2490,6 +2493,42 @@ final class CoreModel {
                 }
             } catch { lastError = error.localizedDescription }
         }
+    }
+
+    // MARK: Voice notes (voice notes into actions, slice 3)
+
+    /// Holding the capture field's mic, or "take a voice note" said to Talk: Navilife comes forward with the voice note
+    /// sheet, which starts recording as it opens.
+    func startVoiceNote() {
+        NSApp.activate()
+        showVoiceNote = true
+    }
+
+    /// "Take a voice note" said to Talk: the conversation has ended (End came first), then the sheet opens recording.
+    func openVoiceNoteFromTalk() { startVoiceNote() }
+
+    /// A note's words (never its recording) to the AI's tidy-up, as on the Fold: the tidy note, the people and the
+    /// cards (which wait in Needs you). Only Strings cross to the core; nil when it threw.
+    func tidyVoiceNote(_ words: String, subject: String) async -> VoiceNoteRead? {
+        guard let core else { return nil }
+        do { return try await core.tidyVoiceNote(words: words, subject: subject) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// "Voice note · 14:02" for a note made at `atMs`.
+    func voiceNoteSubject(_ atMs: Int64) -> String {
+        core?.voiceNoteSubject(atMs: atMs) ?? VoiceNoteRules.shared.subject(minuteOfDay: 0)
+    }
+
+    /// The notes as Voice notes shows them (the Mac's wording), newest first.
+    func voiceNoteRows(_ notes: [VoiceNote]) -> [VoiceNoteRow] { core?.voiceNoteRows(notes: notes, onMac: true) ?? [] }
+
+    /// Daily's Voice notes line for the notes this Mac keeps (nil: the row's fixed words).
+    func voiceNotesLine(_ notes: [VoiceNote]?) -> DailyLine? {
+        guard let notes else { return nil }
+        return core?.voiceNotesLine(notes: notes)
     }
 
     /// The ✕ on a quick alarm or timer: cancelled on every device.

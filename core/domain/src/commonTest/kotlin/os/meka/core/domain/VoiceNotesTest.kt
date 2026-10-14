@@ -124,8 +124,11 @@ class VoiceNotesTest {
             "take a voice note", "ok Navilife, take a voice note please", "record a note", "I want to record a voice memo",
             "start a new voice note", "voice note", "new note", "take a note",
         ).forEach { assertEquals(TalkPlace.VOICE_NOTE, TalkOpenRules.request(it, TalkOpenRules.FOLD), it) }
-        // The Mac doesn't record them yet; more words make it a question.
+        // A device that doesn't record them leaves it a question; the Mac records them since slice 3.
         assertNull(TalkOpenRules.request("take a voice note", TalkOpenRules.DEFAULT))
+        assertEquals(TalkPlace.VOICE_NOTE, TalkOpenRules.request("take a voice note", TalkOpenRules.MAC))
+        assertNull(TalkOpenRules.request("where did I park", TalkOpenRules.MAC))
+        assertNull(TalkOpenRules.request("bedside clock", TalkOpenRules.MAC))
         assertNull(TalkOpenRules.request("read my last voice note", TalkOpenRules.FOLD))
         assertNull(TalkOpenRules.request("note", TalkOpenRules.FOLD))
         assertEquals(VoiceNoteRules.OPENING, TalkOpenRules.opening(TalkPlace.VOICE_NOTE))
@@ -178,5 +181,40 @@ class VoiceNotesTest {
         assertEquals(RequestPlan.AddIdea("Family film night on Fridays"), plan)
         assertNull(RequestAcceptRules.plan(p, canAddEvent = true, change = true))
         assertEquals("Kept “Family film night on Fridays” in Someday · Ideas", RequestAcceptRules.doneLine(plan!!, RequestKind.IDEA, day))
+    }
+
+    @Test
+    fun slice3TheMacSaysThisMacAndKeepsTheSameNotes() {
+        // A note just made: its words from the segments, or why there are none.
+        val made = VoiceNoteRules.made("vn2", at, 42_000, listOf("ring the garage", "buy milk"), failed = false)
+        assertEquals(VoiceNote("vn2", at, 42_000, VoiceNoteWords.HEARD, "Ring the garage. Buy milk."), made)
+        assertEquals(VoiceNoteWords.FAILED, VoiceNoteRules.made("vn3", at, 5_000, emptyList(), failed = true).words)
+        assertEquals(VoiceNoteWords.NOTHING, VoiceNoteRules.made("vn4", at, 5_000, listOf(" "), failed = false).words)
+        // The Mac's lines when there are no words.
+        assertNull(VoiceNoteRules.noWordsLineMac(VoiceNoteWords.HEARD, noOnDevice = true))
+        assertEquals(VoiceNoteRules.MAC_NO_ON_DEVICE, VoiceNoteRules.noWordsLineMac(VoiceNoteWords.FAILED, noOnDevice = true))
+        assertEquals(VoiceNoteRules.NOTHING_HEARD, VoiceNoteRules.noWordsLineMac(VoiceNoteWords.NOTHING, noOnDevice = false))
+        assertEquals(VoiceNoteRules.MAC_FAILED, VoiceNoteRules.noWordsLineMac(VoiceNoteWords.FAILED, noOnDevice = false))
+        assertTrue("phone" !in VoiceNoteRules.MAC_FAILED + VoiceNoteRules.MAC_NOTE + VoiceNoteRules.MAC_EMPTY + VoiceNoteRules.MAC_NO_ON_DEVICE)
+        // Rows and the summary say "this Mac".
+        val failed = note(words = VoiceNoteWords.FAILED, transcript = "")
+        assertEquals("Not turned into words on this Mac", VoiceNoteRules.row(failed, day, 600, day + 30, day, onMac = true).text)
+        assertEquals("Not turned into words on this phone", VoiceNoteRules.row(failed, day, 600, day + 30, day).text)
+        assertEquals(VoiceNoteRules.MAC_EMPTY, VoiceNoteRules.summary(emptyList(), onMac = true))
+        assertEquals(VoiceNoteRules.EMPTY, VoiceNoteRules.summary(emptyList()))
+        // Keep, and what the AI's answer changes.
+        assertTrue(VoiceNoteRules.toggledKeep(note()).kept)
+        assertFalse(VoiceNoteRules.toggledKeep(note(kept = true)).kept)
+        assertNull(VoiceNoteRules.tidied(note(), -1, "", listOf("Sam")))
+        assertEquals(note(cards = 2).copy(tidy = "Ring the garage.", people = listOf("Sam")),
+            VoiceNoteRules.tidied(note(), 2, "Ring the garage.", listOf("Sam")))
+        // Offline but tidied earlier: the count stays unknown, the tidy note and people stay.
+        val earlier = note(cards = 1).copy(tidy = "Earlier.", people = listOf("Alex"))
+        assertEquals(earlier.copy(cards = 0), VoiceNoteRules.tidied(earlier, 0, "", emptyList()))
+        assertEquals(earlier.copy(tidy = "New."), VoiceNoteRules.tidied(earlier, -1, "New.", emptyList()))
+        // The Mac's index is the phone's format.
+        val two = listOf(note(), made)
+        assertEquals(VoiceNoteRules.encode(two), VoiceNoteRules.encodeList(two))
+        assertEquals(VoiceNoteRules.ordered(two), VoiceNoteRules.decode(VoiceNoteRules.encodeList(two)))
     }
 }

@@ -19,9 +19,9 @@
     <key>MekaSyncURL</key>
     <string>$(MEKA_SYNC_URL)</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Navilife listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.</string>
+    <string>Navilife listens while you talk to it, and records the voice notes you start. Your voice is turned into words on this Mac; a voice note's recording is kept on this Mac only, encrypted, and never sent away.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Navilife turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.</string>
+    <string>Navilife turns what you say into words on this Mac only, for Talk and voice notes. Nothing is sent to Apple.</string>
     <key>CFBundleURLTypes</key>
     <array>
         <dict>

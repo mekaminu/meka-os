@@ -1197,6 +1197,26 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.mailMoment.label, "Ten-minute inbox")
     }
 
+    /// Voice notes, slice 3: "take a voice note" said to Talk on the Mac opens the voice note sheet; the Mac's notes
+    /// use the phone's index format and the core's rows say "this Mac".
+    func testVoiceNoteOnTheMacReachesSwift() {
+        let said = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "take a voice note",
+                                         places: TalkOpenRules.shared.MAC)
+        XCTAssertEqual((said.effects.first as? TalkEffectSpeak)?.text, VoiceNoteRules.shared.OPENING)
+        let done = TalkFlow.shared.spoke(s: said.session)
+        XCTAssertEqual((done.effects.last as? TalkEffectOpen)?.place, TalkPlace.voiceNote)
+        let rules = VoiceNoteRules.shared
+        let note = rules.made(id: "vn1", atMs: 1_791_668_400_000, durationMs: 83_000, segments: ["ring the garage"], failed: false)
+        XCTAssertEqual(note.transcript, "Ring the garage.")
+        XCTAssertEqual(note.words, VoiceNoteWords.heard)
+        let back = rules.decode(text: rules.encodeList(notes: [note]))
+        XCTAssertEqual(back.map(\.id), ["vn1"])
+        XCTAssertEqual(rules.toggledKeep(note: note).kept, true)
+        XCTAssertNil(rules.tidied(note: note, cards: -1, tidy: "", people: []))
+        XCTAssertEqual(rules.tidied(note: note, cards: 2, tidy: "Ring the garage.", people: ["Sam"])?.tidy, "Ring the garage.")
+        XCTAssertEqual(rules.noWordsLineMac(words: VoiceNoteWords.failed, noOnDevice: true), rules.MAC_NO_ON_DEVICE)
+    }
+
     /// Morning brief, slice 7: the brief's Listen hands over to Talk (8 s) only after a finished read that ends asking.
     func testBriefFollowOnReachesSwift() {
         let script = "Good morning, Meka. " + BriefScriptRules.shared.CLOSE

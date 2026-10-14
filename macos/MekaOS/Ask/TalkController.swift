@@ -240,7 +240,9 @@ final class TalkController {
             // "Plan my day" (morning brief, slice 5): the conversation has ended (End came first); Today opens with
             // the planner up, as its button does. Only a Kotlin enum is compared here, on the main actor.
             // "Clear my inbox" (Inbox autopilot, slice 7b): Needs you comes forward with the ten-minute inbox started.
+            // "Take a voice note" (voice notes, slice 3): the voice note sheet opens recording.
             if open.place == TalkPlace.plan { model?.openPlanFromTalk() } else if open.place == TalkPlace.inbox { model?.openInboxFromTalk() }
+            else if open.place == TalkPlace.voiceNote { model?.openVoiceNoteFromTalk() }
         } else if let openHelp = effect as? TalkEffectOpenHelp {
             // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens its sheet, as the
             // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.
@@ -454,7 +456,7 @@ final class TalkController {
         let text = heard
         stopListening()
         level = 0
-        apply(TalkFlow.shared.heard(s: session, utterance: text))
+        apply(TalkFlow.shared.heard(s: session, utterance: text, places: TalkOpenRules.shared.MAC))
     }
 
     private func stopListening() {

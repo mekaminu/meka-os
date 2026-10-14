@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, car, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, car, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -88,6 +88,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .news: "News"
         case .shutdown: "Shut down the day"
         case .trainQueue: "Train queue"
+        case .voiceNotes: VoiceNoteRules.shared.TITLE
         case .lifeAdmin: "Life admin hour"
         case .review: "Review"
         case .aboutYou: AboutYouRules.shared.TITLE
@@ -136,6 +137,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .news: "Barça, AI and the headlines · topics and sources"
         case .shutdown: "Tick off, carry over and see tomorrow"
         case .trainQueue: "Links and podcasts saved for the commute"
+        case .voiceNotes: VoiceNoteRules.shared.ROW_LINE
         case .lifeAdmin: "One hour a week for forms, calls and renewals"
         case .review: "Your week, looked back on"
         case .aboutYou: AboutYouRules.shared.ROW_LINE
@@ -164,7 +166,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
     var group: MoreGroup {
         switch self {
         case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .appointments, .leave, .gifts, .trips, .errands, .car, .emergency, .facts: .life
-        case .brief, .weekAhead, .news, .shutdown, .trainQueue, .lifeAdmin, .review: .daily
+        case .brief, .weekAhead, .news, .shutdown, .trainQueue, .voiceNotes, .lifeAdmin, .review: .daily
         case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
@@ -296,7 +298,9 @@ enum ShellNav {
 
     /// A Daily row's line (Ask polish, item 3): the core's live one ("Tomorrow 06:40 · 5 things", "2 saved"), lit when
     /// it's ready or wants a look; else the row's fixed words.
-    static func dailyLine(_ item: MoreItem, lines: DailyLines?) -> (text: String, lit: Bool) {
+    static func dailyLine(_ item: MoreItem, lines: DailyLines?, voiceNotes: DailyLine? = nil) -> (text: String, lit: Bool) {
+        // Voice notes (slice 3): the notes live on this Mac, so their line comes from its store, not the core's lines.
+        if item == .voiceNotes, let live = voiceNotes { return (live.text, live.lit) }
         if let row = dailyRow(item), let live = lines?.of(row: row) { return (live.text, live.lit) }
         return (item.line, false)
     }

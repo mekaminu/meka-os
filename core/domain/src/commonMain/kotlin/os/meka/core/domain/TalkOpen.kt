@@ -41,6 +41,12 @@ object TalkOpenRules {
     val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE)
 
     /**
+     * The Mac (voice notes into actions, slice 3): the planner, the ten-minute inbox and a voice note, which the Mac now
+     * records too; no bedside clock and no Find my car (the parked spot stays on the phone).
+     */
+    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE)
+
+    /**
      * Voice notes into actions, slice 1 (the Fold records them): "take a voice note", "record a note", "start a voice
      * memo", "voice note" (what's left once [DROP] is gone). "Read my last voice note" has more in it and stays a question.
      */

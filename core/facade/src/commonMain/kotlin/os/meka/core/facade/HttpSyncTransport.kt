@@ -256,7 +256,35 @@ class BreakdownKept internal constructor(
  * cards, as "Handle this" gives them (the same lines). Nothing is kept here: the phone keeps [tidy] and [people] with
  * the note.
  */
-data class VoiceNoteRead(val tidy: String, val people: List<String>, val cards: HandleOutcome)
+data class VoiceNoteRead(val tidy: String, val people: List<String>, val cards: HandleOutcome) {
+    /** How many cards it offered: 0 when there was nothing to add, -1 when it couldn't answer (offline, AI off). */
+    val cardCount: Int
+        get() = when (val c = cards) {
+            is HandleOutcome.Cards -> c.cards.size
+            is HandleOutcome.NothingToDo -> 0
+            is HandleOutcome.Unavailable -> -1
+        }
+
+    /** "Mentions Sam and Alex" · null. */
+    val peopleLine: String? get() = os.meka.core.domain.VoiceNoteRules.peopleLine(people)
+
+    /** The capture sheet's line: what came of it, or (couldn't answer) that Make cards waits in Voice notes. */
+    val captureLine: String
+        get() = when (val c = cards) {
+            is HandleOutcome.Cards -> c.line
+            is HandleOutcome.NothingToDo -> c.line
+            is HandleOutcome.Unavailable ->
+                c.line + " · " + os.meka.core.domain.VoiceNoteRules.MAKE_CARDS.lowercase() + " in Voice notes later"
+        }
+
+    /** Voice notes' line after Make cards: the cards wait in Needs you. */
+    val paneLine: String
+        get() = when (val c = cards) {
+            is HandleOutcome.Cards -> c.line + " · in Needs you"
+            is HandleOutcome.NothingToDo -> c.line
+            is HandleOutcome.Unavailable -> c.line
+        }
+}
 
 /** What "Handle this" made of a share ([MekaCore.handleThis]). */
 sealed class HandleOutcome {

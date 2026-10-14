@@ -264,6 +264,9 @@ private struct ShellSheetsC: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showLeave }, set: { model.showLeave = $0 })) { LeaveSheet(palette: palette) }
             // Train queue (Ask → More, or Today's "For the train"): links and podcasts saved for the commute.
             .sheet(isPresented: Binding(get: { model.showTrainQueue }, set: { model.showTrainQueue = $0 })) { TrainQueueSheet(palette: palette) }
+            // Voice notes (Ask → Daily, slice 3): the notes this Mac keeps; and the sheet that records one.
+            .sheet(isPresented: Binding(get: { model.showVoiceNotes }, set: { model.showVoiceNotes = $0 })) { VoiceNotesSheet(palette: palette) }
+            .sheet(isPresented: Binding(get: { model.showVoiceNote }, set: { model.showVoiceNote = $0 })) { VoiceNoteSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showWeekAhead }, set: { model.showWeekAhead = $0 })) { WeekAheadSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showErrands }, set: { model.showErrands = $0 })) { ErrandsSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showAppointments }, set: { model.showAppointments = $0 })) { AppointmentsSheet(palette: palette) }

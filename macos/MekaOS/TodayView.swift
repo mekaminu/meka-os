@@ -916,12 +916,17 @@ struct CompleteButton: View {
 
 /// The capture bar: "Capture anything…" with the Talk mic at its trailing end (Fold review 2026-10-09 07:26, item 5:
 /// the mic sits here, not on a card). The mic presses in and brings Ask forward, already listening (as ⌥Space).
+/// Voice notes, slice 3: holding the mic (half a second) records a voice note instead, with a light haptic as the
+/// voice note sheet opens; the click that ends the hold doesn't also start Talk. Its context menu and the
+/// accessibility action "Voice note" do the same.
 private struct CaptureField: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var text = ""
     @FocusState private var focused: Bool
+    /// A hold just started a voice note: the button's own click (on release) is swallowed.
+    @State private var held = false
 
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
@@ -932,12 +937,29 @@ private struct CaptureField: View {
                 .padding(.vertical, MekaSpace.m)
                 .onSubmit { model.captureTyped(text); text = "" }
                 .onChange(of: model.focusCapture) { focused = true }
-            Button { model.requestTalk(reduced: reduceMotion) } label: {
+            Button {
+                if held { held = false; return }
+                model.requestTalk(reduced: reduceMotion)
+            } label: {
                 VoiceOrbView(phase: .ended, level: 0, palette: palette, size: 30)
             }
             .buttonStyle(MekaPressStyle())
-            .help("Talk to Navilife (⌥Space)")
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                held = true
+                MekaHaptics.light()
+                model.startVoiceNote()
+                // If the release lands off the button no click comes: the next click talks as usual.
+                Task {
+                    try? await Task.sleep(for: .seconds(2))
+                    held = false
+                }
+            })
+            .contextMenu {
+                Button("Take a voice note") { model.startVoiceNote() }
+            }
+            .help(VoiceNoteRules.shared.MAC_HINT)
             .accessibilityLabel("Talk to Navilife")
+            .accessibilityAction(named: "Voice note") { model.startVoiceNote() }
         }
         .padding(.leading, MekaSpace.l)
         .padding(.trailing, MekaSpace.xs)
@@ -1125,6 +1147,11 @@ struct QuickCaptureMenu: View {
                 .onSubmit { model.captureTyped(text); text = "" }
                 .padding(MekaSpace.m)
                 .frame(width: 320)
+            // Voice notes, slice 3: from the menu bar, Navilife comes forward recording one.
+            Button("🎙 Take a voice note") { model.startVoiceNote() }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .padding([.horizontal, .bottom], MekaSpace.m)
         }
     }
 }

@@ -157,6 +157,50 @@ object VoiceNoteRules {
         else -> "Tidied · $cards things to add"
     }
 
+    // ---- slice 3: the Mac (on-device SFSpeechRecognizer, the capture field's mic held) ----
+    /** The capture field's mic on the Mac: a click talks, a hold records a voice note. */
+    const val MAC_HINT = "Talk to Navilife (⌥Space) · hold for a voice note"
+    const val MAC_EMPTY = "No voice notes on this Mac yet · hold the mic by the capture field, or say “take a voice note” to Talk"
+    const val MAC_NOTE = "Recordings stay on this Mac, encrypted, and go after 30 days unless you keep them. Only the words go to Navilife's AI, when it pulls out what to add."
+    const val MAC_FAILED = "This Mac couldn't turn it into words · the recording is kept in Voice notes"
+    const val MAC_NO_ON_DEVICE = "This Mac turns notes into words only with Dictation's English on it (System Settings → Keyboard → Dictation) · the recording is kept"
+    const val MAC_NEEDS_MIC = "Allow Navilife the microphone and speech recognition in System Settings → Privacy & Security, then try again"
+    const val MAC_NO_KEY = "This Mac can't keep voice notes encrypted (it has no Secure Enclave) · the words are read, nothing is kept"
+    const val MIC_BUSY = "The microphone is busy · close the other app using it and try again"
+    const val MAC_TITLE = "VOICE NOTE"
+    const val SEE_CARDS = "See them in Needs you"
+
+    /** As [noWordsLine] on the Mac: [noOnDevice] when it has no on-device recogniser for English. */
+    fun noWordsLineMac(words: VoiceNoteWords, noOnDevice: Boolean): String? = when {
+        words == VoiceNoteWords.HEARD -> null
+        noOnDevice -> MAC_NO_ON_DEVICE
+        words == VoiceNoteWords.NOTHING -> NOTHING_HEARD
+        else -> MAC_FAILED
+    }
+
+    /** A note just recorded: its words from the recogniser's [segments] ([failed]: it couldn't run). */
+    fun made(id: String, atMs: Long, durationMs: Long, segments: List<String>, failed: Boolean): VoiceNote =
+        VoiceNote(id, atMs, durationMs.coerceAtLeast(0L), words(segments, failed), transcript(segments))
+
+    /** [note] kept past [KEEP_DAYS] days, or let go again. */
+    fun toggledKeep(note: VoiceNote): VoiceNote = note.copy(kept = !note.kept)
+
+    /**
+     * [note] once the AI has read it: [cards] offered (negative: it couldn't answer, the count stays as it was), its
+     * [tidy] note and [people] (empty keeps what it had). Null when there is nothing new to keep.
+     */
+    fun tidied(note: VoiceNote, cards: Int, tidy: String, people: List<String>): VoiceNote? {
+        if (cards < 0 && tidy.isEmpty()) return null
+        return note.copy(
+            cards = if (cards >= 0) cards else note.cards,
+            tidy = tidy.ifEmpty { note.tidy },
+            people = people.ifEmpty { note.people },
+        )
+    }
+
+    /** As [encode], for a list (the Mac passes a Swift array). */
+    fun encodeList(notes: List<VoiceNote>): String = encode(notes)
+
     /** What Talk says before the capture sheet opens recording. */
     const val OPENING = "Go ahead, I'm listening."
     const val OPENED = "Started a voice note."
@@ -244,7 +288,11 @@ object VoiceNoteRules {
      * A note as the pane shows it. [atDay]/[atMinute] are when it was made and [expiryDay] the day it goes, in the
      * phone's time zone; [today] for "Today"/"Yesterday".
      */
-    fun row(note: VoiceNote, atDay: Long, atMinute: Int, expiryDay: Long?, today: Long): VoiceNoteRow {
+    fun row(note: VoiceNote, atDay: Long, atMinute: Int, expiryDay: Long?, today: Long): VoiceNoteRow =
+        row(note, atDay, atMinute, expiryDay, today, onMac = false)
+
+    /** As [row]; [onMac]: a note the Mac couldn't write down says "this Mac". */
+    fun row(note: VoiceNote, atDay: Long, atMinute: Int, expiryDay: Long?, today: Long, onMac: Boolean): VoiceNoteRow {
         val day = when (atDay) {
             today -> "Today"
             today - 1 -> "Yesterday"
@@ -255,7 +303,7 @@ object VoiceNoteRules {
         val text = when (note.words) {
             VoiceNoteWords.HEARD -> if (tidied) note.tidy else note.transcript
             VoiceNoteWords.NOTHING -> "Nothing was heard in it"
-            VoiceNoteWords.FAILED -> "Not turned into words on this phone"
+            VoiceNoteWords.FAILED -> if (onMac) "Not turned into words on this Mac" else "Not turned into words on this phone"
         }
         val keepLine = if (note.kept || expiryDay == null) "Kept · Navilife won't delete it"
         else "Kept until " + CivilDate.shortLabel(expiryDay)
@@ -275,8 +323,11 @@ object VoiceNoteRules {
     }
 
     /** The pane's summary: "3 notes · 4 min 10 s recorded" · "1 note · 0:42". */
-    fun summary(notes: List<VoiceNote>): String {
-        if (notes.isEmpty()) return EMPTY
+    fun summary(notes: List<VoiceNote>): String = summary(notes, onMac = false)
+
+    /** As [summary]; [onMac]: the empty line says how to make one on the Mac. */
+    fun summary(notes: List<VoiceNote>, onMac: Boolean): String {
+        if (notes.isEmpty()) return if (onMac) MAC_EMPTY else EMPTY
         val total = notes.sumOf { it.durationMs }
         return (if (notes.size == 1) "1 note" else "${notes.size} notes") + " · " + elapsed(total) + " recorded"
     }

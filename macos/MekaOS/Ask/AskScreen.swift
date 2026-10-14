@@ -32,7 +32,7 @@ struct AskScreen: View {
                     .staggeredAppear(1)
                     // A help entry found by Search or Ask's field (slice 2) opens where it lives.
                     .onChange(of: model.openHelpPlace) { takeHelpPlace() }
-                    .onAppear { takeHelpPlace() }
+                    .onAppear { takeHelpPlace(); MacVoiceNoteStore.shared.load() }
                 // Setup or Health, one row, only when something needs a look.
                 if let status = ShellNav.statusItem(healthAttention: Int(model.health?.attention ?? 0), setupLeft: Int(model.setup?.toDo ?? 0)) {
                     MoreRow(item: status, line: ShellNav.moreLine(status, listsDue: 0, health: model.health?.summary, setup: model.setup?.summary),
@@ -53,7 +53,7 @@ struct AskScreen: View {
                 sectionLabel(MoreGroup.daily.label, first: false).staggeredAppear(ShellNav.moreLabelStep(1))
                 ForEach(Array(ShellNav.daily().enumerated()), id: \.element) { i, item in
                     // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
-                    let line = ShellNav.dailyLine(item, lines: model.dailyLines)
+                    let line = ShellNav.dailyLine(item, lines: model.dailyLines, voiceNotes: model.voiceNotesLine(MacVoiceNoteStore.shared.notes))
                     MoreRow(item: item, line: line.text, lit: line.lit, palette: palette) { open(item) }
                         .staggeredAppear(ShellNav.moreRowStep(1, i))
                 }
@@ -178,6 +178,7 @@ struct AskScreen: View {
         case .lifeAdmin: model.showLifeAdmin = true
         case .emergency: model.showEmergency = true
         case .trainQueue: model.showTrainQueue = true
+        case .voiceNotes: model.showVoiceNotes = true
         case .errands: model.showErrands = true
         case .appointments: model.showAppointments = true
         case .bins: model.showBins = true

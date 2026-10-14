@@ -71,6 +71,27 @@ struct DeviceIdentity {
 
     nonisolated private static let databaseKeyName = "database_key"
 
+    /// The 256-bit key that encrypts voice notes on this Mac (voice notes into actions, slice 3), as 64 hex characters.
+    /// Like the database key: a sealed file only, made once and read back before use; nil when this Mac has no sealed
+    /// files or the file won't open (then no voice note is kept).
+    nonisolated static func voiceNotesKey() -> String? {
+        guard let files else { return nil }
+        switch files.read(voiceNotesKeyName) {
+        case .found(let v):
+            return isKeyHex(v) ? v : nil
+        case .unreadable:
+            return nil
+        case .missing:
+            var bytes = [UInt8](repeating: 0, count: 32)
+            guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { return nil }
+            let hex = bytes.map { String(format: "%02x", $0) }.joined()
+            guard files.write(voiceNotesKeyName, hex), case .found(let back) = files.read(voiceNotesKeyName), back == hex else { return nil }
+            return hex
+        }
+    }
+
+    nonisolated private static let voiceNotesKeyName = "voice_notes_key"
+
     nonisolated static func isKeyHex(_ s: String) -> Bool {
         s.count == 64 && s.allSatisfy { $0.isHexDigit && !$0.isUppercase }
     }

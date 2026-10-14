@@ -112,4 +112,36 @@ class VoiceNoteFacadeTest {
         assertEquals("Long day. Tired.", none.tidy)
         assertEquals("Tidied · nothing in it to add", assertIs<HandleOutcome.NothingToDo>(none.cards).line)
     }
+
+    @Test
+    fun slice3TheMacsRowsSubjectAndLinesComeFromTheCore() = runTest {
+        val c = core()
+        val vn = os.meka.core.domain.VoiceNoteRules
+        // 22:40 tonight and 08:05 three days ago, in London.
+        val tonight = vn.made("vn-a", now, 83_000, listOf("ring the garage"), failed = false)
+        val earlier = vn.made("vn-b", now - 3 * 86_400_000L - (14 * 60 + 35) * 60_000L, 5_000, emptyList(), failed = true)
+        assertEquals("Voice note · 22:40", c.voiceNoteSubject(now))
+        val rows = c.voiceNoteRows(listOf(earlier, tonight), onMac = true)
+        assertEquals(listOf("vn-a", "vn-b"), rows.map { it.id })
+        assertEquals("Today 22:40 · 1:23", rows[0].title)
+        assertEquals("Kept until Mon 9 Nov", rows[0].keepLine)
+        assertTrue(rows[1].title.endsWith("08:05 · 0:05"))
+        assertEquals("Not turned into words on this Mac", rows[1].text)
+        assertEquals(os.meka.core.domain.DailyLine("2 notes · newest today", true), c.voiceNotesLine(listOf(earlier, tonight)))
+        assertNull(c.voiceNotesLine(emptyList()))
+
+        // What the AI's answer says on the Mac's sheet and in Voice notes.
+        server.reply = VoiceNoteCodec.Response("answered", "Ring the garage.", listOf("Sam"),
+            listOf(MessageRequestCodec.Proposal("task", "Ring the garage", words = "tomorrow")))
+        val read = c.tidyVoiceNote(words, "Voice note · 22:40")
+        assertEquals(1, read.cardCount)
+        assertEquals("Mentions Sam", read.peopleLine)
+        assertEquals("Tidied · 1 thing to add", read.captureLine)
+        assertEquals("Tidied · 1 thing to add · in Needs you", read.paneLine)
+        server.down = true
+        val off = c.tidyVoiceNote("buy bread and call the plumber about the boiler", "Voice note · 22:41")
+        assertEquals(-1, off.cardCount)
+        assertTrue(off.captureLine.endsWith(" · make cards in Voice notes later"))
+        assertNull(vn.tidied(tonight, off.cardCount, off.tidy, off.people))
+    }
 }

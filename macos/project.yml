@@ -42,8 +42,8 @@ targets:
         NSHumanReadableCopyright: ""
         MekaSyncURL: $(MEKA_SYNC_URL)
         # Talk to MEKA (V1 voice slice 3): speech is recognised on the Mac only; nothing is recorded or sent away.
-        NSMicrophoneUsageDescription: Navilife listens while you talk to it. Your voice is turned into words on this Mac and never recorded or sent away.
-        NSSpeechRecognitionUsageDescription: Navilife turns what you say into words on this Mac only, so you can talk to it. Nothing is sent to Apple or kept.
+        NSMicrophoneUsageDescription: Navilife listens while you talk to it, and records the voice notes you start. Your voice is turned into words on this Mac; a voice note's recording is kept on this Mac only, encrypted, and never sent away.
+        NSSpeechRecognitionUsageDescription: Navilife turns what you say into words on this Mac only, for Talk and voice notes. Nothing is sent to Apple.
         # Self-updating phone app: tools/publish-fold.sh opens mekaos://publish-fold-update?apk=… (FoldUpdateSheet).
         CFBundleURLTypes:
           - CFBundleURLName: os.meka.mac.publish
