@@ -37,6 +37,9 @@ import os.meka.core.domain.MailAutopilotFields
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.ParcelFields
+import os.meka.core.domain.ParcelRules
+import os.meka.core.domain.ParcelState
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.MailWarrantyFields
 import os.meka.core.domain.ObligationKind
@@ -600,6 +603,36 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(cursor = "h3") }
         i.syncAccount(id)
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
+    }
+
+    @Test
+    fun shippingEmailsBecomeOneParcelThatADeliveryClears() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        // Autopilot isn't needed: parcels are read whether or not the emails were tidied.
+        gmail.mailbox["p1"] = msg("p1", 0, "auto-confirm@shop.example").copy(
+            subject = "Your order 112-4455 has shipped", preview = "Arriving tomorrow between 10:15 and 11:15",
+        )
+        gmail.mailbox["n1"] = msg("n1", 0, "sam@example.com").copy(subject = "Arriving tomorrow?", preview = "Are you arriving tomorrow")
+        gmail.nextRound = { MailChanges(fetch = listOf("p1", "n1"), cursor = "h2") }
+        i.syncAccount(id)
+        val parcels = EntityReader.scanning(ops).entities("home", EntityTypes.PARCEL)
+        val (pid, f) = parcels.entries.single()
+        assertEquals(ParcelRules.entityId(id, "112-4455"), pid)
+        assertEquals(FieldValue.Text(ParcelState.COMING.name), f[ParcelFields.STATE])
+        assertEquals(FieldValue.Text("10:15–11:15"), f[ParcelFields.WINDOW])
+        assertEquals(FieldValue.Text("Shop"), f[ParcelFields.MERCHANT])
+        // The next day the delivery email clears it (the same entity, never a second one).
+        now += day
+        gmail.mailbox["p2"] = msg("p2", 0, "auto-confirm@shop.example").copy(subject = "Delivered: your order 112-4455", preview = "Left with a neighbour")
+        gmail.nextRound = { MailChanges(fetch = listOf("p2"), cursor = "h3") }
+        i.syncAccount(id)
+        val after = EntityReader.scanning(ops).entities("home", EntityTypes.PARCEL)
+        assertEquals(setOf(pid), after.keys)
+        assertEquals(FieldValue.Text(ParcelState.DELIVERED.name), after.getValue(pid)[ParcelFields.STATE])
     }
 
     // ---- Slice 3c: the daily Junk review ----

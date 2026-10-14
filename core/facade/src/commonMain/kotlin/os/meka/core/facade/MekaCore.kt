@@ -5853,6 +5853,8 @@ class MekaCore(
             bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
             gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
             trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
+            // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
+            parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))

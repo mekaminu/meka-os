@@ -113,6 +113,8 @@ object EntityTypes {
     const val MAIL_ITEM = "mail_item"
     /** Inbox autopilot, slice 8a (2026-10-13): one mail account's backlog clean-up plan, from the server (see [MailBacklogRules]). */
     const val MAIL_BACKLOG = "mail_backlog"
+    /** Inbox autopilot, slice 3g (2026-10-14): one parcel read from a mail account's shipping emails, from the server (see [ParcelRules]). */
+    const val PARCEL = "parcel"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -122,7 +124,7 @@ object EntityTypes {
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
-        MAIL_BACKLOG,
+        MAIL_BACKLOG, PARCEL,
     )
 }
 
@@ -410,6 +412,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.MAIL_ITEM -> MergePolicy.Lww
         // Backlog plans: the server writes the plan; Approve (slice 8b) comes from either app, latest wins.
         entityType == EntityTypes.MAIL_BACKLOG -> MergePolicy.Lww
+        // Parcels: only the server writes them, from the shipping emails; its latest reading wins.
+        entityType == EntityTypes.PARCEL -> MergePolicy.Lww
         // Drive times: only the server writes them; its latest answer wins.
         entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
         // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.

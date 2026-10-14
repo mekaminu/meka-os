@@ -52,6 +52,8 @@ data class Today(
     val gifts: GiftLine? = null,
     /** Travel mode, slice 1: "Barcelona in 3 days · Flight BA478 Sat 07:40", "Barcelona · day 2 of 5 · …" ([TripRules.todayLine]); set by the facade. */
     val trip: TripLine? = null,
+    /** Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from shipping emails ([ParcelRules.todayLine]); set by the facade. */
+    val parcels: ParcelLine? = null,
     /**
      * Needs you's Coming up (Fold review 2026-10-12 17:56, item 3): the next two task reminders this week, shown under
      * the empty line ([NeedsYouMeanwhileRules.comingUp]); set by the facade, which sees every task.

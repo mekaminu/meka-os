@@ -563,6 +563,10 @@ class ActivityLog(
     fun mailItems(): List<MailItem> = replica.entities(EntityTypes.MAIL_ITEM)
         .mapNotNull { i -> MailNeedsRules.read(i.ref.entityId, i.fields) }
 
+    /** Inbox autopilot, slice 3g: the parcels the server read from shipping emails (Today's "arriving today" line). */
+    fun parcels(): List<Parcel> = replica.entities(EntityTypes.PARCEL)
+        .mapNotNull { i -> ParcelRules.read(i.ref.entityId, i.fields) }
+
     /**
      * Unsubscribe on one sender (Mail): asks the server to do it at its next check. The line Mail shows: asked, already
      * done/asked, or unknown.

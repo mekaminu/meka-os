@@ -916,6 +916,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from the shipping emails (lit in
+                    // the accent while one is out for delivery); a delivered parcel drops off; cross-fades as it changes.
+                    today.parcels?.let { parcels ->
+                        Crossfade(parcels, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "parcels-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     today.dateNight?.let { night ->
                         Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->

@@ -209,6 +209,16 @@ struct TodayView: View {
                             .accessibilityLabel(trip.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from the shipping emails (lit in
+                    // the accent while one is out for delivery); a delivered parcel drops off; cross-fades.
+                    if let parcels = model.today?.parcels {
+                        Text(parcels.text).font(MekaType.caption)
+                            .foregroundStyle(parcels.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: parcels.text)
+                            .accessibilityLabel(parcels.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

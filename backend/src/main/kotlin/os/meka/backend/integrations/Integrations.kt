@@ -8,6 +8,7 @@ import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MailBacklogFacts
@@ -483,6 +484,30 @@ class Integrations(
         runCatching { backlog(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         runCatching { publishMailNeeds(a, ms) }
+        // Slice 3g: parcels arriving, from the shipping emails (whether or not Autopilot has tidied them).
+        runCatching { parcels(a, ms) }
+    }
+
+    /**
+     * Inbox autopilot, slice 3g: the order and carrier emails of the last [ParcelRules.WINDOW_DAYS] days (sorted as
+     * receipts or notifications by the rules; never newsletters, promos or junk) are read by [ParcelRules.read] from
+     * the sender, subject and kept preview, folded into parcels ([ParcelRules.fold]) and written as one `parcel` entity
+     * each (days in Europe/London). Rewritten every check; unchanged fields write nothing.
+     */
+    internal fun parcels(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= ParcelRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it == MailSort.RECEIPT || it == MailSort.NOTIFICATION }
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val reads = candidates.mapNotNull { h ->
+            ParcelRules.read(h.id, h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, h.receivedAtMs, LONDON.epochDayOf(h.receivedAtMs))
+        }
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        for (p in ParcelRules.fold(reads)) writeMail(a, ParcelRules.entityId(a.id, p.key), ParcelRules.fields(p, account), EntityTypes.PARCEL)
     }
 
     /**
