@@ -52,7 +52,7 @@ object DocumentShareRules {
         val s = text.lowercase()
         if (ParkingConfirmationRules.looksLikeOne(text)) return null
         // Whole words for the short ones ("ehic" is inside "vehicle").
-        val words = String(CharArray(s.length) { if (s[it].isLetter()) s[it] else ' ' }).split(' ').toSet()
+        val words = CharArray(s.length) { if (s[it].isLetter()) s[it] else ' ' }.concatToString().split(' ').toSet()
         return when {
             has(s, "passport", "passeport") || mrzLines(text).any { it.startsWith("P<") } -> DocKind.PASSPORT
             has(s, "global health insurance card", "european health insurance card") || words.any { it == "ghic" || it == "ehic" } -> DocKind.HEALTH_CARD
