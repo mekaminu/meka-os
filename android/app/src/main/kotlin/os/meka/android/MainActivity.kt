@@ -96,6 +96,15 @@ class MainActivity : ComponentActivity() {
                 app.openErrands.value = true
                 app.openDestination.value = ShellDestination.ASK
             }
+            // "Parked the Golf?" (car and parking, slice 3): Ask with the Car pane up, saving the spot or for the bay.
+            open.startsWith(OPEN_CAR_PARK_PREFIX) || open.startsWith(OPEN_CAR_PREFIX) -> {
+                val save = open.startsWith(OPEN_CAR_PARK_PREFIX)
+                val car = open.removePrefix(if (save) OPEN_CAR_PARK_PREFIX else OPEN_CAR_PREFIX)
+                val id = intent.getIntExtra(EXTRA_CANCEL, 0)
+                if (id != 0) androidx.core.app.NotificationManagerCompat.from(this).cancel(id)
+                if (car.isNotBlank()) app.openCarFrom.value = os.meka.android.ask.CarOpen(car, save)
+                app.openDestination.value = ShellDestination.ASK
+            }
             open == OPEN_LEAVE -> {
                 app.openLeave.value = true
                 app.openDestination.value = ShellDestination.ASK
@@ -155,6 +164,9 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_CANCEL = "os.meka.cancel"
         /** Ask → More → Errands, its pane up (the near-a-place reminder). */
         const val OPEN_ERRANDS = "errands"
+        /** "car-park:car2": the Car pane saving car 2's spot; "car:car2": the Car pane (its bay to add). */
+        const val OPEN_CAR_PARK_PREFIX = "car-park:"
+        const val OPEN_CAR_PREFIX = "car:"
         /** "dest:LISTS" opens Lists. */
         const val OPEN_DESTINATION_PREFIX = "dest:"
         /** "news:<story id>" opens News over Today on that story; "news:" opens News. */

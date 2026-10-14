@@ -72,7 +72,11 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.CarBluetoothRules
+import os.meka.core.domain.CarLink
+import os.meka.core.domain.DeviceChoice
 import os.meka.core.domain.FindView
+import os.meka.core.domain.PairedDevice
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.LocationFix
 import os.meka.core.domain.ParkedRow
@@ -90,6 +94,8 @@ import os.meka.core.facade.MekaCore
  * while it is open, says "Within 15 m · look around" with one buzz, and offers Walk there in Maps (his maps app, only
  * on his tap). Drove off clears the spot with Undo. Under them each car's summary with Dates › (Lists → Renewals).
  * [findFirst]: opened from Talk ("where did I park?"): the first parked car's Find my car is already open.
+ * [parkFirst]: opened from "Parked the Golf?" (slice 3, the car's Bluetooth disconnected): that car's spot is saved
+ * straight away. BLUETOOTH links each car to one of the phone's paired devices ([CarBluetooth], on this phone only).
  *
  * Motion: the pane springs up (MekaPane) with the tile's title travelling in; lines cross-fade ("Finding where you
  * are…" → "Saved where the Golf is · ±6 m", the accent when refused, light haptic on a save, a tick when refused);
@@ -98,7 +104,7 @@ import os.meka.core.facade.MekaCore
  * arrow snaps, unfold and fades become cross-fades.
  */
 @Composable
-fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst: Boolean = false) {
+fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst: Boolean = false, parkFirst: String? = null) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -154,6 +160,23 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
     val saidColor by animateColorAsState(
         if (refused) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "park-said",
     )
+    LaunchedEffect(parkFirst) { parkFirst?.let { startPark(it) } }
+    // Car and parking, slice 3: each car's Bluetooth device (kept on this phone only).
+    var links by remember { mutableStateOf(CarBluetooth.links(context)) }
+    var picking by remember { mutableStateOf<String?>(null) }
+    var btAllowed by remember { mutableStateOf(CarBluetooth.allowed(context)) }
+    var always by remember { mutableStateOf(CarBluetooth.always(context)) }
+    LaunchedEffect(cars) {
+        val pruned = CarBluetoothRules.prune(links, cars.cars.map { it.carId })
+        if (pruned != links) { links = pruned; CarBluetooth.store(context, pruned) }
+    }
+    val askNearby = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        btAllowed = ok || CarBluetooth.allowed(context)
+    }
+    val askAlways = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { always = CarBluetooth.always(context) }
+    val askPreciseForAlways = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (ParkingStore.precise(context)) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -297,9 +320,111 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
                 Text(ParkingRules.DATES_ACTION, style = MekaType.caption, color = Meka.colors.accent)
             }
         }
+        // Car and parking, slice 3: each car's Bluetooth saves the spot when it disconnects.
+        item(key = "bt-label") { SectionLabel(CarBluetoothRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
+        item(key = "bt-intro") {
+            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(CarBluetoothRules.INTRO, style = MekaType.caption, color = Meka.colors.textSecondary)
+                if (!btAllowed) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(CarBluetoothRules.NEEDS_PERMISSION, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
+                        Text(CarBluetoothRules.ALLOW, style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                                haptics.tick(); askNearby.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                            }.minTouch().padding(MekaSpace.xs))
+                    }
+                } else if (links.isNotEmpty()) {
+                    Text(CarBluetoothRules.modeLine(always), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    if (!always) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(CarBluetoothRules.ALWAYS_LINE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+                            Text(CarBluetoothRules.ALLOW, style = MekaType.caption, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                                    haptics.tick()
+                                    if (ParkingStore.precise(context)) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                                    else askPreciseForAlways.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                                }.minTouch().padding(MekaSpace.xs))
+                        }
+                    }
+                }
+            }
+        }
+        if (btAllowed) {
+            itemsIndexed(cars.cars, key = { _, c -> "bt-${c.carId}" }) { _, c ->
+                BluetoothRow(
+                    title = c.title, link = links[c.carId], open = picking == c.carId,
+                    choices = if (picking == c.carId) CarBluetoothRules.choices(CarBluetooth.paired(context), links, c.carId, cars) else emptyList(),
+                    bluetoothOn = CarBluetooth.bluetoothOn(context),
+                    modifier = Modifier.animateItem(),
+                    onToggle = { haptics.tick(); picking = if (picking == c.carId) null else c.carId },
+                    onPick = { d ->
+                        haptics.light()
+                        links = if (d == null) CarBluetoothRules.unlink(links, c.carId)
+                        else CarBluetoothRules.link(links, c.carId, PairedDevice(d.address, d.name))
+                        CarBluetooth.store(context, links)
+                        picking = null
+                    },
+                )
+            }
+        }
         item(key = "privacy") {
             Text(ParkingRules.PRIVACY, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
+        }
+    }
+}
+
+/**
+ * One car's Bluetooth: "Bluetooth · MY VW 1234" (or not linked) with Pick/Change, unfolding the phone's paired devices
+ * (car-looking ones first; one used by the other car says so) and None.
+ */
+@Composable
+private fun BluetoothRow(
+    title: String, link: CarLink?, open: Boolean, choices: List<DeviceChoice>, bluetoothOn: Boolean, modifier: Modifier,
+    onToggle: () -> Unit, onPick: (DeviceChoice?) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
+                Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Crossfade(CarBluetoothRules.rowLine(link), animationSpec = MekaMotion.appear(reduced), label = "bt-line") { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+            Text(if (link == null) CarBluetoothRules.PICK else CarBluetoothRules.CHANGE, style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onToggle)
+                    .semantics { contentDescription = "Bluetooth for $title" }.minTouch().padding(MekaSpace.xs))
+        }
+        AnimatedVisibility(
+            open,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                when {
+                    choices.isEmpty() && !bluetoothOn -> Text(CarBluetoothRules.BLUETOOTH_OFF, style = MekaType.caption, color = Meka.colors.accent)
+                    choices.isEmpty() -> Text(CarBluetoothRules.NO_DEVICES, style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+                choices.forEach { d ->
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onPick(d) }.minTouch()
+                            .padding(vertical = MekaSpace.xxs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(d.name, style = MekaType.body, color = if (d.chosen) Meka.colors.accent else Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                        d.linkedTo?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                    }
+                }
+                if (link != null) {
+                    Text(CarBluetoothRules.NONE, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onPick(null) }.minTouch().padding(MekaSpace.xs))
+                }
+            }
         }
     }
 }

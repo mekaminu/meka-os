@@ -204,6 +204,12 @@ fun AskRoute(
     LaunchedEffect(openCar) {
         if (openCar) { carFindFirst = true; pane = MoreItem.CAR; healthApp?.openCar?.value = false }
     }
+    // "Parked the Golf?" (car and parking, slice 3) → the Car pane, saving that car's spot (or to add the bay).
+    var carParkFirst by remember { mutableStateOf<String?>(null) }
+    val openCarFrom by remember(healthApp) { healthApp?.openCarFrom ?: kotlinx.coroutines.flow.MutableStateFlow<CarOpen?>(null) }.collectAsState()
+    LaunchedEffect(openCarFrom) {
+        openCarFrom?.let { o -> carFindFirst = false; carParkFirst = o.carId.takeIf { o.save }; pane = MoreItem.CAR; healthApp?.openCarFrom?.value = null }
+    }
     // An errand found by Search (errands by location, slice 2b) → the Errands pane.
     val foundItem by remember(healthApp) { healthApp?.openItem ?: kotlinx.coroutines.flow.MutableStateFlow<OpenItem?>(null) }.collectAsState()
     LaunchedEffect(foundItem) {
@@ -334,7 +340,11 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.TRAIN_QUEUE) { TrainQueuePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ERRANDS) { ErrandsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.CAR) {
-            CarPane(core, onClose = { pane = null; carFindFirst = false }, onDates = { pane = null; carFindFirst = false; open(MoreItem.LISTS) }, findFirst = carFindFirst)
+            CarPane(
+                core, onClose = { pane = null; carFindFirst = false; carParkFirst = null },
+                onDates = { pane = null; carFindFirst = false; carParkFirst = null; open(MoreItem.LISTS) },
+                findFirst = carFindFirst, parkFirst = carParkFirst,
+            )
         }
         MekaPane(visible = pane == MoreItem.APPOINTMENTS) { AppointmentsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.BINS) { BinsPane(core, onClose = { pane = null }) }

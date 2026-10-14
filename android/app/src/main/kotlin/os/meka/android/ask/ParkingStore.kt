@@ -55,12 +55,15 @@ object ParkingStore {
         prefs(context).edit().putString(KEY_SPOTS, ParkingRules.encode(spots.values)).apply()
     }
 
-    /** "I've parked here" for [carId]: a few seconds of fixes, the best saved. Never throws. */
-    suspend fun parkHere(context: Context, carId: String, title: String): ParkSaved {
+    /**
+     * "I've parked here" for [carId]: a few seconds of fixes, the best saved. Never throws. [maxMs]: how long to wait
+     * for a first fix (slice 3: the car's Bluetooth disconnecting saves by itself in at most 15 s).
+     */
+    suspend fun parkHere(context: Context, carId: String, title: String, maxMs: Long = ParkingRules.FIX_TIMEOUT_MS): ParkSaved {
         val before = spots(context)
         if (!precise(context)) return ParkSaved(before, ParkingRules.NO_PERMISSION, false)
         if (!locationOn(context)) return ParkSaved(before, ParkingRules.LOCATION_OFF, false)
-        val fixes = try { listen(context) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
+        val fixes = try { listen(context, maxMs) } catch (e: CancellationException) { throw e } catch (e: Exception) { emptyList() }
         val now = System.currentTimeMillis()
         val r = ParkingRules.save(before, carId, title, ParkingRules.bestFix(fixes, now), now)
         if (r.saved) store(context, r.spots)
@@ -74,7 +77,7 @@ object ParkingStore {
 
     /** The fixes of the next few seconds (and a very fresh one the phone already has). */
     @SuppressLint("MissingPermission") // precise() checked by the caller; a late revoke throws, caught there
-    private suspend fun listen(context: Context): List<LocationFix> {
+    private suspend fun listen(context: Context, maxMs: Long): List<LocationFix> {
         val lm = context.getSystemService(LocationManager::class.java) ?: return emptyList()
         val providers = lm.getProviders(true).filter { it == LocationManager.GPS_PROVIDER || it == FUSED || it == LocationManager.NETWORK_PROVIDER }
         if (providers.isEmpty()) return emptyList()
@@ -91,7 +94,7 @@ object ParkingStore {
                 val best = got.toList().mapNotNull { it.accuracyM }.minOrNull()
                 if (best != null && best <= GOOD_ENOUGH_M && waited >= 1_500) break
                 if (waited >= ParkingRules.SETTLE_MS && got.isNotEmpty()) break
-                if (waited >= ParkingRules.FIX_TIMEOUT_MS) break
+                if (waited >= maxMs) break
             }
         } finally {
             lm.removeUpdates(listener)
