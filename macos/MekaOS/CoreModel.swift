@@ -4331,7 +4331,7 @@ struct AskReplyView {
     /// Earned trust: what MEKA already did on its own for this answer, each with Undo.
     var did: [AskAutoDone] = []
     /// Ask knows how Navilife itself works: Take me there under an answer from the help.
-    var help: HelpLink? = nil
+    var help: MekaKit.HelpLink? = nil
     /// "Still stuck? Ask Navilife" under a help answer (slice 2).
     var stillStuck: String? = nil
 }
