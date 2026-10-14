@@ -1722,6 +1722,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallLogRules.shared.dayLabel(day: 10, today: 11), "Yesterday")
     }
 
+    func testVoiceWaveformReachesSwift() {
+        // Call notifications, slice 7: the player's scrub bar and waveform.
+        let rules = VoiceRecordingRules.shared
+        XCTAssertEqual(rules.seekMs(fraction: 0.25, durationMs: 40_000), 10_000)
+        XCTAssertEqual(rules.startFromMs(fraction: 1, durationMs: 40_000), 0)
+        XCTAssertEqual(rules.spoken(positionMs: 12_400, durationMs: 40_000), "Voice message, 0:12 of 0:40")
+        XCTAssertEqual(VoiceWaveformRules.shared.BARS, 48)
+        XCTAssertTrue(VoiceWaveformRules.shared.bars(levels: [], bars: 48).isEmpty)
+    }
+
     func testVoiceRecordingReachesSwift() {
         // Call assistant polish 8c: the player's line and bar, and only a held id is ever asked for.
         let rules = VoiceRecordingRules.shared

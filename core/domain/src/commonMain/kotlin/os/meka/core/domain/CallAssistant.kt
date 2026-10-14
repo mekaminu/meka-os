@@ -306,6 +306,23 @@ object VoiceRecordingRules {
     fun fraction(positionMs: Long, durationMs: Long): Float =
         if (durationMs <= 0) 0f else (positionMs.toFloat() / durationMs).coerceIn(0f, 1f)
 
+    /** Where a tap or drag at [fraction] of the waveform lands, in ms (slice 7's scrub bar). */
+    fun seekMs(fraction: Float, durationMs: Long): Long =
+        if (durationMs <= 0) 0L else (fraction.coerceIn(0f, 1f) * durationMs).toLong().coerceIn(0L, durationMs)
+
+    /**
+     * Where a seek starts playing from: a drag let go at (or within half a second of) the end starts again from the
+     * top rather than playing nothing.
+     */
+    fun startFromMs(fraction: Float, durationMs: Long): Long {
+        val at = seekMs(fraction, durationMs)
+        return if (durationMs > 0 && durationMs - at < 500) 0L else at
+    }
+
+    /** What a screen reader says for the player: "Voice message, 0:12 of 0:40" (or its length before it plays). */
+    fun spoken(positionMs: Long, durationMs: Long): String =
+        if (durationMs <= 0) "Voice message" else "Voice message, ${clock(positionMs)} of ${clock(durationMs)}"
+
     private fun clock(ms: Long): String {
         val s = (ms.coerceAtLeast(0) / 1000).toInt()
         return "${s / 60}:${(s % 60).toString().padStart(2, '0')}"

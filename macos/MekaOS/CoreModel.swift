@@ -2148,6 +2148,13 @@ final class CoreModel {
         return data
     }
 
+    /// The player's waveform (call notifications slice 7) for a recording [voiceMessageAudio] fetched: the core reads
+    /// the MP3's frames in memory; only a String goes in and plain Doubles come back, on the main actor.
+    func voiceWaveform(_ data: Data) -> [Double] {
+        guard let core else { return [] }
+        return core.voiceWaveformOfBase64(base64: data.base64EncodedString()).map { Double($0.floatValue) }
+    }
+
     /// "Play my messages" in Talk (call assistant polish 8c): the synced summary's voice messages as plain steps (MEKA's
     /// lines, then each recording or its words). Empty when not connected.
     func voicePlaylist() -> [PlaylistStep] {

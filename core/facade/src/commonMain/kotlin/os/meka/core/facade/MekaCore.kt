@@ -4835,6 +4835,15 @@ class MekaCore(
         voiceMessageAudio(id)?.let { kotlin.io.encoding.Base64.encode(it) }
 
     /**
+     * The player's waveform (call notifications slice 7) for a recording the Mac fetched with [voiceMessageAudioBase64]:
+     * [os.meka.core.domain.VoiceWaveformRules.BARS] heights in 0..1, empty when it can't be read. Pure, in memory.
+     */
+    fun voiceWaveformOfBase64(base64: String): List<Float> {
+        val bytes = runCatching { kotlin.io.encoding.Base64.decode(base64) }.getOrNull() ?: return emptyList()
+        return os.meka.core.domain.VoiceWaveformRules.of(bytes)
+    }
+
+    /**
      * What Talk plays for "play my messages" (polish 8c): the voice messages in [summary] (the one the device shows;
      * the Fold passes its contacts-named copy), urgent first then oldest first, each introduced in MEKA's words and
      * then its recording ([voiceMessageAudio]) or its words. Pure; nothing is marked or cleared.
