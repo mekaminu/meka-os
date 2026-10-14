@@ -51,6 +51,21 @@ use `body` too; Up next's title is the one bold line.
 
 Moved to **docs/motion-catalogue.md** (2026-10-11). Read it before building or changing any screen; it applies to every screen exactly as before.
 
+## Daily plan (Meka, 2026-10-14 10:30: "a daily plan of what will be built so I can plan and track it")
+
+Runs keep to this order after any new "Take first" fix from Meka. It mirrors the Navilife tab of his project tracker (https://claude.ai/artifact — see the midnight report task), which the midnight run updates. Items marked [!] for mail access are **buildable now** (Connect mail and Inbox autopilot landed 2026-10-13): build them, and say in the run summary that they need his accounts connected to test. If a day's items finish early, start the next day's.
+- **Wed 14 Oct:** natural voice (finish) · school dates for both boys + School rhythm · Ask's help: Take me there · two cars (Car on autopilot per car) · Car and parking (Where I parked, Find my car, big car parks).
+- **Thu 15 Oct:** Voice notes into actions · Screenshots and photos that do something + Photo of a letter → task · Weekly reflection · Kids' admin · Barça match day.
+- **Fri 16 Oct:** the email assistant set: Email triage completeness · Promises → Waiting for, receipts → Vault, renewals radar · Follow-up radar · Scheduling assistant · Meeting prep · School and family logistics from email · Life audit · Returns and warranties completeness.
+- **Sat 17 Oct:** Money manager slices 1–4 (connect bank, transactions and categories, Money screen, nudges); if Enable Banking isn't set up yet, build the CSV-import path and the screens with invented data first.
+- **Sun 18 Oct:** Money manager 5–12 (forecast, payday view, cards, watchdog, low-balance warning, refunds, net worth) · Trading tracker (Hyperliquid by public address).
+- **Mon 19 Oct:** Money manager 13–18 (side hustle and tax, shared costs, challenges, Ask/Talk, travel, year in review) · Reading and learning · Train-time queue completeness.
+- **Tue 20 Oct:** Household and family sharing with his wife (needs Needs Meka #18) · Done for the day · Protected time · Edit your calendars completeness.
+- **Wed 21 Oct:** Galaxy Watch completeness + approve drafts from the wrist · Vault · Travel mode completeness · Activity log and "What Navilife may do" completeness.
+- **Thu 22 Oct:** Full news hub · Balance view · Clean-ups.
+- **Fri 23 Oct:** Mac review polish (needs his Mac screenshots, #21) · completeness sweep across every item.
+- **Sat 24 – Fri 31 Oct:** buffer: his feedback, the items waiting on keys (trains, travel times, spam lookup, DVLA, council bins, Enable Banking), polish. Target: everything done by **Fri 31 Oct**.
+
 ## Fix first (Meka's feedback, take before anything below)
 
 
