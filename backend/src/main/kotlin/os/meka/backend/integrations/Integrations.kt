@@ -11,6 +11,8 @@ import os.meka.core.domain.MailBacklog
 import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailTidyFacts
+import os.meka.core.domain.MailSenderRule
+import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
@@ -232,18 +234,36 @@ class Integrations(
         store.accounts(householdId).filter { it.status != DISCONNECTED }.map {
             val sorted = if (it.provider in mail) sortedCounts(it.id) else null
             WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = sorted,
-                wouldTidy = if (sorted != null) tidyCounts(it.id, keepAddresses(householdId)) else null)
+                wouldTidy = if (sorted != null) tidyCounts(householdId, it.id, keepAddresses(householdId)) else null)
         }
 
     /**
      * Slice 3a: Autopilot's dry run — what [MailTidyRules] would do with each sorted email still in the inbox, counted
      * per [MailTidy] name (KEEP included). Nothing in the mailbox moves; null if the store can't be read.
      */
-    private fun tidyCounts(accountId: String, keep: Set<String>): Map<String, Int>? {
+    private fun tidyCounts(householdId: String, accountId: String, keep: Set<String>): Map<String, Int>? {
         val ms = mailStore ?: return null
         return runCatching {
-            ms.inboxSorted(accountId).groupingBy { (h, s) -> MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep)).name }.eachCount()
+            val inbox = ms.inboxSorted(accountId)
+            val rules = senderRules(householdId, accountId, inbox.map { it.first.fromAddress })
+            inbox.groupingBy { (h, s) ->
+                MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] })).name
+            }.eachCount()
         }.getOrNull()
+    }
+
+    /**
+     * Completeness: Meka's own rule for each of these senders of one account ([MailSenderRule], set in Mail on the
+     * sender's synced `mail_sender` entity, whose id is the account and the address), by lower-cased address; senders
+     * without a rule are left out. Never logged.
+     */
+    internal fun senderRules(householdId: String, accountId: String, addresses: Collection<String?>): Map<String, MailSenderRule> {
+        val senders = runCatching { reader.entities(householdId, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+        if (senders.isEmpty()) return emptyMap()
+        return addresses.mapNotNull { it?.lowercase()?.takeIf { a -> a.isNotEmpty() } }.distinct().mapNotNull { address ->
+            val id = MailUnsubscribeRules.senderId(accountId, address)
+            MailSenderRuleRules.read(senders[id])?.let { address to it }
+        }.toMap()
     }
 
     /**
@@ -475,9 +495,14 @@ class Integrations(
             nextPage = null, listed = false, readyMs = null,
         )
         var s = scan
-        val keep = keepAddresses(a.householdId)
+        val keepBase = keepAddresses(a.householdId)
+        // Completeness: a sender Meka keeps in the inbox is kept by the clean-up too (read once a check).
+        val keptIds = runCatching { reader.entities(a.householdId, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+            .filter { (_, f) -> MailSenderRuleRules.read(f) == MailSenderRule.KEEP }.keys
         fun planned(h: MailHeader): BacklogItem {
             val sorted = MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
+            val kept = h.fromAddress?.lowercase()?.takeIf { MailUnsubscribeRules.senderId(a.id, it) in keptIds }
+            val keep = if (kept != null) keepBase + kept else keepBase
             val kind = MailBacklogRules.plan(MailBacklogFacts(h.fromAddress, h.inInbox, sorted, h.receivedAtMs, keep), nowMs)
             return BacklogItem(h.id, h.threadId, h.fromAddress, h.fromName, h.receivedAtMs, kind)
         }
@@ -554,7 +579,9 @@ class Integrations(
         if (!MailBacklogRules.shouldApply(plan, paused, batch)) return
         val done = moved.map { it.id }.toSet()
         val perCheck = if (m.id == MailProviders.OUTLOOK) MailBacklogRules.APPLY_PER_CHECK_OUTLOOK else MailBacklogRules.APPLY_PER_CHECK_GMAIL
-        val next = items.filter { it.kind != MailBacklogKind.KEEP && it.id !in done }
+        // Completeness: a sender Meka chose to keep in the inbox after the plan was made is still left alone.
+        val keptNow = senderRules(hh, a.id, items.map { it.fromAddress }).filterValues { it == MailSenderRule.KEEP }.keys
+        val next = items.filter { it.kind != MailBacklogKind.KEEP && it.id !in done && it.fromAddress?.lowercase() !in keptNow }
         val chunk = next.take(perCheck)
         val nowMs = now()
         val startedAt = plan.applyStartedAtMs ?: nowMs
@@ -571,7 +598,7 @@ class Integrations(
             }
         }
         val doneIds = all.map { it.id }.toSet()
-        val finished = ms.backlogItems(a.id).none { it.kind != MailBacklogKind.KEEP && it.id !in doneIds }
+        val finished = ms.backlogItems(a.id).none { it.kind != MailBacklogKind.KEEP && it.id !in doneIds && it.fromAddress?.lowercase() !in keptNow }
         if (all.isNotEmpty()) {
             writeTidy(a, batchId, MailBacklogRules.batchFields(startedAt, account, all.groupingBy { it.tidy }.eachCount()))
         }
@@ -720,6 +747,7 @@ class Integrations(
                 h.fromAddress, h.inInbox, s, keep,
                 replied = h.threadId?.let { it in replied } == true,
                 unsubscribed = MailUnsubscribeRules.trashes(senderOf(h), h.receivedAtMs),
+                rule = h.fromAddress?.let { MailSenderRuleRules.read(senders[MailUnsubscribeRules.senderId(a.id, it)]) },
             ))
             if (t == MailTidy.KEEP) null else h to t
         }.take(MailAutopilotRules.MAX_PER_CHECK)

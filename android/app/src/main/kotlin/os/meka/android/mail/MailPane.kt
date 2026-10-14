@@ -163,6 +163,16 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         if (now != null) view = Result.success(now) else reload++
     }
 
+    // Completeness: Keep in inbox / Let Autopilot decide on one sender (synced; the server follows it from its next check).
+    fun setRule(id: String, rule: String) = scope.launch {
+        haptics.tick()
+        message = null
+        val r = core.setMailSenderRule(id, rule)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
     // Slice 8b: Approve / Cancel on an account's backlog clean-up (synced; the server applies it from its next check).
     fun approveBacklog(id: String, approve: Boolean) = scope.launch {
         if (approve) haptics.medium() else haptics.light()
@@ -210,6 +220,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         onDisconnect = { disconnect(row) },
                         onUndo = { undoTidy(it) },
                         onUnsubscribe = { unsubscribe(it) },
+                        onRule = { id, rule -> setRule(id, rule) },
                         onApprove = { id, yes -> approveBacklog(id, yes) },
                     )
                 }
@@ -232,6 +243,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 private fun MailAccountCard(
     row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
     onUndo: (String) -> Unit, onUnsubscribe: (String) -> Unit = {}, onApprove: (String, Boolean) -> Unit = { _, _ -> },
+    onRule: (String, String) -> Unit = { _, _ -> },
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -288,7 +300,7 @@ private fun MailAccountCard(
             Text(MailSenderPanelRules.TITLE, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
             Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
             val shown = if (allSenders) row.senders else row.senders.take(SENDERS_FOLDED)
-            shown.forEach { s -> SenderLine(s) { onUnsubscribe(s.id) } }
+            shown.forEach { s -> SenderLine(s, onRule = { onRule(s.id, s.ruleSets) }) { onUnsubscribe(s.id) } }
             if (row.senders.size > SENDERS_FOLDED) {
                 Text(if (allSenders) "Show fewer" else "Show ${row.senders.size - SENDERS_FOLDED} more", style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); allSenders = !allSenders }.minTouch())
@@ -441,7 +453,7 @@ private const val SENDERS_FOLDED = 3
  * only offers a page shows Open page.
  */
 @Composable
-private fun SenderLine(s: MailSenderRow, onUnsubscribe: () -> Unit) {
+private fun SenderLine(s: MailSenderRow, onRule: () -> Unit = {}, onUnsubscribe: () -> Unit) {
     val reduced = Meka.reducedMotion
     val uri = LocalUriHandler.current
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xxs)) {
@@ -450,6 +462,15 @@ private fun SenderLine(s: MailSenderRow, onUnsubscribe: () -> Unit) {
             if (s.line.isNotEmpty()) Text(s.line, style = MekaType.caption, color = Meka.colors.textTertiary)
             Crossfade(s.state, animationSpec = MekaMotion.appear(reduced), label = "sender-state") { st ->
                 st?.let { Text(it, style = MekaType.caption, color = if (s.done) Meka.colors.accent else Meka.colors.textSecondary) }
+            }
+            // Completeness: his rule for the sender ("Always kept in the inbox · …") cross-fades in, with the action
+            // that sets or takes it off.
+            Crossfade(s.ruleLine, animationSpec = MekaMotion.appear(reduced), label = "sender-rule") { r ->
+                r?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            }
+            Crossfade(s.ruleAction, animationSpec = MekaMotion.appear(reduced), label = "sender-rule-action") { a ->
+                Text(a, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onRule() }.minTouch())
             }
         }
         val link = s.link

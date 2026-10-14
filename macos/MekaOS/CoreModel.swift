@@ -1036,6 +1036,16 @@ final class CoreModel {
         if let v = r.view { mail = v } else { await loadMail() }
     }
 
+    /// Inbox autopilot, completeness: Keep in inbox / Let Autopilot decide on one sender (synced).
+    func setMailSenderRule(_ id: String, rule: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let r = try? await core.setMailSenderRule(id: id, rule: rule) else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
     /// Inbox autopilot, slice 8b: Approve (or Cancel, before anything moved) on an account's backlog clean-up.
     func approveMailBacklog(_ id: String, approve: Bool) async {
         guard let core else { return }

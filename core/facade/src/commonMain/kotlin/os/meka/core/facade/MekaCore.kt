@@ -4073,6 +4073,16 @@ class MekaCore(
     }
 
     /**
+     * Inbox autopilot, completeness: Meka's rule for one sender in Mail — "KEEP" (Keep in inbox: Autopilot never tidies
+     * its emails), "TIDY" (always tidied), or "" (Let Autopilot decide). Synced; the server follows it from its next
+     * check. Returns what Mail says and the pane as it is now.
+     */
+    suspend fun setMailSenderRule(id: String, rule: String): MailSwitched {
+        val line = onCore { activity.setSenderRule(id, rule) }
+        return MailSwitched(line, lastMailFacts?.let { mailView(it) })
+    }
+
+    /**
      * Disconnects a mail account (slice 1b): the server stops reading it and forgets its sign-in (and asks Google to
      * withdraw the permission); nothing in the mailbox changes. The accounts as they are now, or null when the server
      * couldn't be reached (it stays connected; the pane says so). Setup's Mail step follows.

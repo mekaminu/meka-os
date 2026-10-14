@@ -176,6 +176,7 @@ object MailUnsubscribeRules {
             unopened = (f[MailSenderFields.UNOPENED] as? FieldValue.Int64)?.value?.toInt()?.coerceAtLeast(0) ?: 0,
             unopenedAtMs = ms(MailSenderFields.UNOPENED_AT),
             keptAtMs = ms(MailSenderFields.KEPT_AT),
+            rule = MailSenderRule.of(text(MailSenderFields.RULE)),
         )
     }
 
@@ -256,6 +257,9 @@ object MailSenderFields {
     const val UNOPENED_AT = "unopenedAtMs"
     /** Slice 5c (an app): Keep on the weekly offer: never offered again (0 clears it, for Undo). */
     const val KEPT_AT = "keptAtMs"
+    /** Completeness (an app): Meka's rule for this sender ([MailSenderRule] name, "" = none) and when he set it. */
+    const val RULE = "rule"
+    const val RULE_AT = "ruleAtMs"
 }
 
 data class MailSender(
@@ -278,6 +282,8 @@ data class MailSender(
     val unopenedAtMs: Long? = null,
     /** Slice 5c: Keep on the weekly offer. */
     val keptAtMs: Long? = null,
+    /** Meka's own rule for the sender, or null. */
+    val rule: MailSenderRule? = null,
 )
 
 /** One sender under its account in Mail. */
@@ -295,6 +301,12 @@ data class MailSenderRow(
     val done: Boolean,
     /** The sender's page to open to finish (OPEN_LINK), else null. */
     val link: String?,
+    /** Meka's rule for the sender ("Always kept in the inbox · …"), or null. */
+    val ruleLine: String? = null,
+    /** The rule action: "Keep in inbox" without a rule, "Let Autopilot decide" with one. */
+    val ruleAction: String = MailSenderRuleRules.KEEP_ACTION,
+    /** The rule the action sets, by name ("KEEP"), or "" to take it off (a plain string, so both apps pass it as is). */
+    val ruleSets: String = MailSenderRule.KEEP.name,
 )
 
 object MailSenderPanelRules {
@@ -347,6 +359,9 @@ object MailSenderPanelRules {
                     },
                     done = done,
                     link = if (!due && s.state == UnsubscribeState.OPEN_LINK) s.link else null,
+                    ruleLine = s.rule?.line,
+                    ruleAction = if (s.rule == null) MailSenderRuleRules.KEEP_ACTION else MailSenderRuleRules.CLEAR_ACTION,
+                    ruleSets = if (s.rule == null) MailSenderRule.KEEP.name else "",
                 )
             }
     }

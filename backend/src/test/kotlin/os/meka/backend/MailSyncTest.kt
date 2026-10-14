@@ -49,6 +49,7 @@ import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
 import os.meka.core.domain.MailSenderFields
+import os.meka.core.domain.MailSenderRule
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailChaseRules
@@ -699,6 +700,45 @@ class MailSyncTest {
         i.syncAccount(id)
         assertEquals(mapOf("n" to MailTidy.NEWSLETTER), gmail.tidyCalls.single())
         assertTrue(gmail.mailbox.getValue("s").inInbox)
+    }
+
+    @Test
+    fun hisSenderRulesKeepOrAlwaysTidyAndCanBeTakenOff() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n0"] = msg("n0", 1, "Editor@Weekly.Example").copy(listId = "<weekly.example>")
+        gmail.mailbox["p0"] = msg("p0", 1, "reports@tool.example") // sorted as needing him
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals(mapOf("NEWSLETTER" to 1, "KEEP" to 1), i.accounts("home").single().wouldTidy)
+        // On a device: Keep in inbox on the newsletter, always tidy on the reports (only the rule field is written).
+        val weekly = MailUnsubscribeRules.senderId(id, "editor@weekly.example")
+        val reports = MailUnsubscribeRules.senderId(id, "reports@tool.example")
+        device(ops, EntityTypes.MAIL_SENDER, weekly, MailSenderFields.RULE, FieldValue.Text(MailSenderRule.KEEP.name))
+        device(ops, EntityTypes.MAIL_SENDER, reports, MailSenderFields.RULE, FieldValue.Text(MailSenderRule.TIDY.name))
+        // The dry run follows them.
+        assertEquals(mapOf("KEEP" to 1, "ARCHIVE" to 1), i.accounts("home").single().wouldTidy)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["n1"] = msg("n1", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["p1"] = msg("p1", 0, "reports@tool.example")
+        gmail.mailbox["b1"] = msg("b1", 0, "alerts@barclays.co.uk")
+        device(ops, EntityTypes.MAIL_SENDER, MailUnsubscribeRules.senderId(id, "alerts@barclays.co.uk"), MailSenderFields.RULE, FieldValue.Text(MailSenderRule.TIDY.name))
+        gmail.nextRound = { MailChanges(fetch = listOf("n1", "p1", "b1"), cursor = "h2") }
+        i.syncAccount(id)
+        // Kept stays, always-tidy is archived, a bank is never tidied whatever the rule says.
+        assertEquals(mapOf("p1" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        assertTrue(gmail.mailbox.getValue("n1").inInbox)
+        assertTrue(gmail.mailbox.getValue("b1").inInbox)
+        // Taken off ("Let Autopilot decide"): the next newsletter is tidied as usual.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_SENDER, weekly, MailSenderFields.RULE, FieldValue.Text(""))
+        gmail.mailbox["n2"] = msg("n2", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.nextRound = { MailChanges(fetch = listOf("n2"), cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(MailTidy.NEWSLETTER, gmail.tidyCalls.last()["n2"])
     }
 
     // ---- Slice 5a: Unsubscribe for him ----

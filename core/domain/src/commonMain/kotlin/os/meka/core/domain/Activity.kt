@@ -574,6 +574,17 @@ class ActivityLog(
         return MailSenderPanelRules.ASKED_LINE
     }
 
+    /**
+     * Completeness: Meka's rule for one sender ([MailSenderRule] name, "" to take it off), synced; the server follows it
+     * from its next check. The line Mail's bar shows.
+     */
+    fun setSenderRule(id: String, rule: String): String {
+        val s = mailSenders().firstOrNull { it.id == id } ?: return MailSenderPanelRules.UNKNOWN
+        val r = MailSenderRule.of(rule)
+        replica.commitLocal(EntityTypes.MAIL_SENDER, id, MailSenderRuleRules.fields(r, nowMs()))
+        return MailSenderRuleRules.setLine(s.name, r)
+    }
+
     /** Inbox autopilot (slice 3b-2): each tidy the server did, read from the synced `mail_tidy` entity itself. */
     private fun mailTidies(): List<ActivityItem> {
         val now = nowMs()

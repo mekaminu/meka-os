@@ -64,6 +64,8 @@ data class MailTidyFacts(
      * ([MailUnsubscribeRules.trashes]).
      */
     val unsubscribed: Boolean = false,
+    /** Meka's own rule for the sender ([MailSenderRule]): never tidy, or always tidy; null for none. */
+    val rule: MailSenderRule? = null,
 )
 
 object MailTidyRules {
@@ -89,9 +91,13 @@ object MailTidyRules {
     fun plan(f: MailTidyFacts): MailTidy {
         val s = f.sorted ?: return MailTidy.KEEP
         if (!f.inInbox || f.replied || protectedSender(f.fromAddress, f.keepAddresses)) return MailTidy.KEEP
+        // His "never tidy" wins over everything below, the unsubscribed sender's Trash included.
+        if (f.rule == MailSenderRule.KEEP) return MailTidy.KEEP
         // Slice 5b: only what still reads as a newsletter or promo goes to Trash (a receipt or a person's email from the
         // same address is planned as usual), sure or not: he already said he doesn't want them.
         if (f.unsubscribed && (s.sort == MailSort.NEWSLETTER || s.sort == MailSort.PROMO)) return MailTidy.TRASH
+        // His "always tidy", sure or not.
+        MailSenderRuleRules.plan(f.rule, s.sort)?.let { return it }
         if (!s.sure) return MailTidy.KEEP
         return when (s.sort) {
             MailSort.NEWSLETTER -> MailTidy.NEWSLETTER

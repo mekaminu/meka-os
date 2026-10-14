@@ -64,6 +64,8 @@ struct MailSheet: View {
                         Task { await model.undoMailTidy(id) }
                     }, onUnsubscribe: { id in
                         Task { await model.unsubscribeMailSender(id) }
+                    }, onRule: { id, rule in
+                        Task { await model.setMailSenderRule(id, rule: rule) }
                     }, onApprove: { id, yes in
                         Task { await model.approveMailBacklog(id, approve: yes) }
                     })
@@ -115,6 +117,7 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.tidies.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.ruleLine ?? "" } } ?? [])
         .task { await model.loadMail(); await model.loadMailMomentKey() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
@@ -204,6 +207,7 @@ private struct MailAccountRowView: View {
     let onDisconnect: () -> Void
     let onUndo: (String) -> Void
     var onUnsubscribe: (String) -> Void = { _ in }
+    var onRule: (String, String) -> Void = { _, _ in }
     var onApprove: (String, Bool) -> Void = { _, _ in }
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
@@ -224,6 +228,18 @@ private struct MailAccountRowView: View {
                         .contentTransition(.opacity)
                         .transition(.opacity)
                 }
+                // Completeness: his rule for the sender, and the action that sets or takes it off.
+                if let rule = s.ruleLine {
+                    Text(rule).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
+                }
+                let id = s.id, sets = s.ruleSets
+                Button(s.ruleAction) { onRule(id, sets) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .contentTransition(.opacity)
             }
             Spacer()
             if let link = s.link, let url = URL(string: link) {
