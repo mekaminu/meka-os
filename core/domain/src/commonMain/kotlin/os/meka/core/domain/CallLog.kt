@@ -32,7 +32,53 @@ data class CallDetail(
     val block: String?,
     val unblock: String?,
     val notSpam: String?,
+    /**
+     * Slice 6: for a call the phone screened (not a held message), what Block puts on the list as why ("Rang · today");
+     * the Fold blocks the [number] with it. Null for a held call (blocked by its id).
+     */
+    val blockWhy: String? = null,
 )
+
+/**
+ * Call notifications, slice 6: a call the Fold's screening saw — rang through, sent to the call assistant, or stopped
+ * before it rang. Kept on the phone only (its own preferences, the last 7 days), never synced, sent or logged; the
+ * number is display only. [reason] null = Navilife didn't answer Android in time, so it rang. [known] = a contact,
+ * someone he called lately, the household or a listed person (their calls that rang aren't listed: Activity → Calls is
+ * for calls Navilife handled and numbers he doesn't know).
+ */
+data class PhoneCall(
+    val atMs: Long,
+    val number: String?,
+    val verdict: CallVerdict,
+    val reason: CallReason?,
+    val known: Boolean,
+)
+
+object PhoneCallRules {
+    const val MAX = 40
+    const val KEEP_MS = 7 * 86_400_000L
+
+    /** [call] added, newest first, the last 7 days, at most [MAX]. */
+    fun add(list: List<PhoneCall>, call: PhoneCall, nowMs: Long): List<PhoneCall> =
+        (listOf(call) + list).filter { nowMs - it.atMs < KEEP_MS }.sortedByDescending { it.atMs }.take(MAX)
+
+    /** One line per call, "at\tverdict\treason\tknown\tnumber" ("-" for none). */
+    fun encode(list: List<PhoneCall>): String = list.take(MAX).joinToString("\n") {
+        listOf(it.atMs.toString(), it.verdict.name, it.reason?.name ?: "-", if (it.known) "1" else "0", clean(it.number) ?: "-").joinToString("\t")
+    }
+
+    /** Unreadable lines skipped; null or blank = none. */
+    fun decode(s: String?): List<PhoneCall> = s.orEmpty().lineSequence().mapNotNull { line ->
+        val p = line.split('\t')
+        if (p.size != 5) return@mapNotNull null
+        val at = p[0].toLongOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+        val verdict = CallVerdict.entries.firstOrNull { it.name == p[1] } ?: return@mapNotNull null
+        val reason = CallReason.entries.firstOrNull { it.name == p[2] }
+        PhoneCall(at, p[4].takeIf { it != "-" && it.isNotBlank() }, verdict, reason, p[3] == "1")
+    }.sortedByDescending { it.atMs }.take(MAX).toList()
+
+    private fun clean(n: String?) = n?.replace('\t', ' ')?.replace('\n', ' ')?.trim()?.takeIf { it.isNotEmpty() }
+}
 
 data class CallLogRow(
     val id: String,
@@ -68,7 +114,7 @@ data class CallLogView(val days: List<CallLogDay>) {
 
 object CallLogRules {
     const val TITLE = "Recent calls"
-    const val HINT = "Calls your call assistant took and calls you missed at work. Tap one for what happened"
+    const val HINT = "Calls your call assistant took, calls Navilife stopped, numbers you don't know and calls you missed at work. Tap one for what happened"
     const val MAX = 30
 
     const val CHIP_BLOCKED = "Blocked"
@@ -83,6 +129,89 @@ object CallLogRules {
     const val KEYPAD_URGENT = "Pressed a key for urgent with no words, so it didn't break through"
     const val CLEARED_WORDS = "Words cleared when you pressed Done"
     const val FLAGGED = "Flagged as likely spam"
+
+    // ---- Slice 6: calls the phone screened ----
+    const val PHONE_PREFIX = "phone:"
+    const val RANG_THROUGH = "Rang through"
+    const val STOPPED = "Stopped before it rang"
+    const val TO_ASSISTANT = "Sent to your call assistant"
+    const val NO_MESSAGE = "Left no message"
+    const val NO_RING = "No ring and no notification"
+    const val TOO_SLOW = "Navilife didn't decide in time, so it rang"
+    /** A held call within this long after a screened call is the same call (its message or missed-call notice). */
+    const val SAME_CALL_MS = 10 * 60_000L
+
+    fun isPhone(id: String): Boolean = id.startsWith(PHONE_PREFIX)
+
+    /** Why a call rang, in plain words ("Family", "Called again within 3 minutes"); null when nothing worth saying. */
+    fun rangWhy(reason: CallReason?): String? = when (reason) {
+        null -> TOO_SLOW
+        CallReason.FAMILY -> "Family"
+        CallReason.ALWAYS_RING -> "On Always notify"
+        CallReason.REPEAT -> "Called again within 3 minutes"
+        CallReason.OFFICIAL_CLAIM -> "Claims to be an official body, so Navilife never blocks it"
+        CallReason.EMERGENCY -> "An emergency service is never screened"
+        CallReason.PAUSED -> CallReason.PAUSED.label
+        else -> null
+    }
+
+    /** The row's one line for a screened call. */
+    fun phoneLine(c: PhoneCall): String = when (c.verdict) {
+        CallVerdict.RING -> RANG_THROUGH + when (c.reason) {
+            CallReason.OFFICIAL_CLAIM -> " · claims to be an official body"
+            CallReason.EMERGENCY -> " · emergency service"
+            else -> ""
+        }
+        CallVerdict.DECLINE -> "$TO_ASSISTANT · ${NO_MESSAGE.lowercase()}"
+        CallVerdict.BLOCK -> STOPPED + (c.reason?.let { " · " + lowerFirst(it.label) } ?: "")
+    }
+
+    /** The screened call's timeline: when it rang, what Navilife did and why. */
+    fun phoneTimeline(c: PhoneCall, cal: LocalCalendar): List<String> {
+        val at = LocalClock.formatMinute(cal.minuteOfDay(c.atMs))
+        return when (c.verdict) {
+            CallVerdict.RING -> listOfNotNull("Rang · $at", RANG_THROUGH, rangWhy(c.reason))
+            CallVerdict.DECLINE -> listOfNotNull("Rang · $at", TO_ASSISTANT + (c.reason?.let { " · " + lowerFirst(it.label) } ?: ""), NO_MESSAGE)
+            CallVerdict.BLOCK -> listOfNotNull("Called · $at", STOPPED + (c.reason?.let { " · " + lowerFirst(it.label) } ?: ""), NO_RING)
+        }
+    }
+
+    /** What Block on a screened call writes as why: "Rang · today", "Sent to your call assistant · 9 Oct". */
+    fun phoneBlockWhy(c: PhoneCall, nowMs: Long, cal: LocalCalendar): String {
+        val label = SearchRules.dayLabel(cal.epochDayOf(c.atMs), cal.epochDayOf(nowMs))
+        val day = if (label == "Today" || label == "Yesterday") label.lowercase() else label
+        val what = when (c.verdict) {
+            CallVerdict.RING -> "Rang"
+            CallVerdict.DECLINE -> TO_ASSISTANT
+            CallVerdict.BLOCK -> "Called"
+        }
+        return "$what · $day"
+    }
+
+    /**
+     * Which screened calls to list: not a known caller's call that rang, and not one a held call already covers (its
+     * message or missed-call notice from the same number, or both withheld, within [SAME_CALL_MS] after it).
+     */
+    fun phoneShown(phone: List<PhoneCall>, held: List<HeldCall>): List<PhoneCall> = phone.filter { c ->
+        if (c.verdict == CallVerdict.RING && c.known) return@filter false
+        val key = BlockedCallerRules.keyOf(c.number)
+        held.none { h ->
+            val dt = h.item.atMs - c.atMs
+            dt in -60_000L..SAME_CALL_MS && BlockedCallerRules.keyOf(CallNoticeRules.numberOf(h.item)) == key &&
+                (key != null || h.item.personName == CallAssistantRules.WITHHELD_NAME)
+        }
+    }
+
+    /** A screened call as a call item, so the chip, who and block line read as for any call. */
+    fun phoneItem(c: PhoneCall): CapturedItem = CapturedItem(
+        id = PHONE_PREFIX + c.atMs + "-" + (BlockedCallerRules.keyOf(c.number) ?: CallScreeningRules.WITHHELD),
+        app = CaptureApp.PHONE, kind = CaptureKind.MISSED_CALL,
+        personName = c.number?.takeIf { BlockedCallerRules.keyOf(it) != null } ?: CallAssistantRules.WITHHELD_NAME,
+        text = null, conversation = null, atMs = c.atMs,
+        callerNumber = c.number?.takeIf { BlockedCallerRules.keyOf(it) != null },
+    )
+
+    private fun lowerFirst(s: String) = s.replaceFirstChar { it.lowercase() }
 
     /**
      * Slice 5: a call notification's tap opens Activity → Calls with the call unfolded. The open value is
@@ -201,21 +330,28 @@ object CallLogRules {
     fun view(
         calls: List<HeldCall>, blocked: BlockedCallersView, nowMs: Long, cal: LocalCalendar,
         names: CallerNames = CallerNames.NONE, lists: PeopleLists = PeopleLists(),
+        phone: List<PhoneCall> = emptyList(),
     ): CallLogView {
-        if (calls.isEmpty()) return CallLogView.EMPTY
+        val shown = phoneShown(phone.filter { nowMs - it.atMs < PhoneCallRules.KEEP_MS }, calls)
+        if (calls.isEmpty() && shown.isEmpty()) return CallLogView.EMPTY
         val today = cal.epochDayOf(nowMs)
-        val rows = calls.sortedWith(compareByDescending<HeldCall> { it.item.atMs }.thenBy { it.item.id }).take(MAX).map { c ->
-            val item = named(c.item, names, lists)
+        val entries = calls.map { it.item.atMs to (it to null as PhoneCall?) } + shown.map { it.atMs to (null as HeldCall? to it) }
+        val rows = entries.sortedWith(compareByDescending<Pair<Long, Pair<HeldCall?, PhoneCall?>>> { it.first }
+            .thenBy { it.second.first?.item?.id ?: "" }).take(MAX).map { (_, e) ->
+            val (c, p) = e
+            val item = named(c?.item ?: phoneItem(p!!), names, lists)
+            val cleared = c?.cleared ?: false
             val (chip, isBlocked) = chip(item, blocked)
+            val base = detail(item, cleared, blocked, cal)
             cal.epochDayOf(item.atMs) to CallLogRow(
                 id = item.id,
                 time = LocalClock.formatMinute(cal.minuteOfDay(item.atMs)),
                 who = CallNoticeRules.who(item),
-                line = line(item, c.cleared),
+                line = p?.let { phoneLine(it) } ?: line(item, cleared),
                 chip = chip, blocked = isBlocked,
-                urgent = item.kind == CaptureKind.VOICE_MESSAGE && CallNoticeRules.urgent(item),
-                automated = item.automated,
-                detail = detail(item, c.cleared, blocked, cal),
+                urgent = p == null && item.kind == CaptureKind.VOICE_MESSAGE && CallNoticeRules.urgent(item),
+                automated = p == null && item.automated,
+                detail = if (p == null) base else base.copy(timeline = phoneTimeline(p, cal), blockWhy = phoneBlockWhy(p, nowMs, cal)),
             )
         }
         val days = rows.groupBy({ it.first }, { it.second }).entries.sortedByDescending { it.key }

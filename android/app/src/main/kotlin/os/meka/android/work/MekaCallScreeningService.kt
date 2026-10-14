@@ -84,6 +84,23 @@ class MekaCallScreeningService : CallScreeningService() {
                 )
                 os.meka.android.notify.NotifyTraceReporter.poke(meka)
             }
+            // Call notifications, slice 6: the call goes in Activity → Calls (this phone only, never sent).
+            runCatching {
+                val d = decision?.decision
+                val sig = decision?.signals
+                val known = sig != null && (sig.knownContact || sig.calledRecently || sig.household) ||
+                    d?.reason == os.meka.core.domain.CallReason.FAMILY || d?.reason == os.meka.core.domain.CallReason.ALWAYS_RING
+                PhoneCallLog.record(
+                    this@MekaCallScreeningService,
+                    os.meka.core.domain.PhoneCall(
+                        atMs = decision?.atMs ?: System.currentTimeMillis(),
+                        number = details.handle?.schemeSpecificPart?.takeIf { it.isNotBlank() },
+                        verdict = d?.verdict ?: CallVerdict.RING,
+                        reason = d?.reason,
+                        known = known,
+                    ),
+                )
+            }
             // Android has its answer; now, unhurried: a caller nobody knows gets "Unknown caller · Block?" afterwards,
             // and an auto-blocked one the quiet "Blocked … · it won't ring again" with Undo (spam calls still ring, slice 1).
             decision?.let { s ->

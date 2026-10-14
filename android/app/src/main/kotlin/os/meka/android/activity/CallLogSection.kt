@@ -55,6 +55,7 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.work.CallerLookup
+import os.meka.android.work.PhoneCallLog
 import os.meka.android.work.VoiceMessagePlayer
 import os.meka.core.domain.CallDetail
 import os.meka.core.domain.CallLogRow
@@ -67,8 +68,9 @@ import os.meka.core.domain.CallLogRules
 data class CallOpen(val heldId: String, val key: String?)
 
 /**
- * Activity → Calls (call notifications, slice 4): RECENT CALLS — the call assistant's messages and the calls missed at
- * work from the last 7 days, named from this phone's contacts, one line each with a block chip. A tap (tick haptic)
+ * Activity → Calls (call notifications, slice 4): RECENT CALLS — the call assistant's messages, the calls missed at
+ * work and (slice 6) the calls this phone screened (strangers' calls that rang through, calls sent to the assistant
+ * with no message, calls stopped before they rang) from the last 7 days, named from this phone's contacts, one line each with a block chip. A tap (tick haptic)
  * unfolds the call's detail in place on the expand spring: the small timeline, the AI's summary, the words, the spam
  * flag, whether it's blocked now and in future, ▶ Listen (the recording, played from memory), Call back (the dialer),
  * Block / Unblock / Not spam (light haptic; the chip and the block line cross-fade). Reduced motion: cross-fades.
@@ -81,7 +83,9 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
     val calls by core.heldCalls.collectAsState()
     val blocked by core.blockedCallers.collectAsState()
     val lists by app.captures.lists.collectAsState()
-    val view = remember(calls, blocked, lists) { core.callLogOf(calls, CallerLookup.names(context), lists) }
+    // Slice 6: with the calls this phone screened (rang through, sent to the assistant, stopped), kept on the phone only.
+    val phone by remember { PhoneCallLog.calls(context) }.collectAsState()
+    val view = remember(calls, blocked, lists, phone) { core.callLogOf(calls, CallerLookup.names(context), lists, phone) }
     if (view.isEmpty) return
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -112,7 +116,15 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
                     },
                     onBlock = {
                         haptics.light()
-                        scope.launch { if (!runCatching { core.blockLoggedCaller(row.id) }.getOrDefault(false)) onNote("Couldn't block that number. Try again.") }
+                        scope.launch {
+                            val number = row.detail.number
+                            val ok = runCatching {
+                                // Slice 6: a call the phone screened isn't a held message, so it's blocked by its number.
+                                if (CallLogRules.isPhone(row.id) && number != null) core.blockCaller(number, row.detail.blockWhy)
+                                else core.blockLoggedCaller(row.id)
+                            }.getOrDefault(false)
+                            if (!ok) onNote("Couldn't block that number. Try again.")
+                        }
                     },
                     onUnblock = { key ->
                         haptics.light()

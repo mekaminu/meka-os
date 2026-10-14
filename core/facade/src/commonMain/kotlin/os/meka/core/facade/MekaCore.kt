@@ -3365,8 +3365,10 @@ class MekaCore(
         calls: List<os.meka.core.domain.HeldCall>,
         names: os.meka.core.domain.CallerNames = os.meka.core.domain.CallerNames.NONE,
         lists: os.meka.core.domain.PeopleLists = os.meka.core.domain.PeopleLists(),
+        /** Slice 6: the calls this phone screened (rang through, sent to the assistant, stopped), kept on the phone only. */
+        phone: List<os.meka.core.domain.PhoneCall> = emptyList(),
     ): os.meka.core.domain.CallLogView =
-        os.meka.core.domain.CallLogRules.view(calls, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone), names, lists)
+        os.meka.core.domain.CallLogRules.view(calls, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone), names, lists, phone)
 
     /**
      * Block in a call's detail (Activity → Calls, call notifications slice 4): the held call [id]'s number goes on the
