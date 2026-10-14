@@ -186,6 +186,8 @@ final class CoreModel {
     private(set) var mailMomentSession: MailMomentSession?
     /// Slice 7: when the ten-minute inbox comes, as its key ("morning", "evening", "off"); nil until read.
     private(set) var mailMomentKey: String?
+    /// Slice 3f: Warranty reminders' threshold as its key ("off", "50", "100", "250", "500"); nil until read.
+    private(set) var mailWarrantyKey: String?
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -3795,6 +3797,22 @@ final class CoreModel {
     func loadMailMomentKey() async {
         guard let core else { return }
         mailMomentKey = try? await core.mailMomentTimeKey()
+    }
+
+    /// Slice 3f: the Mail sheet reads Warranty reminders' threshold (a String key comes back).
+    func loadMailWarrantyKey() async {
+        guard let core else { return }
+        mailWarrantyKey = try? await core.mailWarrantyKey()
+    }
+
+    /// Off · £50 · £100 · £250 · £500 in the Mail sheet (synced). Only the key (a String) crosses; the line comes back.
+    func setMailWarrantyKey(_ key: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let line = try? await core.setMailWarrantyKey(key: key) else { return }
+        mailWarrantyKey = key
+        mailNote = line
     }
 
     /// Morning · Evening · Off in the Mail sheet (synced). Only the key (a String) crosses; the line comes back.

@@ -48,6 +48,13 @@ struct MailSheet: View {
                         }
                         .staggeredAppear(2)
                     }
+                    // Slice 3f: which orders put a warranty's end on Renewals (synced with the Fold).
+                    if let key = model.mailWarrantyKey {
+                        WarrantyPanelView(key: key, palette: palette) { picked in
+                            Task { await model.setMailWarrantyKey(picked) }
+                        }
+                        .staggeredAppear(2)
+                    }
                 }
                 ForEach(Array(view.rows.enumerated()), id: \.element.email) { i, row in
                     MailAccountRowView(row: row, palette: palette, onReconnect: {
@@ -119,7 +126,7 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.ruleLine ?? "" } } ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mail?.rows.map { $0.rules.map(\.id) } ?? [])
-        .task { await model.loadMail(); await model.loadMailMomentKey() }
+        .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
         }
@@ -157,6 +164,47 @@ private struct MomentPanelView: View {
                         .padding(.vertical, MekaSpace.xxs)
                         .background(Capsule().fill(lit ? palette.accent : palette.hairline))
                         .accessibilityLabel("Ten-minute inbox: \(t.label)")
+                        .accessibilityAddTraits(lit ? .isSelected : [])
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
+    }
+}
+
+/// Slice 3f: Warranty reminders — Off · £50 · £100 · £250 · £500 (the lit chip in the accent; the line cross-fades).
+private struct WarrantyPanelView: View {
+    let key: String
+    let palette: MekaPalette
+    let onPick: (String) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    private let levels: [MailWarrantyLevel] = [.off, .fifty, .hundred, .twoFifty, .fiveHundred]
+
+    var body: some View {
+        let current = MailWarrantyLevel.companion.of(key: key) ?? MailWarrantyLevel.hundred
+        let line = MailWarrantyRules.shared.settingLine(level: current)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(MailWarrantyRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(levels, id: \.key) { l in
+                    let lit = l.key == key
+                    Button(l.label) { if !lit { onPick(l.key) } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                        .padding(.horizontal, MekaSpace.m)
+                        .padding(.vertical, MekaSpace.xxs)
+                        .background(Capsule().fill(lit ? palette.accent : palette.hairline))
+                        .accessibilityLabel("Warranty reminders: \(l.label)")
                         .accessibilityAddTraits(lit ? .isSelected : [])
                 }
             }

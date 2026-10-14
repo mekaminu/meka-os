@@ -3985,6 +3985,36 @@ class MekaCore(
         return setMailMomentTime(time)
     }
 
+    // ---- Inbox autopilot, slice 3f: warranty reminders from receipts ----
+
+    /** Mail pane: the lowest order price that puts a warranty's end on Renewals (synced; absent = £100). */
+    suspend fun mailWarranty(): os.meka.core.domain.MailWarrantyLevel = onCore {
+        os.meka.core.domain.MailWarrantyRules.read(
+            replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailWarrantyRules.ENTITY_ID)?.fields,
+        )
+    }
+
+    /** Mail pane: Off · £50 · £100 · £250 · £500 (synced). Returns what the pane says. */
+    suspend fun setMailWarranty(level: os.meka.core.domain.MailWarrantyLevel): String = onCore {
+        val stored = replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailWarrantyRules.ENTITY_ID)?.fields
+        if (stored?.get(os.meka.core.domain.MailWarrantyFields.MIN_PENCE) == null || os.meka.core.domain.MailWarrantyRules.read(stored) != level) {
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailWarrantyRules.ENTITY_ID,
+                os.meka.core.domain.MailWarrantyRules.settingFields(level, nowMs()),
+            )
+        }
+        os.meka.core.domain.MailWarrantyRules.switchedLine(level)
+    }
+
+    /** The Mac's way in (only Strings cross): the level's key ("off", "50", "100", "250", "500"). */
+    suspend fun mailWarrantyKey(): String = mailWarranty().key
+
+    /** The Mac's way in: [key] is a [os.meka.core.domain.MailWarrantyLevel] key; an unknown one changes nothing. */
+    suspend fun setMailWarrantyKey(key: String): String {
+        val level = os.meka.core.domain.MailWarrantyLevel.of(key) ?: return os.meka.core.domain.MailWarrantyRules.switchedLine(mailWarranty())
+        return setMailWarranty(level)
+    }
+
     /** Undo on the last Done or Snooze in "From your mail" on this device. */
     suspend fun undoMailItem() = onCore {
         val undo = mailNeedsUndo ?: return@onCore

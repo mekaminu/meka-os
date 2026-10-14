@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,6 +76,8 @@ import os.meka.core.domain.MailRuleRow
 import os.meka.core.domain.MailLabel
 import os.meka.core.domain.MailMomentRules
 import os.meka.core.domain.MailMomentTime
+import os.meka.core.domain.MailWarrantyLevel
+import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
 
@@ -106,6 +110,9 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     // Slice 7: when the ten-minute inbox comes (synced).
     var momentTime by remember { mutableStateOf<MailMomentTime?>(null) }
     LaunchedEffect(Unit) { momentTime = runCatching { core.mailMomentTime() }.getOrNull() }
+    // Slice 3f: the lowest order price that puts a warranty's end on Renewals (synced).
+    var warranty by remember { mutableStateOf<MailWarrantyLevel?>(null) }
+    LaunchedEffect(Unit) { warranty = runCatching { core.mailWarranty() }.getOrNull() }
 
     LaunchedEffect(reload) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -154,6 +161,13 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         message = null
         note = core.setMailMomentTime(time)
         momentTime = time
+    }
+
+    fun setWarranty(level: MailWarrantyLevel) = scope.launch {
+        haptics.tick()
+        message = null
+        note = core.setMailWarranty(level)
+        warranty = level
     }
 
     fun unsubscribe(id: String) = scope.launch {
@@ -214,6 +228,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 v.emptyLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
                 if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }
+                if (v.autopilot != null) warranty?.let { w -> WarrantyCard(w, Modifier.appear(rememberAppearance(0))) { setWarranty(it) } }
                 v.rows.forEachIndexed { i, row ->
                     MailAccountCard(
                         row, Modifier.appear(rememberAppearance(i + 1)),
@@ -407,6 +422,41 @@ private fun MomentCard(time: MailMomentTime, modifier: Modifier, onPick: (MailMo
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
                         .clickable(role = Role.Button) { if (!lit) onPick(t) }
                         .semantics { selected = lit; contentDescription = "Ten-minute inbox: ${t.label}" }
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Slice 3f: Warranty reminders — Off · £50 · £100 · £250 · £500 chips (the lit one blends to the accent with a tick
+ * haptic; the line cross-fades). Synced with the Mac.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WarrantyCard(level: MailWarrantyLevel, modifier: Modifier, onPick: (MailWarrantyLevel) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MailWarrantyRules.TITLE + ". " + MailWarrantyRules.settingLine(level) }) {
+            Text(MailWarrantyRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(MailWarrantyRules.settingLine(level), animationSpec = MekaMotion.appear(reduced), label = "warranty-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            MailWarrantyLevel.entries.forEach { l ->
+                val lit = l == level
+                val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "warranty-chip")
+                val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "warranty-ink")
+                Text(
+                    l.label, style = MekaType.itemMeta, color = ink,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                        .clickable(role = Role.Button) { if (!lit) onPick(l) }
+                        .semantics { selected = lit; contentDescription = "Warranty reminders: ${l.label}" }
                         .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
             }

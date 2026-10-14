@@ -37,6 +37,9 @@ import os.meka.core.domain.MailAutopilotFields
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.MailWarrantyRules
+import os.meka.core.domain.MailWarrantyFields
+import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.ActionableFields
 import os.meka.core.domain.ObligationFields
 import os.meka.core.domain.MailTidyBatchFields
@@ -567,6 +570,33 @@ class MailSyncTest {
         val (_, t) = tidies(ops).entries.single()
         assertTrue((t[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains(" · 1 return date → Renewals"))
         // Written once: the next check (or a retried one) adds nothing.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
+    }
+
+    @Test
+    fun anOrderAboveHisThresholdPutsItsWarrantyEndOnTheRadarOnce() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        autopilotOn(ops)
+        device(ops, EntityTypes.CONTEXT_MODE, MailWarrantyRules.ENTITY_ID, MailWarrantyFields.MIN_PENCE, FieldValue.Int64(25_000))
+        now += day * 2
+        gmail.mailbox["w1"] = msg("w1", 0, "orders@shop.example").copy(subject = "Your order has shipped", preview = "Order total: £450.00 · 2-year warranty")
+        gmail.mailbox["w2"] = msg("w2", 0, "orders@other.example").copy(subject = "Your order has shipped", preview = "Order total: £120.00")
+        gmail.nextRound = { MailChanges(fetch = listOf("w1", "w2"), cursor = "h2") }
+        i.syncAccount(id)
+        val reminders = EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION)
+        val (rid, f) = reminders.entries.single()
+        assertEquals(MailWarrantyRules.obligationId(id, "w1"), rid)
+        assertEquals(FieldValue.Text("Warranty ends · Shop order"), f[ActionableFields.TITLE])
+        assertEquals(FieldValue.Text(ObligationKind.WARRANTY.name), f[ObligationFields.KIND])
+        assertEquals(FieldValue.Int64(45_000), f[ObligationFields.COST_MINOR])
+        val (_, t) = tidies(ops).entries.single()
+        assertTrue((t[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains(" · 1 warranty → Renewals"))
         gmail.nextRound = { MailChanges(cursor = "h3") }
         i.syncAccount(id)
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)

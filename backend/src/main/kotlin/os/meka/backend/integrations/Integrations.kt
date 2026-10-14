@@ -8,6 +8,7 @@ import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MailBacklogFacts
 import os.meka.core.domain.MailBacklog
@@ -803,7 +804,10 @@ class Integrations(
         val receipts = receiptHeaders.map { h -> MailReceiptRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview) }
         // Slice 3e: a receipt that says how long there is to send it back puts a one-off reminder on the Renewals radar.
         val returns = receiptHeaders.zip(receipts).count { (h, r) -> returnReminder(a, account, h, r, previews[h.id] ?: h.preview) }
-        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts, returns))
+        // Slice 3f: an order at or above his Warranty reminders threshold puts the warranty's end on the Renewals radar.
+        val level = if (receiptHeaders.isEmpty()) null else MailWarrantyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailWarrantyRules.ENTITY_ID))
+        val warranties = if (level == null) 0 else receiptHeaders.zip(receipts).count { (h, r) -> warrantyReminder(a, account, h, r, previews[h.id] ?: h.preview, level) }
+        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts, returns, warranties))
         // Slice 5b: each unsubscribed sender's row in Mail says how many later emails went to Trash.
         done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
             writeSender(a, id, MailUnsubscribeRules.trashedFields(ss.first().trashed, ss.size, at))
@@ -823,6 +827,23 @@ class Integrations(
         val id = MailReturnRules.obligationId(a.id, h.id)
         if (store.transaction { store.mirror(a.householdId, a.id) }.containsKey(id)) return false
         writeMail(a, id, MailReturnRules.fields(ret, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION)
+        return true
+    }
+
+    /**
+     * Inbox autopilot, slice 3f: when a tidied receipt's price is at or above [level]'s threshold, a one-off `obligation`
+     * (kind WARRANTY) "Warranty ends · Currys order" on the day the warranty ends ([MailWarrantyRules.read]: what the
+     * subject or kept preview says, else a year), written once under an id from the account and the email, like 3e's.
+     */
+    private fun warrantyReminder(
+        a: AccountRow, account: String, h: MailHeader, r: MailReceipt, preview: String?, level: os.meka.core.domain.MailWarrantyLevel,
+    ): Boolean {
+        val receivedDay = LONDON.epochDayOf(h.receivedAtMs)
+        val w = MailWarrantyRules.read(r, h.subject, preview, receivedDay, level) ?: return false
+        if (w.endDay < LONDON.epochDayOf(now())) return false
+        val id = MailWarrantyRules.obligationId(a.id, h.id)
+        if (store.transaction { store.mirror(a.householdId, a.id) }.containsKey(id)) return false
+        writeMail(a, id, MailWarrantyRules.fields(w, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION)
         return true
     }
 
