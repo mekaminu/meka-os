@@ -369,6 +369,8 @@ object MailAutopilotPanelRules {
     const val OFF_LINE = "Off · new mail stays where it lands. Turn on to have Navilife tidy it as it arrives."
     const val PAUSED_LINE = "Paused with everything Navilife does on its own · Resume in What Navilife may do"
     const val PUTTING_BACK = "Putting back at the next check…"
+    /** An account whose sign-in ended: Autopilot waits for Reconnect (Setup and Today say so too). */
+    const val SIGN_IN_ENDED_LINE = "Autopilot · paused · the sign-in ended · Reconnect and it carries on"
     /** How many of an account's tidies Mail lists (the last [SHOWN_DAYS] days); Activity keeps 30 days. */
     const val SHOWN = 5
     const val SHOWN_DAYS = 7
@@ -400,10 +402,15 @@ object MailAutopilotPanelRules {
     /**
      * The account's Autopilot line in Mail: off or paused, the dry run's "would tidy …" ([MailTidyRules.dryRunLine]);
      * on, "Autopilot · on · tidied 12 today" (what still stands, put-back ones not counted) or "Autopilot · on ·
-     * nothing tidied today · new mail is tidied as it arrives".
+     * nothing tidied today · new mail is tidied as it arrives". Completeness: on, but the account's sign-in has ended
+     * (revoked or expired, [signInEnded]): nothing can move until he reconnects, so it says so ([SIGN_IN_ENDED_LINE]).
      */
-    fun accountLine(setting: MailAutopilotSetting, paused: Boolean, wouldTidy: Map<String, Int>?, todays: List<MailTidyBatch>): String? {
+    fun accountLine(
+        setting: MailAutopilotSetting, paused: Boolean, wouldTidy: Map<String, Int>?, todays: List<MailTidyBatch>,
+        signInEnded: Boolean = false,
+    ): String? {
         if (!setting.on || paused) return MailTidyRules.dryRunLine(wouldTidy)
+        if (signInEnded) return SIGN_IN_ENDED_LINE
         val n = todays.filter { it.undoneAtMs == null && it.undoAskedAtMs == null }.sumOf { it.count }
         return if (n > 0) "Autopilot · on · tidied $n today" else "Autopilot · on · nothing tidied today · new mail is tidied as it arrives"
     }

@@ -195,6 +195,33 @@ data class MailChanges(
 /** The provider has forgotten the sync cursor: the account's mail is listed again from the start. */
 class MailCursorExpired(message: String) : Exception(message)
 
+/**
+ * Inbox autopilot, completeness ("API failures and offline: nothing half-applied"): a [MailProvider.tidy] or
+ * [MailProvider.untidy] that failed part-way (a 429, a 5xx, the network) after moving some emails. [done] is what
+ * did move (old id → id now), so the caller records those (with Undo) and the rest are simply tried at the next check.
+ */
+class MailMovePartial(val done: Map<String, String>, cause: Throwable) : RuntimeException("moved ${done.size} before a failure", cause)
+
+/** Runs a provider's moves; a failure after some moved becomes [MailMovePartial] with them, one before any is rethrown. */
+internal inline fun movesKept(block: (MutableMap<String, String>) -> Unit): Map<String, String> {
+    val done = LinkedHashMap<String, String>()
+    try {
+        block(done)
+    } catch (e: Exception) {
+        if (done.isEmpty()) throw e
+        throw MailMovePartial(done, e)
+    }
+    return done
+}
+
+/** What moved, whether or not the provider failed part-way (the rest wait for the next check). */
+internal fun MailProvider.tidyKept(accessToken: String, items: Map<String, MailTidy>): Pair<Map<String, String>, Boolean> =
+    try { tidy(accessToken, items) to false } catch (p: MailMovePartial) { p.done to true }
+
+/** As [tidyKept], for an Undo. */
+internal fun MailProvider.untidyKept(accessToken: String, items: Map<String, MailTidy>): Pair<Map<String, String>, Boolean> =
+    try { untidy(accessToken, items) to false } catch (p: MailMovePartial) { p.done to true }
+
 /** What the sign-in check saw (counts only; no message is read). */
 data class MailboxCheck(val messages: Long?, val unread: Long?)
 
@@ -310,8 +337,7 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
     }
 
     /** One batchModify per label, a thousand ids at a time: archived (INBOX off) and labelled. Ids stay the same. */
-    override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
-        val done = LinkedHashMap<String, String>()
+    override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = movesKept { done ->
         for ((t, ids) in items.entries.groupBy({ it.value }, { it.key })) {
             if (t == MailTidy.KEEP) continue
             if (t == MailTidy.TRASH || t == MailTidy.JUNK_TRASH) {
@@ -332,13 +358,11 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
                 if (a.status in 200..299) chunk.forEach { done[it] = it }
             }
         }
-        return done
     }
 
     /** One modify per email (an Undo is at most a check's worth): back in the inbox, its label off; a deleted one is skipped. */
-    override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
+    override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = movesKept { done ->
         val labels = HashMap<String, String?>()
-        val done = LinkedHashMap<String, String>()
         for ((id, t) in items) {
             if (t == MailTidy.TRASH || t == MailTidy.JUNK_TRASH) {
                 // Out of Trash with the labels it had (INBOX, or slice 3c's SPAM: trashing never took them off).
@@ -354,7 +378,6 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
             })
             if (a.status in 200..299) done[id] = id
         }
-        return done
     }
 
     /** Slice 5a: messages.send with the RFC 822 text; Gmail fills in From with this account. */
@@ -511,8 +534,7 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     }
 
     /** Each email: its category added (Outlook's label), then moved to Archive (a new id). */
-    override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
-        val done = LinkedHashMap<String, String>()
+    override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = movesKept { done ->
         for ((id, t) in items) {
             if (t == MailTidy.KEEP) continue
             t.label?.let { label ->
@@ -530,12 +552,10 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             if (t == MailTidy.RESCUE) runCatching { setFlag(accessToken, moved, true) }
             done[id] = moved
         }
-        return done
     }
 
     /** Each email back to the Inbox (another new id), its category taken off. */
-    override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
-        val done = LinkedHashMap<String, String>()
+    override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = movesKept { done ->
         for ((id, t) in items) {
             // Slice 3c: the Junk review's moves go back to Junk.
             val junk = t == MailTidy.JUNK_TRASH || t == MailTidy.RESCUE
@@ -544,7 +564,6 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             t.label?.let { label -> categories(accessToken, back)?.takeIf { label in it }?.let { setCategories(accessToken, back, it - label) } }
             done[id] = back
         }
-        return done
     }
 
     /** Slice 5a: the message's internet headers (on demand, one message per sender). */

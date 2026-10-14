@@ -210,7 +210,11 @@ object MailAccountRules {
             // Slice 8b: the backlog clean-up's tidy has its own lines under Backlog clean-up (Activity lists it too).
             val mine = batches.filter { it.account == r.label.label && !it.backlog }
             r.copy(
-                tidyLine = MailAutopilotPanelRules.accountLine(autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal)),
+                tidyLine = MailAutopilotPanelRules.accountLine(
+                    autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal),
+                    // Completeness: a revoked or expired sign-in (not one merely ending today) pauses it.
+                    signInEnded = a?.status == "needs_reconnect",
+                ),
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
                 senders = MailSenderPanelRules.rows(senders, r.label.label, nowMs, cal),
                 backlog = MailBacklogRules.rowFor(backlogs, r.label.label, batches, paused, nowMs),

@@ -187,6 +187,23 @@ class MailTidyTest {
         val would = mapOf("NEWSLETTER" to 2)
         assertEquals(MailTidyRules.dryRunLine(would), MailAutopilotPanelRules.accountLine(MailAutopilotSetting(false, 1L), false, would, todays))
         assertEquals(MailTidyRules.dryRunLine(would), MailAutopilotPanelRules.accountLine(on, true, would, todays))
+        // Completeness: on, but the sign-in ended: paused until Reconnect (off or the kill switch still say the dry run).
+        assertEquals(MailAutopilotPanelRules.SIGN_IN_ENDED_LINE, MailAutopilotPanelRules.accountLine(on, false, would, todays, signInEnded = true))
+        assertEquals(MailTidyRules.dryRunLine(would), MailAutopilotPanelRules.accountLine(on, true, would, todays, signInEnded = true))
+    }
+
+    @Test
+    fun mailSaysAutopilotIsPausedOnAnAccountWhoseSignInEnded() {
+        val on = MailAutopilotSetting(true, null)
+        val now = today + 15 * hour
+        fun facts(email: String, label: String, status: String) = MailAccountFacts(MailProviders.GMAIL, email, status, now - 60_000L, label)
+        val v = MailAccountRules.view(
+            listOf(facts("alex@example.com", "PERSONAL", "needs_reconnect"), facts("sam@example.com", "BUSINESS", "ok")),
+            now, emptyList(), on, false, listOf(batch("a", today + 9 * hour), batch("b", today + 10 * hour, account = "Business")), LocalCalendar.UTC,
+        )
+        assertEquals(MailAutopilotPanelRules.SIGN_IN_ENDED_LINE, v.rows.first { it.label == MailLabel.PERSONAL }.tidyLine)
+        assertTrue(v.rows.first { it.label == MailLabel.PERSONAL }.needsReconnect)
+        assertEquals("Autopilot · on · tidied 3 today", v.rows.first { it.label == MailLabel.BUSINESS }.tidyLine)
     }
 
     @Test

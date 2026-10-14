@@ -49,6 +49,7 @@ import os.meka.core.domain.ObligationFields
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.MailMoved
+import os.meka.backend.integrations.MailMovePartial
 import os.meka.backend.integrations.MailBacklogPage
 import os.meka.backend.integrations.BacklogScan
 import os.meka.backend.integrations.BacklogItem
@@ -200,8 +201,21 @@ class MailSyncTest {
             if (repliedFails) error("Gmail 503")
             return sentThreads
         }
+        // Completeness: the provider fails (a 429) after moving this many, as GmailMail reports it (MailMovePartial).
+        var tidyFailsAfter: Int? = null
+        var untidyFailsAfter: Int? = null
+        private fun cut(items: Map<String, MailTidy>, after: Int?, move: (Map<String, MailTidy>) -> Map<String, String>): Map<String, String> {
+            if (after == null) return move(items)
+            val done = move(items.entries.take(after).associate { it.key to it.value })
+            val cause = IllegalStateException("provider HTTP 429")
+            if (done.isEmpty()) throw cause
+            throw MailMovePartial(done, cause)
+        }
         override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
             tidyCalls += items
+            return cut(items, tidyFailsAfter, this::moveOut)
+        }
+        private fun moveOut(items: Map<String, MailTidy>): Map<String, String> {
             // Slice 3c: the Junk review's moves out of Junk.
             val fromJunk = items.filterKeys { it in junkBox }.mapValues { (id, t) ->
                 val h = junkBox.remove(id)!!
@@ -215,7 +229,8 @@ class MailSyncTest {
                 id
             }
         }
-        override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> =
+        override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> = cut(items, untidyFailsAfter, this::moveBack)
+        private fun moveBack(items: Map<String, MailTidy>): Map<String, String> =
             items.filter { (_, t) -> t == MailTidy.JUNK_TRASH || t == MailTidy.RESCUE }.mapNotNull { (id, _) ->
                 val h = trashBox.remove(id) ?: mailbox.remove(id) ?: return@mapNotNull null
                 junkBox[id] = h.copy(inInbox = false)
@@ -770,6 +785,63 @@ class MailSyncTest {
         i.syncAccount(id)
         assertEquals(1, gmail.tidyCalls.size)
         assertTrue(gmail.mailbox.getValue("n").inInbox)
+    }
+
+    @Test
+    fun aProviderFailurePartWayRecordsWhatMovedAndTheRestFollowNextCheck() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        listOf("n1", "n2", "n3").forEach { gmail.mailbox[it] = msg(it, 0, "editor@weekly.example").copy(listId = "<weekly.example>") }
+        gmail.nextRound = { MailChanges(fetch = listOf("n1", "n2", "n3"), cursor = "h2") }
+        // Gmail answers 429 after the first move: that one is recorded (with Undo), the others stay in the inbox.
+        gmail.tidyFailsAfter = 1
+        i.syncAccount(id)
+        assertEquals("ok", i.accounts("home").single().status)
+        val first = tidies(ops).entries.single()
+        assertEquals(FieldValue.Int64(1), first.value[MailTidyBatchFields.COUNT])
+        val movedFirst = ms.tidied(id, first.key).single().id
+        val rest = listOf("n1", "n2", "n3") - movedFirst
+        assertFalse(gmail.mailbox.getValue(movedFirst).inInbox)
+        assertTrue(rest.all { gmail.mailbox.getValue(it).inInbox })
+        // The next check tidies the rest, once each.
+        gmail.tidyFailsAfter = null
+        now += 60_000
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(rest.associateWith { MailTidy.NEWSLETTER }, gmail.tidyCalls.last())
+        assertEquals(2, tidies(ops).size)
+        assertTrue(listOf("n1", "n2", "n3").none { gmail.mailbox.getValue(it).inInbox })
+        // Undo of the second tidy cut short after one: not marked done, the one back is never tidied again; the next
+        // check finishes it and says so.
+        val second = tidies(ops).keys.single { it != first.key }
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, second, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.untidyFailsAfter = 1
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertNull(tidies(ops).getValue(second)[MailTidyBatchFields.UNDONE_AT])
+        val backFirst = rest.filter { gmail.mailbox.getValue(it).inInbox }
+        assertEquals(1, backFirst.size)
+        assertTrue(backFirst.single() in ms.neverTidied(id))
+        gmail.untidyFailsAfter = null
+        now += 60_000
+        gmail.nextRound = { MailChanges(fetch = rest, cursor = "h5") }
+        i.syncAccount(id)
+        val f = tidies(ops).getValue(second)
+        assertTrue(f[MailTidyBatchFields.UNDONE_AT] is FieldValue.Int64)
+        assertEquals(FieldValue.Text("Put back 2 emails in the inbox"), f[MailTidyBatchFields.UNDO_NOTE])
+        assertTrue(rest.all { gmail.mailbox.getValue(it).inInbox })
+        // Back in the inbox: never tidied again.
+        now += 60_000
+        gmail.nextRound = { MailChanges(fetch = rest, cursor = "h6") }
+        i.syncAccount(id)
+        assertEquals(2, gmail.tidyCalls.size)
     }
 
     @Test

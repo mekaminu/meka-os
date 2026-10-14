@@ -636,13 +636,17 @@ class Integrations(
             val left = moved.filter { it.id !in never }
             val chunk = left.take(MailBacklogRules.UNDO_PER_CHECK)
             var putBack = plan.putBack
+            var interrupted = false
             if (chunk.isNotEmpty()) {
-                val back = m.untidy(token, chunk.associate { it.movedId to it.tidy })
-                ms.neverTidy(a.id, chunk.map { it.id } + chunk.map { it.movedId } + back.values)
+                val (back, cut) = m.untidyKept(token, chunk.associate { it.movedId to it.tidy })
+                interrupted = cut
+                // Interrupted: only what came back is done; the rest of the chunk is put back next check.
+                val handled = if (cut) chunk.filter { it.movedId in back } else chunk
+                ms.neverTidy(a.id, handled.map { it.id } + handled.map { it.movedId } + back.values)
                 putBack += back.size
             }
             writeMail(a, entityId, MailBacklogRules.progressFields(moved.size, plan.applyStartedAtMs, plan.finishedAtMs, putBack), EntityTypes.MAIL_BACKLOG)
-            if (left.size <= chunk.size) {
+            if (!interrupted && left.size <= chunk.size) {
                 writeTidy(a, batchId, mapOf(
                     MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
                     MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(putBack, moved.size)),
@@ -662,12 +666,13 @@ class Integrations(
         val startedAt = plan.applyStartedAtMs ?: nowMs
         var all = moved
         if (chunk.isNotEmpty()) {
-            val got = m.tidy(token, chunk.associate { it.id to it.kind.tidy })
+            val (got, interrupted) = m.tidyKept(token, chunk.associate { it.id to it.kind.tidy })
             val newly = chunk.mapNotNull { item -> got[item.id]?.let { movedId -> MailMoved(item.id, movedId, item.kind.tidy) } }
             ms.recordTidy(a.id, batchId, newly)
             all = moved + newly
             // Not moved: gone or out of the inbox since the plan → not the backlog's any more; otherwise tried next check.
-            chunk.filter { it.id !in got }.forEach { item ->
+            // Interrupted by a provider failure: the rest are simply tried next check (no header reads now).
+            if (!interrupted) chunk.filter { it.id !in got }.forEach { item ->
                 val h = runCatching { m.header(token, item.id) }.getOrElse { return@forEach }
                 if (h == null || !h.inInbox) ms.removeBacklog(a.id, item.id)
             }
@@ -721,14 +726,14 @@ class Integrations(
                     writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
                     continue
                 }
-                val moved = m.tidy(token, mapOf(h.id to MailTidy.ARCHIVE))[h.id] ?: continue
+                val moved = m.tidyKept(token, mapOf(h.id to MailTidy.ARCHIVE)).first[h.id] ?: continue
                 ms.recordTidy(a.id, item.id, listOf(MailMoved(h.id, moved, MailTidy.ARCHIVE)))
                 ms.put(hh, a.id, h.copy(inInbox = false))
                 writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
             } else {
                 val items = ms.tidied(a.id, item.id)
                 if (items.isNotEmpty()) {
-                    val back = m.untidy(token, items.associate { it.movedId to it.tidy })
+                    val back = m.untidyKept(token, items.associate { it.movedId to it.tidy }).first
                     ms.neverTidy(a.id, items.map { it.id } + items.map { it.movedId } + back.values)
                     // Gmail keeps the id: back in the inbox now, sorted again this check (Outlook's new id comes with its feed).
                     items.forEach { t -> byItem[item.id]?.takeIf { back[t.movedId] == t.id }?.let { h -> ms.put(hh, a.id, h.copy(inInbox = true)) } }
@@ -874,7 +879,8 @@ class Integrations(
         if (plan.isEmpty()) return
         val at = now()
         val batchId = MailAutopilotRules.batchId(a.id, at)
-        val moved = m.tidy(token, plan.associate { (h, t) -> h.id to t })
+        // Completeness: a provider failure part-way still records (with Undo) what moved; the rest are tried next check.
+        val moved = m.tidyKept(token, plan.associate { (h, t) -> h.id to t }).first
         val done = plan.filter { (h, _) -> h.id in moved }
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
@@ -968,7 +974,8 @@ class Integrations(
         junkReviewedAt[a.id] = nowMs
         if (plan.isEmpty()) return
         val batchId = MailJunkRules.batchId(a.id, nowMs)
-        val moved = m.tidy(token, plan.associate { (h, t) -> h.id to t })
+        // Completeness: a provider failure part-way still records (with Undo) what moved; the rest are tried next check.
+        val moved = m.tidyKept(token, plan.associate { (h, t) -> h.id to t }).first
         val done = plan.filter { (h, _) -> h.id in moved }
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
@@ -988,8 +995,13 @@ class Integrations(
         for (b in due) {
             val items = ms.tidied(a.id, b.id)
             if (items.isEmpty()) continue // another account's tidy
-            val back = m.untidy(token, items.associate { it.movedId to it.tidy })
-            ms.neverTidy(a.id, items.map { it.id } + items.map { it.movedId } + back.values)
+            // Completeness: an Undo a provider failure cut short protects what came back now (never tidied again) and
+            // is tried again whole at the next check (putting back is idempotent; one already moved is skipped), and
+            // only says it's done once a try got through.
+            val (back, interrupted) = m.untidyKept(token, items.associate { it.movedId to it.tidy })
+            val handled = if (interrupted) items.filter { it.movedId in back } else items
+            ms.neverTidy(a.id, handled.map { it.id } + handled.map { it.movedId } + back.values)
+            if (interrupted) continue
             writeTidy(a, b.id, mapOf(
                 MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
                 MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(back.size, items.size, if (b.junk) "in Junk" else "in the inbox")),
