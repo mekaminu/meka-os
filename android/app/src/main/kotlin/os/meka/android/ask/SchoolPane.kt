@@ -216,7 +216,7 @@ private fun TermsCard(
     val reduced = Meka.reducedMotion
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
@@ -252,7 +252,7 @@ private fun TermsCard(
         }
         Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "school-terms-said") { line ->
             line?.let {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f, fill = false))
                     if (undo) {
                         Text(

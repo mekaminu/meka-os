@@ -140,7 +140,7 @@ struct SchoolSheet: View {
                 Text(SchoolTerms.shared.NOT_LISTED).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             if let termsSaid {
-                HStack(spacing: MekaSpace.s) {
+                HStack(spacing: MekaSpace.xs) {
                     Text(termsSaid).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let done = termsDone {
