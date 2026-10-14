@@ -356,6 +356,29 @@ class SpeechService(
         return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine), audio)
     }
 
+    /**
+     * [text] in the Google voice [voiceId] only (natural voice, slice 3: the call assistant's lines), metered on Google's
+     * meter. Null — and the caller says it with Polly — when that voice isn't offered, the month is past
+     * [googleFallbackAt], or Google fails or is slow (then [googleFailedAtMs] is kept, as for [say]). Never throws.
+     */
+    fun googleClip(text: String, voiceId: String): ByteArray? {
+        val g = google ?: return null
+        val wanted = runCatching { offered() }.getOrNull()
+            ?.firstOrNull { it.provider == SpeechCodec.GOOGLE && it.id.equals(voiceId, ignoreCase = true) } ?: return null
+        val m = month()
+        val chars = text.length.toLong()
+        val used = runCatching { googleUsage.used(m) }.getOrDefault(Long.MAX_VALUE / 2)
+        if (used + chars > googleFallbackAt) return null
+        val audio = runCatching { g.synthesize(text, wanted.id, wanted.engine) }.getOrNull()
+            ?.takeIf { it.isNotEmpty() && it.size <= SpeechCodec.MAX_AUDIO_BYTES }
+        if (audio == null) { googleFailedAtMs = nowMs(); return null }
+        runCatching { googleUsage.add(m, chars) }
+        return audio
+    }
+
+    /** Google's state for Health: [SpeechCodec.Google.ON] · [SpeechCodec.Google.FAILED] · null (no key). Never throws. */
+    fun googleState(): String? = runCatching { runCatching { offered() }; googleInfo(month()).state }.getOrNull()?.takeIf { it != SpeechCodec.Google.NO_KEY }
+
     /** [say] as the JSON answer (audio as base64), for devices that didn't ask for raw MP3. */
     fun speak(r: SpeechCodec.Request): SpeechCodec.Response {
         val said = say(r)

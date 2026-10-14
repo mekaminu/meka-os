@@ -44,6 +44,17 @@ class HealthCodecTest {
     }
 
     @Test
+    fun googlesVoicesRoundTripAndAnUnknownStateReadsAsFailed() {
+        // Natural voice, slice 3: Google's voices on the server and when a chosen one last failed.
+        val r = HealthCodec.Response(HealthCodec.Response.PUSH_ON, calls = true, speech = true, atMs = 5, speechGoogle = "on", speechGoogleFailedAtMs = 4)
+        assertEquals(r, HealthCodec.decodeResponse(HealthCodec.encodeResponse(r)))
+        assertEquals("failed", HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"speechGoogle":"odd"}""").speechGoogle)
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"speechGoogle":"nokey"}""").speechGoogle)
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5}""").speechGoogle)
+        assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"speechGoogleFailedAt":"4"}""").speechGoogleFailedAtMs)
+    }
+
+    @Test
     fun theRequestCarriesOnlyTheVersion() {
         assertEquals("""{"w":1}""", HealthCodec.encodeRequest())
         HealthCodec.decodeRequest(HealthCodec.encodeRequest())

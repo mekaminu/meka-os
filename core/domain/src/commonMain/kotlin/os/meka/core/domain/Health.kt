@@ -60,8 +60,14 @@ data class ServerHealth(
     val lastPushAtMs: Long? = null,
     /** "sent" · "failed" · "gone" · "off". */
     val lastPushResult: String? = null,
+    /** Google's natural voices: [GOOGLE_ON] · [GOOGLE_FAILED] · null (no key, or the server doesn't say). */
+    val speechGoogle: String? = null,
+    /** When a chosen Google voice last failed and Amazon Polly said it instead (natural voice, slice 3). */
+    val speechGoogleFailedAtMs: Long? = null,
 ) {
     companion object {
+        const val GOOGLE_ON = "on"
+        const val GOOGLE_FAILED = "failed"
         const val PUSH_ON = "on"
         const val PUSH_MISSING = "missing"
         const val PUSH_OFF = "off"
@@ -173,7 +179,7 @@ object HealthRules {
             add(calls(f, cal))
             SpamProtectionRules.healthRow(f.device.callRoleHeld, f.spamProtectionOn, f.device.mac, f.device.callerLookups)?.let(::add)
             add(ai(f))
-            add(voice(f))
+            add(voice(f, cal))
             battery(f)?.let(::add)
             update(f, cal)?.let(::add)
             AboutYouRules.healthRow(f.aboutYou, f.nowMs, cal)?.let(::add)
@@ -304,11 +310,28 @@ object HealthRules {
         return HealthRow("ai", "Navilife's AI", ai.line, state)
     }
 
-    private fun voice(f: HealthFacts): HealthRow = when (f.server?.speech) {
+    private fun voice(f: HealthFacts, cal: LocalCalendar): HealthRow = when (f.server?.speech) {
         null -> HealthRow("voice", "Navilife's voice", "Couldn't check", HealthState.UNKNOWN)
-        true -> HealthRow("voice", "Navilife's voice", "On · Amazon Polly", HealthState.OK)
+        true -> HealthRow("voice", "Navilife's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
         false -> HealthRow("voice", "Navilife's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
     }
+
+    /**
+     * Which voices the server speaks with (natural voice, slice 3). A Google failure in the last day is noted, never
+     * flagged: Amazon Polly already said those words, so nothing needs a look.
+     */
+    fun voiceLine(s: ServerHealth, nowMs: Long, cal: LocalCalendar): String {
+        val failed = s.speechGoogleFailedAtMs?.takeIf { nowMs - it in 0 until GOOGLE_FAILED_NOTE_MS }
+            ?.let { " · Google voice failed ${at(it, nowMs, cal)} · used Polly" }.orEmpty()
+        return when (s.speechGoogle) {
+            ServerHealth.GOOGLE_ON -> "On · Google Chirp 3 HD and Amazon Polly$failed"
+            ServerHealth.GOOGLE_FAILED -> "On · Amazon Polly · Google's voices can't be reached$failed"
+            else -> "On · Amazon Polly"
+        }
+    }
+
+    /** How long Health mentions a Google voice failure. */
+    const val GOOGLE_FAILED_NOTE_MS = 24 * HOUR
 
     private fun battery(f: HealthFacts): HealthRow? {
         val exempt = f.device.batteryExempt ?: return null

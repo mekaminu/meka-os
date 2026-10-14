@@ -753,8 +753,17 @@ fun Application.mekaSync(
                 }
                 if (event is VoiceEvent.Recorded && reply is VoiceReply.AskUrgent) call.application.environment.log.info("voice message taken") // no identifiers
                 val callVoice = if (reply == VoiceReply.Done || reply == VoiceReply.Busy) CallVoice.DEFAULT else withContext(Dispatchers.IO) { voice.assistant.voice() }
-                val (type, text) = provider.render(reply, voice.publicUrl, callVoice)
+                val clips = voice.clips
+                val (type, text) = if (clips == null) provider.render(reply, voice.publicUrl, callVoice)
+                else provider.render(reply, voice.publicUrl, callVoice) { g, line -> clips.path(g, line) }
                 call.respondText(text, ContentType.parse(type))
+            }
+            // The call assistant's lines in a chosen Google voice (natural voice, slice 3), fetched by the phone service
+            // for <Play>. Only clips this server made of its fixed lines, under an unguessable key; anything else is 404.
+            get("${CallClips.PATH}{file}") {
+                val mp3 = voice.clips?.audio(call.parameters["file"].orEmpty())
+                    ?: return@get call.respondText("not found", status = HttpStatusCode.NotFound)
+                call.respondBytes(mp3, ContentType.parse("audio/mpeg"))
             }
         }
 
@@ -788,6 +797,8 @@ fun Application.mekaSync(
             val health = HealthCodec.Response(
                 pushState, calls = voice != null, speech = speech != null, atMs = System.currentTimeMillis(), macs = macs,
                 lastPushAtMs = lastPush?.first, lastPushResult = lastPush?.second?.let { NotifyReports.word(it) },
+                speechGoogle = speech?.let { withContext(Dispatchers.IO) { it.googleState() } },
+                speechGoogleFailedAtMs = speech?.googleFailedAtMs,
             )
             call.respondText(HealthCodec.encodeResponse(health), ContentType.Application.Json)
         }
@@ -989,6 +1000,7 @@ fun main(args: Array<String>) {
             val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai)
             voice?.let { startRecordingSweep(it.assistant) }
+            voice?.let { startCallClipsWarm(it) }
             // The call assistant's low-balance guard: the phone service's credit, read a few times a day.
             voice?.providers?.values?.filterIsInstance<CreditSource>()?.firstOrNull()?.let { source ->
                 val devices = PostgresDeviceRegistry(ds)
@@ -1106,7 +1118,9 @@ fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?,
         // Suspected spam (8b c): MEKA's AI reads a message's words (never the number); metered, off with the AI.
         scamCheck = ai?.provider?.let { CallScamCheck(it) },
     )
-    return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl)
+    // Callers hear a chosen Google voice (natural voice, slice 3): its lines made once, on Google's meter.
+    val clips = speech?.let { sp -> CallClips(synth = { text, v -> sp.googleClip(text, v) }, store = recordings) }
+    return VoiceRoutes(assistant, listOf(TwilioVoice.fromSecret(secret)), publicUrl, clips)
 }
 
 /**

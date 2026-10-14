@@ -35,6 +35,13 @@ object HealthCodec {
         val lastPushAtMs: Long? = null,
         /** [PUSH_SENT] · [PUSH_FAILED] · [PUSH_GONE] · [PUSH_OFF_RESULT]. */
         val lastPushResult: String? = null,
+        /**
+         * Google's natural voices on the server (natural voice, slice 3): [SpeechCodec.Google.ON] · [SpeechCodec.Google.FAILED]
+         * (a key, but Google can't be reached) · null (no key, or an older server).
+         */
+        val speechGoogle: String? = null,
+        /** When a chosen Google voice last failed and Amazon Polly said the words instead; null when not since start. */
+        val speechGoogleFailedAtMs: Long? = null,
     ) {
         companion object {
             const val PUSH_ON = "on"
@@ -66,6 +73,8 @@ object HealthCodec {
             put("lastPushAt", r.lastPushAtMs)
             put("lastPush", r.lastPushResult)
         }
+        r.speechGoogle?.let { put("speechGoogle", it) }
+        r.speechGoogleFailedAtMs?.let { put("speechGoogleFailedAt", it) }
     }.toString()
 
     /** An unknown push state reads as off (an older or newer server), never as fine. */
@@ -86,6 +95,11 @@ object HealthCodec {
             macs = (o["macs"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull?.takeIf { it >= 0 },
             lastPushAtMs = lastPush?.let { lastPushAt },
             lastPushResult = lastPushAt?.let { lastPush },
+            // An unknown Google state reads as failed (never as on); "nokey" as none.
+            speechGoogle = (o["speechGoogle"] as? JsonPrimitive)?.takeIf { it.isString }?.content
+                ?.takeIf { it != SpeechCodec.Google.NO_KEY }
+                ?.let { if (it == SpeechCodec.Google.ON) it else SpeechCodec.Google.FAILED },
+            speechGoogleFailedAtMs = (o["speechGoogleFailedAt"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it > 0 },
         )
     }
 

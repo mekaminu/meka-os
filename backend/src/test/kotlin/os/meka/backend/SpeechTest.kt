@@ -341,9 +341,46 @@ class SpeechTest {
     }
 
     @Test
-    fun callsKeepAPollyVoiceWhenAGoogleVoiceIsChosen() {
+    fun callsPlayAChosenGoogleVoiceOverAPollyVoice() {
         val offered = listOf(SpeechCodec.Voice("Aoede", "Female", "chirp3hd", SpeechCodec.GOOGLE), SpeechCodec.Voice("Amy", "Female", "generative"))
-        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Aoede", offered))
+        // The Polly voice stands behind the Google one: it says any line whose clip isn't ready.
+        assertEquals(CallVoice("Amy", "generative", google = "Aoede"), CallVoice.choose("Aoede", offered))
+        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Amy", offered))
+        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Charon", offered)) // not offered: no Google voice
         assertEquals(CallVoice.DEFAULT, CallVoice.choose("Aoede-US", emptyList()))
+    }
+
+    @Test
+    fun aCallLineInAGoogleVoiceIsOnGooglesMeterAndNeverPolly() {
+        val google = FakePolly(chirp)
+        val polly = FakePolly(gb)
+        val googleUsage = InMemorySpeechUsageStore()
+        val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = google, googleUsage = googleUsage)
+        assertEquals(SpeechCodec.Google.ON, s.googleState())
+        assertContentEquals("ID3:Aoede:Goodbye.".toByteArray(), s.googleClip("Goodbye.", "Aoede"))
+        assertEquals(8L, googleUsage.used("2026-10"))
+        assertTrue(polly.said.isEmpty())
+        // Not a Google voice here: nothing made, nothing counted, not a failure.
+        assertEquals(null, s.googleClip("Goodbye.", "Amy"))
+        assertEquals(null, s.googleClip("Goodbye.", "Puck"))
+        assertEquals(null, s.googleFailedAtMs)
+        // Past 900k: none (Polly says it on the call), still not a failure.
+        googleUsage.add("2026-10", 899_990)
+        assertEquals(null, s.googleClip("Goodbye.", "Aoede"))
+        assertEquals(null, s.googleFailedAtMs)
+        // Google fails: none, and the time is kept for Health and the picker.
+        val failing = FakePolly(chirp)
+        val f = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = failing)
+        f.offered()
+        failing.fail = true
+        assertEquals(null, f.googleClip("Goodbye.", "Aoede"))
+        assertEquals(now, f.googleFailedAtMs)
+        assertTrue(polly.said.isEmpty())
+        // Health's state: none without a key, failed when Google can't be reached.
+        val noKey = object : SpeechEngine by FakePolly(chirp) { override fun configured() = false }
+        assertEquals(null, SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = noKey).googleState())
+        assertEquals(null, SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }).googleState())
+        val down = FakePolly(chirp).apply { fail = true }
+        assertEquals(SpeechCodec.Google.FAILED, SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).googleState())
     }
 }

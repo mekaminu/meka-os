@@ -1,5 +1,6 @@
 package os.meka.backend
 
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -413,5 +414,74 @@ class CallAssistantTest {
         // Webhooks before a household exists still answer (busy), in no voice at all.
         val none = CallAssistant(ops, FieldReader.scanning(ops), household = { null }, speechVoices = { error("not asked") })
         assertEquals(CallVoice.DEFAULT, none.voice())
+    }
+    @Test
+    fun callersHearAChosenGoogleVoiceOnceItsLinesAreMadeAndPollyUntilThen() = testApplication {
+        val offered = listOf(
+            SpeechCodec.Voice("Aoede", "Female", "chirp3hd", SpeechCodec.GOOGLE), SpeechCodec.Voice("Amy", "Female", "generative"),
+        )
+        val withVoice = CallAssistant(ops, FieldReader.scanning(ops), household = { devices.soleHousehold() }, now = { nowMs }, speechVoices = { offered })
+        val made = mutableListOf<Pair<String, String>>()
+        val later = mutableListOf<Runnable>()
+        var googleDown = false
+        val store = InMemoryRecordingStore { nowMs }
+        val clips = CallClips(
+            synth = { text, v -> if (googleDown) null else { made += text to v; "ID3:$v:$text".toByteArray() } },
+            store = store, nowMs = { nowMs }, background = { later += it },
+        )
+        application { mekaSync(ops, devices, voice = VoiceRoutes(withVoice, listOf(TwilioVoice(authToken = { token })), base, clips)) }
+        switch(true)
+        ops.append(Op("v1", "hh", EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID, MekaVoiceFields.NAME, "Aoede".fv(), Hlc(nowMs + 500, 0, "fold"), emptyList(), "fold"))
+        val call = arrayOf("CallSid" to "CA800", "From" to "+447700900123")
+
+        // The first call after the choice: Polly says it (no waiting on Google) and the lines are made in the background.
+        val first = hook(VoiceStep.INCOMING, *call).bodyAsText()
+        assertTrue("""<Say voice="Polly.Amy-Generative" language="en-GB">""" in first, first)
+        assertFalse("<Play>" in first)
+        assertEquals(1, later.size)
+        hook(VoiceStep.INCOMING, *call) // a second call meanwhile doesn't ask again
+        assertEquals(1, later.size)
+        later.single().run()
+        assertEquals(CallClips.LINES.size, made.size)
+        assertTrue(made.all { it.second == "Aoede" })
+        assertTrue(clips.ready("Aoede"))
+
+        // Now every line is played in Aoede, from this server, and nothing is said by Polly.
+        val greet = hook(VoiceStep.INCOMING, *call).bodyAsText()
+        val plays = Regex("<Play>([^<]+)</Play>").findAll(greet).map { it.groupValues[1] }.toList()
+        assertEquals(3, plays.size, greet) // greeting, the prompt, and "I didn't hear a message"
+        assertTrue(plays.all { it.startsWith("$base${CallClips.PATH}") && it.endsWith(".mp3") })
+        assertFalse("<Say" in greet, greet)
+        assertTrue("<Record " in greet)
+        val asked = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "9").bodyAsText()
+        assertTrue("<Gather " in asked && "<Play>" in asked && "<Say" !in asked, asked)
+        assertTrue("<Play>" in hook(VoiceStep.ANSWERED, *call, "Digits" to "1").bodyAsText())
+
+        // The phone service fetches a clip: the MP3, as the line says it; any other name is not found.
+        val clip = client.get(plays.first().removePrefix(base))
+        assertEquals(HttpStatusCode.OK, clip.status)
+        assertTrue(clip.headers["Content-Type"].orEmpty().startsWith("audio/mpeg"), clip.headers["Content-Type"])
+        assertEquals("ID3:Aoede:${CallAssistantScript.GREETING}", clip.bodyAsText())
+        assertEquals(HttpStatusCode.NotFound, client.get("${CallClips.PATH}0123456789abcdef0123456789abcdef.mp3").status)
+        assertEquals(HttpStatusCode.NotFound, client.get("${CallClips.PATH}..%2Fsecret.mp3").status)
+
+        // Kept in the bucket under voice/clips/, so a restart (a new salt) makes nothing again.
+        assertEquals(CallClips.LINES.size, store.list(CallClips.STORE_PREFIX).size)
+        val restarted = CallClips(synth = { _, _ -> error("asked Google again") }, store = store, nowMs = { nowMs }, background = { it.run() })
+        assertEquals(CallClips.LINES.size, restarted.warm("Aoede"))
+        assertTrue(restarted.ready("Aoede"))
+
+        // Google down for a new voice: Polly says every line, and Google isn't asked again for five minutes.
+        googleDown = true
+        val other = CallClips(synth = { _, _ -> null }, nowMs = { nowMs }, background = { later += it })
+        assertNull(other.path("Charon", CallAssistantScript.GREETING))
+        later.last().run()
+        assertFalse(other.ready("Charon"))
+        val n = later.size
+        assertNull(other.path("Charon", CallAssistantScript.GREETING))
+        assertEquals(n, later.size)
+        nowMs += CallClips.RETRY_MS
+        assertNull(other.path("Charon", CallAssistantScript.GREETING))
+        assertEquals(n + 1, later.size)
     }
 }

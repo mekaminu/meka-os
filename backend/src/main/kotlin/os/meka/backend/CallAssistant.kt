@@ -114,7 +114,13 @@ interface VoiceProvider {
      * The reply as the service's markup: content type and body. [baseUrl] is the server's public URL; [voice] is MEKA's
      * voice, so callers hear the same voice Meka hears in Talk ([CallAssistant.voice]).
      */
-    fun render(reply: VoiceReply, baseUrl: String, voice: CallVoice = CallVoice.DEFAULT): Pair<String, String>
+    fun render(
+        reply: VoiceReply,
+        baseUrl: String,
+        voice: CallVoice = CallVoice.DEFAULT,
+        /** The path of a ready clip of a line in a Google voice ([CallClips.path]); null: say it in [voice]'s Polly voice. */
+        clip: (voice: String, text: String) -> String? = { _, _ -> null },
+    ): Pair<String, String>
 
     /** Deletes a recording from the phone service once it has been transcribed. Returns whether it is gone. */
     fun deleteRecording(recording: String): Boolean
@@ -128,9 +134,11 @@ interface VoiceProvider {
 
 /**
  * The Polly voice the call assistant speaks with and its engine ("generative" or "neural"): MEKA's voice (build plan V1,
- * "Weather and a voice", item 3: one voice everywhere, so callers hear the voice Meka chose).
+ * "Weather and a voice", item 3: one voice everywhere, so callers hear the voice Meka chose). [google] is a chosen
+ * Google Chirp 3 HD voice (natural voice, slice 3): its lines are played as clips ([CallClips]) when they're ready, and
+ * the Polly voice says any line that isn't.
  */
-data class CallVoice(val name: String, val engine: String) {
+data class CallVoice(val name: String, val engine: String, val google: String? = null) {
     companion object {
         /** Before MEKA's voice is known (Polly off or unreachable, nothing chosen): Amy, the server's first choice. */
         val DEFAULT = CallVoice("Amy", SpeechService.NEURAL)
@@ -138,18 +146,133 @@ data class CallVoice(val name: String, val engine: String) {
         /**
          * The voice for calls: the synced choice ([chosen], a `context_mode/voice` name) when the server offers it,
          * else the server's default (the first [offered]; also when the device's own voice is chosen, since a caller
-         * can't hear Meka's phone), else the chosen name on the neural engine, else [DEFAULT].
+         * can't hear Meka's phone), else the chosen name on the neural engine, else [DEFAULT]. A chosen Google voice
+         * the server offers rides along as [google], over the server's default Polly voice.
          */
         fun choose(chosen: String?, offered: List<SpeechCodec.Voice>): CallVoice {
+            val polly = pollyFor(chosen, offered)
+            val name = MekaVoiceRules.normalize(chosen)?.takeIf { it != MekaVoiceRules.DEVICE } ?: return polly
+            val google = offered.firstOrNull { it.provider == SpeechCodec.GOOGLE && it.id.equals(name, ignoreCase = true) }
+            return if (google != null) polly.copy(google = google.id) else polly
+        }
+
+        private fun pollyFor(chosen: String?, offered: List<SpeechCodec.Voice>): CallVoice {
             val polly = MekaVoiceRules.normalize(chosen)?.takeIf { it != MekaVoiceRules.DEVICE }
-            // Calls speak through the phone service's own Polly voices: a chosen Google voice (natural voice, slice 1)
-            // isn't one, so callers hear the server's default Polly voice until calls can play Google's.
+            // The phone service's own voices are Polly's: a chosen Google voice isn't one, so the server's default Polly
+            // voice stands behind it (said whenever a Google clip isn't ready).
             val pollyOffered = offered.filter { it.provider == SpeechCodec.POLLY }
             pollyOffered.firstOrNull { it.id.equals(polly, ignoreCase = true) }?.let { return CallVoice(it.id, it.engine) }
             pollyOffered.firstOrNull()?.let { return CallVoice(it.id, it.engine) }
             if (offered.any { it.id.equals(polly, ignoreCase = true) } || polly?.endsWith("-US") == true) return DEFAULT
             return polly?.let { CallVoice(it, SpeechService.NEURAL) } ?: DEFAULT
         }
+    }
+}
+
+/**
+ * The call assistant's lines in a chosen Google voice (natural voice, slice 3). The phone service can only speak in its
+ * own Polly voices, so Google's are played as MP3 clips the server made once ([CallAssistantScript]'s nine fixed lines,
+ * about 700 characters a voice, on Google's meter and under its 900k fallback) and serves from memory at
+ * [PATH]`<key>.mp3`. A line whose clip isn't ready is said by the Polly voice and the voice's clips are made in the
+ * background, so a call never waits on Google. Keys are a salted hash (new each start), so nobody can guess a clip's
+ * address; clips hold only those fixed lines.
+ */
+class CallClips(
+    /** The line in the Google voice, or null (not offered, past the fallback, failed) — [SpeechService.googleClip]. */
+    private val synth: (text: String, voice: String) -> ByteArray?,
+    /**
+     * Where made clips are kept between starts (MEKA's own bucket, under [STORE_PREFIX]; the bucket's 30-day rule
+     * renews them monthly), so a deploy doesn't pay Google again; null keeps them in memory only.
+     */
+    private val store: RecordingStore? = null,
+    private val nowMs: () -> Long = System::currentTimeMillis,
+    private val background: (Runnable) -> Unit = { r -> Thread.ofVirtual().name("call-clips").start(r) },
+    private val salt: ByteArray = ByteArray(16).also { java.security.SecureRandom().nextBytes(it) },
+) {
+    private val clips = java.util.concurrent.ConcurrentHashMap<String, ByteArray>()
+    private val tried = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val warming = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    fun key(voice: String, text: String): String {
+        val d = MessageDigest.getInstance("SHA-256")
+        d.update(salt)
+        d.update("$voice\n$text".toByteArray(Charsets.UTF_8))
+        return d.digest().joinToString("") { "%02x".format(it) }.take(32)
+    }
+
+    /**
+     * The clip's path for [text] in [voice], or null when it isn't ready (Polly says the line; [voice]'s lines are made
+     * in the background, at most once every [RETRY_MS] after a failure).
+     */
+    fun path(voice: String, text: String): String? {
+        val k = key(voice, text)
+        if (clips.containsKey(k)) return "$PATH$k.mp3"
+        warmLater(voice)
+        return null
+    }
+
+    /** A clip by its file name (`<key>.mp3`); null for anything else. */
+    fun audio(file: String): ByteArray? {
+        val k = file.removeSuffix(".mp3").takeIf { file.endsWith(".mp3") && KEY.matches(it) } ?: return null
+        return clips[k]
+    }
+
+    /** Makes [voice]'s missing lines now, stopping at the first failure; how many were made. Never throws. */
+    fun warm(voice: String): Int {
+        if (!warming.add(voice)) return 0
+        try {
+            tried[voice] = nowMs()
+            var made = 0
+            for (line in LINES) {
+                val k = key(voice, line)
+                if (clips.containsKey(k)) continue
+                val kept = storeKey(voice, line)
+                val mp3 = runCatching { store?.get(kept) }.getOrNull()?.takeIf { it.isNotEmpty() }
+                    ?: runCatching { synth(line, voice) }.getOrNull()?.takeIf { it.isNotEmpty() }
+                        ?.also { fresh -> runCatching { store?.put(kept, fresh) } }
+                    ?: break
+                if (clips.size >= MAX_CLIPS) clips.clear()
+                clips[k] = mp3
+                made++
+            }
+            return made
+        } finally {
+            warming.remove(voice)
+        }
+    }
+
+    /** Where [text] in [voice] is kept in the bucket: `voice/clips/<voice>/<hash of the line>.mp3`. */
+    fun storeKey(voice: String, text: String): String {
+        val h = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }.take(24)
+        return "$STORE_PREFIX${voice.filter { it.isLetterOrDigit() || it == '-' }}/$h.mp3"
+    }
+
+    /** Every line in [voice] is ready. */
+    fun ready(voice: String): Boolean = LINES.all { clips.containsKey(key(voice, it)) }
+
+    private fun warmLater(voice: String) {
+        val last = tried[voice]
+        if (last != null && nowMs() - last < RETRY_MS) return
+        if (voice in warming) return
+        tried[voice] = nowMs()
+        runCatching { background(Runnable { warm(voice) }) }
+    }
+
+    companion object {
+        const val PATH = "/v1/voice/clip/"
+        /** Under the recordings' `voice/` prefix (so the bucket's lifecycle covers them), apart from any household's. */
+        const val STORE_PREFIX = "voice/clips/"
+        /** Everything the call assistant says (handle's replies only ever use these). */
+        val LINES = listOf(
+            CallAssistantScript.GREETING, CallAssistantScript.GREETING_AWAY, CallAssistantScript.RECORD_PROMPT,
+            CallAssistantScript.URGENT_QUESTION, CallAssistantScript.URGENT_AGAIN, CallAssistantScript.THANKS_URGENT,
+            CallAssistantScript.THANKS, CallAssistantScript.THANKS_AWAY, CallAssistantScript.NO_MESSAGE,
+        )
+        /** A failed or partial warm-up is tried again no sooner than this (each call would otherwise ask Google). */
+        const val RETRY_MS = 5 * 60_000L
+        /** A few voices' worth; past it the cache starts again (a voice changed many times). */
+        const val MAX_CLIPS = 9 * 6
+        private val KEY = Regex("[0-9a-f]{32}")
     }
 }
 
@@ -492,8 +615,30 @@ class CallAssistant(
 }
 
 /** The voice routes' dependencies; null in [mekaSync] leaves them out. */
-class VoiceRoutes(val assistant: CallAssistant, providers: List<VoiceProvider>, val publicUrl: String) {
+class VoiceRoutes(
+    val assistant: CallAssistant,
+    providers: List<VoiceProvider>,
+    val publicUrl: String,
+    /** The lines in a chosen Google voice (natural voice, slice 3); null when the server has no Google voices. */
+    val clips: CallClips? = null,
+) {
     val providers: Map<String, VoiceProvider> = providers.associateBy { it.id }
+}
+
+/**
+ * Keeps the chosen Google voice's call lines ready (natural voice, slice 3): shortly after start and then every
+ * [SpeechService.REFRESH_MS], so the first call after a deploy or a new choice already hears that voice. Lines already
+ * made cost nothing; nothing happens while a Polly voice is chosen.
+ */
+fun startCallClipsWarm(voice: VoiceRoutes, periodMs: Long = SpeechService.REFRESH_MS) {
+    val clips = voice.clips ?: return
+    Thread.ofVirtual().name("call-clips-warm").start {
+        Thread.sleep(20_000)
+        while (true) {
+            runCatching { voice.assistant.voice().google?.let { clips.warm(it) } }
+            Thread.sleep(periodMs)
+        }
+    }
 }
 
 /** A GET's answer, no redirects followed ([TwilioVoice.fetchRecording]). */
@@ -546,10 +691,12 @@ class TwilioVoice(
         }
     }
 
-    override fun render(reply: VoiceReply, baseUrl: String, voice: CallVoice): Pair<String, String> {
+    override fun render(reply: VoiceReply, baseUrl: String, voice: CallVoice, clip: (voice: String, text: String) -> String?): Pair<String, String> {
         val base = baseUrl.trimEnd('/')
         val name = voiceName(voice)
-        fun say(text: String) = sayIn(name, text)
+        // A chosen Google voice's ready clip is played; any other line is said in the Polly voice (natural voice, slice 3).
+        fun say(text: String) = voice.google?.let { g -> runCatching { clip(g, text) }.getOrNull() }
+            ?.let { "<Play>${xml(base + it)}</Play>" } ?: sayIn(name, text)
         fun url(step: String) = xml(base + VoiceStep.path(ID, step))
         val s = CallAssistantScript
         val body = when (reply) {

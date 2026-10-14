@@ -12,6 +12,7 @@ import os.meka.core.wire.WireCodec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** `POST /v1/health/household` (Reliability first, item 3): what only the server knows, for a keyed device. */
@@ -37,6 +38,7 @@ class HealthRouteTest {
         // The phone service and Polly aren't configured on this test server.
         assertFalse(fold.calls)
         assertFalse(fold.speech)
+        assertNull(fold.speechGoogle) // no voice on this server: nothing about Google either
         assertTrue(kotlin.math.abs(fold.atMs - System.currentTimeMillis()) < 60_000)
         // The Mac has no address of its own.
         val mac = HealthCodec.decodeResponse(client.post(path) { with(macKey) { signed(macSecret, path, body) } }.bodyAsText())

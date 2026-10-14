@@ -181,6 +181,16 @@ class HealthTest {
         assertEquals(HealthState.WARN, over.state)
         assertEquals(HealthState.UNKNOWN, HealthRules.view(facts(ai = AskRules.STATUS_UNKNOWN), cal).row("ai").state)
         assertEquals(HealthState.WARN, HealthRules.view(facts(server = server.copy(speech = false)), cal).row("voice").state)
+        // Natural voice, slice 3: which voices the server has, and a Google failure noted for a day (Polly said it).
+        assertEquals("On · Amazon Polly", HealthRules.view(facts(), cal).row("voice").line)
+        val g = server.copy(speechGoogle = ServerHealth.GOOGLE_ON)
+        assertEquals("On · Google Chirp 3 HD and Amazon Polly", HealthRules.view(facts(server = g), cal).row("voice").line)
+        val googleFailed = HealthRules.view(facts(server = g.copy(speechGoogleFailedAtMs = now - 2 * HealthRules.HOUR)), cal).row("voice")
+        assertEquals("On · Google Chirp 3 HD and Amazon Polly · Google voice failed 12:05 · used Polly", googleFailed.line)
+        assertEquals(HealthState.OK, googleFailed.state)
+        assertEquals("On · Google Chirp 3 HD and Amazon Polly", HealthRules.view(facts(server = g.copy(speechGoogleFailedAtMs = now - 25 * HealthRules.HOUR)), cal).row("voice").line)
+        val down = HealthRules.view(facts(server = server.copy(speechGoogle = ServerHealth.GOOGLE_FAILED)), cal).row("voice")
+        assertEquals("On · Amazon Polly · Google's voices can't be reached" to HealthState.OK, down.line to down.state)
 
         val sleepy = HealthRules.view(facts(device = fold.copy(batteryExempt = false)), cal)
         assertEquals(HealthFix.BATTERY to HealthState.WARN, sleepy.row("battery").fix to sleepy.row("battery").state)

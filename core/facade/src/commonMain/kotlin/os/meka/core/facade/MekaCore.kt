@@ -4238,7 +4238,7 @@ class MekaCore(
         accounts?.let(::rememberEditing)
         val names = onCore { eventActions.calendarNames() }
         val facts = HealthServerFacts(
-            server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult) },
+            server?.let { os.meka.core.domain.ServerHealth(it.push, it.calls, it.speech, it.atMs, it.macs, it.lastPushAtMs, it.lastPushResult, it.speechGoogle, it.speechGoogleFailedAtMs) },
             accounts?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) }?.map { os.meka.core.domain.HealthAccount(it.provider, it.email, os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names), it.status, it.lastSyncAtMs) },
             ai, nowMs(), mail,
         )
