@@ -141,6 +141,8 @@ class MekaApplication : Application() {
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
         // Notifications never seen (slice 1): every channel exists from the first start, and the trace says so.
         os.meka.android.notify.MekaChannels.ensureAll(this)
+        // Screenshots and photos, slice 2: while it's on, the watch for new screenshots stays armed.
+        runCatching { os.meka.android.capture.ScreenshotWatch.start(this) }
         os.meka.android.notify.NotifyTraceStore.started(this, os.meka.android.notify.MekaChannels.states(this).size)
         // Slice 4: Ask and Talk read the same state when asked "why didn't I get a notification?".
         core.notificationHealthSource = { os.meka.android.notify.NotifyTraceStore.health(this) }

@@ -2263,6 +2263,12 @@ final class CoreModel {
             MacNotifier.remove(key: a.key)
             return
         }
+        // Screenshots and photos, slice 2: Handle this on a noticed screenshot reads it again into Handle this.
+        if a.action == MacScreenshotWatch.action {
+            MacNotifier.remove(key: a.key)
+            if let path = a.picture { handlePicture(.file(URL(fileURLWithPath: path))) }
+            return
+        }
         // Pay on a bill's reminder (Bills due): the saved pay link opens in the browser. MEKA never pays.
         if a.action == MacNotifier.payAction {
             MacNotifier.remove(key: a.key)
@@ -2538,6 +2544,21 @@ final class CoreModel {
         panel.prompt = "Read it"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         handlePicture(.file(url))
+    }
+
+    /// Notice new screenshots (slice 2), from the menu bar's capture: turns the watch on or off and says so in the bar
+    /// (or that the Mac's notifications are off, so nothing could be offered).
+    func setNoticeScreenshots(_ on: Bool) {
+        MacScreenshotWatch.shared.set(on)
+        let rules = ScreenshotRules.shared
+        guard on else {
+            offerEventUndo(rules.TURNED_OFF, nil)
+            return
+        }
+        Task {
+            let allowed = await MacNotifier.allowed()
+            offerEventUndo(allowed ? rules.TURNED_ON_MAC : rules.MAC_NO_NOTIFY, nil)
+        }
     }
 
     /// Read the copied picture: a screenshot copied with ⌃⇧⌘4, or an image copied in a browser.

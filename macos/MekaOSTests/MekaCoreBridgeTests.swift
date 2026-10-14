@@ -1722,6 +1722,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallLogRules.shared.dayLabel(day: 10, today: 11), "Yesterday")
     }
 
+    func testScreenshotRulesReachSwift() {
+        // Screenshots and photos, slice 2: what a new screenshot looks like, and which ones are read.
+        let rules = ScreenshotRules.shared
+        let notice = rules.noticeFor(text: "Oakfield Dental\nYour appointment is on Thu 16 Oct at 15:00")
+        XCTAssertEqual(notice?.title, "Screenshot · looks like an appointment")
+        XCTAssertEqual(notice?.text, "Your appointment is on Thu 16 Oct at 15:00")
+        XCTAssertNil(rules.noticeFor(text: "haha see you later then"))
+        let now: Int64 = 1_800_000_000_000
+        let c = [ScreenshotCandidate(id: "/a.png", takenAtMs: now - 60_000, screenshot: true)]
+        XCTAssertEqual(rules.pick(candidates: c, sinceMs: now - 120_000, nowMs: now).map(\.id), ["/a.png"])
+        XCTAssertTrue(rules.pick(candidates: c, sinceMs: now, nowMs: now).isEmpty)
+    }
+
     func testVoiceWaveformReachesSwift() {
         // Call notifications, slice 7: the player's scrub bar and waveform.
         let rules = VoiceRecordingRules.shared

@@ -1,7 +1,7 @@
 ---
 id: pictures
 title: Screenshots and photos
-keywords: screenshot, screenshots, share a screenshot, share a photo, photo of a letter, read a picture, read a photo, picture of a letter, scan a letter, letter to task, read the copied picture, text in a picture
+keywords: screenshot, screenshots, notice new screenshots, new screenshots, screenshot notification, share a screenshot, share a photo, photo of a letter, read a picture, read a photo, picture of a letter, scan a letter, letter to task, read the copied picture, text in a picture
 data: no
 fold: none
 fold_where: Share → Navilife, or Capture → 📷 Photo of a letter
@@ -14,3 +14,6 @@ mac_how: Right-click a screenshot or photo in Finder → Services → Handle thi
 tip: Reading happens on the device (Google's ML Kit on the phone, Apple's Vision on the Mac); only the words go on, and only to Navilife's AI when you tap Handle this.
 tip: A screenshot's clock, battery and buttons are left out. If it says no words were found, crop the picture to the part that matters and share it again.
 tip: The camera's photo of a letter is deleted as soon as it's read and never goes to your gallery.
+tip: To have new screenshots noticed by themselves, open Capture and tap "Notice new screenshots" under Photo of a letter and allow Navilife to see your photos (Allow all).
+tip: With Notice new screenshots on, each new one is read on the phone; one that looks like a booking, ticket, appointment, order, receipt, letter or parking confirmation gets a quiet "Screenshot · looks like …" notification with Handle this. A chat or a meme says nothing.
+tip: On the Mac, turn on Notice new screenshots in the menu bar's capture: a new screen capture that looks like something to act on gets the same notification, read on the Mac.

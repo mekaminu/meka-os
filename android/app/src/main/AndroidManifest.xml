@@ -47,6 +47,11 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
+    <!-- Screenshots and photos, slice 2: asked only when he turns on "Notice new screenshots"; each new screenshot is
+         read on the phone (ML Kit) and never kept or sent. -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <!-- Health Connect, slice 1 (off by default, Goals → Workouts): today's exercise sessions are read on the phone
          while MEKA is in front, and a workout ticks the habit it matches. Nothing read leaves the phone. -->
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />

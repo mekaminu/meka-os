@@ -1139,6 +1139,8 @@ private struct DetailContent: View {
 struct QuickCaptureMenu: View {
     @Environment(CoreModel.self) private var model
     @State private var text = ""
+    /// Notice new screenshots (screenshots and photos, slice 2): this Mac's own switch.
+    @AppStorage(MacScreenshotWatch.enabledKey) private var noticeScreenshots = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -1159,6 +1161,16 @@ struct QuickCaptureMenu: View {
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .padding([.horizontal, .bottom], MekaSpace.m)
+            // Slice 2: new screenshots noticed by themselves, read on this Mac (off until turned on here).
+            Toggle(ScreenshotRules.shared.OFF_LINE_MAC, isOn: Binding(
+                get: { noticeScreenshots },
+                set: { noticeScreenshots = $0; model.setNoticeScreenshots($0) }
+            ))
+            .toggleStyle(.switch)
+            .controlSize(.mini)
+            .font(MekaType.caption)
+            .help(ScreenshotRules.shared.TURNED_ON_MAC)
+            .padding([.horizontal, .bottom], MekaSpace.m)
         }
     }
 }

@@ -160,6 +160,8 @@ struct NotificationAnswer: Equatable, Sendable {
     var body: String? = nil
     /// The page Pay opens (Bills due).
     var link: String? = nil
+    /// A noticed screenshot's file (screenshots and photos, slice 2): Handle this reads it.
+    var picture: String? = nil
 }
 
 /// Buttons can be pressed before the core has started (macOS launches MEKA to deliver them), so they wait here until
@@ -194,9 +196,13 @@ final class MacNotificationActions: NSObject, UNUserNotificationCenterDelegate {
 
     nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         let request = response.notification.request
+        let picture = request.content.userInfo["picture"] as? String
+        // A click on a noticed screenshot's notification is its Handle this (screenshots and photos, slice 2).
+        let action = picture != nil && response.actionIdentifier == UNNotificationDefaultActionIdentifier
+            ? MacScreenshotWatch.action : response.actionIdentifier
         let answer = NotificationAnswer(
-            key: request.identifier, action: response.actionIdentifier, habit: request.content.userInfo["habit"] as? String,
-            body: request.content.body, link: request.content.userInfo["link"] as? String
+            key: request.identifier, action: action, habit: request.content.userInfo["habit"] as? String,
+            body: request.content.body, link: request.content.userInfo["link"] as? String, picture: picture
         )
         await NotificationActionInbox.shared.receive(answer)
     }

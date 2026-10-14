@@ -38,6 +38,7 @@ object MekaChannels {
         runCatching { UnknownCallNotice.ensureChannel(app) }
         runCatching { ErrandProximity.ensureChannel(app) }
         runCatching { os.meka.android.ask.CarBluetooth.ensureChannel(app) }
+        runCatching { os.meka.android.capture.ScreenshotWatch.ensureChannel(app) }
     }
 
     /** Each MEKA channel as Android has it now (on unless its importance is None). */

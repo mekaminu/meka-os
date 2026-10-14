@@ -115,6 +115,8 @@ class CaptureActivity : ComponentActivity() {
             hasPicture = sharedPicture() != null,
         )
         if (request == null) { finish(); return }
+        // Screenshots and photos, slice 2: opened from a "Screenshot · looks like …" notification, which goes now.
+        ScreenshotWatch.opened(this, intent)
         val picture = if (request.picture) sharedPicture() else null
         enableEdgeToEdge()
         val core = (application as MekaApplication).core
@@ -630,6 +632,8 @@ private fun CaptureSheet(
                                     .semantics { contentDescription = PictureTextRules.PHOTO_LABEL }
                                     .padding(vertical = MekaSpace.xs),
                             )
+                            // Slice 2: new screenshots noticed by themselves (off until turned on here).
+                            ScreenshotSwitchLine(onLine = { pictureLine = it })
                         }
                         if (voiceMissing) {
                             Text("Voice isn't available on this phone. Type it instead.", style = MekaType.caption, color = Meka.colors.textSecondary)

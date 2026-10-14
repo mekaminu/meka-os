@@ -31,6 +31,8 @@ struct MekaOSApp: App {
                     CaptureInbox.shared.attachPictures { model.handlePicture($0) }
                     // Notification buttons pressed while the core was starting are answered now.
                     NotificationActionInbox.shared.attach { model.answerFromNotification($0) }
+                    // Screenshots and photos, slice 2: while it's on, new screen captures are noticed.
+                    MacScreenshotWatch.shared.start()
                     // "Listen when I open MEKA": a launch that came before the core was ready listens now.
                     MacTalkOnOpen.shared.attach { model.requestTalkOnOpen(reduced: MotionSetting.reduced) }
                     // ⌥Space from any app (on by default): MEKA comes forward on Ask listening, as the menu's Talk to MEKA.
