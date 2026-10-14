@@ -252,7 +252,9 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
     // Inbox autopilot, slice 7b-2: the inbox count follows the synced emails and the ten-minute inbox's moment.
     val mailNeeds by core.mailNeeds.collectAsState()
     val mailMoment by core.mailMoment.collectAsState()
-    val home = remember(today, fasting, tick, mailNeeds, mailMoment) { core.watchHome() }
+    // Car and parking, slice 7: the cars' parking timers (synced; set on the phone or the Mac).
+    val parkingTimers by core.parkingTimersView.collectAsState()
+    val home = remember(today, fasting, tick, mailNeeds, mailMoment, parkingTimers) { core.watchHome() }
     val scope = rememberCoroutineScope()
 
     if ((sync as? SyncStatus.Failing)?.reason == MekaCore.SIGNED_OUT_MESSAGE) {
@@ -304,6 +306,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         Spacer(Modifier.height(MekaSpace.xs))
         CaptureBlock(core, reduced, listen, onListen)
 
+        ParkingRows(home.parking, reduced) { carId -> scope.launch { runCatching { core.watchParkingExtend(carId) } } }
+
         InboxRow(home.inbox, reduced)
 
         Spacer(Modifier.height(MekaSpace.m))
@@ -348,6 +352,51 @@ private fun InboxRow(inbox: os.meka.core.domain.WatchInbox?, reduced: Boolean) {
                 label = "inboxCount",
             ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
             v.streakLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary)) }
+        }
+    }
+}
+
+/**
+ * Car and parking, slice 7: each car's parking timer — "PARKING" (· THE GOLF), "Paid until 15:30 · 40 min left" with
+ * the note, and +15 min. A timer unfolds on the expand spring when one is set (reduced motion: a fade) and folds away
+ * two hours after it ends; the line cross-fades as the minutes count down; lit in the accent for the last 10 minutes.
+ */
+@Composable
+private fun ParkingRows(rows: List<os.meka.core.domain.WatchParking>, reduced: Boolean, onExtend: (String) -> Unit) {
+    // The last rows shown, so a timer folds away still showing itself (not state: nothing reads it to recompose).
+    val last = remember { mutableMapOf<String, os.meka.core.domain.WatchParking>() }
+    rows.forEach { last[it.carId] = it }
+    for (carId in os.meka.core.domain.CarRules.CAR_IDS) {
+        val p = rows.firstOrNull { it.carId == carId }
+        AnimatedVisibility(
+            visible = p != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+            label = "parking",
+        ) {
+            val v = p ?: last[carId] ?: return@AnimatedVisibility
+            Column(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.m),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = v.spoken },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                ) {
+                    Line(v.label, MekaType.captionStrong.copy(color = if (v.lit) C.accent else C.textSecondary), maxLines = 1)
+                    AnimatedContent(
+                        targetState = v.line,
+                        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                        label = "parkingLeft",
+                    ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
+                    v.note?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 1) }
+                }
+                v.button?.let { label ->
+                    WatchButton(label, primary = v.lit, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) { onExtend(v.carId) }
+                }
+            }
         }
     }
 }

@@ -3525,7 +3525,23 @@ class MekaCore(
      * make (Done · Tomorrow, Went · Didn't go) and the fast with Start or End. Pure and cheap. Nothing is stored.
      */
     fun watchHome(): os.meka.core.domain.WatchHomeView =
-        os.meka.core.domain.WatchHomeRules.view(coverNow(), _fasting.value, nowMs(), watchInbox())
+        os.meka.core.domain.WatchHomeRules.view(coverNow(), _fasting.value, nowMs(), watchInbox(), watchParking())
+
+    /**
+     * Car and parking, slice 7: the cars' parking timers for the wrist, worked out again at this minute from the synced
+     * timers (so "40 min left" counts down between syncs). No location: where the car is stays on the Fold.
+     */
+    private fun watchParking(): List<os.meka.core.domain.WatchParking> {
+        val now = nowMs()
+        val timers = os.meka.core.domain.ParkingTimerRules.view(
+            _parkingTimers.value.rows.map { it.timer }, _cars.value, now, ZoneCalendar(timeZone),
+        )
+        return os.meka.core.domain.WatchHomeRules.parking(timers, now)
+    }
+
+    /** Car and parking, slice 7: the watch's +15 min on car [carId]'s timer; the new line, or null without a timer. */
+    suspend fun watchParkingExtend(carId: String): String? =
+        extendParkingTimer(carId, os.meka.core.domain.WatchHomeRules.EXTEND_MIN)
 
     /**
      * Inbox autopilot, slice 7b-2: the watch's inbox count — the rows of "From your mail" (linked emails once, as in

@@ -102,6 +102,11 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.fastReached) C.success else C.accent, 1))
         }
+        // Car and parking, slice 7: the parking timer that ends first, lit in its last 10 minutes (the inbox gives way).
+        v.parkingLine?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, if (v.parkingLit) C.accent else C.textSecondary, 1))
+        }
         // Inbox autopilot, slice 7b-2: the count only, lit at the ten-minute inbox's moment (a fast's clock takes it).
         v.inboxLine?.let {
             column.addContent(gap(MekaSpace.xs.value))

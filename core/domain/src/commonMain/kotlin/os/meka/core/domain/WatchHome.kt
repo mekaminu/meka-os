@@ -22,6 +22,35 @@ data class WatchHomeView(
     val fast: WatchFast,
     /** Inbox autopilot, slice 7b-2: how many emails wait in "From your mail"; null when none (or no mail connected). */
     val inbox: WatchInbox? = null,
+    /** Car and parking, slice 7: each car's parking timer that still shows (running first by when it ends). */
+    val parking: List<WatchParking> = emptyList(),
+)
+
+/**
+ * Car and parking, slice 7: a car's parking timer on the wrist. The timer is synced (it holds no location), so the
+ * watch's own copy of the day has it; where the car is parked stays on the Fold. One button, +15 min, while it runs.
+ */
+data class WatchParking(
+    val carId: String,
+    /** "PARKING" · "PARKING · THE GOLF". */
+    val label: String,
+    /** The last [ParkingTimerRules.REMIND_MIN] minutes, or ended: the accent. */
+    val lit: Boolean,
+    val ended: Boolean,
+    /** "Paid until 15:30 · 40 min left" · "Ended 15:30 · 5 min ago". */
+    val line: String,
+    /** "RingGo 81234", or null. */
+    val note: String?,
+    /** "+15 min" while it runs; null once ended. */
+    val button: String?,
+    /** The tile's and complication's short line: "Parking · 40 min left" · "The Golf · 40 min left". */
+    val short: String,
+    /** "40 min", "1 h 20" (at most 7 characters), for the complication; "Ended" once ended. */
+    val left: String,
+    /** Share of the paid time still left, 0 to 1. */
+    val leftShare: Float,
+    val endsAtMs: Long,
+    val spoken: String,
 )
 
 /**
@@ -138,7 +167,41 @@ object WatchHomeRules {
         }
     }
 
-    fun view(now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null): WatchHomeView {
+    const val PARKING = "PARKING"
+    /** The watch's one extend button, in minutes (the phone and the Mac offer more). */
+    const val EXTEND_MIN = 15
+
+    /**
+     * Car and parking, slice 7: the timers that still show ([TimersView.rows], made at [nowMs]) for the wrist, running
+     * ones first by when they end, then ended ones. With one car the label is just PARKING.
+     */
+    fun parking(timers: TimersView, nowMs: Long): List<WatchParking> =
+        timers.rows.sortedWith(compareBy<TimerRow>({ it.ended }, { it.timer.endsAtMs })).map { r ->
+            val named = r.title != ParkingRules.TITLE
+            val who = if (named) r.title.replaceFirstChar { it.titlecaseChar() } else "Parking"
+            val leftMs = r.timer.endsAtMs - nowMs
+            val total = (r.timer.endsAtMs - r.timer.startedAtMs).coerceAtLeast(1L)
+            val left = if (r.ended) "Ended" else ParkingTimerRules.leftText(leftMs)
+            WatchParking(
+                carId = r.carId,
+                label = if (named) "$PARKING · ${r.title.uppercase()}" else PARKING,
+                lit = r.lit,
+                ended = r.ended,
+                line = r.line,
+                note = r.note,
+                button = if (r.ended) null else ParkingTimerRules.extendLabel(EXTEND_MIN),
+                short = if (r.ended) "$who · ended ${r.endText}" else "$who · $left left",
+                left = left.take(7),
+                leftShare = if (r.ended) 0f else (leftMs.toFloat() / total).coerceIn(0f, 1f),
+                endsAtMs = r.timer.endsAtMs,
+                spoken = (if (named) "Parking, ${r.title}. " else "Parking. ") + r.line.replace(" · ", ", ") + ".",
+            )
+        }
+
+    fun view(
+        now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null,
+        parking: List<WatchParking> = emptyList(),
+    ): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
             when (a) {
@@ -159,6 +222,7 @@ object WatchHomeRules {
             thenLine = now.thenLine,
             fast = fast(fasting, nowMs),
             inbox = inbox,
+            parking = parking,
         )
     }
 

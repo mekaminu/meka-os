@@ -98,7 +98,8 @@ class WatchApplication : Application() {
         WatchSurfaces.scheduleSync(this)
         surfaces?.cancel()
         surfaces = appScope.launch {
-            combine(core.today, core.fastingView) { t, f -> t to f }.collectLatest {
+            // Car and parking, slice 7: a parking timer set or extended on the phone redraws them too.
+            combine(core.today, core.fastingView, core.parkingTimersView) { t, f, p -> Triple(t, f, p) }.collectLatest {
                 delay(SURFACE_SETTLE_MS)
                 WatchSurfaces.refresh(this@WatchApplication)
             }

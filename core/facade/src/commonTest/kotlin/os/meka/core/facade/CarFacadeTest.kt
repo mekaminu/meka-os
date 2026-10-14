@@ -174,6 +174,27 @@ class CarFacadeTest {
     }
 
     @Test
+    fun aTimerSetOnTheFoldReachesTheWatchWhichCountsItDownAndExtendsIt() = runTest {
+        val fold = core("android")
+        val watch = core("watch")
+        assertEquals("Parking timer until 11:30 · reminds you at 11:20", fold.setParkingTimer("car", "until 11:30"))
+        fold.syncNow(); watch.syncNow()
+        val p = watch.watchHome().parking.single()
+        assertEquals("PARKING", p.label)
+        assertEquals("Paid until 11:30 · 1 h 30 left", p.line)
+        assertEquals("Parking · 1 h 30 left", watch.watchTile().parkingLine)
+        assertEquals("Park", watch.watchComplication().title)
+        // Twenty minutes on, with nothing synced in between, the wrist counts down.
+        now += 20 * 60_000L
+        assertEquals("Paid until 11:30 · 1 h 10 left", watch.watchHome().parking.single().line)
+        // +15 min on the watch: the Fold follows.
+        assertEquals("Parking timer until 11:45 · reminds you at 11:35", watch.watchParkingExtend("car"))
+        watch.syncNow(); fold.syncNow()
+        assertEquals("Paid until 11:45 · 1 h 25 left", fold.parkingTimersView.value.rows.single().line)
+        assertNull(watch.watchParkingExtend("car2"))
+    }
+
+    @Test
     fun aSharedRingGoConfirmationStartsTheTimerOnTheCarItNamesAndTheMacSeesIt() = runTest {
         val fold = core("android")
         val mac = core("mac")

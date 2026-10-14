@@ -38,6 +38,12 @@ data class WatchTileView(
      */
     val inboxLine: String? = null,
     val inboxLit: Boolean = false,
+    /**
+     * Car and parking, slice 7: the running parking timer that ends first, "Parking · 40 min left" (lit in the last
+     * 10 minutes); null when none runs. It takes the inbox's place on the tile (the screen shows both).
+     */
+    val parkingLine: String? = null,
+    val parkingLit: Boolean = false,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */
@@ -98,6 +104,7 @@ object WatchTileRules {
         val button = home.buttons.firstOrNull { it.primary }
         val f = home.fast
         val fastLine = if (f.running) "${f.title} · ${f.clock}" else null
+        val parking = home.parking.firstOrNull { !it.ended }
         val title = shorten(home.title)
         val spoken = buildList {
             add(home.label.lowercase().replaceFirstChar { it.uppercase() })
@@ -105,12 +112,13 @@ object WatchTileRules {
             home.line?.let(::add)
             if (f.running) add("${f.title}, ${spokenClock(f.clock)}")
             button?.let { add("Double tap ${it.label} to ${it.label.lowercase()}") }
-        }.joinToString(". ") + "." + (home.inbox?.let { " " + it.spoken } ?: "")
-        val inbox = home.inbox?.takeIf { fastLine == null }
+        }.joinToString(". ") + "." + (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
+        val inbox = home.inbox?.takeIf { fastLine == null && parking == null }
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
             spoken = spoken, capture = true, inboxLine = inbox?.short, inboxLit = inbox?.lit == true,
+            parkingLine = parking?.short, parkingLit = parking?.lit == true,
         )
     }
 
@@ -119,7 +127,7 @@ object WatchTileRules {
      * fast's clock runs or something is starting ("IN 12 MIN" counts down), else a quarter hour.
      */
     fun refreshAfterMs(home: WatchHomeView?, nowMs: Long): Long {
-        val counting = home != null && (home.fast.running || home.lit)
+        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended })
         return if (counting) WatchHomeRules.nextTickMs(nowMs) - nowMs else CALM_REFRESH_MS
     }
 
@@ -130,6 +138,12 @@ object WatchTileRules {
      */
     fun complication(home: WatchHomeView?, done: Int, left: Int): WatchComplicationView {
         if (home == null) return WatchComplicationView("Link", "Navilife", 0f, false, "Navilife isn't linked on this watch yet")
+        // Car and parking, slice 7: a running parking timer leads the ring (short-lived and the one that costs money).
+        home.parking.firstOrNull { !it.ended }?.let { p ->
+            return WatchComplicationView(
+                text = p.left, title = "Park", value = p.leftShare, fasting = false, spoken = p.spoken,
+            )
+        }
         val f = home.fast
         if (f.running) {
             return WatchComplicationView(
