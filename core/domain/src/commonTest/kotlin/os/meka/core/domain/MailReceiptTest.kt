@@ -38,6 +38,7 @@ class MailReceiptTest {
         assertEquals("Oakfield", MailReceiptRules.merchant("Orders | Oakfield", "orders@oakfield.example"))
         assertEquals("Trainline", MailReceiptRules.merchant("no-reply", "auto@email.trainline.com"))
         assertEquals("Shopco", MailReceiptRules.merchant(null, "orders@shopco.co.uk"))
+        assertEquals("Shop", MailReceiptRules.merchant(null, "auto-confirm@shop.example"))
         assertNull(MailReceiptRules.merchant(null, null))
     }
 

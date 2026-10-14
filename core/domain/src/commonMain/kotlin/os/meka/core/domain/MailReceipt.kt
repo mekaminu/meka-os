@@ -32,7 +32,6 @@ object MailReceiptRules {
         "accounts", "billing", "payments", "shop", "store", "mail", "email", "news",
     )
     private val SLD = setOf("co", "com", "org", "net", "ac", "gov", "ltd", "plc", "me")
-    private val SUBDOMAINS = setOf("mail", "email", "e", "em", "info", "news", "orders", "order", "shop", "store", "notify", "notifications", "service", "mailer", "send", "reply", "noreply", "no-reply", "bounce", "www", "m", "uk", "eu", "marketing", "transactional", "accounts", "billing")
 
     /** The receipt as the server reads it at tidy time. */
     fun read(fromName: String?, fromAddress: String?, subject: String?, preview: String?): MailReceipt =
@@ -67,8 +66,8 @@ object MailReceiptRules {
 
     /**
      * Who it's from: the sender's display name without "no-reply"/"Orders"-style words and domain endings
-     * ("Amazon.co.uk" → "Amazon", "Tesco Groceries" stays); else the address's domain ("orders@email.trainline.com" →
-     * "Trainline"); null when neither gives a name.
+     * ("Amazon.co.uk" → "Amazon", "Tesco Groceries" stays); else the address's registrable label ("orders@email.trainline.com"
+     * → "Trainline", "orders@shopco.co.uk" → "Shopco"); null when neither gives a name.
      */
     fun merchant(fromName: String?, fromAddress: String?): String? {
         val name = fromName?.trim()?.trim('"', '\'')?.let { cleanName(it) }
@@ -79,7 +78,7 @@ object MailReceiptRules {
         var i = parts.size - 2
         if (parts[i] in SLD && i > 0) i--
         val label = parts[i]
-        if (label in SUBDOMAINS || label.length < 2) return null
+        if (label.length < 2) return null
         return label.replaceFirstChar { it.uppercase() }
     }
 
