@@ -5746,6 +5746,9 @@ class MekaCore(
                 occasions = occasionItems,
                 trips = tripItems,
                 children = marks.clubChildren,
+                // Inbox autopilot, slice 9b: the sorted mail and the chases of emails made into Waiting for.
+                mail = activity.mailItems(),
+                waiting = lists.waitingItems(),
             ),
             nowMs(), cal, ::dayWindowOf,
         )

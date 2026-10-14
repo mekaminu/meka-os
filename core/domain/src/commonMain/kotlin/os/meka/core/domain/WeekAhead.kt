@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /** What a line in the week ahead is about (it picks the lead mark the pane draws). */
-enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS, OCCASION, TRIP }
+enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS, OCCASION, TRIP, MAIL }
 
 /**
  * One thing on a day of the week ahead: "17:30 · Barça v Getafe", "Rex: PE", "Date night from 19:00". [time] leads the
@@ -76,6 +76,10 @@ data class WeekAheadView(
     val spoken: String,
     /** Goals for the week: the pick of up to three (Goals, properly, item 6). */
     val goals: WeekAheadGoals = WeekAheadGoals.EMPTY,
+    /** Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week"; null with none ([MailWeekRules.line]). */
+    val mail: String? = null,
+    /** Sunday's heads-up's mail words: "3 emails need you · 2 to chase" ([MailWeekRules.noticeBit]). */
+    val mailNotice: String? = null,
 ) {
     companion object {
         val EMPTY = WeekAheadView(0, "This week", "", "A quiet week so far", emptyList(), emptyList(), "")
@@ -128,6 +132,10 @@ data class WeekAheadInputs(
     val trips: List<TripItem> = emptyList(),
     /** Whose club training or fixture a series is ([ClubChildRules]), for "who's taking …?" on a clash. */
     val children: Map<String, String> = emptyMap(),
+    /** Inbox autopilot, slice 9b: the emails the server sorted as needing him ([MailWeekRules]). */
+    val mail: List<MailItem> = emptyList(),
+    /** Waiting for, so an email made into one shows its chase day. */
+    val waiting: List<WaitingItem> = emptyList(),
 )
 
 /**
@@ -400,8 +408,12 @@ object WeekAheadRules {
         val today = cal.epochDayOf(nowMs)
         val ws = weekStart(today)
         val dayList = days(today)
+        // Inbox autopilot, slice 9b: emails naming a day of the week, and email chases, after the day's own lines.
+        val mailLines = MailWeekRules.lines(inputs.mail, inputs.waiting, dayList, nowMs, cal).groupBy { it.day }
         val days = dayList.map { d ->
-            val all = lines(inputs, d, window(d), dayList, cal)
+            val all = lines(inputs, d, window(d), dayList, cal) + mailLines[d].orEmpty().map { m ->
+                WeekAheadLine(m.id, WeekAheadKind.MAIL, null, m.text, false, m.spoken)
+            }
             val shown = all.take(MAX_LINES)
             val dayLine = dayLine(inputs.work, inputs.holidays, d)
             val weather = WeatherRules.dayGlance(inputs.forecast, d, cal)
@@ -410,13 +422,16 @@ object WeekAheadRules {
         val summary = summary(inputs, days)
         val sync = sync(inputs, dayList, window, cal)
         val goals = goalPick(inputs.goals, ws)
+        val mail = MailWeekRules.line(inputs.mail, inputs.waiting, dayList, nowMs, title(today))
         val spoken = buildList {
             add("Your week ahead. ${summary.replace(" · ", ", ")}.")
+            mail?.let { add(MailWeekRules.spokenLine(it)) }
             days.filter { it.dayLine != null || it.lines.isNotEmpty() }.forEach { add(it.spoken) }
             if (sync.isNotEmpty()) add("To sort out with Jeanette: " + sync.joinToString("; ") { it.replace(" · ", ", ") } + ".")
             spokenGoals(goals).takeIf { it.isNotEmpty() }?.let { add(it) }
         }.joinToString(" ")
-        return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals)
+        return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals, mail,
+            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs))
     }
 
     // ---- Slice 2: the time setting ----
@@ -462,11 +477,13 @@ object WeekAheadRules {
         if (!setting.on) return emptyList()
         val today = cal.epochDayOf(nowMs)
         if (CivilDate.isoDayOfWeek(today) != 7 || view.weekStart != today + 1) return emptyList()
+        // Inbox autopilot, slice 9b: the mail's counts only (never who or what: a notification is seen on the lock screen).
+        val head = view.summary + (view.mailNotice?.let { " · $it" } ?: "")
         val text = listOfNotNull(
-            view.summary,
+            head,
             view.sync.takeIf { it.isNotEmpty() }?.let { "${ShutdownRules.count(it.size, "thing")} to sort out with Jeanette" },
             if (view.goals.goals.isNotEmpty() && view.goals.picked == 0) "Pick your goals for the week?" else null,
-        ).joinToString(". ").let { if (it.endsWith("?")) it else if (it == view.summary) it else "$it." }
+        ).joinToString(". ").let { if (it.endsWith("?")) it else if (it == head) it else "$it." }
         return listOf(
             Notice(
                 key = "weekahead:${view.weekStart}", source = NoticeSource.WEEK_AHEAD, tier = NoticeTier.HEADS_UP,

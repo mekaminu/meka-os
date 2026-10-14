@@ -136,6 +136,14 @@ fun WeekAheadPane(
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
+        // Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week" (cross-fades as it changes).
+        v.mail?.let { mail ->
+            item(key = "mail") {
+                Crossfade(mail, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-mail", modifier = Modifier.animateItem()) { m ->
+                    Text(m, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                }
+            }
+        }
         itemsIndexed(v.days, key = { _, d -> "day-${d.epochDay}" }) { i, d ->
             DayBlock(d, Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2 + i)))
         }
@@ -278,12 +286,13 @@ private fun WeekLine(l: WeekAheadLine) {
     }
 }
 
-/** The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, the rest a dot. */
+/** The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, email, the rest a dot. */
 private fun mark(kind: WeekAheadKind): String = when (kind) {
     WeekAheadKind.SCHOOL -> "School"
     WeekAheadKind.DUE -> "Due"
     WeekAheadKind.BINS -> "Bins"
     WeekAheadKind.OCCASION -> "Gift"
     WeekAheadKind.TRIP -> "Trip"
+    WeekAheadKind.MAIL -> "Email"
     else -> "·"
 }

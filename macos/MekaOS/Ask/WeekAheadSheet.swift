@@ -48,6 +48,14 @@ struct WeekAheadSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
+            // Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week".
+            if let mail = v.mail {
+                Text(mail).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: mail)
+                    .staggeredAppear(1)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.m) {
                     ForEach(Array(v.days.enumerated()), id: \.element.epochDay) { i, d in
@@ -215,13 +223,14 @@ private struct WeekAheadDayView: View {
         }
     }
 
-    /// The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, the rest a dot.
+    /// The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, email, the rest a dot.
     static func mark(_ kind: WeekAheadKind) -> String {
         if kind == .school { return "School" }
         if kind == .due { return "Due" }
         if kind == .bins { return "Bins" }
         if kind == .occasion { return "Gift" }
         if kind == .trip { return "Trip" }
+        if kind == .mail { return "Email" }
         return "·"
     }
 }
