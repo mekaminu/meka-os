@@ -118,6 +118,7 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.ruleLine ?? "" } } ?? [])
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mail?.rows.map { $0.rules.map(\.id) } ?? [])
         .task { await model.loadMail(); await model.loadMailMomentKey() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
@@ -333,6 +334,31 @@ private struct MailAccountRowView: View {
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
+                }
+            }
+            // Slice 10b: the senders with his own rule, each with Let Autopilot decide.
+            if let line = row.rulesLine {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .padding(.top, MekaSpace.xs)
+                    .contentTransition(.opacity)
+                ForEach(row.rules, id: \.id) { r in
+                    HStack(alignment: .center) {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                            Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(r.spoken)
+                        Spacer()
+                        let id = r.id, sets = r.sets
+                        Button(r.action) { onRule(id, sets) }
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.caption)
+                            .foregroundStyle(palette.accent)
+                    }
+                    .padding(.top, MekaSpace.xxs)
+                    .transition(.opacity)
                 }
             }
             // Slice 8a: the backlog clean-up's plan for the older mail already in the inbox (nothing moves yet).

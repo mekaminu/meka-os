@@ -3644,6 +3644,19 @@ final class CoreModel {
         }
     }
 
+    /// Always tidy on an email in "From your mail" (slice 10b): Done, and the server gives its sender the always-tidy
+    /// rule; Undo on the bar brings the card back and takes the rule off. Only the id (a String) crosses.
+    func alwaysTidyMailItem(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.alwaysTidyMailItem(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Task on an email in "From your mail" (slice 6b-1): a task from its subject, the email archived at the server's
     /// next check, Undo on the bar. Only the id (a String) crosses.
     func taskFromMailItem(_ id: String) {

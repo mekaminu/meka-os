@@ -2772,6 +2772,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Completeness: a sender rule on an unknown sender answers offline too.
         let rule = try await core.setMailSenderRule(id: "nothing", rule: "KEEP")
         XCTAssertEqual(rule.line, MailSenderPanelRules.shared.UNKNOWN)
+        // Slice 10b: Always tidy on an unknown card answers offline too.
+        let tidy = try await core.alwaysTidyMailItem(id: "nothing")
+        XCTAssertEqual(tidy, MailNeedsRules.shared.UNKNOWN)
         // Slice 4: "Archived for you" — nothing tidied, no card; Got it and its Undo answer offline.
         XCTAssertNil(core.archivedForYou.value)
         let seen = try await core.seenArchivedForYou()

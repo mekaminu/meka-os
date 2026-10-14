@@ -69,6 +69,11 @@ object MailItemFields {
     const val CHASE_SENT_AT = "chaseSentAtMs"
     const val CHASE_FAILED_AT = "chaseFailedAtMs"
     const val CHASE_FAILED_WHY = "chaseFailedWhy"
+    /** Slice 10b (an app): **Always tidy** on the card — a Done that also asks for the sender's always-tidy rule. */
+    const val TIDY_ASKED_AT = "tidyAskedAtMs"
+    /** Slice 10b (the server): it wrote the sender's rule for that ask, and (after an Undo) took it off again. */
+    const val TIDY_RULE_AT = "tidyRuleAtMs"
+    const val TIDY_CLEARED_AT = "tidyClearedAtMs"
 }
 
 data class MailItem(
@@ -106,6 +111,10 @@ data class MailItem(
     val chaseFailedWhy: String? = null,
     /** Slice 6c: the server's hash of the thread, or null (published before 6c). */
     val threadKey: String? = null,
+    /** Slice 10b: Always tidy on the card, and what the server did about the sender's rule. */
+    val tidyAskedAtMs: Long? = null,
+    val tidyRuleAtMs: Long? = null,
+    val tidyClearedAtMs: Long? = null,
 )
 
 /** One email on the card. */
@@ -291,6 +300,9 @@ object MailNeedsRules {
             chaseFailedAtMs = ms(MailItemFields.CHASE_FAILED_AT),
             chaseFailedWhy = text(MailItemFields.CHASE_FAILED_WHY),
             threadKey = text(MailItemFields.THREAD_KEY),
+            tidyAskedAtMs = ms(MailItemFields.TIDY_ASKED_AT),
+            tidyRuleAtMs = ms(MailItemFields.TIDY_RULE_AT),
+            tidyClearedAtMs = ms(MailItemFields.TIDY_CLEARED_AT),
         )
     }
 

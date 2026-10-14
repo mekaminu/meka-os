@@ -73,6 +73,26 @@ class MailNeedsFacadeTest {
     }
 
     @Test
+    fun alwaysTidyIsADoneThatAsksForTheSendersRuleAndUndoTakesItBack() = runTest {
+        // Slice 10b: Always tidy on a card.
+        val a = email("m1", "Tool Reports", "Weekly usage", hour)
+        val b = email("m2", "Alex Reed", "Invoice question", 2 * hour)
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals("Done · Autopilot will tidy Tool Reports's emails as they arrive", fold.alwaysTidyMailItem(a))
+        assertEquals(listOf(b), fold.mailNeeds.value?.rows?.map { it.id })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf(b), mac.mailNeeds.value?.rows?.map { it.id })
+        val fields = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityId == a }.map { it.field }
+        assertTrue(MailItemFields.DONE_ASKED_AT in fields && MailItemFields.TIDY_ASKED_AT in fields)
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a, b), fold.mailNeeds.value?.rows?.map { it.id })
+        assertEquals(MailNeedsRules.UNKNOWN, fold.alwaysTidyMailItem("nothing"))
+    }
+
+    @Test
     fun linkedEmailsGoAndComeBackTogether() = runTest {
         // Slice 6c: two emails from Sam about the same thing share a row; Done takes both, Undo brings both back.
         val a = email("m1", "Sam Taylor", "Re: Football on Saturday", hour)

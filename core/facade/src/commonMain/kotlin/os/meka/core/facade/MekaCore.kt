@@ -3739,6 +3739,25 @@ class MekaCore(
         os.meka.core.domain.MailLinkRules.doneLine(group.size)
     }
 
+    /**
+     * Slice 10b: **Always tidy** on an email in "From your mail": it is Done (archived at the server's next check, with
+     * the emails linked to it), and the server gives its sender the always-tidy rule ([os.meka.core.domain.MailSenderRule.TIDY]),
+     * so Autopilot archives their later emails as they arrive (never a bank, school, public body, his partner or a thread
+     * he wrote in). Undo brings the card back and takes the rule off again. Returns the bar's line.
+     */
+    suspend fun alwaysTidyMailItem(id: String): String = onCore {
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        val group = mailGroup(id)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailSenderRuleRules.cardFields(nowMs()))
+        val linked = doneLinked(group)
+        mailNeedsUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs()))
+            linked()
+        }
+        mailNeedsChanged()
+        os.meka.core.domain.MailSenderRuleRules.cardLine(item.from)
+    }
+
     /** Slice 6c: [id] and the emails linked to it on "From your mail" ([id] first). */
     private fun mailGroup(id: String): List<String> = os.meka.core.domain.MailLinkRules.groupIds(activity.mailItems(), id, nowMs())
 

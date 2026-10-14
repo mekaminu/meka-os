@@ -62,4 +62,102 @@ object MailSenderRuleRules {
             MailSort.NEEDS_YOU, MailSort.FYI, MailSort.NOTIFICATION, MailSort.PROMO -> MailTidy.ARCHIVE
         }
     }
+
+    // ---- Slice 10b: Always tidy from a "From your mail" card, and "Your rules" in Mail ----
+
+    /** On a card in From your mail: the email is Done and its sender gets [MailSenderRule.TIDY]. */
+    const val ALWAYS_TIDY = "Always tidy"
+    const val RULES_TITLE = "Your rules"
+
+    /** What the bar says after Always tidy on a card from [from]. */
+    fun cardLine(from: String): String = "Done · Autopilot will tidy $from's emails as they arrive"
+
+    /** What an app writes on the card's `mail_item`: a Done that also asks for the sender's always-tidy rule. */
+    fun cardFields(nowMs: Long): Map<String, FieldValue> =
+        MailNeedsRules.doneFields(nowMs) + (MailItemFields.TIDY_ASKED_AT to nowMs.fv())
+
+    /** The server should write the sender's always-tidy rule now: asked on the card, still Done, not written for this ask. */
+    fun ruleDue(i: MailItem): Boolean {
+        val asked = i.tidyAskedAtMs ?: return false
+        return MailNeedsRules.done(i) && (i.doneAskedAtMs ?: 0L) >= asked && (i.tidyRuleAtMs == null || i.tidyRuleAtMs < asked)
+    }
+
+    /**
+     * The server should take the rule off again: it wrote it for this ask, then Undo brought the card back (an Undo
+     * before the server acted needs nothing), and it hasn't taken it off since.
+     */
+    fun clearDue(i: MailItem): Boolean {
+        val asked = i.tidyAskedAtMs ?: return false
+        val wrote = i.tidyRuleAtMs ?: return false
+        val undo = i.undoAskedAtMs ?: return false
+        return wrote >= asked && undo > asked && !MailNeedsRules.done(i) && (i.tidyClearedAtMs == null || i.tidyClearedAtMs < wrote)
+    }
+
+    /**
+     * What the server writes on the sender for an Always tidy asked at [askedAtMs]: the rule, and — when the sender has
+     * no entity yet (a person, not a newsletter) — the entity itself (its account label, name and domain, never the
+     * address). Null when he set a rule on that sender after the tap ([current] is the sender's fields), which stands.
+     */
+    fun senderFieldsForCard(
+        current: Map<String, FieldValue>?, account: String, fromName: String?, fromAddress: String?, lastAtMs: Long, askedAtMs: Long,
+    ): Map<String, FieldValue>? {
+        val ruleAt = (current?.get(MailSenderFields.RULE_AT) as? FieldValue.Int64)?.value ?: 0L
+        if (ruleAt > askedAtMs) return null
+        val base = if (current?.get(MailSenderFields.NAME) == null) {
+            MailUnsubscribeRules.senderFields(
+                account, MailUnsubscribeRules.displayName(fromName, fromAddress), MailSortRules.domain(fromAddress),
+                UnsubscribeMethod.NONE, lastAtMs, 1,
+            )
+        } else emptyMap()
+        return base + fields(MailSenderRule.TIDY, askedAtMs)
+    }
+
+    /**
+     * After an Undo on the card: the rule comes off only while it's still the one the card set (same time); a rule he
+     * set since stands. Null to leave it.
+     */
+    fun clearFieldsForCard(current: Map<String, FieldValue>?, askedAtMs: Long, nowMs: Long): Map<String, FieldValue>? {
+        if (read(current) != MailSenderRule.TIDY) return null
+        val ruleAt = (current?.get(MailSenderFields.RULE_AT) as? FieldValue.Int64)?.value ?: return null
+        if (ruleAt != askedAtMs) return null
+        return fields(null, nowMs)
+    }
+
+    /** What the server writes on the card once it wrote the rule, or took it off. */
+    fun ruleWrittenFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.TIDY_RULE_AT to nowMs.fv())
+    fun ruleClearedFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailItemFields.TIDY_CLEARED_AT to nowMs.fv())
+
+    /** One account's senders that carry his rule, by name: each with [CLEAR_ACTION]. */
+    fun rows(senders: List<MailSender>, account: String): List<MailRuleRow> =
+        senders.filter { it.account == account && it.rule != null }
+            .sortedWith(compareBy<MailSender> { it.name.lowercase() }.thenBy { it.id })
+            .map { s ->
+                val rule = s.rule!!
+                MailRuleRow(
+                    id = s.id, name = s.name, line = rule.line, rule = rule.name,
+                    spoken = "${s.name}. ${rule.line}",
+                )
+            }
+
+    /** "Your rules · 2 senders" over the list; null with none. */
+    fun header(rows: List<MailRuleRow>): String? = when (rows.size) {
+        0 -> null
+        1 -> "$RULES_TITLE · 1 sender"
+        else -> "$RULES_TITLE · ${rows.size} senders"
+    }
 }
+
+/** Slice 10b: one sender under "Your rules" in Mail. */
+data class MailRuleRow(
+    val id: String,
+    /** "Sam Taylor" or "The Weekly Digest". */
+    val name: String,
+    /** "Always tidied · Autopilot archives its emails as they arrive". */
+    val line: String,
+    /** The rule's name ("KEEP" / "TIDY"). */
+    val rule: String,
+    val spoken: String,
+    /** Takes it off: "Let Autopilot decide", which sets "" (a plain string, so both apps pass it as is). */
+    val action: String = MailSenderRuleRules.CLEAR_ACTION,
+    val sets: String = "",
+)

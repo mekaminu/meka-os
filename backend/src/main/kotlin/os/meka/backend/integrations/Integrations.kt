@@ -26,6 +26,7 @@ import os.meka.core.domain.MailUnopenedRules
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailItemFields
+import os.meka.core.domain.MailItem
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
 import os.meka.core.domain.UnsubscribeState
@@ -617,8 +618,10 @@ class Integrations(
             .mapNotNull { (id, f) -> MailNeedsRules.read(id, f) }
         val chases = all.filter { MailChaseRules.due(it, now()) }
         val asked = all.filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) || MailNeedsRules.replyDue(it, now()) }
-        if (asked.isEmpty() && chases.isEmpty()) return
+        val rules = all.filter { MailSenderRuleRules.ruleDue(it) || MailSenderRuleRules.clearDue(it) }
+        if (asked.isEmpty() && chases.isEmpty() && rules.isEmpty()) return
         val byItem = ms.messages(a.id).associateBy { MailNeedsRules.itemId(a.id, it.id) }
+        if (rules.isNotEmpty()) cardRules(a, rules, byItem)
         for (item in chases) {
             // Slice 6b-3: his chase of a Waiting for item, from this account, in the email's thread (the email stays
             // archived). Outlook gave the archived email a new id: that one. Sent once; a failure goes back to him.
@@ -657,6 +660,36 @@ class Integrations(
                     items.forEach { t -> byItem[item.id]?.takeIf { back[t.movedId] == t.id }?.let { h -> ms.put(hh, a.id, h.copy(inInbox = true)) } }
                 }
                 writeMail(a, item.id, MailNeedsRules.putBackFields(now()), EntityTypes.MAIL_ITEM)
+            }
+        }
+    }
+
+    /**
+     * Slice 10b: **Always tidy** on a card. The sender (by the email's address, which stays here) gets the always-tidy
+     * rule on its `mail_sender` entity — made from the card when it has none (a person, not a newsletter) — unless he
+     * set a rule on it since, and never for a sender Autopilot must never tidy (a bank, school, public body, his
+     * partner): those are only archived, like a Done. After an Undo the rule comes off again while it's still the
+     * card's. Each once; the email itself is archived by the Done that came with it.
+     */
+    private fun cardRules(a: AccountRow, items: List<MailItem>, byItem: Map<String, MailHeader>) {
+        val hh = a.householdId
+        val senders = runCatching { reader.entities(hh, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+        val keep = keepAddresses(hh)
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        for (item in items) {
+            val asked = item.tidyAskedAtMs ?: continue
+            val h = byItem[item.id]
+            val address = h?.fromAddress?.lowercase()?.takeIf { it.isNotEmpty() }
+            val id = address?.let { MailUnsubscribeRules.senderId(a.id, it) }
+            if (MailSenderRuleRules.ruleDue(item)) {
+                if (h != null && id != null && !MailTidyRules.protectedSender(address, keep)) {
+                    MailSenderRuleRules.senderFieldsForCard(senders[id], account, h.fromName, address, h.receivedAtMs, asked)
+                        ?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+                }
+                writeMail(a, item.id, MailSenderRuleRules.ruleWrittenFields(now()), EntityTypes.MAIL_ITEM)
+            } else {
+                if (id != null) MailSenderRuleRules.clearFieldsForCard(senders[id], asked, now())?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+                writeMail(a, item.id, MailSenderRuleRules.ruleClearedFields(now()), EntityTypes.MAIL_ITEM)
             }
         }
     }
@@ -902,11 +935,15 @@ class Integrations(
         writeSender(a, id, MailUnsubscribeRules.outcomeFields(state, now(), if (state == UnsubscribeState.OPEN_LINK) plan.fallbackUrl else null))
     }
 
-    private fun writeSender(a: AccountRow, id: String, fields: Map<String, FieldValue>) {
+    /**
+     * [rewrite]: fields written even when the server's own last write had the same value (an app may have changed them
+     * since — slice 10b's rule, which is his as much as the card's).
+     */
+    private fun writeSender(a: AccountRow, id: String, fields: Map<String, FieldValue>, rewrite: Set<String> = emptySet()) {
         val wrote = store.transaction {
             ops.transaction {
                 store.lockAccount(a.id)
-                val prev = store.mirror(a.householdId, a.id)[id]
+                val prev = store.mirror(a.householdId, a.id)[id]?.let { p -> if (rewrite.isEmpty()) p else p.copy(fieldOps = p.fieldOps - rewrite) }
                 write(a, id, 0, 0, false, prev, fields, EntityTypes.MAIL_SENDER)
             }
         }
@@ -1503,6 +1540,8 @@ class Integrations(
         Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(bytes).also(rng::nextBytes))
 
     companion object {
+        /** Slice 10b: the sender's rule fields, rewritten whatever the server wrote last. */
+        private val RULE_FIELDS = setOf(os.meka.core.domain.MailSenderFields.RULE, os.meka.core.domain.MailSenderFields.RULE_AT)
         const val SERVER_DEVICE = "server"
         const val STATE_TTL_MS = 15 * 60_000L
         const val WINDOW_BACK_MS = 24 * 3_600_000L

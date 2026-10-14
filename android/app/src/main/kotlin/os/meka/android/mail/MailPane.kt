@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -69,6 +70,7 @@ import os.meka.core.domain.MailAutopilotPanelRules
 import os.meka.core.domain.MailTidyRow
 import os.meka.core.domain.MailSenderPanelRules
 import os.meka.core.domain.MailSenderRow
+import os.meka.core.domain.MailRuleRow
 import os.meka.core.domain.MailLabel
 import os.meka.core.domain.MailMomentRules
 import os.meka.core.domain.MailMomentTime
@@ -306,6 +308,22 @@ private fun MailAccountCard(
                     modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); allSenders = !allSenders }.minTouch())
             }
         }
+        // Slice 10b: the senders with his own rule (Keep in inbox, or Always tidy from a card), each with Let Autopilot
+        // decide; unfolds when the first rule comes and closes up when the last goes.
+        AnimatedVisibility(
+            row.rulesLine != null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced))) {
+                Crossfade(row.rulesLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-rules") {
+                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+                row.rules.forEach { r ->
+                    androidx.compose.runtime.key(r.id) { RuleLine(r) { onRule(r.id, r.sets) } }
+                }
+            }
+        }
         // Slice 8a: the backlog clean-up's plan (the older mail already in the inbox); unfolds once the server starts it,
         // and its line cross-fades as the scan counts up. Nothing moves yet.
         AnimatedVisibility(
@@ -452,6 +470,19 @@ private const val SENDERS_FOLDED = 3
  * state cross-fades in ("Unsubscribing at the next check…", then the server's outcome, accent when done); a sender that
  * only offers a page shows Open page.
  */
+/** Slice 10b: one sender under Your rules: its name, the rule, and Let Autopilot decide. */
+@Composable
+private fun RuleLine(r: MailRuleRow, onClear: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xxs)) {
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+            Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        Text(r.action, style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.padding(start = MekaSpace.xs).clickable(role = Role.Button) { onClear() }.minTouch())
+    }
+}
+
 @Composable
 private fun SenderLine(s: MailSenderRow, onRule: () -> Unit = {}, onUnsubscribe: () -> Unit) {
     val reduced = Meka.reducedMotion

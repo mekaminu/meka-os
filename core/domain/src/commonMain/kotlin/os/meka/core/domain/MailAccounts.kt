@@ -78,6 +78,10 @@ data class MailAccountRow(
     val sendersLine: String? = null,
     /** Slice 8a: the backlog clean-up's plan for this account (nothing moves yet), or null before the server started it. */
     val backlog: MailBacklogRow? = null,
+    /** Slice 10b: the senders that carry his own rule ([MailSenderRuleRules.rows]), each with Let Autopilot decide. */
+    val rules: List<MailRuleRow> = emptyList(),
+    /** Slice 10b: "Your rules · 2 senders", or null with none. */
+    val rulesLine: String? = null,
 )
 
 /** One "Connect …" button. */
@@ -210,7 +214,8 @@ object MailAccountRules {
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
                 senders = MailSenderPanelRules.rows(senders, r.label.label, nowMs, cal),
                 backlog = MailBacklogRules.rowFor(backlogs, r.label.label, batches, paused, nowMs),
-            ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders)) }
+                rules = MailSenderRuleRules.rows(senders, r.label.label),
+            ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders), rulesLine = MailSenderRuleRules.header(it.rules)) }
         }
         return base.copy(rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused))
     }

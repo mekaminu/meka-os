@@ -55,6 +55,7 @@ import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -109,6 +110,8 @@ internal fun MailNeedsSection(
                             onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
                             onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
                             onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
+                            // Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive.
+                            onAlwaysTidy = { haptics.medium(); answer { core.alwaysTidyMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSend = { text, sent ->
                                 haptics.medium()
@@ -136,6 +139,7 @@ internal fun MailNeedsRowView(
     row: MailNeedsRow, onDone: () -> Unit, onTask: () -> Unit, onWaiting: () -> Unit, onSnooze: () -> Unit,
     onDraft: suspend () -> MailDraft,
     onSend: (String, () -> Unit) -> Unit,
+    onAlwaysTidy: (() -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -252,6 +256,12 @@ internal fun MailNeedsRowView(
             MailNeedsPill(MailNeedsRules.TASK, spoken = "Make a task from ${row.subject} and archive the email", onClick = onTask)
             MailNeedsPill(MailNeedsRules.WAITING, quiet = true, spoken = "Waiting for ${row.from} on ${row.subject}, chase in 3 days", onClick = onWaiting)
             MailNeedsPill(MailNeedsRules.SNOOZE, quiet = true, spoken = "${MailNeedsRules.SNOOZE} ${row.subject} till tomorrow 8 o'clock", onClick = onSnooze)
+            if (onAlwaysTidy != null) {
+                MailNeedsPill(
+                    MailSenderRuleRules.ALWAYS_TIDY, quiet = true,
+                    spoken = "Archive this and always tidy ${row.from}'s emails as they arrive", onClick = onAlwaysTidy,
+                )
+            }
         }
     }
 }

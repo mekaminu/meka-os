@@ -43,7 +43,8 @@ struct MailNeedsView: View {
                                                  waiting: { model.waitingFromMailItem(row.id) },
                                                  snooze: { model.snoozeMailItem(row.id) },
                                                  send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) },
-                                                 draft: { await model.draftMailReply(row.id) })
+                                                 draft: { await model.draftMailReply(row.id) },
+                                                 alwaysTidy: { model.alwaysTidyMailItem(row.id) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -80,6 +81,8 @@ struct MailNeedsRowView: View {
     let send: (String, @escaping @MainActor () -> Void) -> Void
     /// Slice 6b-2b: Navilife's draft for the editor and the line to show; nothing is sent.
     let draft: @MainActor () async -> (text: String?, line: String)
+    /// Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive (nil: not offered here).
+    var alwaysTidy: (() -> Void)? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var replying = false
     @State private var text = ""
@@ -159,6 +162,10 @@ struct MailNeedsRowView: View {
                               spoken: "Waiting for \(row.from) on \(row.subject), chase in 3 days", action: waiting)
                 MailNeedsPill(label: MailNeedsRules.shared.SNOOZE, palette: palette, quiet: true,
                               spoken: "Snooze \(row.subject) till tomorrow 8 o'clock", action: snooze)
+                if let alwaysTidy {
+                    MailNeedsPill(label: MailSenderRuleRules.shared.ALWAYS_TIDY, palette: palette, quiet: true,
+                                  spoken: "Archive this and always tidy \(row.from)'s emails as they arrive", action: alwaysTidy)
+                }
             }
             .padding(.top, MekaSpace.xxs)
         }

@@ -49,6 +49,7 @@ import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
 import os.meka.core.domain.MailSenderFields
+import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.MailSenderRule
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.MailNeedsRules
@@ -739,6 +740,86 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(fetch = listOf("n2"), cursor = "h3") }
         i.syncAccount(id)
         assertEquals(MailTidy.NEWSLETTER, gmail.tidyCalls.last()["n2"])
+    }
+
+    @Test
+    fun alwaysTidyOnACardGivesTheSenderTheRuleAndUndoTakesItOff() {
+        // Slice 10b.
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["p0"] = msg("p0", 0, "Reports@Tool.Example").copy(fromName = "Tool Reports")
+        gmail.mailbox["b0"] = msg("b0", 0, "office@oakfield.sch.uk").copy(fromName = "Oakfield School")
+        val id = connect(i)
+        i.syncAccount(id)
+        val p0 = MailNeedsRules.itemId(id, "p0")
+        val b0 = MailNeedsRules.itemId(id, "b0")
+        assertEquals(setOf(p0, b0), items(ops).keys)
+        fun senders() = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+        val sid = MailUnsubscribeRules.senderId(id, "reports@tool.example")
+        assertNull(senders()[sid])
+
+        // Always tidy on both cards: each is archived; the person's sender is made with the rule, the school gets none.
+        now += 60_000
+        val asked = now
+        for (c in listOf(p0, b0)) MailSenderRuleRules.cardFields(asked).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, c, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertFalse(gmail.mailbox.getValue("p0").inInbox)
+        assertFalse(gmail.mailbox.getValue("b0").inInbox)
+        val made = assertNotNull(MailUnsubscribeRules.read(sid, senders().getValue(sid)))
+        assertEquals("Tool Reports", made.name)
+        assertEquals("Personal", made.account)
+        assertEquals(MailSenderRule.TIDY, made.rule)
+        assertFalse(senders().getValue(sid).values.any { it == FieldValue.Text("reports@tool.example") })
+        assertNull(senders()[MailUnsubscribeRules.senderId(id, "office@oakfield.sch.uk")]?.let { MailSenderRuleRules.read(it) })
+        assertFalse(MailSenderRuleRules.ruleDue(MailNeedsRules.read(p0, items(ops).getValue(p0))!!))
+        // The Mail pane's "Your rules" would list it (the core reads the same entity).
+        assertEquals(listOf("Tool Reports"), MailSenderRuleRules.rows(listOf(made), "Personal").map { it.name })
+
+        // Autopilot follows it: their next email is archived as it arrives.
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["p1"] = msg("p1", 0, "reports@tool.example")
+        gmail.nextRound = { MailChanges(fetch = listOf("p1"), cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(MailTidy.ARCHIVE, gmail.tidyCalls.last()["p1"])
+
+        // Let Autopilot decide in Mail, then Always tidy on a later card from them: the rule is written again, even
+        // though the server's own last write said the same.
+        now += 60_000
+        MailSenderRuleRules.fields(null, now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_SENDER, sid, f, v) }
+        now += 60_000
+        gmail.mailbox["p2"] = msg("p2", 0, "reports@tool.example")
+        gmail.nextRound = { MailChanges(fetch = listOf("p2"), cursor = "h4") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("p2").inInbox)
+        val p2 = MailNeedsRules.itemId(id, "p2")
+        assertNotNull(items(ops)[p2])
+        now += 60_000
+        val asked2 = now
+        MailSenderRuleRules.cardFields(asked2).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, p2, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h5") }
+        i.syncAccount(id)
+        assertEquals(MailSenderRule.TIDY, MailSenderRuleRules.read(senders().getValue(sid)))
+
+        // Undo on the first card: back in the inbox, but the rule set since (p2's) stands.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_ITEM, p0, MailItemFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h6") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("p0").inInbox)
+        assertEquals(MailSenderRule.TIDY, MailSenderRuleRules.read(senders().getValue(sid)))
+        assertFalse(MailSenderRuleRules.clearDue(MailNeedsRules.read(p0, items(ops).getValue(p0))!!))
+        // Undo on p2's card: the rule comes off (once).
+        now += 60_000
+        device(ops, EntityTypes.MAIL_ITEM, p2, MailItemFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h7") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("p2").inInbox)
+        assertNull(MailSenderRuleRules.read(senders().getValue(sid)))
+        assertFalse(MailSenderRuleRules.clearDue(MailNeedsRules.read(p2, items(ops).getValue(p2))!!))
     }
 
     // ---- Slice 5a: Unsubscribe for him ----
