@@ -131,4 +131,52 @@ class VoiceNotesTest {
         assertEquals(VoiceNoteRules.OPENING, TalkOpenRules.opening(TalkPlace.VOICE_NOTE))
         assertEquals(VoiceNoteRules.OPENED, TalkOpenRules.remembered(TalkPlace.VOICE_NOTE))
     }
+
+    @Test
+    fun slice2TheTidyNoteAndPeopleAreKeptAndShown() {
+        val words = "Um so ring the garage and uh buy milk."
+        // The model's tidy note: control characters out, blank runs folded; repeating the words is no tidy note.
+        assertEquals("Ring the garage.\n\nBuy milk.", VoiceNoteRules.tidyNote("Ring the garage.\u0007\n\n\n\nBuy  milk.", words))
+        assertEquals("", VoiceNoteRules.tidyNote(words, words))
+        assertEquals("", VoiceNoteRules.tidyNote(null, words))
+        val long = VoiceNoteRules.tidyNote("word ".repeat(400), words)
+        assertTrue(long.length <= VoiceNoteRules.MAX_TIDY + 1 && long.endsWith("…"))
+        // People: no numbers, addresses or links; no repeats.
+        assertEquals(listOf("Sam", "Mum"), VoiceNoteRules.people(listOf(" Sam,", "sam", "07700 900123", "a@b.c", "Mum", "http://x")))
+        assertNull(VoiceNoteRules.peopleLine(emptyList()))
+        assertEquals("Mentions Sam", VoiceNoteRules.peopleLine(listOf("Sam")))
+        assertEquals("Mentions Sam, Alex and Mum", VoiceNoteRules.peopleLine(listOf("Sam", "Alex", "Mum")))
+        assertEquals("Tidied · 2 things to add", VoiceNoteRules.tidiedLine(2))
+        // The index keeps them (tabs and line breaks too); a slice-1 line of 7 fields still reads.
+        val n = note(transcript = words).copy(tidy = "Ring the garage.\n\tBuy milk.", people = listOf("Sam", "Alex"), cards = 2)
+        assertEquals(listOf(n), VoiceNoteRules.decode(VoiceNoteRules.encode(listOf(n))))
+        val old = "vn1\t$at\t83000\theard\tBuy milk.\t0\t"
+        assertEquals(listOf(note(transcript = "Buy milk.")), VoiceNoteRules.decode(old))
+        // The row reads the tidy note, keeps his words behind "Your words", and names the people.
+        val row = VoiceNoteRules.row(n, day, 14 * 60 + 2, day + 30, day)
+        assertEquals("Ring the garage.\n\tBuy milk.", row.text)
+        assertEquals(words, row.words)
+        assertEquals("Mentions Sam and Alex", row.peopleLine)
+        val plain = VoiceNoteRules.row(note(), day, 14 * 60 + 2, day + 30, day)
+        assertNull(plain.words)
+        assertNull(plain.peopleLine)
+        // Only these kinds come from a note to himself.
+        val raw = listOf("task", "reply", "booking", "idea", "work_from_home").map { RawRequestProposal(it, "x") }
+        assertEquals(listOf("task", "idea"), VoiceNoteRules.allowed(raw).map { it.kind })
+    }
+
+    @Test
+    fun slice2AnIdeaIsOnlyForVoiceNotesAndGoesToSomeday() {
+        val raw = listOf(RawRequestProposal("idea", "family film night on Fridays", date = "2026-10-16", time = "18:00"))
+        assertTrue(MessageRequestRules.check(raw, day, 600).isEmpty())
+        val p = MessageRequestRules.check(raw, day, 600, allowIdea = true).single()
+        // No day or time, whatever the model wrote.
+        assertEquals(RequestProposal(RequestKind.IDEA, "Family film night on Fridays", null, null), p)
+        assertEquals("Add to Ideas: Family film night on Fridays", MessageRequestRules.actionLine(p, day))
+        assertEquals(MessageRequestRules.IDEA_DETAIL, MessageRequestRules.detailLine(p))
+        val plan = RequestAcceptRules.plan(p, canAddEvent = true)
+        assertEquals(RequestPlan.AddIdea("Family film night on Fridays"), plan)
+        assertNull(RequestAcceptRules.plan(p, canAddEvent = true, change = true))
+        assertEquals("Kept “Family film night on Fridays” in Someday · Ideas", RequestAcceptRules.doneLine(plan!!, RequestKind.IDEA, day))
+    }
 }

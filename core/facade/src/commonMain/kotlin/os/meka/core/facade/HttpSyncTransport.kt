@@ -121,6 +121,13 @@ interface AiApi {
         os.meka.core.wire.MessageRequestCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * A voice note's tidy-up (`POST /v1/ai/voice-note`, Voice notes into actions, slice 2): the note's words only; a
+     * tidy note, the people and proposals come back unchecked. A server without the route answers "off".
+     */
+    suspend fun voiceNote(request: os.meka.core.wire.VoiceNoteCodec.Request): os.meka.core.wire.VoiceNoteCodec.Response =
+        os.meka.core.wire.VoiceNoteCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * "Break it down" (`POST /v1/ai/goal-breakdown`, Goals, properly, slice 4): one goal in Meka's words; proposed
      * milestones and first steps come back unchecked ([os.meka.core.domain.GoalBreakdownRules.check] reads them). A
      * server without the route answers "off".
@@ -242,6 +249,14 @@ class BreakdownKept internal constructor(
     /** Nothing was added (everything ticked was already there). */
     val isEmpty: Boolean get() = milestoneIds.isEmpty() && taskIds.isEmpty()
 }
+
+/**
+ * What a voice note's tidy-up made of its words ([MekaCore.tidyVoiceNote], Voice notes into actions, slice 2): [tidy]
+ * the AI's tidy note ("" when it gave none, or it couldn't answer), [people] the names it mentions, and [cards] the
+ * cards, as "Handle this" gives them (the same lines). Nothing is kept here: the phone keeps [tidy] and [people] with
+ * the note.
+ */
+data class VoiceNoteRead(val tidy: String, val people: List<String>, val cards: HandleOutcome)
 
 /** What "Handle this" made of a share ([MekaCore.handleThis]). */
 sealed class HandleOutcome {
@@ -635,6 +650,19 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/handle-this")
         }
         return os.meka.core.wire.MessageRequestCodec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun voiceNote(request: os.meka.core.wire.VoiceNoteCodec.Request): os.meka.core.wire.VoiceNoteCodec.Response {
+        val body = os.meka.core.wire.VoiceNoteCodec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send("/v1/ai/voice-note", body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/ai/voice-note")
+            resp.status.value == 404 -> return os.meka.core.wire.VoiceNoteCodec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.VoiceNoteCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/voice-note")
+        }
+        return os.meka.core.wire.VoiceNoteCodec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun goalBreakdown(request: os.meka.core.wire.GoalBreakdownCodec.Request): os.meka.core.wire.GoalBreakdownCodec.Response {

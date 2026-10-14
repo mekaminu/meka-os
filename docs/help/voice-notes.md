@@ -12,4 +12,5 @@ how: Open Capture (the widget, the quick-settings tile or Share) and hold the �
 tip: The recording and its words stay on the phone, encrypted, and go after 30 days; tap Keep on a note in Ask → Daily → Voice notes to hold on to it. Only the words, never the recording, go to Navilife's AI.
 tip: Turning speech into words happens on the phone with Android's own recogniser (Android 13 or later). If it can't, the recording is still kept and you can play it back.
 tip: No signal? The note is still recorded and turned into words; tap Make cards on it in Voice notes once you're back online.
+tip: Navilife's AI tidies the note into a few short lines and says who it mentions; your own words stay under "Your words". Ideas with no date can go to Lists → Someday → Ideas with one tap.
 tip: A quick tap on the 🎙 is still the short way: say one thing and it fills the capture field.

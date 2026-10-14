@@ -25,6 +25,11 @@ enum class RequestKind(val wire: String, val verb: String, val decline: String) 
      * shared. Only ever proposed for something Meka shared; it joins the trip it falls on ([HandleThisRules.withTrips]).
      */
     BOOKING("booking", "Add to trip", "Not needed"),
+    /**
+     * An idea for Someday → Ideas (Voice notes into actions, slice 2): only ever proposed for one of Meka's own voice
+     * notes; it has a title and nothing else (no day, no time).
+     */
+    IDEA("idea", "Add to Ideas", "Not needed"),
     ;
 
     companion object {
@@ -166,12 +171,19 @@ object MessageRequestRules {
         allowRenewal: Boolean = false,
         allowReply: Boolean = false,
         allowBooking: Boolean = false,
+        allowIdea: Boolean = false,
     ): List<RequestProposal> {
         val out = mutableListOf<RequestProposal>()
         raw.forEach { r ->
             val kind = RequestKind.of(r.kind) ?: return@forEach
             if (kind == RequestKind.RENEWAL && !allowRenewal) return@forEach
             if (kind == RequestKind.BOOKING && !allowBooking) return@forEach
+            if (kind == RequestKind.IDEA) {
+                if (!allowIdea) return@forEach
+                val p = RequestProposal(kind, cleanTitle(r.title) ?: return@forEach, null, null)
+                if (out.none { sameRequest(it, p) }) out += p
+                return@forEach
+            }
             if (kind == RequestKind.REPLY) {
                 if (!allowReply || out.any { it.kind == RequestKind.REPLY }) return@forEach
                 val draft = HandleThisRules.cleanReply(r.body) ?: return@forEach
@@ -224,6 +236,9 @@ object MessageRequestRules {
         val pence = try { RenewalRules.parseCost(r.cost) } catch (e: ValidationException) { null }
         return RenewalDetails(kind, repeat, pence?.takeIf { it > 0 })
     }
+
+    /** The line under an idea card: where Add puts it. */
+    const val IDEA_DETAIL = "Kept in Lists → Someday → Ideas · no date, nothing to plan"
 
     /** A booking stays this many days at most (a stay's check-out, a hire car's return); a later one is dropped. */
     const val MAX_BOOKING_DAYS = 60
@@ -288,7 +303,7 @@ object MessageRequestRules {
             // Nothing to edit as a task: a work-from-home day; a renewal is changed on the radar once added; a reply is
             // edited where Meka pastes it; a booking in Trips.
             changeLabel = if (p.kind == RequestKind.WORK_FROM_HOME || p.kind == RequestKind.RENEWAL || p.kind == RequestKind.REPLY ||
-                p.kind == RequestKind.BOOKING) null else "Change",
+                p.kind == RequestKind.BOOKING || p.kind == RequestKind.IDEA) null else "Change",
             declineLabel = p.kind.decline,
             spoken = (if (shared) "${HandleThisRules.PERSON} $quote. $action?" else "${message.personName.trim()} wrote $quote. $action?") +
                 (p.reply?.let { " The draft says: $it" } ?: ""),
@@ -322,6 +337,7 @@ object MessageRequestRules {
     fun detailLine(p: RequestProposal): String? = when (p.kind) {
         RequestKind.WORK_FROM_HOME -> p.day?.let { "${CivilDate.shortLabel(it)} shows as work from home on both apps" }
         RequestKind.RENEWAL -> p.renewal?.let { r -> renewalDetailLine(r, p.day) }
+        RequestKind.IDEA -> IDEA_DETAIL
         else -> null
     }
 

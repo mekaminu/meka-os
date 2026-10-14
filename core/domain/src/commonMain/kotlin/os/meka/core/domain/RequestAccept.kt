@@ -39,6 +39,9 @@ sealed class RequestPlan {
      * when Add is tapped ([TripRules.tripFor]) and names it [tripName] in the line.
      */
     data class AddBooking(val entry: BookingEntry, val tripName: String) : RequestPlan()
+
+    /** An idea into Someday → Ideas (Voice notes into actions, slice 2). */
+    data class AddIdea(val title: String) : RequestPlan()
 }
 
 object RequestAcceptRules {
@@ -62,6 +65,7 @@ object RequestAcceptRules {
         }
         RequestKind.REPLY -> if (change) null else p.reply?.let { RequestPlan.CopyReply(p.title, it) }
         RequestKind.BOOKING -> if (change) null else MessageRequestRules.bookingEntry(p)?.let { RequestPlan.AddBooking(it, p.booking!!.tripName) }
+        RequestKind.IDEA -> if (change) null else RequestPlan.AddIdea(p.title)
     }
 
     /**
@@ -100,6 +104,7 @@ object RequestAcceptRules {
             "On the radar: “${plan.title}” · ${RenewalRules.verb(plan.details.kind)} ${RenewalRules.dayWord(plan.day, today)}"
         is RequestPlan.CopyReply -> HandleThisRules.COPIED_LINE
         is RequestPlan.AddBooking -> "Added to " + TripRules.bookingLine(plan.entry, plan.tripName)
+        is RequestPlan.AddIdea -> "Kept “${plan.title}” in Someday · Ideas"
     }
 
     /** The line when a booking's trip is no longer in Trips: kept as a planned task, "Added “Flight BA478 · ref ABC123” as a task · …". */

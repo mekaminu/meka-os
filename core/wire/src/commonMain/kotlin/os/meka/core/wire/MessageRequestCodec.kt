@@ -50,7 +50,12 @@ object MessageRequestCodec {
      * stay's check-out or a hire car's return day, YYYY-MM-DD); anything else in them is dropped.
      */
     const val BOOKING = "booking"
-    val ALL_KINDS = KINDS + RENEWAL + REPLY + BOOKING
+    /**
+     * Something for Someday → Ideas (Voice notes into actions, slice 2): only a voice note's tidy-up proposes it
+     * ([VoiceNoteCodec]); it carries a title and nothing else. An older device's decoder drops it as an unknown kind.
+     */
+    const val IDEA = "idea"
+    val ALL_KINDS = KINDS + RENEWAL + REPLY + BOOKING + IDEA
     /** What a booking is on the wire ([Proposal.type]); the domain maps each to its booking kind. */
     val BOOKING_TYPES = setOf("flight", "train", "stay", "car", "other")
     /** A booking reference: 3–16 letters, digits or hyphens. */
@@ -151,8 +156,8 @@ object MessageRequestCodec {
         return proposalsOf(o, kinds)
     }
 
-    /** The `proposals` array of [o]: [kinds] only, at most [MAX_PROPOSALS] (shared with [MessageTriageCodec]). */
-    internal fun proposalsOf(o: JsonObject, kinds: Set<String> = KINDS): List<Proposal> =
+    /** The `proposals` array of [o]: [kinds] only, at most [max] (shared with [MessageTriageCodec], [VoiceNoteCodec]). */
+    internal fun proposalsOf(o: JsonObject, kinds: Set<String> = KINDS, max: Int = MAX_PROPOSALS): List<Proposal> =
         (o["proposals"] as? JsonArray).orEmpty().mapNotNull { e ->
             val p = e as? JsonObject ?: return@mapNotNull null
             val kind = p.optStr("kind")?.takeIf { it in kinds } ?: return@mapNotNull null
@@ -172,7 +177,7 @@ object MessageRequestCodec {
                 ref = p.optStr("ref")?.trim()?.takeIf { booking && REF.matches(it) },
                 until = p.optStr("until")?.takeIf { booking && DATE.matches(it) },
             )
-        }.take(MAX_PROPOSALS)
+        }.take(max)
 
     internal fun encodeProposal(p: Proposal): JsonObject = buildJsonObject {
         put("kind", p.kind)

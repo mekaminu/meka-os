@@ -90,6 +90,7 @@ import os.meka.core.domain.HandleThisRules
 import os.meka.core.domain.QueueRules
 import os.meka.core.domain.RequestCard
 import os.meka.core.facade.HandleOutcome
+import os.meka.core.facade.VoiceNoteRead
 import os.meka.core.domain.QuickCapture
 import os.meka.core.domain.VoiceNoteRules
 
@@ -126,6 +127,8 @@ class CaptureActivity : ComponentActivity() {
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
                     // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
                     handle = { text, subject -> core.handleThis(text, subject) },
+                    // Voice notes, slice 2: a note's words (never the recording) are tidied by the AI; cards come back.
+                    tidyNote = { words, subject -> core.tidyVoiceNote(words, subject) },
                     // What MEKA knows, slice 4: a shared form's fields answered from the facts page, on the phone only.
                     formAnswers = { text, subject -> core.formAnswers(text, subject) },
                     // Car and parking, slice 5: a shared RingGo/JustPark confirmation offers its parking timer (read here).
@@ -168,6 +171,7 @@ private fun CaptureSheet(
     save: suspend (String) -> Boolean,
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
+    tidyNote: suspend (String, String) -> VoiceNoteRead,
     formAnswers: suspend (String, String?) -> FormAnswersView,
     parking: suspend (String, String?) -> ParkingShareView?,
     startParking: suspend (String, String, String?) -> String?,
@@ -204,6 +208,9 @@ private fun CaptureSheet(
     var micAsks by remember { mutableStateOf(0) }
     val levels = remember { mutableStateListOf<Float>() }
     var heard by rememberSaveable { mutableStateOf<String?>(null) }
+    // Voice notes, slice 2: the AI's tidy note and who it mentions, shown over his own words once it answers.
+    var tidied by rememberSaveable { mutableStateOf<String?>(null) }
+    var mentions by rememberSaveable { mutableStateOf<String?>(null) }
     var noteMessage by remember { mutableStateOf<String?>(null) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -361,14 +368,19 @@ private fun CaptureSheet(
                     reading = true
                     val minute = java.time.Instant.ofEpochMilli(note.atMs).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
                         .let { it.hour * 60 + it.minute }
-                    val out = handle(note.transcript, VoiceNoteRules.subject(minute))
+                    val read = tidyNote(note.transcript, VoiceNoteRules.subject(minute))
+                    tidied = read.tidy.ifEmpty { null }
+                    mentions = VoiceNoteRules.peopleLine(read.people)
+                    val out = read.cards
                     val count = when (out) {
                         is HandleOutcome.Cards -> { handleCards = out.cards; handleLine = out.line; out.cards.size }
                         is HandleOutcome.NothingToDo -> { handleLine = out.line; 0 }
                         // Offline or the AI is off: Make cards on the note in Voice notes later.
                         is HandleOutcome.Unavailable -> { handleLine = out.line + " · " + VoiceNoteRules.MAKE_CARDS.lowercase() + " in Voice notes later"; null }
                     }
-                    if (count != null) VoiceNoteStore.update(context, note.id) { it.copy(cards = count) }
+                    if (count != null || read.tidy.isNotEmpty()) VoiceNoteStore.update(context, note.id) { n ->
+                        n.copy(cards = count ?: n.cards, tidy = read.tidy.ifEmpty { n.tidy }, people = read.people.ifEmpty { n.people })
+                    }
                     reading = false
                 } else {
                     handleLine = st.noWords ?: HandleThisRules.NOTHING_LINE
@@ -460,7 +472,7 @@ private fun CaptureSheet(
                 } else if (step == 1) {
                     HandleThisSection(
                         reading, handleLine, handleCards, answered, onChoice = ::answerCard,
-                        heard = heard, voiceNote = noting,
+                        heard = heard, voiceNote = noting, tidied = tidied, mentions = mentions,
                         onDone = if (noting) ({ scope.launch { leave(true) } }) else null,
                         answers = answers, copiedLine = copiedLine,
                         onCopy = { a -> copy(a.copyText); haptics.light(); copiedLine = FormFillRules.copiedLine(a) },

@@ -61,6 +61,7 @@ import os.meka.core.sync.SyncService
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.GoalBreakdownCodec
 import os.meka.core.wire.HandleThisCodec
+import os.meka.core.wire.VoiceNoteCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.BriefScriptCodec
 import os.meka.core.wire.ChatSummaryCodec
@@ -590,6 +591,16 @@ fun Application.mekaSync(
                 val request = HandleThisCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { handleService.read(request) }
                 call.respondText(MessageRequestCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // Voice notes into actions, slice 2: one voice note's words (never its recording); a tidy note, the people it
+            // mentions and proposals back. Nothing is kept or logged.
+            val voiceNoteService = VoiceNoteService(ai.provider)
+            post("/v1/ai/voice-note") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = VoiceNoteCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { voiceNoteService.tidy(request) }
+                call.respondText(VoiceNoteCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // "Break it down": one goal in Meka's own words; proposed milestones and first steps back. Nothing is kept or
             // logged.

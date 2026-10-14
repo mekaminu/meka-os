@@ -64,8 +64,9 @@ import java.time.ZoneId
 /**
  * Ask → Daily → Voice notes (voice notes into actions, slice 1; the Fold only): the notes this phone keeps, newest
  * first — when, how long, the words (three lines; tap for all), ▶ Play / ■ Stop, Keep (past 30 days) or Let it go,
- * Make cards (the words through Handle this, when it hasn't answered yet) and Delete with Undo. Everything here stays on
- * the phone; only Make cards sends the words.
+ * Make cards (the words through the AI's tidy-up, when it hasn't answered yet) and Delete with Undo. Everything here
+ * stays on the phone; only Make cards sends the words. Slice 2: a tidied note shows the tidy note, "Mentions …", and
+ * (opened) his own words under YOUR WORDS.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; rows stagger in 40 ms apart and leave with
  * the list's item motion; a note's words unfold on the expand spring; Play's label and the lines cross-fade. Reduced
@@ -127,14 +128,18 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
         making = note.id
         scope.launch {
             val minute = Instant.ofEpochMilli(note.atMs).atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
-            val out = runCatching { core.handleThis(note.transcript, VoiceNoteRules.subject(minute)) }.getOrNull()
+            // Slice 2: the words are tidied by the AI, which also pulls out the cards (and ideas for Someday).
+            val read = runCatching { core.tidyVoiceNote(note.transcript, VoiceNoteRules.subject(minute)) }.getOrNull()
+            val out = read?.cards
             val count = when (out) {
                 is HandleOutcome.Cards -> { line = out.line + " · in Needs you"; out.cards.size }
                 is HandleOutcome.NothingToDo -> { line = out.line; 0 }
                 is HandleOutcome.Unavailable -> { line = out.line; null }
                 null -> null
             }
-            if (count != null) VoiceNoteStore.update(context, note.id) { it.copy(cards = count) }
+            if (count != null || read?.tidy?.isNotEmpty() == true) VoiceNoteStore.update(context, note.id) { n ->
+                n.copy(cards = count ?: n.cards, tidy = read?.tidy?.ifEmpty { null } ?: n.tidy, people = read?.people?.ifEmpty { null } ?: n.people)
+            }
             making = null
         }
     }
@@ -248,6 +253,7 @@ private fun NoteRow(
                 row.text, style = MekaType.body, color = if (row.heard) Meka.colors.textPrimary else Meka.colors.textSecondary,
                 maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
             )
+            row.peopleLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
             row.cardsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
         AnimatedVisibility(
@@ -255,7 +261,14 @@ private fun NoteRow(
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            Text(row.keepLine, style = MekaType.caption, color = if (row.kept) Meka.colors.accent else Meka.colors.textTertiary)
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                // Slice 2: when the row shows the tidy note, his own words are kept under it.
+                row.words?.let { w ->
+                    Text(VoiceNoteRules.WORDS_LABEL, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(w, style = MekaType.body, color = Meka.colors.textSecondary)
+                }
+                Text(row.keepLine, style = MekaType.caption, color = if (row.kept) Meka.colors.accent else Meka.colors.textTertiary)
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             if (canPlay) {

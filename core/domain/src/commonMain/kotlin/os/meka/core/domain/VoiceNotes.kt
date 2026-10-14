@@ -40,6 +40,10 @@ data class VoiceNote(
     val kept: Boolean = false,
     /** How many cards Handle this offered for it (null: not asked yet, or it couldn't answer). */
     val cards: Int? = null,
+    /** Slice 2: the AI's tidy note of [transcript] ("" until it has answered, or when it gave none). */
+    val tidy: String = "",
+    /** Slice 2: the people the note mentions, as he named them. */
+    val people: List<String> = emptyList(),
 )
 
 /** A note as the Voice notes pane shows it. */
@@ -47,8 +51,12 @@ data class VoiceNoteRow(
     val id: String,
     /** "Today 14:02 · 1:23" */
     val title: String,
-    /** The words, or why there are none. */
+    /** The tidy note, else the words, else why there are none. */
     val text: String,
+    /** Slice 2: his own words when [text] is the tidy note (for "Your words"); null otherwise. */
+    val words: String? = null,
+    /** Slice 2: "Mentions Sam and Alex" · null. */
+    val peopleLine: String? = null,
     /** Whether [text] is the words (else a quiet line saying why there are none). */
     val heard: Boolean,
     /** "Kept until Fri 13 Nov" · "Kept · Navilife won't delete it" */
@@ -97,6 +105,57 @@ object VoiceNoteRules {
     const val EMPTY = "No voice notes yet · hold the 🎙 in Capture and talk, or say “take a voice note” to Talk"
     const val NOTE = "Recordings stay on this phone, encrypted, and go after 30 days unless you keep them. Only the words go to Navilife's AI, when it pulls out what to add."
     const val PLAY_FAILED = "Couldn't play that recording"
+
+    // ---- slice 2: the AI's tidy note ----
+    const val TIDY_LABEL = "TIDIED BY NAVILIFE"
+    const val WORDS_LABEL = "YOUR WORDS"
+    const val SHOW_WORDS = "Your words ▾"
+    const val HIDE_WORDS = "Your words ▴"
+    /** The tidy note is shown at most this long (the wire allows more; the rest is cut at a word). */
+    const val MAX_TIDY = 1_200
+    const val MAX_PEOPLE = 6
+
+    /**
+     * The model's tidy note as kept and shown: control characters gone, runs of blank lines folded, at most [MAX_TIDY]
+     * characters (cut at a word, "…"); "" when it says nothing or only repeats the words.
+     */
+    fun tidyNote(raw: String?, transcript: String): String {
+        val t = raw.orEmpty().replace("\r\n", "\n").replace(Regex("""[\u0000-\u0009\u000B-\u001F\u007F]"""), " ")
+            .replace(Regex("""[ ]{2,}"""), " ").replace(Regex("""[ ]*\n[ ]*"""), "\n").replace(Regex("""\n{3,}"""), "\n\n").trim()
+        if (t.isEmpty() || t == transcript.trim()) return ""
+        if (t.length <= MAX_TIDY) return t
+        val cut = t.take(MAX_TIDY)
+        return cut.take(cut.lastIndexOf(' ').takeIf { it > MAX_TIDY - 200 } ?: MAX_TIDY).trimEnd() + "…"
+    }
+
+    /**
+     * The people as kept: trimmed, at most 40 characters, nothing that looks like a number, address or link (never
+     * kept even if the model wrote it), no repeats (ignoring case), at most [MAX_PEOPLE].
+     */
+    fun people(raw: List<String>): List<String> =
+        raw.map { it.replace(Regex("""\s+"""), " ").trim().trim(',', '.', ';', ':') }
+            .filter { it.isNotEmpty() && it.length <= 40 && !it.any(Char::isDigit) && '@' !in it && "http" !in it.lowercase() && '|' !in it }
+            .distinctBy { it.lowercase() }.take(MAX_PEOPLE)
+
+    /** "Mentions Sam" · "Mentions Sam and Alex" · "Mentions Sam, Alex and Mum" · null for nobody. */
+    fun peopleLine(people: List<String>): String? = when (people.size) {
+        0 -> null
+        1 -> "Mentions ${people[0]}"
+        else -> "Mentions " + people.dropLast(1).joinToString(", ") + " and " + people.last()
+    }
+
+    /** The kinds a voice note's tidy-up may propose (no reply, booking or work-from-home day from a note to himself). */
+    val KINDS = setOf("task", "event", "reminder", "renewal", "idea")
+
+    /** The model's proposals of [KINDS] only. */
+    fun allowed(raw: List<RawRequestProposal>): List<RawRequestProposal> = raw.filter { it.kind in KINDS }
+
+    /** The capture sheet's line once the note is tidied: the cards' line, or what came of it. */
+    fun tidiedLine(cards: Int): String = when (cards) {
+        0 -> "Tidied · nothing in it to add"
+        1 -> "Tidied · 1 thing to add"
+        else -> "Tidied · $cards things to add"
+    }
 
     /** What Talk says before the capture sheet opens recording. */
     const val OPENING = "Go ahead, I'm listening."
@@ -192,8 +251,9 @@ object VoiceNoteRules {
             else -> CivilDate.shortLabel(atDay)
         }
         val heard = note.words == VoiceNoteWords.HEARD
+        val tidied = heard && note.tidy.isNotBlank()
         val text = when (note.words) {
-            VoiceNoteWords.HEARD -> note.transcript
+            VoiceNoteWords.HEARD -> if (tidied) note.tidy else note.transcript
             VoiceNoteWords.NOTHING -> "Nothing was heard in it"
             VoiceNoteWords.FAILED -> "Not turned into words on this phone"
         }
@@ -208,7 +268,8 @@ object VoiceNoteRules {
         return VoiceNoteRow(
             id = note.id,
             title = "$day ${LocalClock.formatMinute(atMinute.coerceIn(0, 1439))} · ${elapsed(note.durationMs)}",
-            text = text, heard = heard, keepLine = keepLine, kept = note.kept, cardsLine = cardsLine,
+            text = text, words = if (tidied) note.transcript else null, peopleLine = peopleLine(note.people),
+            heard = heard, keepLine = keepLine, kept = note.kept, cardsLine = cardsLine,
             canMakeCards = worthAsking(note) && note.cards == null,
         )
     }
@@ -221,23 +282,27 @@ object VoiceNoteRules {
     }
 
     // ---- the phone's index: one note per line, tab-separated (the words with tabs and line breaks escaped) ----
+    // Slice 2 adds two fields (the tidy note, the people joined by '|'); a 7-field line from slice 1 still reads.
 
     fun encode(notes: Collection<VoiceNote>): String =
         ordered(notes.toList()).joinToString("\n") { n ->
             listOf(
                 clean(n.id), n.atMs.toString(), n.durationMs.toString(), n.words.wire, escape(n.transcript),
                 if (n.kept) "1" else "0", n.cards?.toString().orEmpty(),
+                escape(n.tidy), n.people.joinToString("|") { clean(it).replace('|', ' ') },
             ).joinToString("\t")
         }
 
     fun decode(text: String?): List<VoiceNote> =
         text.orEmpty().lines().mapNotNull { line ->
             val f = line.split('\t')
-            if (f.size != 7 || f[0].isBlank()) return@mapNotNull null
+            if ((f.size != 7 && f.size != 9) || f[0].isBlank()) return@mapNotNull null
             val at = f[1].toLongOrNull() ?: return@mapNotNull null
             VoiceNote(
                 id = f[0], atMs = at, durationMs = f[2].toLongOrNull()?.coerceAtLeast(0L) ?: 0L,
                 words = VoiceNoteWords.of(f[3]), transcript = unescape(f[4]), kept = f[5] == "1", cards = f[6].toIntOrNull(),
+                tidy = f.getOrNull(7)?.let(::unescape).orEmpty(),
+                people = f.getOrNull(8).orEmpty().split('|').map { it.trim() }.filter { it.isNotEmpty() },
             )
         }.distinctBy { it.id }
 

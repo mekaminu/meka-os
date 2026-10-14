@@ -1375,6 +1375,59 @@ class MekaCore(
         return if (cards.isEmpty()) HandleOutcome.NothingToDo(rules.NOTHING_LINE) else HandleOutcome.Cards(cards, rules.readyLine(cards.size))
     }
 
+    /**
+     * Voice notes into actions, slice 2: the words of one voice note (never its recording) go to
+     * `POST /v1/ai/voice-note` with its [subject] ("Voice note · 14:02"), today's date and his work days. The AI's tidy
+     * note and the people it names come back for the phone to keep with the note; its proposals (task · event ·
+     * reminder · renewal · an idea for Someday) are checked again here and saved as request cards that say "You
+     * shared · 14:02", exactly as "Handle this" does (same lines, same Needs you, never a notification). Nothing is
+     * added until Meka taps Add. The same words already read today make no second call: their open cards come back,
+     * with no tidy note (the phone already keeps it).
+     */
+    suspend fun tidyVoiceNote(words: String, subject: String): VoiceNoteRead {
+        val rules = os.meka.core.domain.HandleThisRules
+        val vn = os.meka.core.domain.VoiceNoteRules
+        if (!rules.worthAsking(words, null)) return VoiceNoteRead("", emptyList(), HandleOutcome.Unavailable(rules.NOTHING_LINE))
+        val api = aiApi ?: return VoiceNoteRead("", emptyList(), HandleOutcome.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE))
+        val atMs = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(atMs)
+        val messageId = rules.messageId(words, subject, today)
+        if (onCore { requestCards.known(messageId) }) {
+            val open = onCore { requestCards.open() }.filter { it.messageId == messageId }
+            return VoiceNoteRead("", emptyList(),
+                if (open.isEmpty()) HandleOutcome.NothingToDo(rules.ALREADY_LINE) else HandleOutcome.Cards(open, rules.readyLine(open.size)))
+        }
+        val request = onCore {
+            val max = os.meka.core.wire.VoiceNoteCodec.MAX_WORK
+            os.meka.core.wire.VoiceNoteCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(atMs))}",
+                work = work.schedule().plainLine.let { if (it.length <= max) it else it.take(max).substringBeforeLast(", ") },
+                subject = rules.outgoingSubject(subject), text = rules.outgoingText(words),
+            )
+        }
+        val reply = try { api.voiceNote(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return VoiceNoteRead("", emptyList(), HandleOutcome.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE))
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return VoiceNoteRead("", emptyList(), HandleOutcome.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason)))
+        }
+        val tidy = vn.tidyNote(reply.note, words)
+        val people = vn.people(reply.people)
+        val cards = onCore {
+            val raw = vn.allowed(reply.proposals.map {
+                os.meka.core.domain.RawRequestProposal(it.kind, it.title, it.date, it.time, it.words, it.type, it.repeat, it.cost, it.body, it.ref, it.until)
+            })
+            val message = os.meka.core.domain.RequestMessage(messageId, rules.PERSON, rules.quoteText(words, subject), atMs)
+            val checked = os.meka.core.domain.MessageRequestRules.check(raw, today, cal.minuteOfDay(atMs), allowRenewal = true, allowIdea = true)
+            requestCards.save(message, checked)
+        }
+        val outcome = if (cards.isEmpty()) HandleOutcome.NothingToDo(if (tidy.isEmpty()) rules.NOTHING_LINE else vn.tidiedLine(0))
+        else HandleOutcome.Cards(cards, if (tidy.isEmpty()) rules.readyLine(cards.size) else vn.tidiedLine(cards.size))
+        return VoiceNoteRead(tidy, people, outcome)
+    }
+
     private class MessageContext(val sender: String, val sentAt: String, val date: String, val now: String, val work: String)
 
     /** What an AI message call says besides the text: the sender's label, its time, today and Meka's work days. */
@@ -1811,6 +1864,11 @@ class MekaCore(
                         RequestDone(rules.doneLine(plan.copy(entry = entry, tripName = trip.name), card.proposal.kind, today), null, null, bookingId = id)
                     }
                 }
+            }
+            // Voice notes, slice 2: an idea into Someday → Ideas; Undo deletes it (a Someday item is a task).
+            is os.meka.core.domain.RequestPlan.AddIdea -> {
+                val id = lists.addSomeday(plan.title, os.meka.core.domain.SomedayKind.IDEA)
+                RequestDone(rules.doneLine(plan, card.proposal.kind, today), id, null)
             }
         }
         requestCards.resolve(cardId, if (change) os.meka.core.domain.RequestResolution.CHANGED else os.meka.core.domain.RequestResolution.ADDED)

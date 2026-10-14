@@ -17,7 +17,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,16 +76,29 @@ internal fun HandleThisSection(
     voiceNote: Boolean = false,
     /** Voice notes: a Done that closes the sheet (cards left wait in Needs you). */
     onDone: (() -> Unit)? = null,
+    /** Voice notes, slice 2: the AI's tidy note (shown over [heard], which folds behind "Your words"). */
+    tidied: String? = null,
+    /** Voice notes, slice 2: "Mentions Sam and Alex". */
+    mentions: String? = null,
 ) {
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth().testTag("handle-this"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(if (voiceNote) "VOICE NOTE" else "HANDLE THIS", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
         if (heard != null) {
-            Column(
-                Modifier.fillMaxWidth().heightIn(max = 160.dp).clip(RoundedCornerShape(MekaRadius.m))
-                    .background(Meka.colors.surfaceRaised).verticalScroll(rememberScrollState())
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            ) { Text(heard, style = MekaType.body, color = Meka.colors.textPrimary) }
+            // Slice 2: once the AI has tidied it, the tidy note cross-fades in over his words, which fold behind
+            // "Your words ▾" (the expand spring; reduced motion: no slide).
+            Crossfade(targetState = tidied, animationSpec = MekaMotion.appear(reduced), label = "voice-note-tidied") { tidy ->
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    if (tidy != null) Text(VoiceNoteRules.TIDY_LABEL, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Column(
+                        Modifier.fillMaxWidth().heightIn(max = 160.dp).clip(RoundedCornerShape(MekaRadius.m))
+                            .background(Meka.colors.surfaceRaised).verticalScroll(rememberScrollState())
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    ) { Text(tidy ?: heard, style = MekaType.body, color = Meka.colors.textPrimary) }
+                    if (tidy != null) YourWords(heard)
+                }
+            }
+            mentions?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
         if (voiceNote) Text(VoiceNoteRules.KEPT_WHERE, style = MekaType.caption, color = Meka.colors.textTertiary)
         Crossfade(targetState = reading, animationSpec = MekaMotion.appear(reduced), label = "handle-reading") { isReading ->
@@ -184,6 +201,29 @@ private fun FormAnswersBlock(
         Crossfade(copiedLine ?: view.line, animationSpec = MekaMotion.appear(reduced), label = "form-answers-line") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+        }
+    }
+}
+
+/** Voice notes, slice 2: his own words behind a "Your words ▾" toggle under the tidy note. */
+@Composable
+internal fun YourWords(words: String) {
+    val reduced = Meka.reducedMotion
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(
+            if (open) VoiceNoteRules.HIDE_WORDS else VoiceNoteRules.SHOW_WORDS, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { open = !open }
+                .semantics { contentDescription = if (open) "Hide your own words" else "Show your own words" }
+                .minTouch().padding(horizontal = MekaSpace.xs),
+        )
+        AnimatedVisibility(
+            visible = open,
+            enter = androidx.compose.animation.fadeIn(MekaMotion.appear(reduced)) +
+                (if (reduced) androidx.compose.animation.fadeIn() else androidx.compose.animation.expandVertically(MekaMotion.expand(false))),
+            exit = fadeOut(MekaMotion.appear(reduced)) + (if (reduced) fadeOut() else shrinkVertically(MekaMotion.expand(false))),
+        ) {
+            Text(words, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.padding(horizontal = MekaSpace.m))
         }
     }
 }
