@@ -118,6 +118,8 @@ data class BriefStory(
      * Rex's under-sevens training at 4:55, while you're at work. Who's taking Rex?".
      */
     val workClashes: List<String> = emptyList(),
+    /** Inbox autopilot, slice 9a: the emails that need him now ([MailAskRules.brief]); null when none (or no mail). */
+    val mail: BriefMail? = null,
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -180,6 +182,8 @@ object BriefScriptRules {
 
         // Waiting on him: urgent voice messages, then what people asked for, then decisions and chases.
         out += askLines(s)
+        // Inbox autopilot, slice 9a: how many emails need him and who from (never a subject: someone else's words).
+        s.mail?.let { out += MailAskRules.briefSentence(it) }
         if (s.needsYou > 0) out += if (s.needsYou == 1) "One decision is waiting for you in Needs you." else "${s.needsYou} decisions are waiting for you in Needs you."
         val chases = v.waiting.filter { it.state == DueState.DUE }.take(len.maxChases)
         if (chases.isNotEmpty()) out += sentence("Chase " + listing(chases.map { w -> w.who?.let { "$it about ${w.title}" } ?: w.title }))

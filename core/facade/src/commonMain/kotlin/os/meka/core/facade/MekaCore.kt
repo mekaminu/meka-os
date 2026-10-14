@@ -4511,8 +4511,13 @@ class MekaCore(
         val commuteLocal = if (!os.meka.core.domain.CommuteAskRules.isAbout(q)) null else onCore {
             os.meka.core.domain.CommuteAskRules.localAnswer(q, hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake())
         }
+        // Inbox autopilot, slice 9a: "anything important in my email?" / "what did the school say?" carry the emails
+        // that need him (other people's words: the context turns untrusted); without the AI the device answers itself.
+        val mailAsked = os.meka.core.domain.MailAskRules.isAbout(q)
+        val mailItems = if (!mailAsked) emptyList() else onCore { activity.mailItems() }
         fun unavailable(line: String): os.meka.core.domain.AskOutcome {
             val local = (if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null)
+                ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal) else null)
                 ?: commuteLocal
             return if (local != null) os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(local, emptyList()))
             else os.meka.core.domain.AskOutcome.Unavailable(line)
@@ -4572,7 +4577,9 @@ class MekaCore(
                 // Notifications never seen, slice 4: only for a question about notifications, so "why didn't I get a notification?" has an answer.
                 notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList(),
                 // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
-                commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake()))
+                commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake()),
+                // Inbox autopilot, slice 9a: only for a question about his email, so "what did the school say?" has an answer.
+                mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) else emptyList())
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -5834,6 +5841,8 @@ class MekaCore(
                         family = listOfNotNull(t.bins?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
                         // Slice 4: urgent voice messages and requests from watched people, waiting on you.
                         asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
+                        // Inbox autopilot, slice 9a: how many emails need him and who from.
+                        mail = os.meka.core.domain.MailAskRules.brief(activity.mailItems(), nowMs()),
                     ),
                 )
             }

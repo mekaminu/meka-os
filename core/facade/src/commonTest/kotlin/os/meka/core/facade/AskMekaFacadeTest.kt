@@ -1121,4 +1121,36 @@ class AskMekaFacadeTest {
         c.notificationHealthSource = null
         assertEquals(AskOutcome.Unavailable(AskRules.OFFLINE_LINE), c.askMeka("why no notifications?"))
     }
+
+    @Test
+    fun aMailQuestionCarriesTheEmailsThatNeedHimAsUntrustedAndIsAnsweredWithoutTheAi() = runTest {
+        // Inbox autopilot, slice 9a: the server's Needs-you emails reach the device; only a mail question carries them.
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        fun email(message: String, from: String, subject: String, agoMs: Long) {
+            val id = os.meka.core.domain.MailNeedsRules.itemId("acc1", message)
+            os.meka.core.domain.MailNeedsRules.serverFields("Personal", from, null, subject, "Hi there", now - agoMs, 1).forEach { (f, v) ->
+                serverOps.append(os.meka.core.sync.Op("srvmi${k++}", "hh", os.meka.core.domain.EntityTypes.MAIL_ITEM, id, f, v, clock.now(), emptyList(), "server"))
+            }
+        }
+        email("m1", "Oakfield School", "Trip forms due Friday", 3_600_000L)
+        email("m2", "Sam Taylor", "Invoice for October", 7_200_000L)
+        val c = core()
+        assertTrue(c.syncNow())
+        c.askMeka("What's on today?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.MAIL })
+        c.askMeka("What did the school say?")
+        val ctx = server.asked.last().second
+        val lines = ctx.items.filter { it.kind == AskItemKind.MAIL }.map { it.line }
+        assertEquals("Mail · 2 need him · Personal 2 · emails sorted as needing him, last 14 days", lines.first())
+        assertTrue(lines[1].startsWith("Oakfield School · Personal · 16:15 · “Trip forms due Friday”"), lines[1])
+        assertTrue(ctx.untrusted)
+        // No AI: the device answers from the same emails.
+        server.reply = AskReply.Unavailable("off", null)
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("anything important in my email?"))
+        assertEquals("2 emails need you: Oakfield School about “Trip forms due Friday”, Sam Taylor about “Invoice for October”.", out.answer.text)
+        // The brief says how many and who from.
+        assertEquals(2, c.briefView.value.story.mail?.count)
+        assertEquals(listOf("Oakfield School", "Sam Taylor"), c.briefView.value.story.mail?.senders)
+    }
 }
