@@ -227,4 +227,50 @@ class SpeechTest {
         assertEquals(SpeechRules.Miss.PIECE_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = false))
         assertEquals(SpeechRules.Miss.REST_ON_DEVICE, SpeechRules.onMiss(reading = true, resting = true))
     }
+
+    @Test
+    fun googleVoicesComeFirstUnderTheirHeadingsAndPollyStaysTheDefault() {
+        val offered = listOf(
+            OfferedVoice("Aoede", "Female", "chirp3hd", "google"), OfferedVoice("Charon-US", "Male", "chirp3hd", "google"),
+            OfferedVoice("Charon", "Male", "chirp3hd", "google"),
+        ) + polly
+        val v = VoicePickerRules.view(SpeechRules.ON, offered, "Amy", chosen = null, usageLine = null, mac = false)
+        assertEquals(listOf("Aoede", "Charon", "Charon-US", "Amy", "Emma", "Brian", "Arthur", "device"), v.choices.map { it.id })
+        assertEquals(
+            listOf(VoicePickerRules.GROUP_GOOGLE_GB, VoicePickerRules.GROUP_GOOGLE_GB, VoicePickerRules.GROUP_GOOGLE_US, VoicePickerRules.GROUP_POLLY),
+            v.choices.take(4).map { it.group },
+        )
+        assertEquals("On this phone", v.choices.last().group)
+        assertEquals("Charon", v.choices[2].label)
+        assertEquals("American · male · most natural · Google", v.choices[2].detail)
+        assertEquals("British · female · most natural · Google", v.choices[0].detail)
+        // Nothing chosen: Polly's default still speaks (a Google voice is only used when chosen).
+        assertEquals(listOf("Amy"), v.choices.filter { it.selected }.map { it.id })
+        val chosen = VoicePickerRules.view(SpeechRules.ON, offered, "Amy", "Charon-US", null, mac = true)
+        assertEquals(listOf("Charon-US"), chosen.choices.filter { it.selected }.map { it.id })
+        assertEquals("On this Mac", chosen.choices.last().group)
+        assertEquals("Charon-US", MekaVoiceRules.normalize("Charon-US"))
+        assertNull(MekaVoiceRules.normalize("Charon-FR"))
+    }
+
+    @Test
+    fun theGoogleLineSaysTheFreeMonthTheFallbackAndHowToAddTheKey() {
+        assertEquals("Google voices · 84k of 1M free this month", VoicePickerRules.googleLine("on", 84_213, 1_000_000, 900_000, null, "2026-10"))
+        assertEquals("Google voices · 0 of 1M free this month", VoicePickerRules.googleLine("on", 0, 0, 900_000, null, "2026-10"))
+        assertEquals(
+            "Google voices · 900k of the free 1M used, so Amazon Polly speaks until 1 Nov (never paid without your yes)",
+            VoicePickerRules.googleLine("on", 900_000, 1_000_000, 900_000, null, "2026-10"),
+        )
+        assertEquals(
+            "Google voices · 12k of 1M free this month · Google voice failed at 08:12 · used Polly",
+            VoicePickerRules.googleLine("on", 12_000, 1_000_000, 900_000, "08:12", "2026-10"),
+        )
+        assertEquals(VoicePickerRules.GOOGLE_ADD_KEY, VoicePickerRules.googleLine("nokey", 0, 0, 0, null, null))
+        assertTrue(VoicePickerRules.GOOGLE_ADD_KEY.contains("Cloud Text-to-Speech API"))
+        assertEquals(VoicePickerRules.GOOGLE_UNREACHABLE, VoicePickerRules.googleLine("failed", 0, 0, 0, null, null))
+        assertNull(VoicePickerRules.googleLine(null, 0, 0, 0, null, null))
+        assertEquals("1.5M", VoicePickerRules.short(1_500_000))
+        assertEquals("512", VoicePickerRules.short(512))
+        assertEquals("1M", VoicePickerRules.short(999_700))
+    }
 }

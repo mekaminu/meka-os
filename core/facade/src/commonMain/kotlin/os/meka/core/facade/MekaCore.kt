@@ -5411,12 +5411,18 @@ class MekaCore(
         val v = try { api.speechVoices() } catch (e: CancellationException) { throw e } catch (e: Exception) {
             os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.FAILED)
         }
-        val offered = v.voices.map { os.meka.core.domain.OfferedVoice(it.id, it.gender, it.engine) }
+        val offered = v.voices.map { os.meka.core.domain.OfferedVoice(it.id, it.gender, it.engine, it.provider) }
         val speaking = v.voices.firstOrNull { it.id.equals(chosen, ignoreCase = true) }?.id ?: v.defaultVoice
         val usage = os.meka.core.domain.SpeechRules.usageLine(
             v.state, v.month, v.usedChars, v.capChars, speaking, deviceChosen = chosen == os.meka.core.domain.MekaVoiceRules.DEVICE,
         )
-        return os.meka.core.domain.VoicePickerRules.view(v.state, offered, v.defaultVoice, chosen, usage, mac)
+        val g = v.google
+        val failedClock = g?.failedAtMs?.let { at ->
+            val cal = ZoneCalendar(timeZone)
+            at.takeIf { cal.epochDayOf(it) == cal.epochDayOf(nowMs()) }?.let { LocalClock.formatMinute(cal.minuteOfDay(it)) }
+        }
+        val google = os.meka.core.domain.VoicePickerRules.googleLine(g?.state, g?.usedChars ?: 0, g?.freeChars ?: 0, g?.fallbackAtChars ?: 0, failedClock, v.month)
+        return os.meka.core.domain.VoicePickerRules.view(v.state, offered, v.defaultVoice, chosen, usage, mac).copy(googleLine = google)
     }
 
     /**

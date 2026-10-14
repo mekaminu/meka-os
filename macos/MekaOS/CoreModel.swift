@@ -1922,8 +1922,8 @@ final class CoreModel {
         guard let core, let v = voicePicker else { return }
         MekaHaptics.tick()
         voicePicker = VoicePickerView(loaded: v.loaded, intro: v.intro,
-                                      choices: v.choices.map { VoiceChoice(id: $0.id, label: $0.label, detail: $0.detail, selected: $0.id == id, sample: $0.sample) },
-                                      statusLine: v.statusLine, usageLine: v.usageLine, help: v.help)
+                                      choices: v.choices.map { VoiceChoice(id: $0.id, label: $0.label, detail: $0.detail, selected: $0.id == id, sample: $0.sample, group: $0.group) },
+                                      statusLine: v.statusLine, usageLine: v.usageLine, help: v.help, googleLine: v.googleLine)
         Task {
             if (try? await core.chooseMekaVoice(name: id))?.boolValue == true { await refreshVoicePicker() }
         }

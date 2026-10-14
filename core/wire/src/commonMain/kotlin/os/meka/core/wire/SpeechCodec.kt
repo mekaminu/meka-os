@@ -41,7 +41,16 @@ object SpeechCodec {
     const val HEADER_ENGINE = "X-Meka-Engine"
     private const val BINARY = "mp3"
 
-    private val VOICE = Regex("[A-Za-z]{2,20}")
+    /**
+     * A voice's id: a Polly name ("Amy"), or a Google Chirp 3 HD voice's short name ("Aoede" for the British one,
+     * "Aoede-US" for the American; natural voice, slice 1). The server keeps the ids unique across providers.
+     */
+    private val VOICE = Regex("[A-Za-z]{2,20}(-US)?")
+    private val ENGINE = Regex("[a-z0-9]{1,20}")
+
+    /** Who makes a voice's speech ([Voice.provider]). */
+    const val POLLY = "polly"
+    const val GOOGLE = "google"
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
@@ -71,8 +80,31 @@ object SpeechCodec {
         }
     }
 
-    /** One voice MEKA can speak with: Polly's [id] ("Amy"), [gender] ("Female"), and the best [engine] it has here. */
-    data class Voice(val id: String, val gender: String, val engine: String)
+    /**
+     * One voice MEKA can speak with: its [id] ("Amy", "Aoede", "Aoede-US"), [gender] ("Female"), the best [engine] it
+     * has here ("generative", "neural", "chirp3hd") and its [provider] ([POLLY] or [GOOGLE]; absent on the wire = Polly).
+     */
+    data class Voice(val id: String, val gender: String, val engine: String, val provider: String = POLLY)
+
+    /**
+     * Google's voices on this server (natural voice, slice 1): [state] on · nokey (no key with Text-to-Speech allowed
+     * yet) · failed (Google didn't answer); this month's characters said by Google ([usedChars]) against the free
+     * [freeChars] (1M), past [fallbackAtChars] Polly speaks instead; [failedAtMs] the last time a Google clip failed and
+     * Polly said it instead (null: not since the server started).
+     */
+    data class Google(
+        val state: String,
+        val usedChars: Long = 0,
+        val freeChars: Long = 0,
+        val fallbackAtChars: Long = 0,
+        val failedAtMs: Long? = null,
+    ) {
+        companion object {
+            const val ON = "on"
+            const val NO_KEY = "nokey"
+            const val FAILED = "failed"
+        }
+    }
 
     /**
      * The voices list: [state] on/off/failed, the voices (best first), the server's default, and this month's metered
@@ -86,6 +118,8 @@ object SpeechCodec {
         val usedChars: Long = 0,
         val capChars: Long = 0,
         val reason: String? = null,
+        /** Google's voices (natural voice, slice 1); null from an older server. [capChars] is Polly's cap. */
+        val google: Google? = null,
     ) {
         companion object {
             const val ON = "on"
@@ -121,7 +155,7 @@ object SpeechCodec {
     fun binaryResponse(audioB64: String, voice: String?, engine: String?): Response {
         if (audioB64.isEmpty() || audioB64.length > MAX_AUDIO_B64) return Response(Response.FAILED, reason = "Navilife's voice sent an unusable clip")
         val v = voice?.takeIf { VOICE.matches(it) }
-        val e = engine?.takeIf { it.length <= 20 && it.all { c -> c.isLetter() } }
+        val e = engine?.takeIf { ENGINE.matches(it) }
         return Response(Response.SPOKEN, audioB64, BINARY, v, e)
     }
 
@@ -156,12 +190,24 @@ object SpeechCodec {
     fun encodeVoices(v: Voices): String = buildJsonObject {
         put("w", WireCodec.VERSION)
         put("state", v.state)
-        putJsonArray("voices") { v.voices.forEach { x -> addJsonObject { put("id", x.id); put("gender", x.gender); put("engine", x.engine) } } }
+        putJsonArray("voices") { v.voices.forEach { x -> addJsonObject { put("id", x.id); put("gender", x.gender); put("engine", x.engine); put("provider", x.provider) } } }
         v.defaultVoice?.let { put("default", it) }
         v.month?.let { put("month", it) }
         put("usedChars", v.usedChars)
         put("capChars", v.capChars)
         v.reason?.let { put("reason", it) }
+        v.google?.let { g ->
+            put(
+                "google",
+                buildJsonObject {
+                    put("state", g.state)
+                    put("usedChars", g.usedChars)
+                    put("freeChars", g.freeChars)
+                    put("fallbackAtChars", g.fallbackAtChars)
+                    g.failedAtMs?.let { put("failedAtMs", it) }
+                },
+            )
+        }
     }.toString()
 
     fun decodeVoices(body: String): Voices = wrap("voices") {
@@ -170,7 +216,21 @@ object SpeechCodec {
         val voices = (o["voices"] as? JsonArray).orEmpty().mapNotNull { e ->
             val x = e as? JsonObject ?: return@mapNotNull null
             val id = x.optStr("id")?.takeIf { VOICE.matches(it) } ?: return@mapNotNull null
-            Voice(id, x.optStr("gender") ?: "", x.optStr("engine") ?: "")
+            val provider = when (x.optStr("provider")) {
+                GOOGLE -> GOOGLE
+                null, POLLY -> POLLY
+                else -> return@mapNotNull null // a provider this app doesn't know: not offered here
+            }
+            Voice(id, x.optStr("gender") ?: "", x.optStr("engine") ?: "", provider)
+        }
+        val google = (o["google"] as? JsonObject)?.let { g ->
+            Google(
+                state = g.optStr("state") ?: return@let null,
+                usedChars = (g.optLong("usedChars") ?: 0).coerceAtLeast(0),
+                freeChars = (g.optLong("freeChars") ?: 0).coerceAtLeast(0),
+                fallbackAtChars = (g.optLong("fallbackAtChars") ?: 0).coerceAtLeast(0),
+                failedAtMs = g.optLong("failedAtMs")?.takeIf { it > 0 },
+            )
         }
         Voices(
             state = o.str("state"),
@@ -180,6 +240,7 @@ object SpeechCodec {
             usedChars = o.optLong("usedChars") ?: 0,
             capChars = o.optLong("capChars") ?: 0,
             reason = o.optStr("reason", MAX_REASON),
+            google = google,
         )
     }
 

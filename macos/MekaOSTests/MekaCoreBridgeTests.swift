@@ -918,13 +918,17 @@ final class MekaCoreBridgeTests: XCTestCase {
 
     /// The voice picker (Weather and a voice, item 2): MEKA's voices first, then the Mac's own, reach Swift.
     func testVoicePickerReachesSwift() {
-        let offered = [OfferedVoice(id: "Amy", gender: "Female", engine: "generative"), OfferedVoice(id: "Brian", gender: "Male", engine: "neural")]
+        let offered = [OfferedVoice(id: "Amy", gender: "Female", engine: "generative", provider: "polly"), OfferedVoice(id: "Brian", gender: "Male", engine: "neural", provider: "polly"),
+                       OfferedVoice(id: "Aoede", gender: "Female", engine: "chirp3hd", provider: "google")]
         let v = VoicePickerRules.shared.view(state: "on", offered: offered, defaultVoice: "Amy", chosen: "Brian", usageLine: nil,
                                              mac: true, connected: true, loaded: true)
-        XCTAssertEqual(v.choices.map(\.id), ["Amy", "Brian", "device"])
+        XCTAssertEqual(v.choices.map(\.id), ["Aoede", "Amy", "Brian", "device"])
+        XCTAssertEqual(v.choices.first?.group, "Google · Chirp 3 HD · British")
+        XCTAssertEqual(VoicePickerRules.shared.googleLine(state: "on", usedChars: 84_213, freeChars: 1_000_000, fallbackAtChars: 900_000,
+                                                         failedClock: nil, month: "2026-10"), "Google voices · 84k of 1M free this month")
         XCTAssertEqual(v.choices.filter(\.selected).map(\.id), ["Brian"])
         XCTAssertEqual(v.choices.last?.label, "This Mac's own voice")
-        XCTAssertEqual(v.choices.first?.detail, "British · female · most natural · Navilife's default")
+        XCTAssertEqual(v.choices[1].detail, "British · female · most natural · Navilife's default")
         XCTAssertTrue(v.help.contains("Manage Voices"))
         XCTAssertTrue(VoicePickerRules.shared.SAMPLE.hasPrefix("Good morning, Meka."))
     }

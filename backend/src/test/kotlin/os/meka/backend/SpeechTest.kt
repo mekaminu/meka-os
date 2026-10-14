@@ -240,4 +240,110 @@ class SpeechTest {
             assertEquals(7L, store.used("1999-02"))
         }
     }
+
+    private val chirp = listOf(
+        SpeechVoice("Charon", "Male", setOf("chirp3hd")),
+        SpeechVoice("Aoede", "Female", setOf("chirp3hd")),
+        SpeechVoice("Aoede-US", "Female", setOf("chirp3hd")),
+        SpeechVoice("en-GB-Odd", "Female", setOf("chirp3hd")),
+    )
+
+    @Test
+    fun googleVoicesComeFirstWithTheirMonthAndPollyStaysTheDefault() {
+        val google = FakePolly(chirp)
+        val s = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = google)
+        val v = s.voices()
+        assertEquals(listOf("Aoede", "Charon", "Aoede-US", "Amy"), v.voices.take(4).map { it.id })
+        assertEquals(listOf("google", "google", "google", "polly"), v.voices.take(4).map { it.provider })
+        assertEquals("Amy", v.defaultVoice)
+        assertEquals(SpeechCodec.Google(SpeechCodec.Google.ON, 0, 1_000_000, 900_000, null), v.google)
+        // No voice asked for: Polly's default speaks, never a Google voice.
+        assertEquals("Amy", s.speak(SpeechCodec.Request("Hello.")).voice)
+        // No key: Google's voices are hidden and the line says how to add it.
+        val noKey = object : SpeechEngine by FakePolly(chirp) { override fun configured() = false }
+        val off = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = noKey).voices()
+        assertTrue(off.voices.all { it.provider == "polly" })
+        assertEquals(SpeechCodec.Google.NO_KEY, off.google?.state)
+        // Google unreachable: Polly's voices still offered, the line says Google failed.
+        val down = FakePolly(chirp).apply { fail = true }
+        val failed = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).voices()
+        assertEquals(SpeechCodec.Voices.ON, failed.state)
+        assertEquals(SpeechCodec.Google.FAILED, failed.google?.state)
+    }
+
+    @Test
+    fun aChosenGoogleVoiceSpeaksOnItsOwnMeterAndFallsBackToPollyOnceOnFailure() {
+        val google = FakePolly(chirp)
+        val polly = FakePolly(gb)
+        val pollyUsage = InMemorySpeechUsageStore()
+        val googleUsage = InMemorySpeechUsageStore()
+        val s = SpeechService(polly, pollyUsage, nowMs = { now }, google = google, googleUsage = googleUsage)
+        val r = s.speak(SpeechCodec.Request("Good morning, Meka.", "Aoede"))
+        assertEquals("Aoede" to "chirp3hd", r.voice to r.engine)
+        assertEquals(Triple("Good morning, Meka.", "Aoede", "chirp3hd"), google.said.single())
+        assertEquals(19L, googleUsage.used("2026-10"))
+        assertEquals(0L, pollyUsage.used("2026-10"))
+        // Google fails: the same words, once, in Polly's default voice; the time is kept for the picker's line.
+        google.fail = true
+        val fell = s.speak(SpeechCodec.Request("Ten past seven.", "Aoede"))
+        assertEquals(SpeechCodec.Response.SPOKEN, fell.state)
+        assertEquals("Amy" to "generative", fell.voice to fell.engine)
+        assertEquals("Ten past seven.", polly.said.single().first)
+        assertEquals(now, s.googleFailedAtMs)
+        assertEquals(15L, pollyUsage.used("2026-10"))
+        assertEquals(19L, googleUsage.used("2026-10"))
+    }
+
+    @Test
+    fun pastNineHundredThousandGoogleCharactersPollySpeaksSoTheFreeTierIsNeverExceeded() {
+        val google = FakePolly(chirp)
+        val polly = FakePolly(gb)
+        val googleUsage = InMemorySpeechUsageStore().apply { add("2026-10", 899_990) }
+        val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = google, googleUsage = googleUsage)
+        assertEquals("Aoede", s.speak(SpeechCodec.Request("Hi there.", "Aoede")).voice) // 899,999: still free
+        val over = s.speak(SpeechCodec.Request("Good morning.", "Aoede"))
+        assertEquals("Amy", over.voice)
+        assertEquals(1, google.said.size)
+        assertEquals(899_999L, googleUsage.used("2026-10"))
+        assertEquals(null, s.googleFailedAtMs) // the cap isn't a failure
+        // A new month starts Google's count again.
+        now += 31L * 86_400_000L
+        assertEquals("Aoede", s.speak(SpeechCodec.Request("Hello.", "Aoede")).voice)
+    }
+
+    @Test
+    fun googlesRequestsAndAnswersAreReadSafely() {
+        assertEquals("en-GB-Chirp3-HD-Aoede", GoogleSpeech.fullName("Aoede"))
+        assertEquals("en-US-Chirp3-HD-Aoede", GoogleSpeech.fullName("Aoede-US"))
+        assertEquals(null, GoogleSpeech.fullName("Amy;drop"))
+        val body = """{"voices":[{"languageCodes":["en-GB"],"name":"en-GB-Chirp3-HD-Aoede","ssmlGender":"FEMALE"},
+            {"languageCodes":["en-GB"],"name":"en-GB-Neural2-A","ssmlGender":"FEMALE"},
+            {"languageCodes":["en-GB"],"name":"en-GB-Chirp3-HD-Charon","ssmlGender":"MALE"}]}"""
+        assertEquals(listOf("Aoede" to "Female", "Charon" to "Male"), GoogleSpeech.parseVoices(body, "en-GB").map { it.id to it.gender })
+        assertEquals(listOf("Aoede-US"), GoogleSpeech.parseVoices(body.replace("en-GB", "en-US"), "en-US").filter { it.id.startsWith("Aoede") }.map { it.id })
+        assertTrue(GoogleSpeech.parseVoices("not json", "en-GB").isEmpty())
+        val req = GoogleSpeech.request("It's ten past seven.", "en-GB-Chirp3-HD-Aoede")
+        assertTrue(""""languageCode":"en-GB"""" in req && """"name":"en-GB-Chirp3-HD-Aoede"""" in req && """"audioEncoding":"MP3"""" in req, req)
+        assertContentEquals("ID3".toByteArray(), GoogleSpeech.parseAudio("""{"audioContent":"${Base64.getEncoder().encodeToString("ID3".toByteArray())}"}"""))
+        assertEquals(null, GoogleSpeech.parseAudio("""{"error":{"code":403}}"""))
+        // The key goes in a header, never the URL.
+        val seen = mutableListOf<Pair<String, Map<String, String>>>()
+        val g = GoogleSpeech(
+            { "AIzaTESTKEY0000000000000000" },
+            { url, h -> seen += url to h; 200 to body },
+            { url, h, _ -> seen += url to h; 200 to """{"audioContent":"SUQz"}""" },
+        )
+        assertEquals(listOf("Aoede", "Charon"), g.voices("en-GB").take(2).map { it.id })
+        assertTrue(g.synthesize("Hello.", "Aoede", "chirp3hd").isNotEmpty())
+        assertTrue(seen.all { (url, h) -> "AIza" !in url && h[GoogleSpeech.KEY_HEADER] == "AIzaTESTKEY0000000000000000" })
+        // No key: not configured, nothing sent.
+        assertFalse(GoogleSpeech({ null }, { _, _ -> error("sent") }, { _, _, _ -> error("sent") }).configured())
+    }
+
+    @Test
+    fun callsKeepAPollyVoiceWhenAGoogleVoiceIsChosen() {
+        val offered = listOf(SpeechCodec.Voice("Aoede", "Female", "chirp3hd", SpeechCodec.GOOGLE), SpeechCodec.Voice("Amy", "Female", "generative"))
+        assertEquals(CallVoice("Amy", "generative"), CallVoice.choose("Aoede", offered))
+        assertEquals(CallVoice.DEFAULT, CallVoice.choose("Aoede-US", emptyList()))
+    }
 }

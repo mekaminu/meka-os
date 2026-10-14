@@ -163,12 +163,18 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             SkeletonRows(count = 4, rowHeight = 56.dp)
         } else {
             v.choices.forEachIndexed { i, c ->
+                // Each provider's voices under their heading (Google's British, American, then Polly's).
+                val group = c.group
+                if (group != null && group != v.choices.getOrNull(i - 1)?.group) {
+                    Text(group.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary,
+                        modifier = Modifier.padding(top = if (i == 0) MekaSpace.xs else MekaSpace.m).appear(rememberAppearance(i + 1)))
+                }
                 VoiceRow(c, playing = playing == c.id && speaker.speaking, modifier = Modifier.appear(rememberAppearance(i + 1)),
                     choose = { choose(c) }, sample = { sample(c) })
             }
             val after = v.choices.size + 1
             AnimatedContent(
-                targetState = listOfNotNull(v.statusLine, v.usageLine),
+                targetState = listOfNotNull(v.statusLine, v.googleLine, v.usageLine),
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "voice-lines",
                 modifier = Modifier.appear(rememberAppearance(after)),
@@ -176,7 +182,11 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     lines.forEachIndexed { i, line ->
                         Text(line, style = MekaType.caption,
-                            color = if (i == 0 && v.statusLine != null) Meka.colors.accent else Meka.colors.textTertiary)
+                            color = when {
+                                i == 0 && v.statusLine != null -> Meka.colors.accent
+                                line == v.googleLine -> Meka.colors.textSecondary
+                                else -> Meka.colors.textTertiary
+                            })
                     }
                 }
             }

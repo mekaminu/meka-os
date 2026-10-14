@@ -320,9 +320,10 @@ object MekaVoiceFields {
 object MekaVoiceRules {
     /** The device's own text-to-speech voice, never sent anywhere. */
     const val DEVICE = "device"
-    private val POLLY = Regex("[A-Z][a-z]{1,19}")
+    /** A Polly name ("Amy") or a Google Chirp 3 HD short name ("Aoede", the American one "Aoede-US"). */
+    private val POLLY = Regex("[A-Z][a-z]{1,19}(-US)?")
 
-    /** A stored or chosen value as one MEKA can use: a Polly name, [DEVICE], or null (the server's default). */
+    /** A stored or chosen value as one MEKA can use: a server voice's name, [DEVICE], or null (the server's default). */
     fun normalize(name: String?): String? {
         val n = name?.trim().orEmpty()
         return when {
@@ -356,8 +357,11 @@ class MekaVoiceStore(private val replica: Replica) {
     }
 }
 
-/** One of the server's voices as the picker sees it: Polly's [id] ("Amy"), [gender] ("Female") and best [engine] here. */
-data class OfferedVoice(val id: String, val gender: String, val engine: String)
+/**
+ * One of the server's voices as the picker sees it: its [id] ("Amy", "Aoede", "Aoede-US"), [gender] ("Female"), best
+ * [engine] here and [provider] ("polly" or "google").
+ */
+data class OfferedVoice(val id: String, val gender: String, val engine: String, val provider: String = VoicePickerRules.POLLY)
 
 /**
  * One row of the voice picker: [id] is what choosing it saves (a Polly name, or [MekaVoiceRules.DEVICE]); [sample] is
@@ -369,6 +373,8 @@ data class VoiceChoice(
     val detail: String,
     val selected: Boolean,
     val sample: Boolean = true,
+    /** The heading this row sits under ("Google · Chirp 3 HD · British"); shown above the first row of each group. */
+    val group: String? = null,
 )
 
 /**
@@ -383,6 +389,11 @@ data class VoicePickerView(
     val statusLine: String?,
     val usageLine: String?,
     val help: String,
+    /**
+     * Google's voices this month or how to add them (natural voice, slice 1, [VoicePickerRules.googleLine]): "Google
+     * voices · 84k of 1M free this month", or "More natural Google voices · add the key …"; null from an older server.
+     */
+    val googleLine: String? = null,
 )
 
 /** The voice picker's words and order (non-AI, pure), the same on the Fold and the Mac. */
@@ -392,16 +403,83 @@ object VoicePickerRules {
     const val TITLE = "Navilife's voice"
     const val INTRO = "How Navilife sounds in Talk, the spoken brief and when it answers calls. The choice follows you to every device."
 
-    /** "Amy · British · female · most natural". */
+    const val POLLY = "polly"
+    const val GOOGLE = "google"
+    const val GROUP_GOOGLE_GB = "Google · Chirp 3 HD · British"
+    const val GROUP_GOOGLE_US = "Google · Chirp 3 HD · American"
+    const val GROUP_POLLY = "Amazon Polly · British"
+
+    /** An American Google voice's id ends "-US" ("Aoede-US"); its row reads "Aoede". */
+    fun american(v: OfferedVoice): Boolean = v.provider == GOOGLE && v.id.endsWith("-US")
+
+    /** The row's name: the voice's id without the "-US" ("Aoede"). */
+    fun label(v: OfferedVoice): String = v.id.removeSuffix("-US")
+
+    /** The heading a server voice sits under. */
+    fun group(v: OfferedVoice): String = when {
+        v.provider != GOOGLE -> GROUP_POLLY
+        american(v) -> GROUP_GOOGLE_US
+        else -> GROUP_GOOGLE_GB
+    }
+
+    /** "British · female · most natural" (Polly) · "British · female · most natural · Google" (Chirp 3 HD). */
     fun detail(v: OfferedVoice, isDefault: Boolean): String {
         val engine = when (v.engine.lowercase()) {
-            "generative" -> "most natural"
+            "generative", "chirp3hd" -> "most natural"
             "neural" -> "natural"
             else -> v.engine.lowercase().ifEmpty { null }
         }
-        return listOfNotNull("British", v.gender.lowercase().ifEmpty { null }, engine, if (isDefault) "Navilife's default" else null)
+        val accent = if (american(v)) "American" else "British"
+        return listOfNotNull(accent, v.gender.lowercase().ifEmpty { null }, engine, if (v.provider == GOOGLE) "Google" else null, if (isDefault) "Navilife's default" else null)
             .joinToString(" · ")
     }
+
+    /** Google's free characters a month and where Navilife stops using them (natural voice, slice 1). */
+    const val GOOGLE_FREE = 1_000_000L
+
+    const val GOOGLE_ADD_KEY = "More natural Google voices · add the key: Google Cloud console → APIs & Services → Library → " +
+        "Cloud Text-to-Speech API → Enable, then Credentials → your API key → allow Cloud Text-to-Speech API. " +
+        "Navilife uses the same key as travel times, free up to 1M characters a month."
+    const val GOOGLE_UNREACHABLE = "Couldn't reach Google's voices just now · a chosen Google voice speaks with Amazon Polly meanwhile"
+
+    /**
+     * The Google line under the picker: [state] "on" · "nokey" · "failed" (null: an older server, no line); this
+     * month's [usedChars] of [freeChars] free, Polly from [fallbackAtChars]; [failedClock] "08:12" when the last Google
+     * clip failed and Polly said it (today's local time, else null); [month] "2026-10" names the 1st it resets.
+     *
+     * "Google voices · 84k of 1M free this month" · "Google voices · 900k of the free 1M used, so Amazon Polly speaks
+     * until 1 Nov (never paid without your yes)" · "… · Google voice failed at 08:12 · used Polly"
+     */
+    fun googleLine(state: String?, usedChars: Long, freeChars: Long, fallbackAtChars: Long, failedClock: String?, month: String?): String? {
+        return when (state) {
+            null -> null
+            "nokey" -> GOOGLE_ADD_KEY
+            "on" -> {
+                val free = freeChars.takeIf { it > 0 } ?: GOOGLE_FREE
+                val base = if (fallbackAtChars in 1..usedChars) {
+                    val m = month?.let { Regex("\\d{4}-(\\d{2})").matchEntire(it) }?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 1..12 }
+                    val until = m?.let { " until 1 ${MONTHS3[it % 12]}" }.orEmpty()
+                    "Google voices · ${short(fallbackAtChars)} of the free ${short(free)} used, so Amazon Polly speaks$until (never paid without your yes)"
+                } else {
+                    "Google voices · ${short(usedChars.coerceAtLeast(0))} of ${short(free)} free this month"
+                }
+                if (failedClock != null) "$base · Google voice failed at $failedClock · used Polly" else base
+            }
+            else -> GOOGLE_UNREACHABLE
+        }
+    }
+
+    /** 84_213 → "84k", 900_000 → "900k", 1_000_000 → "1M", 1_500_000 → "1.5M", 512 → "512". */
+    fun short(n: Long): String = when {
+        n >= 1_000_000 -> {
+            val tenths = (n + 50_000) / 100_000
+            if (tenths % 10 == 0L) "${tenths / 10}M" else "${tenths / 10}.${tenths % 10}M"
+        }
+        n >= 1_000 -> "${(n + 500) / 1_000}k".let { if (it == "1000k") "1M" else it }
+        else -> n.toString()
+    }
+
+    private val MONTHS3 = listOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
     /** The device's own voice row: "This phone's own voice" / "This Mac's own voice". */
     fun deviceLabel(mac: Boolean): String = if (mac) "This Mac's own voice" else "This phone's own voice"
@@ -442,11 +520,16 @@ object VoicePickerRules {
             chosen != null && polly.any { it.id == chosen } -> chosen
             else -> default
         }
-        val rows = polly.map { v -> VoiceChoice(v.id, v.id, detail(v, v.id == default), selected = v.id == picked) }.toMutableList()
+        // Google's British voices first, then the American ones, then Polly's (each group under its heading).
+        val ordered = polly.filter { it.provider == GOOGLE && !american(it) } + polly.filter { american(it) } + polly.filter { it.provider != GOOGLE }
+        val rows = ordered.map { v -> VoiceChoice(v.id, label(v), detail(v, v.id == default), selected = v.id == picked, group = group(v)) }.toMutableList()
         if (!on && chosen != null && !device) {
             rows += VoiceChoice(chosen, chosen, "Navilife's voice · not reachable right now", selected = true, sample = false)
         }
-        rows += VoiceChoice(MekaVoiceRules.DEVICE, deviceLabel(mac), DEVICE_DETAIL, selected = device || (picked == null && !rows.any { it.selected }))
+        rows += VoiceChoice(
+            MekaVoiceRules.DEVICE, deviceLabel(mac), DEVICE_DETAIL, selected = device || (picked == null && !rows.any { it.selected }),
+            group = if (rows.isEmpty()) null else if (mac) "On this Mac" else "On this phone",
+        )
         val where = if (mac) "the Mac" else "the phone"
         val status = when {
             !loaded -> null

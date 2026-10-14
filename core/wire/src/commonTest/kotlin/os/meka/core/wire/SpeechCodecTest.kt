@@ -77,4 +77,33 @@ class SpeechCodecTest {
         assertEquals(SpeechCodec.Response.FAILED, SpeechCodec.binaryResponse("A".repeat(SpeechCodec.MAX_AUDIO_B64 + 1), "Amy", "neural").state)
         assertTrue(SpeechCodec.MAX_AUDIO_BYTES * 4 / 3 <= SpeechCodec.MAX_AUDIO_B64)
     }
+
+    @Test
+    fun googleVoicesAndTheirMonthTravelAndAnOlderAnswerHasNone() {
+        val voices = SpeechCodec.Voices(
+            SpeechCodec.Voices.ON,
+            listOf(
+                SpeechCodec.Voice("Aoede", "Female", "chirp3hd", SpeechCodec.GOOGLE),
+                SpeechCodec.Voice("Charon-US", "Male", "chirp3hd", SpeechCodec.GOOGLE),
+                SpeechCodec.Voice("Amy", "Female", "generative"),
+            ),
+            defaultVoice = "Amy", month = "2026-10", usedChars = 10, capChars = 1_000_000,
+            google = SpeechCodec.Google(SpeechCodec.Google.ON, 84_000, 1_000_000, 900_000, 1_791_504_000_000L),
+        )
+        assertEquals(voices, SpeechCodec.decodeVoices(SpeechCodec.encodeVoices(voices)))
+        val noKey = voices.copy(google = SpeechCodec.Google(SpeechCodec.Google.NO_KEY))
+        assertEquals(noKey, SpeechCodec.decodeVoices(SpeechCodec.encodeVoices(noKey)))
+        // An older server: no provider (Polly) and no google block.
+        val old = """{"w":1,"state":"on","voices":[{"id":"Amy","gender":"Female","engine":"neural"}],"usedChars":0,"capChars":1}"""
+        val decoded = SpeechCodec.decodeVoices(old)
+        assertEquals(SpeechCodec.POLLY, decoded.voices.single().provider)
+        assertNull(decoded.google)
+        // A provider this app doesn't know is left out; an American Google voice is asked for by its id.
+        val other = """{"w":1,"state":"on","voices":[{"id":"Amy","gender":"","engine":"neural","provider":"acme"}],"usedChars":0,"capChars":1}"""
+        assertTrue(SpeechCodec.decodeVoices(other).voices.isEmpty())
+        assertEquals("Charon-US", SpeechCodec.decodeRequest(SpeechCodec.encodeRequest(SpeechCodec.Request("Hi", "Charon-US"))).voice)
+        assertFailsWith<WireFormatException> { SpeechCodec.decodeRequest("""{"w":1,"text":"Hi","voice":"Charon-FR"}""") }
+        // A Google clip's engine comes through the header.
+        assertEquals("chirp3hd", SpeechCodec.binaryResponse("SUQz", "Aoede", "chirp3hd").engine)
+    }
 }

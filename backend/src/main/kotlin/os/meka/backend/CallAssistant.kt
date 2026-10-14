@@ -142,8 +142,12 @@ data class CallVoice(val name: String, val engine: String) {
          */
         fun choose(chosen: String?, offered: List<SpeechCodec.Voice>): CallVoice {
             val polly = MekaVoiceRules.normalize(chosen)?.takeIf { it != MekaVoiceRules.DEVICE }
-            offered.firstOrNull { it.id.equals(polly, ignoreCase = true) }?.let { return CallVoice(it.id, it.engine) }
-            offered.firstOrNull()?.let { return CallVoice(it.id, it.engine) }
+            // Calls speak through the phone service's own Polly voices: a chosen Google voice (natural voice, slice 1)
+            // isn't one, so callers hear the server's default Polly voice until calls can play Google's.
+            val pollyOffered = offered.filter { it.provider == SpeechCodec.POLLY }
+            pollyOffered.firstOrNull { it.id.equals(polly, ignoreCase = true) }?.let { return CallVoice(it.id, it.engine) }
+            pollyOffered.firstOrNull()?.let { return CallVoice(it.id, it.engine) }
+            if (offered.any { it.id.equals(polly, ignoreCase = true) } || polly?.endsWith("-US") == true) return DEFAULT
             return polly?.let { CallVoice(it, SpeechService.NEURAL) } ?: DEFAULT
         }
     }

@@ -34,6 +34,7 @@ struct VoiceSheet: View {
         .background(palette.surface)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voicePicker?.statusLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voicePicker?.usageLine)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voicePicker?.googleLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: showAll)
         .onAppear {
             speaker.attach(model)
@@ -51,11 +52,21 @@ struct VoiceSheet: View {
                 .staggeredAppear(0)
             if let v = model.voicePicker {
                 ForEach(Array(v.choices.enumerated()), id: \.element.id) { i, c in
+                    // Each provider's voices under their heading (Google's British, American, then Polly's).
+                    if let group = c.group, group != (i > 0 ? v.choices[i - 1].group : nil) {
+                        Text(group.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                            .foregroundStyle(palette.textSecondary)
+                            .padding(.top, i == 0 ? MekaSpace.xs : MekaSpace.m)
+                            .staggeredAppear(i + 1)
+                    }
                     row(c).staggeredAppear(i + 1)
                 }
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     if let status = v.statusLine {
                         Text(status).font(MekaType.caption).foregroundStyle(palette.accent).transition(.opacity)
+                    }
+                    if let google = v.googleLine {
+                        Text(google).font(MekaType.caption).foregroundStyle(palette.textSecondary).transition(.opacity)
                     }
                     if let usage = v.usageLine {
                         Text(usage).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
@@ -90,7 +101,7 @@ struct VoiceSheet: View {
             .padding(.top, MekaSpace.m)
             .staggeredAppear(after)
         ForEach(Array(d.rows.enumerated()), id: \.element.id) { i, r in
-            row(VoiceChoice(id: "device:" + r.id, label: r.label, detail: r.detail, selected: r.selected, sample: true),
+            row(VoiceChoice(id: "device:" + r.id, label: r.label, detail: r.detail, selected: r.selected, sample: true, group: nil),
                 choose: { chooseDevice(r) }, sample: { toggleDeviceSample(r) })
                 .staggeredAppear(after + 1 + i)
         }

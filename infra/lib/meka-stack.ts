@@ -236,6 +236,16 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // Google's natural voices (natural voice, slice 1; Meka 2026-10-14, Needs Meka #33): '{}' until he pastes a key
+    // allowed for Cloud Text-to-Speech; until then the service tries the travel times' key (the same key can be allowed
+    // for both). Read at use time; neither = Google voices hidden and Polly speaks as before.
+    const speechGoogle = new secretsmanager.Secret(this, 'SpeechGoogle', {
+      secretName: `${prefix}/speech/google`,
+      encryptionKey: this.key,
+      description: 'MEKA OS natural voices: {"api_key": "AIza..."} from Google Cloud (Cloud Text-to-Speech API)',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     // The car's MOT and tax from the DVLA (car on autopilot, slice 2; Needs Meka #26): '{}' until he pastes the free
     // keys. Read at use time; empty = feature off, and only the registration is ever sent to the DVLA.
     const carDvla = new secretsmanager.Secret(this, 'CarDvla', {
@@ -279,6 +289,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_RELEASE_PUBLISHER_SECRET: publisherPublic.secretArn,
         MEKA_VOICE_TWILIO_SECRET: voiceTwilio.secretArn,
         MEKA_MAPS_GOOGLE_SECRET: mapsGoogle.secretArn,
+        MEKA_SPEECH_GOOGLE_SECRET: speechGoogle.secretArn,
         MEKA_CAR_DVLA_SECRET: carDvla.secretArn,
         MEKA_APPROVALS_KESTREL_SECRET: approvalsKestrel.secretArn,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
@@ -312,6 +323,7 @@ export class MekaStack extends cdk.Stack {
     publisherPublic.grantRead(task.taskRole); // the public half only; the private key is never granted to the service
     voiceTwilio.grantRead(task.taskRole);
     mapsGoogle.grantRead(task.taskRole);
+    speechGoogle.grantRead(task.taskRole);
     carDvla.grantRead(task.taskRole);
     approvalsKestrel.grantRead(task.taskRole); // a public key only
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
