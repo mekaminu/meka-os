@@ -815,6 +815,7 @@ object NoticeSources {
         out += SignInRules.notices(signIns, nowMs, cal)
         out += CallCreditRules.notices(callCredit, callAssistantOn)
         out += SchoolRules.notices(school, schoolCovers, nowMs, cal)
+        out += SchoolTerms.notices(school, nowMs, cal)
         out += DateNightRules.notices(dateNight, nowMs, cal)
         out += WinRules.notices(wins, nowMs, cal)
         out += LeaveRules.notices(school, leave, leaveWork, nowMs, cal)

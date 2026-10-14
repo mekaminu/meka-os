@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -48,6 +49,7 @@ import os.meka.core.domain.SchoolRow
 import os.meka.core.domain.SchoolRules
 import os.meka.core.domain.SchoolTermCard
 import os.meka.core.domain.SchoolTerms
+import os.meka.core.domain.SchoolTermsAdded
 import os.meka.core.facade.MekaCore
 
 /**
@@ -58,6 +60,10 @@ import os.meka.core.facade.MekaCore
  * School dates filled in (slice 1): a card under the summary offers the councils whose holidays Navilife knows; Fill in
  * writes them as days off (each row says "Council dates · checked … · check with the school"), Remove all takes them out,
  * and the line after either has Undo. Under it a second field takes the school's INSET days pasted as dates or a letter.
+ *
+ * Slice 2, the yearly look: the card's brass line says when a later Navilife carries new dates from the council ("New
+ * dates from … · 2028–29 · 6 holidays" with Add them, Undo after) or, from June, that next school year's holidays aren't
+ * in yet (with Council's page when the council's dates are in); it cross-fades in and out with the card's line.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
  * cross-fade (the "couldn't read" line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with
@@ -77,6 +83,9 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
 
     // The council card's last action, for its line and Undo: true after Fill in, false after Remove all.
     var terms by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    // Slice 2: what Add them added, for Undo (exactly those go again).
+    var added by remember { mutableStateOf<SchoolTermsAdded?>(null) }
+    val uri = LocalUriHandler.current
     var termsSaid by remember { mutableStateOf<String?>(null) }
     var insetSaid by remember { mutableStateOf<String?>(null) }
     val insetColor by animateColorAsState(
@@ -104,23 +113,36 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
         v.terms?.let { card ->
             item(key = "terms") {
                 TermsCard(
-                    card, termsSaid, undo = terms != null,
+                    card, termsSaid, undo = terms != null || added != null,
                     modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2)),
                     onFill = { id ->
                         haptics.light()
                         scope.launch {
                             termsSaid = runCatching { core.fillSchoolTerms(id) }.getOrNull()
-                            terms = termsSaid?.let { id to true }
+                            terms = termsSaid?.let { id to true }; added = null
                         }
                     },
+                    onAddNew = { id ->
+                        haptics.light()
+                        scope.launch {
+                            added = runCatching { core.addNewSchoolTerms(id) }.getOrNull()
+                            termsSaid = added?.line; terms = null
+                        }
+                    },
+                    onOpen = { url -> runCatching { uri.openUri(url) } },
                     onRemove = { id ->
                         haptics.tick()
                         scope.launch {
                             termsSaid = runCatching { core.removeSchoolTerms(id) }.getOrNull()
-                            terms = termsSaid?.let { id to false }
+                            terms = termsSaid?.let { id to false }; added = null
                         }
                     },
                     onUndo = {
+                        added?.let { a ->
+                            haptics.tick()
+                            scope.launch { runCatching { core.undoNewSchoolTerms(a) }; added = null; termsSaid = null }
+                            return@TermsCard
+                        }
                         val (id, filled) = terms ?: return@TermsCard
                         haptics.tick()
                         scope.launch {
@@ -211,6 +233,8 @@ private fun TermsCard(
     modifier: Modifier,
     onFill: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onAddNew: (String) -> Unit,
+    onOpen: (String) -> Unit,
     onUndo: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -222,6 +246,26 @@ private fun TermsCard(
         Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Crossfade(card.line, animationSpec = MekaMotion.appear(reduced), label = "school-terms-line") { line ->
             Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        // Slice 2: new dates from the council, or next school year's holidays not in yet.
+        Crossfade(card.refresh, animationSpec = MekaMotion.appear(reduced), label = "school-terms-refresh") { r ->
+            r?.let {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    Text(it.line, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
+                    val act = it.action
+                    if (act != null) {
+                        Text(
+                            act, style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button) {
+                                    it.councilId?.let(onAddNew) ?: it.url?.let(onOpen)
+                                }
+                                .semantics { contentDescription = "$act. ${it.line}" }
+                                .minTouch().padding(MekaSpace.xs),
+                        )
+                    }
+                }
+            }
         }
         card.choices.forEach { c ->
             Row(Modifier.fillMaxWidth().minTouch(), verticalAlignment = Alignment.CenterVertically) {

@@ -447,7 +447,7 @@ object SchoolRules {
      * The School pane and the week-ahead questions. [hours] says which days Meka works and which he works from home
      * (its holidays are the bank holidays).
      */
-    fun view(items: List<SchoolItem>, today: Long, hours: WorkHours): SchoolView {
+    fun view(items: List<SchoolItem>, today: Long, hours: WorkHours, known: Set<String> = emptySet()): SchoolView {
         val off = items.filter { it.kind == SchoolKind.OFF && it.endDay >= today }
             .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id })
         val dates = items.filter { it.kind == SchoolKind.DAY && it.startDay >= today }
@@ -479,7 +479,7 @@ object SchoolRules {
         return SchoolView(
             offRows, dateRows, weeklyRows, covers(off, today, hours), summary,
             firstOff?.title, firstOff?.let { maxOf(it.startDay, today) },
-            SchoolTerms.card(items, today),
+            SchoolTerms.card(items, today, known),
         )
     }
 
@@ -694,7 +694,11 @@ class School(
     fun items(): List<SchoolItem> =
         SchoolRules.items(replica.entities(EntityTypes.SCHOOL_ITEM).associate { it.ref.entityId to it.fields })
 
-    fun view(hours: WorkHours): SchoolView = SchoolRules.view(items(), calendar.epochDayOf(nowMs()), hours)
+    fun view(hours: WorkHours): SchoolView =
+        SchoolRules.view(items(), calendar.epochDayOf(nowMs()), hours, known())
+
+    /** Every school item id ever written, removed ones too (so a council holiday he removed isn't offered as new). */
+    fun known(): Set<String> = replica.entities(EntityTypes.SCHOOL_ITEM, includeDeleted = true).map { it.ref.entityId }.toSet()
 
     /** Adds what [text] says ([SchoolRules.read]); null when MEKA couldn't read it (nothing is written). */
     fun add(text: String): Pair<String, SchoolEntry>? {

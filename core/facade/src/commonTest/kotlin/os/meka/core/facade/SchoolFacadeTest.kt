@@ -114,6 +114,9 @@ class SchoolFacadeTest {
         assertEquals("Central Bedfordshire", fold.schoolView.value.terms?.filled?.name)
         assertEquals("Next day off: October half term · Mon 26 – Fri 30 Oct", fold.schoolView.value.summary)
         assertNull(fold.fillSchoolTerms("nowhere"))
+        // Slice 2: everything in the table is in, so no new dates and nothing for next year in October.
+        assertNull(fold.schoolView.value.terms?.refresh)
+        assertNull(fold.addNewSchoolTerms(id))
 
         fold.syncNow(); mac.syncNow()
         assertEquals("Council dates · checked 14 Oct 2026 · check with the school", mac.schoolView.value.off.first().source)

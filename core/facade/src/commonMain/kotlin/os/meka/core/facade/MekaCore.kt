@@ -2508,6 +2508,15 @@ class MekaCore(
      */
     suspend fun fillSchoolTerms(councilId: String): String? = onCore { schoolTerms.fill(councilId)?.first }
 
+    /**
+     * School dates filled in (slice 2): the council card's **Add them** — only [councilId]'s new dates (a later Navilife's
+     * table; a holiday he removed stays removed); null when there are none. Undo is [undoNewSchoolTerms] with the result.
+     */
+    suspend fun addNewSchoolTerms(councilId: String): os.meka.core.domain.SchoolTermsAdded? = onCore { schoolTerms.addNew(councilId) }
+
+    /** Undo for [addNewSchoolTerms]: takes exactly those holidays out again. */
+    suspend fun undoNewSchoolTerms(added: os.meka.core.domain.SchoolTermsAdded): Int = onCore { schoolTerms.removeIds(added.ids) }
+
     /** Remove all on the council card (and Undo after filling in): every holiday from [councilId] goes; the line to show. */
     suspend fun removeSchoolTerms(councilId: String): String = onCore {
         os.meka.core.domain.SchoolTerms.removedLine(schoolTerms.removeAll(councilId))

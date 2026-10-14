@@ -118,4 +118,87 @@ class SchoolTermsTest {
         assertEquals("Added 2 INSET days · Mon 2 Nov, Fri 18 Dec · 1 already in", terms(fold).addInset("2 Nov, 18 Dec, 4 Jan"))
         assertEquals(16, school(fold).items().size)
     }
+
+    // ---- Slice 2: the yearly look at next year's dates ----
+
+    @Test
+    fun newDatesInALaterTableAreOfferedOnceAndAHolidayHeRemovedStaysRemoved() {
+        val cal = SchoolTerms.CENTRAL_BEDFORDSHIRE
+        // As if an older Navilife had filled in 2026–27 only: the table's 2027–28 dates are new.
+        cal.periods.filter { SchoolTerms.schoolYearOf(it.startDay) == 2026 }.forEach { p ->
+            fold.replica.commitLocal(EntityTypes.SCHOOL_ITEM, SchoolTerms.idFor(cal, p), SchoolTerms.fields(cal, p, world.clock.nowMs))
+        }
+        // He removed one of next year's from another device before (its fixed id is gone for good).
+        val removed = cal.periods.first { SchoolTerms.schoolYearOf(it.startDay) == 2027 }
+        fold.replica.commitLocal(EntityTypes.SCHOOL_ITEM, SchoolTerms.idFor(cal, removed), SchoolTerms.fields(cal, removed, world.clock.nowMs))
+        school(fold).remove(SchoolTerms.idFor(cal, removed))
+
+        val r = assertNotNull(school(fold).view(work).terms?.refresh)
+        assertEquals("New dates from Central Bedfordshire · 2027–28 · 5 holidays", r.line)
+        assertEquals(SchoolTerms.ADD_THEM, r.action)
+        assertEquals(council, r.councilId)
+
+        val added = assertNotNull(terms(fold).addNew(council))
+        assertEquals("Added 5 new holidays from Central Bedfordshire · 2027–28", added.line)
+        assertNull(school(fold).view(work).terms?.refresh)
+        assertNull(terms(fold).addNew(council))
+        assertTrue(school(fold).items().none { it.startDay == removed.startDay })
+        sync()
+        assertEquals(13, school(mac).items().size)
+
+        // Undo takes exactly those out; nothing else goes.
+        assertEquals(5, terms(mac).removeIds(added.ids))
+        assertEquals(8, school(mac).items().size)
+    }
+
+    @Test
+    fun fromJuneNextSchoolYearsHolidaysNotInYetAreAskedForOnceUntilOneIsIn() {
+        assertEquals(2026, SchoolTerms.schoolYearOf(wed))
+        assertEquals(2026, SchoolTerms.schoolYearOf(d(6, 3, 2027)))
+        assertEquals("2027–28", SchoolTerms.yearLabel(2027))
+        assertEquals("2099–00", SchoolTerms.yearLabel(2099))
+
+        // Nothing in School: nothing asked, at any time.
+        world.clock.nowMs = at(d(6, 10, 2027), 10)
+        assertNull(school(fold).view(work).terms?.refresh)
+        assertTrue(SchoolTerms.notices(school(fold).items(), world.clock.nowMs, cal).isEmpty())
+
+        // Only this year's holidays typed: in May nothing; from 1 June, the line and one heads-up until 1 September.
+        world.clock.nowMs = at(d(10, 14), 10)
+        school(fold).add("Half term 31 May – 4 Jun 2027")
+        world.clock.nowMs = at(d(5, 31, 2027), 10)
+        assertNull(school(fold).view(work).terms?.refresh)
+        assertTrue(SchoolTerms.notices(school(fold).items(), world.clock.nowMs, cal).isEmpty())
+        world.clock.nowMs = at(d(6, 10, 2027), 10)
+        val r = assertNotNull(school(fold).view(work).terms?.refresh)
+        // The council's table has 2027–28, so the card points at it.
+        assertEquals("2027–28's holidays aren't in yet · pick the school's council above, or type them below", r.line)
+        assertNull(r.action)
+        val n = SchoolTerms.notices(school(fold).items(), world.clock.nowMs, cal).single()
+        assertEquals("school:year:2027", n.key)
+        assertEquals("2027–28's school holidays aren't in yet", n.title)
+        assertEquals(at(d(6, 1, 2027), 9), n.atMs)
+        assertEquals(cal.toEpochMs(d(9, 1, 2027), 0), n.expiresAtMs)
+
+        // One day off in next school year quietens it.
+        school(fold).add("INSET 6 Sep 2027")
+        assertNull(school(fold).view(work).terms?.refresh)
+        assertTrue(SchoolTerms.notices(school(fold).items(), world.clock.nowMs, cal).isEmpty())
+    }
+
+    @Test
+    fun withTheCouncilsDatesInTheLookPointsAtTheCouncilsPageOnceTheTableRunsOut() {
+        terms(fold).fill(council)
+        // June 2027: 2027–28 is in from the table, so nothing to say.
+        world.clock.nowMs = at(d(6, 10, 2027), 10)
+        assertNull(school(fold).view(work).terms?.refresh)
+        // June 2028: 2028–29 isn't in this table: check the council's page.
+        world.clock.nowMs = at(d(6, 10, 2028), 10)
+        val r = assertNotNull(school(fold).view(work).terms?.refresh)
+        assertTrue(r.line.startsWith("2028–29's holidays aren't in yet · Central Bedfordshire"), r.line)
+        assertEquals(SchoolTerms.COUNCIL_PAGE, r.action)
+        assertEquals(SchoolTerms.CENTRAL_BEDFORDSHIRE.sourceUrl, r.url)
+        val n = SchoolTerms.notices(school(fold).items(), world.clock.nowMs, cal).single()
+        assertEquals("Check Central Bedfordshire's dates and the school's INSET days · Ask → More → School", n.text)
+    }
 }

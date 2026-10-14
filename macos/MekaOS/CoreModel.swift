@@ -3454,6 +3454,31 @@ final class CoreModel {
         }
     }
 
+    // MARK: School dates filled in (slice 2)
+
+    /// Add them on the council card's yearly line: only the council's id crosses in, and only Strings come back (the
+    /// line and the ids Undo takes out). Nil when there are no new dates.
+    func addNewSchoolTerms(_ councilId: String) async -> (line: String, ids: [String])? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do {
+            guard let added = try await core.addNewSchoolTerms(councilId: councilId) else { return nil }
+            return (added.line, added.ids)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Undo for Add them: a fresh value made from the ids crosses once.
+    func undoNewSchoolTerms(_ ids: [String]) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        do { _ = try await core.undoNewSchoolTerms(added: SchoolTermsAdded(line: "", ids: ids)) } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
     /// The school's INSET days pasted as dates or a letter; only the String crosses. The line to show, or that no date
     /// was found in it.
     func addSchoolInset(_ text: String) async -> String? {

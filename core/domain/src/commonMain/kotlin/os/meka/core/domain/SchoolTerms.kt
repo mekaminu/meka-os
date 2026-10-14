@@ -44,6 +44,21 @@ data class SchoolTermCard(
     val line: String,
     val choices: List<TermChoice>,
     val filled: TermChoice?,
+    /** The yearly look (slice 2): new dates from the council to add, or next school year's holidays not in yet. */
+    val refresh: TermRefresh? = null,
+)
+
+/**
+ * The council card's yearly line (School dates filled in, slice 2). Either the council's table holds holidays he
+ * hasn't got (a later Navilife carries the next year's dates): [line] "New dates from Central Bedfordshire · 2028–29 ·
+ * 6 holidays" with [action] "Add them", which fills [councilId] in; or from June, next school year has no day off in
+ * yet: "2027–28's holidays aren't in yet…" with [action] "Council's page" opening [url], or no action (type them).
+ */
+data class TermRefresh(
+    val line: String,
+    val action: String?,
+    val councilId: String?,
+    val url: String?,
 )
 
 object SchoolTerms {
@@ -116,16 +131,104 @@ object SchoolTerms {
         return TermChoice(cal.id, cal.name, "${cal.years} · $n ${if (n == 1) "date" else "dates"} · checked ${checkedLabel(cal.checkedDay)}")
     }
 
-    /** The card for [items] (live ones): the offer while no council's dates are in, else what's in. */
-    fun card(items: List<SchoolItem>, today: Long): SchoolTermCard {
+    /**
+     * The card for [items] (live ones): the offer while no council's dates are in, else what's in. [known] is every
+     * school item id ever written, removed ones too, so a council holiday he removed isn't offered again as new.
+     */
+    fun card(items: List<SchoolItem>, today: Long, known: Set<String> = emptySet()): SchoolTermCard {
         val filled = items.mapNotNull { councilOf(it.source) }.firstOrNull()
         if (filled == null) {
-            return SchoolTermCard(CARD_TITLE, OFFER_LINE, COUNCILS.filter { ahead(it, today).isNotEmpty() }.map { choice(it, today) }, null)
+            val choices = COUNCILS.filter { ahead(it, today).isNotEmpty() }.map { choice(it, today) }
+            return SchoolTermCard(CARD_TITLE, OFFER_LINE, choices, null, refresh(null, items, known, today, choices.isNotEmpty()))
         }
         val n = items.count { councilOf(it.source)?.id == filled.id && it.endDay >= today }
         val line = "${filled.name} · $n ${if (n == 1) "holiday" else "holidays"} to come · ${filled.years} · " +
             "checked ${checkedLabel(filled.checkedDay)}. The school's own INSET days aren't in them: add those below."
-        return SchoolTermCard(CARD_TITLE, line, emptyList(), choice(filled, today))
+        return SchoolTermCard(CARD_TITLE, line, emptyList(), choice(filled, today), refresh(filled, items, known, today, false))
+    }
+
+    // ---- Slice 2: the yearly look at next year's dates ----
+
+    /** From this month (June) to the end of August, next school year's holidays are looked for. */
+    const val LOOK_FROM_MONTH = 6
+    /** The heads-up's time on the first day of the look (or the first day School is opened after it), 09:00. */
+    const val LOOK_NOTICE_MIN = 9 * 60
+    const val ADD_THEM = "Add them"
+    const val COUNCIL_PAGE = "Council's page"
+
+    /** The school year a day is in, by its September: 14 Oct 2026 → 2026 (2026–27); 3 Jun 2027 → 2026. */
+    fun schoolYearOf(day: Long): Int = CivilDate.fromEpochDay(day).let { if (it.month >= 9) it.year else it.year - 1 }
+
+    /** "2027–28". */
+    fun yearLabel(year: Int): String = "$year–${((year + 1) % 100).toString().padStart(2, '0')}"
+
+    /** 1 Sep [year] .. 31 Aug [year]+1. */
+    fun yearDays(year: Int): LongRange = CivilDate.toEpochDay(year, 9, 1)..CivilDate.toEpochDay(year + 1, 8, 31)
+
+    /**
+     * The council's holidays still to come that he hasn't got and never had: not in (so not under their fixed id,
+     * live or removed) and not overlapping a day off for both boys he has. What a later Navilife's table adds.
+     */
+    fun newDates(cal: TermCalendar, items: List<SchoolItem>, known: Set<String>, today: Long): List<TermPeriod> =
+        toAdd(cal, items, today).filter { idFor(cal, it) !in known }
+
+    /**
+     * The yearly line ([TermRefresh]) for [filled] (the council whose dates are in, or null), or null when there's
+     * nothing to say. Only once he uses School (something is in), and never for a past council.
+     */
+    fun refresh(filled: TermCalendar?, items: List<SchoolItem>, known: Set<String>, today: Long, offered: Boolean): TermRefresh? {
+        if (filled != null) {
+            val new = newDates(filled, items, known, today)
+            if (new.isNotEmpty()) {
+                val years = new.map { schoolYearOf(it.startDay) }.distinct().sorted().joinToString(" and ") { yearLabel(it) }
+                val n = new.size
+                return TermRefresh("New dates from ${filled.name} · $years · $n ${if (n == 1) "holiday" else "holidays"}", ADD_THEM, filled.id, null)
+            }
+        }
+        if (items.isEmpty()) return null
+        val next = nextYearMissing(items, today) ?: return null
+        val label = yearLabel(next)
+        return when {
+            filled != null -> TermRefresh(
+                "$label's holidays aren't in yet · ${filled.name} usually publishes them a year or more ahead: check its page, then type them below",
+                COUNCIL_PAGE, null, filled.sourceUrl,
+            )
+            offered -> TermRefresh("$label's holidays aren't in yet · pick the school's council above, or type them below", null, null, null)
+            else -> TermRefresh("$label's holidays aren't in yet · type them below from the school's website", null, null, null)
+        }
+    }
+
+    /**
+     * Next school year, when it's June to August and no day off falls in it yet; else null. Any day off counts (his,
+     * the council's or an INSET day), so typing one quietens it.
+     */
+    fun nextYearMissing(items: List<SchoolItem>, today: Long): Int? {
+        val d = CivilDate.fromEpochDay(today)
+        if (d.month !in LOOK_FROM_MONTH..8) return null
+        val next = d.year
+        val range = yearDays(next)
+        val any = items.any { it.kind == SchoolKind.OFF && it.startDay <= range.last && range.first <= it.endDay }
+        return if (any) null else next
+    }
+
+    /**
+     * The yearly heads-up, once a year: from 1 June at 09:00, while next school year's holidays aren't in (gone once
+     * any are, and by 1 September). Only once he uses School.
+     */
+    fun notices(items: List<SchoolItem>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        if (items.isEmpty()) return emptyList()
+        val today = cal.epochDayOf(nowMs)
+        val next = nextYearMissing(items, today) ?: return emptyList()
+        val label = yearLabel(next)
+        val filled = items.mapNotNull { councilOf(it.source) }.firstOrNull()
+        return listOf(Notice(
+            key = "school:year:$next", source = NoticeSource.SCHOOL, tier = NoticeTier.HEADS_UP,
+            title = "$label's school holidays aren't in yet",
+            text = if (filled != null) "Check ${filled.name}'s dates and the school's INSET days · Ask → More → School"
+            else "Add the school's dates for next year · Ask → More → School",
+            atMs = cal.toEpochMs(CivilDate.toEpochDay(next, LOOK_FROM_MONTH, 1), LOOK_NOTICE_MIN), target = NoticeTarget.TODAY,
+            expiresAtMs = cal.toEpochMs(CivilDate.toEpochDay(next, 9, 1), 0),
+        ))
     }
 
     /**
@@ -156,6 +259,13 @@ object SchoolTerms {
     /** "Filled in 8 holidays from Central Bedfordshire · check the school's INSET days". */
     fun filledLine(cal: TermCalendar, n: Int): String =
         "Filled in $n ${if (n == 1) "holiday" else "holidays"} from ${cal.name} · add the school's INSET days below"
+
+    /** "Added 6 new holidays from Central Bedfordshire · 2028–29". */
+    fun addedNewLine(cal: TermCalendar, added: List<TermPeriod>): String {
+        val years = added.map { schoolYearOf(it.startDay) }.distinct().sorted().joinToString(" and ") { yearLabel(it) }
+        val n = added.size
+        return "Added $n new ${if (n == 1) "holiday" else "holidays"} from ${cal.name} · $years"
+    }
 
     /** "Removed 8 council holidays". */
     fun removedLine(n: Int): String = "Removed $n council ${if (n == 1) "holiday" else "holidays"}"
@@ -195,6 +305,9 @@ object SchoolTerms {
     }
 }
 
+/** What Add them did: the line, and the ids Undo takes out again. */
+data class SchoolTermsAdded(val line: String, val ids: List<String>)
+
 /** The council holidays and pasted INSET days on a replica (alongside [School]). */
 class SchoolTermsStore(
     private val replica: Replica,
@@ -221,6 +334,27 @@ class SchoolTermsStore(
             replica.commitLocal(EntityTypes.SCHOOL_ITEM, id, SchoolTerms.fields(cal, p, nowMs()))
         }
         return SchoolTerms.filledLine(cal, add.size) to add.size
+    }
+
+    /**
+     * Adds only [councilId]'s new dates ([SchoolTerms.newDates]: never had, so a holiday he removed stays removed), under
+     * their fixed ids; null when there are none. Undo removes exactly these ([removeIds]).
+     */
+    fun addNew(councilId: String): SchoolTermsAdded? {
+        val cal = SchoolTerms.calendar(councilId) ?: return null
+        val today = calendar.epochDayOf(nowMs())
+        val known = replica.entities(EntityTypes.SCHOOL_ITEM, includeDeleted = true).map { it.ref.entityId }.toSet()
+        val add = SchoolTerms.newDates(cal, items(), known, today)
+        if (add.isEmpty()) return null
+        val ids = add.map { p -> SchoolTerms.idFor(cal, p).also { replica.commitLocal(EntityTypes.SCHOOL_ITEM, it, SchoolTerms.fields(cal, p, nowMs())) } }
+        return SchoolTermsAdded(SchoolTerms.addedNewLine(cal, add), ids)
+    }
+
+    /** Undo for [addNew]: removes those items; how many went. */
+    fun removeIds(ids: List<String>): Int = ids.count { id ->
+        val live = replica.entity(EntityTypes.SCHOOL_ITEM, id)?.takeIf { it[SchoolFields.DELETED].boolOrNull != true } != null
+        if (live) replica.commitLocal(EntityTypes.SCHOOL_ITEM, id, mapOf(SchoolFields.DELETED to true.fv()))
+        live
     }
 
     /** Removes every council holiday from [councilId] (past ones too); how many went. */

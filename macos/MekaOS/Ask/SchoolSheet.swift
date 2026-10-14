@@ -11,8 +11,12 @@ import SwiftUI
 ///
 /// School dates filled in (slice 1): the council card under the summary (Fill in a council's holidays, or Remove all,
 /// each followed by a line with Undo) and a second field for the school's INSET days pasted as dates or a letter.
+///
+/// Slice 2, the yearly look: the card's brass line for new dates from the council (Add them, then Undo) or, from June,
+/// next school year's holidays not in yet (Council's page when the council's dates are in); it cross-fades.
 struct SchoolSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
@@ -24,6 +28,8 @@ struct SchoolSheet: View {
     /// The council card's last action for Undo: the council's id and whether it was Fill in.
     @State private var termsDone: (id: String, filled: Bool)?
     @State private var termsSaid: String?
+    /// What Add them added, for Undo (exactly those go again).
+    @State private var addedIds: [String]?
 
     var body: some View {
         let v = model.school
@@ -103,6 +109,33 @@ struct SchoolSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: card.line)
+            if let r = card.refresh {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(r.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    if let act = r.action {
+                        Button(act) {
+                            if let id = r.councilId {
+                                Task {
+                                    if let a = await model.addNewSchoolTerms(id) {
+                                        termsSaid = a.line
+                                        addedIds = a.ids
+                                        termsDone = nil
+                                    }
+                                }
+                            } else if let u = r.url, let url = URL(string: u) {
+                                openURL(url)
+                            }
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel("\(act). \(r.line)")
+                    }
+                }
+                .transition(.opacity)
+            }
             ForEach(card.choices, id: \.id) { c in
                 HStack(spacing: MekaSpace.xs) {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -116,6 +149,7 @@ struct SchoolSheet: View {
                         Task {
                             termsSaid = await model.fillSchoolTerms(id)
                             termsDone = termsSaid == nil ? nil : (id, true)
+                            addedIds = nil
                         }
                     }
                     .buttonStyle(MekaPressStyle())
@@ -130,6 +164,7 @@ struct SchoolSheet: View {
                     Task {
                         termsSaid = await model.removeSchoolTerms(id)
                         termsDone = termsSaid == nil ? nil : (id, false)
+                        addedIds = nil
                     }
                 }
                 .buttonStyle(MekaPressStyle())
@@ -143,7 +178,18 @@ struct SchoolSheet: View {
                 HStack(spacing: MekaSpace.xs) {
                     Text(termsSaid).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    if let done = termsDone {
+                    if let ids = addedIds {
+                        Button("Undo") {
+                            Task {
+                                await model.undoNewSchoolTerms(ids)
+                                addedIds = nil
+                                self.termsSaid = nil
+                            }
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                    } else if let done = termsDone {
                         Button("Undo") {
                             let id = done.id
                             let filled = done.filled
@@ -165,6 +211,7 @@ struct SchoolSheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: termsSaid)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: card.refresh?.line)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: card.filled?.id)
     }
 
