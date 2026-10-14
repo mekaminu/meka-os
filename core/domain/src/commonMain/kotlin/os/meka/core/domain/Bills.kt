@@ -9,7 +9,7 @@ package os.meka.core.domain
  *
  * **MEKA never pays anything.** It only reminds and opens the page Meka typed; marking it Paid stays his tap in Lists.
  * The radar's digest line leaves bills to this reminder until one is overdue. Non-AI, pure; nothing leaves the device.
- * Bill emails (the amount and the link read from the email) wait on mail access (Needs Meka #4).
+ * Slice 2 ([MailBillRules]): the server puts bills read from bill emails on the radar (never a link from the email).
  */
 object BillRules {
     /** The reminder comes this many days before the due day. */
@@ -60,7 +60,12 @@ object BillRules {
             Notice(
                 key = "bill:${item.id}:${item.dueDay}", source = NoticeSource.BILLS, tier = NoticeTier.HEADS_UP,
                 title = "${item.title} due $dayWord" + (item.costPence?.let { " · ${RenewalRules.formatPence(it)}" } ?: ""),
-                text = "$inWords · " + (link?.let { "Pay opens ${site(it)}" } ?: "mark it Paid in Lists once it's done"),
+                text = "$inWords · " + when {
+                    link != null -> "Pay opens ${site(link)}"
+                    // Mail slice 3h: a Direct Debit read from a bill email has nothing to pay by hand.
+                    MailBillRules.isDirectDebit(item.title) -> "taken by Direct Debit · nothing to pay"
+                    else -> "mark it Paid in Lists once it's done"
+                },
                 atMs = cal.toEpochMs(item.dueDay - REMIND_DAYS, NOTICE_MIN), target = NoticeTarget.LISTS,
                 expiresAtMs = cal.toEpochMs(item.dueDay + 1, 0),
                 actions = if (link != null) listOf(NoticeAction.PAY) else emptyList(),

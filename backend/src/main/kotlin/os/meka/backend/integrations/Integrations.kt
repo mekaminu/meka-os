@@ -8,6 +8,7 @@ import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
@@ -486,6 +487,43 @@ class Integrations(
         runCatching { publishMailNeeds(a, ms) }
         // Slice 3g: parcels arriving, from the shipping emails (whether or not Autopilot has tidied them).
         runCatching { parcels(a, ms) }
+        // Slice 3h: bills due, from the bill emails (whether or not Autopilot has tidied them).
+        runCatching { bills(a, ms) }
+    }
+
+    /**
+     * Inbox autopilot, slice 3h (Bills due, slice 2): the emails of the last [MailBillRules.WINDOW_DAYS] days that the
+     * rules didn't sort as newsletters, promos or junk are read by [MailBillRules.read] from the sender, subject and kept
+     * preview; each bill due today or later becomes one `obligation` (kind BILL) on the Renewals radar under an id from
+     * the account, payee and due day, written once (an id already in the mirror is never written again, so his Done or
+     * Stop tracking stands), and none when the radar already has that payee's bill near that day. Never a pay link.
+     */
+    internal fun bills(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= MailBillRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val today = LONDON.epochDayOf(nowMs)
+        val reads = candidates.mapNotNull { h ->
+            val day = LONDON.epochDayOf(h.receivedAtMs)
+            MailBillRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, day)
+                ?.takeIf { it.dueDay >= today }?.let { Triple(h, day, it) }
+        }
+        if (reads.isEmpty()) return
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        val radar = reader.entities(a.householdId, EntityTypes.OBLIGATION).values
+        val written = mutableSetOf<String>()
+        for ((h, day, bill) in reads.sortedBy { it.first.receivedAtMs }) {
+            val id = MailBillRules.obligationId(a.id, h.id, bill)
+            if (id in written || mirror.containsKey(id) || MailBillRules.alreadyOnRadar(bill, radar, LONDON)) continue
+            writeMail(a, id, MailBillRules.fields(bill, account, day, nowMs, LONDON), EntityTypes.OBLIGATION)
+            written += id
+        }
     }
 
     /**

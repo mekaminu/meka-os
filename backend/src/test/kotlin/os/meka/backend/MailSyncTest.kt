@@ -37,6 +37,7 @@ import os.meka.core.domain.MailAutopilotFields
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.ParcelFields
 import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.ParcelState
@@ -633,6 +634,34 @@ class MailSyncTest {
         val after = EntityReader.scanning(ops).entities("home", EntityTypes.PARCEL)
         assertEquals(setOf(pid), after.keys)
         assertEquals(FieldValue.Text(ParcelState.DELIVERED.name), after.getValue(pid)[ParcelFields.STATE])
+    }
+
+    @Test
+    fun aBillEmailPutsOneBillOnTheRenewalsRadar() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        // Autopilot isn't needed: bills are read whether or not the emails were tidied.
+        val due = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of("Europe/London")).toLocalDate().plusDays(10)
+        val dueText = due.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        gmail.mailbox["b1"] = msg("b1", 0, "billing@energyco.example").copy(subject = "Your bill is ready", preview = "Your bill is £84.20 · payment due $dueText")
+        gmail.mailbox["b2"] = msg("b2", 0, "billing@energyco.example").copy(subject = "Reminder: your bill", preview = "£84.20 due $dueText")
+        gmail.mailbox["p1"] = msg("p1", 0, "billing@energyco.example").copy(subject = "Thanks for your payment", preview = "Payment received · bill due $dueText")
+        gmail.nextRound = { MailChanges(fetch = listOf("b1", "b2", "p1"), cursor = "h2") }
+        i.syncAccount(id)
+        val bills = EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION)
+        val (_, f) = bills.entries.single()
+        assertEquals(FieldValue.Text("Energyco bill"), f[ActionableFields.TITLE])
+        assertEquals(FieldValue.Text(os.meka.core.domain.ObligationKind.BILL.name), f[ObligationFields.KIND])
+        assertEquals(FieldValue.Int64(8420), f[ObligationFields.COST_MINOR])
+        assertEquals(null, f[ObligationFields.PAY_LINK])
+        assertEquals(FieldValue.Text(MailBillRules.SOURCE), f[ActionableFields.PROVENANCE_SOURCE])
+        // Written once: the next check adds nothing.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
     }
 
     // ---- Slice 3c: the daily Junk review ----
