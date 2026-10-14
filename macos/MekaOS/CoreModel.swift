@@ -18,6 +18,8 @@ final class CoreModel {
     private(set) var afterWork: AfterWorkSummary?
     /// Spam call protection's block list (call assistant polish 8b), synced with the Fold, which does the blocking.
     private(set) var blockedCallers: BlockedCallersView?
+    /// Activity → Calls (call notifications, slice 4): recent calls with their detail, numbers as numbers on the Mac.
+    private(set) var callLog: CallLogView?
     var showAfterWork = false
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
@@ -448,6 +450,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await b in core.blockedCallers { self?.blockedCallers = b }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.callLog { self?.callLog = c }
         })
         observers.append(Task { [weak self] in
             for await r in core.requests { self?.requests = r }
@@ -2179,6 +2184,8 @@ final class CoreModel {
         }
     }
     func unblockCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.unblockCaller(key: key) } }
+    /// Block in a call's detail (Activity → Calls, call notifications slice 4): the call's number goes on the list.
+    func blockLoggedCaller(_ id: String) { MekaHaptics.light(); run { _ = try await $0.blockLoggedCaller(id: id) } }
     /// Block again on an unblocked row of Activity → Blocked calls (spam calls still ring, slice 4).
     func reblockCaller(_ key: String) { MekaHaptics.light(); run { _ = try await $0.reblockCaller(key: key) } }
     /// Suspected spam (call assistant polish 8b c): Block puts the AI-flagged number on the block list with its reason.

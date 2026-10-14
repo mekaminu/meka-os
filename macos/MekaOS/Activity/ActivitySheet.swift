@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import AppKit
 import SwiftUI
 
 /// What MEKA did and why (V1 activity log): every reminder and digest that reached you, and later every change MEKA
@@ -7,7 +8,8 @@ import SwiftUI
 /// Motion: the sheet scale-fades; day sections stagger in; Undo gives a light haptic and the row's line cross-fades
 /// to "Undone at 09:12"; the filter (All · Reminders · Done for you · Calendar · Calls · Other, only the kinds there are)
 /// is a segmented control (tick haptic) and the days cross-fade; Blocked calls (spam calls still ring, slice 4: numbers
-/// the block list stopped lately, with Unblock / Block again) shows under it for All and Calls, its rows cross-fading; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
+/// the block list stopped lately, with Unblock / Block again) shows under it for All and Calls, its rows cross-fading,
+/// then Recent calls (call notifications, slice 4), a click unfolding a call's detail on the expand spring; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this Mac lately, the month's characters) fade in once known. Reduce Motion:
 /// cross-fades.
 struct ActivitySheet: View {
     @Environment(CoreModel.self) private var model
@@ -16,6 +18,8 @@ struct ActivitySheet: View {
     let palette: MekaPalette
     /// The filter (slice 3), by name: this Mac's choice while the sheet is open, never synced.
     @State private var filterName = ActivityRules.shared.filterNamed(name: nil).name
+    /// Recent calls: the call whose detail is unfolded (this Mac only).
+    @State private var openCall: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -66,6 +70,10 @@ struct ActivitySheet: View {
                         if let blocked = model.blockedCallers, !blocked.stopped.isEmpty,
                            filter.name == "ALL" || filter.name == "CALLS" {
                             blockedCalls(blocked).staggeredAppear(2)
+                        }
+                        if let calls = model.callLog, !calls.isEmpty,
+                           filter.name == "ALL" || filter.name == "CALLS" {
+                            recentCalls(calls).staggeredAppear(2)
                         }
                         ForEach(Array(shown.days.enumerated()), id: \.element.day) { i, day in
                             VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -134,6 +142,108 @@ struct ActivitySheet: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: row.blocked)
             }
         }
+    }
+
+    /// Recent calls (call notifications, slice 4): the call assistant's messages and calls missed at work from the last
+    /// 7 days, one line each with a block chip; a click unfolds the call's detail in place.
+    private func recentCalls(_ view: CallLogView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(CallLogRules.shared.TITLE.uppercased())
+                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary)
+            Text([view.line, CallLogRules.shared.HINT].compactMap { $0 }.joined(separator: ". "))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(view.days, id: \.label) { day in
+                Text(day.label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                ForEach(day.rows, id: \.id) { row in callRow(row) }
+            }
+        }
+    }
+
+    private func callRow(_ row: CallLogRow) -> some View {
+        let expanded = openCall == row.id
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Button {
+                MekaHaptics.tick()
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { openCall = expanded ? nil : row.id }
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(row.time).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).monospacedDigit()
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(row.who).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(row.line).font(MekaType.itemMeta)
+                            .foregroundStyle(row.urgent ? palette.critical : palette.textSecondary)
+                        Text(row.chip).font(MekaType.caption)
+                            .foregroundStyle(row.blocked ? palette.critical : palette.textTertiary)
+                            .id(row.chip).transition(.opacity)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(expanded ? "Fold away" : "Show what happened")
+            if expanded {
+                callDetail(row.id, row.detail).transition(.opacity)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.xs)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: row.chip)
+    }
+
+    private func callDetail(_ id: String, _ d: CallDetail) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                ForEach(d.timeline, id: \.self) { step in
+                    HStack(spacing: MekaSpace.xs) {
+                        Circle().fill(palette.accent).frame(width: 6, height: 6)
+                        Text(step).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                }
+            }
+            if let summary = d.summary {
+                Text(summary).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let words = d.words {
+                Text(words).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true).textSelection(.enabled)
+            }
+            if let spam = d.spam {
+                Text(spam).font(MekaType.caption).foregroundStyle(palette.critical)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(d.blockStatus).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .id(d.blockStatus).transition(.opacity)
+            if d.listen != nil {
+                VoiceMessagePlayerView(id: id, palette: palette)
+            }
+            HStack(spacing: MekaSpace.m) {
+                if let label = d.callBack, let number = d.number,
+                   let url = URL(string: "tel:" + number.filter { $0.isNumber || $0 == "+" }) {
+                    Button(label) { MekaHaptics.light(); NSWorkspace.shared.open(url) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+                if let label = d.block {
+                    Button(label) { model.blockLoggedCaller(id) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                }
+                if let label = d.unblock, let key = d.key {
+                    Button(label) { model.unblockCaller(key) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+                if let label = d.notSpam, let key = d.key {
+                    Button(label) { model.dismissSuspectedCaller(key) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+            }
+        }
+        .padding(.top, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: d.blockStatus)
     }
 
     private func rowView(_ row: ActivityRow) -> some View {

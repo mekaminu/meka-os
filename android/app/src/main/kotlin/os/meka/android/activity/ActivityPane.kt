@@ -64,7 +64,8 @@ import os.meka.android.designsystem.sharedTitleInPane
  * row's line cross-fades to "Undone at 09:12"; the filter chips (All · Reminders · Done for you · Calendar · Calls ·
  * Other, only the kinds there are) blend their colour with a tick haptic and the days cross-fade; Blocked calls (spam
  * calls still ring, slice 4: numbers whose calls the block list stopped, with Unblock / Block again) fades in under the
- * filter for All and Calls, and a row's line cross-fades between "Blocked …" and "Unblocked …" with a light haptic; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
+ * filter for All and Calls, and a row's line cross-fades between "Blocked …" and "Unblocked …" with a light haptic; Recent
+ * calls (call notifications, slice 4) follows it, a tap unfolding a call's detail on the expand spring; MEKA's AI today ("Talk 6 · Ask 2 · 3¢") and MEKA's voice lines (how quickly it answered on this phone lately, the
  * month's characters) fade in once known. Reduced motion: cross-fades.
  */
 @Composable
@@ -167,6 +168,8 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
                         }
                     }
                 }
+                // Recent calls (call notifications, slice 4): with All or Calls, each call with its detail.
+                if (f == ActivityFilter.ALL || f == ActivityFilter.CALLS) CallLogSection(index = 2) { note = it }
                 shown.days.forEachIndexed { i, day ->
                     Column(Modifier.fillMaxWidth().appear(rememberAppearance(i + 2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Spacer(Modifier.height(MekaSpace.m))

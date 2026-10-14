@@ -1713,6 +1713,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(StoppedCallRules.shared.BLOCK_AGAIN_LABEL, "Block again")
     }
 
+    func testRecentCallsReachSwift() {
+        // Call notifications, slice 4: Activity → Calls and a call's detail.
+        XCTAssertTrue(CallLogView.companion.EMPTY.isEmpty)
+        XCTAssertNil(CallLogView.companion.EMPTY.line)
+        XCTAssertEqual(CallLogRules.shared.TITLE, "Recent calls")
+        XCTAssertEqual(CallLogRules.shared.CHIP_BLOCKED, "Blocked")
+        XCTAssertEqual(CallLogRules.shared.dayLabel(day: 10, today: 11), "Yesterday")
+    }
+
     func testVoiceRecordingReachesSwift() {
         // Call assistant polish 8c: the player's line and bar, and only a held id is ever asked for.
         let rules = VoiceRecordingRules.shared

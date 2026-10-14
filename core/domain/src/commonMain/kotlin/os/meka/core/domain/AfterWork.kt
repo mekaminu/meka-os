@@ -481,30 +481,52 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
         )
         return replica.entities(EntityTypes.HELD_MESSAGE).mapNotNull { e ->
             if (e[HeldMessageFields.CLEARED].boolOrNull == true) return@mapNotNull null
-            val at = e[HeldMessageFields.AT].longOrNull ?: return@mapNotNull null
-            if (at < cutoff) return@mapNotNull null
-            val app = e[HeldMessageFields.APP].textOrNull?.let { n -> CaptureApp.entries.firstOrNull { it.name == n } } ?: return@mapNotNull null
-            val kind = e[HeldMessageFields.KIND].textOrNull?.let { n -> CaptureKind.entries.firstOrNull { it.name == n } } ?: return@mapNotNull null
-            val person = e[HeldMessageFields.PERSON].textOrNull ?: return@mapNotNull null
-            val text = e[HeldMessageFields.TEXT].textOrNull
-            val noTranscript = e[HeldMessageFields.NO_TRANSCRIPT].boolOrNull == true
-            CapturedItem(
-                id = e.ref.entityId, app = app, kind = kind, personName = person,
-                text = text, conversation = e[HeldMessageFields.CONVERSATION].textOrNull,
-                atMs = at, family = e[HeldMessageFields.FAMILY].boolOrNull == true,
-                urgent = e[HeldMessageFields.URGENT].boolOrNull == true,
-                away = e[HeldMessageFields.AWAY].boolOrNull == true,
-                transcribing = kind == CaptureKind.VOICE_MESSAGE && text == null && !noTranscript &&
-                    nowMs() - at < CallAssistantRules.TRANSCRIBING_MS,
-                noTranscript = noTranscript,
-                hasAudio = VoiceRecordingRules.playable(
-                    kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = false, atMs = at, nowMs = nowMs(), keepDays = keepDays,
-                ),
-                seconds = e[HeldMessageFields.SECONDS].longOrNull?.toInt(),
-                urgentBy = e[HeldMessageFields.URGENT_BY].textOrNull,
-                summary = e[HeldMessageFields.SUMMARY].textOrNull?.let(CallNoticeRules::cleanSummary),
-            )
+            read(e, cutoff, keepDays, cleared = false)
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
+    }
+
+    /**
+     * Activity → Calls (call notifications, slice 4): the call assistant's messages and the missed calls held at work
+     * from the last [RETENTION_MS], **including** ones Done cleared (their words are gone; [HeldCall.cleared]), newest
+     * first, at most [CallLogRules.MAX].
+     */
+    fun calls(): List<HeldCall> {
+        val cutoff = nowMs() - RETENTION_MS
+        val keepDays = VoiceRecordingRules.keepDays(
+            replica.entity(EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)?.longOrNull,
+        )
+        return replica.entities(EntityTypes.HELD_MESSAGE).mapNotNull { e ->
+            val cleared = e[HeldMessageFields.CLEARED].boolOrNull == true
+            val item = read(e, cutoff, keepDays, cleared) ?: return@mapNotNull null
+            if (item.app != CaptureApp.PHONE || item.kind == CaptureKind.MESSAGE) return@mapNotNull null
+            HeldCall(item, cleared)
+        }.sortedWith(compareByDescending<HeldCall> { it.item.atMs }.thenBy { it.item.id }).take(CallLogRules.MAX)
+    }
+
+    private fun read(e: os.meka.core.sync.EntitySnapshot, cutoff: Long, keepDays: Int, cleared: Boolean): CapturedItem? {
+        val at = e[HeldMessageFields.AT].longOrNull ?: return null
+        if (at < cutoff) return null
+        val app = e[HeldMessageFields.APP].textOrNull?.let { n -> CaptureApp.entries.firstOrNull { it.name == n } } ?: return null
+        val kind = e[HeldMessageFields.KIND].textOrNull?.let { n -> CaptureKind.entries.firstOrNull { it.name == n } } ?: return null
+        val person = e[HeldMessageFields.PERSON].textOrNull ?: return null
+        val text = e[HeldMessageFields.TEXT].textOrNull
+        val noTranscript = e[HeldMessageFields.NO_TRANSCRIPT].boolOrNull == true
+        return CapturedItem(
+            id = e.ref.entityId, app = app, kind = kind, personName = person,
+            text = text, conversation = e[HeldMessageFields.CONVERSATION].textOrNull,
+            atMs = at, family = e[HeldMessageFields.FAMILY].boolOrNull == true,
+            urgent = e[HeldMessageFields.URGENT].boolOrNull == true,
+            away = e[HeldMessageFields.AWAY].boolOrNull == true,
+            transcribing = kind == CaptureKind.VOICE_MESSAGE && text == null && !noTranscript &&
+                nowMs() - at < CallAssistantRules.TRANSCRIBING_MS,
+            noTranscript = noTranscript,
+            hasAudio = VoiceRecordingRules.playable(
+                kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = cleared, atMs = at, nowMs = nowMs(), keepDays = keepDays,
+            ),
+            seconds = e[HeldMessageFields.SECONDS].longOrNull?.toInt(),
+            urgentBy = e[HeldMessageFields.URGENT_BY].textOrNull,
+            summary = e[HeldMessageFields.SUMMARY].textOrNull?.let(CallNoticeRules::cleanSummary),
+        )
     }
 
     /** The summary both apps show. */

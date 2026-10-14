@@ -414,6 +414,17 @@ class MekaCore(
      */
     val afterWork: StateFlow<os.meka.core.domain.AfterWorkSummary> = _afterWork.asStateFlow()
 
+    private val _heldCalls = MutableStateFlow<List<os.meka.core.domain.HeldCall>>(emptyList())
+    /**
+     * Activity → Calls (call notifications, slice 4): the call assistant's messages and the missed calls held at work
+     * from the last 7 days, cleared ones too, newest first. The Fold names them from its contacts with [callLogOf].
+     */
+    val heldCalls: StateFlow<List<os.meka.core.domain.HeldCall>> = _heldCalls.asStateFlow()
+
+    private val _callLog = MutableStateFlow(os.meka.core.domain.CallLogView.EMPTY)
+    /** [heldCalls] as Activity → Calls shows them, numbers unnamed (the Mac's; the Fold uses [callLogOf]). */
+    val callLog: StateFlow<os.meka.core.domain.CallLogView> = _callLog.asStateFlow()
+
     private val _school = MutableStateFlow(os.meka.core.domain.SchoolView.EMPTY)
     private val _bins = MutableStateFlow(os.meka.core.domain.BinsView.EMPTY)
 
@@ -3346,6 +3357,28 @@ class MekaCore(
         blockList.block(number, why).also { refresh() }
     }
 
+    /**
+     * Activity → Calls with this device's names for numbers ([names], [lists]: the Fold's contacts and lists; pure, so
+     * it can run as the screen draws).
+     */
+    fun callLogOf(
+        calls: List<os.meka.core.domain.HeldCall>,
+        names: os.meka.core.domain.CallerNames = os.meka.core.domain.CallerNames.NONE,
+        lists: os.meka.core.domain.PeopleLists = os.meka.core.domain.PeopleLists(),
+    ): os.meka.core.domain.CallLogView =
+        os.meka.core.domain.CallLogRules.view(calls, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone), names, lists)
+
+    /**
+     * Block in a call's detail (Activity → Calls, call notifications slice 4): the held call [id]'s number goes on the
+     * list with why ("Left a message · today"). False, saving nothing, for a withheld number or one he knows.
+     */
+    suspend fun blockLoggedCaller(id: String): Boolean = onCore {
+        val call = held.calls().firstOrNull { it.item.id == id } ?: return@onCore false
+        val number = os.meka.core.domain.CallNoticeRules.numberOf(call.item) ?: return@onCore false
+        val why = os.meka.core.domain.BlockedCallerRules.whyFromHeld(call.item.kind, call.item.atMs, nowMs(), ZoneCalendar(timeZone))
+        blockList.block(number, why).also { refresh() }
+    }
+
     /** Takes a number ([key], from [blockedCallers]' rows) off the block list; its calls ring again. */
     suspend fun unblockCaller(key: String): Boolean = onCore { blockList.unblock(key).also { refresh() } }
 
@@ -4760,7 +4793,8 @@ class MekaCore(
      */
     suspend fun voiceMessageAudio(id: String): ByteArray? {
         if (!os.meka.core.domain.VoiceRecordingRules.isHeldId(id)) return null
-        if (_afterWork.value.people.none { p -> p.items.any { it.id == id && it.hasAudio } }) return null
+        if (_afterWork.value.people.none { p -> p.items.any { it.id == id && it.hasAudio } } &&
+            _heldCalls.value.none { it.item.id == id && it.item.hasAudio && !it.cleared }) return null
         val api = voiceMessageApi ?: return null
         val bytes = try { api.voiceMessageAudio(id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         return bytes?.takeIf { it.isNotEmpty() && it.size <= os.meka.core.domain.VoiceRecordingRules.MAX_BYTES }
@@ -6383,6 +6417,8 @@ class MekaCore(
         _groupGists.value = gistStore.open()
         _chatSummaries.value = chatSummaryStore.all()
         _blockedCallers.value = blockList.view()
+        _heldCalls.value = held.calls()
+        _callLog.value = os.meka.core.domain.CallLogRules.view(_heldCalls.value, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone))
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))
         _conflicts.value = tasks.conflicts().map { c ->
