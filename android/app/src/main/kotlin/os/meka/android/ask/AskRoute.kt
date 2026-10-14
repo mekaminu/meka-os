@@ -192,6 +192,13 @@ fun AskRoute(
             os.meka.core.domain.SearchTarget.ERRANDS -> { pane = MoreItem.ERRANDS; healthApp?.openItem?.value = null }
             // An appointment found by Search (appointment nudges, slice 2a) → the Appointments pane.
             os.meka.core.domain.SearchTarget.APPOINTMENTS -> { pane = MoreItem.APPOINTMENTS; healthApp?.openItem?.value = null }
+            // A help entry found by Search or Ask's field (Ask knows how Navilife works, slice 2) → where it lives.
+            os.meka.core.domain.SearchTarget.HELP -> {
+                val id = foundItem?.id.orEmpty().removePrefix("help:")
+                healthApp?.openItem?.value = null
+                showSearch = false
+                os.meka.core.domain.HelpRules.entry(id)?.fold?.let(openHelp)
+            }
             else -> {}
         }
     }

@@ -108,6 +108,11 @@ data class AskAnswer(
     val text: String, val cards: List<AskCard>, val did: List<AskAutoDone> = emptyList(),
     /** Ask knows how Navilife itself works: Take me there under an answer from the help index ([HelpRules.answer]). */
     val help: HelpLink? = null,
+    /**
+     * Ask knows how Navilife itself works, slice 2: "Still stuck? Ask Navilife" under an answer from the help; a tap
+     * asks the same question of the AI, past the help (the facade's askBeyondHelp). Null for every other answer.
+     */
+    val stillStuck: String? = null,
 )
 
 /** What asking came to: an answer, or why there is none (AI off, the month's budget spent, offline, a failure). */

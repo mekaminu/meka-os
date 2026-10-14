@@ -116,6 +116,35 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun stillStuckAsksTheAiPastTheHelpWithTheEntryAsContext() = runTest {
+        // Slice 2: the help answer offers "Still stuck? Ask Navilife"; the tap asks the AI the same question.
+        val c = core()
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("flex mode"))
+        assertEquals("Still stuck? Ask Navilife", out.answer.stillStuck)
+        assertTrue(server.asked.isEmpty())
+        c.askBeyondHelp("flex mode")
+        val (q, ctx) = server.asked.single()
+        assertEquals("flex mode", q)
+        val help = ctx.items.filter { it.kind == AskItemKind.HELP }
+        assertTrue(help.isNotEmpty() && help.first().line.startsWith("Help · Bedside clock"), help.toString())
+        // Offline it says so rather than repeating the help.
+        server.down = true
+        assertIs<AskOutcome.Unavailable>(c.askBeyondHelp("flex mode"))
+    }
+
+    @Test
+    fun searchFindsTheHelpEntriesWithEachAppsPaths() = runTest {
+        val c = core()
+        c.search("flex")
+        val fold = c.searchView.value.groups.single { it.kind == os.meka.core.domain.SearchKind.HELP }.hits.first()
+        assertEquals(os.meka.core.domain.HelpPlace.BEDSIDE, fold.place)
+        c.helpOnMac = true
+        c.search("gmail")
+        val mac = c.searchView.value.groups.single { it.kind == os.meka.core.domain.SearchKind.HELP }.hits.first { it.id == "help:mail" }
+        assertEquals("Ask → Settings → Mail", mac.detail)
+    }
+
+    @Test
     fun aQuestionThatOnlyMentionsAFeatureTakesItsHelpToTheAi() = runTest {
         val c = core()
         c.askMeka("Can the call assistant take a message from my boss?")

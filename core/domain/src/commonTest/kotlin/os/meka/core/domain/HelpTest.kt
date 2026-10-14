@@ -131,4 +131,57 @@ class HelpTest {
         HelpPlace.entries.forEach { p -> assertEquals(p.system, p.key.isEmpty(), p.name) }
     }
 
+
+    private fun search(q: String, mac: Boolean = false): SearchView = Search.run(
+        q, SearchSources(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+            help = HelpRules.entries, helpOnMac = mac),
+        0L, LocalCalendar.UTC)
+
+    @Test
+    fun searchFindsHelpEntriesAndOpensWhereTheyLive() {
+        // Slice 2: "flex" (a keyword) finds the bedside clock; the hit opens it like Take me there.
+        val hit = search("flex").groups.single { it.kind == SearchKind.HELP }.hits.first()
+        assertEquals("help:bedside-clock", hit.id)
+        assertEquals("Bedside clock", hit.title)
+        assertEquals("Ask → Daily → Bedside clock", hit.detail)
+        assertEquals(SearchTarget.HELP, hit.target)
+        assertEquals(HelpPlace.BEDSIDE, hit.place)
+        // In Ask's field it reads "Help · …" and opens.
+        val row = AskFieldRules.row(hit)
+        assertEquals("Help · Ask → Daily → Bedside clock", row.line)
+        assertTrue(row.opens)
+        // An Android page is still a place on the Fold.
+        assertEquals(HelpPlace.SYSTEM_SCREEN_SAVER, search("screen saver").groups.single { it.kind == SearchKind.HELP }.hits
+            .first { it.id == "help:screen-saver" }.place)
+        // The title weighs most: "call assistant" puts the Call assistant first.
+        assertEquals("help:call-assistant", search("call assistant").groups.single { it.kind == SearchKind.HELP }.hits.first().id)
+        // Help comes after his own things and before done tasks.
+        assertTrue(SearchKind.HELP.ordinal > SearchKind.HABIT.ordinal && SearchKind.HELP.ordinal < SearchKind.DONE.ordinal)
+        // No help unless the sources carry it (the other searches are unchanged).
+        assertTrue(Search.run("flex", SearchSources(emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
+            emptyList(), emptyList()), 0L, LocalCalendar.UTC).groups.isEmpty())
+    }
+
+    @Test
+    fun onTheMacAFoldOnlyFeatureIsShownNotOpened() {
+        val bedside = search("bedside", mac = true).groups.single { it.kind == SearchKind.HELP }.hits.first()
+        assertEquals("Fold only · Ask → Daily → Bedside clock", bedside.detail)
+        assertEquals(SearchTarget.INFO, bedside.target)
+        assertNull(bedside.place)
+        assertFalse(AskFieldRules.row(bedside).opens)
+        val mail = search("gmail", mac = true).groups.single { it.kind == SearchKind.HELP }.hits.first { it.id == "help:mail" }
+        assertEquals(HelpPlace.MAIL, mail.place)
+        assertEquals(SearchTarget.HELP, mail.target)
+        // An Android page never opens on the Mac.
+        search("screen saver", mac = true).hits.forEach { assertFalse(it.place?.system == true, it.id) }
+    }
+
+    @Test
+    fun everyHelpAnswerOffersStillStuck() {
+        HelpRules.entries.forEach { e ->
+            assertEquals("Still stuck? Ask Navilife", HelpRules.answer(e, mac = false).stillStuck, e.id)
+            assertEquals("Still stuck? Ask Navilife", HelpRules.answer(e, mac = true).stillStuck, e.id)
+        }
+        assertNull(AskAnswer("Fine", emptyList()).stillStuck)
+    }
 }

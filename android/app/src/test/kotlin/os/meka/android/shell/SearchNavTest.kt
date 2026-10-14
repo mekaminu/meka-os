@@ -28,6 +28,10 @@ class SearchNavTest {
         assertNull(SearchNav.listTab(SearchTarget.APPOINTMENTS))
         assertEquals("Opens Appointments", SearchNav.hint(SearchTarget.APPOINTMENTS))
         assertNull(SearchNav.listTab(SearchTarget.GOALS))
+        // A help entry (Ask knows how Navilife works, slice 2): Ask opens where it lives.
+        assertEquals(ShellDestination.ASK, SearchNav.destination(SearchTarget.HELP))
+        assertNull(SearchNav.listTab(SearchTarget.HELP))
+        assertEquals("Opens where it lives", SearchNav.hint(SearchTarget.HELP))
     }
 
     @Test

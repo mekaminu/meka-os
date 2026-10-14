@@ -105,6 +105,8 @@ data class HelpMatch(val entry: HelpEntry, val strong: Boolean, val score: Int)
 
 object HelpRules {
     const val BUTTON = "Take me there"
+    /** Under every help answer: asks the same question of the AI, with the entry as context. */
+    const val STILL_STUCK = "Still stuck? Ask Navilife"
     /** At most this many entries go to the AI with a question that only mentions features. */
     const val ASK_ENTRIES = 2
     const val MAX_LINE = 160
@@ -203,7 +205,7 @@ object HelpRules {
             entry.macWhere?.let { lines += "On the Mac: $it." }
             link = entry.mac?.takeIf { !it.system }?.let { HelpLink(entry.id, it) }
         }
-        return AskAnswer(lines.joinToString("\n"), emptyList(), help = link)
+        return AskAnswer(lines.joinToString("\n"), emptyList(), help = link, stillStuck = STILL_STUCK)
     }
 
     /**

@@ -19,6 +19,8 @@ enum SearchNav {
         case .errands: .ask
         // Ask → More → Appointments springs up (appointment nudges, slice 2a).
         case .appointments: .ask
+        // A help entry: Ask opens where the feature lives, as Take me there does (Ask knows how Navilife works, slice 2).
+        case .help: .ask
         default: nil
         }
     }
@@ -47,6 +49,7 @@ enum SearchNav {
         case .errands: "Opens Errands"
         case .appointments: "Opens Appointments"
         case .goals: "Opens Goals"
+        case .help: "Opens where it lives"
         default: nil
         }
     }

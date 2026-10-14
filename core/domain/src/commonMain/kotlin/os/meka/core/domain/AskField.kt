@@ -83,6 +83,7 @@ object AskFieldRules {
         SearchKind.SOMEDAY -> "Someday"
         SearchKind.GOAL -> "Goal"
         SearchKind.HABIT -> "Habit"
+        SearchKind.HELP -> "Help"
         SearchKind.DONE -> "Done"
     }
 

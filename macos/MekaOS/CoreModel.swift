@@ -262,6 +262,8 @@ final class CoreModel {
     var showCommandBar = false
     /// A search result Lists or Goals should open (its tab and unfolded row); cleared once shown.
     var openItem: OpenItem?
+    /// A help entry found by Search or Ask's field: Ask opens where it lives (Take me there); cleared once opened.
+    var openHelpPlace: HelpPlace?
     var showWork = false
     /// Self-updating phone app: the APK chosen to publish, what it is (or why it can't go), and how publishing went.
     var showFoldUpdate = false
@@ -858,6 +860,16 @@ final class CoreModel {
         guard let d = SearchNav.destination(hit.target) else { return }
         showSearch = false
         search("")
+        if hit.target == .help {
+            // Ask knows how Navilife itself works, slice 2: Ask opens the sheet or place once the search sheet has gone.
+            let place = hit.place
+            go(to: d, reduced: reduced)
+            Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(reduced ? 50 : 350))
+                self?.openHelpPlace = place
+            }
+            return
+        }
         if hit.target == .errands || hit.target == .appointments {
             // Errands and Appointments are sheets: they rise once the search sheet has gone (appointments: slice 2a).
             let errands = hit.target == .errands
@@ -1756,13 +1768,16 @@ final class CoreModel {
 
     /// Asks MEKA; only the question (a String) crosses into the core. The answer as Ask shows it: its lines (they fade
     /// in one after another) and cards, or why there is none.
-    func askMeka(_ question: String) async -> AskReplyView {
+    /// `beyondHelp`: "Still stuck? Ask Navilife" under a help answer asks the same question of the AI, past the help.
+    func askMeka(_ question: String, beyondHelp: Bool = false) async -> AskReplyView {
         guard let core else { return AskReplyView(lines: [], cards: [], unavailable: AskRules.shared.NOT_CONNECTED_LINE) }
         var reply = AskReplyView(lines: [], cards: [], unavailable: AskRules.shared.OFFLINE_LINE)
-        if let out = try? await core.askMeka(question: question) {
+        let asked: AskOutcome?
+        if beyondHelp { asked = try? await core.askBeyondHelp(question: question) } else { asked = try? await core.askMeka(question: question) }
+        if let out = asked {
             switch onEnum(of: out) {
             case .answered(let a):
-                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help)
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck)
             case .unavailable(let u):
                 reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
@@ -4010,6 +4025,8 @@ struct AskReplyView {
     var did: [AskAutoDone] = []
     /// Ask knows how Navilife itself works: Take me there under an answer from the help.
     var help: HelpLink? = nil
+    /// "Still stuck? Ask Navilife" under a help answer (slice 2).
+    var stillStuck: String? = nil
 }
 
 /// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.

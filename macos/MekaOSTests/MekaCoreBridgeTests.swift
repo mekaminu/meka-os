@@ -1600,7 +1600,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.showMatches(typed: "dentist", asked: nil))
         XCTAssertFalse(rules.showMatches(typed: "what's on", asked: "what's on"))
         let hit = SearchHit(id: "t1", kind: .task, title: "Dentist", detail: "Planned today 14:00", snippet: nil,
-                            target: .task, task: nil, score: 5)
+                            target: .task, task: nil, score: 5, place: nil)
         let view = SearchView(query: "den", groups: [SearchGroup(kind: .task, label: "Tasks", hits: [hit], more: 0)], total: 3)
         let m = rules.matches(view: view, typed: "den", canAsk: true)
         XCTAssertEqual(m?.rows.first?.line, "Task · Planned today 14:00")

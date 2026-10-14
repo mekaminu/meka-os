@@ -18,6 +18,8 @@ object SearchNav {
         SearchTarget.GOALS -> ShellDestination.GOALS
         // Ask picks it up and springs Errands (or Appointments) up over More.
         SearchTarget.ERRANDS, SearchTarget.APPOINTMENTS -> ShellDestination.ASK
+        // A help entry: Ask opens where the feature lives, as Take me there does.
+        SearchTarget.HELP -> ShellDestination.ASK
         SearchTarget.TASK, SearchTarget.INFO -> null
     }
 
@@ -42,6 +44,7 @@ object SearchNav {
         SearchTarget.ERRANDS -> "Opens Errands"
         SearchTarget.APPOINTMENTS -> "Opens Appointments"
         SearchTarget.GOALS -> "Opens Goals"
+        SearchTarget.HELP -> "Opens where it lives"
         SearchTarget.INFO -> null
     }
 }

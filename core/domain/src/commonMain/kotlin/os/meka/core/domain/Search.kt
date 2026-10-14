@@ -26,6 +26,8 @@ enum class SearchKind(val label: String) {
     SOMEDAY("Someday"),
     GOAL("Goals"),
     HABIT("Habits"),
+    /** Ask knows how Navilife itself works, slice 2: the help entries (a feature's name finds where it lives). */
+    HELP("How Navilife works"),
     DONE("Done"),
 }
 
@@ -43,6 +45,8 @@ enum class SearchTarget {
     /** Ask → More → Appointments (appointment nudges, slice 2a). */
     APPOINTMENTS,
     GOALS,
+    /** A help entry: opens the screen it lives on ([SearchHit.place]), as Take me there does. */
+    HELP,
     /** Shown for information only (calendar events are read-only). */
     INFO,
 }
@@ -59,6 +63,8 @@ data class SearchHit(
     /** The task itself for task hits (open, Someday, done), so the detail can open from the results. */
     val task: Task?,
     val score: Int,
+    /** For a [SearchTarget.HELP] hit: where Take me there goes on this app. */
+    val place: HelpPlace? = null,
 )
 
 data class SearchGroup(
@@ -114,6 +120,10 @@ data class SearchSources(
     val appointments: List<AppointmentItem> = emptyList(),
     /** What Meka promised someone, still open (People, slice 1). */
     val promised: List<PromiseItem> = emptyList(),
+    /** Ask knows how Navilife itself works, slice 2: the help entries to search ([HelpRules.entries]). */
+    val help: List<HelpEntry> = emptyList(),
+    /** True on the Mac: help hits give the Mac's paths, and a Fold-only feature is shown, not opened. */
+    val helpOnMac: Boolean = false,
 )
 
 object SearchRules {
@@ -130,6 +140,13 @@ object SearchRules {
         "ìíîïī".forEach { put(it, 'i') }; "ñń".forEach { put(it, 'n') }; "òóôõöøō".forEach { put(it, 'o') }
         "ùúûüū".forEach { put(it, 'u') }; "ýÿ".forEach { put(it, 'y') }; "śšş".forEach { put(it, 's') }
         "źżž".forEach { put(it, 'z') }; "ł".forEach { put(it, 'l') }; put('ß', 's')
+    }
+
+    /** A help entry's line in the results and where it opens: "Ask → Daily → Bedside clock", or "Fold only · …" on the Mac. */
+    fun helpWhere(e: HelpEntry, mac: Boolean): Pair<String, HelpPlace?> = when {
+        !mac -> e.foldWhere to e.fold
+        e.foldOnly -> "Fold only · ${e.foldWhere}" to null
+        else -> (e.macWhere ?: e.foldWhere) to e.mac?.takeIf { !it.system }
     }
 
     /** Lower case, common accents folded, apostrophes dropped ("Ada's" → "adas"), anything else that isn't a letter or digit a space. */
@@ -247,9 +264,9 @@ object Search {
         val hits = mutableListOf<Pair<SearchHit, Long>>() // hit and an order key within its group (smaller first)
 
         fun add(id: String, kind: SearchKind, title: String, detail: String?, target: SearchTarget, task: Task?, order: Long,
-                fields: List<SearchRules.Field>) {
+                fields: List<SearchRules.Field>, place: HelpPlace? = null) {
             val score = SearchRules.score(tokens, fields) ?: return
-            hits += SearchHit(id, kind, title, detail?.ifBlank { null }, SearchRules.snippet(tokens, fields), target, task, score) to order
+            hits += SearchHit(id, kind, title, detail?.ifBlank { null }, SearchRules.snippet(tokens, fields), target, task, score, place) to order
         }
 
         // Tasks: open ones, Someday, and done ones (a repeating task's done occurrences fold into the latest one).
@@ -335,6 +352,13 @@ object Search {
         }
         sources.habits.forEach { h ->
             add(h.id, SearchKind.HABIT, h.title, h.meta, SearchTarget.GOALS, null, 0, listOf(SearchRules.Field(h.title, 3)))
+        }
+        // Help: a feature's name or its keywords ("flex" finds Bedside clock), in the index's order; a hit opens where
+        // it lives, like Take me there. On the Mac a Fold-only feature (or one living on an Android page) is only shown.
+        sources.help.forEachIndexed { i, e ->
+            val (where, place) = SearchRules.helpWhere(e, sources.helpOnMac)
+            add("help:${e.id}", SearchKind.HELP, e.title, where, if (place != null) SearchTarget.HELP else SearchTarget.INFO, null,
+                i.toLong(), listOf(SearchRules.Field(e.title, 3), SearchRules.Field(e.keywords.joinToString(" · "), 2)), place)
         }
 
         val groups = hits.groupBy { it.first.kind }.let { byKind ->

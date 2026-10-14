@@ -4556,6 +4556,14 @@ class MekaCore(
     suspend fun askMeka(question: String): os.meka.core.domain.AskOutcome = ask(question, emptyList(), voice = false)
 
     /**
+     * Ask knows how Navilife itself works, slice 2: "Still stuck? Ask Navilife" under a help answer. The same
+     * [question] goes to the AI past the help index, with the matching entries as context; nothing else differs from
+     * [askMeka] (AI off or offline come back as Unavailable).
+     */
+    suspend fun askBeyondHelp(question: String): os.meka.core.domain.AskOutcome =
+        ask(question, emptyList(), voice = false, beyondHelp = true)
+
+    /**
      * Talk to MEKA (build plan V1, slice 1): asks [question] like [askMeka], with the conversation so far ([history],
      * oldest first; only the last [os.meka.core.domain.TalkRules.MAX_HISTORY] are sent) so "move it to Friday" means
      * something, and asks for an answer that reads well aloud. The cards are checked exactly as for typed questions;
@@ -4576,7 +4584,9 @@ class MekaCore(
      */
     var helpOnMac: Boolean = false
 
-    private suspend fun ask(question: String, history: List<os.meka.core.domain.TalkTurn>, voice: Boolean): os.meka.core.domain.AskOutcome {
+    private suspend fun ask(
+        question: String, history: List<os.meka.core.domain.TalkTurn>, voice: Boolean, beyondHelp: Boolean = false,
+    ): os.meka.core.domain.AskOutcome {
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
         val cal = ZoneCalendar(timeZone)
@@ -4598,7 +4608,7 @@ class MekaCore(
         // call; one that only mentions a feature takes the matching entries to the AI. Questions the rules above answer
         // from his own data (notifications, email, the commute) are theirs.
         val helpMatch = if (notifyAsked || mailAsked || os.meka.core.domain.CommuteAskRules.isAbout(q)) null else os.meka.core.domain.HelpRules.lookup(q)
-        if (helpMatch?.strong == true) {
+        if (helpMatch?.strong == true && !beyondHelp) {
             return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.HelpRules.answer(helpMatch.entry, helpOnMac))
         }
         val helpLines = if (helpMatch == null) emptyList() else os.meka.core.domain.HelpRules.askLines(q, helpOnMac)
@@ -6071,6 +6081,9 @@ class MekaCore(
             errands = errands.items(),
             appointments = appointments.items(),
             promised = _lists.value.promised,
+            // Ask knows how Navilife itself works, slice 2: Search finds the help entries too.
+            help = os.meka.core.domain.HelpRules.entries,
+            helpOnMac = helpOnMac,
         )
         return Search.run(searchQuery, sources, nowMs(), ZoneCalendar(timeZone))
     }

@@ -201,6 +201,19 @@ struct AskMekaSection: View {
                         .accessibilityLabel(link.button)
                         .staggeredAppear(reply.lines.count + reply.did.count + reply.cards.count)
                     }
+                    // Slice 2: "Still stuck? Ask Navilife" asks the same question of the AI, past the help.
+                    if let label = reply.stillStuck {
+                        Button {
+                            MekaHaptics.tick()
+                            ask(again: q)
+                        } label: {
+                            Text(label + " ›").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                                .padding(.vertical, MekaSpace.xs)
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel(label)
+                        .staggeredAppear(reply.lines.count + reply.did.count + reply.cards.count + 1)
+                    }
                     // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
                     if let offer = model.askTrustOffer {
                         TrustOfferRow(offer: offer, palette: palette,
@@ -239,14 +252,15 @@ struct AskMekaSection: View {
         Text("“\(q)”").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(3)
     }
 
-    private func ask() {
-        guard let q = AskRules.shared.question(text: text), thinking == nil else { return }
+    /// Asks what was typed; `again` asks that question of the AI past the help ("Still stuck? Ask Navilife").
+    private func ask(again: String? = nil) {
+        guard let q = again ?? AskRules.shared.question(text: text), thinking == nil else { return }
         MekaHaptics.light()
         asked = q
         if !usedAsk { usedAsk = true }
         withAnimation(MekaMotion.appear(reduced: reduceMotion)) { thinking = q }
         Task {
-            let r = await model.askMeka(q)
+            let r = await model.askMeka(q, beyondHelp: again != nil)
             withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
                 question = q
                 reply = r
@@ -264,7 +278,7 @@ struct AskMekaSection: View {
         talk.attach(model)
         talk.onAnswer = { q, out in
             let r: AskReplyView = switch onEnum(of: out) {
-            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help)
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck)
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q

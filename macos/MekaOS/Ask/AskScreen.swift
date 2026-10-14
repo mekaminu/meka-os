@@ -30,6 +30,9 @@ struct AskScreen: View {
                 // Ask MEKA (V1 AI layer, slice 3b): the field asks in your own words; Search sits beside it.
                 AskMekaSection(palette: palette, openHelp: openHelp)
                     .staggeredAppear(1)
+                    // A help entry found by Search or Ask's field (slice 2) opens where it lives.
+                    .onChange(of: model.openHelpPlace) { takeHelpPlace() }
+                    .onAppear { takeHelpPlace() }
                 // Setup or Health, one row, only when something needs a look.
                 if let status = ShellNav.statusItem(healthAttention: Int(model.health?.attention ?? 0), setupLeft: Int(model.setup?.toDo ?? 0)) {
                     MoreRow(item: status, line: ShellNav.moreLine(status, listsDue: 0, health: model.health?.summary, setup: model.setup?.summary),
@@ -153,6 +156,12 @@ struct AskScreen: View {
         default:
             open(item)
         }
+    }
+
+    private func takeHelpPlace() {
+        guard let place = model.openHelpPlace else { return }
+        model.openHelpPlace = nil
+        openHelp(place)
     }
 
     private func open(_ item: MoreItem) {

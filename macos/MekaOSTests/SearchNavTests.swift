@@ -10,6 +10,9 @@ final class SearchNavTests: XCTestCase {
         XCTAssertEqual(SearchNav.destination(.appointments), .ask) // appointment nudges, slice 2a
         XCTAssertEqual(SearchNav.destination(.listsRenewals), .lists)
         XCTAssertEqual(SearchNav.destination(.goals), .goals)
+        XCTAssertEqual(SearchNav.destination(.help), .ask) // Ask knows how Navilife works, slice 2
+        XCTAssertNil(SearchNav.listTab(.help))
+        XCTAssertEqual(SearchNav.hint(.help), "Opens where it lives")
         XCTAssertEqual(SearchNav.listTab(.listsWaiting), .waiting)
         XCTAssertEqual(SearchNav.listTab(.listsSomeday), .someday)
         XCTAssertEqual(SearchNav.listTab(.listsDecisions), .decisions)

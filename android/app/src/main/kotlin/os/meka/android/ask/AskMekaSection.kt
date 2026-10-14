@@ -208,8 +208,9 @@ fun AskMekaSection(
         talk.startAfterBrief { if (back != os.meka.android.shell.ShellDestination.ASK) app?.openDestination?.value = back }
     }
 
-    fun ask() {
-        val q = AskRules.question(text) ?: return
+    /** Asks what was typed; [again] asks that question of the AI past the help ("Still stuck? Ask Navilife"). */
+    fun ask(again: String? = null) {
+        val q = again ?: AskRules.question(text) ?: return
         keyboard?.hide()
         haptics.light()
         shown = AskShown.Thinking(q)
@@ -221,7 +222,7 @@ fun AskMekaSection(
         scope.launch {
             // "Where I am now": a question about here takes one approximate fix first (only with the switch on).
             os.meka.android.today.HereLocation.refresh(context, core, q)
-            val out = core.askMeka(q)
+            val out = if (again != null) core.askBeyondHelp(q) else core.askMeka(q)
             shown = AskShown.Answer(q, out, asks + 1)
             asks += 1
             if (out is AskOutcome.Answered) text = ""
@@ -410,6 +411,13 @@ fun AskMekaSection(
                                     openHelp(link.place)
                                 }
                             }
+                            // Slice 2: "Still stuck? Ask Navilife" asks the same question of the AI, past the help.
+                            o.answer.stillStuck?.let { label ->
+                                StillStuckRow(label, Modifier.appear(rememberAppearance(lines.size + o.answer.did.size + o.answer.cards.size + 1))) {
+                                    haptics.tick()
+                                    ask(again = s.question)
+                                }
+                            }
                             // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
                             AnimatedVisibility(
                                 visible = offer != null,
@@ -437,6 +445,7 @@ const val ASK_MATCH_TAG = "ask-match"
 const val ASK_AUTO_TAG = "ask-auto"
 const val ASK_TRUST_TAG = "ask-trust"
 const val ASK_HELP_TAG = "ask-help"
+const val ASK_STILL_STUCK_TAG = "ask-still-stuck"
 
 /**
  * The best matches for what's typed: the title, then "Task · Planned today 14:00"; a task, list item, goal or habit
@@ -567,6 +576,19 @@ private fun HelpLinkRow(link: os.meka.core.domain.HelpLink, modifier: Modifier, 
             .testTag(ASK_HELP_TAG)
             .semantics { contentDescription = link.button }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
+}
+
+/** Under a help answer: a quiet accent line, a 48 dp target; asks the same question of the AI. */
+@Composable
+private fun StillStuckRow(label: String, modifier: Modifier, onTap: () -> Unit) {
+    Text(
+        "$label ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+        modifier = modifier.minTouch()
+            .clickable(role = Role.Button, onClick = onTap)
+            .testTag(ASK_STILL_STUCK_TAG)
+            .semantics { contentDescription = label }
+            .padding(vertical = MekaSpace.xs),
     )
 }
 
