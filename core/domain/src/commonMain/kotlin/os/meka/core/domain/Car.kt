@@ -101,6 +101,11 @@ data class CarView(
     val removable: Boolean = false,
     /** The fuel it takes (Car and parking, slice 6): unleaded (E10) unless he picked another. */
     val fuel: FuelKind = FuelKind.DEFAULT,
+    /**
+     * Two cars on the Car tile (2026-10-14): this car's own next date still to come ("MOT due Mon 9 Nov", lit within a
+     * week), else its registration ("AB12 CDE · add its dates"), else null.
+     */
+    val next: LifeTileLine? = null,
 ) {
     val trackedCount: Int get() = rows.count { it.tracked }
 
@@ -320,12 +325,20 @@ object CarRules {
             view(c.registration, itemsOf(c.id, items, cars), check, today, cal).copy(
                 carId = c.id, title = title(c, live.size), name = c.name, removable = c.id != ENTITY_ID,
                 fuel = c.fuel ?: FuelKind.DEFAULT,
+                next = nextOf(c, itemsOf(c.id, items, cars), today),
             ).let { v ->
                 // A later car with no registration yet: its summary names it rather than "Your car".
                 if (c.registration == null && c.id != ENTITY_ID && v.trackedCount > 0) v.copy(summary = v.summary.replaceFirst("Your car", title(c, live.size))) else v
             }
         }
         return CarsView(views, live.size < MAX_CARS)
+    }
+
+    /** [car]'s own next date on or after [today] among its [items], lit within a week; else its registration; else null. */
+    fun nextOf(car: CarEntry, items: List<RenewalItem>, today: Long): LifeTileLine? {
+        val item = items.filter { it.dueDay >= today }.minByOrNull { it.dueDay }
+        if (item != null) return LifeTileLine("${item.title} ${RenewalRules.verb(item.kind)} ${CivilDate.shortLabel(item.dueDay)}", item.dueDay - today <= 7)
+        return car.registration?.let { LifeTileLine("${display(it)} · add its dates", false) }
     }
 
     /** What the undo bar says after removing a car: "Removed the Golf · its dates stay on the radar". */

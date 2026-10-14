@@ -133,7 +133,8 @@ fun AskRoute(
         val nowMs = System.currentTimeMillis()
         val cal = os.meka.core.domain.LocalCalendar.fixedOffset(java.util.TimeZone.getDefault().getOffset(nowMs).toLong())
         val rows = os.meka.core.domain.ParkingRules.rows(ParkingStore.spots(parkContext), carsNow, nowMs, cal)
-        os.meka.core.domain.ParkingRules.withParked(coreLifeLines, os.meka.core.domain.ParkingRules.tileLine(rows, nowMs), timersNow)
+        // Two cars: each car on its own line (where it's parked from this phone, else the core's timer or next date).
+        os.meka.core.domain.ParkingRules.withCars(coreLifeLines, carsNow, timersNow, rows, nowMs)
     }
     val dailyLines by core.dailyLines.collectAsState()
     // The Bedside clock row's "Screen saver on/off": read again each time Ask comes back (he may have just set it).

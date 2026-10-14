@@ -6228,7 +6228,9 @@ class MekaCore(
         ).copy(
             // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
             // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
-            carLine = _parkingTimers.value.tile ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
+            // Two cars (2026-10-14): each car on its own line, its timer or next date.
+            carLine = os.meka.core.domain.ParkingRules.carsLine(_cars.value, _parkingTimers.value, emptyList(), nowMs())
+                ?: _parkingTimers.value.tile ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
         ))
         // Ask polish, item 3: Daily's rows say what they hold now ("Tomorrow 06:40 · 5 things", "2 left", "2 saved").
         val fixtureNow = os.meka.core.domain.DailyRules.fixture(dayEvents, nowMs(), cal)

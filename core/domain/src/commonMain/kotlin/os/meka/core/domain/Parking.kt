@@ -491,6 +491,48 @@ object ParkingRules {
         return LifeTileLine("${CarRules.display(reg)} · add its dates", false)
     }
 
+    // ---- Two cars on the Car tile (Car on autopilot's leftover, 2026-10-14) ----
+
+    /**
+     * With two or more cars, the Car tile lists each car on its own line, with the most pressing thing for that car: a
+     * running parking timer ("The Golf · paid until 15:30 · 40 min left"), else where it's parked (Fold only: [parked]
+     * stays on the phone; "The van parked · Level 3 · Row F"), else its next date ("The van · MOT due Mon 9 Nov").
+     * Lit lines first, then the cars' order; two lines at most ([LifeTileRules.MAX_LINES]), the second ending
+     * "· +1 more" when a third car has something. Lit when any line is. Null with one car (the tile keeps its single
+     * line) or when no car has anything to say.
+     */
+    fun carsLine(cars: CarsView, timers: TimersView, parked: List<ParkedRow>, nowMs: Long): LifeTileLine? {
+        if (cars.count <= 1) return null
+        val entries = cars.cars.mapNotNull { c ->
+            val who = c.title.replaceFirstChar { it.titlecaseChar() }
+            val timer = timers.rows.firstOrNull { it.carId == c.carId && !it.ended }
+            val spot = parked.firstOrNull { it.carId == c.carId }
+            when {
+                timer != null -> LifeTileLine("$who · ${lowerFirst(timer.line)}", true)
+                spot != null -> LifeTileLine(spot.label?.let { "$who parked · $it" }
+                    ?: "$who parked ${ago(((nowMs - spot.spot.savedAtMs) / 60_000L).coerceAtLeast(0))}", true)
+                else -> c.next?.let { LifeTileLine("$who · ${lowerFirst(it.text)}", it.lit) }
+            }
+        }.sortedBy { if (it.lit) 0 else 1 }
+        if (entries.isEmpty()) return null
+        val shown = entries.take(LifeTileRules.MAX_LINES).map { it.text }.toMutableList()
+        val more = entries.size - shown.size
+        if (more > 0) shown[shown.lastIndex] = shown.last() + " · +$more more"
+        return LifeTileLine(shown.joinToString("\n"), entries.any { it.lit })
+    }
+
+    /**
+     * The grid's Car tile on the Fold: [carsLine] with two or more cars (live, not "to set up"), else the one car's
+     * parked line laid over the core's ([withParked]).
+     */
+    fun withCars(lines: LifeLines, cars: CarsView, timers: TimersView, parked: List<ParkedRow>, nowMs: Long): LifeLines =
+        carsLine(cars, timers, parked, nowMs)?.let { LifeLines(lines.lines + (LifeTile.CAR to it), lines.toSetUp - LifeTile.CAR) }
+            ?: withParked(lines, tileLine(parked, nowMs), timers)
+
+    /** "Paid until …" → "paid until …"; "MOT due …" and "AB12 CDE …" keep their capitals. */
+    private fun lowerFirst(text: String): String =
+        if (text.length > 1 && text[1].isLowerCase()) text.replaceFirstChar { it.lowercaseChar() } else text
+
     // ---- Slice 8: "where's the Golf?" said to Talk ----
 
     private val DETERMINERS = setOf("the", "my", "our")

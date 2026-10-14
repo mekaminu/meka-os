@@ -196,6 +196,50 @@ class ParkingTest {
     }
 
     @Test
+    fun theCarTileListsEachCarWithTwo() {
+        fun item(id: String, title: String, kind: ObligationKind, due: Long, subject: String? = null) = RenewalItem(
+            id = id, title = title, kind = kind, subject = subject, notes = null, dueDay = due, cancelByDay = null, leadDays = 14,
+            costPence = null, repeats = RenewalRepeat.YEARLY, repeatLabel = "Every year", state = RenewalState.LATER, meta = "",
+            doneLabel = "Done", stopLabel = "Stop tracking", hasConflict = false,
+        )
+        val entries = listOf(CarEntry(CarRules.ENTITY_ID, "AB12CDE", "the Golf"), CarEntry("car2", null, "the van"))
+        val items = listOf(
+            item("r1", "MOT", ObligationKind.MOT, day + 26),
+            item("r2", "Car tax", ObligationKind.CAR_TAX, day + 3, subject = "the van"),
+            item("r3", "Car insurance", ObligationKind.INSURANCE, day - 2),
+        )
+        val two = CarRules.views(entries, items, null, day, cal)
+        assertEquals(LifeTileLine("MOT due ${CivilDate.shortLabel(day + 26)}", false), two.first.next)
+        // The van's date is within a week, so it leads; each car on its own line.
+        val line = ParkingRules.carsLine(two, TimersView.EMPTY, emptyList(), at(10))
+        assertEquals("The van · car tax due ${CivilDate.shortLabel(day + 3)}\nThe Golf · MOT due ${CivilDate.shortLabel(day + 26)}", line?.text)
+        assertTrue(line!!.lit)
+        // A running timer, then where it's parked (the Fold's own), lead their car's line.
+        val timers = ParkingTimerRules.view(listOf(ParkingTimer(CarRules.ENTITY_ID, at(9), at(11))), two, at(10), cal)
+        val withTimer = ParkingRules.carsLine(two, timers, emptyList(), at(10))!!.text
+        assertTrue(withTimer.startsWith("The Golf · paid until 11:00"), withTimer)
+        val spots = ParkingRules.save(emptyMap(), "car2", "the van", LocationFix(lat, lon, 5.0, at(9, 40)), at(9, 40)).spots
+        val rows = ParkingRules.rows(spots, two, at(10), cal)
+        val parked = ParkingRules.carsLine(two, timers, rows, at(10))!!.text.lines()
+        assertEquals("The van parked 20 min ago", parked[1])
+        // Nothing yet on the second car: only the first car's line; no registration and no dates: nothing.
+        val bare = CarRules.views(listOf(entries[0], CarEntry("car2", null, null)), items.take(1), null, day, cal)
+        assertEquals("The Golf · MOT due ${CivilDate.shortLabel(day + 26)}", ParkingRules.carsLine(bare, TimersView.EMPTY, emptyList(), at(10))?.text)
+        assertNull(ParkingRules.carsLine(CarRules.views(listOf(CarEntry(CarRules.ENTITY_ID, null, null), CarEntry("car2", null, null)), emptyList(), null, day, cal), TimersView.EMPTY, emptyList(), at(10)))
+        // A third car with something to say: "+1 more" on the second line.
+        val three = CarRules.views(entries + CarEntry("car3", "XY34ZZZ", "the bike"), items, null, day, cal)
+        assertTrue(ParkingRules.carsLine(three, TimersView.EMPTY, emptyList(), at(10))!!.text.endsWith(" · +1 more"))
+        // One car: the tile keeps its single line.
+        val one = CarRules.views(entries.take(1), items, null, day, cal)
+        assertNull(ParkingRules.carsLine(one, TimersView.EMPTY, emptyList(), at(10)))
+        val grid = LifeTileRules.lines(LifeTileInputs())
+        assertEquals(grid, ParkingRules.withCars(grid, one, TimersView.EMPTY, emptyList(), at(10)))
+        val laid = ParkingRules.withCars(grid, two, TimersView.EMPTY, emptyList(), at(10))
+        assertFalse(laid.needsSetUp(LifeTile.CAR))
+        assertEquals(2, laid.of(LifeTile.CAR)!!.text.lines().size)
+    }
+
+    @Test
     fun talkOpensFindMyCarOnTheFoldOnly() {
         listOf(
             "where did I park?", "where did I park the car", "where did I leave my car", "where's my car", "where is the car",

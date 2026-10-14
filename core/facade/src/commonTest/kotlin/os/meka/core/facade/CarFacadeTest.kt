@@ -28,6 +28,27 @@ class CarFacadeTest {
     )
 
     @Test
+    fun withTwoCarsTheTileListsEachOnBothApps() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.setCarRegistration("ab12 cde"))
+        val mot = fold.addCarDate("mot")!!
+        fold.setRenewalDue(mot, fold.todayEpochDay() + 28)
+        val van = fold.addCar("the van")!!
+        assertTrue(fold.setCarName(os.meka.core.domain.CarRules.ENTITY_ID, "the Golf"))
+        val vanTax = fold.addCarDate(van, "tax")!!
+        fold.setRenewalDue(vanTax, fold.todayEpochDay() + 40)
+        fold.syncNow(); mac.syncNow()
+        val both = "The Golf · MOT due Mon 9 Nov\nThe van · car tax due Sat 21 Nov"
+        assertEquals(both, mac.lifeLines.value.of(os.meka.core.domain.LifeTile.CAR)?.text)
+        assertEquals(both, fold.lifeLines.value.of(os.meka.core.domain.LifeTile.CAR)?.text)
+        // Removing the van: back to the one line.
+        assertTrue(fold.removeCar(van))
+        fold.syncNow(); mac.syncNow()
+        assertEquals("MOT due Mon 9 Nov", mac.lifeLines.value.of(os.meka.core.domain.LifeTile.CAR)?.text)
+    }
+
+    @Test
     fun theCarTypedOnTheFoldRemindsAMonthAndAWeekBeforeOnBothApps() = runTest {
         val fold = core("android")
         val mac = core("mac")
