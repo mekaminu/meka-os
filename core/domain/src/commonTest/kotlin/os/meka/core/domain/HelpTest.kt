@@ -184,4 +184,38 @@ class HelpTest {
         }
         assertNull(AskAnswer("Fine", emptyList()).stillStuck)
     }
+
+    // ---- Slice 3: every feature has an entry; names that are also his data stay data questions ----
+
+    @Test
+    fun everyScreenHasAnEntry() {
+        val opened = HelpRules.entries.flatMap { listOfNotNull(it.fold, it.mac) }.toSet()
+        HelpPlace.entries.filter { !it.system && it != HelpPlace.SETTINGS }.forEach { p -> assertTrue(p in opened, p.name) }
+    }
+
+    @Test
+    fun theNewEntriesAnswerHowAndWhere() {
+        mapOf(
+            "how do I add a bin" to "bins",
+            "where is the shopping list" to "lists",
+            "life admin hour" to "life-admin",
+            "what's protected time?" to "protected-time",
+            "how do I add an INSET day" to "school",
+            "how do I save a link for the train" to "train-queue",
+            "where's the emergency card" to "emergency",
+            "date night" to "date-night",
+            "how do I add a passport to the vault" to "vault",
+            "how do I connect my calendar" to "calendars",
+            "how do I choose news topics" to "news",
+        ).forEach { (q, id) -> assertEquals(id, strongId(q), q) }
+    }
+
+    @Test
+    fun aFeatureNamedLikeHisDataIsLeftToTheData() {
+        listOf(
+            "what's the news?", "news", "bins?", "what's on my calendar", "what's on the shopping list",
+            "what's in my train queue", "when are the bins", "is there any news", "tell me about my trips",
+            "what are my goals", "start a 16-hour fast",
+        ).forEach { q -> assertFalse(HelpRules.lookup(q)?.strong == true, q) }
+    }
 }

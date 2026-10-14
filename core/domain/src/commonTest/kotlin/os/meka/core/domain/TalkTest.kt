@@ -287,4 +287,53 @@ class TalkTest {
         // Stopped (the orb, a call): nothing opens.
         assertEquals(listOf(TalkEffect.StopSpeaking, TalkEffect.End), TalkFlow.stop(said.session).effects)
     }
+
+    // ---- Ask knows how Navilife itself works, slice 3: "take me there" by voice ----
+
+    private fun helpAnswered(): TalkSession {
+        val heard = TalkFlow.heard(TalkFlow.start().session, "flex mode", TalkOpenRules.FOLD)
+        val answer = HelpRules.answer(HelpRules.entry("bedside-clock")!!, mac = false)
+        return TalkFlow.answered(heard.session, "flex mode", AskOutcome.Answered(answer), today).session
+    }
+
+    @Test
+    fun aHelpAnswerOffersTakeMeThereAloud() {
+        val answer = HelpRules.answer(HelpRules.entry("bedside-clock")!!, mac = false)
+        assertTrue(TalkRules.spoken(answer, today).endsWith(" Say “take me there” to open it."), TalkRules.spoken(answer, today))
+        // The Mac has no screen for a Fold-only feature: nothing offered.
+        val mac = HelpRules.answer(HelpRules.entry("bedside-clock")!!, mac = true)
+        assertFalse("take me there" in TalkRules.spoken(mac, today))
+        assertFalse("take me there" in TalkRules.spoken(AskAnswer("Sure.", emptyList()), today))
+    }
+
+    @Test
+    fun takeMeThereSaysOneLineEndsThenOpensWhereTheAnswerSaid() {
+        val s = helpAnswered()
+        assertEquals(HelpPlace.BEDSIDE, s.help?.place)
+        val said = TalkFlow.heard(TalkFlow.spoke(s).session, "take me there please", TalkOpenRules.FOLD)
+        assertEquals(listOf(TalkEffect.Speak("Here it is.")), said.effects)
+        assertEquals("Opened Bedside clock.", said.session.conversation.turns.last().answer)
+        val done = TalkFlow.spoke(said.session)
+        assertEquals(listOf(TalkEffect.End, TalkEffect.OpenHelp(HelpLink("bedside-clock", HelpPlace.BEDSIDE))), done.effects)
+        assertEquals(null, done.session.openHelpAfter)
+        // Talked over: it still opens. Stopped (the orb, a call): nothing opens.
+        assertEquals(TalkEffect.OpenHelp(HelpLink("bedside-clock", HelpPlace.BEDSIDE)), TalkFlow.bargeIn(said.session).effects.last())
+        assertEquals(listOf(TalkEffect.StopSpeaking, TalkEffect.End), TalkFlow.stop(said.session).effects)
+    }
+
+    @Test
+    fun takeMeThereIsHeardManyWaysButOnlyRightAfterAHelpAnswer() {
+        listOf("take me there", "Yes, take me there", "OK take me there please", "open it", "show me", "go there", "yes please", "sure", "go on")
+            .forEach { assertIs<TalkReply.TakeMeThere>(TalkRules.reply(it, 0, TalkOpenRules.FOLD, help = true), it) }
+        // Without a help answer just before, it's a question like any other.
+        assertIs<TalkReply.Ask>(TalkRules.reply("take me there", 0, TalkOpenRules.FOLD, help = false))
+        // More than the request, a goodbye or a new question isn't it.
+        assertIs<TalkReply.Ask>(TalkRules.reply("take me to the dentist", 0, TalkOpenRules.FOLD, help = true))
+        assertEquals(TalkReply.End, TalkRules.reply("thank you", 0, TalkOpenRules.FOLD, help = true))
+        // Anything said in between moves on: the offer is gone.
+        val s = TalkFlow.spoke(helpAnswered()).session
+        val asked = TalkFlow.heard(s, "what's the weather")
+        assertEquals(null, asked.session.help)
+        assertIs<TalkEffect.Ask>(asked.effects.single())
+    }
 }

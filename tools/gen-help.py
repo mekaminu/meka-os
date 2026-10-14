@@ -16,9 +16,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "docs", "help")
 OUT = os.path.join(ROOT, "core", "domain", "src", "commonMain", "kotlin", "os", "meka", "core", "domain", "HelpIndex.kt")
+SHELL_NAV = os.path.join(ROOT, "android", "app", "src", "main", "kotlin", "os", "meka", "android", "shell", "ShellNav.kt")
 HELP_KT = os.path.join(ROOT, "core", "domain", "src", "commonMain", "kotlin", "os", "meka", "core", "domain", "Help.kt")
 
-FRONT = {"id", "title", "keywords", "fold", "fold_where", "mac", "mac_where"}
+FRONT = {"id", "title", "keywords", "data", "fold", "fold_where", "mac", "mac_where"}
 BODY = {"what", "how", "mac_how", "tip"}
 MAX_LINE = 400
 
@@ -30,6 +31,26 @@ def places():
     if not block:
         raise SystemExit("gen-help: enum class HelpPlace not found in Help.kt")
     return set(re.findall(r"^\s*([A-Z][A-Z_]+)\(", block.group(1), re.M))
+
+
+def more_items():
+    """Ask's rows on the Fold (MoreItem in ShellNav.kt): every one is a HelpPlace, so every feature can have an entry."""
+    src = open(SHELL_NAV, encoding="utf-8").read()
+    block = re.search(r"enum class MoreItem\(.*?\) \{(.*?);", src, re.S)
+    if not block:
+        raise SystemExit("gen-help: enum class MoreItem not found in ShellNav.kt")
+    return re.findall(r"^\s*([A-Z][A-Z_]+)\(", block.group(1), re.M)
+
+
+def coverage(entries, known):
+    """Every Ask row has a HelpPlace and every Navilife screen (not Settings itself, not Android's pages) an entry."""
+    for item in more_items():
+        if item not in known:
+            raise SystemExit(f"gen-help: Ask's row {item} has no HelpPlace in Help.kt: add one and a docs/help entry")
+    opened = {e["fold"] for e in entries} | {e["mac"] for e in entries}
+    missing = sorted(p for p in known if not p.startswith("SYSTEM_") and p != "SETTINGS" and p not in opened)
+    if missing:
+        raise SystemExit("gen-help: no docs/help entry opens " + ", ".join(missing))
 
 
 def parse(path, known):
@@ -76,6 +97,8 @@ def parse(path, known):
             raise SystemExit(f"gen-help: {path}: {k}: {v} is not a HelpPlace")
     if front["mac"] != "none" and not front.get("mac_where"):
         raise SystemExit(f"gen-help: {path}: mac_where is needed when mac isn't none")
+    if front.get("data", "no") not in ("yes", "no"):
+        raise SystemExit(f"gen-help: {path}: data: is yes or no")
     if front["mac"].startswith("SYSTEM_"):
         raise SystemExit(f"gen-help: {path}: the Mac has no Android settings pages")
     if re.search(r"\bMEKA\b", text):
@@ -117,6 +140,7 @@ def render(entries):
             f"            mac = {mac},",
             f"            macWhere = {kt(e.get('mac_where') or None)},",
             f"            macHow = {kt(e.get('mac_how'))},",
+        ] + (["            data = true,"] if e.get("data") == "yes" else []) + [
             "        ),",
         ]
     out += ["    )", "}", ""]
@@ -127,6 +151,7 @@ def main():
     known = places()
     files = sorted(f for f in os.listdir(SRC) if f.endswith(".md") and f != "README.md")
     entries = [parse(os.path.join(SRC, f), known) for f in files]
+    coverage(entries, known)
     seen = {}
     for e in entries:
         for k in e["keywords"]:

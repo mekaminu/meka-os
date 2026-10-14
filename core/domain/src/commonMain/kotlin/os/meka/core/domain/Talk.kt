@@ -47,6 +47,11 @@ sealed interface TalkReply {
     data class ReadOut(val question: String, val read: os.meka.core.domain.ReadOut) : TalkReply
     /** "Plan my day" ([TalkOpenRules.request]): MEKA says so, the conversation ends and the planner opens; no AI. */
     data class Open(val question: String, val place: TalkPlace) : TalkReply
+    /**
+     * "Take me there" after a help answer ([TalkHelpRules.isTakeMeThere]; Ask knows how Navilife itself works, slice
+     * 3): MEKA says so, the conversation ends and the screen the answer named opens, as its Take me there does; no AI.
+     */
+    data class TakeMeThere(val question: String) : TalkReply
     /** Anything else is a new question. */
     data class Ask(val question: String) : TalkReply
 }
@@ -154,8 +159,12 @@ object TalkRules {
     fun reply(utterance: String, pendingCards: Int): TalkReply = reply(utterance, pendingCards, TalkOpenRules.DEFAULT)
 
     /** As [reply], with the places this device can open ([TalkOpenRules.FOLD] on the Fold). */
-    fun reply(utterance: String, pendingCards: Int, places: Set<TalkPlace>): TalkReply {
+    fun reply(utterance: String, pendingCards: Int, places: Set<TalkPlace>): TalkReply = reply(utterance, pendingCards, places, help = false)
+
+    /** As [reply], with [help] true while the latest answer came from the help with a Take me there. */
+    fun reply(utterance: String, pendingCards: Int, places: Set<TalkPlace>, help: Boolean): TalkReply {
         val question = AskRules.question(utterance) ?: return TalkReply.Silence
+        if (help && pendingCards == 0 && TalkHelpRules.isTakeMeThere(question)) return TalkReply.TakeMeThere(question)
         val ws = words(question)
         if (ws.isEmpty() || ws.all { it in FILLERS }) return TalkReply.Silence
         if (pendingCards > 0) {
@@ -208,7 +217,9 @@ object TalkRules {
                 "I can ${choices}. Say which, or " + (if (answer.cards.size == 2) "both." else "all of them.")
             }
         }
-        return listOfNotNull(words.takeIf { it.isNotEmpty() }, did.takeIf { it.isNotEmpty() }, offer).joinToString(" ")
+        // A help answer with a screen to open: "Say “take me there” to open it." (slice 3).
+        val there = TalkHelpRules.OFFER.takeIf { answer.help != null && answer.cards.isEmpty() }
+        return listOfNotNull(words.takeIf { it.isNotEmpty() }, did.takeIf { it.isNotEmpty() }, offer, there).joinToString(" ")
     }
 
     /** After Meka's yes: "Added Call the dentist for tomorrow at 09:00. Anything else?" (failures said plainly). */
@@ -381,6 +392,11 @@ sealed interface TalkEffect {
      * never cuts MEKA off; opening changes nothing by itself (the planner applies only on Meka's tap).
      */
     data class Open(val place: TalkPlace) : TalkEffect
+    /**
+     * Open where a help answer's Take me there goes ([HelpLink.place]), as tapping it does. Always after [End], like
+     * [Open]; it only opens a screen.
+     */
+    data class OpenHelp(val link: HelpLink) : TalkEffect
     /** Say [text] on the device, then report with [TalkFlow.spoke]. */
     data class Speak(val text: String) : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
@@ -401,6 +417,10 @@ data class TalkSession(
     val endAfterSpeaking: Boolean = false,
     /** Where to go once the conversation ends after this line ("plan my day"); a stop (the orb, a call) goes nowhere. */
     val openAfter: TalkPlace? = null,
+    /** The latest answer's Take me there (a help answer), so "take me there" can open it; gone with the next turn. */
+    val help: HelpLink? = null,
+    /** Where to go once the conversation ends after this line ("take me there"). */
+    val openHelpAfter: HelpLink? = null,
 )
 
 data class TalkStep(val session: TalkSession, val effects: List<TalkEffect>)
@@ -432,29 +452,36 @@ object TalkFlow {
     /** As [heard], with the places this device can open ("bedside clock" on the Fold). */
     fun heard(s: TalkSession, utterance: String, places: Set<TalkPlace>): TalkStep {
         if (s.phase != TalkPhase.LISTENING) return TalkStep(s, emptyList())
-        return when (val r = TalkRules.reply(utterance, s.pending.size, places)) {
-            TalkReply.Silence -> silence(s)
-            TalkReply.End -> end(s)
-            is TalkReply.Confirm -> TalkStep(s.copy(phase = TalkPhase.DOING), listOf(TalkEffect.Do(r.indices.map { s.pending[it] })))
-            TalkReply.Which -> say(s, TalkRules.spokenWhich(s.pending.size))
-            TalkReply.Decline -> say(s.copy(pending = emptyList()), TalkRules.LEFT_IT)
+        val link = s.help
+        // Take me there is offered for the answer it came with; anything said next moves on from it.
+        val t = s.copy(help = null)
+        return when (val r = TalkRules.reply(utterance, t.pending.size, places, help = link != null)) {
+            TalkReply.Silence -> silence(t)
+            TalkReply.End -> end(t)
+            is TalkReply.Confirm -> TalkStep(t.copy(phase = TalkPhase.DOING), listOf(TalkEffect.Do(r.indices.map { t.pending[it] })))
+            TalkReply.Which -> say(t, TalkRules.spokenWhich(t.pending.size))
+            TalkReply.Decline -> say(t.copy(pending = emptyList()), TalkRules.LEFT_IT)
             is TalkReply.PlayMessages -> TalkStep(
-                s.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = s.conversation.answered(r.question, VoicePlaylistRules.PLAYED)),
+                t.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = t.conversation.answered(r.question, VoicePlaylistRules.PLAYED)),
                 listOf(TalkEffect.PlayMessages),
             )
             is TalkReply.ReadOut -> TalkStep(
-                s.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = s.conversation.answered(r.question, ReadOutRules.remembered(r.read))),
+                t.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), conversation = t.conversation.answered(r.question, ReadOutRules.remembered(r.read))),
                 listOf(TalkEffect.ReadOut(r.read)),
             )
+            is TalkReply.TakeMeThere -> say(
+                t.copy(pending = emptyList(), endAfterSpeaking = true, openHelpAfter = link, conversation = t.conversation.answered(r.question, TalkHelpRules.remembered(link!!))),
+                TalkHelpRules.OPENING,
+            )
             is TalkReply.Open -> say(
-                s.copy(pending = emptyList(), endAfterSpeaking = true, openAfter = r.place, conversation = s.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
+                t.copy(pending = emptyList(), endAfterSpeaking = true, openAfter = r.place, conversation = t.conversation.answered(r.question, TalkOpenRules.remembered(r.place))),
                 TalkOpenRules.opening(r.place),
             )
             is TalkReply.Ask -> {
-                if (s.questions >= TalkRules.MAX_QUESTIONS) return say(s.copy(endAfterSpeaking = true), TalkRules.TOO_MANY)
+                if (t.questions >= TalkRules.MAX_QUESTIONS) return say(t.copy(endAfterSpeaking = true), TalkRules.TOO_MANY)
                 TalkStep(
-                    s.copy(phase = TalkPhase.THINKING, pending = emptyList(), questions = s.questions + 1),
-                    listOf(TalkEffect.Ask(r.question, s.conversation.history)),
+                    t.copy(phase = TalkPhase.THINKING, pending = emptyList(), questions = t.questions + 1),
+                    listOf(TalkEffect.Ask(r.question, t.conversation.history)),
                 )
             }
         }
@@ -472,6 +499,7 @@ object TalkFlow {
                 s.copy(
                     conversation = s.conversation.answered(question, outcome.answer.text).did(outcome.answer.did.map { it.line }),
                     pending = outcome.answer.cards,
+                    help = outcome.answer.help,
                 ),
                 TalkRules.spoken(outcome.answer, today),
             )
@@ -501,21 +529,27 @@ object TalkFlow {
     /** Meka started talking while MEKA spoke: stop and listen (a closing line is cut short and the conversation ends). */
     fun bargeIn(s: TalkSession): TalkStep {
         if (s.phase != TalkPhase.SPEAKING) return TalkStep(s, emptyList())
-        if (s.endAfterSpeaking) return TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null), listOfNotNull(TalkEffect.StopSpeaking, TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }))
+        if (s.endAfterSpeaking) return TalkStep(
+            s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null),
+            listOfNotNull(TalkEffect.StopSpeaking, TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }, s.openHelpAfter?.let { TalkEffect.OpenHelp(it) }),
+        )
         return TalkStep(s.copy(phase = TalkPhase.LISTENING), listOf(TalkEffect.StopSpeaking, TalkEffect.Listen))
     }
 
     /** The orb tapped, the screen left, a call coming in: everything stops at once. */
     fun stop(s: TalkSession): TalkStep =
         if (s.phase == TalkPhase.ENDED) TalkStep(s, emptyList())
-        else TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null), listOfNotNull(TalkEffect.StopSpeaking.takeIf { s.phase == TalkPhase.SPEAKING }, TalkEffect.End))
+        else TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null), listOfNotNull(TalkEffect.StopSpeaking.takeIf { s.phase == TalkPhase.SPEAKING }, TalkEffect.End))
 
     private fun say(s: TalkSession, text: String): TalkStep =
         TalkStep(s.copy(phase = TalkPhase.SPEAKING), listOf(TalkEffect.Speak(text)))
 
     /** Ends the conversation, then opens what it was asked to ([TalkSession.openAfter]). */
     private fun end(s: TalkSession): TalkStep =
-        TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null), listOfNotNull(TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }))
+        TalkStep(
+            s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null),
+            listOfNotNull(TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }, s.openHelpAfter?.let { TalkEffect.OpenHelp(it) }),
+        )
 }
 
 // ---- On the device: the voice, the orb and what goes wrong (build plan V1, voice slice 2; non-AI, pure) ----

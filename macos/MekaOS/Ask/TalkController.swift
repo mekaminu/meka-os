@@ -48,7 +48,7 @@ final class TalkController {
     var onDid: ([Int]) -> Void = { _ in }
 
     @ObservationIgnored private var model: CoreModel?
-    @ObservationIgnored private var session = TalkSession(phase: .ended, conversation: Conversation(turns: []), pending: [], questions: 0, endAfterSpeaking: false, openAfter: nil)
+    @ObservationIgnored private var session = TalkSession(phase: .ended, conversation: Conversation(turns: []), pending: [], questions: 0, endAfterSpeaking: false, openAfter: nil, help: nil, openHelpAfter: nil)
     /// Bumped by every start and stop, so a late answer or callback from an earlier conversation changes nothing.
     @ObservationIgnored private var generation = 0
 
@@ -189,7 +189,7 @@ final class TalkController {
         session = session.doCopy(phase: session.phase, conversation: session.conversation,
                                   pending: session.pending.filter { $0 != card },
                                   questions: session.questions, endAfterSpeaking: session.endAfterSpeaking,
-                                  openAfter: session.openAfter)
+                                  openAfter: session.openAfter, help: session.help, openHelpAfter: session.openHelpAfter)
     }
 
     private func apply(_ step: TalkStep) {
@@ -241,6 +241,10 @@ final class TalkController {
             // the planner up, as its button does. Only a Kotlin enum is compared here, on the main actor.
             // "Clear my inbox" (Inbox autopilot, slice 7b): Needs you comes forward with the ten-minute inbox started.
             if open.place == TalkPlace.plan { model?.openPlanFromTalk() } else if open.place == TalkPlace.inbox { model?.openInboxFromTalk() }
+        } else if let openHelp = effect as? TalkEffectOpenHelp {
+            // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens its sheet, as the
+            // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.
+            model?.openHelpFromTalk(openHelp.link.place)
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {

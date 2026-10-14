@@ -259,6 +259,12 @@ class TalkController(
                     (context.applicationContext as? os.meka.android.MekaApplication)?.openDestination?.value = os.meka.android.shell.ShellDestination.NEEDS_YOU
                 }
             }
+            // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens where it lives, as the
+            // answer's Take me there does (Ask's help route: a Navilife pane, or Android's own settings page).
+            is TalkEffect.OpenHelp -> {
+                (context.applicationContext as? os.meka.android.MekaApplication)?.openItem?.value =
+                    os.meka.android.shell.OpenItem(os.meka.core.domain.SearchTarget.HELP, "help:" + effect.link.entryId)
+            }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
                 recognizer?.cancel()

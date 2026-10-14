@@ -2,6 +2,7 @@
 id: calendars
 title: Calendars
 keywords: calendars, calendar, google calendar, connect calendar, weather place, weather places
+data: yes
 fold: CALENDARS
 fold_where: Ask → Settings → Calendars
 mac: CALENDARS

@@ -93,6 +93,11 @@ data class HelpEntry(
     val macWhere: String?,
     /** How it works on the Mac when that differs from [how]. */
     val macHow: String?,
+    /**
+     * Its name is also his own data ("news", "bins", "the shopping list", "calendar"): the bare name or "what's the
+     * news?" is a question about the data, so only a how/where question ("how do I add a bin?") is answered from help.
+     */
+    val data: Boolean = false,
 ) {
     val foldOnly: Boolean get() = mac == null && macWhere == null
 }
@@ -124,6 +129,17 @@ object HelpRules {
         "cant find", "cant get", "cant see", "stopped working", "not showing", "doesnt show", "doesnt appear",
         "help with", "help me", "explain", "tell me about", "is there", "do you have", "does navilife have",
         "show me how", "what happened to", "get rid of",
+    )
+
+    /**
+     * For an entry whose name is also his data ([HelpEntry.data]): only these make it a help question ("how do I…",
+     * "where is…", "isn't working"), never the bare name, "what's…", "is there…" or "tell me about…".
+     */
+    private val HOW = listOf(
+        "how do i", "how can i", "how does", "how do you", "how to", "how do", "where is", "wheres", "where do i",
+        "where can i", "where do", "turn on", "turn off", "switch on", "switch off", "set up", "setup", "enable", "disable",
+        "connect", "link", "not working", "doesnt work", "dont work", "isnt working", "isnt showing", "cant find",
+        "stopped working", "not showing", "doesnt show", "doesnt appear", "help with", "explain", "show me how", "get rid of",
     )
 
     /** "What is X" / "what does X do": only when X ends the question ("what's on the meal plan this week" is data). */
@@ -166,14 +182,16 @@ object HelpRules {
                 val at = find(q, kw)
                 if (at < 0) return@forEach
                 val score = kw.sumOf { it.length } + kw.size
-                if (best == null || score > best!!.score) best = HelpMatch(e, strong(q, kw, at), score)
+                if (best == null || score > best!!.score) best = HelpMatch(e, strong(q, kw, at, e.data), score)
             }
         }
         return best
     }
 
-    private fun strong(q: List<String>, kw: List<String>, at: Int): Boolean {
+    private fun strong(q: List<String>, kw: List<String>, at: Int, data: Boolean): Boolean {
         val joined = q.joinToString(" ")
+        // "What's the news?", "bins?", "what's on my calendar": his data, unless he asks how or where.
+        if (data) return !DATA_STARTS.any { joined.startsWith(it) } && HOW.any { has(q, it) }
         val after = q.drop(at + kw.size)
         val rest = (q.take(at) + after).filter { it !in FILLER }
         // Just the feature's name: "flex mode", "the bedside clock?".

@@ -151,3 +151,48 @@ object BriefFollowOnRules {
     fun listenAgain(startedAtMs: Long, nowMs: Long, speechBegan: Boolean): Boolean =
         !speechBegan && nowMs - startedAtMs < WINDOW_MS
 }
+
+/*
+ * "Take me there" said to Talk (build plan, "Ask knows how Navilife itself works", slice 3; non-AI, pure).
+ *
+ * A help answer heard in Talk ends "Say “take me there” to open it." when it has a screen on this device
+ * ([HelpRules.answer] gives the Mac no link for a Fold-only feature). Said straight after it ("take me there", "yes
+ * please", "open it", "show me"), MEKA says [OPENING], the conversation ends and the screen opens exactly as the
+ * answer's Take me there does ([TalkEffect.OpenHelp]). Only right after that answer: anything else said first moves on.
+ */
+object TalkHelpRules {
+    /** Added to a spoken help answer that has a Take me there. */
+    const val OFFER = "Say “take me there” to open it."
+
+    /** What MEKA says before the screen opens. */
+    const val OPENING = "Here it is."
+
+    /** Words around the request that change nothing ("ok, take me there please"). */
+    private val DROP = setOf(
+        "please", "meka", "navilife", "hey", "ok", "okay", "so", "now", "just", "then", "and", "can", "could", "would",
+        "will", "you", "um", "umm", "uh", "er", "erm", "thanks", "thank",
+    )
+
+    /** A yes that may lead the request ("yes, take me there"). */
+    private val YES = setOf("yes", "yeah", "yep", "sure", "go", "alright")
+
+    /** What's left once [DROP] (and a leading yes) is gone. */
+    private val THERE: Set<List<String>> = setOf(
+        listOf("take", "me", "there"), listOf("take", "me", "to", "it"), listOf("take", "me", "to", "that"), listOf("take", "me"),
+        listOf("go", "there"), listOf("go", "to", "it"), listOf("go", "to", "that"), listOf("open", "it"), listOf("open", "that"),
+        listOf("open", "it", "up"), listOf("open", "there"), listOf("show", "me"), listOf("show", "me", "it"),
+        listOf("show", "me", "that"), listOf("show", "me", "where"), listOf("show", "it", "me"), listOf("do", "it"),
+        listOf("yes"), listOf("yeah"), listOf("yep"), listOf("sure"), listOf("go", "on"), listOf("go", "ahead"),
+        listOf("lets", "go"), listOf("let's", "go"),
+    )
+
+    /** [utterance] asks to open the screen the help answer named: "take me there", "yes please", "open it", "show me". */
+    fun isTakeMeThere(utterance: String): Boolean {
+        var ws = ReadOutRules.words(utterance).filter { it !in DROP }
+        if (ws.size > 1 && ws.first() in YES && ws.drop(1) in THERE) ws = ws.drop(1)
+        return ws.isNotEmpty() && ws in THERE
+    }
+
+    /** What the conversation remembers: "Opened Bedside clock." */
+    fun remembered(link: HelpLink): String = "Opened " + (HelpRules.entry(link.entryId)?.title ?: "it") + "."
+}

@@ -816,6 +816,13 @@ final class CoreModel {
         showPlan = true
     }
 
+    /// "Take me there" said to Talk after a help answer (Ask knows how Navilife works, slice 3): Ask comes forward and
+    /// opens the sheet or place, as the answer's Take me there does (AskScreen takes it on appear or on change).
+    func openHelpFromTalk(_ place: HelpPlace) {
+        go(to: .ask, reduced: MotionSetting.reduced)
+        openHelpPlace = place
+    }
+
     /// "Clear my inbox" said to Talk (Inbox autopilot, slice 7b): Needs you comes forward and the ten-minute inbox starts,
     /// as its Start does (nothing is archived or sent but by his own clicks there).
     func openInboxFromTalk() {
