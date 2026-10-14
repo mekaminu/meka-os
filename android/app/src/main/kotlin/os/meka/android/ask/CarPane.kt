@@ -78,6 +78,8 @@ import os.meka.core.domain.LocationFix
 import os.meka.core.domain.ParkedRow
 import os.meka.core.domain.ParkedSpot
 import os.meka.core.domain.ParkingRules
+import os.meka.core.domain.ParkingTimerRules
+import os.meka.core.domain.TimerRow
 import os.meka.core.facade.MekaCore
 
 /**
@@ -114,6 +116,14 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(30_000); now = System.currentTimeMillis() } }
     val rows = ParkingRules.rows(spots, cars, now, cal)
+    val timers by core.parkingTimersView.collectAsState()
+    var timerCar by remember { mutableStateOf<String?>(null) }
+    var timerSaid by remember { mutableStateOf<String?>(null) }
+    var timerRefused by remember { mutableStateOf(false) }
+    var timerUndo by remember { mutableStateOf<String?>(null) }
+    val timerSaidColor by animateColorAsState(
+        if (timerRefused) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "timer-said-color",
+    )
     LaunchedEffect(findFirst) { if (findFirst) finding = rows.firstOrNull()?.carId }
 
     fun park(carId: String) {
@@ -201,6 +211,54 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
                 }
             }
         }
+        // Car and parking, slice 2: the parking timer (synced; the Mac shows it too).
+        item(key = "timer-label") { SectionLabel(ParkingTimerRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
+        itemsIndexed(timers.rows, key = { _, t -> "timer-${t.carId}" }) { _, t ->
+            TimerCard(
+                t, showTitle = cars.cars.size > 1, modifier = Modifier.animateItem(),
+                onExtend = { m ->
+                    haptics.light()
+                    scope.launch { core.extendParkingTimer(t.carId, m)?.let { timerSaid = it; timerRefused = false } }
+                },
+                onEnd = {
+                    haptics.tick()
+                    scope.launch { core.endParkingTimer(t.carId)?.let { timerSaid = it; timerRefused = false; timerUndo = t.carId } }
+                },
+            )
+        }
+        item(key = "timer-add") {
+            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                if (timers.rows.isEmpty()) Text(ParkingTimerRules.EMPTY_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
+                val choices = ParkingRules.choices(cars)
+                val forCar = timerCar?.takeIf { id -> choices.any { it.first == id } }
+                    ?: rows.singleOrNull()?.carId?.takeIf { id -> choices.any { it.first == id } }
+                    ?: ParkingRules.onlyCar(cars).takeIf { choices.isEmpty() } ?: choices.firstOrNull()?.first ?: ParkingRules.onlyCar(cars)
+                if (choices.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        choices.forEach { (id, title) -> Chip(title, id == forCar) { timerCar = id } }
+                    }
+                }
+                Field(ParkingTimerRules.HINT) { text ->
+                    scope.launch {
+                        val line = core.setParkingTimer(forCar, text)
+                        timerSaid = line ?: ParkingTimerRules.NOT_READ
+                        timerRefused = line == null
+                        timerUndo = null
+                        if (line != null) haptics.light() else haptics.tick()
+                    }
+                }
+                Crossfade(timerSaid, animationSpec = MekaMotion.appear(reduced), label = "timer-said") { s ->
+                    s?.let { Text(it, style = MekaType.caption, color = timerSaidColor, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                }
+                timerUndo?.let { id ->
+                    Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                            haptics.light()
+                            scope.launch { if (core.undoEndParkingTimer(id)) timerSaid = null; timerUndo = null }
+                        }.minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
         if (rows.isNotEmpty()) {
             item(key = "parked-label") { SectionLabel("PARKED", Modifier.animateItem().padding(top = MekaSpace.m)) }
         }
@@ -255,6 +313,37 @@ private fun PillAction(label: String, enabled: Boolean = true, onClick: () -> Un
         contentAlignment = Alignment.Center,
     ) {
         Text(label, style = MekaType.metaStrong, color = if (enabled) Meka.colors.accent else Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * One car's parking timer: the time left (brass in its last ten minutes and once ended), the note he typed, +15 min /
+ * +30 min / +1 h and Ended. The line cross-fades as the minutes go.
+ */
+@Composable
+private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onExtend: (Int) -> Unit, onEnd: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val lineColor by animateColorAsState(
+        if (row.lit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "timer-line",
+    )
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) {}) {
+            if (showTitle) Text(row.title, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "timer-left") { l ->
+                Text(l, style = MekaType.body, color = lineColor)
+            }
+            row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            ParkingTimerRules.EXTEND_MIN.forEach { m -> Chip(ParkingTimerRules.extendLabel(m), false) { onExtend(m) } }
+            Text(ParkingTimerRules.ENDED, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onEnd)
+                    .semantics { contentDescription = "${ParkingTimerRules.ENDED}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
+        }
     }
 }
 

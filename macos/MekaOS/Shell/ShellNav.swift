@@ -128,7 +128,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trips: "Trips and bookings, day by day"
         case .errands: "Things to get or do when you're at a place"
         // Car and parking, slice 1: where the car is parked stays on the phone; the Mac's tile has the cars' dates.
-        case .car: "Each car's MOT, tax, insurance and service"
+        case .car: "The parking timer, and each car's MOT, tax, insurance and service"
         case .emergency: "Who to call and where things are"
         case .facts: "Car reg, GP, sizes · the facts Navilife answers from"
         case .brief: "Your day, who you're waiting on and headlines"
@@ -172,8 +172,6 @@ enum MoreItem: Int, CaseIterable, Identifiable {
     var destination: ShellDestination? {
         switch self {
         case .lists: .lists
-        // The cars' dates live in Lists → Renewals on the Mac.
-        case .car: .lists
         case .goals: .goals
         case .review: .review
         case .vault: .vault

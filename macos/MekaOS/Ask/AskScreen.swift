@@ -181,6 +181,7 @@ struct AskScreen: View {
         case .errands: model.showErrands = true
         case .appointments: model.showAppointments = true
         case .bins: model.showBins = true
+        case .car: model.showCar = true
         case .gifts: model.showGifts = true
         case .people: model.showPeople = true
         case .trips: model.showTrips = true
@@ -201,7 +202,7 @@ struct AskScreen: View {
         case .talk: model.showTalk = true
         case .health: model.showHealth = true
         case .setup: model.showSetup = true
-        case .lists, .car, .goals, .review, .vault, .appearance, .ai, .settings: break
+        case .lists, .goals, .review, .vault, .appearance, .ai, .settings: break
         }
     }
 }

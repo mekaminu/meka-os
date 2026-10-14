@@ -116,8 +116,12 @@ final class CoreModel {
     private(set) var car: CarView?
     /// Two cars: every car, first car first.
     private(set) var cars: CarsView?
+    /// Car and parking, slice 2: each car's parking timer (synced; no location in it).
+    private(set) var parkingTimers: TimersView?
     /// Ask → More → Bins.
     var showBins = false
+    /// Car and parking, slice 2: Ask → Life → Car (the parking timer; the dates open Lists).
+    var showCar = false
     /// Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line ("Chilli tonight", "Next Fri 23 Oct").
     private(set) var lifeLines: LifeLines?
     /// Ask's Daily rows (Ask polish, item 3): each row's live line ("Tomorrow 06:40 · 5 things", "2 saved").
@@ -477,6 +481,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.carsView { self?.cars = c }
+        })
+        observers.append(Task { [weak self] in
+            for await t in core.parkingTimersView { self?.parkingTimers = t }
         })
         observers.append(Task { [weak self] in
             for await m in core.mealsView { self?.meals = m }
@@ -1561,6 +1568,42 @@ final class CoreModel {
     func setCarName(_ carId: String, _ text: String) {
         MekaHaptics.light()
         run { _ = try await $0.setCarName(carId: carId, text: text) }
+    }
+
+    /// Car and parking, slice 2: starts a car's parking timer from typed text ("2 h", "until 15:30"); [said] gets the
+    /// line, or nil when it didn't read. Only Strings cross each way.
+    func setParkingTimer(_ carId: String, _ text: String, said: @escaping @MainActor (String?) -> Void) {
+        guard let core else { return }
+        Task {
+            do {
+                let line = try await core.setParkingTimer(carId: carId, text: text)
+                if line != nil { MekaHaptics.light() } else { MekaHaptics.tick() }
+                said(line)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// +15 min / +30 min / +1 h on a car's timer. A String and an Int32 cross; the line comes back.
+    func extendParkingTimer(_ carId: String, _ minutes: Int32, said: @escaping @MainActor (String?) -> Void) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do { said(try await core.extendParkingTimer(carId: carId, minutes: minutes)) } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Ended: clears a car's timer ([undoEndParkingTimer] puts it back). Only Strings cross.
+    func endParkingTimer(_ carId: String, said: @escaping @MainActor (String?) -> Void) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do { said(try await core.endParkingTimer(carId: carId)) } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    func undoEndParkingTimer(_ carId: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.undoEndParkingTimer(carId: carId) }
     }
 
     /// Two cars: adds another car; [opened] gets its id so the sheet can unfold its row. Only a String crosses each way.

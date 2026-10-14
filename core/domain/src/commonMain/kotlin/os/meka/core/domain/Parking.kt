@@ -351,9 +351,12 @@ object ParkingRules {
         }
     }
 
-    /** The grid's lines with the Car tile saying where the car is ([parked], from the phone): live, not "to set up". */
-    fun withParked(lines: LifeLines, parked: LifeTileLine?): LifeLines =
-        if (parked == null) lines else LifeLines(lines.lines + (LifeTile.CAR to parked), lines.toSetUp - LifeTile.CAR)
+    /**
+     * The grid's lines with the Car tile saying where the car is ([parked], from the phone): live, not "to set up".
+     * Slice 2: a running parking timer ([timers]) keeps the tile (its time left matters more than the bay).
+     */
+    fun withParked(lines: LifeLines, parked: LifeTileLine?, timers: TimersView = TimersView.EMPTY): LifeLines =
+        if (parked == null || timers.running) lines else LifeLines(lines.lines + (LifeTile.CAR to parked), lines.toSetUp - LifeTile.CAR)
 
     /**
      * The Car tile's own line (both apps): the soonest of the cars' dates still to come — "MOT due Thu 12 Nov", with

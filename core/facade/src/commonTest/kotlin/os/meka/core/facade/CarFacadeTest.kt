@@ -137,4 +137,39 @@ class CarFacadeTest {
         assertTrue(fold.undoRemoveCar(id))
         assertEquals(2, fold.carsView.value.count)
     }
+
+    @Test
+    fun aParkingTimerTypedOnTheFoldShowsOnTheMacAndRemindsTenMinutesBefore() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        // Mon 12 Oct 2026, 10:00 in London: "until 11:30 RingGo 81234".
+        assertNull(fold.setParkingTimer("car", "somewhere"))
+        assertEquals("Parking timer until 11:30 · reminds you at 11:20", fold.setParkingTimer("car", "until 11:30 RingGo 81234"))
+        assertEquals("Paid until 11:30 · 1 h 30 left", fold.parkingTimersView.value.rows.single().line)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Paid until 11:30 · 1 h 30 left", mac.parkingTimersView.value.rows.single().line)
+        assertEquals("RingGo 81234", mac.parkingTimersView.value.rows.single().note)
+        // The Car tile leads with it on both apps.
+        assertEquals("Paid until 11:30 · 1 h 30 left", mac.lifeLines.value.of(os.meka.core.domain.LifeTile.CAR)?.text)
+
+        val g = mac.governNotifications(null, DeviceAlerts.ALL)
+        assertTrue(g.post.none { it.source == NoticeSource.PARKING })
+        now += 80 * 60_000L // 11:20
+        mac.tick()
+        val due = mac.governNotifications(g.stateEncoded, DeviceAlerts.ALL)
+        assertEquals(listOf("Parking ends at 11:30"), due.post.filter { it.source == NoticeSource.PARKING }.map { it.title })
+        assertEquals("Paid until 11:30 · 10 min left", mac.parkingTimersView.value.rows.single().line)
+
+        // +30 min on the Mac: the Fold follows and the reminder comes again for 12:00.
+        assertEquals("Parking timer until 12:00 · reminds you at 11:50", mac.extendParkingTimer("car", 30))
+        mac.syncNow(); fold.syncNow()
+        assertEquals("Paid until 12:00 · 40 min left", fold.parkingTimersView.value.rows.single().line)
+
+        // Ended, then Undo.
+        assertEquals("Parking timer ended", fold.endParkingTimer("car"))
+        assertTrue(fold.parkingTimersView.value.rows.isEmpty())
+        assertTrue(fold.undoEndParkingTimer("car"))
+        assertEquals("Paid until 12:00 · 40 min left", fold.parkingTimersView.value.rows.single().line)
+        assertFalse(fold.undoEndParkingTimer("car"))
+    }
 }

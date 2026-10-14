@@ -144,6 +144,7 @@ class MekaCore(
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val documents = os.meka.core.domain.Documents(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val car = os.meka.core.domain.Car(replica)
+    private val parkingTimers = os.meka.core.domain.ParkingTimers(replica)
     private val mealPlan = os.meka.core.domain.MealPlan(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
@@ -464,6 +465,12 @@ class MekaCore(
      * and whether another can be added. Synced.
      */
     val carsView: StateFlow<os.meka.core.domain.CarsView> = _cars.asStateFlow()
+    private val _parkingTimers = MutableStateFlow(os.meka.core.domain.TimersView.EMPTY)
+    /**
+     * Car and parking, slice 2: each car's parking timer ("Paid until 15:30 · 1 h 20 left"), ended ones for two hours.
+     * Synced (no location in it), so the Mac shows it too.
+     */
+    val parkingTimersView: StateFlow<os.meka.core.domain.TimersView> = _parkingTimers.asStateFlow()
     /**
      * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
      * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
@@ -2003,6 +2010,42 @@ class MekaCore(
     suspend fun removeCar(carId: String): Boolean = onCore { car.setRemoved(carId, true) }
 
     suspend fun undoRemoveCar(carId: String): Boolean = onCore { car.setRemoved(carId, false) }
+
+    /**
+     * Car and parking, slice 2: starts (or replaces) car [carId]'s parking timer from typed text ("2 h", "until 15:30",
+     * "till 6pm RingGo 81234"). The line to show ("Parking timer until 15:30 · reminds you at 15:20"), or null when it
+     * doesn't read (say [os.meka.core.domain.ParkingTimerRules.NOT_READ]). Never throws.
+     */
+    suspend fun setParkingTimer(carId: String, text: String): String? = onCore {
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val t = parkingTimers.set(carId, text, now, cal) ?: return@onCore null
+        os.meka.core.domain.ParkingTimerRules.setLine(t, os.meka.core.domain.ParkingRules.titleOf(carId, _cars.value), now, cal)
+    }
+
+    /** Adds [minutes] to car [carId]'s timer (+15 min, +30 min, +1 h); the new line, or null without a timer. */
+    suspend fun extendParkingTimer(carId: String, minutes: Int): String? = onCore {
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val t = parkingTimers.extend(carId, minutes, now) ?: return@onCore null
+        os.meka.core.domain.ParkingTimerRules.setLine(t, os.meka.core.domain.ParkingRules.titleOf(carId, _cars.value), now, cal)
+    }
+
+    private val endedTimers = mutableMapOf<String, os.meka.core.domain.ParkingTimer>()
+
+    /** Ends car [carId]'s timer ([undoEndParkingTimer] puts it back); "Parking timer ended · the Golf", or null without one. */
+    suspend fun endParkingTimer(carId: String): String? = onCore {
+        val t = parkingTimers.clear(carId) ?: return@onCore null
+        endedTimers[carId] = t
+        os.meka.core.domain.ParkingTimerRules.clearedLine(os.meka.core.domain.ParkingRules.titleOf(carId, _cars.value))
+    }
+
+    suspend fun undoEndParkingTimer(carId: String): Boolean = onCore {
+        val t = endedTimers.remove(carId) ?: return@onCore false
+        if (parkingTimers.timer(carId) != null) return@onCore false
+        parkingTimers.put(t)
+        true
+    }
 
     /** "Removed the Golf · its dates stay on the radar". */
     fun carRemovedLine(title: String): String = os.meka.core.domain.CarRules.removedLine(title)
@@ -6094,6 +6137,7 @@ class MekaCore(
         )
         _cars.value = os.meka.core.domain.CarRules.views(car.cars(), listsNow.renewals.all, carCheck(), todayDay, cal)
         _car.value = _cars.value.first
+        _parkingTimers.value = os.meka.core.domain.ParkingTimerRules.view(parkingTimers.all(), _cars.value, nowMs(), cal)
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
         _lifeLines.value = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileRules.inputs(
@@ -6102,7 +6146,8 @@ class MekaCore(
             _people.value,
         ).copy(
             // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
-            carLine = os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
+            // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
+            carLine = _parkingTimers.value.tile ?: os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
         ))
         // Ask polish, item 3: Daily's rows say what they hold now ("Tomorrow 06:40 · 5 things", "2 left", "2 saved").
         val fixtureNow = os.meka.core.domain.DailyRules.fixture(dayEvents, nowMs(), cal)
@@ -6202,6 +6247,8 @@ class MekaCore(
             protectedFromMin = protectedFromToday(),
             // Deliveries, slice 2: "Parcel out for delivery · Amazon" when a shipping email says so.
             parcels = activity.parcels(),
+            // Car and parking, slice 2: ten minutes before a parking timer ends.
+            parkingTimers = parkingTimers.all(), cars = _cars.value,
         )
 
     /**

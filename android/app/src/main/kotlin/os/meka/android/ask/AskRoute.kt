@@ -127,12 +127,13 @@ fun AskRoute(
     // line); read again when Ask comes back and when a pane closes.
     val parkContext = LocalContext.current
     val carsNow by core.carsView.collectAsState()
+    val timersNow by core.parkingTimersView.collectAsState()
     var parkedLook by remember { mutableStateOf(0) }
-    val lifeLines = remember(coreLifeLines, carsNow, parkedLook, pane) {
+    val lifeLines = remember(coreLifeLines, carsNow, timersNow, parkedLook, pane) {
         val nowMs = System.currentTimeMillis()
         val cal = os.meka.core.domain.LocalCalendar.fixedOffset(java.util.TimeZone.getDefault().getOffset(nowMs).toLong())
         val rows = os.meka.core.domain.ParkingRules.rows(ParkingStore.spots(parkContext), carsNow, nowMs, cal)
-        os.meka.core.domain.ParkingRules.withParked(coreLifeLines, os.meka.core.domain.ParkingRules.tileLine(rows, nowMs))
+        os.meka.core.domain.ParkingRules.withParked(coreLifeLines, os.meka.core.domain.ParkingRules.tileLine(rows, nowMs), timersNow)
     }
     val dailyLines by core.dailyLines.collectAsState()
     // The Bedside clock row's "Screen saver on/off": read again each time Ask comes back (he may have just set it).

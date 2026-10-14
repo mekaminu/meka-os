@@ -174,6 +174,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * "Parcel out for delivery · Amazon" · "Between 10:15 and 11:15 · with DPD". Gone once it's delivered.
      */
     PARCELS("Parcels out for delivery", NoticeTier.HEADS_UP),
+    /**
+     * Car and parking, slice 2 ([ParkingTimerRules.notices]): ten minutes before a parking timer ends — "Parking ends
+     * at 15:30" · "10 min left · extend it in your parking app, or move the car". Again for an extended time.
+     */
+    PARKING("Parking timer", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -607,6 +612,7 @@ object Governor {
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
         NoticeSource.MAIL_MOMENT -> "your ten-minute inbox"
         NoticeSource.PARCELS -> if (n == 1) "a parcel out for delivery" else "$n parcels out for delivery"
+        NoticeSource.PARKING -> if (n == 1) "parking about to end" else "$n parking timers about to end"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -699,6 +705,9 @@ object NoticeSources {
         protectedFromMin: Int? = null,
         /** Deliveries, slice 2: the parcels read from shipping emails, for "out for delivery" ([ParcelRules.notices]). */
         parcels: List<Parcel> = emptyList(),
+        /** Car and parking, slice 2: the cars' parking timers, ten minutes before each ends ([ParkingTimerRules.notices]). */
+        parkingTimers: List<ParkingTimer> = emptyList(),
+        cars: CarsView = CarsView.EMPTY,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -832,6 +841,7 @@ object NoticeSources {
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
         if (mailMoment != null) out += MailMomentRules.notices(mailMoment, mailWaiting, protectedFromMin, nowMs, cal)
         out += ParcelRules.notices(parcels, nowMs, cal)
+        out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
