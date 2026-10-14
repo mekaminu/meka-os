@@ -84,6 +84,28 @@ object CallLogRules {
     const val CLEARED_WORDS = "Words cleared when you pressed Done"
     const val FLAGGED = "Flagged as likely spam"
 
+    /**
+     * Slice 5: a call notification's tap opens Activity → Calls with the call unfolded. The open value is
+     * [OPEN_PREFIX] + the held message's id ("" when the notice isn't tied to one, e.g. the after-call notice).
+     */
+    const val OPEN_PREFIX = "calls:"
+
+    fun openCall(heldId: String?): String = OPEN_PREFIX + heldId.orEmpty()
+
+    /** The held id in an open value ("" = just Activity → Calls), or null when [open] isn't a call's. */
+    fun callFromOpen(open: String?): String? = open?.takeIf { it.startsWith(OPEN_PREFIX) }?.removePrefix(OPEN_PREFIX)
+
+    /**
+     * Which row to unfold for a tapped notification: the row for [heldId] when it is listed, else the newest row from
+     * the caller with block-list key [key] (the after-call notice and an automatic block know only the number), else
+     * none (the list just opens).
+     */
+    fun target(view: CallLogView, heldId: String?, key: String?): String? {
+        heldId?.takeIf { it.isNotEmpty() }?.let { id -> view.row(id)?.let { return it.id } }
+        if (key == null) return null
+        return view.days.firstNotNullOfOrNull { d -> d.rows.firstOrNull { it.detail.key == key } }?.id
+    }
+
     /** Names a caller known only by number (as the after-work summary does), keeping the number for Call back / Block. */
     fun named(item: CapturedItem, names: CallerNames, lists: PeopleLists): CapturedItem {
         if (!People.key(item.personName).startsWith("tel:")) return item

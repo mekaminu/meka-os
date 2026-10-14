@@ -161,7 +161,7 @@ object UnknownCallNotice {
             title = offer.title, text = offer.line, big = offer.line, sub = null, listen = null, callBack = null,
             block = UnknownCallRules.BLOCK_ACTION, notSpam = if (offer.notSpam) CallNoticeRules.NOT_SPAM else null,
         )
-        val b = CallNotification.mark(base(context, offer.title, offer.line), tag, CallNoticeRules.Kind.AFTER_CALL)
+        val b = CallNotification.mark(context, base(context, offer.title, offer.line), tag, CallNoticeRules.Kind.AFTER_CALL)
         CallNotification.addActions(context, b, tag, offer.number, notice, blockWhy = offer.why, reportText = offer.reportText)
         return send(context, tag, b)
     }
@@ -176,7 +176,7 @@ object UnknownCallNotice {
         val tag = CallNoticeRules.tag(number) ?: return
         ensureChannel(context)
         val notice = CallNoticeRules.confirmNotice(number, blocked, notSpam)
-        val b = CallNotification.mark(base(context, notice.title, notice.text), tag, CallNoticeRules.Kind.CONFIRM)
+        val b = CallNotification.mark(context, base(context, notice.title, notice.text), tag, CallNoticeRules.Kind.CONFIRM)
         CallNotification.addActions(context, b, tag, number, notice, blockWhy = WorkAlerts.BLOCK_WHY,
             reportText = BlockedCallerRules.reportText(number))
         send(context, tag, b)
@@ -198,7 +198,7 @@ object UnknownCallNotice {
         ensureChannel(context)
         val notice = runCatching { (context.applicationContext as MekaApplication).core.autoBlockNotice(number, trigger, atMs, calls) }
             .getOrNull() ?: return
-        val b = CallNotification.mark(base(context, notice.title, notice.text, notice.big), tag, CallNoticeRules.Kind.AUTO_BLOCKED)
+        val b = CallNotification.mark(context, base(context, notice.title, notice.text, notice.big), tag, CallNoticeRules.Kind.AUTO_BLOCKED)
         CallNotification.addActions(context, b, tag, number, notice, activityId = activityId,
             reportText = BlockedCallerRules.reportText(number))
         send(context, tag, b)

@@ -37,6 +37,11 @@ object BlockedCallerFields {
     /** The [HUNG_UP_AT] the Fold has looked at (blocked or let be), so each hang-up is decided once. Added 2026-10-13. */
     const val HUNG_UP_HANDLED = "hungUpHandledAtMs"
     /**
+     * Call notifications, slice 5: the newest automated call-assistant message from this number the Fold has looked at
+     * (blocked or let be; [AutomatedCallRules]), so each is decided once. Written by the Fold only. Added 2026-10-14.
+     */
+    const val AUTOMATED_HANDLED = "automatedHandledAtMs"
+    /**
      * Spam calls still ring, slice 4: how many calls from this number the Fold's screening has stopped (rejected without
      * ringing) while it was on the list, and when the last one was. Written by the Fold only. Added 2026-10-13.
      */
@@ -289,6 +294,24 @@ class BlockedCallers(
         val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return
         if ((s[BlockedCallerFields.HUNG_UP_HANDLED].longOrNull ?: 0L) >= atMs) return
         replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.HUNG_UP_HANDLED to atMs.fv()))
+    }
+
+    /** The [BlockedCallerFields.AUTOMATED_HANDLED] time for [key]; 0 when none. */
+    fun automatedHandledAt(key: String): Long =
+        replica.entity(EntityTypes.BLOCKED_CALLER, key)?.get(BlockedCallerFields.AUTOMATED_HANDLED)?.longOrNull ?: 0L
+
+    /** Marks the automated message at [atMs] from [number] as looked at (synced; never blocks by itself). */
+    fun markAutomatedHandled(number: String, atMs: Long) {
+        val key = BlockedCallerRules.keyOf(number) ?: return
+        if (automatedHandledAt(key) >= atMs) return
+        val exists = replica.entity(EntityTypes.BLOCKED_CALLER, key) != null
+        replica.commitLocal(
+            EntityTypes.BLOCKED_CALLER, key,
+            buildMap {
+                if (!exists) put(BlockedCallerFields.NUMBER, number.trim().take(40).fv())
+                put(BlockedCallerFields.AUTOMATED_HANDLED, atMs.fv())
+            },
+        )
     }
 
     /** Takes [key] off the list (calls from it ring again); false when it wasn't blocked. */

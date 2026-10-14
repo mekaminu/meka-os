@@ -125,6 +125,15 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
         // Filter (slice 3): only shown when there's more than one kind of thing; this phone's choice, never synced.
         var filterName by rememberSaveable { mutableStateOf(ActivityRules.filterNamed(null).name) }
         val chips = ActivityRules.filters(view)
+        // Call notifications, slice 5: opened from a call's notification — Calls, with the call unfolded below.
+        val callApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
+        val callRequest by remember(callApp) { callApp?.openCall ?: kotlinx.coroutines.flow.MutableStateFlow<CallOpen?>(null) }.collectAsState()
+        LaunchedEffect(callRequest) {
+            if (callRequest == null) return@LaunchedEffect
+            filterName = ActivityFilter.CALLS.name
+            kotlinx.coroutines.delay(1_500L) // the Calls section has picked it up by now (both sides of the cross-fade)
+            callApp?.openCall?.value = null
+        }
         val filter = ActivityRules.chosen(view, ActivityRules.filterNamed(filterName))
         if (chips.isNotEmpty()) {
             Row(

@@ -3457,6 +3457,34 @@ class MekaCore(
         autoBlock(hangup.number, os.meka.core.domain.AutoBlockTrigger.ASSISTANT_HANGUP, hangup.atMs)
     }
 
+    /**
+     * Call notifications, slice 5: the call assistant's messages that read as automated, from real numbers, not blocked
+     * and not looked at yet (one per caller). The Fold checks each like a hang-up and calls [autoBlockAutomatedCall].
+     */
+    suspend fun automatedCalls(): List<os.meka.core.domain.AssistantHangup> = onCore {
+        val keys = blockList.view().keys
+        os.meka.core.domain.AutomatedCallRules.pending(held.calls(), blockList::automatedHandledAt, keys, nowMs())
+    }
+
+    /**
+     * The Fold's decision on one [automatedCalls] entry, with the same never-block checks as a hang-up ([known]:
+     * contact, called in 90 days, listed, its own number, a claimed official body; [lookups]: it could check at all).
+     * Marks it looked at either way; with spam protection on, a stranger who isn't household and left no real message
+     * lately goes on the block list as an automatic action with Undo. Returns that Activity entry's id, or null.
+     */
+    suspend fun autoBlockAutomatedCall(call: os.meka.core.domain.AssistantHangup, known: Boolean, lookups: Boolean): String? = onCore {
+        blockList.markAutomatedHandled(call.number, call.atMs)
+        val household = call.key in os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())
+        val real = os.meka.core.domain.AutomatedCallRules.leftRealMessage(held.calls(), call.key, nowMs())
+        val block = os.meka.core.domain.AssistantHangupRules.shouldBlock(work.spamProtection(), lookups, known, household, real) &&
+            call.key !in blockList.view().keys
+        if (!block) {
+            refresh()
+            return@onCore null
+        }
+        autoBlock(call.number, os.meka.core.domain.AutoBlockTrigger.AUTOMATED, call.atMs)
+    }
+
     /** Blocks [number] as an automatic action (Activity, with Undo); the entry's id, or null when nothing changed. */
     private fun autoBlock(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, calls: Int = 0): String? {
         val why = os.meka.core.domain.AutoBlockRules.why(trigger, atMs, ZoneCalendar(timeZone))

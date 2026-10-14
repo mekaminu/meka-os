@@ -108,6 +108,8 @@ enum class AutoBlockTrigger(val why: String) {
     NETWORK_CHECK("Auto-blocked · failed the network's caller check"),
     REPEAT_CALLER("Auto-blocked · called again within a week without leaving a message"),
     ASSISTANT_HANGUP("Auto-blocked · hung up on your call assistant without a message"),
+    /** Call notifications, slice 5: left the call assistant what reads as an automated message ([CallNoticeRules.automated]). */
+    AUTOMATED("Auto-blocked · left your call assistant an automated message"),
 }
 
 object AutoBlockRules {
@@ -136,6 +138,7 @@ object AutoBlockRules {
         AutoBlockTrigger.NETWORK_CHECK -> "Your network couldn't verify the caller's number (often a spoofed one); it didn't ring"
         AutoBlockTrigger.REPEAT_CALLER -> "Called $callsInWindow times in $REPEAT_DAYS days and never left a message"
         AutoBlockTrigger.ASSISTANT_HANGUP -> "Reached your call assistant and hung up without saying who they were or why"
+        AutoBlockTrigger.AUTOMATED -> "Reached your call assistant and left what sounds like an automated call: a keypad press, one word or a second or two"
     }
 }
 
@@ -170,4 +173,42 @@ object AssistantHangupRules {
      */
     fun shouldBlock(protection: Boolean, lookups: Boolean, known: Boolean, household: Boolean, leftVoiceMessage: Boolean): Boolean =
         protection && lookups && !known && !household && !leftVoiceMessage
+}
+
+/**
+ * Call notifications that tell him something, slice 5 (build plan (4): "automated calls … follow the spam rules
+ * (auto-block with Undo unless a contact/recent/household)"). The call assistant's messages that read as automated
+ * ([CallNoticeRules.automated]: under 3 s, only digits or one word, or "urgent" pressed with no words) from a real
+ * number, settled (the words are in, or there will be none), from the last [AssistantHangupRules.WINDOW_DAYS] days, not
+ * blocked yet and not looked at yet. The Fold checks each against what only it knows (contacts, calls in 90 days, the
+ * lists, its own numbers, a claimed official body) and blocks a stranger as an automatic action with Undo, exactly as a
+ * hang-up on the assistant. Pure; numbers are never logged.
+ */
+object AutomatedCallRules {
+    /** One per caller, the newest, oldest caller first: what the Fold should look at. */
+    fun pending(calls: List<HeldCall>, handledAt: (String) -> Long, blockedKeys: Set<String>, nowMs: Long): List<AssistantHangup> {
+        val since = nowMs - AssistantHangupRules.WINDOW_DAYS * 86_400_000L
+        return calls.asSequence()
+            .map { it.item }
+            .filter { it.kind == CaptureKind.VOICE_MESSAGE && it.automated && !it.transcribing && it.atMs >= since }
+            .mapNotNull { item ->
+                val number = CallNoticeRules.numberOf(item) ?: return@mapNotNull null
+                if (OfficialCallerRules.isEmergency(number)) return@mapNotNull null
+                val key = BlockedCallerRules.keyOf(number) ?: return@mapNotNull null
+                if (key in blockedKeys || item.atMs <= handledAt(key)) return@mapNotNull null
+                AssistantHangup(key, number, item.atMs)
+            }
+            .groupBy { it.key }.values.map { hs -> hs.maxWith(compareBy<AssistantHangup> { it.atMs }) }
+            .sortedWith(compareBy<AssistantHangup> { it.atMs }.thenBy { it.key })
+    }
+
+    /** Whether [key] left a real (not automated) voice message in the last [AutoBlockRules.REPEAT_DAYS] days. */
+    fun leftRealMessage(calls: List<HeldCall>, key: String, nowMs: Long): Boolean {
+        val since = nowMs - AutoBlockRules.REPEAT_DAYS * 86_400_000L
+        return calls.any { c ->
+            val i = c.item
+            i.kind == CaptureKind.VOICE_MESSAGE && !i.automated && i.atMs >= since &&
+                BlockedCallerRules.keyOf(CallNoticeRules.numberOf(i)) == key
+        }
+    }
 }

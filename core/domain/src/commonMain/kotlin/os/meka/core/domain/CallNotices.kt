@@ -251,6 +251,7 @@ object CallNoticeRules {
             AutoBlockTrigger.NETWORK_CHECK -> "Blocked before it rang · $at · your network couldn't verify the number"
             AutoBlockTrigger.REPEAT_CALLER -> "Rang · $at · called $callsInWindow times in ${AutoBlockRules.REPEAT_DAYS} days and never left a message"
             AutoBlockTrigger.ASSISTANT_HANGUP -> "Sent to your call assistant · $at · hung up without saying who they were or why"
+            AutoBlockTrigger.AUTOMATED -> "Sent to your call assistant · $at · ${AUTOMATED_LABEL.lowercase()}, no real message"
         }
     }
 

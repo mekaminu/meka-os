@@ -204,6 +204,12 @@ fun AskRoute(
     LaunchedEffect(openWeekAhead) {
         if (openWeekAhead) { pane = MoreItem.WEEK_AHEAD; healthApp?.openWeekAhead?.value = false }
     }
+    // A call's notification (call notifications, slice 5) → the Activity pane, on Calls with that call unfolded (the
+    // pane clears the request once its Calls section has it).
+    val openCall by remember(healthApp) { healthApp?.openCall ?: kotlinx.coroutines.flow.MutableStateFlow<os.meka.android.activity.CallOpen?>(null) }.collectAsState()
+    LaunchedEffect(openCall) {
+        if (openCall != null) pane = MoreItem.ACTIVITY
+    }
     // "Near Tesco" (errands by location, slice 2) → the Errands pane.
     val openErrands by remember(healthApp) { healthApp?.openErrands ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openErrands) {

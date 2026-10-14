@@ -40,12 +40,26 @@ object CallNotification {
         return CallNoticeRules.replaces(incoming, now.kind, now.postedAtMs, System.currentTimeMillis())
     }
 
-    /** Marks a builder as the caller's notification of [kind] (and, for a message alert, which message). */
-    fun mark(b: NotificationCompat.Builder, tag: String, kind: CallNoticeRules.Kind, itemId: String? = null): NotificationCompat.Builder =
-        b.setGroup(tag).addExtras(Bundle().apply {
+    /** Marks a builder as the caller's notification of [kind] (and, for a message alert, which message); its tap opens the call. */
+    fun mark(context: Context, b: NotificationCompat.Builder, tag: String, kind: CallNoticeRules.Kind, itemId: String? = null): NotificationCompat.Builder =
+        b.setGroup(tag).setContentIntent(open(context, tag, itemId)).addExtras(Bundle().apply {
             putString(EXTRA_KIND, kind.name)
             if (itemId != null) putString(EXTRA_ITEM, itemId)
         })
+
+    /**
+     * Call notifications, slice 5: tapping the caller's notification opens Activity → Calls with the call unfolded
+     * ([heldId] for a message alert, else the caller's newest call by [tag]'s number key). Its own request code per
+     * caller, so one caller's tap never carries another's call.
+     */
+    fun open(context: Context, tag: String, heldId: String? = null): PendingIntent = PendingIntent.getActivity(
+        context, id(tag) + 7,
+        Intent(context, os.meka.android.MainActivity::class.java)
+            .putExtra(os.meka.android.MainActivity.EXTRA_OPEN, os.meka.core.domain.CallLogRules.openCall(heldId))
+            .putExtra(os.meka.android.MainActivity.EXTRA_CALL_KEY, tag.removePrefix("call:"))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
 
     private fun broadcast(context: Context, code: Int, action: String, number: String, extra: (Intent) -> Unit = {}): PendingIntent =
         PendingIntent.getBroadcast(

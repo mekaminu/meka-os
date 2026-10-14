@@ -88,6 +88,11 @@ class MainActivity : ComponentActivity() {
                 androidx.core.app.NotificationManagerCompat.from(this).cancel(it.hashCode())
                 app.openAfterWork.value = true
             }
+            // A call's notification (call notifications, slice 5): Activity → Calls with that call unfolded.
+            open.startsWith(os.meka.core.domain.CallLogRules.OPEN_PREFIX) -> os.meka.core.domain.CallLogRules.callFromOpen(open)?.let {
+                app.openCall.value = os.meka.android.activity.CallOpen(it, intent.getStringExtra(EXTRA_CALL_KEY))
+                app.openDestination.value = ShellDestination.ASK
+            }
             // The wake alarm was dismissed: Today with the morning brief springing up.
             open == OPEN_BRIEF -> app.openBrief.value = true
             // A school holiday with nothing booked (annual leave, slice 2): Ask with the Annual leave pane up.
@@ -166,6 +171,8 @@ class MainActivity : ComponentActivity() {
         /** The same, reading itself aloud (Listen on the heads-up); [EXTRA_CANCEL] is the notification to take away. */
         const val OPEN_WEEK_AHEAD_LISTEN = "week_ahead_listen"
         const val EXTRA_CANCEL = "os.meka.cancel"
+        /** With a "calls:" open: the caller's block-list key, for a notice not tied to one message (slice 5). */
+        const val EXTRA_CALL_KEY = "os.meka.callKey"
         /** Ask → More → Errands, its pane up (the near-a-place reminder). */
         const val OPEN_ERRANDS = "errands"
         /** "car-park:car2": the Car pane saving car 2's spot; "car:car2": the Car pane (its bay to add). */

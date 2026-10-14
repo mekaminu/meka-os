@@ -224,6 +224,44 @@ class CallSpamFacadeTest {
     }
 
     @Test
+    fun aStrangersAutomatedMessageBlocksThemOnceWithUndo() = runTest {
+        val c = core()
+        fun msg(id: String, number: String, text: String, at: Long) = os.meka.core.domain.CapturedItem(
+            id, os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE, number, text, null, at,
+        )
+        c.holdCaptured(
+            listOf(
+                msg("r1", "+441632960800", "6", now - 120_000L),
+                msg("r2", "+441632960801", "1", now - 60_000L),
+                msg("r3", "+441632960801", "Hi, it's the garage about your car", now - 3_600_000L),
+            ),
+            lists,
+        )
+        val pending = c.automatedCalls()
+        assertEquals(listOf("+441632960800", "+441632960801"), pending.map { it.number })
+        val id = c.autoBlockAutomatedCall(pending[0], known = false, lookups = true)!!
+        assertEquals("Blocked today · Auto-blocked · left your call assistant an automated message · Sat 10 Oct",
+            c.blockedCallers.value.rows.single().line)
+        val entry = c.activityView.value.days.flatMap { it.rows }.single { it.id == id }
+        assertEquals("Blocked 01632 960800 · it won't ring again", entry.summary)
+        assertTrue(entry.canUndo)
+        // The caller who also left a real message this week isn't blocked; both are looked at once.
+        assertEquals(null, c.autoBlockAutomatedCall(pending[1], known = false, lookups = true))
+        assertEquals(emptyList(), c.automatedCalls())
+        // Undo takes it off the list, and the same message doesn't block it again.
+        c.undoActivity(id)
+        assertEquals(0, c.blockedCallers.value.rows.size)
+        assertEquals(emptyList(), c.automatedCalls())
+        // A known caller (contact, called lately…) or a phone that can't check: looked at, nobody blocked.
+        c.holdCaptured(listOf(msg("r4", "+441632960802", "6", now - 30_000L), msg("r5", "+441632960803", "6", now - 20_000L)), lists)
+        val (known, unchecked) = c.automatedCalls()
+        assertEquals(null, c.autoBlockAutomatedCall(known, known = true, lookups = true))
+        assertEquals(null, c.autoBlockAutomatedCall(unchecked, known = false, lookups = false))
+        assertEquals(0, c.blockedCallers.value.rows.size)
+        assertEquals(emptyList(), c.automatedCalls())
+    }
+
+    @Test
     fun aKnownCallerOrAnUncheckablePhoneOrProtectionOffBlocksNobody() = runTest {
         val c = core()
         serverHangup("01632 960601", now - 60_000L)

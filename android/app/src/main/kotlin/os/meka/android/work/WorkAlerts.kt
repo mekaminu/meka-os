@@ -78,9 +78,17 @@ object WorkAlerts {
         }
         val line = notice?.text ?: item.text ?: why.label
         val big = notice?.big ?: line
-        val open = PendingIntent.getActivity(
+        // Call notifications, slice 5: a call's alert opens Activity → Calls with that call unfolded (a caller's own
+        // notification gets the same from CallNotification.mark below); a message opens the app.
+        val open = if (item.kind == CaptureKind.MESSAGE) PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        ) else PendingIntent.getActivity(
+            context, item.id.hashCode() + 7,
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN, os.meka.core.domain.CallLogRules.openCall(item.id))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val b = NotificationCompat.Builder(context, CHANNEL)
@@ -106,7 +114,7 @@ object WorkAlerts {
         // Block or Unblock and Not spam beside ▶ Listen.
         val tag = CallNoticeRules.tag(number)
         if (notice != null && tag != null && number != null) {
-            CallNotification.mark(b, tag, CallNoticeRules.Kind.MESSAGE, item.id)
+            CallNotification.mark(context, b, tag, CallNoticeRules.Kind.MESSAGE, item.id)
             CallNotification.addActions(context, b, tag, number, notice, listen = playIntent, blockWhy = BLOCK_WHY, itemId = item.id)
         } else if (playIntent != null) {
             b.addAction(0, notice?.listen ?: CallAssistantRules.PLAY_ACTION, playIntent)

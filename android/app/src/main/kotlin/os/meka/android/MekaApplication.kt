@@ -87,6 +87,8 @@ class MekaApplication : Application() {
     val openWeekAhead = MutableStateFlow(false)
     /** Listen on Sunday's week-ahead heads-up (slice 2): the pane opens reading the week aloud; the pane clears it. */
     val listenWeekAhead = MutableStateFlow(false)
+    /** A call notification's tap (call notifications, slice 5) → Ask → More → Activity on Calls, that call unfolded. */
+    val openCall = MutableStateFlow<os.meka.android.activity.CallOpen?>(null)
     /** "Near Tesco" notification's tap → Ask → More → Errands (errands by location, slice 2). */
     val openErrands = MutableStateFlow(false)
     /** "Where did I park?" said to Talk (car and parking, slice 1) → Ask → Life → Car with Find my car open. */

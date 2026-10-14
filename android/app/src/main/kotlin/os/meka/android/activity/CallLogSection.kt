@@ -21,10 +21,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,6 +61,12 @@ import os.meka.core.domain.CallLogRow
 import os.meka.core.domain.CallLogRules
 
 /**
+ * Call notifications, slice 5: a call notification's tap. [heldId] is the held message it was about ("" when none),
+ * [key] the caller's block-list key; Activity opens on Calls with that call unfolded ([CallLogRules.target]).
+ */
+data class CallOpen(val heldId: String, val key: String?)
+
+/**
  * Activity → Calls (call notifications, slice 4): RECENT CALLS — the call assistant's messages and the calls missed at
  * work from the last 7 days, named from this phone's contacts, one line each with a block chip. A tap (tick haptic)
  * unfolds the call's detail in place on the expand spring: the small timeline, the AI's summary, the words, the spam
@@ -77,6 +86,13 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf<String?>(null) }
+    // Slice 5: opened from a call's notification — unfold that call and bring it into view.
+    val request by app.openCall.collectAsState()
+    var reveal by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(request, view) {
+        val r = request ?: return@LaunchedEffect
+        CallLogRules.target(view, r.heldId, r.key)?.let { open = it; reveal = it }
+    }
     Column(Modifier.fillMaxWidth().appear(rememberAppearance(index)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Spacer(Modifier.height(MekaSpace.m))
         Text(CallLogRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
@@ -85,7 +101,7 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
             Text(day.label, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
             day.rows.forEach { row ->
                 CallRowView(
-                    row, expanded = open == row.id,
+                    row, expanded = open == row.id, reveal = reveal == row.id,
                     onToggle = { haptics.tick(); open = if (open == row.id) null else row.id },
                     fetch = { id -> core.voiceMessageAudio(id) },
                     onCallBack = { number ->
@@ -116,6 +132,7 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
 private fun CallRowView(
     row: CallLogRow,
     expanded: Boolean,
+    reveal: Boolean,
     onToggle: () -> Unit,
     fetch: suspend (String) -> ByteArray?,
     onCallBack: (String) -> Unit,
@@ -124,8 +141,15 @@ private fun CallRowView(
     onNotSpam: (String) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
+    val bring = remember { BringIntoViewRequester() }
+    LaunchedEffect(reveal) {
+        if (reveal) {
+            kotlinx.coroutines.delay(if (reduced) 120L else 420L) // after the pane springs up and the row unfolds
+            runCatching { bring.bringIntoView() }
+        }
+    }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        Modifier.fillMaxWidth().bringIntoViewRequester(bring).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button, onClickLabel = if (expanded) "Fold away" else "Show what happened") { onToggle() }
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
