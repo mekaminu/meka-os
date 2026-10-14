@@ -33,6 +33,8 @@ data class UnknownCallOffer(
     val why: String,
     /** "Call 01632960691", for Report to 7726. */
     val reportText: String,
+    /** Call notifications, slice 3: the AI has the number flagged as likely spam, so Not spam is offered. */
+    val notSpam: Boolean = false,
 )
 
 object UnknownCallRules {
@@ -99,6 +101,8 @@ object UnknownCallRules {
          * being blocked; the line says how to check instead of "Block it?" (Block stays on the notification).
          */
         claim: OfficialClaim? = null,
+        /** Call notifications, slice 3: numbers on Suspected spam (keys): the line says so and Not spam is offered. */
+        suspected: Set<String> = emptySet(),
     ): UnknownCallOffer? {
         val key = BlockedCallerRules.keyOf(number) ?: return null
         if (key in blocked) return null
@@ -113,7 +117,8 @@ object UnknownCallRules {
             CallOutcome.ANSWERED -> "Rang through · you spoke ${length(durationS)} · $day$at"
             CallOutcome.TO_ASSISTANT -> "Sent to your call assistant · $day$at · the network couldn't verify the number"
             CallOutcome.UNKNOWN -> "Rang · $day$at"
-        } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) } ?: " · ${CallNoticeRules.NOT_BLOCKED}")
+        } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) }
+            ?: " · " + if (key in suspected) CallNoticeRules.SUSPECTED_STATUS else CallNoticeRules.NOT_BLOCKED)
         val what = when (outcome) {
             CallOutcome.MISSED -> "Missed call"
             CallOutcome.DECLINED -> "Declined call"
@@ -129,6 +134,7 @@ object UnknownCallRules {
             line = line,
             why = "$what · ${CivilDate.shortLabel(cal.epochDayOf(atMs))}",
             reportText = BlockedCallerRules.reportText(number)!!,
+            notSpam = key in suspected,
         )
     }
 

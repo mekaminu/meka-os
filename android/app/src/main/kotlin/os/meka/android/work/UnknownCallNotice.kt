@@ -9,7 +9,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.provider.CallLog
 import androidx.core.app.NotificationCompat
 import androidx.work.BackoffPolicy
@@ -26,6 +25,7 @@ import kotlinx.coroutines.launch
 import os.meka.android.MainActivity
 import os.meka.android.MekaApplication
 import os.meka.core.domain.BlockedCallerRules
+import os.meka.core.domain.CallNoticeRules
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.People
 import os.meka.core.domain.UnknownCallOffer
@@ -124,17 +124,7 @@ object UnknownCallNotice {
         )
     }
 
-    private fun id(key: String) = ("unknown-call:" + key).hashCode()
-
-    /** Opens Messages with "Call 01632960691" to 7726 (Meka sends it); straight to the activity, no trampoline. */
-    private fun reportIntent(context: Context, offer: UnknownCallOffer): PendingIntent = PendingIntent.getActivity(
-        context, id(offer.key),
-        Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + BlockedCallerRules.REPORT_TO))
-            .putExtra("sms_body", offer.reportText).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-    )
-
-    private fun base(context: Context, offer: UnknownCallOffer, line: String): NotificationCompat.Builder {
+    private fun base(context: Context, title: String, line: String, big: String = line): NotificationCompat.Builder {
         val open = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -142,9 +132,9 @@ object UnknownCallNotice {
         )
         return NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_notify_missed_call)
-            .setContentTitle(offer.title)
+            .setContentTitle(title)
             .setContentText(line)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(line))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(big))
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOnlyAlertOnce(true)
@@ -152,88 +142,66 @@ object UnknownCallNotice {
             .setAutoCancel(true)
     }
 
+    private fun send(context: Context, tag: String, b: NotificationCompat.Builder): Boolean = try {
+        os.meka.android.notify.MekaPost.notify(context, CallNotification.id(tag), b.build()); true
+    } catch (e: SecurityException) { false }
+
+    /**
+     * The after-call notice, in the caller's own notification (call notifications, slice 3). Returns true when it was
+     * posted, or held back because the caller's notification already says more (the call assistant's message alert or
+     * an automatic block from the last hour): either way the call has been told.
+     */
     @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
     fun post(context: Context, offer: UnknownCallOffer): Boolean {
         if (!WorkAlerts.canPost(context)) return false
+        val tag = CallNoticeRules.tag(offer.number) ?: return false
+        if (!CallNotification.mayPost(context, tag, CallNoticeRules.Kind.AFTER_CALL)) return true
         ensureChannel(context)
-        val block = PendingIntent.getBroadcast(
-            context, id(offer.key),
-            Intent(context, UnknownCallReceiver::class.java).setAction(UnknownCallReceiver.ACTION_BLOCK)
-                .putExtra(UnknownCallReceiver.EXTRA_NUMBER, offer.number)
-                .putExtra(UnknownCallReceiver.EXTRA_WHY, offer.why),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        val notice = CallNoticeRules.Notice(
+            title = offer.title, text = offer.line, big = offer.line, sub = null, listen = null, callBack = null,
+            block = UnknownCallRules.BLOCK_ACTION, notSpam = if (offer.notSpam) CallNoticeRules.NOT_SPAM else null,
         )
-        val n = base(context, offer, offer.line)
-            .addAction(0, UnknownCallRules.BLOCK_ACTION, block)
-            .addAction(0, UnknownCallRules.REPORT_ACTION, reportIntent(context, offer))
-            .build()
-        return try {
-            os.meka.android.notify.MekaPost.notify(context, id(offer.key), n); true
-        } catch (e: SecurityException) { false }
+        val b = CallNotification.mark(base(context, offer.title, offer.line), tag, CallNoticeRules.Kind.AFTER_CALL)
+        CallNotification.addActions(context, b, tag, offer.number, notice, blockWhy = offer.why, reportText = offer.reportText)
+        return send(context, tag, b)
     }
-
-    /** After Block: the same notification says it's done, keeps Report to 7726, and goes by itself. */
-    @SuppressLint("MissingPermission")
-    fun postBlocked(context: Context, number: String, why: String) {
-        if (!WorkAlerts.canPost(context)) return
-        val key = BlockedCallerRules.keyOf(number) ?: return
-        val shown = BlockedCallerRules.display(number)
-        val offer = UnknownCallOffer(key, number, "Unknown caller · $shown", BlockedCallerRules.BLOCKED_LINE, why,
-            BlockedCallerRules.reportText(number) ?: return)
-        val n = base(context, offer, BlockedCallerRules.BLOCKED_LINE)
-            .addAction(0, UnknownCallRules.REPORT_ACTION, reportIntent(context, offer))
-            .setTimeoutAfter(BLOCKED_SHOWN_MS)
-            .build()
-        try { os.meka.android.notify.MekaPost.notify(context, id(key), n) } catch (e: SecurityException) { }
-    }
-
-    private const val BLOCKED_SHOWN_MS = 60_000L
 
     /**
-     * Spam calls still ring, slice 1: the quiet line after an auto-block — "Blocked 01632 960123 · it won't ring
-     * again" with Undo (takes it off the list; Activity has the same Undo) and Report to 7726. Stays until swiped.
+     * After Block, Unblock or Not spam on a notice that isn't a message alert: the same notification says what it did
+     * and keeps the way back (Unblock after Block, Block after Unblock or Not spam).
      */
-    fun postAutoBlocked(context: Context, number: String, activityId: String, calls: Int) =
-        postAutoBlockedLine(context, number, activityId, os.meka.core.domain.AutoBlockRules.detail(os.meka.core.domain.AutoBlockTrigger.REPEAT_CALLER, calls))
-
-    /** The same line for a caller who hung up on the call assistant without a message (spam calls still ring, slice 3). */
-    fun postAutoBlockedHangup(context: Context, number: String, activityId: String) =
-        postAutoBlockedLine(context, number, activityId, os.meka.core.domain.AutoBlockRules.detail(os.meka.core.domain.AutoBlockTrigger.ASSISTANT_HANGUP))
-
-    /** The same line for a number blocked before it rang because the network couldn't verify it. */
-    fun postAutoBlockedNetwork(context: Context, number: String, activityId: String) =
-        postAutoBlockedLine(context, number, activityId, os.meka.core.domain.AutoBlockRules.detail(os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK))
-
-    @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
-    private fun postAutoBlockedLine(context: Context, number: String, activityId: String, detail: String) {
+    @SuppressLint("MissingPermission")
+    fun postConfirm(context: Context, number: String, blocked: Boolean? = null, notSpam: Boolean = false) {
         if (!WorkAlerts.canPost(context)) return
-        val key = BlockedCallerRules.keyOf(number) ?: return
-        val line = os.meka.core.domain.AutoBlockRules.blockedLine(number)
-        val offer = UnknownCallOffer(key, number, line, line, "", BlockedCallerRules.reportText(number) ?: return)
-        val undo = PendingIntent.getBroadcast(
-            context, id(key) + 1,
-            Intent(context, UnknownCallReceiver::class.java).setAction(UnknownCallReceiver.ACTION_UNDO)
-                .putExtra(UnknownCallReceiver.EXTRA_NUMBER, number)
-                .putExtra(UnknownCallReceiver.EXTRA_ACTIVITY, activityId),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-        val n = base(context, offer, detail)
-            .setContentTitle(line)
-            .addAction(0, os.meka.core.domain.AutoBlockRules.UNDO, undo)
-            .addAction(0, UnknownCallRules.REPORT_ACTION, reportIntent(context, offer))
-            .build()
-        try { os.meka.android.notify.MekaPost.notify(context, id(key), n) } catch (e: SecurityException) { }
+        val tag = CallNoticeRules.tag(number) ?: return
+        ensureChannel(context)
+        val notice = CallNoticeRules.confirmNotice(number, blocked, notSpam)
+        val b = CallNotification.mark(base(context, notice.title, notice.text), tag, CallNoticeRules.Kind.CONFIRM)
+        CallNotification.addActions(context, b, tag, number, notice, blockWhy = WorkAlerts.BLOCK_WHY,
+            reportText = BlockedCallerRules.reportText(number))
+        send(context, tag, b)
     }
 
-    /** After Undo on that line: it says the number can ring again, and goes by itself. */
-    @SuppressLint("MissingPermission")
-    fun postUnblocked(context: Context, number: String) {
+    /**
+     * An automatic block (spam calls still ring, slices 1 and 3), in the caller's own notification: who, "Blocked · and
+     * blocked from now on" and what happened, with Undo (takes it off the list; Activity has the same Undo) and Report
+     * to 7726. Stays until swiped.
+     */
+    @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
+    fun postAutoBlocked(
+        context: Context, number: String, activityId: String, trigger: os.meka.core.domain.AutoBlockTrigger,
+        atMs: Long, calls: Int = 0,
+    ) {
         if (!WorkAlerts.canPost(context)) return
-        val key = BlockedCallerRules.keyOf(number) ?: return
-        val shown = BlockedCallerRules.display(number)
-        val offer = UnknownCallOffer(key, number, "Unblocked $shown", "", "", BlockedCallerRules.reportText(number) ?: return)
-        val n = base(context, offer, "Taken off your block list · its calls ring again").setTimeoutAfter(BLOCKED_SHOWN_MS).build()
-        try { os.meka.android.notify.MekaPost.notify(context, id(key), n) } catch (e: SecurityException) { }
+        val tag = CallNoticeRules.tag(number) ?: return
+        if (!CallNotification.mayPost(context, tag, CallNoticeRules.Kind.AUTO_BLOCKED)) return
+        ensureChannel(context)
+        val notice = runCatching { (context.applicationContext as MekaApplication).core.autoBlockNotice(number, trigger, atMs, calls) }
+            .getOrNull() ?: return
+        val b = CallNotification.mark(base(context, notice.title, notice.text, notice.big), tag, CallNoticeRules.Kind.AUTO_BLOCKED)
+        CallNotification.addActions(context, b, tag, number, notice, activityId = activityId,
+            reportText = BlockedCallerRules.reportText(number))
+        send(context, tag, b)
     }
 
     internal const val KEY_NUMBER = IN_NUMBER
@@ -264,7 +232,7 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
             val calls = UnknownCallNotice.incomingCallsSince(ctx, number, since)
             val id = runCatching { app.core.autoBlockRepeatCaller(number, calls, atMs) }.getOrNull()
             if (id != null) {
-                UnknownCallNotice.postAutoBlocked(ctx, number, id, calls)
+                UnknownCallNotice.postAutoBlocked(ctx, number, id, os.meka.core.domain.AutoBlockTrigger.REPEAT_CALLER, atMs, calls)
                 return Result.success()
             }
         }
@@ -276,34 +244,58 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
     }
 }
 
-/** Block on "Unknown caller · Block?": the number goes on the synced block list (Work → Spam protection lists it). */
+/**
+ * The buttons on a caller's notification (call notifications, slice 3): Block (onto the synced block list; Work →
+ * Spam protection lists it), Unblock, Not spam (off Suspected spam, never flagged again) and Undo on an automatic
+ * block. Afterwards the same notification shows the new state: a message alert is redrawn with its new block line,
+ * anything else says what was done.
+ */
 class UnknownCallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != ACTION_BLOCK && intent.action != ACTION_UNDO) return
+        val action = intent.action ?: return
+        if (action !in setOf(ACTION_BLOCK, ACTION_UNDO, ACTION_UNBLOCK, ACTION_NOT_SPAM)) return
         val number = intent.getStringExtra(EXTRA_NUMBER) ?: return
         val why = intent.getStringExtra(EXTRA_WHY)
         val activityId = intent.getStringExtra(EXTRA_ACTIVITY)
+        val itemId = intent.getStringExtra(EXTRA_ITEM)
         val app = context.applicationContext as MekaApplication
         val pending = goAsync()
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
-                if (intent.action == ACTION_UNDO) {
+                val key = BlockedCallerRules.keyOf(number)
+                val done: Boolean? = when (action) {
                     // Undo on an auto-block: the same Undo as Activity's (it takes the number off the list).
-                    if (activityId != null) runCatching { app.core.undoActivity(activityId) }
-                    UnknownCallNotice.postUnblocked(app, number)
-                } else {
-                    val ok = runCatching { app.core.blockCaller(number, why) }.getOrDefault(false)
-                    if (ok) UnknownCallNotice.postBlocked(app, number, why.orEmpty())
+                    ACTION_UNDO -> { if (activityId != null) runCatching { app.core.undoActivity(activityId) }; false }
+                    ACTION_UNBLOCK -> if (key != null && runCatching { app.core.unblockCaller(key) }.getOrDefault(false)) false else null
+                    ACTION_NOT_SPAM -> if (key != null && runCatching { app.core.dismissSuspectedCaller(key) }.getOrDefault(false)) false else null
+                    else -> if (runCatching { app.core.blockCaller(number, why) }.getOrDefault(false)) true else null
                 }
+                if (done != null) show(app, number, itemId, blocked = done, notSpam = action == ACTION_NOT_SPAM)
             } finally { pending.finish() }
         }
+    }
+
+    private fun show(app: MekaApplication, number: String, itemId: String?, blocked: Boolean, notSpam: Boolean) {
+        val tag = CallNoticeRules.tag(number)
+        val showing = tag?.let { CallNotification.showing(app, it) }
+        val item = if (itemId != null && showing?.kind == CallNoticeRules.Kind.MESSAGE && showing.itemId == itemId) {
+            runCatching {
+                app.core.afterWork.value.withLists(app.captures.lists.value, CallerLookup.names(app)).people
+                    .flatMap { it.items }.firstOrNull { it.id == itemId }
+            }.getOrNull()
+        } else null
+        if (item != null) WorkAlerts.post(app, item, os.meka.core.domain.BreakThrough.URGENT, play = item.hasAudio)
+        else UnknownCallNotice.postConfirm(app, number, blocked = blocked, notSpam = notSpam)
     }
 
     companion object {
         const val ACTION_BLOCK = "os.meka.work.BLOCK_UNKNOWN_CALLER"
         const val ACTION_UNDO = "os.meka.work.UNDO_AUTO_BLOCK"
+        const val ACTION_UNBLOCK = "os.meka.work.UNBLOCK_CALLER"
+        const val ACTION_NOT_SPAM = "os.meka.work.NOT_SPAM_CALLER"
         const val EXTRA_ACTIVITY = "os.meka.work.activity"
         const val EXTRA_NUMBER = "os.meka.work.number"
         const val EXTRA_WHY = "os.meka.work.why"
+        const val EXTRA_ITEM = "os.meka.work.item"
     }
 }

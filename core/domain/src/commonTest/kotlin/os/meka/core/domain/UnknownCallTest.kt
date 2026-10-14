@@ -98,4 +98,15 @@ class UnknownCallTest {
         assertEquals(offered, CallScreeningRules.decode(CallScreeningRules.encode(offered)))
         assertEquals(1, UnknownCallRules.remember(offered, "tel:7700900999", t + UnknownCallRules.ONCE_PER_MS + 2_000).size)
     }
+
+    @Test
+    fun aFlaggedNumbersAfterCallNoticeSaysSoAndOffersNotSpam() {
+        val key = BlockedCallerRules.keyOf(stranger)!!
+        val at = t
+        val o = assertNotNull(UnknownCallRules.offer(stranger, CallOutcome.TO_ASSISTANT, 0, at, at + 60_000, emptySet(), emptyList(), cal, suspected = setOf(key)))
+        assertTrue(o.notSpam)
+        assertTrue(o.line.endsWith(CallNoticeRules.SUSPECTED_STATUS), o.line)
+        val plain = assertNotNull(UnknownCallRules.offer(stranger, CallOutcome.MISSED, 0, at, at + 60_000, emptySet(), emptyList(), cal))
+        assertFalse(plain.notSpam)
+    }
 }

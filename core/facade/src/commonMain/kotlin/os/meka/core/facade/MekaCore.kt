@@ -3451,11 +3451,20 @@ class MekaCore(
         /** The name the network sent with the call (read on the phone); a claimed police/bank/NHS/school gets the heads-up. */
         networkName: String? = null,
     ): os.meka.core.domain.UnknownCallOffer? = onCore {
+        val view = blockList.view()
         os.meka.core.domain.UnknownCallRules.offer(
-            number, outcome, durationS, atMs, nowMs(), blockList.view().keys, offered, ZoneCalendar(timeZone),
+            number, outcome, durationS, atMs, nowMs(), view.keys, offered, ZoneCalendar(timeZone),
             claim = os.meka.core.domain.OfficialCallerRules.claim(networkName),
+            suspected = view.suspectedKeys,
         )
     }
+
+    /**
+     * Call notifications, slice 3: the automatic block in the caller's own notification ("Blocked · and blocked from
+     * now on" with Undo), worded in the phone's time zone.
+     */
+    fun autoBlockNotice(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, callsInWindow: Int = 0) =
+        os.meka.core.domain.CallNoticeRules.autoBlockNotice(number, trigger, atMs, ZoneCalendar(timeZone), callsInWindow)
 
     /**
      * The Fold's call screening asks this about every incoming call: the call assistant's switch, work mode, quiet

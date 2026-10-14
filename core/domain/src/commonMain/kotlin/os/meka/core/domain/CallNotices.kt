@@ -177,6 +177,10 @@ object CallNoticeRules {
     data class Notice(
         val title: String, val text: String, val big: String, val sub: String?,
         val listen: String?, val callBack: String?, val block: String?,
+        /** Slice 3: "Unblock" once the number is on the block list; "Not spam" while the AI has it flagged. */
+        val unblock: String? = null, val notSpam: String? = null,
+        /** Slice 3: "Undo" on an automatic block (takes it off the list, like Activity's Undo). */
+        val undo: String? = null,
     )
 
     /**
@@ -201,6 +205,80 @@ object CallNoticeRules {
             listen = if (canPlay) listenLabel(item.seconds) else null,
             callBack = n?.let { CALL_BACK },
             block = if (n != null && !known(item) && !blocked.has(n)) BLOCK else null,
+            unblock = if (n != null && blocked.has(n)) UNBLOCK else null,
+            notSpam = if (n != null && !known(item) && !blocked.has(n) && BlockedCallerRules.keyOf(n) in blocked.suspectedKeys) NOT_SPAM else null,
+        )
+    }
+
+    // ---- Slice 3: one live notification per call, updated in place ----
+
+    const val UNBLOCK = "Unblock"
+    const val NOT_SPAM = SuspectedSpamRules.NOT_SPAM_LABEL
+    const val UNDO = AutoBlockRules.UNDO
+    /** Meka 18:57: a number put on the list automatically says so in the same notification. */
+    const val AUTO_BLOCKED = "Blocked · and blocked from now on"
+    const val UNBLOCKED = "Unblocked · it will ring again"
+    const val MARKED_NOT_SPAM = "Not spam · Navilife won't flag it again · its calls are screened as usual"
+
+    /**
+     * The one notification a caller has (the after-call notice, the call assistant's message alert, an automatic block
+     * and what Block/Unblock/Not spam did all share it): "call:" + the number's key, or null for a withheld number
+     * (which keeps its own alert per message). Also the group, so Android bundles per caller.
+     */
+    fun tag(number: String?): String? = BlockedCallerRules.keyOf(number)?.let { "call:$it" }
+
+    /** What a caller's notification is showing now, most telling last. */
+    enum class Kind { CONFIRM, AFTER_CALL, AUTO_BLOCKED, MESSAGE }
+
+    /** A newer call's notice replaces an older one of any kind after this long. */
+    const val FRESH_MS = 60 * 60_000L
+
+    /**
+     * Whether [incoming] may replace what the caller's notification shows ([showing], posted at [showingAtMs]; null =
+     * nothing showing): never a less telling notice over a more telling one from the last hour (the after-call
+     * "Sent to your call assistant" never wipes the message alert it led to); the same kind updates in place.
+     */
+    fun replaces(incoming: Kind, showing: Kind?, showingAtMs: Long, nowMs: Long): Boolean = when {
+        showing == null -> true
+        nowMs - showingAtMs !in 0 until FRESH_MS -> true
+        else -> incoming.ordinal >= showing.ordinal
+    }
+
+    /** What happened before an automatic block: "Blocked before it rang · 14:05", "Rang · 14:05 · 3rd call in 7 days". */
+    fun autoBlockHappened(trigger: AutoBlockTrigger, atMs: Long, cal: LocalCalendar, callsInWindow: Int = 0): String {
+        val at = LocalClock.formatMinute(cal.minuteOfDay(atMs))
+        return when (trigger) {
+            AutoBlockTrigger.NETWORK_CHECK -> "Blocked before it rang · $at · your network couldn't verify the number"
+            AutoBlockTrigger.REPEAT_CALLER -> "Rang · $at · called $callsInWindow times in ${AutoBlockRules.REPEAT_DAYS} days and never left a message"
+            AutoBlockTrigger.ASSISTANT_HANGUP -> "Sent to your call assistant · $at · hung up without saying who they were or why"
+        }
+    }
+
+    /**
+     * The automatic block, in the caller's own notification: who, "Blocked · and blocked from now on" collapsed, and
+     * expanded what happened then the block line; Undo and Report to 7726 are the buttons.
+     */
+    fun autoBlockNotice(number: String, trigger: AutoBlockTrigger, atMs: Long, cal: LocalCalendar, callsInWindow: Int = 0): Notice {
+        val happened = autoBlockHappened(trigger, atMs, cal, callsInWindow)
+        return Notice(
+            title = UnknownCallRules.title(number),
+            text = AUTO_BLOCKED,
+            big = "$happened\n$AUTO_BLOCKED · Undo takes it off your block list",
+            sub = null, listen = null, callBack = null, block = null, undo = UNDO,
+        )
+    }
+
+    /** After Block / Unblock / Not spam on a notice that wasn't a message alert: what it did, in the same notification. */
+    fun confirmNotice(number: String, blocked: Boolean? = null, notSpam: Boolean = false): Notice {
+        val line = when {
+            notSpam -> MARKED_NOT_SPAM
+            blocked == true -> BLOCKED
+            else -> UNBLOCKED
+        }
+        return Notice(
+            title = UnknownCallRules.title(number), text = line, big = line, sub = null,
+            listen = null, callBack = CALL_BACK, block = if (blocked == false || notSpam) BLOCK else null,
+            unblock = if (blocked == true) UNBLOCK else null,
         )
     }
 }

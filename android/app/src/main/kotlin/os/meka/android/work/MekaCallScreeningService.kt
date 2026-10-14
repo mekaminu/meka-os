@@ -88,7 +88,7 @@ class MekaCallScreeningService : CallScreeningService() {
             // and an auto-blocked one the quiet "Blocked … · it won't ring again" with Undo (spam calls still ring, slice 1).
             decision?.let { s ->
                 val autoId = s.decision.autoBlockId
-                if (autoId != null && s.number != null) runCatching { UnknownCallNotice.postAutoBlockedNetwork(this@MekaCallScreeningService, s.number, autoId) }
+                if (autoId != null && s.number != null) runCatching { UnknownCallNotice.postAutoBlocked(this@MekaCallScreeningService, s.number, autoId, os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK, System.currentTimeMillis()) }
                 else runCatching { watchUnknown(s) }
             }
         }

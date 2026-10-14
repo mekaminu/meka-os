@@ -8,7 +8,6 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -48,10 +47,14 @@ object WorkAlerts {
     }
 
     /** Whether this item's alert is still in the shade (so adding ▶ Play never brings back one Meka swiped away). */
-    fun isShowing(context: Context, item: CapturedItem): Boolean =
-        runCatching {
+    fun isShowing(context: Context, item: CapturedItem): Boolean {
+        // Call notifications, slice 3: a caller's message alert lives under the caller's own notification.
+        val tag = if (item.kind == CaptureKind.VOICE_MESSAGE) CallNoticeRules.tag(CallNoticeRules.numberOf(item)) else null
+        if (tag != null) return CallNotification.showing(context, tag)?.itemId == item.id
+        return runCatching {
             context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == item.id.hashCode() }
         }.getOrDefault(false)
+    }
 
     /**
      * Posts (or, with the same id, silently updates) the alert. [play] adds ▶ Play once the server has kept the
@@ -91,38 +94,26 @@ object WorkAlerts {
             .setContentIntent(open)
             .setAutoCancel(true)
             .setOnlyAlertOnce(true) // adding ▶ Play later updates it without ringing again
-        if (play) {
-            val playIntent = PendingIntent.getActivity(
-                context, item.id.hashCode(),
-                Intent(context, MainActivity::class.java)
-                    .putExtra(MainActivity.EXTRA_OPEN, CallAssistantRules.openPlay(item.id))
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            b.addAction(0, notice?.listen ?: CallAssistantRules.PLAY_ACTION, playIntent)
-        }
+        val playIntent = if (play) PendingIntent.getActivity(
+            context, item.id.hashCode(),
+            Intent(context, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN, CallAssistantRules.openPlay(item.id))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        ) else null
         val number = if (notice != null) CallNoticeRules.numberOf(item) else null
-        if (notice?.callBack != null && number != null) {
-            val dial = PendingIntent.getActivity(
-                context, item.id.hashCode() + 1,
-                Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            b.addAction(0, notice.callBack, dial)
-        }
-        if (notice?.block != null && number != null) {
-            val block = PendingIntent.getBroadcast(
-                context, item.id.hashCode() + 2,
-                Intent(context, UnknownCallReceiver::class.java).setAction(UnknownCallReceiver.ACTION_BLOCK)
-                    .putExtra(UnknownCallReceiver.EXTRA_NUMBER, number)
-                    .putExtra(UnknownCallReceiver.EXTRA_WHY, BLOCK_WHY),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-            )
-            b.addAction(0, notice.block, block)
+        // Call notifications, slice 3: one notification per caller (the after-call notice becomes this alert), with
+        // Block or Unblock and Not spam beside ▶ Listen.
+        val tag = CallNoticeRules.tag(number)
+        if (notice != null && tag != null && number != null) {
+            CallNotification.mark(b, tag, CallNoticeRules.Kind.MESSAGE, item.id)
+            CallNotification.addActions(context, b, tag, number, notice, listen = playIntent, blockWhy = BLOCK_WHY, itemId = item.id)
+        } else if (playIntent != null) {
+            b.addAction(0, notice?.listen ?: CallAssistantRules.PLAY_ACTION, playIntent)
         }
         val n = b.build()
         try {
-            os.meka.android.notify.MekaPost.notify(context, item.id.hashCode(), n)
+            os.meka.android.notify.MekaPost.notify(context, tag?.let(CallNotification::id) ?: item.id.hashCode(), n)
         } catch (e: SecurityException) {
             // Permission withdrawn between the check and the post: the item is still in the summary.
         }

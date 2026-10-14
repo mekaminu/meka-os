@@ -27,7 +27,7 @@ object AssistantHangups {
                 CallerLookup.calledRecently(app, h.number, h.atMs) ||
                 CallScreenLog.claimedOfficial(app, h.number, since)
             val id = runCatching { app.core.autoBlockAssistantHangup(h, known, lookups) }.getOrNull() ?: continue
-            runCatching { UnknownCallNotice.postAutoBlockedHangup(app, h.number, id) }
+            runCatching { UnknownCallNotice.postAutoBlocked(app, h.number, id, os.meka.core.domain.AutoBlockTrigger.ASSISTANT_HANGUP, h.atMs) }
         }
     }
 }

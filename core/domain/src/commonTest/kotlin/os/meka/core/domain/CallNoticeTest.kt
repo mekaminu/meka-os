@@ -195,4 +195,63 @@ class CallNoticeTest {
         ))).single()
         assertTrue(AssistantCallReportRules.line(e).endsWith("· AI summary 21 chars"), AssistantCallReportRules.line(e))
     }
+
+    @Test
+    fun oneNotificationPerCallerUpdatedInPlaceWithUnblockNotSpamAndAutoBlock() {
+        val key = BlockedCallerRules.keyOf("+441632960001")!!
+        // One notification per caller: the after-call notice, the message alert and an auto-block share it.
+        assertEquals("call:$key", CallNoticeRules.tag("+441632960001"))
+        assertEquals(CallNoticeRules.tag("01632 960001"), CallNoticeRules.tag("+44 1632 960001"))
+        assertNull(CallNoticeRules.tag(null))
+        assertNull(CallNoticeRules.tag("Withheld"))
+        // The after-call "Sent to your call assistant" never wipes the message alert it led to…
+        val k = CallNoticeRules.Kind.entries
+        assertFalse(CallNoticeRules.replaces(CallNoticeRules.Kind.AFTER_CALL, CallNoticeRules.Kind.MESSAGE, t, t + 60_000))
+        assertFalse(CallNoticeRules.replaces(CallNoticeRules.Kind.AFTER_CALL, CallNoticeRules.Kind.AUTO_BLOCKED, t, t + 60_000))
+        // …the message alert replaces the after-call notice, the same kind updates in place, nothing showing = post.
+        assertTrue(CallNoticeRules.replaces(CallNoticeRules.Kind.MESSAGE, CallNoticeRules.Kind.AFTER_CALL, t, t + 60_000))
+        assertTrue(k.all { CallNoticeRules.replaces(it, it, t, t + 60_000) })
+        assertTrue(k.all { CallNoticeRules.replaces(it, null, 0, t) })
+        // A newer call an hour later replaces anything.
+        assertTrue(CallNoticeRules.replaces(CallNoticeRules.Kind.AFTER_CALL, CallNoticeRules.Kind.MESSAGE, t, t + CallNoticeRules.FRESH_MS))
+
+        // Unblock once on the list; Not spam while flagged; Block otherwise.
+        val msg = voice(text = "Hi it's about your parcel delivery today")
+        val listed = BlockedCallersView(listOf(BlockedCallerRow(key, "+441632960001", "Blocked today · Hung up on the assistant")), "1 number")
+        val onList = CallNoticeRules.voiceNotice(msg, cal, canPlay = false, blocked = listed)
+        assertEquals(CallNoticeRules.UNBLOCK, onList.unblock)
+        assertNull(onList.block)
+        assertNull(onList.notSpam)
+        val flagged = BlockedCallersView(emptyList(), BlockedCallerRules.EMPTY_LINE, suspects = listOf(SuspectedCallerRow(key, "+441632960001", "Flagged")))
+        val suspect = CallNoticeRules.voiceNotice(msg, cal, canPlay = false, blocked = flagged)
+        assertEquals("Not spam", suspect.notSpam)
+        assertEquals(CallNoticeRules.BLOCK, suspect.block)
+        assertTrue(suspect.big.endsWith(CallNoticeRules.SUSPECTED_STATUS), suspect.big)
+        val plain = CallNoticeRules.voiceNotice(msg, cal, canPlay = false)
+        assertNull(plain.unblock)
+        assertNull(plain.notSpam)
+        // A contact never gets Block, Unblock or Not spam.
+        val dentist = CallNoticeRules.voiceNotice(voice(text = "Confirming Thursday at three", name = "Dentist"), cal, canPlay = false, blocked = flagged)
+        assertNull(dentist.block)
+        assertNull(dentist.notSpam)
+
+        // An automatic block says so in the caller's own notification, with Undo.
+        val auto = CallNoticeRules.autoBlockNotice("+441632960001", AutoBlockTrigger.ASSISTANT_HANGUP, t, cal)
+        assertEquals("01632 960001 · not in your contacts", auto.title)
+        assertEquals("Blocked · and blocked from now on", auto.text)
+        assertEquals("Sent to your call assistant · 14:02 · hung up without saying who they were or why\nBlocked · and blocked from now on · Undo takes it off your block list", auto.big)
+        assertEquals("Undo", auto.undo)
+        assertNull(auto.block)
+        assertTrue(CallNoticeRules.autoBlockNotice("+441632960001", AutoBlockTrigger.REPEAT_CALLER, t, cal, 3).big.startsWith("Rang · 14:02 · called 3 times in 7 days"))
+        assertTrue(CallNoticeRules.autoBlockNotice("+441632960001", AutoBlockTrigger.NETWORK_CHECK, t, cal).big.startsWith("Blocked before it rang · 14:02"))
+
+        // What Block / Unblock / Not spam did, in the same notification, with the way back.
+        val blockedNow = CallNoticeRules.confirmNotice("+441632960001", blocked = true)
+        assertEquals(CallNoticeRules.BLOCKED, blockedNow.text)
+        assertEquals(CallNoticeRules.UNBLOCK, blockedNow.unblock)
+        val unblocked = CallNoticeRules.confirmNotice("+441632960001", blocked = false)
+        assertEquals("Unblocked · it will ring again", unblocked.text)
+        assertEquals(CallNoticeRules.BLOCK, unblocked.block)
+        assertEquals(CallNoticeRules.BLOCK, CallNoticeRules.confirmNotice("+441632960001", notSpam = true).block)
+    }
 }
