@@ -5,7 +5,10 @@ import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
+import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
+import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MailBacklogFacts
 import os.meka.core.domain.MailBacklog
 import os.meka.core.domain.MailBacklogKind
@@ -798,11 +801,29 @@ class Integrations(
         val receiptHeaders = done.filter { it.second == MailTidy.RECEIPT }.map { it.first }
         val previews = if (receiptHeaders.isEmpty()) emptyMap() else ms.previews(a.id, receiptHeaders.map { it.id })
         val receipts = receiptHeaders.map { h -> MailReceiptRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview) }
-        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts))
+        // Slice 3e: a receipt that says how long there is to send it back puts a one-off reminder on the Renewals radar.
+        val returns = receiptHeaders.zip(receipts).count { (h, r) -> returnReminder(a, account, h, r, previews[h.id] ?: h.preview) }
+        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts, returns))
         // Slice 5b: each unsubscribed sender's row in Mail says how many later emails went to Trash.
         done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
             writeSender(a, id, MailUnsubscribeRules.trashedFields(ss.first().trashed, ss.size, at))
         }
+    }
+
+    /**
+     * Inbox autopilot, slice 3e: when a tidied receipt's subject or kept preview names a return window
+     * ([MailReturnRules.lastDay]), a one-off `obligation` "Last day to return · Amazon order" is written once under an id
+     * from the account and the email; one already written (even if he edited, finished or removed it since) is never
+     * written again. Days are Europe/London's. Returns whether it wrote one.
+     */
+    private fun returnReminder(a: AccountRow, account: String, h: MailHeader, r: MailReceipt, preview: String?): Boolean {
+        val receivedDay = LONDON.epochDayOf(h.receivedAtMs)
+        val ret = MailReturnRules.read(r, h.subject, preview, receivedDay) ?: return false
+        if (ret.lastDay < LONDON.epochDayOf(now())) return false
+        val id = MailReturnRules.obligationId(a.id, h.id)
+        if (store.transaction { store.mirror(a.householdId, a.id) }.containsKey(id)) return false
+        writeMail(a, id, MailReturnRules.fields(ret, account, receivedDay, now(), LONDON), EntityTypes.OBLIGATION)
+        return true
     }
 
     /** Slice 3c: when each account's Junk was last looked at (this process; a restart looks again, which moves nothing twice). */
@@ -1540,6 +1561,14 @@ class Integrations(
         Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(bytes).also(rng::nextBytes))
 
     companion object {
+        /** Slice 3e: Meka's days (a return-by date is a London day; its reminder sits at 09:00 London on it). */
+        private val LONDON: LocalCalendar = object : LocalCalendar {
+            private val zone = java.time.ZoneId.of("Europe/London")
+            override fun epochDayOf(epochMs: Long) = java.time.Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate().toEpochDay()
+            override fun minuteOfDay(epochMs: Long) = java.time.Instant.ofEpochMilli(epochMs).atZone(zone).toLocalTime().toSecondOfDay() / 60
+            override fun toEpochMs(epochDay: Long, minuteOfDay: Int) =
+                java.time.LocalDate.ofEpochDay(epochDay).atStartOfDay(zone).plusMinutes(minuteOfDay.toLong()).toInstant().toEpochMilli()
+        }
         /** Slice 10b: the sender's rule fields, rewritten whatever the server wrote last. */
         private val RULE_FIELDS = setOf(os.meka.core.domain.MailSenderFields.RULE, os.meka.core.domain.MailSenderFields.RULE_AT)
         const val SERVER_DEVICE = "server"

@@ -36,6 +36,9 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailAutopilotFields
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
+import os.meka.core.domain.MailReturnRules
+import os.meka.core.domain.ActionableFields
+import os.meka.core.domain.ObligationFields
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.MailMoved
@@ -540,6 +543,33 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(cursor = "h4") }
         i.syncAccount(id)
         assertEquals(1, gmail.tidyCalls.size)
+    }
+
+    @Test
+    fun aReceiptWithAReturnWindowPutsOneReminderOnTheRenewalsRadar() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        autopilotOn(ops)
+        now += day * 2
+        gmail.mailbox["r1"] = msg("r1", 0, "auto-confirm@shop.example").copy(subject = "Your order has shipped", preview = "Order total: £40.00 · 30-day returns")
+        gmail.mailbox["r2"] = msg("r2", 0, "orders@other.example").copy(subject = "Your order has shipped", preview = "Order total: £9.99")
+        gmail.nextRound = { MailChanges(fetch = listOf("r1", "r2"), cursor = "h2") }
+        i.syncAccount(id)
+        val reminders = EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION)
+        val (rid, f) = reminders.entries.single()
+        assertEquals(MailReturnRules.obligationId(id, "r1"), rid)
+        assertEquals(FieldValue.Text("Last day to return · Shop order"), f[ActionableFields.TITLE])
+        assertEquals(FieldValue.Int64(4000), f[ObligationFields.COST_MINOR])
+        assertEquals(FieldValue.Text(MailReturnRules.SOURCE), f[ActionableFields.PROVENANCE_SOURCE])
+        val (_, t) = tidies(ops).entries.single()
+        assertTrue((t[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains(" · 1 return date → Renewals"))
+        // Written once: the next check (or a retried one) adds nothing.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
     }
 
     // ---- Slice 3c: the daily Junk review ----

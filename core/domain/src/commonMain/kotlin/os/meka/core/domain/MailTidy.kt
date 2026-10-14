@@ -257,7 +257,7 @@ object MailAutopilotRules {
      * What the batch says in Activity and Mail: "Tidied 6 emails · Personal" over "3 newsletters → Navilife/Newsletters
      * · 2 receipts and orders → Navilife/Receipts · 1 notification or promo archived". [counts] KEEP ignored.
      */
-    fun lines(counts: Map<MailTidy, Int>, account: String, receipts: List<MailReceipt> = emptyList()): Pair<String, String> {
+    fun lines(counts: Map<MailTidy, Int>, account: String, receipts: List<MailReceipt> = emptyList(), returns: Int = 0): Pair<String, String> {
         val parts = MailTidy.entries.filter { it != MailTidy.KEEP }.mapNotNull { t -> counts[t]?.takeIf { it > 0 }?.let { it to t } }
         val total = parts.sumOf { it.first }
         val summary = "Tidied $total ${if (total == 1) "email" else "emails"} · $account"
@@ -265,7 +265,7 @@ object MailAutopilotRules {
         val receiptSuffix = MailReceiptRules.suffix(
             counts[MailTidy.RECEIPT] ?: 0, receipts.count { it.pence != null },
             MailReceiptRules.total(receipts), MailReceiptRules.merchants(receipts),
-        )
+        ) + MailReturnRules.suffix(returns) // Slice 3e: " · 1 return date → Renewals".
         val detail = parts.joinToString(" · ") { (n, t) ->
             "$n ${if (n == 1) t.one else t.many} ${t.destination}" + if (t == MailTidy.RECEIPT) receiptSuffix else ""
         }
@@ -283,8 +283,8 @@ object MailAutopilotRules {
         return out
     }
 
-    fun batchFields(atMs: Long, account: String, counts: Map<MailTidy, Int>, receipts: List<MailReceipt> = emptyList()): Map<String, FieldValue> {
-        val (summary, detail) = lines(counts, account, receipts)
+    fun batchFields(atMs: Long, account: String, counts: Map<MailTidy, Int>, receipts: List<MailReceipt> = emptyList(), returns: Int = 0): Map<String, FieldValue> {
+        val (summary, detail) = lines(counts, account, receipts, returns)
         return receiptFields(receipts) + mapOf(
             MailTidyBatchFields.AT to atMs.fv(),
             MailTidyBatchFields.ACCOUNT to account.fv(),
