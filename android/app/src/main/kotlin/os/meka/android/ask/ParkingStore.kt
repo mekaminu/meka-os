@@ -121,26 +121,8 @@ object ParkingStore {
      */
     suspend fun readSign(context: Context, carId: String): String? {
         val bitmap = loadPhoto(context, carId, ParkingRules.PHOTO_MAX_PX) ?: return null
-        val soft = if (bitmap.config == android.graphics.Bitmap.Config.HARDWARE) bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else bitmap
-        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
-            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS,
-        )
-        return try {
-            kotlinx.coroutines.withTimeoutOrNull(SIGN_READ_MS) {
-                kotlinx.coroutines.suspendCancellableCoroutine<String?> { cont ->
-                    recognizer.process(com.google.mlkit.vision.common.InputImage.fromBitmap(soft ?: bitmap, 0))
-                        .addOnSuccessListener { t -> if (cont.isActive) cont.resumeWith(Result.success(t.text)) }
-                        .addOnFailureListener { if (cont.isActive) cont.resumeWith(Result.success(null)) }
-                        .addOnCanceledListener { if (cont.isActive) cont.resumeWith(Result.success(null)) }
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            null
-        } finally {
-            runCatching { recognizer.close() }
-        }
+        // The one on-phone reading path (screenshots and photos, slice 1).
+        return try { os.meka.android.capture.OnPhoneText.read(bitmap, SIGN_READ_MS) } finally { bitmap.recycle() }
     }
 
     private const val SIGN_READ_MS = 6_000L

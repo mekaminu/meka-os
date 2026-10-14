@@ -27,6 +27,8 @@ struct MekaOSApp: App {
                     CaptureInbox.shared.attach { text, subject, handle in
                         if handle { model.handleThis(text, subject: subject) } else { model.capture(text, subject: subject) }
                     }
+                    // Screenshots and photos, slice 1: "Handle this picture with Navilife" from Services.
+                    CaptureInbox.shared.attachPictures { model.handlePicture($0) }
                     // Notification buttons pressed while the core was starting are answered now.
                     NotificationActionInbox.shared.attach { model.answerFromNotification($0) }
                     // "Listen when I open MEKA": a launch that came before the core was ready listens now.

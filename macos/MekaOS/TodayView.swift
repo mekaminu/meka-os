@@ -956,6 +956,8 @@ private struct CaptureField: View {
             })
             .contextMenu {
                 Button("Take a voice note") { model.startVoiceNote() }
+                Button("Read a picture…") { model.choosePictureToRead() }
+                Button("Read the copied picture") { model.readCopiedPicture() }
             }
             .help(VoiceNoteRules.shared.MAC_HINT)
             .accessibilityLabel("Talk to Navilife")
@@ -1149,6 +1151,11 @@ struct QuickCaptureMenu: View {
                 .frame(width: 320)
             // Voice notes, slice 3: from the menu bar, Navilife comes forward recording one.
             Button("🎙 Take a voice note") { model.startVoiceNote() }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .padding([.horizontal, .bottom], MekaSpace.m)
+            // Screenshots and photos, slice 1: a picture's words, read on this Mac, go to Handle this.
+            Button("🖼 Read a picture…") { model.choosePictureToRead() }
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .padding([.horizontal, .bottom], MekaSpace.m)

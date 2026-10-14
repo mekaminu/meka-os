@@ -29,4 +29,19 @@ final class CaptureInboxTests: XCTestCase {
         XCTAssertEqual(handled.last, "Reply slip by Friday")
         XCTAssertEqual(inbox.waitingCount, 0)
     }
+
+    /// Screenshots and photos, slice 1: a picture from Services waits for the core too, then is read straight away.
+    @MainActor
+    func testPicturesWaitUntilTheCoreIsReady() {
+        let inbox = CaptureInbox()
+        inbox.receive(picture: .bytes(Data([1, 2, 3])))
+        inbox.receive(picture: .file(URL(fileURLWithPath: "/tmp/Screenshot.png")))
+        XCTAssertEqual(inbox.waitingCount, 2)
+        var read = 0
+        inbox.attachPictures { _ in read += 1 }
+        XCTAssertEqual(read, 2)
+        XCTAssertEqual(inbox.waitingCount, 0)
+        inbox.receive(picture: .bytes(Data([4])))
+        XCTAssertEqual(read, 3)
+    }
 }

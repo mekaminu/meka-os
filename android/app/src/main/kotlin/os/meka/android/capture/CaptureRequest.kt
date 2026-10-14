@@ -13,6 +13,11 @@ data class CaptureRequest(
     val startVoice: Boolean,
     /** Open straight into recording a voice note (Talk's "take a voice note"; voice notes slice 1). */
     val voiceNote: Boolean = false,
+    /**
+     * A shared screenshot or photo (screenshots and photos, slice 1): the sheet reads it on the phone first and the
+     * words it finds take [text]'s place; the picture itself is never kept or sent.
+     */
+    val picture: Boolean = false,
 )
 
 object CaptureRequests {
@@ -27,20 +32,25 @@ object CaptureRequests {
     const val EXTRA_TEXT = "android.intent.extra.TEXT"
     const val EXTRA_SUBJECT = "android.intent.extra.SUBJECT"
     const val EXTRA_PROCESS_TEXT = "android.intent.extra.PROCESS_TEXT"
+    const val EXTRA_STREAM = "android.intent.extra.STREAM"
 
     /** Shared text longer than this is cut before it reaches the sheet (the core caps notes anyway). */
     const val MAX_SHARED = 20_000
 
     /**
      * @param text EXTRA_TEXT for a share, EXTRA_PROCESS_TEXT for "Capture in MEKA" on selected text.
-     * Returns null for anything we don't handle (another action, or a share that isn't text).
+     * @param hasPicture a share carries a picture (EXTRA_STREAM): with an image type it opens the sheet reading it.
+     * Returns null for anything we don't handle (another action, or a share that is neither text nor a picture).
      */
     fun from(
         action: String?, mimeType: String?, text: CharSequence?, subject: CharSequence?, voice: Boolean, voiceNote: Boolean = false,
+        hasPicture: Boolean = false,
     ): CaptureRequest? =
         when (action) {
             ACTION_CAPTURE -> CaptureRequest("", null, startVoice = voice && !voiceNote, voiceNote = voiceNote)
-            ACTION_SEND, ACTION_PROCESS_TEXT -> {
+            ACTION_SEND, ACTION_PROCESS_TEXT -> if (action == ACTION_SEND && mimeType?.startsWith("image/") == true) {
+                if (hasPicture) CaptureRequest("", null, startVoice = false, picture = true) else null
+            } else {
                 val isText = mimeType == null || mimeType.startsWith("text/")
                 val body = text?.toString()?.take(MAX_SHARED).orEmpty()
                 val subj = subject?.toString()?.trim()?.takeIf { it.isNotEmpty() && action == ACTION_SEND }

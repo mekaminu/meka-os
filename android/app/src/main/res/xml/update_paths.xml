@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The kept update download (AppUpdater.downloadDir), for Android's own installer; and the camera's scratch file for
-     the bay's photo (ParkingStore.captureUri, car and parking slice 4), which the camera app writes into. -->
+     the bay's photo (ParkingStore.captureUri, car and parking slice 4), which the camera app writes into; and the
+     capture sheet's Photo of a letter (PictureReader.cameraUri, screenshots and photos slice 1), read then deleted. -->
 <paths>
     <cache-path name="update" path="update/" />
     <files-path name="parking" path="parking/" />
+    <cache-path name="pictures" path="pictures/" />
 </paths>

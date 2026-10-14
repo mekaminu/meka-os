@@ -2495,6 +2495,46 @@ final class CoreModel {
         }
     }
 
+    // MARK: Pictures (screenshots and photos that do something, slice 1)
+
+    /// A screenshot or photo (Services → "Handle this picture with Navilife", the menu bar's Read a picture…, the capture
+    /// mic's context menu): Navilife comes forward on Needs you saying it's reading the picture on this Mac, Vision reads
+    /// it off the main actor, and the words alone go to Handle this; with no words the bar says so. Never kept or sent.
+    func handlePicture(_ picture: MacPictureReader.Picture) {
+        NSApp.activate()
+        go(to: .needsYou, reduced: MotionSetting.reduced)
+        offerEventUndo(PictureTextRules.shared.READING_LINE_MAC, nil)
+        Task {
+            switch await MacPictureReader.read(picture) {
+            case .words(let text): handleThis(text)
+            case .nothing(let line):
+                MekaHaptics.tick()
+                offerEventUndo(line, nil)
+            }
+        }
+    }
+
+    /// Read a picture…: an open panel for one image, read as above.
+    func choosePictureToRead() {
+        NSApp.activate()
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.message = "Pick a screenshot or photo · Navilife reads it on this Mac and doesn't keep it"
+        panel.prompt = "Read it"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        handlePicture(.file(url))
+    }
+
+    /// Read the copied picture: a screenshot copied with ⌃⇧⌘4, or an image copied in a browser.
+    func readCopiedPicture() {
+        guard let picture = MacPictureReader.picture(on: .general) else {
+            offerEventUndo(PictureTextRules.shared.NO_COPIED_LINE, nil)
+            return
+        }
+        handlePicture(picture)
+    }
+
     // MARK: Voice notes (voice notes into actions, slice 3)
 
     /// Holding the capture field's mic, or "take a voice note" said to Talk: Navilife comes forward with the voice note

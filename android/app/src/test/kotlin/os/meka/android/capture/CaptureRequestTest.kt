@@ -27,6 +27,18 @@ class CaptureRequestTest {
     }
 
     @Test
+    fun aSharedPictureOpensTheSheetReadingIt() {
+        // Screenshots and photos, slice 1: the words come later, read on the phone; the picture never becomes the task.
+        assertEquals(CaptureRequest("", null, false, picture = true),
+            CaptureRequests.from(ACTION_SEND, "image/png", null, null, false, hasPicture = true))
+        assertEquals(CaptureRequest("", null, false, picture = true),
+            CaptureRequests.from(ACTION_SEND, "image/jpeg", "caption ignored", "subject ignored", true, hasPicture = true))
+        // A picture type with no picture attached is refused; a picture never comes through "Capture in Navilife".
+        assertNull(CaptureRequests.from(ACTION_SEND, "image/png", null, null, false, hasPicture = false))
+        assertNull(CaptureRequests.from(ACTION_PROCESS_TEXT, "image/png", null, null, false, hasPicture = true))
+    }
+
+    @Test
     fun selectedTextIgnoresSubject() {
         assertEquals(CaptureRequest("Book the MOT", null, false),
             CaptureRequests.from(ACTION_PROCESS_TEXT, "text/plain", "Book the MOT", "ignored", false))

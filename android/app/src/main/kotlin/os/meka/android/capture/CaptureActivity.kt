@@ -65,7 +65,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -91,6 +93,7 @@ import os.meka.core.domain.QueueRules
 import os.meka.core.domain.RequestCard
 import os.meka.core.facade.HandleOutcome
 import os.meka.core.facade.VoiceNoteRead
+import os.meka.core.domain.PictureTextRules
 import os.meka.core.domain.QuickCapture
 import os.meka.core.domain.VoiceNoteRules
 
@@ -109,8 +112,10 @@ class CaptureActivity : ComponentActivity() {
             intent?.getCharSequenceExtra(CaptureRequests.EXTRA_SUBJECT),
             intent?.getBooleanExtra(CaptureRequests.EXTRA_VOICE, false) == true,
             voiceNote = intent?.getBooleanExtra(CaptureRequests.EXTRA_VOICE_NOTE, false) == true,
+            hasPicture = sharedPicture() != null,
         )
         if (request == null) { finish(); return }
+        val picture = if (request.picture) sharedPicture() else null
         enableEdgeToEdge()
         val core = (application as MekaApplication).core
         // MEKA follows its own Motion setting, not the phone's animator scale (MotionClock.kt).
@@ -122,6 +127,11 @@ class CaptureActivity : ComponentActivity() {
                     listenOnOpen = request.startVoice && savedInstanceState == null,
                     // Voice notes, slice 1: Talk's "take a voice note" opens the sheet recording (first launch only).
                     noteOnOpen = request.voiceNote && savedInstanceState == null,
+                    // Screenshots and photos, slice 1: a shared picture (or a letter photographed here) read on the phone.
+                    picture = picture,
+                    readPicture = { uri -> PictureReader.read(this@CaptureActivity, uri) },
+                    cameraUri = { PictureReader.cameraUri(this@CaptureActivity) },
+                    forgetCameraPhoto = { PictureReader.forgetCameraPhoto(this@CaptureActivity) },
                     save = { text -> core.capture(text, null) != null },
                     // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
@@ -149,6 +159,12 @@ class CaptureActivity : ComponentActivity() {
         }
     }
 
+    /** The picture a share carries (EXTRA_STREAM), if any; only ever read on the phone, never kept. */
+    private fun sharedPicture(): android.net.Uri? = intent?.let {
+        if (it.action != CaptureRequests.ACTION_SEND || it.type?.startsWith("image/") != true) null
+        else androidx.core.content.IntentCompat.getParcelableExtra(it, CaptureRequests.EXTRA_STREAM, android.net.Uri::class.java)
+    }
+
     override fun onStop() {
         super.onStop()
         // Voice notes, slice 1: leaving the sheet mid-recording stops and keeps the note (Android cuts an app's
@@ -168,6 +184,10 @@ private fun CaptureSheet(
     request: CaptureRequest,
     listenOnOpen: Boolean,
     noteOnOpen: Boolean,
+    picture: android.net.Uri?,
+    readPicture: suspend (android.net.Uri) -> PictureRead,
+    cameraUri: () -> android.net.Uri,
+    forgetCameraPhoto: () -> Unit,
     save: suspend (String) -> Boolean,
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
@@ -179,16 +199,23 @@ private fun CaptureSheet(
     answer: suspend (RequestCard, Boolean) -> String?,
     done: (Boolean) -> Unit,
 ) {
-    val initial = remember(request) { QuickCapture.draft(request.text, request.subject) }
+    // Screenshots and photos, slice 1: the words read off a picture take the shared text's place (the picture is gone).
+    var pictureText by rememberSaveable { mutableStateOf<String?>(null) }
+    var pictureLine by rememberSaveable { mutableStateOf<String?>(null) }
+    var pictureReading by remember { mutableStateOf(false) }
+    val shared = remember(request, pictureText) {
+        pictureText?.let { CaptureRequest(it, null, startVoice = false) } ?: request
+    }
+    val initial = remember(shared) { QuickCapture.draft(shared.text, shared.subject) }
     // A shared web link offers "For the train" (train-time queue, slice 1).
-    val hasLink = remember(request) { (QueueRules.link(request.text) ?: QueueRules.link(request.subject)) != null }
+    val hasLink = remember(shared) { (QueueRules.link(shared.text) ?: QueueRules.link(shared.subject)) != null }
     var doneLabel by rememberSaveable { mutableStateOf("Captured") }
     var title by rememberSaveable { mutableStateOf(initial?.title.orEmpty()) }
     val notes = initial?.notes
     var captured by rememberSaveable { mutableStateOf(false) }
     var voiceMissing by remember { mutableStateOf(false) }
     // "Handle this" (V1, slice 1): offered for shared text with words in it (never for the widget or tile).
-    val canHandle = remember(request) { HandleThisRules.worthAsking(request.text, request.subject) }
+    val canHandle = remember(shared) { HandleThisRules.worthAsking(shared.text, shared.subject) }
     var handling by remember { mutableStateOf(false) }
     var reading by remember { mutableStateOf(false) }
     var handleLine by remember { mutableStateOf<String?>(null) }
@@ -212,6 +239,8 @@ private fun CaptureSheet(
     var tidied by rememberSaveable { mutableStateOf<String?>(null) }
     var mentions by rememberSaveable { mutableStateOf<String?>(null) }
     var noteMessage by remember { mutableStateOf<String?>(null) }
+    // The camera's scratch file for Photo of a letter (kept across the camera app taking over the screen).
+    var lastCameraUri by rememberSaveable { mutableStateOf<android.net.Uri?>(null) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -282,7 +311,7 @@ private fun CaptureSheet(
     fun forTheTrain() {
         if (captured) return
         scope.launch {
-            if (saveForTrain(request.text, request.subject)) {
+            if (saveForTrain(shared.text, shared.subject)) {
                 keyboard?.hide()
                 doneLabel = "Saved for the train"
                 captured = true
@@ -296,7 +325,7 @@ private fun CaptureSheet(
     fun startTimer(carId: String) {
         if (captured) return
         scope.launch {
-            val line = startParking(carId, request.text, request.subject) ?: return@launch
+            val line = startParking(carId, shared.text, shared.subject) ?: return@launch
             keyboard?.hide()
             doneLabel = line
             captured = true
@@ -321,8 +350,8 @@ private fun CaptureSheet(
         reading = true
         scope.launch {
             // Worked out on the phone before MEKA's AI answers (and even when it can't).
-            answers = formAnswers(request.text, request.subject)
-            val out = handle(request.text, request.subject)
+            answers = formAnswers(shared.text, shared.subject)
+            val out = handle(shared.text, shared.subject)
             when (out) {
                 is HandleOutcome.Cards -> { handleCards = out.cards; handleLine = out.line }
                 is HandleOutcome.NothingToDo -> handleLine = out.line
@@ -350,8 +379,41 @@ private fun CaptureSheet(
         }
     }
 
-    LaunchedEffect(request) {
-        if (request.text.isNotBlank()) parkingOffer = parking(request.text, request.subject)
+    LaunchedEffect(shared) {
+        if (shared.text.isNotBlank()) parkingOffer = parking(shared.text, shared.subject)
+    }
+
+    // Screenshots and photos, slice 1: read the picture on the phone; its words fill the field (first line) and notes.
+    suspend fun read(uri: android.net.Uri, source: PictureTextRules.Source) {
+        pictureReading = true
+        keyboard?.hide()
+        when (val r = readPicture(uri)) {
+            is PictureRead.Words -> {
+                pictureText = r.text
+                title = QuickCapture.draft(r.text, null)?.title.orEmpty()
+                pictureLine = PictureTextRules.readLine(r.text, source)
+                haptics.light()
+            }
+            is PictureRead.NoWords -> { pictureLine = r.line; haptics.reject() }
+        }
+        pictureReading = false
+        if (pictureText == null) { runCatching { focus.requestFocus() }; keyboard?.show() }
+    }
+
+    val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = lastCameraUri
+        lastCameraUri = null
+        scope.launch {
+            if (ok && uri != null) read(uri, PictureTextRules.Source.CAMERA)
+            forgetCameraPhoto() // read and gone, or never taken
+        }
+    }
+    fun photographLetter() {
+        if (captured || handling || pictureReading) return
+        haptics.light()
+        val uri = cameraUri()
+        lastCameraUri = uri
+        try { takePhoto.launch(uri) } catch (_: ActivityNotFoundException) { pictureLine = PictureTextRules.NO_CAMERA_LINE }
     }
 
     // The voice note's progress: the level strip follows the voice; once kept, its words go to Handle this.
@@ -403,6 +465,8 @@ private fun CaptureSheet(
         if (captured) { leave(true); return@LaunchedEffect } // rotated or unfolded mid-goodbye
         when {
             noting -> {} // unfolded mid-note: the session carries on
+            picture != null && pictureText == null && pictureLine == null -> read(picture, PictureTextRules.Source.SHARED)
+            request.picture -> {} // already read (rotated or unfolded): the field stays as it was
             noteOnOpen -> holdMic()
             listenOnOpen -> startListening()
             else -> { runCatching { focus.requestFocus() }; keyboard?.show() }
@@ -433,8 +497,9 @@ private fun CaptureSheet(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             AnimatedContent(
-                // 0 the field, 1 Handle this, 2 the goodbye tick, 3 a voice note recording: each step cross-fades (the tick also pops in).
-                targetState = when { captured -> 2; handling -> 1; noting -> 3; else -> 0 },
+                // 0 the field, 1 Handle this, 2 the goodbye tick, 3 a voice note recording, 4 reading a picture: each step
+                // cross-fades (the tick also pops in).
+                targetState = when { captured -> 2; handling -> 1; noting -> 3; pictureReading -> 4; else -> 0 },
                 transitionSpec = {
                     if (targetState == 2) {
                         (fadeIn(MekaMotion.appear(reduced)) + (if (reduced) fadeIn() else scaleIn(MekaMotion.approve(false), 0.6f)))
@@ -455,6 +520,12 @@ private fun CaptureSheet(
                         }
                         Spacer(Modifier.width(MekaSpace.xs))
                         Text(doneLabel, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                    }
+                } else if (step == 4) {
+                    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Text("PICTURE", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+                        Text(PictureTextRules.READING_LINE, style = MekaType.body, color = Meka.colors.textSecondary)
+                        os.meka.android.designsystem.SkeletonRows(count = 2, rowHeight = 18.dp)
                     }
                 } else if (step == 3) {
                     VoiceNoteRecordingView(
@@ -539,11 +610,26 @@ private fun CaptureSheet(
                             Text("Kept in notes: $notes", style = MekaType.caption, color = Meka.colors.textSecondary,
                                 maxLines = 3, overflow = TextOverflow.Ellipsis)
                         }
+                        pictureLine?.let {
+                            Text(it, style = MekaType.caption, color = Meka.colors.textTertiary,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                        }
                         val message = noteMessage
                         if (message != null) {
                             Text(message, style = MekaType.caption, color = Meka.colors.textSecondary)
-                        } else if (title.isEmpty() && request.text.isBlank()) {
+                        } else if (title.isEmpty() && shared.text.isBlank()) {
                             Text(VoiceNoteRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        }
+                        // Photo of a letter: on a sheet opened empty (widget, tile, Today's capture), the camera app
+                        // takes a letter, ticket or sign and Navilife reads it here.
+                        if (request.text.isBlank() && request.subject == null && pictureText == null) {
+                            Text(
+                                "📷 " + PictureTextRules.PHOTO_ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                    .clickable(role = Role.Button) { photographLetter() }
+                                    .semantics { contentDescription = PictureTextRules.PHOTO_LABEL }
+                                    .padding(vertical = MekaSpace.xs),
+                            )
                         }
                         if (voiceMissing) {
                             Text("Voice isn't available on this phone. Type it instead.", style = MekaType.caption, color = Meka.colors.textSecondary)

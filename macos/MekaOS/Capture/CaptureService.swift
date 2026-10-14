@@ -16,6 +16,8 @@ final class CaptureInbox {
 
     private var pending: [(text: String, subject: String?, handle: Bool)] = []
     private var sink: ((String, String?, Bool) -> Void)?
+    private var pendingPictures: [MacPictureReader.Picture] = []
+    private var pictureSink: ((MacPictureReader.Picture) -> Void)?
 
     /// A capture from Services (`handle`: "Handle this with MEKA" rather than "Add to MEKA"). Empty text is ignored.
     func receive(_ text: String, subject: String? = nil, handle: Bool = false) {
@@ -31,7 +33,19 @@ final class CaptureInbox {
         waiting.forEach { sink($0.text, $0.subject, $0.handle) }
     }
 
-    var waitingCount: Int { pending.count }
+    /// A picture from Services; read once the core is running.
+    func receive(picture: MacPictureReader.Picture) {
+        if let pictureSink { pictureSink(picture) } else { pendingPictures.append(picture) }
+    }
+
+    func attachPictures(_ sink: @escaping (MacPictureReader.Picture) -> Void) {
+        pictureSink = sink
+        let waiting = pendingPictures
+        pendingPictures.removeAll()
+        waiting.forEach(sink)
+    }
+
+    var waitingCount: Int { pending.count + pendingPictures.count }
 }
 
 /// The object macOS calls for the "Add to MEKA" service (`NSMessage` = captureText).
@@ -51,6 +65,16 @@ final class CaptureServiceProvider: NSObject {
             return
         }
         MainActor.assumeIsolated { CaptureInbox.shared.receive(text, handle: true) }
+    }
+
+    /// "Handle this picture with Navilife" (screenshots and photos, slice 1): an image, or an image file from Finder, is
+    /// read on this Mac with Vision and only its words go to Handle this.
+    @objc func handlePicture(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+        guard let picture = MacPictureReader.picture(on: pboard) else {
+            error.pointee = "There was no picture for Navilife to read." as NSString
+            return
+        }
+        MainActor.assumeIsolated { CaptureInbox.shared.receive(picture: picture) }
     }
 }
 
