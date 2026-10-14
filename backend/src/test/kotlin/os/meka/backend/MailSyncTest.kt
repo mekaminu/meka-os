@@ -585,8 +585,8 @@ class MailSyncTest {
         autopilotOn(ops)
         device(ops, EntityTypes.CONTEXT_MODE, MailWarrantyRules.ENTITY_ID, MailWarrantyFields.MIN_PENCE, FieldValue.Int64(25_000))
         now += day * 2
-        gmail.mailbox["w1"] = msg("w1", 0, "orders@shop.example").copy(subject = "Your order has shipped", preview = "Order total: £450.00 · 2-year warranty")
-        gmail.mailbox["w2"] = msg("w2", 0, "orders@other.example").copy(subject = "Your order has shipped", preview = "Order total: £120.00")
+        gmail.mailbox["w1"] = msg("w1", 0, "auto-confirm@shop.example").copy(subject = "Your order has shipped", preview = "Order total: £450.00 · 2-year warranty")
+        gmail.mailbox["w2"] = msg("w2", 0, "auto-confirm@other.example").copy(subject = "Your order has shipped", preview = "Order total: £120.00")
         gmail.nextRound = { MailChanges(fetch = listOf("w1", "w2"), cursor = "h2") }
         i.syncAccount(id)
         val reminders = EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION)
