@@ -14,6 +14,7 @@ import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.SyncService
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.minutes
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -22,6 +23,10 @@ import kotlin.test.assertTrue
 
 /** About you (rule 13, slice 1) through the facade: the Fold's one-off copy after a sync, edits on both apps, Setup. */
 class AboutYouFacadeTest {
+    // MekaCore works on Dispatchers.Default (real time), so runTest's 60 s default is wall-clock: the loaded macOS runner's
+    // Kotlin/Native build took longer than that for the many syncs here (dispatched ci run 557: UncompletedCoroutinesError).
+    private companion object { val SLOW_RUNNER = 5.minutes }
+
     private var now = 1_791_795_600_000L // Mon 12 Oct 2026, 10:00 in London
     private val ops = InMemoryServerOpStore()
 
@@ -32,7 +37,7 @@ class AboutYouFacadeTest {
     )
 
     @Test
-    fun theFoldCopiesWhatMekaHadOnceAndTheMacSeesIt() = runTest {
+    fun theFoldCopiesWhatMekaHadOnceAndTheMacSeesIt() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android").apply { seedsAboutYou = true }
         val mac = core("mac")
         // The Mac never copies: its profile stays empty after a sync.
@@ -57,7 +62,7 @@ class AboutYouFacadeTest {
     }
 
     @Test
-    fun aReinstalledFoldPullsBeforeItCouldCopy() = runTest {
+    fun aReinstalledFoldPullsBeforeItCouldCopy() = runTest(timeout = SLOW_RUNNER) {
         val mac = core("mac")
         mac.setAboutYou(AboutField.HOME, "Hilltown")
         mac.syncNow()
@@ -70,7 +75,7 @@ class AboutYouFacadeTest {
     }
 
     @Test
-    fun setupAsksUntilSomethingIsFilledIn() = runTest {
+    fun setupAsksUntilSomethingIsFilledIn() = runTest(timeout = SLOW_RUNNER) {
         val mac = core("mac")
         val setup = mac.refreshSetup(SetupDevice(mac = true))
         val step = setup.steps.first { it.key == AboutYouRules.SETUP_KEY }
@@ -86,7 +91,7 @@ class AboutYouFacadeTest {
     }
 
     @Test
-    fun healthSaysWhenBothAppsHoldTheProfile() = runTest {
+    fun healthSaysWhenBothAppsHoldTheProfile() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android").apply { seedsAboutYou = true; aboutYouDevice = AboutYouDevice.FOLD }
         val mac = core("mac").apply { aboutYouDevice = AboutYouDevice.MAC }
         // No profile yet: no row (Setup asks), and an empty profile is never created by the Mac's mark.
