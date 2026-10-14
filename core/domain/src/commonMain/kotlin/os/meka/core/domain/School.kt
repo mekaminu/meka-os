@@ -144,6 +144,8 @@ data class SchoolView(
     val nextOffDay: Long? = null,
     /** The council card: pick the school's council to fill in its holidays, or what's in and Remove all. */
     val terms: SchoolTermCard? = null,
+    /** Where the school's INSET days are, with its website from About you (slice 3); set by the facade. */
+    val inset: SchoolInsetLink? = null,
 ) {
     val isEmpty: Boolean get() = off.isEmpty() && dates.isEmpty() && weekly.isEmpty()
 

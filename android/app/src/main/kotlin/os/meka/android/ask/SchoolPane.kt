@@ -60,6 +60,8 @@ import os.meka.core.facade.MekaCore
  * School dates filled in (slice 1): a card under the summary offers the councils whose holidays Navilife knows; Fill in
  * writes them as days off (each row says "Council dates · checked … · check with the school"), Remove all takes them out,
  * and the line after either has Undo. Under it a second field takes the school's INSET days pasted as dates or a letter.
+ * Slice 3: over that field, where INSET days are and **School's website ›** (opened in the browser) once About you holds
+ * the school's website, else how to add it; the line cross-fades when it changes.
  *
  * Slice 2, the yearly look: the card's brass line says when a later Navilife carries new dates from the council ("New
  * dates from … · 2028–29 · 6 holidays" with Add them, Undo after) or, from June, that next school year's holidays aren't
@@ -166,6 +168,20 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "inset") {
             Column(Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                // Slice 3: where the INSET days are, and the school's website from About you (cross-fades when it's added).
+                v.inset?.let { link ->
+                    Crossfade(link, animationSpec = MekaMotion.appear(reduced), label = "school-inset-site") { l ->
+                        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            Text(l.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                            val url = l.url
+                            val action = l.action
+                            if (url != null && action != null) {
+                                Text("$action ›", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                    modifier = Modifier.clickable(role = Role.Button) { haptics.light(); runCatching { uri.openUri(url) } }.minTouch())
+                            }
+                        }
+                    }
+                }
                 Field(SchoolTerms.INSET_HINT) { text ->
                     haptics.light()
                     scope.launch { insetSaid = runCatching { core.addSchoolInset(text) }.getOrNull() ?: SchoolTerms.INSET_NONE }

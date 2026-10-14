@@ -34,6 +34,11 @@ object AboutYouFields {
     const val CHILDREN = "children"
     const val HOME = "home"
     const val WORK = "work"
+    /**
+     * The children's school's website (School dates filled in, slice 3, 2026-10-14): School's INSET card opens it, as
+     * INSET days are the school's own and are published there. A normalised https URL.
+     */
+    const val SCHOOL_WEBSITE = "schoolWebsite"
     const val ASSISTANT_NUMBER = "assistantNumber"
     const val VOICEMAIL_NUMBER = "voicemailNumber"
     /** Int64: when the Fold copied MEKA's earlier values in (release 1); absent when he typed it all. */
@@ -68,13 +73,14 @@ data class AboutYou(
     val children: List<AboutChild> = emptyList(),
     val home: String? = null,
     val work: String? = null,
+    val schoolWebsite: String? = null,
     val assistantNumber: String? = null,
     val voicemailNumber: String? = null,
     val seededAtMs: Long? = null,
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, assistantNumber, voicemailNumber).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, assistantNumber, voicemailNumber).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -90,6 +96,7 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     PARTNER_EMAIL(AboutYouFields.PARTNER_EMAIL, "Partner's email", "Their email address", "Add it so Inbox autopilot never tidies their emails away"),
     HOME(AboutYouFields.HOME, "Home", "Your town", "Add home for its weather and the commute"),
     WORK(AboutYouFields.WORK, "Work", "Where the office is", "Add work for office-day weather"),
+    SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
     VOICEMAIL_NUMBER(AboutYouFields.VOICEMAIL_NUMBER, "Voicemail number", "Your network's voicemail", "Not added · only needed for call forwarding"),
 }
@@ -143,6 +150,8 @@ object AboutYouRules {
     const val NOT_NUMBER = "That doesn't look like a phone number."
     const val NOT_PLACE = "Type a town or area, up to 60 letters."
     const val NOT_EMAIL = "That doesn't look like an email address."
+    const val NOT_WEBSITE = "That doesn't look like a web address: “oakfield.sch.uk” or a link from the school's site."
+    const val MAX_WEBSITE = 300
     const val MAX_EMAIL = 254
     const val NOT_CHILD = "Type a name first: “Alex”, “Alex, U7” or “Alex, U7, Oakfield School”."
     const val TOO_MANY = "That's the most children About you holds."
@@ -212,6 +221,7 @@ object AboutYouRules {
             children = decodeChildren(fields[AboutYouFields.CHILDREN]?.textOrNull),
             home = text(AboutYouFields.HOME),
             work = text(AboutYouFields.WORK),
+            schoolWebsite = text(AboutYouFields.SCHOOL_WEBSITE)?.let(::website),
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
             seededAtMs = fields[AboutYouFields.SEEDED_AT]?.longOrNull,
@@ -225,6 +235,7 @@ object AboutYouRules {
         AboutField.PARTNER_EMAIL -> a.partnerEmail
         AboutField.HOME -> a.home
         AboutField.WORK -> a.work
+        AboutField.SCHOOL_WEBSITE -> a.schoolWebsite
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
     }
@@ -241,6 +252,7 @@ object AboutYouRules {
             AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> phone(t)
             AboutField.PARTNER_EMAIL -> email(t)
             AboutField.HOME, AboutField.WORK -> place(t)
+            AboutField.SCHOOL_WEBSITE -> website(t)
         }
     }
 
@@ -249,6 +261,7 @@ object AboutYouRules {
         AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> NOT_NUMBER
         AboutField.PARTNER_EMAIL -> NOT_EMAIL
         AboutField.HOME, AboutField.WORK -> NOT_PLACE
+        AboutField.SCHOOL_WEBSITE -> NOT_WEBSITE
     }
 
     /** Spaces collapsed and trimmed; no regex (Kotlin/Native reads some differently). */
@@ -291,6 +304,35 @@ object AboutYouRules {
         if (labels.size < 2 || labels.any { it.isEmpty() || it.startsWith('-') || it.endsWith('-') }) return null
         if (!labels.all { l -> l.all { it.isLetterOrDigit() || it == '-' } } || labels.last().length < 2) return null
         return s
+    }
+
+    /**
+     * A website as https: "oakfield.sch.uk", "www.Oakfield.sch.uk/term-dates/", "http://…" or a pasted "<https://…>";
+     * the host lower-cased (labels of letters, digits and hyphens, at least one dot, a top level of 2+ letters), a
+     * trailing "/" on a bare host dropped, an "http://" kept as typed; no spaces, quotes or angle brackets, up to
+     * [MAX_WEBSITE]. Null when it can't be one (an email address, "ftp:", "javascript:"). No regex.
+     */
+    internal fun website(t: String): String? {
+        var s = t.trim().trimStart('<').trimEnd('>').trim()
+        if (s.isEmpty() || s.length > MAX_WEBSITE || s.any { it.isWhitespace() || it in "\"'<>`{}|\\^" }) return null
+        val lower = s.lowercase()
+        val scheme = when {
+            lower.startsWith("https://") -> "https://"
+            lower.startsWith("http://") -> "http://"
+            "://" in lower || lower.startsWith("javascript:") || lower.startsWith("mailto:") -> return null
+            else -> "https://"
+        }
+        s = if (lower.startsWith(scheme)) s.substring(scheme.length) else s
+        val cut = s.indexOfFirst { it == '/' || it == '?' || it == '#' }
+        val host = (if (cut < 0) s else s.substring(0, cut)).lowercase()
+        var rest = if (cut < 0) "" else s.substring(cut)
+        if ('@' in host || ':' in host) return null
+        val labels = host.split('.')
+        if (labels.size < 2 || labels.any { it.isEmpty() || it.startsWith('-') || it.endsWith('-') }) return null
+        if (!labels.all { l -> l.all { it.isLetterOrDigit() || it == '-' } }) return null
+        if (labels.last().length < 2 || !labels.last().all(Char::isLetter)) return null
+        if (rest == "/") rest = ""
+        return scheme + host + rest
     }
 
     /**
@@ -416,6 +458,7 @@ object AboutYouRules {
             a.children.size.takeIf { it > 0 }?.let { if (it == 1) "1 child" else "$it children" },
             a.home?.let { "home" },
             a.work?.let { "work" },
+            a.schoolWebsite?.let { "the school's website" },
             (a.assistantNumber ?: a.voicemailNumber)?.let { "numbers" },
         )
         val s = when (parts.size) {

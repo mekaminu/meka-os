@@ -6033,6 +6033,7 @@ class MekaCore(
         _requests.value = requestCards.open()
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
+            .copy(inset = os.meka.core.domain.SchoolTerms.insetLink(aboutYou.profile().schoolWebsite))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay)

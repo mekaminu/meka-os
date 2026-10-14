@@ -7,8 +7,8 @@ internal object HelpIndex {
         HelpEntry(
             id = "about-you",
             title = "About you",
-            keywords = listOf("about you", "my details", "household", "partner", "children"),
-            what = "your name, partner, children, home, work and numbers, kept in your encrypted data, never in Navilife's code.",
+            keywords = listOf("about you", "my details", "household", "partner", "children", "school website"),
+            what = "your name, partner, children, home, work, the school's website and numbers, kept in your encrypted data, never in Navilife's code.",
             how = "Type each line there; clearing one has Undo.",
             tips = listOf(),
             fold = HelpPlace.ABOUT_YOU,

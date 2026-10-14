@@ -130,4 +130,21 @@ class SchoolFacadeTest {
         mac.syncNow(); fold.syncNow()
         assertEquals(15, fold.schoolView.value.off.size)
     }
+
+    @Test
+    fun theSchoolsWebsiteFromAboutYouOnTheMacOpensFromTheFoldsInsetLine() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addSchool("INSET 12 Oct")
+        assertEquals(os.meka.core.domain.SchoolTerms.INSET_SITE_ADD, fold.schoolView.value.inset!!.line)
+        assertNull(fold.schoolView.value.inset!!.url)
+        assertEquals("Saved", mac.setAboutYouField("schoolWebsite", "oakfield.sch.uk/term-dates")!!.line)
+        assertEquals("https://oakfield.sch.uk/term-dates", mac.schoolView.value.inset!!.url)
+        mac.syncNow(); fold.syncNow()
+        val link = fold.schoolView.value.inset!!
+        assertEquals("School's website", link.action)
+        assertEquals("https://oakfield.sch.uk/term-dates", link.url)
+        fold.setAboutYou(os.meka.core.domain.AboutField.SCHOOL_WEBSITE, "")
+        assertNull(fold.schoolView.value.inset!!.url)
+    }
 }

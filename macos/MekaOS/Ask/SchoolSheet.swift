@@ -11,6 +11,7 @@ import SwiftUI
 ///
 /// School dates filled in (slice 1): the council card under the summary (Fill in a council's holidays, or Remove all,
 /// each followed by a line with Undo) and a second field for the school's INSET days pasted as dates or a letter.
+/// Slice 3: over that field, where INSET days are and **School's website ›** once About you holds it.
 ///
 /// Slice 2, the yearly look: the card's brass line for new dates from the council (Add them, then Undo) or, from June,
 /// next school year's holidays not in yet (Council's page when the council's dates are in); it cross-fades.
@@ -61,6 +62,25 @@ struct SchoolSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+            }
+            if let link = v?.inset {
+                // Slice 3: where the INSET days are, and the school's website from About you.
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(link.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let act = link.action, let u = link.url, let url = URL(string: u) {
+                        Spacer(minLength: MekaSpace.xs)
+                        Button("\(act) ›") { openURL(url) }
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.itemMeta)
+                            .foregroundStyle(palette.accent)
+                            .accessibilityLabel("\(act). \(link.line)")
+                    }
+                }
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: link.url)
+                .padding(.top, MekaSpace.xs)
+                .staggeredAppear(3)
             }
             TextField(SchoolTerms.shared.INSET_HINT, text: $inset)
                 .textFieldStyle(.roundedBorder)

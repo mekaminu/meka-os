@@ -54,6 +54,12 @@ data class SchoolTermCard(
  * 6 holidays" with [action] "Add them", which fills [councilId] in; or from June, next school year has no day off in
  * yet: "2027–28's holidays aren't in yet…" with [action] "Council's page" opening [url], or no action (type them).
  */
+/**
+ * The line over the INSET field (slice 3): where the school's INSET days are, and [action] "School's website" opening
+ * [url] once About you has it (both null until then).
+ */
+data class SchoolInsetLink(val line: String, val action: String?, val url: String?)
+
 data class TermRefresh(
     val line: String,
     val action: String?,
@@ -276,6 +282,19 @@ object SchoolTerms {
     const val INSET_NONE = "Navilife couldn't find a date in that. Paste the dates, e.g. \"2 Nov, 4 Jan and 12 Apr\"."
     /** At most this many INSET days from one paste (a school has five a year; two years' worth with room). */
     const val INSET_MAX = 12
+
+    /**
+     * Where the INSET days are (slice 3, 2026-10-14): with the school's website in About you, "INSET days are the
+     * school's own…" and **School's website** opening it; without it, how to add it. Never a school's name or address
+     * in code (rule 13): the link is his, typed in About you.
+     */
+    fun insetLink(website: String?): SchoolInsetLink =
+        if (website != null) SchoolInsetLink(INSET_SITE_LINE, INSET_SITE_ACTION, website)
+        else SchoolInsetLink(INSET_SITE_ADD, null, null)
+
+    const val INSET_SITE_LINE = "INSET days are the school's own: they're on its website, under term dates or letters home."
+    const val INSET_SITE_ACTION = "School's website"
+    const val INSET_SITE_ADD = "INSET days are the school's own. Add its website in Ask → Settings → About you to open it from here."
 
     /**
      * Every date or range in a pasted text, in order ("INSET days: Monday 2 November, 4 January and 12–13 April"), each

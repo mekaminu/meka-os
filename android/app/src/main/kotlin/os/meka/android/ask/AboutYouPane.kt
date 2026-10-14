@@ -174,6 +174,7 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit
             cursorBrush = SolidColor(Meka.colors.accent),
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = when (row.field) {
                 AboutField.PARTNER_EMAIL -> KeyboardType.Email
+                AboutField.SCHOOL_WEBSITE -> KeyboardType.Uri
                 AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> KeyboardType.Phone
                 else -> KeyboardType.Text
             }),

@@ -30,6 +30,41 @@ class AboutYouTest {
     }
 
     @Test
+    fun theSchoolsWebsiteIsReadAsHttpsOrRefused() {
+        val f = AboutField.SCHOOL_WEBSITE
+        assertEquals("https://oakfield.sch.uk", AboutYouRules.clean(f, " oakfield.sch.uk/ "))
+        assertEquals("https://www.oakfield.sch.uk/Term-Dates?y=2026#inset", AboutYouRules.clean(f, "<HTTPS://WWW.Oakfield.sch.uk/Term-Dates?y=2026#inset>"))
+        assertEquals("http://oakfield-primary.example", AboutYouRules.clean(f, "http://oakfield-primary.example"))
+        assertEquals("", AboutYouRules.clean(f, "  "))
+        assertNull(AboutYouRules.clean(f, "office@oakfield.sch.uk"))
+        assertNull(AboutYouRules.clean(f, "javascript:alert(1)"))
+        assertNull(AboutYouRules.clean(f, "ftp://oakfield.sch.uk"))
+        assertNull(AboutYouRules.clean(f, "oakfield school"))
+        assertNull(AboutYouRules.clean(f, "oakfield"))
+        assertNull(AboutYouRules.clean(f, "oakfield.sch.uk/\"x\""))
+        assertEquals(AboutYouRules.NOT_WEBSITE, store().set(f, "not a site").line)
+
+        val s = store()
+        assertEquals("Saved", s.set(f, "oakfield.sch.uk").line)
+        assertEquals("https://oakfield.sch.uk", s.profile().schoolWebsite)
+        assertFalse(s.profile().isEmpty)
+        assertEquals("The school's website · change in About you", AboutYouRules.setupStep(s.profile()).line)
+        val cleared = s.set(f, "")
+        assertEquals("https://oakfield.sch.uk", cleared.undo)
+        assertNull(s.profile().schoolWebsite)
+    }
+
+    @Test
+    fun theInsetLineOpensTheSchoolsWebsiteOnceItIsIn() {
+        val none = SchoolTerms.insetLink(null)
+        assertEquals(SchoolTerms.INSET_SITE_ADD, none.line)
+        assertNull(none.action); assertNull(none.url)
+        val site = SchoolTerms.insetLink("https://oakfield.sch.uk")
+        assertEquals("School's website", site.action)
+        assertEquals("https://oakfield.sch.uk", site.url)
+    }
+
+    @Test
     fun childrenAreReadByNameAgeGroupAndSchool() {
         assertEquals(AboutChild("Alex", 7, "Oakfield School"), AboutYouRules.parseChild("Alex, U7, Oakfield School"))
         assertEquals(AboutChild("Alex", 7), AboutYouRules.parseChild("Alex U7"))
