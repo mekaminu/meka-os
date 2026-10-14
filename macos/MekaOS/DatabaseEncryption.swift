@@ -171,7 +171,9 @@ nonisolated enum DatabaseEncryption {
 
     /// Copies the plain database at [url] into a new encrypted one at [copy]; returns the schema version carried over.
     static func export(_ url: URL, to copy: URL, keyHex: String) -> Int64? {
-        guard let db = open(url, keyHex: nil) else { return nil }
+        // ATTACH opens the new file with the main connection's flags, so it needs CREATE too (nightly ci run 555:
+        // "unable to open database: …meka.db.encrypting").
+        guard let db = open(url, keyHex: nil, create: true) else { return nil }
         defer { sqlite3_close(db) }
         guard let version = int(db, "PRAGMA user_version;") else { return nil }
         let sql = "ATTACH DATABASE '\(copy.path.replacingOccurrences(of: "'", with: "''"))' AS encrypted KEY \"x'\(keyHex)'\";"
@@ -207,9 +209,12 @@ nonisolated enum DatabaseEncryption {
 
     // MARK: - SQLite
 
-    private static func open(_ url: URL, keyHex: String?) -> OpaquePointer? {
+    private static func open(_ url: URL, keyHex: String?, create: Bool = false) -> OpaquePointer? {
         var db: OpaquePointer?
-        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READWRITE, nil) == SQLITE_OK, let db else {
+        // Only ever opens a file that exists (no CREATE for the main file's own path), whatever [create] says.
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        let flags = SQLITE_OPEN_READWRITE | (create ? SQLITE_OPEN_CREATE : 0)
+        guard sqlite3_open_v2(url.path, &db, flags, nil) == SQLITE_OK, let db else {
             if let db { sqlite3_close(db) }
             return nil
         }
