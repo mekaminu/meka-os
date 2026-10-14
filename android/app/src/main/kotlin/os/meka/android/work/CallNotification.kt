@@ -74,11 +74,16 @@ object CallNotification {
         val base = id(tag)
         val actions = mutableListOf<Pair<String, PendingIntent>>()
         fun withItem(i: Intent) { if (itemId != null) i.putExtra(UnknownCallReceiver.EXTRA_ITEM, itemId) }
-        if (listen != null && notice.listen != null) actions.add(notice.listen to listen)
-        notice.block?.let { actions.add(it to broadcast(context, base + 2, UnknownCallReceiver.ACTION_BLOCK, number) { i -> i.putExtra(UnknownCallReceiver.EXTRA_WHY, blockWhy); withItem(i) } })
-        notice.unblock?.let { actions.add(it to broadcast(context, base + 3, UnknownCallReceiver.ACTION_UNBLOCK, number, ::withItem) })
-        notice.notSpam?.let { actions.add(it to broadcast(context, base + 4, UnknownCallReceiver.ACTION_NOT_SPAM, number, ::withItem) })
-        notice.undo?.let { actions.add(it to broadcast(context, base + 5, UnknownCallReceiver.ACTION_UNDO, number) { i -> i.putExtra(UnknownCallReceiver.EXTRA_ACTIVITY, activityId) } })
+        val listenLabel = notice.listen
+        if (listen != null && listenLabel != null) actions.add(listenLabel to listen)
+        notice.block?.let { label ->
+            actions.add(label to broadcast(context, base + 2, UnknownCallReceiver.ACTION_BLOCK, number) { i -> i.putExtra(UnknownCallReceiver.EXTRA_WHY, blockWhy); withItem(i) })
+        }
+        notice.unblock?.let { label -> actions.add(label to broadcast(context, base + 3, UnknownCallReceiver.ACTION_UNBLOCK, number, ::withItem)) }
+        notice.notSpam?.let { label -> actions.add(label to broadcast(context, base + 4, UnknownCallReceiver.ACTION_NOT_SPAM, number, ::withItem)) }
+        notice.undo?.let { label ->
+            actions.add(label to broadcast(context, base + 5, UnknownCallReceiver.ACTION_UNDO, number) { i -> i.putExtra(UnknownCallReceiver.EXTRA_ACTIVITY, activityId) })
+        }
         notice.callBack?.let {
             actions.add(it to PendingIntent.getActivity(
                 context, base + 1,
