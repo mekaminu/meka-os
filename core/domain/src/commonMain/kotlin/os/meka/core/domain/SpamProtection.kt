@@ -38,19 +38,28 @@ object SpamProtectionRules {
      * The Fold's Health row (role lost or switched off), or null when all's well or on the Mac. Health's attention rows
      * feed Today's line, so a lost role shows as "Spam calls · can ring … · Fix" on Today in red.
      */
-    fun healthRow(roleHeld: Boolean?, protectionOn: Boolean, mac: Boolean): HealthRow? {
+    fun healthRow(roleHeld: Boolean?, protectionOn: Boolean, mac: Boolean, lookups: Boolean? = null): HealthRow? {
         if (mac) return null
         return when {
             roleHeld == false -> HealthRow(
                 HEALTH_KEY, TITLE, "can ring · Navilife isn't your Caller ID & spam app", HealthState.BAD, HealthFix.CALL_ROLE, "Fix",
             )
             !protectionOn -> HealthRow(HEALTH_KEY, TITLE, "Spam protection is off (Work mode → Spam protection → Advanced)", HealthState.WARN, HealthFix.WORK, "Work mode")
+            // Slice 5 (the Fold's 14 Oct report: "contacts/call log NOT readable"): without them only spoofed numbers
+            // are stopped; Today shows this line with Allow until he grants both.
+            roleHeld == true && lookups == false -> HealthRow(HEALTH_KEY, TITLE, LOOKUPS_LINE, HealthState.WARN, HealthFix.CALLER_LOOKUPS, "Allow")
             roleHeld == true -> HealthRow(HEALTH_KEY, TITLE, "Protected · spoofed and repeat unknown callers are blocked", HealthState.OK)
             else -> null
         }
     }
 
     const val HEALTH_KEY = "spam"
+
+    /**
+     * Slice 5: the row (and Today's line) while Navilife can't read contacts and the call log. They're read on the
+     * phone only; without them it can't tell a stranger from a contact, so only spoofed numbers are stopped.
+     */
+    const val LOOKUPS_LINE = "can ring · allow contacts and call log so repeat callers and hang-ups are blocked (read on this phone only)"
 
     /** The household profile's numbers (About you: partner, the call assistant, voicemail) as call keys: never screened as spam. */
     fun householdKeys(a: AboutYou): Set<String> =

@@ -169,6 +169,10 @@ class HealthTest {
         val offNoRole = HealthRules.view(facts(callAssistantOn = false, device = fold.copy(callRoleHeld = false)), cal)
         assertEquals("Spam calls · can ring · Navilife isn't your Caller ID & spam app", offNoRole.todayLine)
         assertTrue(offNoRole.critical)
+        // Slice 5: without contacts and the call log, Today says so (worth a look, not critical) with Allow.
+        val noLookups = HealthRules.view(facts(device = fold.copy(callRoleHeld = true, callerLookups = false)), cal)
+        assertEquals(HealthFix.CALLER_LOOKUPS to HealthState.WARN, noLookups.row("spam").fix to noLookups.row("spam").state)
+        assertEquals("Spam calls · " + SpamProtectionRules.LOOKUPS_LINE, noLookups.todayLine)
     }
 
     @Test

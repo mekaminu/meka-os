@@ -67,6 +67,22 @@ class SpamProtectionTest {
     }
 
     @Test
+    fun healthAsksForContactsAndCallLogWhenTheyCantBeRead() {
+        // Slice 5: the Fold's report said "contacts/call log NOT readable": only spoofed numbers were being stopped.
+        val half = SpamProtectionRules.healthRow(roleHeld = true, protectionOn = true, mac = false, lookups = false)!!
+        assertEquals(HealthState.WARN, half.state)
+        assertEquals(HealthFix.CALLER_LOOKUPS, half.fix)
+        assertEquals("Allow", half.fixLabel)
+        assertEquals(SpamProtectionRules.LOOKUPS_LINE, half.line)
+        assertEquals(HealthState.OK, SpamProtectionRules.healthRow(true, protectionOn = true, mac = false, lookups = true)!!.state)
+        assertEquals(HealthState.OK, SpamProtectionRules.healthRow(true, protectionOn = true, mac = false, lookups = null)!!.state)
+        // A lost role or protection turned off says that first; the Mac has no row.
+        assertEquals(HealthFix.CALL_ROLE, SpamProtectionRules.healthRow(false, protectionOn = true, mac = false, lookups = false)!!.fix)
+        assertEquals(HealthFix.WORK, SpamProtectionRules.healthRow(true, protectionOn = false, mac = false, lookups = false)!!.fix)
+        assertNull(SpamProtectionRules.healthRow(true, protectionOn = true, mac = true, lookups = false))
+    }
+
+    @Test
     fun theHouseholdProfilesNumbersAreKeys() {
         val a = AboutYou.EMPTY.copy(partnerPhone = "07700 900111", assistantNumber = "+44 1632 960000", voicemailNumber = "not a number")
         assertEquals(

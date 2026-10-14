@@ -74,7 +74,7 @@ struct HealthSheet: View {
         case .work: dismiss(); model.showWork = true
         // Notifications never seen, the Mac's half: asks macOS the first time, else opens System Settings.
         case .notificationsOn: model.turnOnNotifications()
-        case .battery, .notificationAccess, .callRole, .installUpdate: break
+        case .battery, .notificationAccess, .callRole, .installUpdate, .callerLookups: break
         }
     }
 
@@ -83,7 +83,7 @@ struct HealthSheet: View {
         guard let f = row.fix else { return false }
         switch f {
         case .syncNow, .reconnect, .calendars, .work, .notificationsOn: return true
-        case .battery, .notificationAccess, .callRole, .installUpdate: return false
+        case .battery, .notificationAccess, .callRole, .installUpdate, .callerLookups: return false
         }
     }
 }

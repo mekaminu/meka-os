@@ -15,6 +15,7 @@ final class HealthSheetTests: XCTestCase {
         XCTAssertFalse(HealthSheet.fixHere(row(.battery)))
         XCTAssertFalse(HealthSheet.fixHere(row(.notificationAccess)))
         XCTAssertFalse(HealthSheet.fixHere(row(.callRole)))
+        XCTAssertFalse(HealthSheet.fixHere(row(.callerLookups)))
         XCTAssertTrue(HealthSheet.fixHere(row(.notificationsOn)))
         XCTAssertEqual(MoreItem.health.label, "Health")
     }

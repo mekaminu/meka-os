@@ -241,4 +241,22 @@ internal object CallerLookup {
         granted(context, Manifest.permission.READ_CONTACTS) && granted(context, Manifest.permission.READ_CALL_LOG)
 
     val PERMISSIONS = arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.READ_CALL_LOG)
+
+    /**
+     * Spam calls still ring, slice 5: after Allow, if Android refused without asking (after two "Don't allow"s it
+     * stops showing the dialog, and then gives no rationale either), open Navilife's app page so Permissions →
+     * Contacts and Call logs can be turned on there. A refusal he just made in the dialog is left alone.
+     */
+    fun openAppSettingsIfRefused(context: Context) {
+        if (allowed(context)) return
+        val activity = generateSequence(context) { (it as? android.content.ContextWrapper)?.baseContext }
+            .firstNotNullOfOrNull { it as? android.app.Activity } ?: return
+        val missing = PERMISSIONS.filterNot { granted(context, it) }
+        if (missing.any { activity.shouldShowRequestPermissionRationale(it) }) return
+        runCatching {
+            activity.startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+            )
+        }
+    }
 }

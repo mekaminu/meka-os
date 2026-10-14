@@ -110,6 +110,7 @@ object HealthDevice {
             sizeBytes = updater?.let { runCatching { it.installedSizeBytes }.getOrNull() },
             previousSizeBytes = updater?.previousSizeBytes,
             notifications = os.meka.android.notify.NotifyTraceStore.health(context),
+            callerLookups = os.meka.android.work.CallerLookup.allowed(context),
         )
     }
 }
@@ -125,6 +126,12 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
     // Notifications never seen: Turn on asks for the permission once; after a "don't ask again" it opens MEKA's page.
     val askNotify = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (!granted) openMekaNotificationSettings(context)
+        after()
+    }
+    // Spam calls still ring, slice 5: Allow asks for contacts and the call log; once Android won't ask again
+    // ("don't allow" twice), it opens Navilife's app page, where Permissions has both.
+    val askLookups = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (!os.meka.android.work.CallerLookup.allowed(context)) os.meka.android.work.CallerLookup.openAppSettingsIfRefused(context)
         after()
     }
     return remember(core, openPane) {
@@ -161,6 +168,7 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
                     if (needsPermission) runCatching { askNotify.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
                     else openMekaNotificationSettings(context)
                 }
+                HealthFix.CALLER_LOOKUPS -> runCatching { askLookups.launch(os.meka.android.work.CallerLookup.PERMISSIONS) }
                 HealthFix.CALENDARS, HealthFix.WORK -> f?.let { openPane?.invoke(it) }
                 null -> Unit
             }

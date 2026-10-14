@@ -15,6 +15,8 @@ enum class HealthFix {
     SYNC_NOW, RECONNECT, CALENDARS, BATTERY, NOTIFICATION_ACCESS, CALL_ROLE, WORK, INSTALL_UPDATE,
     /** MEKA's own notifications are off (the permission, the app switch or a category): ask, else open the app's page. */
     NOTIFICATIONS_ON,
+    /** Spam calls still ring, slice 5: ask for the contacts and call-log permissions (else open the app's page). */
+    CALLER_LOOKUPS,
 }
 
 data class HealthRow(
@@ -91,6 +93,12 @@ data class DeviceHealth(
     val previousSizeBytes: Long? = null,
     /** MEKA's own notifications: allowed, each channel, and the trace ([NotifyTrace]); null leaves the row out. */
     val notifications: NotificationHealth? = null,
+    /**
+     * Spam calls still ring, slice 5: Navilife may read contacts and the call log here (Work mode → Spam protection →
+     * Recognise callers). Without them spam protection can't tell a stranger, so repeat callers and hang-ups aren't
+     * blocked. Null: not on this device (the Mac).
+     */
+    val callerLookups: Boolean? = null,
 )
 
 data class HealthFacts(
@@ -163,7 +171,7 @@ object HealthRules {
             feeds(f, cal)?.let(::add)
             messages(f, cal)?.let(::add)
             add(calls(f, cal))
-            SpamProtectionRules.healthRow(f.device.callRoleHeld, f.spamProtectionOn, f.device.mac)?.let(::add)
+            SpamProtectionRules.healthRow(f.device.callRoleHeld, f.spamProtectionOn, f.device.mac, f.device.callerLookups)?.let(::add)
             add(ai(f))
             add(voice(f))
             battery(f)?.let(::add)
