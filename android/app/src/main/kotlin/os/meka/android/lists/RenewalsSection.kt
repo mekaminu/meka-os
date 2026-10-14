@@ -16,6 +16,7 @@ import os.meka.core.domain.BillRules
 import os.meka.core.domain.SessionRules
 import androidx.compose.ui.platform.LocalUriHandler
 import os.meka.core.domain.CarView
+import os.meka.core.domain.CarsView
 import os.meka.core.domain.MoneyDateRules
 import os.meka.core.domain.MoneyDatesView
 import androidx.compose.foundation.horizontalScroll
@@ -72,8 +73,9 @@ data class NewRenewal(
  * new place, light haptic); a one-off leaves like a completion. Nothing is paid or cancelled for you.
  */
 internal fun LazyListScope.renewals(
-    r: RenewalsView, car: CarView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
-    act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, tap: () -> Unit,
+    r: RenewalsView, cars: CarsView, today: Long, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit,
+    removedCar: String? = null, setRemovedCar: (String?) -> Unit = {}, tap: () -> Unit,
 ) {
     r.costLine?.let { line ->
         item(key = "r-cost") {
@@ -87,7 +89,11 @@ internal fun LazyListScope.renewals(
         )
     }
     homeUpkeep(HomeUpkeepRules.view(r.all, today), open, toggle, core, act, tap)
-    car(car, open, toggle, core, act, tap)
+    // Two cars: one row per car, each with its own dates; the last one offers another car.
+    cars.cars.forEachIndexed { i, c ->
+        car(c, i == cars.count - 1, cars.addLine, open, toggle, core, act, leave, setRemovedCar, tap)
+    }
+    removedCar?.let { removedCarLine(it, core, act, setRemovedCar, tap) }
     moneyDates(MoneyDateRules.view(r.all, today), open, toggle, core, act, tap)
     section("Needs doing", r.attention, today, open, toggle, core, act, leave, tap)
     section("Coming up", r.upcoming, today, open, toggle, core, act, leave, tap)
@@ -141,19 +147,26 @@ private fun LazyListScope.moneyDates(
  * its new row so the real date can be set; reminders come four weeks and a week before. Its line cross-fades to
  * "On the radar · due …" like the home jobs'. Slice 2: the DVLA's line and the MOT history under the registration, the
  * DVLA's day on the MOT and tax lines, and "Use the DVLA's date" when the radar's date differs.
+ * Two cars (2026-10-14): one such row per car (titled with his name for it, "Car 1"/"Car 2" otherwise), each with a
+ * Name field; the last row offers **Add another car** (the new car's row unfolds), a later car has **Remove** (it
+ * leaves like a completion, its dates stay on the radar, and a line under the cars offers Undo).
  */
 private fun LazyListScope.car(
-    v: CarView, open: String?, toggle: (String) -> Unit, core: MekaCore,
-    act: (suspend () -> Unit) -> Unit, tap: () -> Unit,
+    v: CarView, last: Boolean, addLine: String?, open: String?, toggle: (String) -> Unit, core: MekaCore,
+    act: (suspend () -> Unit) -> Unit, leave: (suspend () -> Unit) -> Unit, setRemovedCar: (String?) -> Unit, tap: () -> Unit,
 ) {
-    item(key = "r-car") {
-        ListRow(CarRules.LABEL, v.summary, DueState.NONE, open == CAR, { toggle(CAR) }, Modifier.animateItem()) {
-            var regError by rememberSaveable { mutableStateOf<String?>(null) }
+    val key = carKey(v.carId)
+    item(key = "r-$key") {
+        ListRow(v.title, v.summary, DueState.NONE, open == key, { toggle(key) }, Modifier.animateItem()) {
+            var regError by rememberSaveable(v.carId) { mutableStateOf<String?>(null) }
             Field(v.registration?.let { "Registration (now $it), blank to clear" } ?: "Registration, e.g. AB12 CDE") { text ->
                 regError = CarRules.registrationError(text)
-                if (regError == null) { tap(); act { core.setCarRegistration(text) } }
+                if (regError == null) { tap(); act { core.setCarRegistration(v.carId, text) } }
             }
             regError?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
+            Field(v.name?.let { "Name (now $it)" } ?: "Name, e.g. the Golf (optional)") { text ->
+                tap(); act { core.setCarName(v.carId, text) }
+            }
             // Slice 2: what the DVLA says (MEKA's server asks once a day), cross-fading as a new answer arrives.
             AnimatedContent(v.dvlaLine to v.historyLine, transitionSpec = { fadeIn(MekaMotion.appear(true)) togetherWith fadeOut(MekaMotion.appear(true)) }, label = "car-dvla") { (dvla, history) ->
                 Column {
@@ -164,12 +177,39 @@ private fun LazyListScope.car(
             v.rows.forEach { row ->
                 UpkeepLine(
                     row.title, row.line, row.note, row.tracked,
-                    use = row.dvlaOffer?.let { { tap(); act { core.useDvlaDate(row.presetId) } } },
-                ) { tap(); act { core.addCarDate(row.presetId)?.let { id -> toggle(id) } } }
+                    use = row.dvlaOffer?.let { { tap(); act { core.useDvlaDate(v.carId, row.presetId) } } },
+                ) { tap(); act { core.addCarDate(v.carId, row.presetId)?.let { id -> toggle(id) } } }
             }
+            Actions {
+                if (last && addLine != null) Action("Add another car") {
+                    tap(); act { core.addCar("")?.let { id -> toggle(carKey(id)) } }
+                }
+                if (v.removable) Action("Remove", critical = true) {
+                    setRemovedCar(v.carId + "\t" + v.title)
+                    leave { core.removeCar(v.carId) }
+                }
+            }
+            if (last && addLine != null) Text(addLine, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
     }
 }
+
+/** "Removed the Golf · its dates stay on the radar" with Undo, under the cars, until Undo or another removal. */
+private fun LazyListScope.removedCarLine(
+    removed: String, core: MekaCore, act: (suspend () -> Unit) -> Unit, setRemovedCar: (String?) -> Unit, tap: () -> Unit,
+) {
+    val id = removed.substringBefore('\t')
+    val title = removed.substringAfter('\t')
+    item(key = "r-car-removed") {
+        Row(Modifier.animateItem().fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Text(core.carRemovedLine(title), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            Action("Undo") { tap(); setRemovedCar(null); act { core.undoRemoveCar(id) } }
+        }
+    }
+}
+
+/** The first car keeps the row key it always had, so an open row stays open after the update. */
+private fun carKey(carId: String): String = if (carId == CarRules.ENTITY_ID) CAR else "car-$carId"
 
 @Composable
 private fun UpkeepRowView(row: UpkeepRow, add: () -> Unit) = UpkeepLine(row.title, row.line, row.note, row.tracked, add = add)

@@ -184,4 +184,82 @@ class CarTest {
         assertEquals("Car · registration not typed · 1 of 4 dates on the radar", noReg.first())
         assertTrue(noReg.none { it.startsWith("DVLA") })
     }
+
+    @Test
+    fun twoCarsKeepTheirOwnDatesAndTheFirstCarIsUnchanged() {
+        at(2026, 10, 14)
+        car.setRegistration("AB12 CDE")
+        val mot1 = r.addCarDate("mot", today(), car.registration())
+        // One car: as before.
+        val one = CarRules.views(car.cars(), r.items(), null, today(), null)
+        assertEquals(1, one.count)
+        assertEquals("Car", one.first.title)
+        assertFalse(one.first.removable)
+        assertEquals(mot1, one.first.rows.first { it.presetId == "mot" }.trackedId)
+
+        // A second car, named; its MOT is its own even though car 1 has one.
+        val id = car.addCar("  the Golf ")!!
+        assertEquals("car2", id)
+        val golf = car.car(id)!!
+        assertEquals("the Golf", golf.name)
+        assertEquals("the Golf", golf.key)
+        val mot2 = r.addCarDate("mot", today(), golf.registration, null, CarRules.itemsOf(id, r.items(), car.cars()), golf.key)
+        val two = CarRules.views(car.cars(), r.items(), null, today(), null)
+        assertEquals(listOf("Car 1", "the Golf"), two.cars.map { it.title })
+        assertEquals(mot1, two.carAt(0).rows.first { it.presetId == "mot" }.trackedId)
+        assertEquals(mot2, two.carAt(1).rows.first { it.presetId == "mot" }.trackedId)
+        assertEquals(1, two.carAt(0).trackedCount)
+        assertEquals("the Golf · 1 of 4 on the radar", two.carAt(1).summary)
+        assertTrue(two.carAt(1).removable)
+        assertTrue(two.canAdd)
+        assertFailsWith<ValidationException> {
+            r.addCarDate("mot", today(), null, null, CarRules.itemsOf(id, r.items(), car.cars()), golf.key)
+        }
+
+        // Its registration typed: the subject "AB99 XYZ" (typed any way) still names it.
+        assertTrue(car.setRegistration(id, "ab99xyz"))
+        assertTrue(CarRules.names("AB99XYZ", car.car(id)!!))
+        assertTrue(CarRules.names("the golf", car.car(id)!!))
+        assertFalse(CarRules.names("AB12 CDE", car.car(id)!!))
+
+        // Removed: its dates stay on the radar under no car, and the first car doesn't take them; Undo puts it back.
+        assertTrue(car.setRemoved(id, true))
+        assertFalse(car.setRemoved(CarRules.ENTITY_ID, true))
+        val removed = CarRules.views(car.cars(), r.items(), null, today(), null)
+        assertEquals(listOf("Car"), removed.cars.map { it.title })
+        assertEquals(mot1, removed.first.rows.first { it.presetId == "mot" }.trackedId)
+        assertTrue(r.items().any { it.id == mot2 })
+        assertTrue(car.setRemoved(id, false))
+        assertEquals(2, CarRules.views(car.cars(), r.items(), null, today(), null).count)
+        assertEquals("Removed the Golf · its dates stay on the radar", CarRules.removedLine("the Golf"))
+
+        // Four at most.
+        assertTrue(car.addCar(null) != null && car.addCar("") != null)
+        assertNull(car.addCar("fifth"))
+        val four = CarRules.views(car.cars(), r.items(), null, today(), null)
+        assertEquals(listOf("Car 1", "the Golf", "Car 3", "Car 4"), four.cars.map { it.title })
+        assertFalse(four.canAdd)
+        assertNull(four.addLine)
+    }
+
+    @Test
+    fun eachCarsRemindersAndAskLinesNameIt() {
+        at(2026, 10, 14)
+        car.setRegistration("AB12CDE")
+        val id = car.addCar("the Golf")!!
+        val golf = car.car(id)!!
+        val mot = r.addCarDate("mot", today(), null, null, emptyList(), golf.key)
+        r.setDue(mot, today() + CarRules.MONTH_DAYS)
+        val cal = LocalCalendar.UTC
+        val n = CarRules.notices(r.items(), car.registration(), world.clock.nowMs, cal)
+        assertEquals(listOf("MOT due ${CivilDate.shortLabel(today() + 28)} · the Golf"), n.map { it.title })
+
+        val views = CarRules.views(car.cars(), r.items(), null, today(), null)
+        val lines = CarAskRules.askLines(views, today())
+        assertEquals("Car · AB12 CDE · none of its dates on the radar", lines.first())
+        assertTrue(lines.contains("Car · the Golf · registration not typed · 1 of 4 dates on the radar"))
+        // The DVLA isn't asked about the second car: no "waiting for the keys" line for it.
+        assertEquals(1, lines.count { it == CarAskRules.NO_ANSWER })
+        assertTrue(lines.size <= CarAskRules.ASK_LINES_ALL)
+    }
 }

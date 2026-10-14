@@ -1902,6 +1902,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CarRules.shared.registrationError(text: "??"), "Type the registration, like AB12 CDE")
         XCTAssertNil(CarRules.shared.registrationError(text: "ab12 cde"))
         XCTAssertEqual(CarRules.shared.LABEL, "Car")
+        // Two cars: the first car's id and the Undo line reach the Mac.
+        XCTAssertEqual(CarRules.shared.ENTITY_ID, "car")
+        XCTAssertEqual(CarRules.shared.removedLine(title: "the Golf"), "Removed the Golf · its dates stay on the radar")
+        XCTAssertEqual(view.carId, "car")
         XCTAssertEqual(RenewalRules.shared.kindLabel(k: .carService), "Car service")
         // Slice 2: without the DVLA's answer there is no DVLA line and nothing to offer.
         XCTAssertNil(view.dvlaLine)

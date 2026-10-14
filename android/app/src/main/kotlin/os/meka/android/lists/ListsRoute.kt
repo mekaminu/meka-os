@@ -102,7 +102,9 @@ enum class ListTab(val label: String, val short: String = label) {
 @Composable
 fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
     val view by core.listsView.collectAsState()
-    val car by core.carView.collectAsState()
+    val cars by core.carsView.collectAsState()
+    // Two cars: the car just removed ("id<TAB>title"), for its Undo line.
+    var removedCar by rememberSaveable { mutableStateOf<String?>(null) }
     var tab by rememberSaveable { mutableStateOf(initialTab ?: ListTab.WAITING) }
     var open by rememberSaveable { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -146,7 +148,7 @@ fun ListsRoute(core: MekaCore, initialTab: ListTab? = null) {
             ListTab.WAITING -> waiting(view, open, toggle, core, act, leave)
             ListTab.SOMEDAY -> someday(view, open, toggle, core, act, leave)
             ListTab.DECISIONS -> decisions(view, open, toggle, core, act, leave)
-            ListTab.RENEWALS -> renewals(view.renewals, car, core.todayEpochDay(), open, toggle, core, act, leave) { haptics.light() }
+            ListTab.RENEWALS -> renewals(view.renewals, cars, core.todayEpochDay(), open, toggle, core, act, leave, removedCar, { removedCar = it }) { haptics.light() }
             ListTab.SHOPPING -> shopping(view.shopping, core, act)
         }
         item(key = "add-${tab.name}") {

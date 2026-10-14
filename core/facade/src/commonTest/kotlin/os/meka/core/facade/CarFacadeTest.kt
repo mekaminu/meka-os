@@ -99,4 +99,38 @@ class CarFacadeTest {
     }
 
     private var n = 0
+
+    @Test
+    fun aSecondCarAddedOnTheFoldHasItsOwnDatesOnTheMac() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.setCarRegistration("ab12 cde"))
+        val mot1 = fold.addCarDate("mot")!!
+        val id = fold.addCar("the Golf")!!
+        assertEquals(listOf("Car 1", "the Golf"), fold.carsView.value.cars.map { it.title })
+        val mot2 = fold.addCarDate(id, "mot")!!
+        assertNull(fold.addCarDate(id, "mot"))
+        assertEquals("the Golf", fold.listsView.value.renewals.all.single { it.id == mot2 }.subject)
+        // Its registration typed: its MOT follows, the first car's doesn't.
+        assertTrue(fold.setCarRegistration(id, "xy34 zzz"))
+        assertEquals("XY34 ZZZ", fold.listsView.value.renewals.all.single { it.id == mot2 }.subject)
+        assertEquals("AB12 CDE", fold.listsView.value.renewals.all.single { it.id == mot1 }.subject)
+        assertTrue(fold.setCarName(id, "the family car"))
+
+        fold.syncNow(); mac.syncNow()
+        val cars = mac.carsView.value
+        assertEquals(listOf("Car 1", "the family car"), cars.cars.map { it.title })
+        assertEquals("XY34 ZZZ", cars.carAt(1).registration)
+        assertEquals(mot2, cars.carAt(1).rows.first { it.presetId == "mot" }.trackedId)
+        assertEquals(mot1, mac.carView.value.rows.first { it.presetId == "mot" }.trackedId)
+
+        // Removed on the Mac: the Fold shows one car, the date stays on the radar; Undo brings it back.
+        assertTrue(mac.removeCar(id))
+        assertFalse(mac.removeCar(os.meka.core.domain.CarRules.ENTITY_ID))
+        mac.syncNow(); fold.syncNow()
+        assertEquals(1, fold.carsView.value.count)
+        assertTrue(fold.listsView.value.renewals.all.any { it.id == mot2 })
+        assertTrue(fold.undoRemoveCar(id))
+        assertEquals(2, fold.carsView.value.count)
+    }
 }

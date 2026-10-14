@@ -458,6 +458,12 @@ class MekaCore(
      * the renewals radar (Lists → Renewals → Car). Synced.
      */
     val carView: StateFlow<os.meka.core.domain.CarView> = _car.asStateFlow()
+    private val _cars = MutableStateFlow(os.meka.core.domain.CarsView.EMPTY)
+    /**
+     * Two cars (2026-10-14): every car, first car first (its view is also [carView]), each with only its own dates,
+     * and whether another can be added. Synced.
+     */
+    val carsView: StateFlow<os.meka.core.domain.CarsView> = _cars.asStateFlow()
     /**
      * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
      * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
@@ -1960,24 +1966,60 @@ class MekaCore(
      * that had no registration, or the old one, take the new one as their subject. False when it doesn't read (check
      * first with [os.meka.core.domain.CarRules.registrationError]) or nothing changed; never throws, so the Mac can call it.
      */
-    suspend fun setCarRegistration(text: String): Boolean = onCore {
-        val old = car.registration()?.let(os.meka.core.domain.CarRules::display)
-        val changed = try { car.setRegistration(text) } catch (_: os.meka.core.domain.ValidationException) { false }
-        if (changed) {
-            val now = car.registration()?.let(os.meka.core.domain.CarRules::display)
-            renewals.items().filter { os.meka.core.domain.CarRules.isCar(it) && (it.subject == null || it.subject == old) }
+    suspend fun setCarRegistration(text: String): Boolean = setCarRegistration(os.meka.core.domain.CarRules.ENTITY_ID, text)
+
+    /**
+     * Two cars: sets car [carId]'s registration (blank clears it). That car's dates on the radar whose subject was its
+     * old key (or none, for the first car) take the new one, so they stay its own. Never throws.
+     */
+    suspend fun setCarRegistration(carId: String, text: String): Boolean = onCore {
+        rekeyCar(carId) { try { car.setRegistration(carId, text) } catch (_: os.meka.core.domain.ValidationException) { false } }
+    }
+
+    /** Two cars: names car [carId] ("the Golf"; blank clears it); its dates follow when the name is their key. Never throws. */
+    suspend fun setCarName(carId: String, text: String): Boolean = onCore { rekeyCar(carId) { car.setName(carId, text) } }
+
+    /** Runs [change] on car [carId]; when it changed, the car's own dates carrying its old key (or none) take the new one. */
+    private fun rekeyCar(carId: String, change: () -> Boolean): Boolean {
+        val before = car.cars()
+        val old = before.firstOrNull { it.id == carId } ?: return false
+        val own = os.meka.core.domain.CarRules.itemsOf(carId, renewals.items(), before)
+        if (!change()) return false
+        val now = car.car(carId)?.key
+        if (now != old.key) {
+            own.filter { it.subject.isNullOrBlank() || (old.key != null && it.subject?.trim().equals(old.key, ignoreCase = true)) }
                 .forEach { renewals.edit(it.id, subject = now ?: "") }
         }
-        changed
+        return true
     }
+
+    /** Two cars: adds another car named [name] (blank for none). Its id, or null at the limit. Never throws. */
+    suspend fun addCar(name: String): String? = onCore { car.addCar(name) }
+
+    /**
+     * Two cars: removes car [carId] (never the first); its dates stay on the radar under no car. [carRemovedLine] says
+     * it; [undoRemoveCar] puts it back with its dates. False when nothing changes.
+     */
+    suspend fun removeCar(carId: String): Boolean = onCore { car.setRemoved(carId, true) }
+
+    suspend fun undoRemoveCar(carId: String): Boolean = onCore { car.setRemoved(carId, false) }
+
+    /** "Removed the Golf · its dates stay on the radar". */
+    fun carRemovedLine(title: String): String = os.meka.core.domain.CarRules.removedLine(title)
 
     /**
      * Car on autopilot: adds one of [os.meka.core.domain.CarRules.PRESETS] to the radar (a placeholder date a month
      * ahead for Meka to set, reminders four weeks and a week before). The new item's id, or null when it is already
      * there or isn't one (never throws).
      */
-    suspend fun addCarDate(presetId: String): String? = onCore {
-        try { renewals.addCarDate(presetId, todayEpochDay(), car.registration(), carCheck()) } catch (_: os.meka.core.domain.ValidationException) { null }
+    suspend fun addCarDate(presetId: String): String? = addCarDate(os.meka.core.domain.CarRules.ENTITY_ID, presetId)
+
+    /** Two cars: the same for car [carId]; the new date carries the car's key so it stays that car's. */
+    suspend fun addCarDate(carId: String, presetId: String): String? = onCore {
+        val cars = car.cars()
+        val c = cars.firstOrNull { it.id == carId && !it.removed } ?: return@onCore null
+        val own = os.meka.core.domain.CarRules.itemsOf(carId, renewals.items(), cars)
+        try { renewals.addCarDate(presetId, todayEpochDay(), c.registration, carCheck(), own, c.key) } catch (_: os.meka.core.domain.ValidationException) { null }
     }
 
     /**
@@ -1985,11 +2027,17 @@ class MekaCore(
      * row's "Use the DVLA's date"). Only on Meka's tap; false when there is no DVLA day, no such date on the radar, or
      * it already matches. Never throws.
      */
-    suspend fun useDvlaDate(presetId: String): Boolean = onCore {
+    suspend fun useDvlaDate(presetId: String): Boolean = useDvlaDate(os.meka.core.domain.CarRules.ENTITY_ID, presetId)
+
+    /** Two cars: the same for car [carId] (the DVLA's answer must be for its registration). */
+    suspend fun useDvlaDate(carId: String, presetId: String): Boolean = onCore {
         val p = os.meka.core.domain.CarRules.preset(presetId) ?: return@onCore false
-        val check = os.meka.core.domain.CarCheckRules.forRegistration(carCheck(), car.registration())
+        val cars = car.cars()
+        val c = cars.firstOrNull { it.id == carId } ?: return@onCore false
+        val check = os.meka.core.domain.CarCheckRules.forRegistration(carCheck(), c.registration)
         val day = os.meka.core.domain.CarCheckRules.dayFor(p.id, check) ?: return@onCore false
-        val item = renewals.items().sortedBy { it.dueDay }.firstOrNull { os.meka.core.domain.CarRules.matches(p, it) } ?: return@onCore false
+        val item = os.meka.core.domain.CarRules.itemsOf(carId, renewals.items(), cars).sortedBy { it.dueDay }
+            .firstOrNull { os.meka.core.domain.CarRules.matches(p, it) } ?: return@onCore false
         if (item.dueDay == day) return@onCore false
         try { renewals.setDue(item.id, day); true } catch (_: os.meka.core.domain.ValidationException) { false }
     }
@@ -4692,7 +4740,7 @@ class MekaCore(
                 // Bin days, slice 2: each bin and the coming collections, so "which bin is it this week?" has an answer.
                 os.meka.core.domain.BinRules.askLines(bins.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()),
                 // Car on autopilot, slice 3: the DVLA's answer and the car's dates, so "is the car taxed?" has an answer.
-                os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.view(car.registration(), renewals.items(), carCheck(), cal.epochDayOf(nowMs()), cal), cal.epochDayOf(nowMs())),
+                os.meka.core.domain.CarAskRules.askLines(os.meka.core.domain.CarRules.views(car.cars(), renewals.items(), carCheck(), cal.epochDayOf(nowMs()), cal), cal.epochDayOf(nowMs())),
                 // Life admin hour, slice 3: the hour and its jobs, so "when's my admin hour?" has an answer.
                 lifeAdmin = os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, nowMs()),
                 // Gift planner, slice 2: each birthday and anniversary with its ideas, so "when's Mum's birthday?" has an answer.
@@ -6044,7 +6092,8 @@ class MekaCore(
             triageCards.contacts() + os.meka.core.domain.PeopleRules.heldContacts(heldNow), todayDay, nowMs(), cal,
             listedPeople,
         )
-        _car.value = os.meka.core.domain.CarRules.view(car.registration(), listsNow.renewals.all, carCheck(), todayDay, cal)
+        _cars.value = os.meka.core.domain.CarRules.views(car.cars(), listsNow.renewals.all, carCheck(), todayDay, cal)
+        _car.value = _cars.value.first
         _leave.value = leave.view(hoursOf(workState, todayDay), schoolItems)
         // Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line, from the views just made.
         _lifeLines.value = os.meka.core.domain.LifeTileRules.lines(os.meka.core.domain.LifeTileRules.inputs(

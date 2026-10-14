@@ -114,6 +114,8 @@ final class CoreModel {
     private(set) var bins: BinsView?
     /// Car on autopilot (V1, slice 1): the registration and the car's four dates against the radar (Lists → Renewals → Car).
     private(set) var car: CarView?
+    /// Two cars: every car, first car first.
+    private(set) var cars: CarsView?
     /// Ask → More → Bins.
     var showBins = false
     /// Ask's Life grid (Fold review 2026-10-12, item 7): each tile's live line ("Chilli tonight", "Next Fri 23 Oct").
@@ -472,6 +474,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.carView { self?.car = c }
+        })
+        observers.append(Task { [weak self] in
+            for await c in core.carsView { self?.cars = c }
         })
         observers.append(Task { [weak self] in
             for await m in core.mealsView { self?.meals = m }
@@ -1526,6 +1531,58 @@ final class CoreModel {
     func useDvlaDate(_ presetId: String) {
         MekaHaptics.light()
         run { _ = try await $0.useDvlaDate(presetId: presetId) }
+    }
+
+    /// Two cars: the same three for one car ([carId]); only Strings cross.
+    @discardableResult
+    func setCarRegistration(_ carId: String, _ text: String) -> String? {
+        if let problem = CarRules.shared.registrationError(text: text) { return problem }
+        MekaHaptics.light()
+        run { _ = try await $0.setCarRegistration(carId: carId, text: text) }
+        return nil
+    }
+
+    func useDvlaDate(_ carId: String, _ presetId: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.useDvlaDate(carId: carId, presetId: presetId) }
+    }
+
+    func addCarDate(_ carId: String, _ presetId: String, opened: @escaping @MainActor (String) -> Void) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let id = try await core.addCarDate(carId: carId, presetId: presetId) { opened(id) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Two cars: names a car (blank clears it). Only Strings cross.
+    func setCarName(_ carId: String, _ text: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.setCarName(carId: carId, text: text) }
+    }
+
+    /// Two cars: adds another car; [opened] gets its id so the sheet can unfold its row. Only a String crosses each way.
+    func addCar(opened: @escaping @MainActor (String) -> Void) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let id = try await core.addCar(name: "") { opened(id) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Two cars: removes a later car (its dates stay on the radar) or puts it back. Only a String crosses.
+    func removeCar(_ carId: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.removeCar(carId: carId) }
+    }
+
+    func undoRemoveCar(_ carId: String) {
+        MekaHaptics.light()
+        run { _ = try await $0.undoRemoveCar(carId: carId) }
     }
 
     /// Adds one of the car's dates to the radar (light haptic); [opened] gets the new row's id so the sheet can unfold

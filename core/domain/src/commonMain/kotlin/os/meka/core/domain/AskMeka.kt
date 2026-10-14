@@ -298,7 +298,7 @@ object AskRules {
         // Bin days (slice 2, [BinRules.askLines]): Meka's own typed bins in MEKA's words, never untrusted.
         val binLines = bins.take(1 + BinRules.ASK_BINS + BinRules.ASK_DAYS).map { AskItem("", AskItemKind.BINS, line(it)) }
         // Car on autopilot (slice 3, [CarAskRules.askLines]): the registration, the DVLA's answer and the four dates, never untrusted.
-        val carLines = car.take(CarAskRules.ASK_LINES).map { AskItem("", AskItemKind.CAR, line(it)) }
+        val carLines = car.take(CarAskRules.ASK_LINES_ALL).map { AskItem("", AskItemKind.CAR, line(it)) }
         // Gift planner (slice 2, [GiftAskRules.askLines]): Meka's own birthdays, anniversaries and ideas, never untrusted.
         val giftLines = gifts.take(1 + GiftAskRules.ASK_ITEMS).map { AskItem("", AskItemKind.GIFTS, line(it)) }
         // People (slice 3, [PeopleAskRules.askLines]): Meka's own promises, waiting-fors and birthdays; a contact only

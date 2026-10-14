@@ -27,10 +27,23 @@ struct RenewalsSection: View {
                 }
             }
         }
-        if let car = model.car, !car.rows.isEmpty {
-            ListRowView(title: CarRules.shared.LABEL, meta: car.summary, due: false, expanded: open == Self.carKey, palette: palette,
-                        toggle: { open = open == Self.carKey ? nil : Self.carKey }) {
-                CarDetails(car: car, palette: palette, open: $open)
+        // Two cars: one row per car, each with its own dates; the last offers another car.
+        if let cars = model.cars {
+            ForEach(Array(cars.cars.enumerated()), id: \.element.carId) { index, car in
+                let key = Self.carKey(car.carId)
+                ListRowView(title: car.title, meta: car.summary, due: false, expanded: open == key, palette: palette,
+                            toggle: { open = open == key ? nil : key }) {
+                    CarDetails(car: car, last: index == cars.cars.count - 1, addLine: cars.addLine, palette: palette,
+                               open: $open, removed: $removedCar)
+                }
+            }
+            if let removed = removedCar {
+                HStack {
+                    Text(CarRules.shared.removedLine(title: removed.title)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Spacer(minLength: 0)
+                    Button("Undo") { model.undoRemoveCar(removed.id); removedCar = nil }
+                }
+                .transition(.opacity)
             }
         }
         if let money = model.moneyDates {
@@ -46,8 +59,11 @@ struct RenewalsSection: View {
         section("Later", r?.later ?? [])
     }
 
+    @State private var removedCar: RemovedCar?
+
     static let homeKey = "home-upkeep"
-    static let carKey = "car"
+    /// The first car keeps the key it always had.
+    static func carKey(_ carId: String) -> String { carId == CarRules.shared.ENTITY_ID ? "car" : "car-\(carId)" }
     static let moneyKey = "money-dates"
 
     @ViewBuilder private func section(_ label: String, _ items: [RenewalItem]) -> some View {
@@ -127,21 +143,41 @@ private struct MoneyDateRowView: View {
 /// Car on autopilot (V1, slice 1): the registration (typed once; Return saves it) and the car's four dates, each with
 /// Add like the home jobs; adding one unfolds its new row so the real date can be set. Reminders come four weeks and a
 /// week before. Slice 2: the DVLA's line and MOT history, and "Use the DVLA's date" when the radar's date differs.
+/// The car just removed, for its Undo line (two cars).
+struct RemovedCar: Equatable {
+    let id: String
+    let title: String
+}
+
+/// Two cars (2026-10-14): each car's row also has its name, Add another car on the last one and Remove on a later one.
 private struct CarDetails: View {
     @Environment(CoreModel.self) private var model
     let car: CarView
+    let last: Bool
+    let addLine: String?
     let palette: MekaPalette
     @Binding var open: String?
+    @Binding var removed: RemovedCar?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var reg = ""
+    @State private var name = ""
     @State private var problem: String?
 
     var body: some View {
+        let carId = car.carId
         TextField(car.registration.map { "Registration (now \($0)), blank to clear" } ?? "Registration, e.g. AB12 CDE", text: $reg)
             .textFieldStyle(.roundedBorder)
             .frame(maxWidth: 260)
             .onSubmit {
-                problem = model.setCarRegistration(reg)
+                problem = model.setCarRegistration(carId, reg)
                 if problem == nil { reg = "" }
+            }
+        TextField(car.name.map { "Name (now \($0)), blank to clear" } ?? "Name, e.g. the Golf (optional)", text: $name)
+            .textFieldStyle(.roundedBorder)
+            .frame(maxWidth: 260)
+            .onSubmit {
+                model.setCarName(carId, name)
+                name = ""
             }
         if let problem { Text(problem).font(MekaType.caption).foregroundStyle(palette.critical) }
         // Slice 2: what the DVLA says (MEKA's server asks once a day).
@@ -163,13 +199,29 @@ private struct CarDetails: View {
                 }
                 Spacer(minLength: 0)
                 if !row.tracked {
-                    Button("Add") { model.addCarDate(row.presetId) { id in open = id } }
+                    Button("Add") { model.addCarDate(carId, row.presetId) { id in open = id } }
                 } else if row.dvlaOffer != nil {
                     // The radar's date differs from the DVLA's; never changed without this click.
-                    Button("Use the DVLA's date") { model.useDvlaDate(row.presetId) }
+                    Button("Use the DVLA's date") { model.useDvlaDate(carId, row.presetId) }
                 }
             }
         }
+        HStack(spacing: MekaSpace.m) {
+            if last, addLine != nil {
+                Button("Add another car") { model.addCar { id in open = RenewalsSection.carKey(id) } }
+            }
+            if car.removable {
+                Button("Remove", role: .destructive) {
+                    let title = car.title
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
+                        removed = RemovedCar(id: carId, title: title)
+                        open = nil
+                    }
+                    model.removeCar(carId)
+                }
+            }
+        }
+        if last, let addLine { Text(addLine).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
     }
 }
 
