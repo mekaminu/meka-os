@@ -5422,8 +5422,23 @@ class MekaCore(
             at.takeIf { cal.epochDayOf(it) == cal.epochDayOf(nowMs()) }?.let { LocalClock.formatMinute(cal.minuteOfDay(it)) }
         }
         val google = os.meka.core.domain.VoicePickerRules.googleLine(g?.state, g?.usedChars ?: 0, g?.freeChars ?: 0, g?.fallbackAtChars ?: 0, failedClock, v.month)
-        return os.meka.core.domain.VoicePickerRules.view(v.state, offered, v.defaultVoice, chosen, usage, mac).copy(googleLine = google)
+        return os.meka.core.domain.VoicePickerRules.view(v.state, offered, v.defaultVoice, chosen, usage, mac)
+            .copy(googleLine = google, sampleLine = os.meka.core.domain.VoicePickerRules.sampleLine(speechSampleWords()))
     }
+
+    /**
+     * What ▶ Sample says now (natural voice, slice 2, [os.meka.core.domain.VoicePickerRules.sampleFrom]): the first two
+     * sentences of today's brief as Navilife reads it ([briefScriptNow]: the AI's when kept, else its own), or the stock
+     * line before there's a brief. The device's own voice says the same words when a clip can't be had. Pure and cheap.
+     */
+    fun speechSampleWords(): String {
+        val v = _brief.value
+        val script = if (v.dateLabel.isBlank()) null else runCatching { briefScriptNow() }.getOrNull()
+        return os.meka.core.domain.VoicePickerRules.sampleFrom(script)
+    }
+
+    /** Slice 2: each voice's last sample (voice → words to base64 MP3), apart from Talk's clips, so replays are free. */
+    private val sampleClips = LinkedHashMap<String, Pair<String, String>>()
 
     /**
      * ▶ Sample in the voice picker: [os.meka.core.domain.VoicePickerRules.SAMPLE] said by the server's [voice] (a Polly
@@ -5434,16 +5449,19 @@ class MekaCore(
     suspend fun speechSample(voice: String): String? {
         val api = speechApi ?: return null
         val name = os.meka.core.domain.MekaVoiceRules.normalize(voice)?.takeIf { it != os.meka.core.domain.MekaVoiceRules.DEVICE } ?: return null
-        val words = os.meka.core.domain.VoicePickerRules.SAMPLE
-        onCore { speechCached(name, words) }?.let { return it }
+        val words = speechSampleWords()
+        onCore { sampleClips[name]?.takeIf { it.first == words }?.second }?.let { return it }
         val r = withTimeoutOrNull(os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS) {
             try { api.speak(words, name) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         } ?: return null
         val audio = r.audio
         if (r.state != os.meka.core.wire.SpeechCodec.Response.SPOKEN || audio.isNullOrEmpty()) return null
         return onCore {
-            speechClips[os.meka.core.domain.SpeechRules.cacheKey(name, words)] = audio
-            while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
+            // One per voice: a new brief's words replace that voice's old sample; the oldest voices go past the cap.
+            sampleClips.remove(name)
+            sampleClips[name] = words to audio
+            // Room for every voice the picker lists (Google's British and American, Polly's).
+            while (sampleClips.size > 48) sampleClips.remove(sampleClips.keys.first())
             audio
         }
     }

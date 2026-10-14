@@ -394,6 +394,11 @@ data class VoicePickerView(
      * voices · 84k of 1M free this month", or "More natural Google voices · add the key …"; null from an older server.
      */
     val googleLine: String? = null,
+    /**
+     * What ▶ Sample plays (natural voice, slice 2, [VoicePickerRules.sampleLine]): "▶ plays the start of today's brief…"
+     * or the stock line's note; null from an older facade.
+     */
+    val sampleLine: String? = null,
 )
 
 /** The voice picker's words and order (non-AI, pure), the same on the Fold and the Mac. */
@@ -401,6 +406,57 @@ object VoicePickerRules {
     /** What ▶ Sample says: MEKA's own words, never anything of Meka's. */
     const val SAMPLE = "Good morning, Meka. You've got three things today and it's 14 degrees."
     const val TITLE = "Navilife's voice"
+
+    /** The longest sample sent (natural voice, slice 2): two short sentences, never a whole paragraph of the brief. */
+    const val SAMPLE_MAX = 240
+
+    const val SAMPLE_FROM_BRIEF = "▶ Sample reads the start of today's brief in each voice · each voice's sample is kept, so playing it again is free"
+    const val SAMPLE_STOCK = "▶ Sample reads a stock line until today's brief is ready"
+
+    /**
+     * What ▶ Sample says (natural voice, slice 2): the first two sentences of [script] (today's brief as Navilife reads
+     * it), so each voice is heard saying something real; just the first when two run past [SAMPLE_MAX]; [SAMPLE] when
+     * there's no brief yet or its first sentence alone is too long.
+     */
+    fun sampleFrom(script: String?): String {
+        val text = script?.trim()?.replace(Regex("\\s+"), " ").orEmpty()
+        if (text.isEmpty()) return SAMPLE
+        val sentences = sentences(text)
+        val first = sentences.firstOrNull() ?: return SAMPLE
+        if (first.length > SAMPLE_MAX) return SAMPLE
+        val two = sentences.take(2).joinToString(" ")
+        return if (two.length <= SAMPLE_MAX) two else first
+    }
+
+    /** The note under the picker: whether ▶ Sample reads today's brief ([sampleFrom] gave something else than [SAMPLE]). */
+    fun sampleLine(words: String): String = if (words == SAMPLE) SAMPLE_STOCK else SAMPLE_FROM_BRIEF
+
+    /**
+     * [text] cut after each ".", "!", "?" or "…" (with any closing quote or bracket) that a space follows, so "14.5°" and
+     * "St.Albans" stay whole. Plain loop: no look-behind, the same on every platform.
+     */
+    internal fun sentences(text: String): List<String> {
+        val out = mutableListOf<String>()
+        var start = 0
+        var i = 0
+        while (i < text.length) {
+            val c = text[i]
+            if (c == '.' || c == '!' || c == '?' || c == '…') {
+                var end = i + 1
+                while (end < text.length && text[end] in "”\"’')") end++
+                if (end >= text.length || text[end] == ' ') {
+                    val piece = text.substring(start, end).trim()
+                    if (piece.isNotEmpty()) out += piece
+                    start = end
+                    i = end
+                    continue
+                }
+            }
+            i++
+        }
+        text.substring(start).trim().takeIf { it.isNotEmpty() }?.let { out += it }
+        return out
+    }
     const val INTRO = "How Navilife sounds in Talk, the spoken brief and when it answers calls. The choice follows you to every device."
 
     const val POLLY = "polly"

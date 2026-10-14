@@ -68,6 +68,9 @@ struct VoiceSheet: View {
                     if let google = v.googleLine {
                         Text(google).font(MekaType.caption).foregroundStyle(palette.textSecondary).transition(.opacity)
                     }
+                    if let sampleLine = v.sampleLine {
+                        Text(sampleLine).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
+                    }
                     if let usage = v.usageLine {
                         Text(usage).font(MekaType.caption).foregroundStyle(palette.textTertiary).transition(.opacity)
                     }
@@ -189,8 +192,14 @@ struct VoiceSheet: View {
             .accessibilityLabel("Use \(c.label)")
             if c.sample {
                 Button { sample() } label: {
-                    Text(isPlaying ? "■  Stop" : "▶  Sample").font(MekaType.itemMeta).foregroundStyle(palette.accent)
-                        .contentTransition(.opacity)
+                    HStack(spacing: MekaSpace.xs) {
+                        if isPlaying {
+                            SamplePulse(color: palette.accent, reduceMotion: reduceMotion).transition(.opacity)
+                        }
+                        Text(isPlaying ? "■  Stop" : "▶  Sample").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .contentTransition(.opacity)
+                    }
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: isPlaying)
                 }
                 .buttonStyle(MekaPressStyle())
                 .help(isPlaying ? "Stop the sample" : "Hear \(c.label)")
@@ -213,5 +222,34 @@ struct VoiceSheet: View {
         MekaHaptics.light()
         playing = c.id
         speaker.sample(c.id)
+    }
+}
+
+/// Natural voice, slice 2: three thin brass bars that rise and fall out of step while a sample plays (the Fold's
+/// `SamplePulse`). Reduce Motion: the bars stand still at three heights.
+private struct SamplePulse: View {
+    let color: Color
+    let reduceMotion: Bool
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2) { // rhythm: ok (a glyph's own spacing)
+                ForEach(0..<3, id: \.self) { i in
+                    Capsule().fill(color)
+                        .frame(width: 2, height: 14)
+                        .scaleEffect(x: 1, y: Self.level(i, t: t, still: reduceMotion), anchor: .center)
+                }
+            }
+            .frame(height: 14)
+        }
+        .accessibilityHidden(true)
+    }
+
+    /// 0.35…1 on a 0.84 s cycle, each bar 0.14 s behind the one before; still heights under Reduce Motion.
+    static func level(_ i: Int, t: TimeInterval, still: Bool) -> CGFloat {
+        if still { return [0.55, 1, 0.7][i] }
+        let phase = (t - Double(i) * 0.14) / 0.84 * 2 * .pi
+        return 0.35 + 0.65 * CGFloat((1 - cos(phase)) / 2)
     }
 }

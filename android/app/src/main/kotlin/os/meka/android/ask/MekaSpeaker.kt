@@ -185,7 +185,8 @@ class MekaSpeaker(
     private class Pending(val clip: Deferred<String?>, val startedAt: Long, val first: Boolean, val hold: Boolean)
 
     /**
-     * ▶ Sample in the voice picker: [VoicePickerRules.SAMPLE] in the server's [voice] (a Polly name), or in the phone's
+     * ▶ Sample in the voice picker: the start of today's brief ([MekaCore.speechSampleWords], else
+     * [VoicePickerRules.SAMPLE]) in the server's [voice], or in the phone's
      * own voice for [MekaVoiceRules.DEVICE] or when the clip can't be had or played. Stops anything already being said.
      */
     fun sample(voice: String, onDone: () -> Unit = {}) {
@@ -194,7 +195,7 @@ class MekaSpeaker(
         speaking = true
         job = scope.launch {
             val clip = if (voice == MekaVoiceRules.DEVICE) null else core.speechSample(voice)
-            if (clip == null || !play(clip)) sayOnDevice(VoicePickerRules.SAMPLE)
+            if (clip == null || !play(clip)) sayOnDevice(core.speechSampleWords())
             if (id == line) {
                 speaking = false
                 onDone()
@@ -215,7 +216,7 @@ class MekaSpeaker(
     }
 
     /**
-     * ▶ Sample on one of the phone's voices: [VoicePickerRules.SAMPLE] in that voice ([DeviceVoiceRules.AUTOMATIC]:
+     * ▶ Sample on one of the phone's voices: the same words ([MekaCore.speechSampleWords]) in that voice ([DeviceVoiceRules.AUTOMATIC]:
      * MEKA's pick) at this phone's speed and pitch. Stops anything already being said.
      */
     fun sampleOnDevice(voice: String, onDone: () -> Unit = {}) {
@@ -226,7 +227,7 @@ class MekaSpeaker(
             val engine = ensureTts().await()
             if (engine != null) applyVoice(engine, settings.copy(voice = voice.ifEmpty { null }))
             try {
-                sayOnDevice(VoicePickerRules.SAMPLE)
+                sayOnDevice(core.speechSampleWords())
             } finally {
                 if (engine != null) applyVoice(engine, settings)
             }

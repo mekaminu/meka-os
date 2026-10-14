@@ -5,6 +5,11 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -174,7 +180,7 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             }
             val after = v.choices.size + 1
             AnimatedContent(
-                targetState = listOfNotNull(v.statusLine, v.googleLine, v.usageLine),
+                targetState = listOfNotNull(v.statusLine, v.googleLine, v.sampleLine, v.usageLine),
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "voice-lines",
                 modifier = Modifier.appear(rememberAppearance(after)),
@@ -251,9 +257,36 @@ private fun VoiceRow(c: VoiceChoice, playing: Boolean, modifier: Modifier, choos
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
                 Crossfade(targetState = playing, animationSpec = MekaMotion.appear(reduced), label = "voice-sample") { on ->
-                    Text(if (on) "■  Stop" else "▶  Sample", style = MekaType.itemMeta, color = Meka.colors.accent)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (on) {
+                            SamplePulse()
+                            Spacer(Modifier.width(MekaSpace.xs))
+                        }
+                        Text(if (on) "■  Stop" else "▶  Sample", style = MekaType.itemMeta, color = Meka.colors.accent)
+                    }
                 }
             }
+        }
+    }
+}
+
+/**
+ * Natural voice, slice 2: three thin brass bars that rise and fall out of step while a sample plays, so it reads as
+ * "speaking" at a glance. Reduced motion: the bars stand still at three heights.
+ */
+@Composable
+private fun SamplePulse() {
+    val reduced = Meka.reducedMotion
+    val transition = rememberInfiniteTransition(label = "voice-pulse")
+    Row(Modifier.height(14.dp), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) { // rhythm: ok (a glyph's own spacing)
+        listOf(0, 140, 280).forEachIndexed { i, delay ->
+            val still = listOf(0.55f, 1f, 0.7f)[i]
+            val level = if (reduced) still else transition.animateFloat(
+                initialValue = 0.35f, targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(420, delayMillis = delay), RepeatMode.Reverse),
+                label = "voice-pulse-$i",
+            ).value
+            Box(Modifier.width(2.dp).height(14.dp).graphicsLayer { scaleY = level }.clip(RoundedCornerShape(1.dp)).background(Meka.colors.accent))
         }
     }
 }

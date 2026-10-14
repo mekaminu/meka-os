@@ -191,7 +191,8 @@ final class MekaSpeaker {
 
     private static func nowMs() -> Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
 
-    /// ▶ Sample in the voice picker: `VoicePickerRules.SAMPLE` in the server's `voice` (a Polly name), or in the Mac's
+    /// ▶ Sample in the voice picker: the start of today's brief (`speechSampleWords`, else `VoicePickerRules.SAMPLE`) in
+    /// the server's `voice`, or in the Mac's
     /// own voice for "device" or when the clip can't be had or played. Stops anything already being said.
     func sample(_ voice: String) {
         stop()
@@ -199,7 +200,7 @@ final class MekaSpeaker {
         let id = line
         speaking = true
         loadDeviceVoice()
-        let text = VoicePickerRules.shared.SAMPLE
+        let text = model?.speechSampleWords() ?? VoicePickerRules.shared.SAMPLE
         task = Task { [weak self] in
             guard let self else { return }
             var clip: Data?
@@ -244,7 +245,7 @@ final class MekaSpeaker {
         voice = DeviceVoiceStore.voice(settings)
         task = Task { [weak self] in
             guard let self else { return }
-            await self.sayOnDevice(VoicePickerRules.shared.SAMPLE)
+            await self.sayOnDevice(self.model?.speechSampleWords() ?? VoicePickerRules.shared.SAMPLE)
             if lineId == self.line { self.speaking = false }
         }
     }

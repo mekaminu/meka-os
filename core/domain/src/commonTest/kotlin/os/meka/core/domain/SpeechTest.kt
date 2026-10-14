@@ -254,6 +254,24 @@ class SpeechTest {
     }
 
     @Test
+    fun theSampleIsTheBriefsFirstTwoSentencesOrTheStockLine() {
+        val brief = "Good morning, Meka. It's Wednesday 14 October, an office day, finishing at half past 5. " +
+            "Leave about 7:40. It's 14.5 degrees at home."
+        assertEquals("Good morning, Meka. It's Wednesday 14 October, an office day, finishing at half past 5.", VoicePickerRules.sampleFrom(brief))
+        // A decimal or a quote's end doesn't cut a sentence short.
+        assertEquals(listOf("It's 14.5 degrees.", "He said “go!”", "Fine"), VoicePickerRules.sentences("It's 14.5 degrees. He said “go!” Fine"))
+        // Two too long together: just the first; the first alone too long, or nothing yet: the stock line.
+        val long = "Good morning, Meka. " + "x".repeat(VoicePickerRules.SAMPLE_MAX) + "."
+        assertEquals("Good morning, Meka.", VoicePickerRules.sampleFrom(long))
+        assertEquals(VoicePickerRules.SAMPLE, VoicePickerRules.sampleFrom("y".repeat(VoicePickerRules.SAMPLE_MAX + 1) + ". Then."))
+        assertEquals(VoicePickerRules.SAMPLE, VoicePickerRules.sampleFrom(null))
+        assertEquals(VoicePickerRules.SAMPLE, VoicePickerRules.sampleFrom("   "))
+        assertEquals("One line with no stop", VoicePickerRules.sampleFrom("  One line   with no stop "))
+        assertEquals(VoicePickerRules.SAMPLE_STOCK, VoicePickerRules.sampleLine(VoicePickerRules.SAMPLE))
+        assertEquals(VoicePickerRules.SAMPLE_FROM_BRIEF, VoicePickerRules.sampleLine("Good morning, Meka."))
+    }
+
+    @Test
     fun theGoogleLineSaysTheFreeMonthTheFallbackAndHowToAddTheKey() {
         assertEquals("Google voices · 84k of 1M free this month", VoicePickerRules.googleLine("on", 84_213, 1_000_000, 900_000, null, "2026-10"))
         assertEquals("Google voices · 0 of 1M free this month", VoicePickerRules.googleLine("on", 0, 0, 900_000, null, "2026-10"))

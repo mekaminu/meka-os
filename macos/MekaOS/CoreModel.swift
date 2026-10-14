@@ -1936,6 +1936,12 @@ final class CoreModel {
         return Data(base64Encoded: clip)
     }
 
+    /// What ▶ Sample says now: the start of today's brief, or the stock line before there is one (natural voice,
+    /// slice 2). Read on the main actor; a String crosses, nothing of Kotlin's is sent anywhere.
+    func speechSampleWords() -> String {
+        core?.speechSampleWords() ?? VoicePickerRules.shared.SAMPLE
+    }
+
     /// Fetches MEKA's common lines in its voice once, so they play at once in a conversation.
     func warmVoice() async {
         guard let core else { return }

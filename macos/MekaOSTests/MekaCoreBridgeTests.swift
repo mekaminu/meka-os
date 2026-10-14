@@ -931,6 +931,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(v.choices[1].detail, "British · female · most natural · Navilife's default")
         XCTAssertTrue(v.help.contains("Manage Voices"))
         XCTAssertTrue(VoicePickerRules.shared.SAMPLE.hasPrefix("Good morning, Meka."))
+        // Natural voice, slice 2: ▶ Sample reads the start of today's brief.
+        XCTAssertEqual(VoicePickerRules.shared.sampleFrom(script: "Good morning, Meka. It's Wednesday. Leave at 7:40."),
+                       "Good morning, Meka. It's Wednesday.")
+        XCTAssertEqual(VoicePickerRules.shared.sampleLine(words: VoicePickerRules.shared.SAMPLE), VoicePickerRules.shared.SAMPLE_STOCK)
     }
 
     /// The Mac's own voices one by one, with speed and pitch (Weather and a voice, slice 10): the section's rows and the

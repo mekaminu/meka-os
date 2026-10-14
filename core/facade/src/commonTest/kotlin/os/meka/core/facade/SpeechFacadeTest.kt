@@ -157,10 +157,11 @@ class SpeechFacadeTest {
         assertTrue(c.chooseMekaVoice("Brian"))
         assertEquals("Brian", c.voicePicker(mac = true).choices.single { it.selected }.id)
         // ▶ Sample asks for that voice whatever is chosen, once, then plays from memory; the device's row isn't sent.
+        val words = c.speechSampleWords()
         val sample = c.speechSample("Amy")
-        assertEquals("bXAz" + os.meka.core.domain.VoicePickerRules.SAMPLE.length, sample)
+        assertEquals("bXAz" + words.length, sample)
         assertEquals(sample, c.speechSample("Amy"))
-        assertEquals(listOf<Pair<String, String?>>(os.meka.core.domain.VoicePickerRules.SAMPLE to "Amy"), server.said)
+        assertEquals(listOf<Pair<String, String?>>(words to "Amy"), server.said)
         assertNull(c.speechSample("device"))
         assertEquals(1, server.said.size)
         // Refused or unreachable: no clip, the device says it.
@@ -171,6 +172,36 @@ class SpeechFacadeTest {
         val unreachable = c.voicePicker(mac = false)
         assertEquals(listOf("Brian", "device"), unreachable.choices.map { it.id })
         assertTrue(!unreachable.choices.first().sample && unreachable.choices.first().selected)
+    }
+
+    @Test
+    fun theSampleIsTheStartOfTodaysBriefKeptPerVoiceSoReplaysAreFree() = runTest {
+        now = 1_791_786_600_000L // Mon 12 Oct 2026, 07:30 in London: the morning's brief
+        val c = core()
+        c.addTask("Renew passport")
+        val brief = os.meka.core.domain.BriefScriptRules.script(c.briefView.value)
+        val words = c.speechSampleWords()
+        // The brief's first two sentences, not the stock line, and never the whole brief.
+        assertTrue(words.startsWith("Good morning, Meka."), words)
+        assertTrue(brief.startsWith(words), words)
+        assertTrue(words.length <= os.meka.core.domain.VoicePickerRules.SAMPLE_MAX && words.length < brief.length)
+        server.voices = SpeechCodec.Voices(
+            SpeechCodec.Voices.ON,
+            listOf(SpeechCodec.Voice("Aoede", "Female", "chirp3hd", "google"), SpeechCodec.Voice("Amy", "Female", "generative")),
+            "Amy", "2026-10", 0, 1_000_000,
+        )
+        assertEquals(os.meka.core.domain.VoicePickerRules.SAMPLE_FROM_BRIEF, c.voicePicker(mac = false).sampleLine)
+        // Each voice is asked once; playing either again sends nothing.
+        assertEquals("bXAz" + words.length, c.speechSample("Aoede"))
+        assertEquals("bXAz" + words.length, c.speechSample("Amy"))
+        repeat(os.meka.core.domain.SpeechRules.CACHE_CLIPS + 1) { c.speechClip("Line $it.", first = false) } // a long Talk
+        c.speechSample("Aoede"); c.speechSample("Amy")
+        assertEquals(listOf("Aoede", "Amy"), server.said.filter { it.first == words }.map { it.second })
+        // Before there's a brief: the stock line, and the picker says so.
+        val fresh = core(transport = null)
+        if (fresh.briefView.value.dateLabel.isBlank()) {
+            assertEquals(os.meka.core.domain.VoicePickerRules.SAMPLE, fresh.speechSampleWords())
+        }
     }
 
     @Test
