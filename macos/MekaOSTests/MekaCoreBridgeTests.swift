@@ -2592,6 +2592,30 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.documentsView.value.rows.isEmpty)
     }
 
+    func testDocumentFromSharedReachesSwift() async throws {
+        // Screenshots and photos, slice 3: a picture's words that are a document offer a Vault row (only Strings
+        // cross), Add writes its name and date, and the same words then say it's already there. Invented names only.
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "docshare-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let y = (Calendar.current.component(.year, from: Date()) + 3) % 100
+        let text = "PASSPORT\nGiven names / Prénoms (2)\nSAM\nDate of expiry / Date d'expiration (6)\n20 MAY /MAI \(y)"
+        let offer = try await core.documentFromShared(text: text, subject: nil)
+        XCTAssertNotNil(offer)
+        XCTAssertTrue(offer?.line.hasPrefix(DocumentShareRules.shared.ACTION + " · Sam passport · expires ") ?? false, offer?.line ?? "")
+        XCTAssertFalse(offer?.already ?? true)
+        let added = try await core.addDocumentFromShared(text: text, subject: nil)
+        XCTAssertNotNil(added?.id)
+        XCTAssertFalse(added?.updated ?? true)
+        let again = try await core.documentFromShared(text: text, subject: nil)
+        XCTAssertTrue(again?.already ?? false)
+        let none = try await core.documentFromShared(text: "Lunch with Alex at 12:30", subject: nil)
+        XCTAssertNil(none)
+        XCTAssertEqual(ScreenshotKind.document.label, "a document with an expiry date")
+    }
+
     func testAboutYouReachesSwift() async throws {
         // About you (rule 13, slice 1): a line saved by its key and a child added (only Strings and an Int cross),
         // the view, Undo's text and Setup's fix reach the Mac. Invented names only.

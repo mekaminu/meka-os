@@ -2497,6 +2497,9 @@ final class CoreModel {
         offerEventUndo(HandleThisRules.shared.READING_LINE, nil)
         Task {
             do {
+                // Screenshots and photos, slice 3: a passport, licence, GHIC… is offered to the Vault once the cards
+                // are in (read on this Mac; nothing is written until Add to the Vault is clicked).
+                let document = try await core.documentFromShared(text: text, subject: subject)
                 // A form's fields answered from the facts page, on this Mac before the AI answers (and without it).
                 let answers = try await core.formAnswers(text: text, subject: subject)
                 if !answers.answers.isEmpty {
@@ -2510,6 +2513,14 @@ final class CoreModel {
                     offerEventUndo(c.line, nil)
                 case .nothingToDo(let n): offerEventUndo(n.line, nil)
                 case .unavailable(let u): offerEventUndo(u.line, nil)
+                }
+                if let document {
+                    let line = DocumentShareRules.shared.ICON + " " + document.line
+                    if document.already {
+                        offerEventUndo(line, nil)
+                    } else {
+                        offerEventUndo(line, .addDocument(text, subject), label: DocumentShareRules.shared.ACTION, seconds: 10)
+                    }
                 }
             } catch { lastError = error.localizedDescription }
         }
@@ -3014,6 +3025,8 @@ final class CoreModel {
         case .removeSteps(let ids): run { core in for id in ids { try await core.removeStep(stepId: id) } }
         case .removeTemplate(let id): run { _ = try await $0.removeChecklistTemplate(id: id) }
         case .restoreTemplate(let template): run { _ = try await $0.restoreChecklistTemplate(template: template) }
+        case .addDocument(let text, let subject): addDocumentFromShared(text, subject)
+        case .removeDocument(let id): run { _ = try await $0.removeDocument(id: id) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
@@ -3030,6 +3043,19 @@ final class CoreModel {
     }
 
     func dismissEventUndo() { eventUndo = nil }
+
+    /// Add to the Vault on the bar (screenshots and photos, slice 3): the document's name and expiry go in the Vault
+    /// and the bar says so, with Undo unless it updated one already there. Only Strings cross to the core.
+    private func addDocumentFromShared(_ text: String, _ subject: String?) {
+        guard let core else { return }
+        Task {
+            do {
+                guard let added = try await core.addDocumentFromShared(text: text, subject: subject) else { return }
+                let undo: EventUndoOffer.Action? = added.updated ? nil : added.id.map { .removeDocument($0) }
+                offerEventUndo(added.line, undo)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
 
     // MARK: About you (rule 13, slice 1)
 
@@ -4221,11 +4247,11 @@ final class CoreModel {
         }
     }
 
-    private func offerEventUndo(_ message: String, _ action: EventUndoOffer.Action?) {
-        let offer = EventUndoOffer(message: message, action: action)
+    private func offerEventUndo(_ message: String, _ action: EventUndoOffer.Action?, label: String = "Undo", seconds: Double = 5) {
+        let offer = EventUndoOffer(message: message, action: action, label: label)
         eventUndo = offer
         Task {
-            try? await Task.sleep(for: .seconds(5))
+            try? await Task.sleep(for: .seconds(seconds))
             if eventUndo?.id == offer.id { eventUndo = nil }
         }
     }
@@ -4394,9 +4420,15 @@ struct EventUndoOffer: Identifiable, Equatable {
         case removeTemplate(String)
         /// Remove on a saved template: it comes back.
         case restoreTemplate(ChecklistTemplate)
+        /// Add to the Vault for a shared picture or text of a document (screenshots and photos, slice 3); not an undo.
+        case addDocument(String, String?)
+        /// Undo on "Added Alex passport · …": the row comes off again.
+        case removeDocument(String)
     }
 
     let id = UUID()
     let message: String
     let action: Action?
+    /// The bar's button: "Undo", or what the action does when it isn't one ("Add to the Vault").
+    var label: String = "Undo"
 }

@@ -147,7 +147,7 @@ struct EventUndoBar: View {
                 HStack(spacing: MekaSpace.m) {
                     Text(offer.message).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                     if offer.action != nil {
-                        Button("Undo") { model.undoEventAction() }
+                        Button(offer.label) { model.undoEventAction() }
                             .buttonStyle(.borderless)
                             .foregroundStyle(palette.accent)
                     }

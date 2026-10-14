@@ -2708,6 +2708,29 @@ class MekaCore(
     /** Removes a document for good. */
     suspend fun removeDocument(id: String): Boolean = onCore { documents.remove(id) }
 
+    /**
+     * Screenshots and photos, slice 3: what the capture sheet (or the Mac's bar) offers for shared text or a picture's
+     * words that are a document with an expiry ([os.meka.core.domain.DocumentShareRules]): "Add to the Vault · Alex
+     * passport · expires Thu 20 May 2027", "Update the Vault · …" or "Already in the Vault · …". Read on the device;
+     * nothing is written until [addDocumentFromShared]. Null when it isn't one. Never throws.
+     */
+    suspend fun documentFromShared(text: String, subject: String?): os.meka.core.domain.DocumentShareView? = onCore {
+        runCatching {
+            os.meka.core.domain.DocumentShareRules.view(text, subject, ZoneCalendar(timeZone).epochDayOf(nowMs()), documents.items())
+        }.getOrNull()
+    }
+
+    /**
+     * Adds the document [text] (and [subject]) show to the Vault, on his tap: its name and expiry only, never a number
+     * or the picture. Null when it doesn't read as one (or is already there with this date).
+     */
+    suspend fun addDocumentFromShared(text: String, subject: String?): os.meka.core.domain.DocumentAdded? = onCore {
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        val v = runCatching { os.meka.core.domain.DocumentShareRules.view(text, subject, today, documents.items()) }.getOrNull()
+        if (v == null || v.already) return@onCore null
+        documents.addEntry(v.entry)
+    }
+
     // ---- Gift planner (V1, slice 1; Ask → More → Gifts) ----
 
     /**

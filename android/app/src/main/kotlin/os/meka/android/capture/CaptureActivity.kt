@@ -87,6 +87,8 @@ import os.meka.android.today.RequestChoice
 import os.meka.core.domain.FormAnswersView
 import os.meka.core.domain.ParkingConfirmationRules
 import os.meka.core.domain.ParkingShareView
+import os.meka.core.domain.DocumentShareRules
+import os.meka.core.domain.DocumentShareView
 import os.meka.core.domain.FormFillRules
 import os.meka.core.domain.HandleThisRules
 import os.meka.core.domain.QueueRules
@@ -146,6 +148,9 @@ class CaptureActivity : ComponentActivity() {
                     // Car and parking, slice 5: a shared RingGo/JustPark confirmation offers its parking timer (read here).
                     parking = { text, subject -> core.parkingFromShared(text, subject) },
                     startParking = { carId, text, subject -> core.startParkingFromShared(carId, text, subject) },
+                    // Screenshots and photos, slice 3: a picture (or text) of a passport, licence, GHIC… offers a Vault row.
+                    vault = { text, subject -> core.documentFromShared(text, subject) },
+                    addToVault = { text, subject -> core.addDocumentFromShared(text, subject)?.line },
                     copy = { text -> os.meka.android.work.LiveReplies.copyText(this@CaptureActivity, text, "Navilife fact") },
                     answer = { card, add ->
                         // A reply card's Copy reply: the draft goes on the clipboard; Meka sends it himself.
@@ -197,6 +202,8 @@ private fun CaptureSheet(
     formAnswers: suspend (String, String?) -> FormAnswersView,
     parking: suspend (String, String?) -> ParkingShareView?,
     startParking: suspend (String, String, String?) -> String?,
+    vault: suspend (String, String?) -> DocumentShareView?,
+    addToVault: suspend (String, String?) -> String?,
     copy: (String) -> Unit,
     answer: suspend (RequestCard, Boolean) -> String?,
     done: (Boolean) -> Unit,
@@ -228,6 +235,8 @@ private fun CaptureSheet(
     // Car and parking, slice 5: read on the phone when the sheet opens; nothing starts until he taps it.
     var parkingOffer by remember { mutableStateOf<ParkingShareView?>(null) }
     var pickingCar by remember { mutableStateOf(false) }
+    // Screenshots and photos, slice 3: a document's name and expiry, read here; nothing is written until he taps it.
+    var vaultOffer by remember { mutableStateOf<DocumentShareView?>(null) }
     // Voice notes, slice 1: holding the mic records a voice note; it survives unfolding (the session lives outside the sheet).
     val context = LocalContext.current
     var noting by rememberSaveable { mutableStateOf(false) }
@@ -337,6 +346,20 @@ private fun CaptureSheet(
         }
     }
 
+    fun vaultTapped() {
+        val offer = vaultOffer ?: return
+        if (offer.already || captured) return
+        scope.launch {
+            val line = addToVault(shared.text, shared.subject) ?: return@launch
+            keyboard?.hide()
+            doneLabel = line
+            captured = true
+            haptics.light()
+            delay(if (reduced) 400 else 900) // the reminder date stays long enough to read
+            leave(true)
+        }
+    }
+
     fun parkingTapped() {
         val offer = parkingOffer ?: return
         if (offer.ended) return
@@ -383,6 +406,7 @@ private fun CaptureSheet(
 
     LaunchedEffect(shared) {
         if (shared.text.isNotBlank()) parkingOffer = parking(shared.text, shared.subject)
+        if (shared.text.isNotBlank()) vaultOffer = vault(shared.text, shared.subject)
     }
 
     // Screenshots and photos, slice 1: read the picture on the phone; its words fill the field (first line) and notes.
@@ -590,6 +614,14 @@ private fun CaptureSheet(
                         ) {
                             if (offer != null) ParkingOfferRow(offer, pickingCar, ::parkingTapped, ::startTimer)
                         }
+                        val doc = vaultOffer
+                        AnimatedVisibility(
+                            doc != null,
+                            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                        ) {
+                            if (doc != null) VaultOfferRow(doc, ::vaultTapped)
+                        }
                         if (hasLink) {
                             Text(
                                 "🚆 " + QueueRules.ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -654,6 +686,26 @@ private fun RoundButton(glyph: String, label: String, fill: Color, ink: Color, o
             .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, style = MekaType.itemTitle, color = ink) }
+}
+
+/**
+ * Screenshots and photos, slice 3: "🗂 Add to the Vault · Alex passport · expires Thu 20 May 2027" (brass, a button;
+ * "Update the Vault · …" for a renewed one), or the quiet "Already in the Vault · …" line.
+ */
+@Composable
+private fun VaultOfferRow(offer: DocumentShareView, onTap: () -> Unit) {
+    val line = DocumentShareRules.ICON + " " + offer.line
+    if (offer.already) {
+        Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+    } else {
+        Text(
+            line, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button, onClick = onTap)
+                .semantics { contentDescription = offer.line + " · only its name and date are kept, never its number or the picture" }
+                .padding(vertical = MekaSpace.xs),
+        )
+    }
 }
 
 /**

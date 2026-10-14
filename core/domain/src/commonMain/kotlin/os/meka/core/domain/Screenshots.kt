@@ -16,6 +16,8 @@ package os.meka.core.domain
 /** What a new screenshot looks like, for the notification's title ("Screenshot · looks like a booking"). */
 enum class ScreenshotKind(val label: String) {
     PARKING("a parking confirmation"),
+    /** Slice 3: a passport, licence, GHIC, railcard, insurance certificate or warranty with the day it runs out. */
+    DOCUMENT("a document with an expiry date"),
     TICKET("a ticket"),
     APPOINTMENT("an appointment"),
     BOOKING("a booking"),
@@ -121,6 +123,7 @@ object ScreenshotRules {
         val money = MONEY.containsMatchIn(s)
         val when_ = time || date
         if (ParkingConfirmationRules.looksLikeOne(t)) return ScreenshotKind.PARKING
+        if (DocumentShareRules.looksLikeOne(t)) return ScreenshotKind.DOCUMENT
         if (TICKET.containsMatchIn(s) && when_) return ScreenshotKind.TICKET
         if (APPOINTMENT.containsMatchIn(s) && when_) return ScreenshotKind.APPOINTMENT
         if (ORDER.containsMatchIn(s) && (when_ || money)) return ScreenshotKind.ORDER
@@ -137,6 +140,7 @@ object ScreenshotRules {
         if (lines.isEmpty()) return ""
         val word = when (kind) {
             ScreenshotKind.PARKING -> Regex("""\b(?:expir\w*|until|ends?|valid|parking)\b""")
+            ScreenshotKind.DOCUMENT -> Regex("""\b(?:passport|licence|license|ghic|ehic|railcard|identity|insurance|policy|warranty|guarantee)\b""")
             ScreenshotKind.TICKET -> TICKET
             ScreenshotKind.APPOINTMENT -> APPOINTMENT
             ScreenshotKind.BOOKING -> BOOKING
@@ -159,7 +163,11 @@ object ScreenshotRules {
         return ScreenshotNotice(
             title = "Screenshot · looks like ${kind.label}",
             text = line.ifEmpty { "Tap to see what Navilife can do with it" },
-            action = if (kind == ScreenshotKind.PARKING) ParkingConfirmationRules.ACTION else ACTION,
+            action = when (kind) {
+                ScreenshotKind.PARKING -> ParkingConfirmationRules.ACTION
+                ScreenshotKind.DOCUMENT -> DocumentShareRules.ACTION
+                else -> ACTION
+            },
         )
     }
 

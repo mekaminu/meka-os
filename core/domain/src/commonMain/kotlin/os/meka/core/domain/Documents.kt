@@ -67,8 +67,11 @@ data class DocumentsView(
     companion object { val EMPTY = DocumentsView(emptyList(), DocumentRules.EMPTY_LINE) }
 }
 
-/** What adding a line did: the line under the field, and whether nothing was written. */
-data class DocumentAdded(val line: String, val refused: Boolean)
+/**
+ * What adding a line did: the line under the field, and whether nothing was written. [id] is the document written
+ * (null when refused) and [updated] whether it was one already there taking a new date (Undo can't remove that).
+ */
+data class DocumentAdded(val line: String, val refused: Boolean, val id: String? = null, val updated: Boolean = false)
 
 /** A typed document ([DocumentRules.read]). */
 data class DocumentEntry(val title: String, val kind: DocKind, val expiresDay: Long?)
@@ -338,13 +341,22 @@ class Documents(
         val today = calendar.epochDayOf(now)
         return when (val r = DocumentRules.read(text, today)) {
             is DocumentRules.Read.Refused -> DocumentAdded(r.line, refused = true)
-            is DocumentRules.Read.Doc -> {
-                val existing = items().firstOrNull { it.title.equals(r.entry.title, ignoreCase = true) }
-                val fields = DocumentRules.fields(r.entry, now).let { f -> if (existing != null) f - VaultDocFields.ADDED_AT else f }
-                replica.commitLocal(EntityTypes.VAULT_DOC, existing?.id ?: newId(), fields)
-                DocumentAdded(DocumentRules.addedLine(r.entry, today, replaced = existing != null), refused = false)
-            }
+            is DocumentRules.Read.Doc -> addEntry(r.entry)
         }
+    }
+
+    /**
+     * Writes [entry] (a typed line read, or a picture of a document, [DocumentShareRules]); a document with the same
+     * title takes the new date.
+     */
+    fun addEntry(entry: DocumentEntry): DocumentAdded {
+        val now = nowMs()
+        val today = calendar.epochDayOf(now)
+        val existing = items().firstOrNull { it.title.equals(entry.title, ignoreCase = true) }
+        val fields = DocumentRules.fields(entry, now).let { f -> if (existing != null) f - VaultDocFields.ADDED_AT else f }
+        val id = existing?.id ?: newId()
+        replica.commitLocal(EntityTypes.VAULT_DOC, id, fields)
+        return DocumentAdded(DocumentRules.addedLine(entry, today, replaced = existing != null), refused = false, id = id, updated = existing != null)
     }
 
     /** Removes a document for good; false when it isn't there. */

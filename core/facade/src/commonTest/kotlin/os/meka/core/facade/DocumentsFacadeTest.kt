@@ -60,4 +60,31 @@ class DocumentsFacadeTest {
         fold.tick()
         assertTrue(fold.documentsView.value.isEmpty)
     }
+
+    @Test
+    fun aPictureOfAPassportIsOfferedToTheVaultAndAddedOnlyOnHisTap() = runTest {
+        val fold = core("android")
+        val text = "PASSPORT\nGiven names / Prénoms (2)\nSAM\nDate of expiry / Date d'expiration (6)\n20 MAY /MAI 27\n925665416"
+        val offer = fold.documentFromShared(text, null)!!
+        assertEquals("Add to the Vault · Sam passport · expires Thu 20 May 2027", offer.line)
+        // Offered, not written.
+        assertTrue(fold.documentsView.value.isEmpty)
+        val added = fold.addDocumentFromShared(text, null)!!
+        assertEquals("Added Sam passport · expires Thu 20 May 2027 · Navilife reminds you from Wed 18 Nov 2026", added.line)
+        assertFalse(added.updated)
+        val row = fold.documentsView.value.rows.single()
+        assertEquals("Sam passport", row.title)
+        assertEquals(added.id, row.id)
+        // The number in the picture is nowhere.
+        assertFalse(row.line.contains("925665416") || row.title.contains("925665416"))
+        // The same picture again: already there, nothing to add.
+        assertTrue(fold.documentFromShared(text, null)!!.already)
+        kotlin.test.assertNull(fold.addDocumentFromShared(text, null))
+        // A renewed passport updates the row (no Undo: it was there before).
+        val renewed = text.replace("MAI 27", "MAI 36")
+        assertEquals("Update the Vault · Sam passport · now expires Tue 20 May 2036", fold.documentFromShared(renewed, null)!!.line)
+        assertTrue(fold.addDocumentFromShared(renewed, null)!!.updated)
+        assertEquals(1, fold.documentsView.value.rows.size)
+        kotlin.test.assertNull(fold.documentFromShared("Lunch with Alex at 12:30", null))
+    }
 }
