@@ -91,8 +91,8 @@ class CallSpamFacadeTest {
         val c = core()
         val at = now - 2 * 60_000L // 09:58 London (BST)
         val o = c.unknownCallOffer("+441632960001", os.meka.core.domain.CallOutcome.MISSED, 0, at, emptyList())!!
-        assertEquals("Unknown caller · 01632 960001", o.title)
-        assertEquals("Missed call at 09:58 · Block it?", o.line)
+        assertEquals("01632 960001 · not in your contacts", o.title)
+        assertEquals("Rang · you missed it · 09:58 · Not blocked · it will ring again", o.line)
         assertEquals("Missed call · Sat 10 Oct", o.why)
         // Block on the notification: on the list with how it called, and never offered again.
         assertTrue(c.blockCaller(o.number, o.why))

@@ -36,7 +36,7 @@ class SpamProtectionTest {
         val t = 1_791_590_400_000L
         val o = UnknownCallRules.offer("01632 960555", CallOutcome.ANSWERED, 95, t, t + 60_000, emptySet(), emptyList(), LocalCalendar.UTC, OfficialClaim.BANK)!!
         assertTrue(o.line.endsWith(" · Calls claiming to be a bank can be spoofed · call the number on the back of your card, not this one"), o.line)
-        assertTrue(UnknownCallRules.offer("01632 960555", CallOutcome.MISSED, 0, t, t + 60_000, emptySet(), emptyList(), LocalCalendar.UTC)!!.line.endsWith(" · Block it?"))
+        assertTrue(UnknownCallRules.offer("01632 960555", CallOutcome.MISSED, 0, t, t + 60_000, emptySet(), emptyList(), LocalCalendar.UTC)!!.line.endsWith(" · Not blocked · it will ring again"))
     }
 
     @Test

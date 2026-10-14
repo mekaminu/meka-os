@@ -229,6 +229,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-calls "${{ steps.decide.outputs.url }}"
 
+      # What the call assistant took (call notifications, slice 1): each recent message's length, how many characters
+      # its words were, urgent and how it was answered, the kept recording's size; never a number or a word.
+      - name: Call assistant messages
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-assistant "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

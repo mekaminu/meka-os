@@ -1,6 +1,8 @@
 package os.meka.backend
 
 import os.meka.core.domain.AboutYouRules
+import os.meka.core.domain.AssistantCallEntry
+import os.meka.core.domain.AssistantCallReportRules
 import os.meka.core.sync.FieldValue
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import javax.sql.DataSource
@@ -24,6 +26,11 @@ interface NotifyReportStore {
 class NotifyReports(
     private val store: NotifyReportStore, private val push: Push?,
     private val profile: ((householdId: String) -> Map<String, FieldValue>?)? = null,
+    /**
+     * Call notifications, slice 1: the call assistant's last messages ([AssistantCallReportRules]) for the publish
+     * job's "Call assistant" notices; never a number or a word.
+     */
+    private val assistantCalls: ((householdId: String) -> List<AssistantCallEntry>)? = null,
 ) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
         // The publisher reads; it never reports.
@@ -33,8 +40,11 @@ class NotifyReports(
 
     fun latest(who: DeviceIdentity): NotifyDiagnosticsCodec.Latest {
         val held = profile?.let { read -> AboutYouRules.held(runCatching { read(who.householdId) }.getOrNull()) }
+        val calls = assistantCalls?.let { read -> runCatching { read(who.householdId) }.getOrNull() }?.map { e ->
+            NotifyDiagnosticsCodec.Entry(e.atMs, if (e.automated) "automated" else "voice", AssistantCallReportRules.line(e))
+        }
         val about = NotifyDiagnosticsCodec.Latest(
-            null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs,
+            null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs, assistant = calls,
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)

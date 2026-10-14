@@ -50,6 +50,15 @@ class NotifyDiagnosticsCodecTest {
     }
 
     @Test
+    fun theCallAssistantsMessagesTravelAndOlderServersSendNone() {
+        val calls = listOf(NotifyDiagnosticsCodec.Entry(1_760_000_000_000L, "automated", "message 0:02 · words 1 chars · urgent (answer: keypad) · recording kept 30 KB · likely automated"))
+        val l = NotifyDiagnosticsCodec.Latest(null, assistant = calls)
+        assertEquals(l, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(l)))
+        assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null}""").assistant)
+        assertEquals(emptyList(), NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, assistant = emptyList()))).assistant)
+    }
+
+    @Test
     fun aChannelsLastPostTravelsAndOlderReportsHaveNone() {
         val r = report.copy(channels = listOf(NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, 1_760_000_000_000L)))
         assertEquals(r, NotifyDiagnosticsCodec.decodeReport(NotifyDiagnosticsCodec.encodeReport(r)))

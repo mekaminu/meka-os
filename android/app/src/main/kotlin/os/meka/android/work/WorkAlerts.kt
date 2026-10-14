@@ -8,6 +8,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -15,6 +16,8 @@ import androidx.core.content.ContextCompat
 import os.meka.android.MainActivity
 import os.meka.core.domain.BreakThrough
 import os.meka.core.domain.CallAssistantRules
+import os.meka.core.domain.CallNoticeRules
+import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
 
@@ -25,6 +28,8 @@ import os.meka.core.domain.CapturedItem
 object WorkAlerts {
     const val CHANNEL = "work_breakthrough"
     const val VOICE_LINE = "Left a message with your call assistant and said it's urgent"
+    /** Saved with the number when Block is tapped on a call-assistant message's alert. */
+    const val BLOCK_WHY = "Left a message with your call assistant"
 
     fun canPost(context: Context): Boolean {
         val granted = Build.VERSION.SDK_INT < 33 ||
@@ -56,13 +61,20 @@ object WorkAlerts {
     fun post(context: Context, item: CapturedItem, why: BreakThrough, play: Boolean = false) {
         if (!canPost(context)) return
         ensureChannel(context)
+        // Call notifications, slice 1: a call-assistant message says who, what happened and what it was about.
+        val notice = if (item.kind == CaptureKind.VOICE_MESSAGE) {
+            val cal = LocalCalendar.fixedOffset(java.util.TimeZone.getDefault().getOffset(item.atMs).toLong())
+            val blocked = runCatching { (context.applicationContext as os.meka.android.MekaApplication).core.blockedCallers.value }
+                .getOrDefault(os.meka.core.domain.BlockedCallersView.EMPTY)
+            CallNoticeRules.voiceNotice(item, cal, canPlay = play, blocked = blocked)
+        } else null
         val title = when (item.kind) {
             CaptureKind.MISSED_CALL -> "Missed call · ${item.personName}"
             CaptureKind.MESSAGE -> "${item.personName} · ${item.app.label}"
-            CaptureKind.VOICE_MESSAGE -> "Voice message · ${item.personName}"
+            CaptureKind.VOICE_MESSAGE -> notice!!.title
         }
-        // A voice message without its transcript yet still says why it rang through.
-        val line = item.text ?: if (item.kind == CaptureKind.VOICE_MESSAGE) VOICE_LINE else why.label
+        val line = notice?.text ?: item.text ?: why.label
+        val big = notice?.big ?: line
         val open = PendingIntent.getActivity(
             context, 0,
             Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
@@ -72,8 +84,8 @@ object WorkAlerts {
             .setSmallIcon(os.meka.android.R.drawable.ic_stat_meka)
             .setContentTitle(title)
             .setContentText(line)
-            .setSubText(why.label)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(line))
+            .setSubText(if (notice != null) notice.sub ?: why.label else why.label)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(big))
             .setCategory(if (item.kind == CaptureKind.MISSED_CALL) NotificationRules.CATEGORY_MISSED_CALL else NotificationCompat.CATEGORY_MESSAGE)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(open)
@@ -87,7 +99,26 @@ object WorkAlerts {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-            b.addAction(0, CallAssistantRules.PLAY_ACTION, playIntent)
+            b.addAction(0, notice?.listen ?: CallAssistantRules.PLAY_ACTION, playIntent)
+        }
+        val number = if (notice != null) CallNoticeRules.numberOf(item) else null
+        if (notice?.callBack != null && number != null) {
+            val dial = PendingIntent.getActivity(
+                context, item.id.hashCode() + 1,
+                Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            b.addAction(0, notice.callBack, dial)
+        }
+        if (notice?.block != null && number != null) {
+            val block = PendingIntent.getBroadcast(
+                context, item.id.hashCode() + 2,
+                Intent(context, UnknownCallReceiver::class.java).setAction(UnknownCallReceiver.ACTION_BLOCK)
+                    .putExtra(UnknownCallReceiver.EXTRA_NUMBER, number)
+                    .putExtra(UnknownCallReceiver.EXTRA_WHY, BLOCK_WHY),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+            b.addAction(0, notice.block, block)
         }
         val n = b.build()
         try {

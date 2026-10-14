@@ -118,6 +118,10 @@ class CallAssistantTest {
         assertEquals("+447700900123", item.personName)
         assertTrue(item.urgent)
         assertEquals("Voice message · Transcribing…", item.displayLine)
+        // Call notifications, slice 1: the length and how "urgent" was answered; a key press waits for the words.
+        assertEquals(14, item.seconds)
+        assertEquals("keypad", item.urgentBy)
+        assertFalse(item.isUrgent)
         assertFalse(item.away) // Thursday 10:00 in the UK: at work
         assertEquals(nowMs, item.atMs)
         assertEquals(CallAssistantRules.heldId("twilio", "CA100"), item.id)
@@ -129,6 +133,7 @@ class CallAssistantTest {
             "TranscriptionText" to "Hi Meka, it's the garage, your car is ready.",
         ).also { assertEquals(HttpStatusCode.OK, it.status); assertTrue("<Response></Response>" in it.bodyAsText()) }
         assertEquals("Voice message · “Hi Meka, it's the garage, your car is ready.”", fold().items().single().displayLine)
+        assertTrue(fold().items().single().isUrgent)
         assertEquals(listOf("hh", "hh"), woken)
         assertEquals(listOf("hh"), urgent)
     }

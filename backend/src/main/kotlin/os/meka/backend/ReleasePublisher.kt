@@ -256,7 +256,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -296,6 +296,12 @@ object ReleasePublisherCli {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Call screening::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
                     callLines(l).forEach(::println)
+                    0
+                }
+                "publisher-assistant" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Call assistant::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    assistantLines(l).forEach(::println)
                     0
                 }
                 else -> {
@@ -377,6 +383,16 @@ object ReleasePublisherCli {
         val head = "::notice title=Call screening (${r.model ?: "phone"}, sent ${utc(r.sentAtMs)})::$summary"
         return (listOf(head) + c.screened.map { e -> "::notice title=Screened call::${utc(e.atMs)} · ${e.kind} · ${e.detail}" })
             .map { it.replace("%", "%25") }
+    }
+
+    /**
+     * Call notifications, slice 1: the call assistant's last messages, one notice each (GitHub keeps a step's first 10):
+     * time, length, characters, urgency and how it was answered, the recording; never the number or the words.
+     */
+    fun assistantLines(l: NotifyDiagnosticsCodec.Latest): List<String> {
+        val calls = l.assistant ?: return listOf("::notice title=Call assistant::the server doesn't report its calls yet")
+        if (calls.isEmpty()) return listOf("::notice title=Call assistant::no messages taken yet")
+        return calls.map { e -> "::notice title=Call assistant message::${utc(e.atMs)} · ${e.detail}".replace("%", "%25") }
     }
 
     /** About you, slice 2: whether the Fold and the Mac both hold the profile (release 2's gate), for a build run. */

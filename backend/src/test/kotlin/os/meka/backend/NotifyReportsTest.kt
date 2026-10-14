@@ -113,6 +113,29 @@ class NotifyReportsTest {
     }
 
     @Test
+    fun thePublisherPrintsTheCallAssistantsMessagesWithoutNumbersOrWords() {
+        val entry = os.meka.core.domain.AssistantCallEntry(
+            atMs = at, seconds = 2, chars = 1, transcribed = true, urgent = true, answeredBy = "keypad",
+            audio = true, bytes = 30_000, automated = true, cleared = false,
+        )
+        val reports = NotifyReports(InMemoryNotifyReportStore(), null, assistantCalls = { listOf(entry) })
+        val latest = reports.latest(DeviceIdentity("hh", ReleasePublisher.ID))
+        assertEquals(
+            listOf("::notice title=Call assistant message::2026-10-13 20:41 UTC · message 0:02 · words 1 chars · urgent (answer: keypad) · recording kept 29 KB · likely automated"),
+            ReleasePublisherCli.assistantLines(latest),
+        )
+        assertEquals("automated", latest.assistant!!.single().kind)
+        assertEquals(
+            listOf("::notice title=Call assistant::the server doesn't report its calls yet"),
+            ReleasePublisherCli.assistantLines(NotifyDiagnosticsCodec.Latest(null)),
+        )
+        assertEquals(
+            listOf("::notice title=Call assistant::no messages taken yet"),
+            ReleasePublisherCli.assistantLines(NotifyDiagnosticsCodec.Latest(null, assistant = emptyList())),
+        )
+    }
+
+    @Test
     fun thePublisherPrintsEachChannelsLastPostWhenThePhoneSendsThem() {
         val withPosts = report.copy(channels = listOf(
             NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, at - 60_000),

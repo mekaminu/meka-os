@@ -327,7 +327,7 @@ object BriefScriptRules {
      */
     fun asks(cards: List<RequestCard>, held: List<CapturedItem>, today: DayWindow, minuteOf: (Long) -> Int): List<BriefAsk> {
         val urgent = held
-            .filter { it.kind == CaptureKind.VOICE_MESSAGE && it.urgent && it.atMs >= today.startMs - ASK_LOOKBACK_MS }
+            .filter { it.kind == CaptureKind.VOICE_MESSAGE && it.urgent && it.isUrgent && it.atMs >= today.startMs - ASK_LOOKBACK_MS }
             .sortedByDescending { it.atMs }
             .map { m ->
                 val number = People.key(m.personName).startsWith("tel:")

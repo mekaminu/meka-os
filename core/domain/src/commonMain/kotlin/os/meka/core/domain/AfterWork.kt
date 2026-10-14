@@ -50,17 +50,30 @@ data class CapturedItem(
     val callerNumber: String? = null,
     /** MEKA's server keeps this voice message's recording, so it can be played ([VoiceRecordingRules.playable]). */
     val hasAudio: Boolean = false,
+    /** The voice message's length in seconds ([HeldMessageFields.SECONDS]); null when the server didn't note it. */
+    val seconds: Int? = null,
+    /** How "is it urgent?" was answered: [CallNoticeRules.BY_KEYPAD] · [CallNoticeRules.BY_SPEECH]; null = not noted. */
+    val urgentBy: String? = null,
 ) {
     val personKey: String get() = People.key(personName)
 
-    /** Urgent by the caller's answer or by its own words ("urgent", "emergency"). */
-    val isUrgent: Boolean get() = urgent || Urgency.isUrgent(text)
+    /** The call assistant's message (not a WhatsApp voice note, whose "text" is its length). */
+    val fromCallAssistant: Boolean get() = kind == CaptureKind.VOICE_MESSAGE && app == CaptureApp.PHONE
+
+    /** A call-assistant message that is a machine, not a person ([CallNoticeRules.automated]); never urgent. */
+    val automated: Boolean get() = fromCallAssistant && CallNoticeRules.automated(seconds, text, noTranscript, urgentBy, urgent)
+
+    /**
+     * Urgent by the caller's answer or by its own words ("urgent", "emergency"); for a voice message, never an
+     * automated call, and "urgent" pressed on the keypad only once its words show a person spoke ([CallNoticeRules.urgent]).
+     */
+    val isUrgent: Boolean get() = if (fromCallAssistant) CallNoticeRules.urgent(this) else urgent || Urgency.isUrgent(text)
 
     /** One line for this item in the after-work summary, the same on both apps. */
     val displayLine: String get() = when (kind) {
         CaptureKind.MISSED_CALL -> "Missed call"
         CaptureKind.MESSAGE -> text.orEmpty()
-        CaptureKind.VOICE_MESSAGE -> text?.let { "Voice message \u00b7 \u201c$it\u201d" } ?: when {
+        CaptureKind.VOICE_MESSAGE -> if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let { "Voice message \u00b7 \u201c$it\u201d" } ?: when {
             noTranscript -> "Voice message \u00b7 no words came through"
             transcribing -> "Voice message \u00b7 Transcribing\u2026"
             else -> "Voice message"
@@ -405,6 +418,13 @@ object HeldMessageFields {
      * recording. Added 2026-10-10.
      */
     const val AUDIO = "audio"
+    /** The voice message's length in seconds (Int64, written once by the server). Absent = not noted. Added 2026-10-14. */
+    const val SECONDS = "seconds"
+    /**
+     * How the caller answered "is it urgent?" (Text: [CallNoticeRules.BY_KEYPAD] · [CallNoticeRules.BY_SPEECH]; written
+     * once by the server). Absent = no answer, or before 2026-10-14.
+     */
+    const val URGENT_BY = "urgentBy"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -469,6 +489,8 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                 hasAudio = VoiceRecordingRules.playable(
                     kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = false, atMs = at, nowMs = nowMs(), keepDays = keepDays,
                 ),
+                seconds = e[HeldMessageFields.SECONDS].longOrNull?.toInt(),
+                urgentBy = e[HeldMessageFields.URGENT_BY].textOrNull,
             )
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
     }

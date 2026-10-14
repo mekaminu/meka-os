@@ -21,6 +21,7 @@ import os.meka.core.domain.MekaVoiceStore
 import os.meka.core.domain.SuspectedSpamRules
 import os.meka.core.domain.Urgency
 import os.meka.core.domain.VoiceRecordingRules
+import os.meka.core.domain.CallNoticeRules
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
 import os.meka.core.sync.FieldValue
@@ -343,7 +344,7 @@ class CallAssistant(
                 }
                 // A retry finds the message written: it keeps the at-work reading it was taken with.
                 val atWork = if (exists(hh, id)) !away(hh, id) else atWork(hh)
-                if (write(hh, id, CallAssistantRules.messageFields(event.from, now(), atWork))) runCatching { onWritten(hh) }
+                if (write(hh, id, CallAssistantRules.messageFields(event.from, now(), atWork, seconds = event.seconds))) runCatching { onWritten(hh) }
                 VoiceReply.AskUrgent(atWork)
             }
             is VoiceEvent.Answered -> {
@@ -354,6 +355,10 @@ class CallAssistant(
                 // What it heard, in Activity, so Meka can see why a message was or wasn't marked urgent.
                 if (known) logAnswer(hh, id, event, answer, askAgain)
                 if (askAgain) return VoiceReply.AskUrgent(!away(hh, id), again = true)
+                // Call notifications, slice 1: how it was answered, so "urgent" pressed by a robocall never breaks through.
+                if (known && answer != null) {
+                    CallNoticeRules.answeredBy(event.digits, event.speech)?.let { by -> write(hh, id, mapOf(HeldMessageFields.URGENT_BY to by.fv())) }
+                }
                 val urgent = answer == true
                 if (urgent && known) {
                     if (write(hh, id, mapOf(HeldMessageFields.URGENT to true.fv()))) runCatching { onUrgent(hh) }

@@ -30,6 +30,8 @@ object NotifyDiagnosticsCodec {
     const val TRACE_MAX = 40
     const val CALLS_MAX = 20
     const val CHANNELS_MAX = 24
+    const val ASSISTANT_MAX = 10
+    const val ASSISTANT_DETAIL_MAX = 160
     const val DETAIL_MAX = 120
     const val NAME_MAX = 40
     const val MODEL_MAX = 40
@@ -77,6 +79,12 @@ object NotifyDiagnosticsCodec {
     data class Latest(
         val report: Report?, val lastPushAtMs: Long? = null, val lastPushResult: String? = null, val hasAddress: Boolean? = null,
         val aboutFilled: Boolean? = null, val aboutFoldAtMs: Long? = null, val aboutMacAtMs: Long? = null,
+        /**
+         * Call notifications, slice 1: the call assistant's last messages, newest first (kind "voice" or "automated",
+         * detail = length, characters, urgency and how it was answered, the recording; never the number or the words).
+         * Null from a server before it.
+         */
+        val assistant: List<Entry>? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -106,6 +114,13 @@ object NotifyDiagnosticsCodec {
             l.aboutFoldAtMs?.let { put("aboutFold", it) }
             l.aboutMacAtMs?.let { put("aboutMac", it) }
         }
+        l.assistant?.let { list ->
+            put("assistant", buildJsonArray {
+                list.take(ASSISTANT_MAX).forEach { e ->
+                    add(buildJsonObject { put("at", e.atMs); put("kind", clean(e.kind, 12)); put("detail", clean(e.detail, ASSISTANT_DETAIL_MAX)) })
+                }
+            })
+        }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -121,6 +136,7 @@ object NotifyDiagnosticsCodec {
             aboutFilled = (o["aboutFilled"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
             aboutFoldAtMs = o.long("aboutFold")?.takeIf { it > 0 },
             aboutMacAtMs = o.long("aboutMac")?.takeIf { it > 0 },
+            assistant = (o["assistant"] as? JsonArray)?.let { a -> entries(a, ASSISTANT_MAX, ASSISTANT_DETAIL_MAX) },
         )
     }
 
@@ -167,11 +183,11 @@ object NotifyDiagnosticsCodec {
         }
     }
 
-    private fun entries(a: JsonArray?, max: Int): List<Entry> = (a ?: JsonArray(emptyList())).mapNotNull { e ->
+    private fun entries(a: JsonArray?, max: Int, detailMax: Int = DETAIL_MAX): List<Entry> = (a ?: JsonArray(emptyList())).mapNotNull { e ->
         val t = e as? JsonObject ?: return@mapNotNull null
         val at = t.long("at")?.takeIf { it > 0 } ?: return@mapNotNull null
         val kind = t.str("kind")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-        Entry(at, clean(kind, 12), clean(t.str("detail").orEmpty(), DETAIL_MAX))
+        Entry(at, clean(kind, 12), clean(t.str("detail").orEmpty(), detailMax))
     }.take(max)
 
     private fun calls(o: JsonObject?): Calls? {

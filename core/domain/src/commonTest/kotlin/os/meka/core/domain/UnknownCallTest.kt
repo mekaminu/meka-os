@@ -62,20 +62,20 @@ class UnknownCallTest {
     fun theNotificationSaysWhoAndHowAndOffersBlockAndReport() {
         val at = t + 6 * 3_600_000L + 5 * 60_000L // 14:05
         val o = assertNotNull(UnknownCallRules.offer(stranger, CallOutcome.MISSED, 0, at, at + 60_000, emptySet(), emptyList(), cal))
-        assertEquals("Unknown caller · 01632 960691", o.title)
-        assertEquals("Missed call at 14:05 · Block it?", o.line)
+        assertEquals("01632 960691 · not in your contacts", o.title)
+        assertEquals("Rang · you missed it · 14:05 · Not blocked · it will ring again", o.line)
         assertEquals("Missed call · Wed 7 Oct", o.why)
         assertEquals("Call 01632960691", o.reportText)
         assertEquals(BlockedCallerRules.keyOf("01632 960691"), o.key)
 
         fun line(outcome: CallOutcome, s: Long = 0) = UnknownCallRules.offer(stranger, outcome, s, at, at + 60_000, emptySet(), emptyList(), cal)!!.line
-        assertEquals("Declined at 14:05 · Block it?", line(CallOutcome.DECLINED))
-        assertEquals("Call at 14:05 · 2 min · Block it?", line(CallOutcome.ANSWERED, 125))
-        assertEquals("Sent to your assistant at 14:05 · the network couldn't verify the number · Block it?", line(CallOutcome.TO_ASSISTANT))
-        assertEquals("Called at 14:05 · Block it?", line(CallOutcome.UNKNOWN))
+        assertEquals("You declined it · 14:05 · Not blocked · it will ring again", line(CallOutcome.DECLINED))
+        assertEquals("Rang through · you spoke 2 min · 14:05 · Not blocked · it will ring again", line(CallOutcome.ANSWERED, 125))
+        assertEquals("Sent to your call assistant · 14:05 · the network couldn't verify the number · Not blocked · it will ring again", line(CallOutcome.TO_ASSISTANT))
+        assertEquals("Rang · 14:05 · Not blocked · it will ring again", line(CallOutcome.UNKNOWN))
         // Checked after midnight: the day is said.
         val late = UnknownCallRules.offer(stranger, CallOutcome.MISSED, 0, at, at + 12 * 3_600_000L, emptySet(), emptyList(), cal)!!
-        assertEquals("Missed call yesterday at 14:05 · Block it?", late.line)
+        assertEquals("Rang · you missed it · yesterday 14:05 · Not blocked · it will ring again", late.line)
         assertEquals("45 s", UnknownCallRules.length(45))
         assertEquals("1 h 05", UnknownCallRules.length(3_900))
     }

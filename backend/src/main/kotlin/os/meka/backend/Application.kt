@@ -1057,7 +1057,7 @@ fun main(args: Array<String>) {
                     foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
                     notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push, profile = { hh ->
                         opStore.latestFields(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)[AboutYouRules.ENTITY_ID]
-                    }),
+                    }, assistantCalls = assistantCallsReader(opStore)),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
@@ -1124,6 +1124,26 @@ fun opStoreReader(opStore: PostgresOpStore): EntityReader = object : EntityReade
     override fun entities(householdId: String, entityType: String) = opStore.latestFields(householdId, entityType)
     override fun entity(householdId: String, entityType: String, entityId: String) =
         opStore.latestFields(householdId, entityType, entityId)[entityId]
+}
+
+/**
+ * Call notifications, slice 1: the call assistant's last messages for the publish job (length, characters, urgency and
+ * how it was answered, the kept recording's size), read from the op log and the recordings bucket. Never a number or a
+ * word leaves: [os.meka.core.domain.AssistantCallReportRules.line] keeps only counts.
+ */
+fun assistantCallsReader(opStore: PostgresOpStore): (String) -> List<os.meka.core.domain.AssistantCallEntry> {
+    val recordings = System.getenv("MEKA_BLOB_BUCKET")?.takeIf { it.isNotBlank() }?.let { S3RecordingStore(it) }
+    return { hh ->
+        fun detail(id: String): String? = listOf(true, false).firstNotNullOfOrNull { again ->
+            val entry = os.meka.core.domain.CallAssistantRules.answerActivityId(id, again)
+            (opStore.latestFields(hh, EntityTypes.AGENT_ACTION, entry)[entry]?.get(os.meka.core.domain.ActivityFields.DETAIL) as? FieldValue.Text)?.value
+        }
+        os.meka.core.domain.AssistantCallReportRules.entries(
+            opStore.latestFields(hh, EntityTypes.HELD_MESSAGE),
+            answerDetail = ::detail,
+            bytes = { id -> os.meka.core.domain.VoiceRecordingRules.key(hh, id)?.let { k -> recordings?.get(k)?.size } },
+        )
+    }
 }
 
 /**

@@ -25,9 +25,9 @@ data class UnknownCallOffer(
     val key: String,
     /** The number as it called, for Block and the 7726 text. */
     val number: String,
-    /** "Unknown caller · 01632 960691" */
+    /** "01632 960691 · not in your contacts" */
     val title: String,
-    /** "Missed call at 14:05 · Block it?" */
+    /** "Rang · you missed it · 14:05 · Not blocked · it will ring again" (Block is the button). */
     val line: String,
     /** Saved with the number on the block list: "Missed call · Fri 9 Oct". */
     val why: String,
@@ -106,13 +106,14 @@ object UnknownCallRules {
         val at = LocalClock.formatMinute(cal.minuteOfDay(atMs))
         val dayLabel = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
         val day = when (dayLabel) { "Today" -> ""; "Yesterday" -> "yesterday "; else -> "$dayLabel " }
+        // Call notifications, slice 1: what happened, in plain words, then the time.
         val line = when (outcome) {
-            CallOutcome.MISSED -> "Missed call ${day}at $at"
-            CallOutcome.DECLINED -> "Declined ${day}at $at"
-            CallOutcome.ANSWERED -> "Call ${day}at $at · ${length(durationS)}"
-            CallOutcome.TO_ASSISTANT -> "Sent to your assistant ${day}at $at · the network couldn't verify the number"
-            CallOutcome.UNKNOWN -> "Called ${day}at $at"
-        } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) } ?: " · Block it?")
+            CallOutcome.MISSED -> "Rang · you missed it · $day$at"
+            CallOutcome.DECLINED -> "You declined it · $day$at"
+            CallOutcome.ANSWERED -> "Rang through · you spoke ${length(durationS)} · $day$at"
+            CallOutcome.TO_ASSISTANT -> "Sent to your call assistant · $day$at · the network couldn't verify the number"
+            CallOutcome.UNKNOWN -> "Rang · $day$at"
+        } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) } ?: " · ${CallNoticeRules.NOT_BLOCKED}")
         val what = when (outcome) {
             CallOutcome.MISSED -> "Missed call"
             CallOutcome.DECLINED -> "Declined call"
@@ -124,12 +125,15 @@ object UnknownCallRules {
         return UnknownCallOffer(
             key = key,
             number = number.trim(),
-            title = "Unknown caller · $shown",
+            title = title(number),
             line = line,
             why = "$what · ${CivilDate.shortLabel(cal.epochDayOf(atMs))}",
             reportText = BlockedCallerRules.reportText(number)!!,
         )
     }
+
+    /** Who rang, for every after-call notice: "01632 960691 · not in your contacts". */
+    fun title(number: String): String = "${BlockedCallerRules.display(number)} · ${CallNoticeRules.NOT_IN_CONTACTS}"
 
     /** The offers made after [key] was offered at [nowMs]: older than a day dropped, one entry per number. */
     fun remember(offered: List<ScreenedCall>, key: String, nowMs: Long): List<ScreenedCall> =

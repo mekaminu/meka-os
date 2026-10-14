@@ -137,7 +137,7 @@ object CallAssistantRules {
      * The fields of a new voice message (the transcript arrives later as [HeldMessageFields.TEXT]). [atWork] false marks
      * a message taken outside work hours ([HeldMessageFields.AWAY]), so the summary isn't titled "While you were at work".
      */
-    fun messageFields(from: String?, atMs: Long, atWork: Boolean = true): Map<String, FieldValue> = buildMap {
+    fun messageFields(from: String?, atMs: Long, atWork: Boolean = true, seconds: Int? = null): Map<String, FieldValue> = buildMap {
         put(HeldMessageFields.APP, CaptureApp.PHONE.name.fv())
         put(HeldMessageFields.KIND, CaptureKind.VOICE_MESSAGE.name.fv())
         put(HeldMessageFields.PERSON, callerName(from).fv())
@@ -145,6 +145,8 @@ object CallAssistantRules {
         // The server doesn't have the family list (it stays on the Fold); the Fold ranks by number with its lists.
         put(HeldMessageFields.FAMILY, false.fv())
         if (!atWork) put(HeldMessageFields.AWAY, true.fv())
+        // Call notifications, slice 1: the length, so a 1-second "message" reads as an automated call.
+        seconds?.let { put(HeldMessageFields.SECONDS, FieldValue.Int64(it.coerceIn(0, 3600).toLong())) }
     }
 
     /** How long a voice message with no words yet reads "Transcribing…" (the phone service takes a minute or two). */
