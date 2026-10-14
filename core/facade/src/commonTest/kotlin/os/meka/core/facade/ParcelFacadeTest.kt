@@ -41,14 +41,19 @@ class ParcelFacadeTest {
         val today = CivilDate.toEpochDay(2026, 10, 17)
         val a = ParcelRules.entityId("acc1", "112-4455")
         serverWrite(a, ParcelRules.fields(ParcelFolded("112-4455", ParcelState.OUT_FOR_DELIVERY, today, "10:15–11:15", "DPD", "Shop", now), "Personal"))
-        serverWrite(ParcelRules.entityId("acc1", "m:x"), ParcelRules.fields(ParcelFolded("m:x", ParcelState.COMING, today + 1, null, null, "Other", now), "Personal"))
+        serverWrite(ParcelRules.entityId("acc1", "m:x"), ParcelRules.fields(ParcelFolded("m:x", ParcelState.COMING, today + 2, null, null, "Other", now), "Personal"))
         val fold = core("android")
         val mac = core("mac")
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertEquals("Parcel out for delivery · Shop · 10:15–11:15", fold.today.value.parcels?.text)
         assertEquals(true, mac.today.value.parcels?.lit)
+        // Deliveries, slice 2: the heads-up on both devices, and Monday's parcel in the (next) week ahead.
+        assertEquals("Parcel out for delivery · Shop", fold.noticesNow().single { it.source == os.meka.core.domain.NoticeSource.PARCELS }.title)
+        assertEquals(1, mac.noticesNow().count { it.source == os.meka.core.domain.NoticeSource.PARCELS })
+        assertTrue(fold.weekAheadView.value.days.single { it.epochDay == today + 2 }.lines.any { it.text.startsWith("Parcel · Other") })
         serverWrite(a, ParcelRules.fields(ParcelFolded("112-4455", ParcelState.DELIVERED, today, "10:15–11:15", "DPD", "Shop", now), "Personal"))
         assertTrue(fold.syncNow())
         assertNull(fold.today.value.parcels)
+        assertTrue(fold.noticesNow().none { it.source == os.meka.core.domain.NoticeSource.PARCELS })
     }
 }

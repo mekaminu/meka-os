@@ -12,7 +12,10 @@ import os.meka.core.sync.fv
  * `parcel` entity per account and parcel. Today on both apps says "2 parcels arriving today · Amazon, DPD" (lit while one
  * is out for delivery); a delivered one drops off the line by itself, and one whose day has gone by stops showing.
  *
- * Every word of an email is someone else's (ADR-006): a parcel only ever makes a line on Today. Nothing is sent, paid,
+ * Deliveries, slice 2: each parcel also shows in the week ahead on its day (lit on an office day), and one that's out
+ * for delivery today brings a heads-up through the governor.
+ *
+ * Every word of an email is someone else's (ADR-006): a parcel only ever makes a line or a heads-up. Nothing is sent, paid,
  * tracked or opened because of it; promos and newsletters ("free delivery tomorrow!") are never read.
  */
 
@@ -61,6 +64,9 @@ data class Parcel(
 
 /** Today's line: "2 parcels arriving today · Amazon, DPD"; [lit] while one is out for delivery. */
 data class ParcelLine(val text: String, val spoken: String, val lit: Boolean, val parcelCount: Int)
+
+/** Deliveries, slice 2: the week ahead's line for one day; [lit] when it's due on an office day (nobody home). */
+data class ParcelWeekLine(val text: String, val spoken: String, val lit: Boolean)
 
 object ParcelFields {
     const val ACCOUNT = "account"
@@ -289,5 +295,57 @@ object ParcelRules {
         val text = "${due.size} parcels arriving today" + (if (shown.isNotEmpty()) " · $shown" else "") + doneSuffix
         val spoken = "${due.size} parcels arriving today" + (if (names.isNotEmpty()) ", from ${names.joinToString(", ")}" else "") + "."
         return ParcelLine(text, spoken, lit = out > 0, parcelCount = due.size)
+    }
+
+    // ---- Deliveries, slice 2: the week ahead and the out-for-delivery heads-up ----
+
+    /**
+     * The week ahead's line for [day], or null when no parcel is due then: "Parcel · Amazon · 10:15–11:15", "Parcel
+     * out for delivery · DPD", "2 parcels · Amazon, DPD". On an office day it adds "· you're at the office" and is lit,
+     * so a parcel that may need someone in is seen in time. Delivered parcels aren't shown.
+     */
+    fun weekLine(parcels: List<Parcel>, day: Long, officeDay: Boolean): ParcelWeekLine? {
+        val due = parcels.filter { it.state != ParcelState.DELIVERED && it.day == day }
+            .sortedWith(compareBy<Parcel> { it.state != ParcelState.OUT_FOR_DELIVERY }.thenBy { it.window ?: "~" }.thenBy { it.lastAtMs })
+        if (due.isEmpty()) return null
+        val office = if (officeDay) " · you're at the office" else ""
+        val spokenOffice = if (officeDay) ", while you're at the office" else ""
+        if (due.size == 1) {
+            val p = due.single()
+            val head = if (p.state == ParcelState.OUT_FOR_DELIVERY) "Parcel out for delivery" else "Parcel"
+            val text = listOfNotNull(head, p.name, p.window).joinToString(" · ") + office
+            val spoken = (if (p.state == ParcelState.OUT_FOR_DELIVERY) "Parcel out for delivery" else "Parcel arriving") +
+                (p.name?.let { " from $it" } ?: "") + (p.window?.let { ", between ${it.replace("–", " and ")}" } ?: "") + spokenOffice
+            return ParcelWeekLine(text, spoken, officeDay)
+        }
+        val names = due.mapNotNull { it.name }.distinct()
+        val shown = names.take(NAMES_SHOWN).joinToString(", ") + if (names.size > NAMES_SHOWN) " + ${names.size - NAMES_SHOWN}" else ""
+        val text = "${due.size} parcels" + (if (shown.isNotEmpty()) " · $shown" else "") + office
+        val spoken = "${due.size} parcels arriving" + (if (names.isNotEmpty()) ", from ${names.joinToString(", ")}" else "") + spokenOffice
+        return ParcelWeekLine(text, spoken, officeDay)
+    }
+
+    /**
+     * The heads-up when a shipping email says a parcel is out for delivery today ([NoticeSource.PARCELS], through the
+     * governor, so quiet hours hold it): "Parcel out for delivery · Amazon" · "Between 10:15 and 11:15 · with DPD".
+     * Due when that email came (never before today), one per parcel and day, standing until the day ends; none once
+     * it's delivered or for another day. Opens Today. Nothing is tracked, opened or sent because of it.
+     */
+    fun notices(parcels: List<Parcel>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        val start = cal.toEpochMs(today, 0)
+        return parcels.filter { it.state == ParcelState.OUT_FOR_DELIVERY && it.day == today }
+            .sortedBy { it.lastAtMs }
+            .map { p ->
+                val text = listOfNotNull(
+                    p.window?.let { "Between ${it.replace("–", " and ")}" },
+                    p.carrier?.takeIf { p.merchant != null }?.let { "with $it" },
+                ).joinToString(" · ").ifEmpty { "Arriving today" }
+                Notice(
+                    key = "parcel:${p.id}:$today:out", source = NoticeSource.PARCELS, tier = NoticeTier.HEADS_UP,
+                    title = "Parcel out for delivery" + (p.name?.let { " · $it" } ?: ""), text = text,
+                    atMs = maxOf(p.lastAtMs, start), target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(today + 1, 0),
+                )
+            }
     }
 }

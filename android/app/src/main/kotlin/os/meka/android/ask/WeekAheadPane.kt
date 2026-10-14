@@ -286,7 +286,7 @@ private fun WeekLine(l: WeekAheadLine) {
     }
 }
 
-/** The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, email, the rest a dot. */
+/** The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, email, parcels, the rest a dot. */
 private fun mark(kind: WeekAheadKind): String = when (kind) {
     WeekAheadKind.SCHOOL -> "School"
     WeekAheadKind.DUE -> "Due"
@@ -294,5 +294,6 @@ private fun mark(kind: WeekAheadKind): String = when (kind) {
     WeekAheadKind.OCCASION -> "Gift"
     WeekAheadKind.TRIP -> "Trip"
     WeekAheadKind.MAIL -> "Email"
+    WeekAheadKind.PARCEL -> "Parcel"
     else -> "·"
 }

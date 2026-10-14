@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /** What a line in the week ahead is about (it picks the lead mark the pane draws). */
-enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS, OCCASION, TRIP, MAIL }
+enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS, OCCASION, TRIP, MAIL, PARCEL }
 
 /**
  * One thing on a day of the week ahead: "17:30 · Barça v Getafe", "Rex: PE", "Date night from 19:00". [time] leads the
@@ -136,6 +136,8 @@ data class WeekAheadInputs(
     val mail: List<MailItem> = emptyList(),
     /** Waiting for, so an email made into one shows its chase day. */
     val waiting: List<WaitingItem> = emptyList(),
+    /** Deliveries, slice 2: the parcels read from shipping emails, on the day each is due ([ParcelRules.weekLine]). */
+    val parcels: List<Parcel> = emptyList(),
 )
 
 /**
@@ -267,6 +269,9 @@ object WeekAheadRules {
         }
         GiftRules.weekLines(inputs.occasions, day).forEachIndexed { i, (text, lit) ->
             out += Keyed(window.startMs - 1, WeekAheadLine("g-$day-$i", WeekAheadKind.OCCASION, null, text, lit, text))
+        }
+        ParcelRules.weekLine(inputs.parcels, day, office)?.let { l ->
+            out += Keyed(window.startMs - 1, WeekAheadLine("p-$day", WeekAheadKind.PARCEL, null, l.text, l.lit, l.spoken))
         }
         for ((minute, text, id) in TripRules.weekLines(inputs.trips, day, first)) {
             val time = minute?.let { LocalClock.formatMinute(it) }

@@ -169,6 +169,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * or when the moment falls in protected time (the card still waits in Needs you).
      */
     MAIL_MOMENT("Ten-minute inbox", NoticeTier.HEADS_UP),
+    /**
+     * Deliveries, slice 2 ([ParcelRules.notices]): when a shipping email says a parcel is out for delivery today —
+     * "Parcel out for delivery · Amazon" · "Between 10:15 and 11:15 · with DPD". Gone once it's delivered.
+     */
+    PARCELS("Parcels out for delivery", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -601,6 +606,7 @@ object Governor {
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
         NoticeSource.MAIL_MOMENT -> "your ten-minute inbox"
+        NoticeSource.PARCELS -> if (n == 1) "a parcel out for delivery" else "$n parcels out for delivery"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -691,6 +697,8 @@ object NoticeSources {
         mailMoment: MailMomentSetting? = null,
         mailWaiting: Int = 0,
         protectedFromMin: Int? = null,
+        /** Deliveries, slice 2: the parcels read from shipping emails, for "out for delivery" ([ParcelRules.notices]). */
+        parcels: List<Parcel> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -822,6 +830,7 @@ object NoticeSources {
         out += DocumentRules.notices(documents, nowMs, cal)
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)
         if (mailMoment != null) out += MailMomentRules.notices(mailMoment, mailWaiting, protectedFromMin, nowMs, cal)
+        out += ParcelRules.notices(parcels, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

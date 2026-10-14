@@ -5808,6 +5808,8 @@ class MekaCore(
                 // Inbox autopilot, slice 9b: the sorted mail and the chases of emails made into Waiting for.
                 mail = activity.mailItems(),
                 waiting = lists.waitingItems(),
+                // Deliveries, slice 2: each parcel on the day it's due (lit on an office day).
+                parcels = activity.parcels(),
             ),
             nowMs(), cal, ::dayWindowOf,
         )
@@ -6048,6 +6050,8 @@ class MekaCore(
             mailMoment = mailMomentSetting(),
             mailWaiting = os.meka.core.domain.MailNeedsRules.allRows(activity.mailItems(), nowMs(), ZoneCalendar(timeZone)).size,
             protectedFromMin = protectedFromToday(),
+            // Deliveries, slice 2: "Parcel out for delivery · Amazon" when a shipping email says so.
+            parcels = activity.parcels(),
         )
 
     /**

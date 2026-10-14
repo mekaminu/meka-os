@@ -223,7 +223,7 @@ private struct WeekAheadDayView: View {
         }
     }
 
-    /// The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, email, the rest a dot.
+    /// The lead mark for a line with no time: school, money due, bins, birthdays and gifts, trips, email, parcels, the rest a dot.
     static func mark(_ kind: WeekAheadKind) -> String {
         if kind == .school { return "School" }
         if kind == .due { return "Due" }
@@ -231,6 +231,7 @@ private struct WeekAheadDayView: View {
         if kind == .occasion { return "Gift" }
         if kind == .trip { return "Trip" }
         if kind == .mail { return "Email" }
+        if kind == .parcel { return "Parcel" }
         return "·"
     }
 }
