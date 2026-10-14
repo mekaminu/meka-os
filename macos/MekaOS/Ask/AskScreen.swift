@@ -201,7 +201,7 @@ struct AskScreen: View {
         case .talk: model.showTalk = true
         case .health: model.showHealth = true
         case .setup: model.showSetup = true
-        case .lists, .goals, .review, .vault, .appearance, .ai, .settings: break
+        case .lists, .car, .goals, .review, .vault, .appearance, .ai, .settings: break
         }
     }
 }

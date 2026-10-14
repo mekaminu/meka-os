@@ -31,6 +31,7 @@ enum class HelpPlace(val key: String) {
     GIFTS("gifts"),
     TRIPS("trips"),
     ERRANDS("errands"),
+    CAR("car"),
     EMERGENCY("emergency"),
     FACTS("facts"),
     BRIEF("brief"),

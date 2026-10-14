@@ -61,7 +61,7 @@ final class ShellNavTests: XCTestCase {
     func testAskIsALifeGridDailyAndOneSettingsRow() {
         // Fold review 2026-10-12, item 7: the same parts as the Fold's.
         XCTAssertEqual(ShellNav.lifeTiles().map(\.label),
-                       ["Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Emergency card", "What Navilife knows"])
+                       ["Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Car", "Emergency card", "What Navilife knows"])
         XCTAssertEqual(ShellNav.lifeTiles().compactMap(\.tile), LifeTileRules.shared.ORDER)
         XCTAssertTrue(ShellNav.lifeTiles().allSatisfy { $0.symbol != nil })
         XCTAssertEqual(ShellNav.daily().map(\.label), ["Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Life admin hour", "Review"])

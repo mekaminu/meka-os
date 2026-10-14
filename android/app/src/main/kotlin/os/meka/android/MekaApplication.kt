@@ -89,6 +89,8 @@ class MekaApplication : Application() {
     val listenWeekAhead = MutableStateFlow(false)
     /** "Near Tesco" notification's tap → Ask → More → Errands (errands by location, slice 2). */
     val openErrands = MutableStateFlow(false)
+    /** "Where did I park?" said to Talk (car and parking, slice 1) → Ask → Life → Car with Find my car open. */
+    val openCar = MutableStateFlow(false)
     /** Appearance → "Play the opening": Today replays its opening (Day ring, tiles, greeting, stagger), then clears it. */
     val playOpening = MutableStateFlow(false)
     /** The wake alarm (Alarms, slice 1), registered with Android whenever the core's next alarm changes. */

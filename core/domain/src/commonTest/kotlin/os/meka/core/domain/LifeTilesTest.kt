@@ -99,7 +99,7 @@ class LifeTilesTest {
     @Test
     fun tilesArriveARowAtATime() {
         assertEquals(listOf(3, 3, 4, 4, 5), (0..4).map { LifeTileRules.step(3, it) })
-        assertEquals(14, LifeTileRules.ORDER.size)
+        assertEquals(15, LifeTileRules.ORDER.size) // Car and parking, slice 1: the Car tile
         assertEquals(LifeTile.LISTS, LifeTileRules.ORDER.first())
     }
 
@@ -116,7 +116,7 @@ class LifeTilesTest {
         assertTrue(live.containsAll(listOf(LifeTile.LISTS, LifeTile.PEOPLE, LifeTile.TRIPS, LifeTile.ERRANDS, LifeTile.BINS)))
         assertTrue(live.none { it in LifeTileRules.toSetUp(l) })
         assertEquals(LifeTileRules.ORDER.size, live.size + LifeTileRules.toSetUp(l).size)
-        assertEquals("To set up · 9", LifeTileRules.setUpLabel(LifeTileRules.toSetUp(l).size))
+        assertEquals("To set up · 10", LifeTileRules.setUpLabel(LifeTileRules.toSetUp(l).size))
         // Dinners with favourites but nothing planned is a nudge, not set-up.
         val d = LifeTileRules.lines(LifeTileInputs(mealsSummary = MealRules.NOTHING_PLANNED))
         assertTrue(LifeTile.DINNERS !in LifeTileRules.toSetUp(d))

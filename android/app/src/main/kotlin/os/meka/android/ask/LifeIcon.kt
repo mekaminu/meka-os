@@ -111,6 +111,16 @@ private fun DrawScope.drawLifeGlyph(tile: LifeTile, color: Color) {
             }
             ring(0.5f, 0.4f, 0.1f)
         }
+        LifeTile.CAR -> {
+            // A car from the side: the body with its cabin, and two wheels.
+            path {
+                moveTo(w * 0.1f, w * 0.66f); lineTo(w * 0.1f, w * 0.52f); lineTo(w * 0.26f, w * 0.48f)
+                lineTo(w * 0.36f, w * 0.32f); lineTo(w * 0.66f, w * 0.32f); lineTo(w * 0.78f, w * 0.48f)
+                lineTo(w * 0.9f, w * 0.52f); lineTo(w * 0.9f, w * 0.66f)
+            }
+            line(0.36f, 0.66f, 0.64f, 0.66f); line(0.26f, 0.48f, 0.78f, 0.48f)
+            ring(0.27f, 0.68f, 0.08f); ring(0.73f, 0.68f, 0.08f)
+        }
         LifeTile.EMERGENCY -> {
             // A cross in a rounded square.
             box(0.12f, 0.12f, 0.76f, 0.76f, 0.16f); line(0.5f, 0.3f, 0.5f, 0.7f); line(0.3f, 0.5f, 0.7f, 0.5f)

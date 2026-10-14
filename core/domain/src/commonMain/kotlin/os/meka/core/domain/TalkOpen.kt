@@ -15,7 +15,7 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE, INBOX }
+enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -34,8 +34,28 @@ object TalkOpenRules {
     /** What a device without a bedside clock (the Mac) can open. */
     val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX)
 
-    /** The Fold: the planner, the bedside clock and the ten-minute inbox. */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX)
+    /**
+     * The Fold: the planner, the bedside clock, the ten-minute inbox and Find my car (car and parking, slice 1: where
+     * the car is parked is kept on the phone only, so the Mac has nothing to open).
+     */
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR)
+
+    /**
+     * "Where did I park?", "where did I leave the car", "where's my car", "find my car", "where am I parked", "show me
+     * where I parked" (what's left once [DROP] is gone). "When's the car's MOT?" has more in it and stays a question.
+     */
+    private val CAR: Set<List<String>> = buildSet {
+        val cars = listOf(listOf("car"), listOf("my", "car"), listOf("the", "car"))
+        for (w in listOf(listOf("where", "did", "park"), listOf("where", "did", "leave"), listOf("where", "have", "parked"),
+            listOf("where've", "parked"), listOf("where", "did", "put"))) {
+            add(w); cars.forEach { add(w + it) }
+        }
+        for (w in listOf(listOf("where's"), listOf("wheres"), listOf("where", "is"), listOf("find"), listOf("locate"), listOf("show"))) {
+            cars.forEach { add(w + it); add(w + it + "parked") }
+        }
+        add(listOf("where", "am", "parked")); add(listOf("show", "where", "parked")); add(listOf("show", "where", "the", "car", "is"))
+        add(listOf("find", "my", "car", "please")); add(listOf("where", "did", "park", "today"))
+    }
 
     /**
      * "Clear my inbox", "go through my emails", "sort out the inbox", "do my email", "inbox zero", "ten-minute inbox",
@@ -93,6 +113,7 @@ object TalkOpenRules {
             ws in PLAN && TalkPlace.PLAN in places -> TalkPlace.PLAN
             ws in BEDSIDE && TalkPlace.BEDSIDE in places -> TalkPlace.BEDSIDE
             ws in INBOX && TalkPlace.INBOX in places -> TalkPlace.INBOX
+            ws in CAR && TalkPlace.CAR in places -> TalkPlace.CAR
             else -> null
         }
     }
@@ -102,6 +123,7 @@ object TalkOpenRules {
         TalkPlace.PLAN -> OPENING_PLAN
         TalkPlace.BEDSIDE -> BedsideEntryRules.OPENING
         TalkPlace.INBOX -> OPENING_INBOX
+        TalkPlace.CAR -> ParkingRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
@@ -109,6 +131,7 @@ object TalkOpenRules {
         TalkPlace.PLAN -> OPENED_PLAN
         TalkPlace.BEDSIDE -> BedsideEntryRules.OPENED
         TalkPlace.INBOX -> OPENED_INBOX
+        TalkPlace.CAR -> ParkingRules.OPENED
     }
 }
 

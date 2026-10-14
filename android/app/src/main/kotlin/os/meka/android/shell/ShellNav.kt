@@ -66,6 +66,7 @@ enum class MoreItem(
     GIFTS("Gifts", "Birthdays, anniversaries and gift ideas", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.GIFTS),
     TRIPS("Trips", "Trips and bookings, day by day", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.TRIPS),
     ERRANDS("Errands", "Things to get or do when you're at a place", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.ERRANDS),
+    CAR(os.meka.core.domain.ParkingRules.TITLE, os.meka.core.domain.ParkingRules.ROW_LINE, null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.CAR),
     EMERGENCY("Emergency card", "Who to call and where things are", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.EMERGENCY),
     FACTS("What Navilife knows", "Car reg, GP, sizes · the facts Navilife answers from", null, MoreGroup.LIFE, os.meka.core.domain.LifeTile.FACTS),
     BRIEF("Morning brief", "Your day, who you're waiting on and headlines", null, MoreGroup.DAILY),

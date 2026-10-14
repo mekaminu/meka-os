@@ -44,6 +44,10 @@ class CarFacadeTest {
         fold.setRenewalDue(mot, fold.todayEpochDay() + 28)
         fold.syncNow(); mac.syncNow()
         assertEquals("AB12 CDE", mac.carView.value.registration)
+        // Car and parking, slice 1: the Car tile on Ask's Life grid says the next date on both apps.
+        assertEquals("MOT due Mon 9 Nov", mac.lifeLines.value.of(os.meka.core.domain.LifeTile.CAR)?.text)
+        assertEquals("MOT due Mon 9 Nov", fold.lifeLines.value.of(os.meka.core.domain.LifeTile.CAR)?.text)
+        assertFalse(mac.lifeLines.value.needsSetUp(os.meka.core.domain.LifeTile.CAR))
         val g = mac.governNotifications(null, DeviceAlerts.ALL)
         val car = g.post.filter { it.source == NoticeSource.CAR }
         assertEquals(listOf("MOT due Mon 9 Nov · AB12 CDE" to "In 4 weeks · an MOT up to a month early keeps the same date"), car.map { it.title to it.text })

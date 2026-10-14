@@ -122,7 +122,18 @@ fun AskRoute(
     var searchTask by rememberSaveable { mutableStateOf<String?>(null) }
     var searchEpoch by rememberSaveable { mutableStateOf(0) }
     val closeSearch = { showSearch = false; searchEpoch += 1 }
-    val lifeLines by core.lifeLines.collectAsState()
+    val coreLifeLines by core.lifeLines.collectAsState()
+    // Car and parking, slice 1: while a car is parked the Car tile says where (kept on this phone, laid over the core's
+    // line); read again when Ask comes back and when a pane closes.
+    val parkContext = LocalContext.current
+    val carsNow by core.carsView.collectAsState()
+    var parkedLook by remember { mutableStateOf(0) }
+    val lifeLines = remember(coreLifeLines, carsNow, parkedLook, pane) {
+        val nowMs = System.currentTimeMillis()
+        val cal = os.meka.core.domain.LocalCalendar.fixedOffset(java.util.TimeZone.getDefault().getOffset(nowMs).toLong())
+        val rows = os.meka.core.domain.ParkingRules.rows(ParkingStore.spots(parkContext), carsNow, nowMs, cal)
+        os.meka.core.domain.ParkingRules.withParked(coreLifeLines, os.meka.core.domain.ParkingRules.tileLine(rows, nowMs))
+    }
     val dailyLines by core.dailyLines.collectAsState()
     // The Bedside clock row's "Screen saver on/off": read again each time Ask comes back (he may have just set it).
     val screenSaverContext = LocalContext.current
@@ -131,6 +142,7 @@ fun AskRoute(
     LaunchedEffect(askLifecycle) {
         askLifecycle.currentStateFlow.collect { st ->
             if (st == androidx.lifecycle.Lifecycle.State.RESUMED) {
+                parkedLook += 1
                 screenSaver = runCatching { os.meka.android.fold.BedsideDreamService.isMeka(screenSaverContext) }.getOrNull()
             }
         }
@@ -184,6 +196,12 @@ fun AskRoute(
     val openErrands by remember(healthApp) { healthApp?.openErrands ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openErrands) {
         if (openErrands) { pane = MoreItem.ERRANDS; healthApp?.openErrands?.value = false }
+    }
+    // "Where did I park?" said to Talk (car and parking, slice 1) → the Car pane with Find my car open.
+    var carFindFirst by remember { mutableStateOf(false) }
+    val openCar by remember(healthApp) { healthApp?.openCar ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openCar) {
+        if (openCar) { carFindFirst = true; pane = MoreItem.CAR; healthApp?.openCar?.value = false }
     }
     // An errand found by Search (errands by location, slice 2b) → the Errands pane.
     val foundItem by remember(healthApp) { healthApp?.openItem ?: kotlinx.coroutines.flow.MutableStateFlow<OpenItem?>(null) }.collectAsState()
@@ -314,6 +332,9 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.EMERGENCY) { EmergencyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.TRAIN_QUEUE) { TrainQueuePane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ERRANDS) { ErrandsPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.CAR) {
+            CarPane(core, onClose = { pane = null; carFindFirst = false }, onDates = { pane = null; carFindFirst = false; open(MoreItem.LISTS) }, findFirst = carFindFirst)
+        }
         MekaPane(visible = pane == MoreItem.APPOINTMENTS) { AppointmentsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.BINS) { BinsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.GIFTS) { GiftsPane(core, onClose = { pane = null }) }

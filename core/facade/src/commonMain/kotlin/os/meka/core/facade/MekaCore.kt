@@ -6100,6 +6100,9 @@ class MekaCore(
             todayDay, _today.value, _lists.value, _goals.value, _meals.value, _bins.value, _dateNight.value, _school.value,
             _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
             _people.value,
+        ).copy(
+            // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
+            carLine = os.meka.core.domain.ParkingRules.carLine(car.cars(), listsNow.renewals.all, todayDay),
         ))
         // Ask polish, item 3: Daily's rows say what they hold now ("Tomorrow 06:40 · 5 things", "2 left", "2 saved").
         val fixtureNow = os.meka.core.domain.DailyRules.fixture(dayEvents, nowMs(), cal)

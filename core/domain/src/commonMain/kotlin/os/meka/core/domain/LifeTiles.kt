@@ -8,7 +8,11 @@ package os.meka.core.domain
  * shows its fixed description any more, and tiles with something today float to the top ([LifeTileRules.ordered]).
  */
 enum class LifeTile {
-    LISTS, GOALS, PEOPLE, DINNERS, BINS, DATE_NIGHT, SCHOOL, APPOINTMENTS, LEAVE, GIFTS, TRIPS, ERRANDS, EMERGENCY, FACTS,
+    LISTS, GOALS, PEOPLE, DINNERS, BINS, DATE_NIGHT, SCHOOL, APPOINTMENTS, LEAVE, GIFTS, TRIPS, ERRANDS,
+
+    /** Car and parking, slice 1: where the car is parked (the Fold), else the next of the cars' dates. */
+    CAR,
+    EMERGENCY, FACTS,
 }
 
 /** A tile's live line; [lit] when it's about today or wants a look. */
@@ -59,6 +63,8 @@ data class LifeTileInputs(
     val tripLit: Boolean = false,
     val tripsSummary: String? = null,
     val errandsSummary: String? = null,
+    /** The next of the cars' dates ([ParkingRules.carLine]); null with nothing entered. */
+    val carLine: LifeTileLine? = null,
     val emergencySummary: String? = null,
     val factsSummary: String? = null,
     val peopleSummary: String? = null,
@@ -90,6 +96,7 @@ object LifeTileRules {
         LifeTile.GIFTS -> "Add a birthday"
         LifeTile.TRIPS -> "No trips planned"
         LifeTile.ERRANDS -> "No errands waiting"
+        LifeTile.CAR -> "Add your car's dates"
         LifeTile.EMERGENCY -> "Not filled in yet"
         LifeTile.FACTS -> "Tell Navilife your car reg"
     }
@@ -191,6 +198,7 @@ object LifeTileRules {
         else put(LifeTile.GIFTS, i.giftsSummary?.removePrefix("Next: "))
         if (i.tripToday != null) put(LifeTile.TRIPS, i.tripToday, lit = i.tripLit) else put(LifeTile.TRIPS, i.tripsSummary)
         put(LifeTile.ERRANDS, i.errandsSummary)
+        i.carLine?.let { put(LifeTile.CAR, it.text, lit = it.lit) }
         put(LifeTile.EMERGENCY, i.emergencySummary)
         put(LifeTile.FACTS, i.factsSummary)
         // Nothing in the place yet: a short prompt, unlit; the ones that ask for setting up sink under "To set up".
