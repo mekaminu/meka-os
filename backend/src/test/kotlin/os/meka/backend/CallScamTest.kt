@@ -12,6 +12,7 @@ import os.meka.core.domain.BlockedCallerFields
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BlockedCallers
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.WorkFields
 import os.meka.core.domain.WorkMode
@@ -108,9 +109,10 @@ class CallScamTest {
         val before = ops.after("hh", 0, 1000).size
         hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA1", "TranscriptionStatus" to "completed", "TranscriptionText" to "This is the police station")
         assertEquals(before, ops.after("hh", 0, 1000).size)
-        // A second message from a number already on the list isn't asked about.
+        // A second message from a number already on the list is read for its summary only: not flagged again.
         message("CA2", "01632 960691", "Final warning from the police, pay the fine today")
-        assertEquals(1, model.asked.size)
+        assertEquals(2, model.asked.size)
+        assertEquals(1, activity().size)
     }
 
     @Test
@@ -131,7 +133,8 @@ class CallScamTest {
         append(EntityTypes.BLOCKED_CALLER, notSpam, BlockedCallerFields.SUSPECTED, FieldValue.Bool(false), device = "mac")
         message("CA6", "07700 900555", "Your account is suspended, press one")
         message("CA7", "07700 900666", "Of the.") // too few words to judge
-        assertEquals(1, model.asked.size)
+        // Withheld, blocked and Not spam messages are still read for their summary (slice 2), never flagged.
+        assertEquals(4, model.asked.size)
         assertTrue(fold().view().suspects.isEmpty())
         assertTrue(activity().isEmpty())
     }
@@ -153,7 +156,30 @@ class CallScamTest {
     }
 
     @Test
+    fun theSummaryIsWrittenOnTheMessageOnceAndWakesTheDevices() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        append(EntityTypes.CONTEXT_MODE, WorkMode.ENTITY_ID, WorkFields.CALL_ASSISTANT, FieldValue.Bool(true))
+        model.outcome = answered("""{"scam": false, "summary": "Garage: car ready to collect."}""")
+        woken.clear()
+        message("CA11", "07700 900123", "Hi it's the garage, your car is ready to collect")
+        fun summaries() = ops.after("hh", 0, 1000).map { it.op }.filter { it.entityType == EntityTypes.HELD_MESSAGE && it.field == HeldMessageFields.SUMMARY }
+        assertEquals(listOf<FieldValue>(FieldValue.Text("Garage: car ready to collect")), summaries().map { it.value })
+        assertTrue(woken.size >= 3) // recorded, words, summary
+        // A retry writes no second summary; a robocall's one word isn't sent at all.
+        hook(VoiceStep.TRANSCRIBED, "CallSid" to "CA11", "TranscriptionStatus" to "completed", "TranscriptionText" to "Hi it's the garage")
+        message("CA12", "07700 900124", "6")
+        assertEquals(1, summaries().size)
+        assertEquals(1, model.asked.size)
+        // A summary with a phone number in it isn't kept.
+        model.outcome = answered("""{"scam": false, "summary": "Call back on 07700 900999"}""")
+        message("CA13", "07700 900125", "Please call me back on the other number, thanks")
+        assertEquals(1, summaries().size)
+    }
+
+    @Test
     fun theAnswerIsReadStrictly() {
+        assertEquals(ScamVerdict(false, null, "Dentist confirming Thursday 3pm"), CallScamCheck.parse("""{"scam": false, "summary": "dentist confirming Thursday 3pm."}"""))
+        assertTrue("summary" in CallScamCheck.SYSTEM)
         assertEquals(ScamVerdict(true, "Claims to be HMRC"), CallScamCheck.parse("```json\n{\"scam\": true, \"why\": \"Claims to be HMRC.\"}\n```"))
         assertEquals(ScamVerdict(false, null), CallScamCheck.parse("""{"scam": false, "why": "A delivery driver"}"""))
         assertEquals(ScamVerdict(true, null), CallScamCheck.parse("""{"scam": true, "why": "see https://x.example"}"""))

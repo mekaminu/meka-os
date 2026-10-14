@@ -54,6 +54,8 @@ data class CapturedItem(
     val seconds: Int? = null,
     /** How "is it urgent?" was answered: [CallNoticeRules.BY_KEYPAD] · [CallNoticeRules.BY_SPEECH]; null = not noted. */
     val urgentBy: String? = null,
+    /** The AI's one-line summary of a voice message's words ([HeldMessageFields.SUMMARY]); null = none. */
+    val summary: String? = null,
 ) {
     val personKey: String get() = People.key(personName)
 
@@ -73,7 +75,10 @@ data class CapturedItem(
     val displayLine: String get() = when (kind) {
         CaptureKind.MISSED_CALL -> "Missed call"
         CaptureKind.MESSAGE -> text.orEmpty()
-        CaptureKind.VOICE_MESSAGE -> if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let { "Voice message \u00b7 \u201c$it\u201d" } ?: when {
+        CaptureKind.VOICE_MESSAGE -> if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let {
+            // Call notifications, slice 2: the AI's one-line summary first, then the words.
+            "Voice message \u00b7 " + (summary?.let { s -> "$s \u00b7 " } ?: "") + "\u201c$it\u201d"
+        } ?: when {
             noTranscript -> "Voice message \u00b7 no words came through"
             transcribing -> "Voice message \u00b7 Transcribing\u2026"
             else -> "Voice message"
@@ -425,6 +430,12 @@ object HeldMessageFields {
      * once by the server). Absent = no answer, or before 2026-10-14.
      */
     const val URGENT_BY = "urgentBy"
+    /**
+     * The AI's one-line summary of a voice message's words ("Dentist confirming Thursday 3pm"; Text, written once by
+     * the server with [CallNoticeRules.cleanSummary]; display only, untrusted, ADR-006). Blanked by Done like the
+     * words. Absent = no summary (AI off, no words, or before 2026-10-14).
+     */
+    const val SUMMARY = "summary"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -491,6 +502,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                 ),
                 seconds = e[HeldMessageFields.SECONDS].longOrNull?.toInt(),
                 urgentBy = e[HeldMessageFields.URGENT_BY].textOrNull,
+                summary = e[HeldMessageFields.SUMMARY].textOrNull?.let(CallNoticeRules::cleanSummary),
             )
         }.sortedWith(compareBy<CapturedItem>({ it.atMs }, { it.id })).takeLast(Capture.MAX_ITEMS)
     }
@@ -510,7 +522,8 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             if ((e[HeldMessageFields.AT].longOrNull ?: 0L) > now) continue
             replica.commitLocal(
                 EntityTypes.HELD_MESSAGE, e.ref.entityId,
-                mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null),
+                mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null,
+                    HeldMessageFields.SUMMARY to FieldValue.Null),
             )
             n++
         }

@@ -182,6 +182,17 @@ object CallAssistantRules {
                 it.id in alerted && it.id !in withPlay
         }
 
+    /**
+     * Call notifications, slice 2: urgent voice messages whose alert should be updated in place with the AI's summary
+     * now: already alerted, the summary has arrived since, within [ALERT_WINDOW_MS], and not updated before
+     * ([withSummary]). Like ▶ Play, only while the alert is still showing (the Fold checks), silently.
+     */
+    fun toAddSummary(items: List<CapturedItem>, alerted: Set<String>, withSummary: Set<String>, nowMs: Long): List<CapturedItem> =
+        items.filter {
+            it.kind == CaptureKind.VOICE_MESSAGE && it.isUrgent && it.summary != null && it.atMs >= nowMs - ALERT_WINDOW_MS &&
+                it.id in alerted && it.id !in withSummary
+        }
+
     /** The alert's action button. */
     const val PLAY_ACTION = "▶ Play"
 

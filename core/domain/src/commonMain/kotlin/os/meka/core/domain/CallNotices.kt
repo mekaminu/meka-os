@@ -31,6 +31,23 @@ object CallNoticeRules {
     const val CALL_BACK = "Call back"
     const val BLOCK = BlockedCallerRules.BLOCK_LABEL
     private const val ABOUT_MAX = 140
+    /** The AI's summary as shown: one line, at most this many characters. */
+    const val SUMMARY_MAX = 80
+
+    /**
+     * Call notifications, slice 2: the AI's one-line summary of a message's words as shown ("Dentist confirming
+     * Thursday 3pm"): one line, no angle brackets, quotes or links, no trailing full stop, at most [SUMMARY_MAX]
+     * characters (cut at a word); null when empty or not a summary.
+     */
+    fun cleanSummary(raw: String?): String? {
+        var t = raw?.replace(Regex("\\s+"), " ")?.replace(Regex("[<>\"“”]"), "")?.trim()?.trimEnd('.', ' ') ?: return null
+        if (t.isEmpty() || t.contains("://") || t.contains("www.", ignoreCase = true)) return null
+        if (t.length > SUMMARY_MAX) {
+            val cut = t.take(SUMMARY_MAX - 1)
+            t = (cut.substringBeforeLast(' ').takeIf { it.length >= SUMMARY_MAX / 2 } ?: cut).trimEnd(',', ';', ':', ' ') + "…"
+        }
+        return t.replaceFirstChar { it.uppercaseChar() }
+    }
 
     /** "keypad" for a key press, "speech" for words, null for no answer ([CallAssistantRules.isUrgentAnswer]'s input). */
     fun answeredBy(digits: String?, speech: String?): String? = when {
@@ -124,6 +141,7 @@ object CallNoticeRules {
             text == null || text.all { !it.isLetter() } || item.urgentBy == BY_KEYPAD -> KEYPAD_ONLY
             else -> ONE_WORD
         }
+        item.summary?.let { return it }
         if (text != null) {
             val cut = if (text.length > ABOUT_MAX) text.take(ABOUT_MAX - 1).trimEnd() + "…" else text
             return "“$cut”"
@@ -169,11 +187,15 @@ object CallNoticeRules {
         val happened = happened(item, cal)
         val urgentLine = if (urgent(item)) SAID_URGENT else null
         val status = blockStatus(item, blocked)
-        val big = listOfNotNull(happened, urgentLine?.let { "$it · " + about(item) } ?: about(item), status).joinToString("\n")
+        // Slice 2: with the AI's summary, the summary is what it was about and the start of the words follows it.
+        val summary = item.summary?.takeIf { !item.automated }
+        val words = if (summary != null) about(item.copy(summary = null)).takeIf { it.startsWith("“") } else null
+        val big = listOfNotNull(happened, urgentLine?.let { "$it · " + about(item) } ?: about(item), words, status).joinToString("\n")
         val n = numberOf(item)
         return Notice(
             title = who(item, reputation),
-            text = happened,
+            // Collapsed, the shade shows one line: the summary says the most, else what happened.
+            text = summary ?: happened,
             big = big,
             sub = urgentLine,
             listen = if (canPlay) listenLabel(item.seconds) else null,
@@ -201,6 +223,8 @@ data class AssistantCallEntry(
     val bytes: Int?,
     val automated: Boolean,
     val cleared: Boolean,
+    /** The AI summary's length in characters (slice 2); null = none. */
+    val summaryChars: Int? = null,
 )
 
 object AssistantCallReportRules {
@@ -244,6 +268,7 @@ object AssistantCallReportRules {
             audio = audio, bytes = if (audio) runCatching { bytes(id) }.getOrNull() else null,
             automated = CallNoticeRules.automated(seconds, text, noTranscript, by, bool(HeldMessageFields.URGENT)),
             cleared = bool(HeldMessageFields.CLEARED),
+            summaryChars = (f[HeldMessageFields.SUMMARY] as? FieldValue.Text)?.value?.length,
         )
     }
 
@@ -259,5 +284,6 @@ object AssistantCallReportRules {
         (if (e.urgent) "urgent" else "not urgent") + " (answer: ${e.answeredBy})",
         if (e.audio) "recording kept" + (e.bytes?.let { " ${(it + 512) / 1024} KB" } ?: "") else "no recording",
         "likely automated".takeIf { e.automated },
+        e.summaryChars?.let { "AI summary $it chars" } ?: "no AI summary".takeIf { e.chars != null && !e.automated },
     ).joinToString(" · ")
 }

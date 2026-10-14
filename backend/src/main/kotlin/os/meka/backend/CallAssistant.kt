@@ -406,7 +406,7 @@ class CallAssistant(
         if (write(hh, id, mapOf(HeldMessageFields.TEXT to text.fv()))) {
             val wasUrgent = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.URGENT) == FieldValue.Bool(true)
             runCatching { if (Urgency.isUrgent(text) && !wasUrgent) onUrgent(hh) else onWritten(hh) }
-            runCatching { flagIfScam(hh, id, text) }
+            runCatching { readWords(hh, id, text) }
         }
     }
 
@@ -416,14 +416,27 @@ class CallAssistant(
      * scam puts the number on Suspected spam ([SuspectedSpamRules.flagFields]) with an Activity entry, and wakes the
      * devices. Nothing is blocked: Meka chooses. Returns whether it flagged.
      */
-    fun flagIfScam(hh: String, id: String, words: String): Boolean {
+    fun flagIfScam(hh: String, id: String, words: String): Boolean = readWords(hh, id, words)
+
+    /**
+     * Call notifications, slice 2: one AI call per message with words ([SuspectedSpamRules.MIN_WORDS] or more, not
+     * a robocall's): its one-line summary is written on the message ([HeldMessageFields.SUMMARY], once, not for one
+     * Meka already cleared) and the devices woken so the alert updates in place; the scam flag follows
+     * [SuspectedSpamRules.shouldCheck] as before. Returns whether it flagged the number.
+     */
+    fun readWords(hh: String, id: String, words: String): Boolean {
         val checker = scamCheck ?: return false
         val number = (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.PERSON) as? FieldValue.Text)?.value
         val key = BlockedCallerRules.keyOf(number)
         fun flag(field: String) = key?.let { (fields.latest(hh, EntityTypes.BLOCKED_CALLER, it, field) as? FieldValue.Bool)?.value }
-        if (!SuspectedSpamRules.shouldCheck(key, flag(BlockedCallerFields.BLOCKED), flag(BlockedCallerFields.SUSPECTED), words)) return false
+        val checkScam = SuspectedSpamRules.shouldCheck(key, flag(BlockedCallerFields.BLOCKED), flag(BlockedCallerFields.SUSPECTED), words)
+        val summarise = SuspectedSpamRules.shouldCheck("any", null, null, words) && !CallNoticeRules.digitsOrOneWord(words)
+        if (!checkScam && !summarise) return false
         val verdict = checker.check(words) ?: return false
-        if (!verdict.scam || key == null || number == null) return false
+        verdict.summary?.let { summary ->
+            if (!cleared(hh, id) && write(hh, id, mapOf(HeldMessageFields.SUMMARY to summary.fv()))) runCatching { onWritten(hh) }
+        }
+        if (!checkScam || !verdict.scam || key == null || number == null) return false
         val at = now()
         // Op ids from the message, so a retried settle writes nothing more (and a later message can flag again after an unblock).
         val flagged = write(hh, key, SuspectedSpamRules.flagFields(number, verdict.why, at), EntityTypes.BLOCKED_CALLER, opBase = id + "scam")

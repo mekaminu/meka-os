@@ -61,13 +61,19 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         val due = CallAssistantRules.toAlert(items, alerted, now)
         // ▶ Play joins an alert once its recording is kept: updated in place, silently, only while it's still showing.
         val play = CallAssistantRules.toAddPlay(items, alerted, withPlay, now)
-        if (due.isEmpty() && play.isEmpty()) return
+        // Call notifications, slice 2: the AI's summary joins the alert the same way, in place and silently.
+        val summarised = prefs.getStringSet(KEY_VOICE_SUMMARY, emptySet()).orEmpty()
+        val summary = CallAssistantRules.toAddSummary(items, alerted, summarised, now).filter { s -> play.none { it.id == s.id } }
+        if (due.isEmpty() && play.isEmpty() && summary.isEmpty()) return
         due.forEach { WorkAlerts.post(context, it, BreakThrough.URGENT, play = it.hasAudio) }
         play.forEach { if (WorkAlerts.isShowing(context, it)) WorkAlerts.post(context, it, BreakThrough.URGENT, play = true) }
+        summary.forEach { if (WorkAlerts.isShowing(context, it)) WorkAlerts.post(context, it, BreakThrough.URGENT, play = it.hasAudio) }
         // Remember the latest few only: the rule's one-hour window keeps older ones from ringing again anyway.
         val keep = (alerted + due.map { it.id }).toList().takeLast(MAX_ALERTED).toSet()
         val played = (withPlay + play.map { it.id } + due.filter { it.hasAudio }.map { it.id }).toList().takeLast(MAX_ALERTED).toSet()
-        prefs.edit().putStringSet(KEY_VOICE_ALERTED, keep).putStringSet(KEY_VOICE_PLAY, played).commit()
+        val withSummary = (summarised + (due + play + summary).filter { it.summary != null }.map { it.id }).toList().takeLast(MAX_ALERTED).toSet()
+        prefs.edit().putStringSet(KEY_VOICE_ALERTED, keep).putStringSet(KEY_VOICE_PLAY, played)
+            .putStringSet(KEY_VOICE_SUMMARY, withSummary).commit()
     }
 
     /** The summary was read: the nudge has done its job. */
@@ -141,6 +147,7 @@ class AfterWorkNudger(private val context: Context, private val app: MekaApplica
         private const val KEY_AT_WORK = "atWork"
         private const val KEY_VOICE_ALERTED = "voiceAlerted"
         private const val KEY_VOICE_PLAY = "voicePlay"
+        private const val KEY_VOICE_SUMMARY = "voiceSummary"
         private const val MAX_ALERTED = 50
         /** Soft milestone: the system may batch it into the next ten minutes. */
         const val WINDOW_MS = 10 * 60_000L

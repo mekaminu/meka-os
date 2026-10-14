@@ -143,11 +143,56 @@ class CallNoticeTest {
         )
         val e = AssistantCallReportRules.entries(all, answerDetail = { if (it == "h1") "Pressed 1 · marked urgent" else null }, bytes = { 190_000 })
         assertEquals(2, e.size)
-        assertEquals("message 0:24 · words 29 chars · not urgent (answer: speech) · no recording", AssistantCallReportRules.line(e[0]))
+        assertEquals("message 0:24 · words 29 chars · not urgent (answer: speech) · no recording · no AI summary", AssistantCallReportRules.line(e[0]))
         val first = AssistantCallReportRules.line(e[1])
         assertEquals("message length not noted · words 1 chars · urgent (answer: keypad) · recording kept 186 KB · likely automated", first)
         assertFalse(first.contains("1632"))
         assertEquals("speech", AssistantCallReportRules.byFromDetail("Heard “yes” · marked urgent"))
         assertEquals("none", AssistantCallReportRules.byFromDetail("No answer · not urgent"))
+    }
+
+    @Test
+    fun theAiSummarySaysWhatItWasAboutAndUpdatesTheAlertInPlace() {
+        // Slice 2: the summary as shown is one tidy line.
+        assertEquals("Dentist confirming Thursday 3pm", CallNoticeRules.cleanSummary("  \"dentist confirming\n Thursday 3pm.\" "))
+        assertNull(CallNoticeRules.cleanSummary("  "))
+        assertNull(CallNoticeRules.cleanSummary("Call back at https://x.example"))
+        val long = CallNoticeRules.cleanSummary("Alex from the garage says the car is ready to collect and the bill comes to two hundred pounds today")!!
+        assertTrue(long.length <= CallNoticeRules.SUMMARY_MAX && long.endsWith("…"), long)
+
+        val item = voice(text = "Hi it's the dentist confirming Thursday at 3pm, it's urgent", urgent = true, by = CallNoticeRules.BY_SPEECH)
+            .copy(summary = "Dentist confirming Thursday 3pm")
+        assertEquals("Dentist confirming Thursday 3pm", CallNoticeRules.about(item))
+        val n = CallNoticeRules.voiceNotice(item, cal, canPlay = false)
+        assertEquals("Dentist confirming Thursday 3pm", n.text)
+        assertEquals(
+            "Sent to your call assistant · 14:02 · left a 0:24 message\nSaid it's urgent · Dentist confirming Thursday 3pm\n" +
+                "“Hi it's the dentist confirming Thursday at 3pm, it's urgent”\n" + CallNoticeRules.NOT_BLOCKED,
+            n.big,
+        )
+        assertEquals("Voice message · Dentist confirming Thursday 3pm · “Hi it's the dentist confirming Thursday at 3pm, it's urgent”", item.displayLine)
+        // A robocall's summary (if one ever came) never replaces "likely automated".
+        val robo = voice(text = "6", seconds = 2).copy(summary = "Automated payment reminder")
+        assertEquals(CallNoticeRules.TOO_SHORT, CallNoticeRules.about(robo))
+        assertEquals("Sent to your call assistant · 14:02 · hung up after 2 s", CallNoticeRules.voiceNotice(robo, cal, canPlay = false).text)
+
+        // The alert already posted gains the summary once, while it's within the hour.
+        val bare = item.copy(summary = null)
+        assertTrue(CallAssistantRules.toAddSummary(listOf(bare), setOf("h1"), emptySet(), t + 60_000).isEmpty())
+        assertEquals(listOf("h1"), CallAssistantRules.toAddSummary(listOf(item), setOf("h1"), emptySet(), t + 60_000).map { it.id })
+        assertTrue(CallAssistantRules.toAddSummary(listOf(item), setOf("h1"), setOf("h1"), t + 60_000).isEmpty())
+        assertTrue(CallAssistantRules.toAddSummary(listOf(item), emptySet(), emptySet(), t + 60_000).isEmpty())
+        assertTrue(CallAssistantRules.toAddSummary(listOf(item), setOf("h1"), emptySet(), t + 2 * 60 * 60_000L).isEmpty())
+
+        // The diagnosis counts the summary's characters, never its words.
+        val e = AssistantCallReportRules.entries(mapOf("h9" to mapOf(
+            HeldMessageFields.KIND to FieldValue.Text(CaptureKind.VOICE_MESSAGE.name),
+            HeldMessageFields.APP to FieldValue.Text(CaptureApp.PHONE.name),
+            HeldMessageFields.AT to FieldValue.Int64(t),
+            HeldMessageFields.SECONDS to FieldValue.Int64(24),
+            HeldMessageFields.TEXT to FieldValue.Text("Hi it's Alex about the parcel"),
+            HeldMessageFields.SUMMARY to FieldValue.Text("Alex about the parcel"),
+        ))).single()
+        assertTrue(AssistantCallReportRules.line(e).endsWith("· AI summary 21 chars"), AssistantCallReportRules.line(e))
     }
 }
