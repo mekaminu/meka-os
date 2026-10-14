@@ -255,6 +255,15 @@ export class MekaStack extends cdk.Stack {
       secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
     });
 
+    // Cheapest fuel nearby (car and parking, slice 6; Needs Meka #34): '{}' until he pastes the free Fuel Finder developer
+    // keys. Read at use time; empty = feature off. Only the keys go to Fuel Finder; nothing of Meka's is sent.
+    const carFuel = new secretsmanager.Secret(this, 'CarFuel', {
+      secretName: `${prefix}/car/fuelfinder`,
+      encryptionKey: this.key,
+      description: 'MEKA OS fuel prices: {"client_id","client_secret"} from the government Fuel Finder developer portal',
+      secretStringValue: cdk.SecretValue.unsafePlainText('{}'),
+    });
+
     // Kestrel's trading approvals (build plan V1, approved 2026-10-07): the PUBLIC half of Kestrel's P-256 key, '{}' until
     // Meka pastes it in a supervised session. The private key stays with Kestrel; MEKA never holds a trading credential.
     const approvalsKestrel = new secretsmanager.Secret(this, 'ApprovalsKestrel', {
@@ -291,6 +300,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_MAPS_GOOGLE_SECRET: mapsGoogle.secretArn,
         MEKA_SPEECH_GOOGLE_SECRET: speechGoogle.secretArn,
         MEKA_CAR_DVLA_SECRET: carDvla.secretArn,
+        MEKA_CAR_FUEL_SECRET: carFuel.secretArn,
         MEKA_APPROVALS_KESTREL_SECRET: approvalsKestrel.secretArn,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
@@ -325,6 +335,7 @@ export class MekaStack extends cdk.Stack {
     mapsGoogle.grantRead(task.taskRole);
     speechGoogle.grantRead(task.taskRole);
     carDvla.grantRead(task.taskRole);
+    carFuel.grantRead(task.taskRole);
     approvalsKestrel.grantRead(task.taskRole); // a public key only
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.

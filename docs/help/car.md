@@ -1,7 +1,7 @@
 ---
 id: car
 title: Car and parking
-keywords: photo of the bay, bay photo, car bluetooth, android auto, saves where i parked, where did i park, where i parked, find my car, parked, parking, car park, my car, the car, two cars, parking timer, parking ticket, ringgo, justpark, paybyphone, parking confirmation, pay and display
+keywords: photo of the bay, bay photo, car bluetooth, android auto, saves where i parked, where did i park, where i parked, find my car, parked, parking, car park, my car, the car, two cars, parking timer, parking ticket, ringgo, justpark, paybyphone, parking confirmation, pay and display, fuel prices, cheapest fuel, petrol, diesel, fuel finder
 data: yes
 fold: CAR
 fold_where: Ask → Life → Car
@@ -18,3 +18,4 @@ tip: Hold the phone flat for the arrow; if it spins, wave the phone in a figure 
 tip: Parking timer: type how long you paid for or until when ("2 h", "until 15:30"); a reminder comes 10 minutes before it ends. +15 min, +30 min or +1 h extend it, Ended clears it.
 tip: Type the RingGo or JustPark location code beside the time ("until 6pm RingGo 81234") and the reminder shows it.
 tip: Paid in RingGo, JustPark or PayByPhone? Share the confirmation (the app's or the email's text) to Navilife, or paste it into the timer field: Navilife reads when it ends on the phone and offers "Parking timer until 15:30 · RingGo 81234"; nothing starts until you tap it. With two cars, the registration in it picks the car, otherwise it asks which.
+tip: FUEL NEARBY in the Car pane shows the cheapest forecourts within 8 km for the fuel each car takes (Change under the prices picks unleaded, super unleaded, diesel or premium diesel), from the government's Fuel Finder; tap one for directions. Only a point rounded to about 1 km goes to Navilife's server, and nothing is kept.

@@ -25,6 +25,7 @@ import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
 import os.meka.backend.integrations.DvlaCarLookup
+import os.meka.backend.integrations.FuelFinder
 import os.meka.backend.integrations.CalendarWriter
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.PublicNewsFeeds
@@ -67,6 +68,7 @@ import os.meka.core.wire.MailDraftCodec
 import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
+import os.meka.core.wire.FuelCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.FoldPostureCodec
@@ -113,6 +115,8 @@ fun Application.mekaSync(
     speech: SpeechService? = null,
     /** "Where I am now" (Places item 3): the forecast at a rounded point; null leaves the route out. */
     here: HereWeather? = integrations?.hereWeather(),
+    /** Cheapest fuel nearby (Car and parking, slice 6): Fuel Finder's prices at a rounded point; null leaves the route out. */
+    fuel: FuelFinder? = null,
     /** The family page (family sharing with Jeanette, slice 2); null leaves its routes out. */
     family: FamilyShare? = null,
     /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
@@ -688,6 +692,19 @@ fun Application.mekaSync(
             }
         }
 
+        if (fuel != null) {
+            // Cheapest fuel nearby: a rounded point (about 1 km; anything finer is refused) and a fuel in, the cheapest
+            // forecourts near it out, from the server's copy of Fuel Finder. Keyed devices only. The point is neither
+            // stored nor logged.
+            post(FuelCodec.PATH) {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = FuelCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { fuel.near(request) }
+                call.respondText(FuelCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+        }
+
         if (push != null) {
             // A device's push address (an FCM token), or an empty token to stop waking it. Keyed devices only.
             post("/v1/push/token") {
@@ -1032,6 +1049,8 @@ fun main(args: Array<String>) {
                     }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
+                    // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
+                    fuel = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) },
                 )
             }.start(wait = true)
         }

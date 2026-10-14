@@ -79,8 +79,9 @@ object HereLocation {
 
     private const val FUSED = "fused" // LocationManager.FUSED_PROVIDER (API 31)
 
+    /** One approximate fix (a fresh one the phone holds, else one balanced-power request), or null. Also the Car pane's fuel prices. */
     @SuppressLint("MissingPermission") // checked by the caller (permitted) and again here
-    private suspend fun locate(context: Context): Location? {
+    suspend fun locate(context: Context): Location? {
         if (!permitted(context)) return null
         val lm = context.getSystemService(LocationManager::class.java) ?: return null
         if (!lm.isLocationEnabled) return null

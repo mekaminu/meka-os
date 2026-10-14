@@ -25,6 +25,8 @@ object CarFields {
     const val ADDED = "added"
     /** He removed this car (not car 1); Undo writes false. Its dates stay on the radar, no longer under a car. */
     const val REMOVED = "removed"
+    /** Car and parking, slice 6 (additive, LWW): the fuel it takes, a [FuelKind] code ("E10", "E5", "B7", "SDV"). */
+    const val FUEL = "fuel"
 }
 
 /**
@@ -37,6 +39,8 @@ data class CarEntry(
     val registration: String?,
     val name: String?,
     val removed: Boolean = false,
+    /** The fuel it takes (slice 6), or null for the default ([FuelKind.DEFAULT]). */
+    val fuel: FuelKind? = null,
 ) {
     /** 1 for the original car, 2 for "car2", … */
     val number: Int get() = CarRules.CAR_IDS.indexOf(id).let { if (it < 0) 1 else it + 1 }
@@ -95,6 +99,8 @@ data class CarView(
     val name: String? = null,
     /** Every car but the first can be removed (with Undo). */
     val removable: Boolean = false,
+    /** The fuel it takes (Car and parking, slice 6): unleaded (E10) unless he picked another. */
+    val fuel: FuelKind = FuelKind.DEFAULT,
 ) {
     val trackedCount: Int get() = rows.count { it.tracked }
 
@@ -313,6 +319,7 @@ object CarRules {
         val views = live.map { c ->
             view(c.registration, itemsOf(c.id, items, cars), check, today, cal).copy(
                 carId = c.id, title = title(c, live.size), name = c.name, removable = c.id != ENTITY_ID,
+                fuel = c.fuel ?: FuelKind.DEFAULT,
             ).let { v ->
                 // A later car with no registration yet: its summary names it rather than "Your car".
                 if (c.registration == null && c.id != ENTITY_ID && v.trackedCount > 0) v.copy(summary = v.summary.replaceFirst("Your car", title(c, live.size))) else v
@@ -348,8 +355,9 @@ class Car(private val replica: Replica) {
         val e = replica.entity(EntityTypes.CONTEXT_MODE, id)
         val reg = e?.get(CarFields.REGISTRATION)?.textOrNull?.takeIf { it.isNotBlank() }
         val name = e?.get(CarFields.NAME)?.textOrNull?.let(CarRules::cleanName)
-        if (id == CarRules.ENTITY_ID) CarEntry(id, reg, name)
-        else if (e?.get(CarFields.ADDED)?.boolOrNull == true) CarEntry(id, reg, name, e.get(CarFields.REMOVED)?.boolOrNull == true)
+        val fuel = FuelKind.of(e?.get(CarFields.FUEL)?.textOrNull)
+        if (id == CarRules.ENTITY_ID) CarEntry(id, reg, name, fuel = fuel)
+        else if (e?.get(CarFields.ADDED)?.boolOrNull == true) CarEntry(id, reg, name, e.get(CarFields.REMOVED)?.boolOrNull == true, fuel)
         else null
     }
 
@@ -377,6 +385,14 @@ class Car(private val replica: Replica) {
         val c = car(id) ?: return false
         if (id == CarRules.ENTITY_ID || c.removed == removed) return false
         replica.commitLocal(EntityTypes.CONTEXT_MODE, id, mapOf(CarFields.REMOVED to removed.fv()))
+        return true
+    }
+
+    /** The fuel car [id] takes (slice 6). False when nothing changes or there is no such car. */
+    fun setFuel(id: String, fuel: FuelKind): Boolean {
+        val c = car(id) ?: return false
+        if ((c.fuel ?: FuelKind.DEFAULT) == fuel && c.fuel != null) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, id, mapOf(CarFields.FUEL to fuel.code.fv()))
         return true
     }
 

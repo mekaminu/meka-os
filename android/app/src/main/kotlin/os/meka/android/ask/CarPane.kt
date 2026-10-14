@@ -77,11 +77,16 @@ import os.meka.android.lists.Chip
 import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.android.today.HereLocation
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CarBluetoothRules
 import os.meka.core.domain.CarLink
 import os.meka.core.domain.DeviceChoice
 import os.meka.core.domain.FindView
+import os.meka.core.domain.FuelKind
+import os.meka.core.domain.FuelPriceRow
+import os.meka.core.domain.FuelRules
+import os.meka.core.domain.FuelView
 import os.meka.core.domain.PairedDevice
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.LocationFix
@@ -107,6 +112,10 @@ import os.meka.core.facade.MekaCore
  * full width, with Remove photo) and Find my car shows it over the arrow. With no bay typed, the sign's words, read on
  * the phone ([ParkingStore.readSign], ML Kit), fill it in ("Photo kept · read “Level 3 · Row F” from the sign"). [photoFirst]: opened from "Photo of the bay"
  * on the parked notification: the camera opens for that car straight away.
+ * Slice 6: FUEL NEARBY — when the pane opens, one approximate fix (coarse location only; asked for on his tap) and the
+ * cheapest forecourts within 8 km for each fuel the cars take, from the government's Fuel Finder via Navilife's server
+ * (only a point rounded to about 1 km leaves the phone); each car's fuel is picked under the prices (synced); a
+ * forecourt opens directions in his maps app on his tap. Nothing is kept.
  *
  * Motion: the pane springs up (MekaPane) with the tile's title travelling in; lines cross-fade ("Finding where you
  * are…" → "Saved where the Golf is · ±6 m", the accent when refused, light haptic on a save, a tick when refused);
@@ -114,7 +123,9 @@ import os.meka.core.facade.MekaCore
  * turns on a soft spring (the shortest way round), brightening to the accent once within 15 m. Reduced motion: the
  * arrow snaps, unfold and fades become cross-fades. Slice 4: the photo fades in once loaded (a new one cross-fades
  * over the old), a tap grows it to full width and back; a kept photo gives a light haptic, a refusal blends the line
- * to the accent with a tick. Reduced motion: cross-fades.
+ * to the accent with a tick. Reduced motion: cross-fades. Slice 6: the fuel line cross-fades through "Looking up…" to
+ * its answer, the forecourt rows arrive with the list's item motion (the cheapest lit in brass), a car's fuel choices
+ * unfold with the expand spring; reduced motion: cross-fades.
  */
 @Composable
 fun CarPane(
@@ -237,6 +248,19 @@ fun CarPane(
     val askPreciseForAlways = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         if (ParkingStore.precise(context)) askAlways.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
     }
+
+    // Car and parking, slice 6: the cheapest fuel nearby, looked up when the pane opens (and when a car's fuel changes).
+    var fuel by remember { mutableStateOf(FuelView.IDLE) }
+    var fuelTick by remember { mutableStateOf(0) }
+    var fuelFor by remember { mutableStateOf<String?>(null) }
+    val fuelKinds = cars.cars.map { it.fuel }
+    LaunchedEffect(fuelTick, fuelKinds) {
+        if (!HereLocation.permitted(context)) { fuel = FuelView(FuelRules.NO_LOCATION, FuelRules.NO_LOCATION_LINE, emptyList()); return@LaunchedEffect }
+        fuel = FuelView(FuelRules.LOOKING, FuelRules.LOOKING_LINE, fuel.blocks)
+        val fix = HereLocation.locate(context)
+        fuel = core.fuelNearby(fix?.latitude ?: Double.NaN, fix?.longitude ?: Double.NaN)
+    }
+    val askCoarse = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { fuelTick++ }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -392,6 +416,58 @@ fun CarPane(
                 Text(ParkingRules.DATES_ACTION, style = MekaType.caption, color = Meka.colors.accent)
             }
         }
+        // Car and parking, slice 6: the cheapest fuel nearby (Fuel Finder, via Navilife's server; nothing kept).
+        item(key = "fuel-label") { SectionLabel(FUEL_HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
+        item(key = "fuel-line") {
+            Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically) {
+                Crossfade(fuel.line, animationSpec = MekaMotion.appear(reduced), modifier = Modifier.weight(1f), label = "fuel-line") { l ->
+                    Text(l, style = MekaType.caption,
+                        color = if (fuel.state == FuelRules.OK || fuel.state == FuelRules.LOOKING) Meka.colors.textSecondary else Meka.colors.accent,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
+                }
+                val action = when (fuel.state) {
+                    FuelRules.NO_LOCATION -> FUEL_ALLOW
+                    FuelRules.LOOKING -> null
+                    else -> FUEL_AGAIN
+                }
+                action?.let { a ->
+                    Text(a, style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                            haptics.tick()
+                            if (a == FUEL_ALLOW && !HereLocation.permitted(context)) askCoarse.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                            else fuelTick++
+                        }.semantics { contentDescription = "$a: fuel prices" }.minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
+        fuel.blocks.forEach { b ->
+            item(key = "fuel-block-${b.fuel.code}") {
+                Column(Modifier.animateItem().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(b.heading, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(b.summary, style = MekaType.body, color = Meka.colors.textPrimary)
+                    b.saving?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                }
+            }
+            itemsIndexed(b.rows, key = { i, _ -> "fuel-${b.fuel.code}-$i" }) { _, r ->
+                FuelRow(r, Modifier.animateItem()) {
+                    haptics.tick()
+                    runCatching {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(FuelRules.mapsUrl(r))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }
+            }
+        }
+        itemsIndexed(cars.cars, key = { _, c -> "fuel-car-${c.carId}" }) { _, c ->
+            FuelCarRow(
+                title = c.title, fuel = c.fuel, open = fuelFor == c.carId, modifier = Modifier.animateItem(),
+                onToggle = { haptics.tick(); fuelFor = if (fuelFor == c.carId) null else c.carId },
+                onPick = { k ->
+                    haptics.light()
+                    fuelFor = null
+                    scope.launch { core.setCarFuel(c.carId, k.code) }
+                },
+            )
+        }
         // Car and parking, slice 3: each car's Bluetooth saves the spot when it disconnects.
         item(key = "bt-label") { SectionLabel(CarBluetoothRules.HEADING, Modifier.animateItem().padding(top = MekaSpace.m)) }
         item(key = "bt-intro") {
@@ -495,6 +571,58 @@ private fun BluetoothRow(
                 if (link != null) {
                     Text(CarBluetoothRules.NONE, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onPick(null) }.minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
+    }
+}
+
+private const val FUEL_HEADING = "FUEL NEARBY"
+private const val FUEL_ALLOW = "Allow"
+private const val FUEL_AGAIN = "Look again"
+
+/** One forecourt: its name, the distance, postcode and how fresh the price is, and the price (brass when cheapest). A tap: directions. */
+@Composable
+private fun FuelRow(row: FuelPriceRow, modifier: Modifier, onOpen: () -> Unit) {
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .semantics(mergeDescendants = true) { contentDescription = "${row.title}, ${row.price}, ${row.line}. Opens directions" }
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(row.line, style = MekaType.caption, color = if (row.stale) Meka.colors.textTertiary else Meka.colors.textSecondary)
+        }
+        Text(row.price, style = MekaType.metaStrong, color = if (row.cheapest) Meka.colors.accent else Meka.colors.textPrimary)
+    }
+}
+
+/** One car's fuel: "Car 1 · Unleaded (E10)" with Change, unfolding the four fuels (synced; the prices follow). */
+@Composable
+private fun FuelCarRow(title: String, fuel: FuelKind, open: Boolean, modifier: Modifier, onToggle: () -> Unit, onPick: (FuelKind) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Crossfade("$title takes ${fuel.label.replaceFirstChar { it.lowercase() }}", animationSpec = MekaMotion.appear(reduced),
+                modifier = Modifier.weight(1f), label = "fuel-car") { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+            Text("Change", style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onToggle)
+                    .semantics { contentDescription = "Change fuel for $title" }.minTouch().padding(MekaSpace.xs))
+        }
+        AnimatedVisibility(
+            open,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column {
+                FuelKind.entries.forEach { k ->
+                    Text(k.label, style = MekaType.body, color = if (k == fuel) Meka.colors.accent else Meka.colors.textPrimary,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onPick(k) }
+                            .minTouch().padding(vertical = MekaSpace.xxs))
                 }
             }
         }

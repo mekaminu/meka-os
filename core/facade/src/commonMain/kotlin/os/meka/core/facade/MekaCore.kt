@@ -225,6 +225,7 @@ class MekaCore(
     private var aiApi: AiApi? = transport as? AiApi
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var hereApi: HereApi? = transport as? HereApi
+    private var fuelApi: FuelApi? = transport as? FuelApi
     private var healthApi: HealthApi? = transport as? HealthApi
     private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
     private var foldPostureApi: FoldPostureApi? = transport as? FoldPostureApi
@@ -2061,6 +2062,40 @@ class MekaCore(
         os.meka.core.domain.ParkingTimerRules.setLine(t, os.meka.core.domain.ParkingRules.titleOf(carId, _cars.value), now, cal)
     }
 
+    /** Car and parking, slice 6: car [carId] takes [fuelCode] ("E10", "E5", "B7", "SDV"); synced. False when nothing changes. */
+    suspend fun setCarFuel(carId: String, fuelCode: String): Boolean = onCore {
+        val k = os.meka.core.domain.FuelKind.of(fuelCode) ?: return@onCore false
+        car.setFuel(carId, k).also { if (it) refresh() }
+    }
+
+    /**
+     * Car and parking, slice 6: the cheapest fuel near [lat],[lon] for every fuel the cars take. The point is rounded to
+     * about 1 km here, before anything is sent ([os.meka.core.domain.HereRules.round]); the answer is neither stored nor
+     * synced. [lat]/[lon] NaN (no location) gives the "allow location" state. Never throws.
+     */
+    suspend fun fuelNearby(lat: Double, lon: Double): os.meka.core.domain.FuelView {
+        val rules = os.meka.core.domain.FuelRules
+        val point = os.meka.core.domain.HereRules.round(lat, lon)
+            ?: return os.meka.core.domain.FuelView(rules.NO_LOCATION, rules.NO_LOCATION_LINE, emptyList())
+        val api = fuelApi ?: return os.meka.core.domain.FuelView(rules.OFF, rules.OFF_LINE, emptyList())
+        val fuels = onCore { rules.fuelsFor(_cars.value) }
+        val answers = fuels.map { (fuel, cars) ->
+            val a = try {
+                val r = api.fuelNearby(point.lat, point.lon, fuel.code)
+                r.state to r.stations.map {
+                    os.meka.core.domain.FuelStation(it.name, it.brand, it.postcode, it.lat, it.lon, it.pence, it.updatedMs, it.distanceM)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A server's refusal or error ("HTTP 500 from …") is "not available"; no network is "offline".
+                (if (e.message?.startsWith("HTTP ") == true || e !is os.meka.core.sync.TransportException) rules.FAILED else rules.OFFLINE) to emptyList()
+            }
+            Triple(fuel, cars, a)
+        }
+        return onCore { rules.view(answers, nowMs(), ZoneCalendar(timeZone)) }
+    }
+
     private val endedTimers = mutableMapOf<String, os.meka.core.domain.ParkingTimer>()
 
     /** Ends car [carId]'s timer ([undoEndParkingTimer] puts it back); "Parking timer ended · the Golf", or null without one. */
@@ -3648,7 +3683,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
-            speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; healthApi = transport as? HealthApi
+            speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
             notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
