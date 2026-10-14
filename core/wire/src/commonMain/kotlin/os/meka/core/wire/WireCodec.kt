@@ -167,10 +167,17 @@ object WireCodec {
     }
 
     /** Disconnecting a mail account (Inbox autopilot, slice 1b): the server forgets its sign-in. */
-    data class MailDisconnect(val email: String)
-    fun encodeMailDisconnect(c: MailDisconnect): String = doc { put("email", c.email) }
+    /**
+     * Disconnecting a mail account (slice 1b); [deleteData] (Inbox autopilot, completeness: Delete mail data) also
+     * clears what Navilife made from it (absent in older apps' bodies = false).
+     */
+    data class MailDisconnect(val email: String, val deleteData: Boolean = false)
+    fun encodeMailDisconnect(c: MailDisconnect): String = doc { put("email", c.email); if (c.deleteData) put("deleteData", true) }
     fun decodeMailDisconnect(s: String): MailDisconnect = parse(s) { o ->
-        MailDisconnect(o.str("email").also { if (it.length !in 3..320 || '@' !in it) throw WireFormatException("unexpected email") })
+        MailDisconnect(
+            o.str("email").also { if (it.length !in 3..320 || '@' !in it) throw WireFormatException("unexpected email") },
+            o["deleteData"]?.jsonPrimitive?.booleanOrNull ?: false,
+        )
     }
 
     /**

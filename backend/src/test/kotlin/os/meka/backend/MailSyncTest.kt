@@ -1010,6 +1010,55 @@ class MailSyncTest {
         assertTrue(MailNeedsRules.read(p, items(ops).getValue(p))!!.goneAtMs != null)
     }
 
+    // ---- Completeness: Delete mail data per account ----
+
+    @Test
+    fun deleteMailDataDropsWhatTheAccountPublishedAndReconnectingBringsItBack() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["p"] = msg("p", 0).copy(fromName = "Sam Taylor", subject = "Football on Saturday")
+        gmail.mailbox["n"] = newsletter("n", "editor@weekly.example", "Weekly", "<https://weekly.example/u>", oneClick = true)
+        val id = connect(i)
+        i.syncAccount(id)
+        fun live(type: String) = EntityReader.scanning(ops).entities("home", type).filterValues { it["deleted"] != FieldValue.Bool(true) }
+        val p = MailNeedsRules.itemId(id, "p")
+        assertEquals(setOf(p), live(EntityTypes.MAIL_ITEM).keys)
+        val senders = live(EntityTypes.MAIL_SENDER).keys
+        assertTrue(senders.isNotEmpty())
+        // A task he made from mail is his: never touched.
+        device(ops, EntityTypes.TASK, "t1", "title", FieldValue.Text("Football kit"))
+
+        assertTrue(i.disconnectMail("home", "gmail", "alex@example.com", deleteData = true))
+        assertTrue(live(EntityTypes.MAIL_ITEM).isEmpty())
+        assertTrue(live(EntityTypes.MAIL_SENDER).isEmpty())
+        assertEquals(FieldValue.Bool(true), EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_ITEM).getValue(p)["deleted"])
+        assertEquals(setOf("t1"), live(EntityTypes.TASK).keys)
+        assertTrue(ms.messages(id).isEmpty())
+
+        // Signing in again: the same cards and senders come back.
+        connect(i)
+        i.syncAccount(id)
+        assertEquals(setOf(p), live(EntityTypes.MAIL_ITEM).keys)
+        assertEquals(senders, live(EntityTypes.MAIL_SENDER).keys)
+        assertNull(MailNeedsRules.read(p, live(EntityTypes.MAIL_ITEM).getValue(p))!!.goneAtMs)
+    }
+
+    @Test
+    fun aPlainDisconnectKeepsThePublishedSenders() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n"] = newsletter("n", "editor@weekly.example", "Weekly", "<https://weekly.example/u>", oneClick = true)
+        val id = connect(i)
+        i.syncAccount(id)
+        val before = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+        assertTrue(before.isNotEmpty())
+        assertTrue(i.disconnectMail("home", "gmail", "alex@example.com"))
+        assertTrue(EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER).values.none { it["deleted"] == FieldValue.Bool(true) })
+        assertTrue(ms.messages(id).isEmpty())
+    }
+
     // ---- Slice 6b-2a: Reply ----
 
     @Test

@@ -131,12 +131,15 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         }
     }
 
-    fun disconnect(row: MailAccountRow) = scope.launch {
+    fun disconnect(row: MailAccountRow, deleteData: Boolean = false) = scope.launch {
         haptics.medium()
         message = null
-        val now = core.disconnectMail(row.provider, row.email)
+        val now = if (deleteData) core.disconnectMailAndDeleteData(row.provider, row.email) else core.disconnectMail(row.provider, row.email)
         if (now == null) message = MailAccountRules.DISCONNECT_FAILED
-        else { view = Result.success(now); note = MailAccountRules.disconnectedLine(row.provider, row.email) }
+        else {
+            view = Result.success(now)
+            note = if (deleteData) MailAccountRules.deletedLine(row.provider, row.email) else MailAccountRules.disconnectedLine(row.provider, row.email)
+        }
     }
 
     fun relabel(row: MailAccountRow, label: MailLabel) = scope.launch {
@@ -235,6 +238,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         onReconnect = { v.connects.firstOrNull { it.provider == row.provider }?.let { connect(it.provider, it.note) } },
                         onLabel = { relabel(row, it) },
                         onDisconnect = { disconnect(row) },
+                        onDeleteData = { disconnect(row, deleteData = true) },
                         onUndo = { undoTidy(it) },
                         onUnsubscribe = { unsubscribe(it) },
                         onRule = { id, rule -> setRule(id, rule) },
@@ -260,7 +264,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 private fun MailAccountCard(
     row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
     onUndo: (String) -> Unit, onUnsubscribe: (String) -> Unit = {}, onApprove: (String, Boolean) -> Unit = { _, _ -> },
-    onRule: (String, String) -> Unit = { _, _ -> },
+    onRule: (String, String) -> Unit = { _, _ -> }, onDeleteData: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -390,6 +394,10 @@ private fun MailAccountCard(
                     Text(MailAccountRules.KEEP, style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = false }.minTouch())
                 }
+                // Completeness: Delete mail data per account, the heavier choice, with what it clears and keeps.
+                Text(MailAccountRules.DELETE_DATA_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(MailAccountRules.DELETE_DATA, style = MekaType.itemMeta, color = Meka.colors.critical,
+                    modifier = Modifier.clickable(role = Role.Button) { asking = false; onDeleteData() }.minTouch())
             }
         }
     }

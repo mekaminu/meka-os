@@ -75,6 +75,9 @@ struct MailSheet: View {
                         Task { await model.setMailSenderRule(id, rule: rule) }
                     }, onApprove: { id, yes in
                         Task { await model.approveMailBacklog(id, approve: yes) }
+                    }, onDeleteData: {
+                        let provider = row.provider, email = row.email
+                        Task { await model.disconnectMail(provider: provider, email: email, deleteData: true) }
                     })
                     .staggeredAppear(i + 3)
                 }
@@ -258,6 +261,7 @@ private struct MailAccountRowView: View {
     var onUnsubscribe: (String) -> Void = { _ in }
     var onRule: (String, String) -> Void = { _, _ in }
     var onApprove: (String, Bool) -> Void = { _, _ in }
+    var onDeleteData: () -> Void = {}
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @State private var asking = false
@@ -485,6 +489,17 @@ private struct MailAccountRowView: View {
                         .font(MekaType.itemMeta)
                         .foregroundStyle(palette.accent)
                     }
+                    // Completeness: Delete mail data per account, the heavier choice, with what it clears and keeps.
+                    Text(MailAccountRules.shared.DELETE_DATA_LINE).font(MekaType.caption)
+                        .foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button(MailAccountRules.shared.DELETE_DATA) {
+                        asking = false
+                        onDeleteData()
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.critical)
                 }
                 .padding(.top, MekaSpace.xs)
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))

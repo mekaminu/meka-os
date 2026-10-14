@@ -993,15 +993,24 @@ final class CoreModel {
     }
 
     /// Disconnects a mail account (slice 1b): the server forgets its sign-in; nothing in the mailbox changes.
+    /// `deleteData` (completeness: Delete mail data) also clears what Navilife made from that mail on both apps.
     /// Only the two Strings cross to the core.
-    func disconnectMail(provider: String, email: String) async {
+    func disconnectMail(provider: String, email: String, deleteData: Bool = false) async {
         guard let core else { return }
         MekaHaptics.medium()
         mailMessage = nil
-        if let now = try? await core.disconnectMail(provider: provider, email: email) {
+        let now: MailAccountsView?
+        if deleteData {
+            now = try? await core.disconnectMailAndDeleteData(provider: provider, email: email)
+        } else {
+            now = try? await core.disconnectMail(provider: provider, email: email)
+        }
+        if let now {
             mail = now
             mailOffline = false
-            mailNote = MailAccountRules.shared.disconnectedLine(provider: provider, email: email)
+            mailNote = deleteData
+                ? MailAccountRules.shared.deletedLine(provider: provider, email: email)
+                : MailAccountRules.shared.disconnectedLine(provider: provider, email: email)
         } else {
             mailMessage = MailAccountRules.shared.DISCONNECT_FAILED
         }

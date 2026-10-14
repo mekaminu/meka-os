@@ -399,7 +399,7 @@ fun Application.mekaSync(
                 val who = call.device(devices, verifier, body, requireKey = true)
                 val req = WireCodec.decodeMailDisconnect(body)
                 val provider = call.parameters["provider"].orEmpty()
-                val found = withContext(Dispatchers.IO) { integrations.disconnectMail(who.householdId, provider, req.email) }
+                val found = withContext(Dispatchers.IO) { integrations.disconnectMail(who.householdId, provider, req.email, req.deleteData) }
                 if (!found) call.respondText("no such mail account", status = HttpStatusCode.NotFound)
                 else call.respondText(WireCodec.encodeAccounts(withContext(Dispatchers.IO) { integrations.accounts(who.householdId) }), ContentType.Application.Json)
             }

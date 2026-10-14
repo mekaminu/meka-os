@@ -398,6 +398,9 @@ interface AccountsApi {
     /** Disconnects a mail account (slice 1b): the server forgets its sign-in; returns the mail accounts as they are now. */
     suspend fun disconnectMail(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
         throw UnsupportedOperationException("disconnecting mail needs Navilife's server")
+    /** Disconnects a mail account and deletes what Navilife made from its mail (completeness: Delete mail data). */
+    suspend fun disconnectMailAndDeleteData(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
+        throw UnsupportedOperationException("deleting mail data needs Navilife's server")
 }
 
 /**
@@ -469,6 +472,9 @@ class HttpSyncTransport(
 
     override suspend fun disconnectMail(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
         mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/disconnect", WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect(email)))))
+
+    override suspend fun disconnectMailAndDeleteData(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
+        mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/disconnect", WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect(email, deleteData = true)))))
 
     private fun mail(list: List<WireCodec.IntegrationAccount>) = list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }
         .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, it.label, it.sorted, it.wouldTidy) }

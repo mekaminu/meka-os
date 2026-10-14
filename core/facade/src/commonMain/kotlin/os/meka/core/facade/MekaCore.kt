@@ -4143,6 +4143,19 @@ class MekaCore(
         return mailView(list)
     }
 
+    /**
+     * Delete mail data per account (Inbox autopilot, completeness): disconnects the account as [disconnectMail] does
+     * and the server deletes what it published from that mail (its cards, tidies, senders and his rules for them, the
+     * clean-up plan, parcels) from both apps; Renewals, Waiting for and tasks stay. Null when the server couldn't be
+     * reached (nothing changed).
+     */
+    suspend fun disconnectMailAndDeleteData(provider: String, email: String): os.meka.core.domain.MailAccountsView? {
+        val list = (try { accountsApi?.disconnectMailAndDeleteData(provider, email) } catch (e: CancellationException) { throw e } catch (e: Exception) { null })
+            ?: return null
+        noteMailForSetup(list)
+        return mailView(list)
+    }
+
     /** Puts Setup's Mail step right after Mail changed, without asking the server again. */
     private suspend fun noteMailForSetup(list: List<os.meka.core.domain.MailAccountFacts>?) {
         val step = os.meka.core.domain.MailAccountRules.setupStep(list, nowMs())

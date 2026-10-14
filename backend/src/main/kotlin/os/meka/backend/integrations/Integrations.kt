@@ -74,6 +74,7 @@ import os.meka.core.domain.CarRules
 import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailLabel
 import os.meka.core.domain.MailProviders
+import os.meka.core.sync.DELETED_FIELD
 import os.meka.core.sync.EntityRef
 import os.meka.core.sync.EntitySnapshot
 import os.meka.core.sync.Hlc
@@ -302,8 +303,13 @@ class Integrations(
      * effort; Google only), wipes the stored sign-in and marks the account disconnected, so nothing reads it any more
      * and Today's sign-in line for it goes (its sign-in entity turns OK). Nothing in the mailbox is touched. Signing in
      * again brings it back with its label. False for an unknown or non-mail account.
+     *
+     * [deleteData] (Inbox autopilot, completeness: Delete mail data per account): everything the server published from
+     * this account's mail — its "From your mail" cards, tidies, newsletter senders (with his rules for them), the
+     * backlog clean-up plan and parcels — is deleted from both apps as well. What he keeps on his own lists (Renewals,
+     * Waiting for, tasks) stays; the mailbox is untouched.
      */
-    fun disconnectMail(householdId: String, provider: String, email: String): Boolean {
+    fun disconnectMail(householdId: String, provider: String, email: String, deleteData: Boolean = false): Boolean {
         val m = mail[provider] ?: return false
         val a = store.accounts(householdId).firstOrNull { it.provider == provider && it.email == email.lowercase() && it.status != DISCONNECTED }
             ?: return false
@@ -316,6 +322,7 @@ class Integrations(
         if (done) runCatching { goneMailNeeds(a, emptySet()) }
         // Slice 1c: the headers MEKA kept for it go too; signing in again lists the mail afresh.
         if (done) runCatching { mailStore?.forget(a.id) }
+        if (done && deleteData) runCatching { deleteMailData(a) }
         if (done) {
             store.account(a.id)?.let { runCatching { if (applySignIn(it)) onChanged(householdId) } }
         }
@@ -804,6 +811,19 @@ class Integrations(
             ), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
+    }
+
+    /**
+     * Delete mail data: every entity of [MAIL_DATA_TYPES] this account published is deleted (the synced `deleted`
+     * field, so both apps drop it). Writing to the same id later (he connects it again) brings it back ([write]).
+     */
+    private fun deleteMailData(a: AccountRow) {
+        val mine = store.transaction { store.mirror(a.householdId, a.id) }
+        val gone = mapOf(DELETED_FIELD to FieldValue.Bool(true))
+        for (type in MAIL_DATA_TYPES) {
+            val ids = runCatching { reader.entities(a.householdId, type) }.getOrDefault(emptyMap()).keys.filter { it in mine }
+            for (id in ids) writeMail(a, id, gone, type)
+        }
     }
 
     /** Every card this account published that isn't in [shown] is marked gone (once). */
@@ -1611,12 +1631,15 @@ class Integrations(
 
     /** Returns whether any op was appended. */
     private fun write(
-        a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, desired: Map<String, FieldValue>,
+        a: AccountRow, entityId: String, startMs: Long, endMs: Long, removed: Boolean, prev: MirrorRow?, asked: Map<String, FieldValue>,
         entityType: String = EntityTypes.EVENT,
         /** The provider's id (calendar events): kept on the mirror row so edits can find the real event. */
         remoteId: String? = prev?.remoteId,
     ): Boolean {
         val fieldOps = HashMap(prev?.fieldOps ?: emptyMap())
+        // Delete mail data: an entity the server deleted comes back when it's written again.
+        val desired = if (prev?.fieldOps?.get(DELETED_FIELD)?.second == valueKey(FieldValue.Bool(true)) && DELETED_FIELD !in asked)
+            asked + (DELETED_FIELD to FieldValue.Bool(false)) else asked
         var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs ||
             (remoteId != null && prev.remoteId != remoteId)
         var appended = false
@@ -1656,6 +1679,8 @@ class Integrations(
         /** Slice 10b: the sender's rule fields, rewritten whatever the server wrote last. */
         private val RULE_FIELDS = setOf(os.meka.core.domain.MailSenderFields.RULE, os.meka.core.domain.MailSenderFields.RULE_AT)
         const val SERVER_DEVICE = "server"
+        /** Delete mail data: what the server publishes from one mail account (Renewals, Waiting for and tasks are his). */
+        val MAIL_DATA_TYPES = listOf(EntityTypes.MAIL_ITEM, EntityTypes.MAIL_TIDY, EntityTypes.MAIL_SENDER, EntityTypes.MAIL_BACKLOG, EntityTypes.PARCEL)
         const val STATE_TTL_MS = 15 * 60_000L
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         /** Inbox autopilot, slice 1c: the mail MEKA keeps headers for (Meka: the last 60 days). */

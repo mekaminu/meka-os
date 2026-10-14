@@ -249,6 +249,19 @@ object MailAccountRules {
         else -> "to remove Navilife from Microsoft too: account.microsoft.com → Privacy → Apps and services"
     }
 
+    // ---- Delete mail data per account (completeness) ----
+
+    /** The question's second choice: disconnect and clear what Navilife made from this account's mail. */
+    const val DELETE_DATA = "Disconnect and delete its mail data"
+
+    /** Under the question: what Delete mail data clears and what it keeps. */
+    const val DELETE_DATA_LINE = "Deleting its mail data also takes its email cards, tidies, newsletter senders (and your rules for them), " +
+        "the clean-up plan and parcels off both apps. Renewals, Waiting for and tasks keep what's on them; nothing in the mailbox changes."
+
+    /** After Disconnect and delete its mail data. */
+    fun deletedLine(provider: String, email: String): String =
+        disconnectedLine(provider, email).replaceFirst("Disconnected $email · ", "Disconnected $email and deleted its mail data · ")
+
     const val DISCONNECT_FAILED = "Couldn't reach your server, so it's still connected. Try again."
 
     // ---- Setup's Mail step (slice 1b) ----

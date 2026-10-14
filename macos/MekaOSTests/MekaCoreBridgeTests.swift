@@ -2754,6 +2754,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 1b: Disconnect offline says nothing changed; Setup's Mail step; a mail sign-in's line on Today.
         let gone = try await core.disconnectMail(provider: "gmail", email: "alex@example.com")
         XCTAssertNil(gone)
+        // Completeness: Delete mail data offline changes nothing either.
+        let wiped = try await core.disconnectMailAndDeleteData(provider: "gmail", email: "alex@example.com")
+        XCTAssertNil(wiped)
+        XCTAssertTrue(rules.deletedLine(provider: "gmail", email: "alex@example.com").contains("deleted its mail data"))
         XCTAssertEqual(rules.setupStep(accounts: [], nowMs: 0).fix, SetupFix.mail)
         XCTAssertTrue(rules.disconnectAsk(row: v.rows[1]).hasPrefix("Disconnect Business · Gmail"))
         XCTAssertTrue(MailProviders.shared.isMail(provider: "outlook_mail"))

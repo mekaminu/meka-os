@@ -51,6 +51,11 @@ class SetupFacadeTest {
             mail.removeAll { it.provider == provider && it.email == email }
             return mailAccounts()
         }
+        val wiped = mutableListOf<String>()
+        override suspend fun disconnectMailAndDeleteData(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> {
+            wiped += email
+            return disconnectMail(provider, email)
+        }
     }
 
     private val server = Server(SyncService(InMemoryServerOpStore()))
@@ -157,10 +162,15 @@ class SetupFacadeTest {
         assertEquals(SetupState.TODO, reopened.state)
         assertEquals(os.meka.core.domain.SetupFix.MAIL, reopened.fix)
         assertEquals(asked, server.healthAsked)
+        // Delete mail data: the same, and the server is asked to delete what it made from that mail.
+        val wiped = c.disconnectMailAndDeleteData("outlook_mail", "alex@example.net")!!
+        assertEquals(listOf("Personal · Gmail"), wiped.rows.map { it.title })
+        assertEquals(listOf("alex@example.net"), server.wiped)
         // Not connected to a server: it waits (not counted).
         val alone = MekaCore(householdId = "hh", deviceId = "mac", store = InMemoryReplicaStore(), transport = null,
             secureRandom = Random(2), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now })
         assertEquals(SetupState.LATER, alone.refreshSetup(fold).steps.first { it.key == os.meka.core.domain.MailAccountRules.SETUP_KEY }.state)
         assertEquals(null, alone.disconnectMail("gmail", "alex@example.com"))
+        assertEquals(null, alone.disconnectMailAndDeleteData("gmail", "alex@example.com"))
     }
 }

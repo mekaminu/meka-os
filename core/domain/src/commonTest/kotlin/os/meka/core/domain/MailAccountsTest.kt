@@ -119,6 +119,15 @@ class MailAccountsTest {
     }
 
     @Test
+    fun deleteMailDataSaysWhatGoesAndWhatStays() {
+        assertTrue(MailAccountRules.deletedLine(MailProviders.GMAIL, "alex@example.com")
+            .startsWith("Disconnected alex@example.com and deleted its mail data · Navilife asked Google"))
+        assertTrue(MailAccountRules.deletedLine(MailProviders.OUTLOOK, "alex@example.net").contains("account.microsoft.com"))
+        assertTrue(MailAccountRules.DELETE_DATA_LINE.contains("Renewals, Waiting for and tasks keep"))
+        assertTrue(MailAccountRules.DELETE_DATA_LINE.contains("nothing in the mailbox changes"))
+    }
+
+    @Test
     fun setupsMailStepFollowsTheThreeAccounts() {
         assertEquals(SetupState.UNKNOWN, MailAccountRules.setupStep(null, now).state)
         val none = MailAccountRules.setupStep(emptyList(), now)

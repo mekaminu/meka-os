@@ -97,6 +97,11 @@ class WireCodecTest {
     fun mailDisconnectsRoundTripAndNeedAnAddress() {
         val c = WireCodec.MailDisconnect("alex@example.com")
         assertEquals(c, WireCodec.decodeMailDisconnect(WireCodec.encodeMailDisconnect(c)))
+        val wipe = WireCodec.MailDisconnect("alex@example.com", deleteData = true)
+        assertEquals(wipe, WireCodec.decodeMailDisconnect(WireCodec.encodeMailDisconnect(wipe)))
+        // An older app's body has no deleteData: a plain disconnect.
+        assertEquals(false, "deleteData" in WireCodec.encodeMailDisconnect(c))
+        assertEquals(false, WireCodec.decodeMailDisconnect(WireCodec.encodeMailDisconnect(c)).deleteData)
         assertFailsWith<WireFormatException> { WireCodec.decodeMailDisconnect(WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect("nobody"))) }
     }
 
