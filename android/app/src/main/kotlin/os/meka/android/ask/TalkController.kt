@@ -263,6 +263,10 @@ class TalkController(
                     app?.openCarFind?.value = namedCar
                     app?.openCar?.value = true
                 }
+                // Voice notes, slice 1: "take a voice note" opens the capture sheet recording (Talk's listening has ended).
+                os.meka.core.domain.TalkPlace.VOICE_NOTE -> {
+                    runCatching { context.startActivity(os.meka.android.capture.CaptureIntents.voiceNote(context)) }
+                }
                 // Inbox autopilot, slice 7b: "clear my inbox" starts the ten-minute inbox and Needs you comes forward.
                 os.meka.core.domain.TalkPlace.INBOX -> {
                     scope.launch { core.startMailMoment() }

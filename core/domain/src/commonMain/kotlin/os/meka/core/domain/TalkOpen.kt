@@ -15,7 +15,7 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR }
+enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -38,7 +38,22 @@ object TalkOpenRules {
      * The Fold: the planner, the bedside clock, the ten-minute inbox and Find my car (car and parking, slice 1: where
      * the car is parked is kept on the phone only, so the Mac has nothing to open).
      */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR)
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE)
+
+    /**
+     * Voice notes into actions, slice 1 (the Fold records them): "take a voice note", "record a note", "start a voice
+     * memo", "voice note" (what's left once [DROP] is gone). "Read my last voice note" has more in it and stays a question.
+     */
+    private val VOICE_NOTE: Set<List<String>> = buildSet {
+        val notes = listOf(listOf("voice", "note"), listOf("voice", "memo"), listOf("note"), listOf("memo"))
+        val dets = listOf(emptyList(), listOf("a"), listOf("new"), listOf("a", "new"), listOf("another"))
+        for (verb in listOf(null, "take", "record", "start", "make", "new", "leave", "do")) for (det in dets) {
+            for (n in notes) {
+                if (verb == null && n.size == 1) continue // "note" or "a note" alone is too little to act on
+                add(listOfNotNull(verb) + det + n)
+            }
+        }
+    }
 
     /**
      * "Where did I park?", "where did I leave the car", "where's my car", "find my car", "where am I parked", "show me
@@ -114,6 +129,7 @@ object TalkOpenRules {
             ws in BEDSIDE && TalkPlace.BEDSIDE in places -> TalkPlace.BEDSIDE
             ws in INBOX && TalkPlace.INBOX in places -> TalkPlace.INBOX
             ws in CAR && TalkPlace.CAR in places -> TalkPlace.CAR
+            ws in VOICE_NOTE && TalkPlace.VOICE_NOTE in places -> TalkPlace.VOICE_NOTE
             else -> null
         }
     }
@@ -124,6 +140,7 @@ object TalkOpenRules {
         TalkPlace.BEDSIDE -> BedsideEntryRules.OPENING
         TalkPlace.INBOX -> OPENING_INBOX
         TalkPlace.CAR -> ParkingRules.OPENING
+        TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
@@ -132,6 +149,7 @@ object TalkOpenRules {
         TalkPlace.BEDSIDE -> BedsideEntryRules.OPENED
         TalkPlace.INBOX -> OPENED_INBOX
         TalkPlace.CAR -> ParkingRules.OPENED
+        TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENED
     }
 }
 

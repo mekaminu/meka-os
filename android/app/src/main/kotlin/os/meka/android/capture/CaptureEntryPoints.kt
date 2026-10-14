@@ -19,6 +19,9 @@ internal object CaptureIntents {
             .putExtra(CaptureRequests.EXTRA_VOICE, voice)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
 
+    /** The capture sheet recording a voice note straight away (Talk's "take a voice note"). */
+    fun voiceNote(context: Context): Intent = open(context, voice = false).putExtra(CaptureRequests.EXTRA_VOICE_NOTE, true)
+
     fun pending(context: Context, voice: Boolean): PendingIntent =
         PendingIntent.getActivity(
             context, if (voice) 2 else 1, open(context, voice),

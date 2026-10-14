@@ -11,12 +11,15 @@ data class CaptureRequest(
     val subject: String?,
     /** Open straight into on-device speech recognition (widget mic, tile long-press). */
     val startVoice: Boolean,
+    /** Open straight into recording a voice note (Talk's "take a voice note"; voice notes slice 1). */
+    val voiceNote: Boolean = false,
 )
 
 object CaptureRequests {
     /** MEKA's own entry points: the home-screen widget and the quick-settings tile. */
     const val ACTION_CAPTURE = "os.meka.action.CAPTURE"
     const val EXTRA_VOICE = "os.meka.capture.voice"
+    const val EXTRA_VOICE_NOTE = "os.meka.capture.voiceNote"
 
     // Platform action and extra names, copied so this file needs no Android classes.
     const val ACTION_SEND = "android.intent.action.SEND"
@@ -32,9 +35,11 @@ object CaptureRequests {
      * @param text EXTRA_TEXT for a share, EXTRA_PROCESS_TEXT for "Capture in MEKA" on selected text.
      * Returns null for anything we don't handle (another action, or a share that isn't text).
      */
-    fun from(action: String?, mimeType: String?, text: CharSequence?, subject: CharSequence?, voice: Boolean): CaptureRequest? =
+    fun from(
+        action: String?, mimeType: String?, text: CharSequence?, subject: CharSequence?, voice: Boolean, voiceNote: Boolean = false,
+    ): CaptureRequest? =
         when (action) {
-            ACTION_CAPTURE -> CaptureRequest("", null, startVoice = voice)
+            ACTION_CAPTURE -> CaptureRequest("", null, startVoice = voice && !voiceNote, voiceNote = voiceNote)
             ACTION_SEND, ACTION_PROCESS_TEXT -> {
                 val isText = mimeType == null || mimeType.startsWith("text/")
                 val body = text?.toString()?.take(MAX_SHARED).orEmpty()

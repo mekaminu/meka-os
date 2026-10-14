@@ -23,6 +23,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,6 +61,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.Role
@@ -87,6 +91,7 @@ import os.meka.core.domain.QueueRules
 import os.meka.core.domain.RequestCard
 import os.meka.core.facade.HandleOutcome
 import os.meka.core.domain.QuickCapture
+import os.meka.core.domain.VoiceNoteRules
 
 /**
  * The capture sheet over whatever Meka was doing (build plan M1, "Capture from anywhere"). Opened by the share
@@ -102,6 +107,7 @@ class CaptureActivity : ComponentActivity() {
             intent?.getCharSequenceExtra(CaptureRequests.EXTRA_TEXT) ?: intent?.getCharSequenceExtra(CaptureRequests.EXTRA_PROCESS_TEXT),
             intent?.getCharSequenceExtra(CaptureRequests.EXTRA_SUBJECT),
             intent?.getBooleanExtra(CaptureRequests.EXTRA_VOICE, false) == true,
+            voiceNote = intent?.getBooleanExtra(CaptureRequests.EXTRA_VOICE_NOTE, false) == true,
         )
         if (request == null) { finish(); return }
         enableEdgeToEdge()
@@ -113,6 +119,8 @@ class CaptureActivity : ComponentActivity() {
                     request = request,
                     // First launch only: rotation or unfolding must not re-open the recogniser.
                     listenOnOpen = request.startVoice && savedInstanceState == null,
+                    // Voice notes, slice 1: Talk's "take a voice note" opens the sheet recording (first launch only).
+                    noteOnOpen = request.voiceNote && savedInstanceState == null,
                     save = { text -> core.capture(text, null) != null },
                     // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
@@ -138,6 +146,13 @@ class CaptureActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        super.onStop()
+        // Voice notes, slice 1: leaving the sheet mid-recording stops and keeps the note (Android cuts an app's
+        // microphone off in the background anyway); unfolding or rotating carries on recording.
+        if (!isChangingConfigurations) VoiceNoteSessions.current?.stop()
+    }
+
     override fun finish() {
         super.finish()
         // The sheet already animated itself away.
@@ -149,6 +164,7 @@ class CaptureActivity : ComponentActivity() {
 private fun CaptureSheet(
     request: CaptureRequest,
     listenOnOpen: Boolean,
+    noteOnOpen: Boolean,
     save: suspend (String) -> Boolean,
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
@@ -179,6 +195,16 @@ private fun CaptureSheet(
     // Car and parking, slice 5: read on the phone when the sheet opens; nothing starts until he taps it.
     var parkingOffer by remember { mutableStateOf<ParkingShareView?>(null) }
     var pickingCar by remember { mutableStateOf(false) }
+    // Voice notes, slice 1: holding the mic records a voice note; it survives unfolding (the session lives outside the sheet).
+    val context = LocalContext.current
+    var noting by rememberSaveable { mutableStateOf(false) }
+    var session by remember { mutableStateOf(VoiceNoteSessions.current) }
+    val idleNote = remember { kotlinx.coroutines.flow.MutableStateFlow<VoiceNoteState>(VoiceNoteState.Idle) }
+    val noteState by (session?.state ?: idleNote).collectAsState()
+    var micAsks by remember { mutableStateOf(0) }
+    val levels = remember { mutableStateListOf<Float>() }
+    var heard by rememberSaveable { mutableStateOf<String?>(null) }
+    var noteMessage by remember { mutableStateOf<String?>(null) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -205,6 +231,32 @@ private fun CaptureSheet(
             .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // on-device speech; nothing leaves the phone
             .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say it and Navilife will keep it")
         try { listen.launch(i) } catch (_: ActivityNotFoundException) { voiceMissing = true }
+    }
+
+    fun startNote() {
+        if (captured || handling) return
+        val app = context.applicationContext as? MekaApplication ?: return
+        keyboard?.hide()
+        noteMessage = null
+        levels.clear()
+        val s = VoiceNoteSession(app, app.appScope, System::currentTimeMillis)
+        VoiceNoteSessions.current = s
+        session = s
+        noting = true
+        s.start()
+        if (s.recording) haptics.light()
+    }
+
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ ->
+        micAsks += 1
+        // Refused: the session says the microphone is needed, with Allow.
+        startNote()
+    }
+
+    fun holdMic() {
+        if (captured || handling) return
+        if (!VoiceNoteRecorder.micAllowed(context)) { haptics.tick(); askMic.launch(android.Manifest.permission.RECORD_AUDIO); return }
+        startNote()
     }
 
     fun add() {
@@ -295,10 +347,54 @@ private fun CaptureSheet(
         if (request.text.isNotBlank()) parkingOffer = parking(request.text, request.subject)
     }
 
+    // The voice note's progress: the level strip follows the voice; once kept, its words go to Handle this.
+    LaunchedEffect(noteState) {
+        when (val st = noteState) {
+            is VoiceNoteState.Recording -> { levels.add(st.level); while (levels.size > LEVEL_BARS) levels.removeAt(0) }
+            is VoiceNoteState.Done -> {
+                VoiceNoteSessions.current = null
+                val note = st.note
+                haptics.light()
+                heard = if (st.noWords == null) note.transcript else null
+                handling = true
+                if (VoiceNoteRules.worthAsking(note)) {
+                    reading = true
+                    val minute = java.time.Instant.ofEpochMilli(note.atMs).atZone(java.time.ZoneId.systemDefault()).toLocalTime()
+                        .let { it.hour * 60 + it.minute }
+                    val out = handle(note.transcript, VoiceNoteRules.subject(minute))
+                    val count = when (out) {
+                        is HandleOutcome.Cards -> { handleCards = out.cards; handleLine = out.line; out.cards.size }
+                        is HandleOutcome.NothingToDo -> { handleLine = out.line; 0 }
+                        // Offline or the AI is off: Make cards on the note in Voice notes later.
+                        is HandleOutcome.Unavailable -> { handleLine = out.line + " · " + VoiceNoteRules.MAKE_CARDS.lowercase() + " in Voice notes later"; null }
+                    }
+                    if (count != null) VoiceNoteStore.update(context, note.id) { it.copy(cards = count) }
+                    reading = false
+                } else {
+                    handleLine = st.noWords ?: HandleThisRules.NOTHING_LINE
+                }
+            }
+            VoiceNoteState.Cancelled -> { VoiceNoteSessions.current = null; noting = false; runCatching { focus.requestFocus() } }
+            VoiceNoteState.TooShort, VoiceNoteState.CouldNotStart -> {
+                VoiceNoteSessions.current = null
+                haptics.reject()
+                delay(if (reduced) 1_200 else 1_800) // the line stays long enough to read
+                noteMessage = if (st == VoiceNoteState.TooShort) VoiceNoteRules.TOO_SHORT else "The microphone is busy · try again in a moment"
+                noting = false
+            }
+            else -> {}
+        }
+    }
+
     LaunchedEffect(Unit) {
         shown.animateTo(1f, MekaMotion.expand(reduced))
         if (captured) { leave(true); return@LaunchedEffect } // rotated or unfolded mid-goodbye
-        if (listenOnOpen) startListening() else { runCatching { focus.requestFocus() }; keyboard?.show() }
+        when {
+            noting -> {} // unfolded mid-note: the session carries on
+            noteOnOpen -> holdMic()
+            listenOnOpen -> startListening()
+            else -> { runCatching { focus.requestFocus() }; keyboard?.show() }
+        }
     }
 
     Box(
@@ -325,8 +421,8 @@ private fun CaptureSheet(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             AnimatedContent(
-                // 0 the field, 1 Handle this, 2 the goodbye tick: each step cross-fades (the tick also pops in).
-                targetState = when { captured -> 2; handling -> 1; else -> 0 },
+                // 0 the field, 1 Handle this, 2 the goodbye tick, 3 a voice note recording: each step cross-fades (the tick also pops in).
+                targetState = when { captured -> 2; handling -> 1; noting -> 3; else -> 0 },
                 transitionSpec = {
                     if (targetState == 2) {
                         (fadeIn(MekaMotion.appear(reduced)) + (if (reduced) fadeIn() else scaleIn(MekaMotion.approve(false), 0.6f)))
@@ -348,9 +444,24 @@ private fun CaptureSheet(
                         Spacer(Modifier.width(MekaSpace.xs))
                         Text(doneLabel, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                     }
+                } else if (step == 3) {
+                    VoiceNoteRecordingView(
+                        noteState, levels,
+                        onPause = { haptics.tick(); session?.pause() },
+                        onResume = { haptics.tick(); session?.resume() },
+                        onDone = { haptics.light(); session?.stop() },
+                        onCancel = { haptics.tick(); session?.cancel() },
+                        onAllowMic = {
+                            // Android stops asking after two refusals: then Navilife's app page, where Microphone is.
+                            if (micAsks >= 2) HelpSettingsLink.appDetails(context)
+                            else askMic.launch(android.Manifest.permission.RECORD_AUDIO)
+                        },
+                    )
                 } else if (step == 1) {
                     HandleThisSection(
                         reading, handleLine, handleCards, answered, onChoice = ::answerCard,
+                        heard = heard, voiceNote = noting,
+                        onDone = if (noting) ({ scope.launch { leave(true) } }) else null,
                         answers = answers, copiedLine = copiedLine,
                         onCopy = { a -> copy(a.copyText); haptics.light(); copiedLine = FormFillRules.copiedLine(a) },
                         onCopyAll = { copy(answers.copyAllText); haptics.light(); copiedLine = FormFillRules.copiedAllLine(answers) },
@@ -379,7 +490,10 @@ private fun CaptureSheet(
                                 )
                             }
                             Spacer(Modifier.width(MekaSpace.xs))
-                            RoundButton("🎙", "Speak", Meka.colors.surfaceRaised, Meka.colors.textPrimary) { startListening() }
+                            RoundButton(
+                                "🎙", "Speak · hold for a voice note", Meka.colors.surfaceRaised, Meka.colors.textPrimary,
+                                onLongClick = ::holdMic,
+                            ) { startListening() }
                             Spacer(Modifier.width(MekaSpace.xs))
                             RoundButton("↑", "Add", if (title.isBlank()) Meka.colors.hairline else Meka.colors.accent, Meka.colors.onAccent) { add() }
                         }
@@ -413,6 +527,12 @@ private fun CaptureSheet(
                             Text("Kept in notes: $notes", style = MekaType.caption, color = Meka.colors.textSecondary,
                                 maxLines = 3, overflow = TextOverflow.Ellipsis)
                         }
+                        val message = noteMessage
+                        if (message != null) {
+                            Text(message, style = MekaType.caption, color = Meka.colors.textSecondary)
+                        } else if (title.isEmpty() && request.text.isBlank()) {
+                            Text(VoiceNoteRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        }
                         if (voiceMissing) {
                             Text("Voice isn't available on this phone. Type it instead.", style = MekaType.caption, color = Meka.colors.textSecondary)
                         }
@@ -424,9 +544,12 @@ private fun CaptureSheet(
 }
 
 @Composable
-private fun RoundButton(glyph: String, label: String, fill: Color, ink: Color, onClick: () -> Unit) {
+private fun RoundButton(glyph: String, label: String, fill: Color, ink: Color, onLongClick: (() -> Unit)? = null, onClick: () -> Unit) {
     Box(
-        Modifier.size(48.dp).clip(CircleShape).background(fill).clickable(onClick = onClick).semantics { contentDescription = label },
+        Modifier.size(48.dp).clip(CircleShape).background(fill)
+            .combinedClickable(role = Role.Button, onClick = onClick, onLongClick = onLongClick,
+                onLongClickLabel = if (onLongClick != null) "Record a voice note" else null)
+            .semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, style = MekaType.itemTitle, color = ink) }
 }

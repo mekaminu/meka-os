@@ -44,6 +44,7 @@ import os.meka.core.domain.FormAnswersView
 import os.meka.core.domain.FormFillRules
 import os.meka.core.domain.HandleThisRules
 import os.meka.core.domain.RequestCard
+import os.meka.core.domain.VoiceNoteRules
 
 /**
  * "Handle this" in the capture sheet (build plan V1, slice 1): while MEKA reads what was shared, a thinking shimmer;
@@ -66,10 +67,23 @@ internal fun HandleThisSection(
     copiedLine: String? = null,
     onCopy: (FormAnswer) -> Unit = {},
     onCopyAll: () -> Unit = {},
+    /** Voice notes, slice 1: the words heard in the note, shown above what Navilife offers. */
+    heard: String? = null,
+    voiceNote: Boolean = false,
+    /** Voice notes: a Done that closes the sheet (cards left wait in Needs you). */
+    onDone: (() -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth().testTag("handle-this"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Text("HANDLE THIS", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        Text(if (voiceNote) "VOICE NOTE" else "HANDLE THIS", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        if (heard != null) {
+            Column(
+                Modifier.fillMaxWidth().heightIn(max = 160.dp).clip(RoundedCornerShape(MekaRadius.m))
+                    .background(Meka.colors.surfaceRaised).verticalScroll(rememberScrollState())
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            ) { Text(heard, style = MekaType.body, color = Meka.colors.textPrimary) }
+        }
+        if (voiceNote) Text(VoiceNoteRules.KEPT_WHERE, style = MekaType.caption, color = Meka.colors.textTertiary)
         Crossfade(targetState = reading, animationSpec = MekaMotion.appear(reduced), label = "handle-reading") { isReading ->
             if (isReading) {
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -103,6 +117,14 @@ internal fun HandleThisSection(
                     }
                     if (answers.answers.isNotEmpty()) {
                         FormAnswersBlock(answers, copiedLine, firstStep = cards.size, onCopy = onCopy, onCopyAll = onCopyAll)
+                    }
+                    if (onDone != null) {
+                        Text(
+                            "Done", style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button, onClick = onDone)
+                                .semantics { contentDescription = "Done: close; anything left waits in Needs you" }
+                                .minTouch(),
+                        )
                     }
                 }
             }

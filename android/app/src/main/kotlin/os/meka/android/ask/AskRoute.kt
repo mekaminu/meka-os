@@ -149,6 +149,16 @@ fun AskRoute(
             }
         }
     }
+    // Voice notes, slice 1: the Daily row's line from the notes this phone keeps (read once Ask shows).
+    val voiceNotes by os.meka.android.capture.VoiceNoteStore.notes.collectAsState()
+    LaunchedEffect(Unit) { os.meka.android.capture.VoiceNoteStore.load(screenSaverContext) }
+    val voiceNotesLine = voiceNotes?.let { n ->
+        val zone = java.time.ZoneId.systemDefault()
+        os.meka.core.domain.DailyRules.voiceNotes(
+            n.size, n.firstOrNull()?.let { java.time.Instant.ofEpochMilli(it.atMs).atZone(zone).toLocalDate().toEpochDay() },
+            java.time.LocalDate.now(zone).toEpochDay(),
+        )
+    }
     // The Settings pane (Fold review 2026-10-12, item 7): every setting behind one row on Ask.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     val bedsideApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
@@ -307,7 +317,7 @@ fun AskRoute(
             item(key = "label-daily") { SectionLabel(MoreGroup.DAILY.label, first = false, step = ShellNav.moreLabelStep(1)) }
             itemsIndexed(ShellNav.daily(), key = { _, it -> it.name }) { i, item ->
                 // Ask polish, item 3: each row says what it holds now; lit when it's ready or wants a look.
-                val line = ShellNav.dailyLine(item, dailyLines, screenSaver)
+                val line = ShellNav.dailyLine(item, dailyLines, screenSaver, voiceNotesLine)
                 MoreRow(item, line.text, line.lit, pane == item,
                     modifier = Modifier.appear(rememberAppearance(ShellNav.moreRowStep(1, i)))) { open(item) }
             }
@@ -342,6 +352,7 @@ fun AskRoute(
         MekaPane(visible = pane == MoreItem.LIFE_ADMIN) { LifeAdminPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.EMERGENCY) { EmergencyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.TRAIN_QUEUE) { TrainQueuePane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.VOICE_NOTES) { VoiceNotesPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.ERRANDS) { ErrandsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.CAR) {
             CarPane(

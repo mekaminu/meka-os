@@ -13,6 +13,9 @@ class CaptureRequestTest {
     fun widgetAndTileOpenAnEmptySheetOptionallyListening() {
         assertEquals(CaptureRequest("", null, false), CaptureRequests.from(ACTION_CAPTURE, null, null, null, false))
         assertEquals(CaptureRequest("", null, true), CaptureRequests.from(ACTION_CAPTURE, null, null, null, true))
+        // Voice notes, slice 1: Talk's "take a voice note" opens the sheet recording, never the short dictation too.
+        assertEquals(CaptureRequest("", null, false, voiceNote = true), CaptureRequests.from(ACTION_CAPTURE, null, null, null, false, voiceNote = true))
+        assertEquals(CaptureRequest("", null, false, voiceNote = true), CaptureRequests.from(ACTION_CAPTURE, null, null, null, true, voiceNote = true))
     }
 
     @Test

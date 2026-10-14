@@ -7,7 +7,7 @@ package os.meka.core.domain
  * stories, Shut down "2 left", the Train queue "2 saved", the Life admin hour "Thu 19:00 · 3 jobs", the Bedside clock
  * "Screen saver on/off" (the Fold only). A row with nothing live keeps its fixed words. Both apps; pure, unit-tested.
  */
-enum class DailyRow { BRIEF, WEEK_AHEAD, NEWS, SHUTDOWN, TRAIN_QUEUE, LIFE_ADMIN, BEDSIDE }
+enum class DailyRow { BRIEF, WEEK_AHEAD, NEWS, SHUTDOWN, TRAIN_QUEUE, VOICE_NOTES, LIFE_ADMIN, BEDSIDE }
 
 /** A Daily row's live line; [lit] when it's ready now or wants a look (drawn in the accent). */
 data class DailyLine(val text: String, val lit: Boolean)
@@ -105,6 +105,20 @@ object DailyRules {
         }
         val jobs = if (i.lifeAdminJobs > 0) " · ${ShutdownRules.count(i.lifeAdminJobs, "job")}" else ""
         return DailyLine("$label ${LocalClock.formatMinute(minute)}$jobs", day == i.todayDay)
+    }
+
+    /**
+     * The Fold's Voice notes row (voice notes into actions, slice 1): how many this phone keeps, the newest one's day
+     * (null: the fixed words). Lit when one was made today.
+     */
+    fun voiceNotes(count: Int, newestDay: Long?, today: Long): DailyLine? {
+        if (count <= 0 || newestDay == null) return null
+        val n = ShutdownRules.count(count, "note")
+        return when (newestDay) {
+            today -> DailyLine("$n · newest today", true)
+            today - 1 -> DailyLine("$n · newest yesterday", false)
+            else -> DailyLine(n, false)
+        }
     }
 
     /** The Fold's Bedside clock row: whether MEKA is Android's screen saver (null: couldn't tell → the fixed words). */

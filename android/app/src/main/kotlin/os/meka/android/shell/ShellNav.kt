@@ -74,6 +74,7 @@ enum class MoreItem(
     NEWS("News", "Barça, AI and the headlines · topics and sources", null, MoreGroup.DAILY),
     SHUTDOWN("Shut down the day", "Tick off, carry over and see tomorrow", null, MoreGroup.DAILY),
     TRAIN_QUEUE("Train queue", "Links and podcasts saved for the commute", null, MoreGroup.DAILY),
+    VOICE_NOTES(os.meka.core.domain.VoiceNoteRules.TITLE, os.meka.core.domain.VoiceNoteRules.ROW_LINE, null, MoreGroup.DAILY),
     LIFE_ADMIN("Life admin hour", "One hour a week for forms, calls and renewals", null, MoreGroup.DAILY),
     BEDSIDE(os.meka.core.domain.BedsideEntryRules.ROW_LABEL, os.meka.core.domain.BedsideEntryRules.ROW_LINE, null, MoreGroup.DAILY),
     REVIEW("Review", "Your week, looked back on", ShellDestination.REVIEW, MoreGroup.DAILY),
@@ -158,6 +159,7 @@ object ShellNav {
         MoreItem.NEWS -> os.meka.core.domain.DailyRow.NEWS
         MoreItem.SHUTDOWN -> os.meka.core.domain.DailyRow.SHUTDOWN
         MoreItem.TRAIN_QUEUE -> os.meka.core.domain.DailyRow.TRAIN_QUEUE
+        MoreItem.VOICE_NOTES -> os.meka.core.domain.DailyRow.VOICE_NOTES
         MoreItem.LIFE_ADMIN -> os.meka.core.domain.DailyRow.LIFE_ADMIN
         MoreItem.BEDSIDE -> os.meka.core.domain.DailyRow.BEDSIDE
         else -> null
@@ -167,9 +169,16 @@ object ShellNav {
      * A Daily row's line (Ask polish, item 3): the core's live one, the Bedside clock's from this phone's screen saver
      * ([screenSaver], null when it couldn't be read), else the row's fixed words.
      */
-    fun dailyLine(item: MoreItem, lines: os.meka.core.domain.DailyLines, screenSaver: Boolean? = null): os.meka.core.domain.DailyLine {
-        val live = if (item == MoreItem.BEDSIDE) os.meka.core.domain.DailyRules.bedside(screenSaver)
-        else dailyRow(item)?.let { lines.of(it) }
+    fun dailyLine(
+        item: MoreItem, lines: os.meka.core.domain.DailyLines, screenSaver: Boolean? = null,
+        voiceNotes: os.meka.core.domain.DailyLine? = null,
+    ): os.meka.core.domain.DailyLine {
+        val live = when (item) {
+            MoreItem.BEDSIDE -> os.meka.core.domain.DailyRules.bedside(screenSaver)
+            // Voice notes, slice 1: the notes live on this phone, so their line comes from its store, not the core.
+            MoreItem.VOICE_NOTES -> voiceNotes
+            else -> dailyRow(item)?.let { lines.of(it) }
+        }
         return live ?: os.meka.core.domain.DailyLine(item.line, false)
     }
 
