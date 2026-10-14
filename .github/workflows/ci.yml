@@ -21,14 +21,6 @@ jobs:
   core-and-backend:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    services:
-      postgres:
-        image: public.ecr.aws/docker/library/postgres:17 # Docker Hub's official image via AWS's public mirror: unauthenticated Docker Hub pulls hit the rate limit (2026-10-09)
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       MEKA_TEST_DB_URL: jdbc:postgresql://localhost:5432/postgres
       MEKA_TEST_DB_USER: postgres
@@ -38,6 +30,9 @@ jobs:
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
       - uses: gradle/actions/setup-gradle@v4
+      # Not a job service container: one image that can't be pulled failed the whole job (mirror limits, 2026-10-14).
+      - name: Postgres for the backend tests (image mirrors, else the runner's own)
+        run: tools/ci-postgres.sh
       - name: Kernel purity (ADR-011)
         run: tools/ci-run.sh ./gradlew checkKernelPurity
       - name: Core + data + facade + backend tests
