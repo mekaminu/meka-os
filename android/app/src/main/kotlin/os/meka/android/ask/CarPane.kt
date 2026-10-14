@@ -330,6 +330,8 @@ fun CarPane(
                         if (line != null) haptics.light() else haptics.tick()
                     }
                 }
+                // Slice 5: a RingGo/JustPark confirmation pasted into the field (or shared to Navilife) is read here too.
+                Text(os.meka.core.domain.ParkingConfirmationRules.PASTE_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
                 Crossfade(timerSaid, animationSpec = MekaMotion.appear(reduced), label = "timer-said") { s ->
                     s?.let { Text(it, style = MekaType.caption, color = timerSaidColor, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
                 }

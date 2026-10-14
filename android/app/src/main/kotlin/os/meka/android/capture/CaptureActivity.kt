@@ -12,6 +12,9 @@ import os.meka.android.designsystem.mekaRecomposer
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.fadeIn
@@ -76,6 +79,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.RequestChoice
 import os.meka.core.domain.FormAnswersView
+import os.meka.core.domain.ParkingConfirmationRules
+import os.meka.core.domain.ParkingShareView
 import os.meka.core.domain.FormFillRules
 import os.meka.core.domain.HandleThisRules
 import os.meka.core.domain.QueueRules
@@ -115,6 +120,9 @@ class CaptureActivity : ComponentActivity() {
                     handle = { text, subject -> core.handleThis(text, subject) },
                     // What MEKA knows, slice 4: a shared form's fields answered from the facts page, on the phone only.
                     formAnswers = { text, subject -> core.formAnswers(text, subject) },
+                    // Car and parking, slice 5: a shared RingGo/JustPark confirmation offers its parking timer (read here).
+                    parking = { text, subject -> core.parkingFromShared(text, subject) },
+                    startParking = { carId, text, subject -> core.startParkingFromShared(carId, text, subject) },
                     copy = { text -> os.meka.android.work.LiveReplies.copyText(this@CaptureActivity, text, "Navilife fact") },
                     answer = { card, add ->
                         // A reply card's Copy reply: the draft goes on the clipboard; Meka sends it himself.
@@ -145,6 +153,8 @@ private fun CaptureSheet(
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
     formAnswers: suspend (String, String?) -> FormAnswersView,
+    parking: suspend (String, String?) -> ParkingShareView?,
+    startParking: suspend (String, String, String?) -> String?,
     copy: (String) -> Unit,
     answer: suspend (RequestCard, Boolean) -> String?,
     done: (Boolean) -> Unit,
@@ -166,6 +176,9 @@ private fun CaptureSheet(
     var answered by remember { mutableStateOf<Set<String>>(emptySet()) }
     var answers by remember { mutableStateOf(FormFillRules.EMPTY) }
     var copiedLine by remember { mutableStateOf<String?>(null) }
+    // Car and parking, slice 5: read on the phone when the sheet opens; nothing starts until he taps it.
+    var parkingOffer by remember { mutableStateOf<ParkingShareView?>(null) }
+    var pickingCar by remember { mutableStateOf(false) }
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -221,6 +234,26 @@ private fun CaptureSheet(
         }
     }
 
+    fun startTimer(carId: String) {
+        if (captured) return
+        scope.launch {
+            val line = startParking(carId, request.text, request.subject) ?: return@launch
+            keyboard?.hide()
+            doneLabel = line
+            captured = true
+            haptics.light()
+            delay(if (reduced) 400 else 900) // the reminder time stays long enough to read
+            leave(true)
+        }
+    }
+
+    fun parkingTapped() {
+        val offer = parkingOffer ?: return
+        if (offer.ended) return
+        val car = offer.carId
+        if (car != null) startTimer(car) else { haptics.tick(); pickingCar = !pickingCar }
+    }
+
     fun handleIt() {
         if (captured || handling) return
         keyboard?.hide()
@@ -256,6 +289,10 @@ private fun CaptureSheet(
                 leave(true)
             }
         }
+    }
+
+    LaunchedEffect(request) {
+        if (request.text.isNotBlank()) parkingOffer = parking(request.text, request.subject)
     }
 
     LaunchedEffect(Unit) {
@@ -346,6 +383,14 @@ private fun CaptureSheet(
                             Spacer(Modifier.width(MekaSpace.xs))
                             RoundButton("↑", "Add", if (title.isBlank()) Meka.colors.hairline else Meka.colors.accent, Meka.colors.onAccent) { add() }
                         }
+                        val offer = parkingOffer
+                        AnimatedVisibility(
+                            offer != null,
+                            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                        ) {
+                            if (offer != null) ParkingOfferRow(offer, pickingCar, ::parkingTapped, ::startTimer)
+                        }
                         if (hasLink) {
                             Text(
                                 "🚆 " + QueueRules.ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -384,4 +429,45 @@ private fun RoundButton(glyph: String, label: String, fill: Color, ink: Color, o
         Modifier.size(48.dp).clip(CircleShape).background(fill).clickable(onClick = onClick).semantics { contentDescription = label },
         contentAlignment = Alignment.Center,
     ) { Text(glyph, style = MekaType.itemTitle, color = ink) }
+}
+
+/**
+ * Car and parking, slice 5: "🅿 Parking timer until 15:30 · RingGo 81234" for a shared parking confirmation (brass, a
+ * button), or the quiet "That parking ended at 15:30 …" line. With two cars and no registration in the text, the tap
+ * unfolds the cars as chips ("Which car?") on the expand spring; a chip starts it.
+ */
+@Composable
+private fun ParkingOfferRow(offer: ParkingShareView, picking: Boolean, onTap: () -> Unit, onCar: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        if (offer.ended) {
+            Text("🅿 " + offer.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        } else {
+            Text(
+                "🅿 " + offer.line, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button, onClick = onTap)
+                    .semantics { contentDescription = "Start a parking timer: ${offer.line}" }
+                    .padding(vertical = MekaSpace.xs),
+            )
+        }
+        AnimatedVisibility(
+            picking && offer.choices.isNotEmpty(),
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                Text(ParkingConfirmationRules.WHICH_CAR, style = MekaType.caption, color = Meka.colors.textTertiary)
+                offer.choices.forEach { (id, title) ->
+                    Text(
+                        title, style = MekaType.caption, color = Meka.colors.textPrimary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button) { onCar(id) }
+                            .semantics { contentDescription = "Start it on $title" }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    )
+                }
+            }
+        }
+    }
 }

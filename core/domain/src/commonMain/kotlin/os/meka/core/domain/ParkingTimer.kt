@@ -290,12 +290,31 @@ class ParkingTimers(private val replica: Replica) {
 
     fun timer(carId: String): ParkingTimer? = all().firstOrNull { it.carId == carId }
 
-    /** Starts (or replaces) [carId]'s timer from typed text. The timer, or null when it doesn't read. */
+    /**
+     * Starts (or replaces) [carId]'s timer from typed text, or (slice 5) a pasted parking confirmation ("RingGo …
+     * Expires 15:30 …", read by [ParkingConfirmationRules]; a long paste is read as one first). The timer, or null
+     * when it doesn't read (or the pasted session has already ended).
+     */
     fun set(carId: String, text: String?, nowMs: Long, cal: LocalCalendar): ParkingTimer? {
         if (carId !in CarRules.CAR_IDS) return null
-        val typed = ParkingTimerRules.parse(text, nowMs, cal) ?: return null
+        fun shared() = ParkingConfirmationRules.read(text, null, nowMs, cal)?.takeIf { !it.ended }
+        if (ParkingConfirmationRules.flat(text).length > PASTE_CHARS && ParkingConfirmationRules.looksLikeOne(text)) {
+            // A pasted confirmation is read only as one: an ended session must not become tomorrow's timer.
+            val pasted = shared() ?: return null
+            put(ParkingConfirmationRules.timer(pasted, carId, nowMs)); return timer(carId)
+        }
+        val typed = ParkingTimerRules.parse(text, nowMs, cal)
+        if (typed == null) {
+            val late = shared() ?: return null
+            put(ParkingConfirmationRules.timer(late, carId, nowMs)); return timer(carId)
+        }
         put(ParkingTimer(carId, nowMs, typed.endsAtMs, typed.note))
         return timer(carId)
+    }
+
+    private companion object {
+        /** Longer than this, what's in the timer field is a pasted confirmation, not something he typed. */
+        const val PASTE_CHARS = 60
     }
 
     /** Adds [minutes] to [carId]'s timer (from now, if it had already ended). Null without a timer. */

@@ -172,4 +172,31 @@ class CarFacadeTest {
         assertEquals("Paid until 12:00 · 40 min left", fold.parkingTimersView.value.rows.single().line)
         assertFalse(fold.undoEndParkingTimer("car"))
     }
+
+    @Test
+    fun aSharedRingGoConfirmationStartsTheTimerOnTheCarItNamesAndTheMacSeesIt() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.setCarRegistration("ab12 cde"))
+        val golf = fold.addCar("the Golf")!!
+        assertTrue(fold.setCarRegistration(golf, "xy34 zzz"))
+        // Mon 12 Oct 2026, 10:00 in London.
+        val text = "RingGo: your parking session has started. Location 81234. Vehicle XY34ZZZ. Expires: 11:45 on 12/10/2026."
+        assertNull(fold.parkingFromShared("Lunch with Sam at 12:30", null))
+        val offer = fold.parkingFromShared(text, null)!!
+        assertEquals(golf, offer.carId)
+        assertEquals("Parking timer until 11:45 · the Golf · RingGo 81234", offer.line)
+        assertTrue(fold.parkingTimersView.value.rows.isEmpty()) // nothing until he taps
+        assertEquals("Parking timer until 11:45 · the Golf · reminds you at 11:35", fold.startParkingFromShared(golf, text, null))
+        fold.syncNow(); mac.syncNow()
+        val row = mac.parkingTimersView.value.rows.single()
+        assertEquals(golf, row.carId)
+        assertEquals("Paid until 11:45 · 1 h 45 left", row.line)
+        assertEquals("RingGo 81234", row.note)
+        // A confirmation whose time has gone says so, on the share sheet and pasted into the Mac's timer field.
+        val old = "RingGo: your parking session has started. Location 81234. Expires: 09:30 on 12/10/2026."
+        assertEquals("That parking ended at 09:30 · nothing to remind you of", fold.parkingFromShared(old, null)?.line)
+        assertNull(fold.startParkingFromShared(golf, old, null))
+        assertEquals("That parking ended at 09:30 · nothing to remind you of", mac.setParkingTimer("car", old))
+    }
 }

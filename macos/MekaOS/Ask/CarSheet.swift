@@ -4,7 +4,7 @@ import SwiftUI
 /// Ask → Life → Car on the Mac (car and parking, slice 2). Where the car is parked stays on the Fold (never synced), so
 /// the Mac shows the parking timer only, like the item says: each car's timer ("Paid until 15:30 · 1 h 20 left", brass
 /// in its last ten minutes), +15 min / +30 min / +1 h and Ended (with Undo), and a field to start one ("2 h", "until
-/// 15:30"); with two cars, chips pick which. Each car's dates open Lists → Renewals. Only Strings and an Int32 cross to
+/// 15:30", or a parking app's confirmation pasted in: slice 5); with two cars, chips pick which. Each car's dates open Lists → Renewals. Only Strings and an Int32 cross to
 /// the core.
 ///
 /// Motion: the sheet scale-fades (system); sections stagger in; a timer's line cross-fades as the minutes go and its
@@ -58,6 +58,9 @@ struct CarSheet: View {
                     }
                 }
                 .staggeredAppear(2)
+            // Slice 5: a RingGo/JustPark confirmation pasted into the field is read on the Mac too.
+            Text(ParkingConfirmationRules.shared.PASTE_HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
             if let said {
                 HStack {
                     Text(said).font(MekaType.caption).foregroundStyle(refused ? palette.accent : palette.textSecondary)

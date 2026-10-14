@@ -2019,7 +2019,37 @@ class MekaCore(
     suspend fun setParkingTimer(carId: String, text: String): String? = onCore {
         val now = nowMs()
         val cal = ZoneCalendar(timeZone)
-        val t = parkingTimers.set(carId, text, now, cal) ?: return@onCore null
+        val t = parkingTimers.set(carId, text, now, cal)
+            // Slice 5: a pasted confirmation whose time has gone says so rather than "doesn't read".
+            ?: return@onCore os.meka.core.domain.ParkingConfirmationRules.read(text, null, now, cal)?.takeIf { it.ended }
+                ?.let { os.meka.core.domain.ParkingConfirmationRules.endedLine(it, now, cal) }
+        os.meka.core.domain.ParkingTimerRules.setLine(t, os.meka.core.domain.ParkingRules.titleOf(carId, _cars.value), now, cal)
+    }
+
+    /**
+     * Car and parking, slice 5: what the share sheet offers for shared text that is a parking confirmation (RingGo,
+     * JustPark, PayByPhone…), read on the device: "Parking timer until 15:30 · RingGo 81234", the car (from its
+     * registration in the text, or the only car) or the choices, or "That parking ended at 15:30 …". Null when the
+     * text isn't one. Nothing starts until [startParkingFromShared]. Never throws.
+     */
+    suspend fun parkingFromShared(text: String, subject: String?): os.meka.core.domain.ParkingShareView? = onCore {
+        runCatching {
+            os.meka.core.domain.ParkingConfirmationRules.view(text, subject, nowMs(), ZoneCalendar(timeZone), _cars.value)
+        }.getOrNull()
+    }
+
+    /**
+     * Starts car [carId]'s parking timer from a shared confirmation (on his tap in the share sheet). The line
+     * ("Parking timer until 15:30 · reminds you at 15:20"), or null when it doesn't read or has already ended.
+     */
+    suspend fun startParkingFromShared(carId: String, text: String, subject: String?): String? = onCore {
+        if (carId !in os.meka.core.domain.CarRules.CAR_IDS) return@onCore null
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val p = os.meka.core.domain.ParkingConfirmationRules.read(text, subject, now, cal, _cars.value)?.takeIf { !it.ended }
+            ?: return@onCore null
+        parkingTimers.put(os.meka.core.domain.ParkingConfirmationRules.timer(p, carId, now))
+        val t = parkingTimers.timer(carId) ?: return@onCore null
         os.meka.core.domain.ParkingTimerRules.setLine(t, os.meka.core.domain.ParkingRules.titleOf(carId, _cars.value), now, cal)
     }
 
