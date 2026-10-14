@@ -46,6 +46,9 @@ object TalkOpenRules {
      */
     val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE)
 
+    /** The Galaxy Watch's Capture (voice notes into actions, slice 4): only a voice note opens from what it hears. */
+    val WATCH: Set<TalkPlace> = setOf(TalkPlace.VOICE_NOTE)
+
     /**
      * Voice notes into actions, slice 1 (the Fold records them): "take a voice note", "record a note", "start a voice
      * memo", "voice note" (what's left once [DROP] is gone). "Read my last voice note" has more in it and stays a question.

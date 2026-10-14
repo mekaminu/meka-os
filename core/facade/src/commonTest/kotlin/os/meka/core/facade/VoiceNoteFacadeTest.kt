@@ -144,4 +144,36 @@ class VoiceNoteFacadeTest {
         assertTrue(off.captureLine.endsWith(" · make cards in Voice notes later"))
         assertNull(vn.tidied(tonight, off.cardCount, off.tidy, off.people))
     }
+
+    @Test
+    fun slice4TheWatchsNoteIsTidiedOrKeptAsATaskWithUndo() = runTest {
+        val c = core()
+        server.reply = VoiceNoteCodec.Response("answered", "Ring the garage.", listOf("Sam"),
+            listOf(MessageRequestCodec.Proposal("task", "Ring the garage", words = "tomorrow")))
+        val read = assertNotNull(c.watchVoiceNote(words, now))
+        assertEquals("Tidied · 1 thing to add", read.line)
+        assertEquals("On your phone in Needs you", read.whereLine)
+        assertEquals("Mentions Sam", read.peopleLine)
+        assertEquals("Voice note · 22:40", server.sent.single().subject)
+        assertNull(read.taskId)
+
+        // Offline: the words are kept as one task under the note's time, and Undo takes it away.
+        server.down = true
+        val off = assertNotNull(c.watchVoiceNote("Buy bread and call the plumber about the boiler.", now))
+        val id = assertNotNull(off.taskId)
+        fun tasks() = c.today.value.let { t -> t.needsYou.map { it.task } + t.yourDay + listOfNotNull(t.upNext) }
+        val task = tasks().firstOrNull { it.id == id }
+        assertEquals("Voice note · 22:40", task?.title)
+        assertEquals("Buy bread and call the plumber about the boiler.", task?.notes)
+        c.watchVoiceNoteUndo(off)
+        assertTrue(tasks().none { it.id == id })
+
+        // A few words go straight in as the task's title, with no AI call; nothing heard is nothing.
+        server.down = false
+        val calls = server.sent.size
+        val short = assertNotNull(c.watchVoiceNote("Milk", now))
+        assertEquals("Kept as a task", short.line)
+        assertEquals(calls, server.sent.size)
+        assertNull(c.watchVoiceNote("  ", now))
+    }
 }

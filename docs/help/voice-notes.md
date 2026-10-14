@@ -16,3 +16,4 @@ tip: Turning speech into words happens on the device: Android's own recogniser o
 tip: No signal? The note is still recorded and turned into words; tap Make cards on it in Voice notes once you're back online.
 tip: Navilife's AI tidies the note into a few short lines and says who it mentions; your own words stay under "Your words". Ideas with no date can go to Lists → Someday → Ideas with one tap.
 tip: A quick tap on the 🎙 is still the short way: say one thing and it fills the capture field.
+tip: On the Galaxy Watch, tap 🎙 Voice note under Capture (or say "take a voice note" to Capture) and talk until you tap Done: the watch writes the words down itself (nothing is recorded), Navilife tidies them and the cards wait in Needs you on the phone. With no signal the words are kept as a task.

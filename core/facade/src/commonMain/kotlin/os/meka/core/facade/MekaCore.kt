@@ -3677,6 +3677,35 @@ class MekaCore(
         return os.meka.core.domain.WatchCaptureRules.captured(captureTyped(text), text)
     }
 
+    /**
+     * Voice notes into actions, slice 4: a voice note on the watch, started at [startedAtMs], whose recogniser wrote
+     * down [words] (nothing recorded). They go once to the AI's tidy-up as the phone's do ([tidyVoiceNote]; the cards
+     * sync to Needs you). When the AI can't answer, or the note is a few words, they are kept as one task instead
+     * ("Voice note · 14:02" with the words in its notes; a few words are the title) so nothing is lost. Null when
+     * nothing was heard.
+     */
+    suspend fun watchVoiceNote(words: String, startedAtMs: Long): os.meka.core.domain.WatchVoiceNoted? {
+        val text = words.trim().takeIf { it.isNotEmpty() } ?: return null
+        val rules = os.meka.core.domain.WatchVoiceNoteRules
+        val subject = voiceNoteSubject(startedAtMs)
+        val short = !os.meka.core.domain.HandleThisRules.worthAsking(text, null)
+        if (!short) {
+            val read = tidyVoiceNote(text, subject)
+            when (val c = read.cards) {
+                is HandleOutcome.Cards -> return rules.tidied(c.cards.size, read.tidy, read.people)
+                is HandleOutcome.NothingToDo -> return rules.tidied(0, read.tidy, read.people)
+                is HandleOutcome.Unavailable -> Unit
+            }
+        }
+        val id = (if (short) capture(text, null) else capture(text, subject)) ?: return null
+        return rules.keptAsTask(id, offline = !short)
+    }
+
+    /** Undo on the watch after a voice note kept as a task: the task is deleted on every device. */
+    suspend fun watchVoiceNoteUndo(v: os.meka.core.domain.WatchVoiceNoted) {
+        v.taskId?.let { delete(it) }
+    }
+
     /** Undo on the watch after a capture: the task is deleted, or the alarm or timer cancelled, on every device. */
     suspend fun watchCaptureUndo(c: os.meka.core.domain.WatchCaptured) {
         c.taskId?.let { delete(it) }

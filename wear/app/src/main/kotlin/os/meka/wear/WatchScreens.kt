@@ -6,6 +6,11 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -26,6 +31,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -34,6 +40,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.verticalScroll
@@ -73,6 +80,8 @@ import os.meka.core.domain.WatchCaptured
 import os.meka.core.domain.WatchHomeRules
 import os.meka.core.domain.WatchListenFailure
 import os.meka.core.domain.WatchLinkRules
+import os.meka.core.domain.WatchVoiceNoteRules
+import os.meka.core.domain.WatchVoiceNoted
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.SyncStatus
 import os.meka.wear.designsystem.MekaChoreography
@@ -443,6 +452,10 @@ private sealed class Capture {
     data class Listening(val heard: String?) : Capture()
     data class Done(val captured: WatchCaptured) : Capture()
     data class Said(val line: String) : Capture()
+    /** Voice notes into actions, slice 4: a voice note being written down ([partial]: the stretch being heard now). */
+    data class Recording(val segments: List<String>, val partial: String?, val paused: Boolean) : Capture()
+    data object Reading : Capture()
+    data class Noted(val noted: WatchVoiceNoted) : Capture()
 }
 
 /**
@@ -450,6 +463,11 @@ private sealed class Capture {
  * on-device recogniser only ([WatchListener]); the microphone is asked the first time. What it did shows for five
  * seconds with Undo; the block cross-fades between its states. [listen] is set when the tile's Capture opened MEKA:
  * it starts listening as if Capture was tapped here, and [onListen] clears it.
+ *
+ * Voice notes into actions, slice 4: **🎙 Voice note** under Capture (or "take a voice note" said to Capture) writes a
+ * ramble down with the same on-device recogniser, listening again after each pause until Done (five minutes at most,
+ * or a minute with no words); nothing is recorded. The words go to the AI's tidy-up and its cards wait in Needs you on
+ * the phone; offline they're kept as one task with Undo ([MekaCore.watchVoiceNote]).
  */
 @Composable
 private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen: () -> Unit) {
@@ -458,12 +476,27 @@ private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen
     val scope = rememberCoroutineScope()
     var state by remember { mutableStateOf<Capture>(Capture.Idle) }
 
+    // The voice note's clock: time recorded before the last Resume, when the current stretch started (null: paused),
+    // when words were last heard, and when the note started (its "Voice note · 14:02").
+    var noteStartedAt by remember { mutableLongStateOf(0L) }
+    var recordedMs by remember { mutableLongStateOf(0L) }
+    var runningSince by remember { mutableStateOf<Long?>(null) }
+    var lastWordsAt by remember { mutableLongStateOf(0L) }
+    var clock by remember { mutableLongStateOf(0L) }
+    fun elapsed(now: Long = System.currentTimeMillis()): Long = recordedMs + (runningSince?.let { now - it } ?: 0L)
+
+    // Set once the voice note's listener exists (it and Capture's listener refer to each other's actions).
+    val voice = remember { arrayOfNulls<WatchListener>(1) }
+    val beginNote = remember { arrayOfNulls<() -> Unit>(1) }
+
     val listener = remember(core) {
         WatchListener(
             context,
             onPartial = { heard -> if (state is Capture.Listening) state = Capture.Listening(heard) },
             onHeard = { heard ->
-                scope.launch {
+                if (WatchVoiceNoteRules.asks(heard)) {
+                    beginNote[0]?.invoke()
+                } else scope.launch {
                     val c = runCatching { core.watchCapture(heard) }.getOrNull()
                     state = if (c == null) {
                         Capture.Said(WatchCaptureRules.failLine(WatchListenFailure.NOT_HEARD))
@@ -476,29 +509,146 @@ private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen
             onFail = { f -> state = Capture.Said(WatchCaptureRules.failLine(f)) },
         )
     }
-    DisposableEffect(listener) { onDispose { listener.stop() } }
-    LifecycleStartEffect(listener) { onStopOrDispose { listener.stop(); if (state is Capture.Listening) state = Capture.Idle } }
+
+    /** Done (or the five minutes, or a minute of quiet): the words so far go to the tidy-up. */
+    fun finishNote() {
+        val r = state as? Capture.Recording ?: return
+        voice[0]?.stop()
+        recordedMs = elapsed(); runningSince = null
+        val words = WatchVoiceNoteRules.words(r.segments, r.partial)
+        if (words.isEmpty()) { state = Capture.Said(WatchVoiceNoteRules.NOTHING_HEARD); return }
+        state = Capture.Reading
+        scope.launch {
+            val v = runCatching { core.watchVoiceNote(words, noteStartedAt) }.getOrNull()
+            if (v != null) view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+            state = if (v == null) Capture.Said(WatchCaptureRules.failLine(WatchListenFailure.FAILED)) else Capture.Noted(v)
+        }
+    }
+
+    /** After a stretch ends: listen again, or end the note by itself (five minutes, a minute of quiet). */
+    fun nextStretch() {
+        val r = state as? Capture.Recording ?: return
+        val now = System.currentTimeMillis()
+        if (WatchVoiceNoteRules.listenAgain(elapsed(now), r.paused, stopped = false, quietMs = now - lastWordsAt)) {
+            voice[0]?.start()
+        } else if (!r.paused) finishNote()
+    }
+
+    val noteListener = remember(core) {
+        WatchListener(
+            context,
+            onPartial = { heard ->
+                (state as? Capture.Recording)?.takeIf { !it.paused }?.let {
+                    state = it.copy(partial = heard); lastWordsAt = System.currentTimeMillis()
+                }
+            },
+            onHeard = { heard ->
+                (state as? Capture.Recording)?.let {
+                    state = it.copy(segments = it.segments + heard, partial = null)
+                    lastWordsAt = System.currentTimeMillis()
+                    nextStretch()
+                }
+            },
+            onFail = { f ->
+                val r = state as? Capture.Recording
+                if (r != null) when {
+                    f == WatchListenFailure.NOT_HEARD -> nextStretch()
+                    WatchVoiceNoteRules.words(r.segments, r.partial).isNotEmpty() -> finishNote()
+                    else -> { recordedMs = 0L; runningSince = null; state = Capture.Said(WatchCaptureRules.failLine(f)) }
+                }
+            },
+        )
+    }.also { voice[0] = it }
+
+    DisposableEffect(listener, noteListener) { onDispose { listener.stop(); noteListener.stop() } }
+    LifecycleStartEffect(listener, noteListener) {
+        onStopOrDispose {
+            listener.stop()
+            if (state is Capture.Listening) state = Capture.Idle
+            // The screen went: what was said so far is read rather than lost.
+            if (state is Capture.Recording) finishNote()
+        }
+    }
+
+    fun startNote() {
+        listener.stop()
+        val now = System.currentTimeMillis()
+        noteStartedAt = now; recordedMs = 0L; runningSince = now; lastWordsAt = now; clock = now
+        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        state = Capture.Recording(emptyList(), null, paused = false)
+        noteListener.start()
+    }
+    beginNote[0] = { startNote() }
+
+    fun pauseOrResume() {
+        val r = state as? Capture.Recording ?: return
+        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+        if (r.paused) {
+            val now = System.currentTimeMillis()
+            runningSince = now; lastWordsAt = now
+            state = r.copy(paused = false)
+            noteListener.start()
+        } else {
+            noteListener.stop()
+            recordedMs = elapsed(); runningSince = null
+            // The stretch being heard is kept as it stands (the recogniser is let go).
+            state = r.copy(segments = r.segments + listOfNotNull(r.partial?.takeIf { it.isNotBlank() }), partial = null, paused = true)
+        }
+    }
+
+    fun cancelNote() {
+        noteListener.stop()
+        recordedMs = 0L; runningSince = null
+        state = Capture.Said(WatchVoiceNoteRules.CANCELLED)
+    }
 
     fun begin() {
         state = Capture.Listening(null)
         listener.start()
     }
+    // Which the microphone was asked for: Capture (false) or a voice note (true).
+    var askedForNote by remember { mutableStateOf(false) }
     val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) begin() else state = Capture.Said(WatchCaptureRules.failLine(WatchListenFailure.NO_MIC))
+        when {
+            !granted -> state = Capture.Said(WatchCaptureRules.failLine(WatchListenFailure.NO_MIC))
+            askedForNote -> startNote()
+            else -> begin()
+        }
     }
+    fun micAllowed() = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     fun tapCapture() {
-        val allowed = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (allowed) begin() else askMic.launch(Manifest.permission.RECORD_AUDIO)
+        if (micAllowed()) begin() else { askedForNote = false; askMic.launch(Manifest.permission.RECORD_AUDIO) }
+    }
+    fun tapVoiceNote() {
+        if (micAllowed()) startNote() else { askedForNote = true; askMic.launch(Manifest.permission.RECORD_AUDIO) }
     }
 
     LaunchedEffect(listen) { if (listen > 0) { onListen(); tapCapture() } }
-    // What it did stays for five seconds with Undo; a failure's line for four; then the button comes back.
+    // What it did stays for five seconds with Undo; a failure's line for four; a voice note's result for eight; then
+    // the button comes back.
     LaunchedEffect(state) {
         when (state) {
             is Capture.Done -> { delay(WatchCaptureRules.UNDO_MS); state = Capture.Idle }
             is Capture.Said -> { delay(WatchCaptureRules.FAIL_MS); state = Capture.Idle }
+            is Capture.Noted -> { delay(WatchVoiceNoteRules.RESULT_MS); state = Capture.Idle }
             else -> Unit
         }
+    }
+    // While a voice note runs: the clock ticks, it ends by itself at five minutes, and the screen stays on.
+    val recording = state is Capture.Recording
+    LaunchedEffect(recording) {
+        while (recording) {
+            val now = System.currentTimeMillis()
+            clock = now
+            if ((state as? Capture.Recording)?.paused == false && os.meka.core.domain.VoiceNoteRules.atLimit(elapsed(now))) {
+                finishNote(); break
+            }
+            delay(NOTE_TICK_MS)
+        }
+    }
+    DisposableEffect(recording) {
+        view.keepScreenOn = recording
+        onDispose { view.keepScreenOn = false }
     }
 
     AnimatedContent(
@@ -513,9 +663,12 @@ private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             when (s) {
-                Capture.Idle -> WatchButton(
-                    WatchCaptureRules.BUTTON, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK,
-                ) { tapCapture() }
+                Capture.Idle -> {
+                    WatchButton(
+                        WatchCaptureRules.BUTTON, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK,
+                    ) { tapCapture() }
+                    VoiceNoteButton(reduced) { tapVoiceNote() }
+                }
                 is Capture.Listening -> {
                     Line(WatchCaptureRules.LISTENING, MekaType.captionStrong.copy(color = C.accent), maxLines = 1)
                     Line(s.heard ?: WatchCaptureRules.HINT, MekaType.caption.copy(color = if (s.heard == null) C.textTertiary else C.textPrimary), maxLines = 3)
@@ -537,7 +690,83 @@ private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen
                         WatchCaptureRules.BUTTON, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK,
                     ) { tapCapture() }
                 }
+                is Capture.Recording -> {
+                    val ms = elapsed(clock)
+                    Row(
+                        Modifier.semantics(mergeDescendants = true) { contentDescription = WatchVoiceNoteRules.recordingLine(ms, s.paused) },
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                    ) {
+                        RecordingDot(s.paused, reduced)
+                        BasicText(WatchVoiceNoteRules.LABEL, style = MekaType.captionStrong.copy(color = C.accent), maxLines = 1)
+                    }
+                    Line(
+                        WatchVoiceNoteRules.recordingLine(ms, s.paused),
+                        MekaType.caption.copy(
+                            color = if (WatchVoiceNoteRules.nearEnd(ms)) C.accent else C.textSecondary, fontFeatureSettings = "tnum",
+                        ),
+                        maxLines = 2,
+                    )
+                    val live = WatchVoiceNoteRules.live(s.segments, s.partial)
+                    Line(live ?: WatchVoiceNoteRules.HINT, MekaType.caption.copy(color = if (live == null) C.textTertiary else C.textPrimary), maxLines = 3)
+                    WatchButton(WatchVoiceNoteRules.DONE, primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) { finishNote() }
+                    WatchButton(
+                        if (s.paused) WatchVoiceNoteRules.RESUME else WatchVoiceNoteRules.PAUSE,
+                        primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK,
+                    ) { pauseOrResume() }
+                    WatchButton(WatchVoiceNoteRules.CANCEL, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) { cancelNote() }
+                    Line(WatchVoiceNoteRules.NOTE, MekaType.caption.copy(color = C.textTertiary), maxLines = 2)
+                }
+                Capture.Reading -> {
+                    Line(WatchVoiceNoteRules.LABEL, MekaType.captionStrong.copy(color = C.accent), maxLines = 1)
+                    Line(WatchVoiceNoteRules.READING, MekaType.caption.copy(color = C.textSecondary), maxLines = 1)
+                }
+                is Capture.Noted -> {
+                    val v = s.noted
+                    Column(
+                        Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = WatchVoiceNoteRules.spoken(v) },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                    ) {
+                        Line(v.line, MekaType.captionStrong.copy(color = if (v.cards > 0) C.accent else C.textPrimary), maxLines = 3)
+                        v.tidy?.let { Line(it, MekaType.caption.copy(color = C.textPrimary), maxLines = 4) }
+                        v.peopleLine?.let { Line(it, MekaType.caption.copy(color = C.textSecondary), maxLines = 1) }
+                        v.whereLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 1) }
+                    }
+                    if (v.taskId != null) {
+                        WatchButton(WatchVoiceNoteRules.UNDO, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                            scope.launch {
+                                runCatching { core.watchVoiceNoteUndo(v) }
+                                state = Capture.Said(WatchVoiceNoteRules.UNDONE)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
+}
+
+private const val NOTE_TICK_MS = 250L
+private val DOT = 8.dp
+
+/** Voice notes into actions, slice 4: the quiet button under Capture that starts a voice note. */
+@Composable
+private fun VoiceNoteButton(reduced: Boolean, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().semantics { contentDescription = WatchVoiceNoteRules.SPOKEN }) {
+        WatchButton(WatchVoiceNoteRules.BUTTON, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK, onClick = onClick)
+    }
+}
+
+/** The brass dot: breathes (0.6 → 1, 0.9 s) while a voice note is written down; still and dimmed when paused or reduced. */
+@Composable
+private fun RecordingDot(paused: Boolean, reduced: Boolean) {
+    val t = rememberInfiniteTransition(label = "watch-voice-note-dot")
+    val pulse = if (reduced || paused) 1f else t.animateFloat(
+        0.6f, 1f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "watch-voice-note-dot-pulse",
+    ).value
+    Box(
+        Modifier.size(DOT).graphicsLayer { scaleX = pulse; scaleY = pulse; alpha = if (paused) 0.4f else 1f }
+            .background(C.accent, CircleShape),
+    )
 }
