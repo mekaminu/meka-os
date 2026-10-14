@@ -91,6 +91,8 @@ class MekaApplication : Application() {
     val openErrands = MutableStateFlow(false)
     /** "Where did I park?" said to Talk (car and parking, slice 1) → Ask → Life → Car with Find my car open. */
     val openCar = MutableStateFlow(false)
+    /** Car and parking, slice 8: the car Talk named ("where's the Golf?"), set just before [openCar]; null for "where did I park?". */
+    val openCarFind = MutableStateFlow<String?>(null)
     /** "Parked the Golf?" (car and parking, slice 3) → the Car pane, saving that car's spot (or showing it to add the bay). */
     val openCarFrom = MutableStateFlow<os.meka.android.ask.CarOpen?>(null)
     /** Appearance → "Play the opening": Today replays its opening (Day ring, tiles, greeting, stagger), then clears it. */

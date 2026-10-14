@@ -104,7 +104,8 @@ import os.meka.core.facade.MekaCore
  * the spot ("Level 3 · Row F"). Find my car unfolds an arrow and the distance that follow the phone's compass and GPS
  * while it is open, says "Within 15 m · look around" with one buzz, and offers Walk there in Maps (his maps app, only
  * on his tap). Drove off clears the spot with Undo. Under them each car's summary with Dates › (Lists → Renewals).
- * [findFirst]: opened from Talk ("where did I park?"): the first parked car's Find my car is already open.
+ * [findFirst]: opened from Talk ("where did I park?"): the first parked car's Find my car is already open; [findCar]
+ * (slice 8): the car Talk named ("where's the Golf?") instead, or, when it isn't parked, a line saying so.
  * [parkFirst]: opened from "Parked the Golf?" (slice 3, the car's Bluetooth disconnected): that car's spot is saved
  * straight away. BLUETOOTH links each car to one of the phone's paired devices ([CarBluetooth], on this phone only).
  * Slice 4: "Photo of the bay" opens the phone's camera app (no camera permission: the camera app takes it) and keeps
@@ -130,7 +131,7 @@ import os.meka.core.facade.MekaCore
 @Composable
 fun CarPane(
     core: MekaCore, onClose: () -> Unit, onDates: () -> Unit,
-    findFirst: Boolean = false, parkFirst: String? = null, photoFirst: String? = null,
+    findFirst: Boolean = false, findCar: String? = null, parkFirst: String? = null, photoFirst: String? = null,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -157,7 +158,10 @@ fun CarPane(
     val timerSaidColor by animateColorAsState(
         if (timerRefused) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "timer-said-color",
     )
-    LaunchedEffect(findFirst) { if (findFirst) finding = rows.firstOrNull()?.carId }
+    // Slice 8: Talk named a car ("where's the Golf?"): its Find my car, or a line saying it isn't saved as parked.
+    LaunchedEffect(findFirst, findCar) {
+        if (findFirst) ParkingRules.findFirst(rows, findCar, cars).let { f -> finding = f.carId; f.line?.let { said = it; refused = true } }
+    }
 
     fun park(carId: String) {
         val title = ParkingRules.titleOf(carId, cars)

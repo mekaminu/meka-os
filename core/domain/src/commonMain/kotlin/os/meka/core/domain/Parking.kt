@@ -490,4 +490,56 @@ object ParkingRules {
         val reg = live.firstNotNullOfOrNull { it.registration } ?: return null
         return LifeTileLine("${CarRules.display(reg)} · add its dates", false)
     }
+
+    // ---- Slice 8: "where's the Golf?" said to Talk ----
+
+    private val DETERMINERS = setOf("the", "my", "our")
+    private val NUMBERS = mapOf("one" to "1", "two" to "2", "three" to "3", "four" to "4")
+
+    /**
+     * Talk, by a car's name (Car and parking's two-cars note: "where's the Golf?"): [utterance] with the car's name (his
+     * name for it, or "Car 2" when there are two) said where "the car" would be — "where's the Golf", "find the family
+     * car", "where did I park car two" — becomes the plain request ("where's car") and the car it named, so Find my car
+     * opens on that car. Null when no car is named, or what's left isn't asking where a car is ("when's the Golf's MOT?"
+     * stays a question). The longest name wins ("the family car" over "car"); a name that is just "car" names nothing.
+     */
+    fun talkCar(utterance: String, cars: CarsView): TalkCar? {
+        val ws = ReadOutRules.words(utterance).map { NUMBERS[it] ?: it }
+        var best: Triple<Int, Int, String>? = null // start, end (exclusive), carId
+        for (car in cars.cars) {
+            for (label in listOfNotNull(car.name, car.title.takeIf { cars.cars.size > 1 })) {
+                val nw = ReadOutRules.words(label).map { NUMBERS[it] ?: it }.dropWhile { it in DETERMINERS }
+                if (nw.isEmpty() || nw == listOf("car")) continue
+                for (i in 0..ws.size - nw.size) {
+                    if (ws.subList(i, i + nw.size) != nw) continue
+                    val start = if (i > 0 && ws[i - 1] in DETERMINERS) i - 1 else i
+                    val end = i + nw.size
+                    if (best == null || end - start > best.second - best.first) best = Triple(start, end, car.carId)
+                }
+            }
+        }
+        val (start, end, carId) = best ?: return null
+        val plain = (ws.subList(0, start) + "car" + ws.subList(end, ws.size)).joinToString(" ")
+        return if (TalkOpenRules.request(plain, TalkOpenRules.FOLD) == TalkPlace.CAR) TalkCar(plain, carId) else null
+    }
+
+    /** "the Golf isn't saved as parked · tap “I've parked here” when you leave it". */
+    fun notParkedLine(title: String): String =
+        "${title.replaceFirstChar { it.titlecaseChar() }} isn't saved as parked · tap “$PARK” when you leave it"
+
+    /**
+     * Which car's Find my car opens when Talk opens the pane ([carId]: the car Talk named, or null for "where did I
+     * park?"): the named car if it is parked, else none with [notParkedLine]; unnamed, the first parked car.
+     */
+    fun findFirst(rows: List<ParkedRow>, carId: String?, cars: CarsView): FindFirst = when {
+        carId == null -> FindFirst(rows.firstOrNull()?.carId, null)
+        rows.any { it.carId == carId } -> FindFirst(carId, null)
+        else -> FindFirst(null, notParkedLine(titleOf(carId, cars)))
+    }
 }
+
+/** "Where's the Golf?" ([ParkingRules.talkCar]): the plain request Talk understands, and the car it named. */
+data class TalkCar(val utterance: String, val carId: String)
+
+/** What Find my car opens on when Talk opens the pane ([ParkingRules.findFirst]): a car, or a line saying why not. */
+data class FindFirst(val carId: String?, val line: String?)

@@ -14,6 +14,7 @@ mac_how: The Mac's Car tile opens the parking timer (set, extend or end it; it's
 tip: Where you park never leaves the phone: it isn't synced or sent. Walk there in Maps hands the spot to your maps app only when you tap it.
 tip: Car's Bluetooth: in the Car pane under BLUETOOTH, Pick each car's Bluetooth (allow Nearby devices). When it disconnects after a drive, Navilife saves where you parked by itself if location is allowed “All the time”, otherwise a notification "Parked the Golf?" saves it with one tap. When it connects again later, the spot is cleared.
 tip: Underground the phone may not know where it is: type the bay, or tap Photo of the bay on the parked card and take a picture of the bay or pillar sign: the phone reads the sign ("Level 3 · Row F") if you haven't typed the bay, and the photo shows over Find my car's arrow. It stays on the phone (never synced, sent or backed up), and goes when you drive off.
+tip: With two cars, say the car's name to Talk ("where's the Golf?", "find car 2"): Find my car opens on that car, or the pane says it isn't saved as parked.
 tip: Hold the phone flat for the arrow; if it spins, wave the phone in a figure of eight to settle its compass.
 tip: Parking timer: type how long you paid for or until when ("2 h", "until 15:30"); a reminder comes 10 minutes before it ends. +15 min, +30 min or +1 h extend it, Ended clears it.
 tip: Type the RingGo or JustPark location code beside the time ("until 6pm RingGo 81234") and the reminder shows it.

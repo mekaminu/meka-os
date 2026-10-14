@@ -142,6 +142,9 @@ class TalkController(
     /** Speech began (or words were heard) since the last [start]: the open's listening window doesn't close. */
     private var speechBegan = false
 
+    /** Car and parking, slice 8: the car the last thing heard named ("where's the Golf?"), for Find my car. */
+    private var namedCar: String? = null
+
     /**
      * "Listen when I open MEKA" (slice 4): the room check first; too noisy → "Too noisy — tap to talk" under the resting
      * orb (a tap starts as usual); otherwise the quiet chime and listening, for up to [TalkOnOpenRules.WINDOW_MS]: if
@@ -257,6 +260,7 @@ class TalkController(
                 os.meka.core.domain.TalkPlace.CAR -> {
                     val app = context.applicationContext as? os.meka.android.MekaApplication
                     app?.openDestination?.value = os.meka.android.shell.ShellDestination.ASK
+                    app?.openCarFind?.value = namedCar
                     app?.openCar?.value = true
                 }
                 // Inbox autopilot, slice 7b: "clear my inbox" starts the ten-minute inbox and Needs you comes forward.
@@ -333,7 +337,10 @@ class TalkController(
             if (phase != TalkPhase.LISTENING) return
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
             if (text.isNotBlank()) heard = text
-            apply(TalkFlow.heard(session, text, os.meka.core.domain.TalkOpenRules.FOLD))
+            // Car and parking, slice 8: "where's the Golf?" is "where's the car?" for the car it names.
+            val named = os.meka.core.domain.ParkingRules.talkCar(text, core.carsView.value)
+            namedCar = named?.carId
+            apply(TalkFlow.heard(session, named?.utterance ?: text, os.meka.core.domain.TalkOpenRules.FOLD))
         }
 
         override fun onError(error: Int) {

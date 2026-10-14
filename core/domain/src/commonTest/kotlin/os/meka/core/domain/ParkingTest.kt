@@ -210,6 +210,44 @@ class ParkingTest {
     }
 
     @Test
+    fun talkFindsTheCarItNames() {
+        val two = CarsView(listOf(
+            CarView.EMPTY.copy(carId = CarRules.ENTITY_ID, title = "the Golf", name = "the Golf"),
+            CarView.EMPTY.copy(carId = CarRules.CAR_IDS[1], title = "the family car", name = "the family car"),
+        ), true)
+        assertEquals(TalkCar("where's car", CarRules.ENTITY_ID), ParkingRules.talkCar("Where's the Golf?", two))
+        assertEquals(CarRules.ENTITY_ID, ParkingRules.talkCar("OK Navilife, find the golf please", two)?.carId)
+        assertEquals(CarRules.CAR_IDS[1], ParkingRules.talkCar("where did I park the family car", two)?.carId)
+        assertEquals(TalkPlace.CAR, TalkOpenRules.request(ParkingRules.talkCar("where is my family car", two)!!.utterance, TalkOpenRules.FOLD))
+        // Unnamed cars: "Car 2" (and "car two") names the second only when there are two.
+        val unnamed = cars("Car 1", "Car 2")
+        assertEquals(CarRules.CAR_IDS[1], ParkingRules.talkCar("where's car two", unnamed)?.carId)
+        assertEquals(CarRules.CAR_IDS[1], ParkingRules.talkCar("find car 2", unnamed)?.carId)
+        assertNull(ParkingRules.talkCar("where's my car", unnamed))
+        assertNull(ParkingRules.talkCar("where's car 2", cars("Car")))
+        // A question about the car stays a question; no name, nothing.
+        assertNull(ParkingRules.talkCar("when's the Golf's MOT?", two))
+        assertNull(ParkingRules.talkCar("is the golf taxed", two))
+        assertNull(ParkingRules.talkCar("where did I park", two))
+        assertNull(ParkingRules.talkCar("where's the van", two))
+    }
+
+    @Test
+    fun findMyCarOpensOnTheNamedCarOrSaysItIsntParked() {
+        val now = at(10, 0)
+        val two = cars("the Golf", "the van")
+        val spots = ParkingRules.save(emptyMap(), CarRules.CAR_IDS[1], "the van", LocationFix(lat, lon, 5.0, now), now).spots
+        val rows = ParkingRules.rows(spots, two, now, cal)
+        assertEquals(FindFirst(CarRules.CAR_IDS[1], null), ParkingRules.findFirst(rows, null, two))
+        assertEquals(FindFirst(CarRules.CAR_IDS[1], null), ParkingRules.findFirst(rows, CarRules.CAR_IDS[1], two))
+        assertEquals(
+            FindFirst(null, "The Golf isn't saved as parked · tap “I've parked here” when you leave it"),
+            ParkingRules.findFirst(rows, CarRules.ENTITY_ID, two),
+        )
+        assertEquals(FindFirst(null, null), ParkingRules.findFirst(emptyList(), null, two))
+    }
+
+    @Test
     fun theBaysPhotoRidesOnTheSpotOnThePhoneAndIsTidiedWhenItGoes() {
         val now = at(10, 0)
         var spots = ParkingRules.save(emptyMap(), "car", "the Golf", LocationFix(lat, lon, 5.0, now), now).spots
