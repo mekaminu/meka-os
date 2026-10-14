@@ -1,5 +1,7 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -101,5 +103,130 @@ class MailBacklogTest {
         assertEquals("Archive 5", v.rows.single().backlog?.line)
         val none = MailAccountRules.view(facts, now, emptyList(), MailAutopilotSetting(true, null), false, emptyList(), LocalCalendar.UTC)
         assertNull(none.rows.single().backlog)
+    }
+
+    // ---- Slice 8b: Approve, applying, Undo ----
+
+    private val counts = mapOf(MailBacklogKind.NEWSLETTER to 2100, MailBacklogKind.RECEIPT to 900, MailBacklogKind.ARCHIVE to 412,
+        MailBacklogKind.JUNK to 640, MailBacklogKind.KEEP to 212)
+    private fun ready(extra: Map<String, FieldValue> = emptyMap()) =
+        MailBacklogRules.read("mb1", MailBacklogRules.fields("Personal", now, 4264, counts, null, readyAtMs = now + 1) + extra)!!
+    private fun tidy(asked: Long? = null, undone: Long? = null, note: String? = null): MailTidyBatch {
+        val f = MailBacklogRules.batchFields(now + 10, "Personal", mapOf(MailTidy.NEWSLETTER to 400, MailTidy.TRASH to 100)) +
+            listOfNotNull(
+                asked?.let { MailTidyBatchFields.UNDO_ASKED_AT to FieldValue.Int64(it) },
+                undone?.let { MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(it) },
+                note?.let { MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(it) },
+            ).toMap()
+        return MailAutopilotRules.readBatch("mt1", f)!!
+    }
+
+    @Test
+    fun aFinalPlanOffersApproveAndNothingElseDoes() {
+        val b = ready()
+        assertTrue(MailBacklogRules.canApprove(b))
+        assertEquals("mb1", MailBacklogRules.row(b).approveId)
+        assertNull(MailBacklogRules.row(b).undoId)
+        // Still scanning, or nothing to move: no Approve.
+        val scanning = MailBacklogRules.read("mb1", MailBacklogRules.fields("Personal", now, 10, counts, null, null))!!
+        assertNull(MailBacklogRules.row(scanning).approveId)
+        val nothing = MailBacklogRules.read("mb1", MailBacklogRules.fields("Personal", now, 3, mapOf(MailBacklogKind.KEEP to 3), null, now))!!
+        assertFalse(MailBacklogRules.canApprove(nothing))
+        assertNull(MailBacklogRules.row(nothing).approveId)
+    }
+
+    @Test
+    fun approvedTheRowCountsTheCleanUpAndOffersUndo() {
+        val approved = ready(MailBacklogRules.approveFields(now + 5))
+        assertTrue(approved.approved)
+        assertFalse(MailBacklogRules.canApprove(approved))
+        assertTrue(MailBacklogRules.canUnapprove(approved))
+        val waiting = MailBacklogRules.row(approved)
+        assertEquals(MailBacklogRules.APPROVED_LINE, waiting.line)
+        assertNull(waiting.approveId)
+        assertTrue(waiting.working)
+        assertEquals("mb1", waiting.cancelId)
+        assertEquals(MailBacklogRules.PAUSED_NOTE, MailBacklogRules.row(approved, paused = true).note)
+        // The bar's Undo clears it again.
+        assertNull(MailBacklogRules.read("mb1", MailBacklogRules.fields("Personal", now, 4264, counts, null, now + 1) +
+            MailBacklogRules.approveFields(now + 5) + MailBacklogRules.unapproveFields())!!.approvedAtMs)
+        // Moving: "Cleaning up · 500 of 4,052 moved…" with Undo on the tidy.
+        val moving = ready(MailBacklogRules.approveFields(now + 5) + MailBacklogRules.progressFields(500, now + 10, null, 0))
+        assertFalse(MailBacklogRules.canUnapprove(moving))
+        val r = MailBacklogRules.row(moving, tidy(), nowMs = now + 20)
+        assertEquals("Cleaning up · 500 of 4,052 moved…", r.line)
+        assertEquals("mt1", r.undoId)
+        assertNull(r.cancelId)
+        // Finished.
+        val done = ready(MailBacklogRules.approveFields(now + 5) + MailBacklogRules.progressFields(4052, now + 10, now + 99, 0))
+        val d = MailBacklogRules.row(done, tidy(), nowMs = now + 100)
+        assertEquals("Cleaned up · 4,052 older emails moved", d.line)
+        assertEquals("Archived 3,412 · 640 junk to Trash", d.detail)
+        assertEquals("mt1", d.undoId)
+        assertFalse(d.working)
+        // After 30 days Undo goes.
+        assertNull(MailBacklogRules.row(done, tidy(), nowMs = now + 31 * day).undoId)
+        // Undo asked, then done.
+        val putting = ready(MailBacklogRules.approveFields(now + 5) + MailBacklogRules.progressFields(4052, now + 10, now + 99, 300))
+        assertEquals("${MailBacklogRules.PUTTING_BACK} · 300 of 4,052 so far", MailBacklogRules.row(putting, tidy(asked = now + 200)).line)
+        assertNull(MailBacklogRules.row(putting, tidy(asked = now + 200)).undoId)
+        assertEquals("Put back 4,052 emails in the inbox",
+            MailBacklogRules.row(putting, tidy(asked = now + 200, undone = now + 300, note = "Put back 4,052 emails in the inbox")).line)
+    }
+
+    @Test
+    fun theServerAppliesOnlyAnApprovedFinalPlanWhileNothingStopsIt() {
+        val approved = ready(MailBacklogRules.approveFields(now + 5))
+        assertTrue(MailBacklogRules.shouldApply(approved, paused = false, batch = null))
+        assertFalse(MailBacklogRules.shouldApply(ready(), paused = false, batch = null))
+        assertFalse(MailBacklogRules.shouldApply(approved, paused = true, batch = null))
+        assertTrue(MailBacklogRules.shouldApply(approved, paused = false, batch = tidy()))
+        assertFalse(MailBacklogRules.shouldApply(approved, paused = false, batch = tidy(asked = now + 6)))
+        // Approved before the plan was final (an old device): not applied.
+        val early = ready(MailBacklogRules.approveFields(now))
+        assertFalse(MailBacklogRules.shouldApply(early, paused = false, batch = null))
+        // Finished: nothing more.
+        assertFalse(MailBacklogRules.shouldApply(ready(MailBacklogRules.approveFields(now + 5) + MailBacklogRules.progressFields(4052, now, now + 9, 0)), false, null))
+    }
+
+    @Test
+    fun theCleanUpIsOneTidyThatArchivedForYouLeavesToMail() {
+        val b = tidy()
+        assertTrue(b.backlog)
+        assertEquals("Backlog clean-up · 500 older emails · Personal", b.summary)
+        assertEquals("400 newsletters → Navilife/Newsletters · 100 junk → Trash", b.detail)
+        assertEquals(500, b.count)
+        assertEquals(MailBacklogRules.tidyBatchId("acc1"), MailBacklogRules.tidyBatchId("acc1"))
+        assertTrue(MailBacklogRules.tidyBatchId("acc1") != MailBacklogRules.entityId("acc1"))
+        // Mail's own tidies list and "tidied N today" leave it out; the backlog row has it.
+        val facts = listOf(MailAccountFacts(MailProviders.GMAIL, "a@example.com", "ok", now, "PERSONAL"))
+        val plan = ready(MailBacklogRules.approveFields(now + 5) + MailBacklogRules.progressFields(500, now + 10, null, 0))
+        val v = MailAccountRules.view(facts, now + 20, emptyList(), MailAutopilotSetting(true, null), false, listOf(b), LocalCalendar.UTC, emptyList(), listOf(plan))
+        val row = v.rows.single()
+        assertTrue(row.tidies.isEmpty())
+        assertEquals("mt1", row.backlog?.undoId)
+        assertNull(ArchivedForYouRules.card(listOf(b), null, now + day, LocalCalendar.UTC))
+    }
+
+    @Test
+    fun approveSyncsToTheOtherAppAndTheBarCanWithdrawIt() {
+        val world = SyncWorld()
+        val a = world.device("android")
+        val m = world.device("mac")
+        var n = 0
+        val la = ActivityLog(a.replica, { "x${n++}" }, { world.clock.nowMs })
+        val lm = ActivityLog(m.replica, { "y${n++}" }, { world.clock.nowMs })
+        val f = MailBacklogRules.fields("Personal", world.clock.nowMs - 10, 4264, counts, null, readyAtMs = world.clock.nowMs - 5)
+        a.replica.commitLocal(EntityTypes.MAIL_BACKLOG, "mb1", f)
+        assertEquals(MailBacklogRules.NOT_APPROVED, la.approveBacklog("nope"))
+        assertEquals(MailBacklogRules.APPROVED_BAR, la.approveBacklog("mb1"))
+        a.sync(); m.sync()
+        val seen = lm.mailBacklogs().single()
+        assertTrue(seen.approved)
+        assertEquals(MailBacklogRules.APPROVED_BAR, lm.approveBacklog("mb1"))
+        assertTrue(lm.unapproveBacklog("mb1"))
+        m.sync(); a.sync()
+        assertFalse(la.mailBacklogs().single().approved)
+        assertFalse(la.unapproveBacklog("mb1"))
     }
 }

@@ -44,6 +44,7 @@ import os.meka.backend.integrations.BacklogScan
 import os.meka.backend.integrations.BacklogItem
 import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailBacklogRules
+import os.meka.core.domain.MailBacklogFields
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
@@ -1095,6 +1096,84 @@ class MailSyncTest {
         val (other, _, j) = world(InMemoryMailStore(), ops = InMemoryServerOpStore())
         assertNull(other.backlogPages)
         j.syncAccount(connect(j))
+    }
+
+    // ---- Slice 8b: Approve, applied a few hundred a check, Undo ----
+
+    @Test
+    fun anApprovedBacklogIsAppliedInBatchesAsOneTidyAndUndoPutsItAllBack() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val ids = (1..600).map { "n$it" }
+        ids.forEach { gmail.mailbox[it] = msg(it, 45, "editor@weekly.example").copy(listId = "<weekly.example>") }
+        gmail.mailbox["p1"] = msg("p1", 50) // a person: kept
+        gmail.backlogPages = mapOf(null to MailBacklogPage(ids = ids + "p1", next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        val id = connect(i)
+        val entityId = MailBacklogRules.entityId(id)
+        fun plan() = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        repeat(3) { i.syncAccount(id); now += 300_000 }
+        assertTrue(plan().ready)
+        assertEquals(600, plan().toMove)
+        // Not approved: nothing moves, however many checks.
+        i.syncAccount(id); now += 300_000
+        assertTrue(gmail.tidyCalls.isEmpty())
+        // Approve (from the Fold): the next check moves 500, the one after the last 100.
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.APPROVED_AT, FieldValue.Int64(now))
+        i.syncAccount(id); now += 300_000
+        assertEquals(500, gmail.tidyCalls.single().size)
+        assertEquals(500, plan().applied)
+        assertNull(plan().finishedAtMs)
+        val batchId = MailBacklogRules.tidyBatchId(id)
+        val batch = MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!
+        assertTrue(batch.backlog)
+        assertEquals(500, batch.count)
+        i.syncAccount(id); now += 300_000
+        assertEquals(listOf(500, 100), gmail.tidyCalls.map { it.size })
+        assertEquals(600, plan().applied)
+        assertNotNull(plan().finishedAtMs)
+        assertEquals("Backlog clean-up · 600 older emails · Personal", MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!.summary)
+        assertTrue(ids.none { gmail.mailbox.getValue(it).inInbox })
+        assertTrue(gmail.mailbox.getValue("p1").inInbox)
+        // Finished: nothing more moves.
+        i.syncAccount(id); now += 300_000
+        assertEquals(2, gmail.tidyCalls.size)
+        // Undo: 300 put back a check, then the tidy says so; never tidied again.
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        i.syncAccount(id); now += 300_000
+        assertEquals(300, ids.count { gmail.mailbox.getValue(it).inInbox })
+        assertEquals(300, plan().putBack)
+        assertNull(MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!.undoneAtMs)
+        i.syncAccount(id); now += 300_000
+        assertTrue(ids.all { gmail.mailbox.getValue(it).inInbox })
+        val undone = MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!
+        assertNotNull(undone.undoneAtMs)
+        assertEquals("Put back 600 emails in the inbox", undone.undoNote)
+        assertTrue(ms.neverTidied(id).containsAll(ids))
+        i.syncAccount(id)
+        assertEquals(2, gmail.tidyCalls.size)
+    }
+
+    @Test
+    fun theKillSwitchHoldsAnApprovedCleanUp() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n1"] = msg("n1", 45, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.backlogPages = mapOf(null to MailBacklogPage(ids = listOf("n1", "gone"), next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        val id = connect(i)
+        val entityId = MailBacklogRules.entityId(id)
+        repeat(2) { i.syncAccount(id); now += 300_000 }
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.APPROVED_AT, FieldValue.Int64(now))
+        device(ops, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID, AutonomyFields.PAUSED, FieldValue.Bool(true))
+        i.syncAccount(id); now += 300_000
+        assertTrue(gmail.tidyCalls.isEmpty())
+        device(ops, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID, AutonomyFields.PAUSED, FieldValue.Bool(false))
+        i.syncAccount(id)
+        assertEquals(mapOf("n1" to MailTidy.NEWSLETTER), gmail.tidyCalls.single())
+        assertNotNull(MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!.finishedAtMs)
     }
 
     // ---- On real Postgres (MEKA_TEST_DB_URL, CI); skipped when unset ----

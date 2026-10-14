@@ -64,6 +64,8 @@ struct MailSheet: View {
                         Task { await model.undoMailTidy(id) }
                     }, onUnsubscribe: { id in
                         Task { await model.unsubscribeMailSender(id) }
+                    }, onApprove: { id, yes in
+                        Task { await model.approveMailBacklog(id, approve: yes) }
                     })
                     .staggeredAppear(i + 3)
                 }
@@ -202,6 +204,7 @@ private struct MailAccountRowView: View {
     let onDisconnect: () -> Void
     let onUndo: (String) -> Void
     var onUnsubscribe: (String) -> Void = { _ in }
+    var onApprove: (String, Bool) -> Void = { _, _ in }
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.openURL) private var openURL
     @State private var asking = false
@@ -328,6 +331,20 @@ private struct MailAccountRowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Text(b.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    // Slice 8b: Approve (the plan is final), Cancel (approved, nothing moved yet), Undo (the clean-up's tidy).
+                    if let id = b.approveId {
+                        Button(MailBacklogRules.shared.APPROVE) { onApprove(id, true) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .padding(.top, MekaSpace.xxs).transition(.opacity)
+                    } else if let id = b.cancelId {
+                        Button(MailBacklogRules.shared.CANCEL) { onApprove(id, false) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            .padding(.top, MekaSpace.xxs).transition(.opacity)
+                    } else if let id = b.undoId {
+                        Button(MailBacklogRules.shared.UNDO) { onUndo(id) }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .padding(.top, MekaSpace.xxs).transition(.opacity)
+                    }
                 }
                 .padding(.top, MekaSpace.xs)
                 .accessibilityElement(children: .combine)

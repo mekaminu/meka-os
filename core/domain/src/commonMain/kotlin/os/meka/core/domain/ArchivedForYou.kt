@@ -104,7 +104,8 @@ object ArchivedForYouRules {
     fun card(batches: List<MailTidyBatch>, seenAtMs: Long?, nowMs: Long, cal: LocalCalendar): ArchivedForYouCard? {
         val slot = slotStartMs(nowMs, cal)
         val floor = maxOf(seenAtMs ?: 0L, nowMs - WINDOW_MS)
-        val unseen = batches.filter { it.atMs > floor && it.atMs <= nowMs && it.count > 0 }
+        // Slice 8b: the backlog clean-up is his own approved tidy, shown under Mail, not a digest's news.
+        val unseen = batches.filter { it.atMs > floor && it.atMs <= nowMs && it.count > 0 && !it.backlog }
         if (unseen.none { it.atMs <= slot }) return null
         val sorted = unseen.sortedWith(compareByDescending<MailTidyBatch> { it.atMs }.thenBy { it.id })
         val today = cal.epochDayOf(nowMs)

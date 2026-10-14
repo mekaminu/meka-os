@@ -203,12 +203,13 @@ object MailAccountRules {
         val facts = accounts.filter { MailProviders.isMail(it.provider) }
         val rows = base.rows.map { r ->
             val a = facts.firstOrNull { it.provider == r.provider && it.email == r.email }
-            val mine = batches.filter { it.account == r.label.label }
+            // Slice 8b: the backlog clean-up's tidy has its own lines under Backlog clean-up (Activity lists it too).
+            val mine = batches.filter { it.account == r.label.label && !it.backlog }
             r.copy(
                 tidyLine = MailAutopilotPanelRules.accountLine(autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal)),
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
                 senders = MailSenderPanelRules.rows(senders, r.label.label, nowMs, cal),
-                backlog = MailBacklogRules.rowFor(backlogs, r.label.label),
+                backlog = MailBacklogRules.rowFor(backlogs, r.label.label, batches, paused, nowMs),
             ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders)) }
         }
         return base.copy(rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused))

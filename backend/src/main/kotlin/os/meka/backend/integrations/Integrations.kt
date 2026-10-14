@@ -6,6 +6,7 @@ import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailBacklogFacts
+import os.meka.core.domain.MailBacklog
 import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailTidyFacts
@@ -505,7 +506,71 @@ class Integrations(
         val counts = items.groupingBy { it.kind }.eachCount()
         val top = MailBacklogRules.topSenders(items.filter { it.kind != MailBacklogKind.KEEP && it.kind != MailBacklogKind.JUNK }.map { it.fromName to it.fromAddress })
         val account = MailLabel.of(a.label)?.label ?: "Mail"
-        writeMail(a, MailBacklogRules.entityId(a.id), MailBacklogRules.fields(account, s.startedMs, items.size, counts, top, s.readyMs), EntityTypes.MAIL_BACKLOG)
+        val entityId = MailBacklogRules.entityId(a.id)
+        writeMail(a, entityId, MailBacklogRules.fields(account, s.startedMs, items.size, counts, top, s.readyMs), EntityTypes.MAIL_BACKLOG)
+        // Slice 8b: once Meka approved the final plan, apply it (or put it back after an Undo).
+        val plan = reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
+        if (plan.approved || plan.applied > 0) applyBacklog(a, m, token, ms, plan, items, account)
+    }
+
+    /**
+     * Inbox autopilot, slice 8b: the approved clean-up. Each check moves up to [MailBacklogRules.APPLY_PER_CHECK_GMAIL]
+     * (Outlook [MailBacklogRules.APPLY_PER_CHECK_OUTLOOK]) of the planned emails not moved yet, recorded under the
+     * account's one clean-up tidy ([MailBacklogRules.tidyBatchId]) so its Undo finds them all; the tidy's counts grow as
+     * it goes. MEKA's kill switch stops it; an Undo stops it and puts back [MailBacklogRules.UNDO_PER_CHECK] a check
+     * until every moved email is back in the inbox (and never tidied again). Nothing moves without the approval.
+     */
+    private fun applyBacklog(a: AccountRow, m: MailProvider, token: String, ms: MailStore, plan: MailBacklog, items: List<BacklogItem>, account: String) {
+        val hh = a.householdId
+        val batchId = MailBacklogRules.tidyBatchId(a.id)
+        val batch = reader.entity(hh, EntityTypes.MAIL_TIDY, batchId)?.let { MailAutopilotRules.readBatch(batchId, it) }
+        val entityId = plan.id
+        val moved = ms.tidied(a.id, batchId)
+        if (batch != null && batch.undoneAtMs == null && MailAutopilotRules.undoDue(batch, now())) {
+            val never = ms.neverTidied(a.id)
+            val left = moved.filter { it.id !in never }
+            val chunk = left.take(MailBacklogRules.UNDO_PER_CHECK)
+            var putBack = plan.putBack
+            if (chunk.isNotEmpty()) {
+                val back = m.untidy(token, chunk.associate { it.movedId to it.tidy })
+                ms.neverTidy(a.id, chunk.map { it.id } + chunk.map { it.movedId } + back.values)
+                putBack += back.size
+            }
+            writeMail(a, entityId, MailBacklogRules.progressFields(moved.size, plan.applyStartedAtMs, plan.finishedAtMs, putBack), EntityTypes.MAIL_BACKLOG)
+            if (left.size <= chunk.size) {
+                writeTidy(a, batchId, mapOf(
+                    MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
+                    MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(putBack, moved.size)),
+                ))
+            }
+            return
+        }
+        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        if (!MailBacklogRules.shouldApply(plan, paused, batch)) return
+        val done = moved.map { it.id }.toSet()
+        val perCheck = if (m.id == MailProviders.OUTLOOK) MailBacklogRules.APPLY_PER_CHECK_OUTLOOK else MailBacklogRules.APPLY_PER_CHECK_GMAIL
+        val next = items.filter { it.kind != MailBacklogKind.KEEP && it.id !in done }
+        val chunk = next.take(perCheck)
+        val nowMs = now()
+        val startedAt = plan.applyStartedAtMs ?: nowMs
+        var all = moved
+        if (chunk.isNotEmpty()) {
+            val got = m.tidy(token, chunk.associate { it.id to it.kind.tidy })
+            val newly = chunk.mapNotNull { item -> got[item.id]?.let { movedId -> MailMoved(item.id, movedId, item.kind.tidy) } }
+            ms.recordTidy(a.id, batchId, newly)
+            all = moved + newly
+            // Not moved: gone or out of the inbox since the plan → not the backlog's any more; otherwise tried next check.
+            chunk.filter { it.id !in got }.forEach { item ->
+                val h = runCatching { m.header(token, item.id) }.getOrElse { return@forEach }
+                if (h == null || !h.inInbox) ms.removeBacklog(a.id, item.id)
+            }
+        }
+        val doneIds = all.map { it.id }.toSet()
+        val finished = ms.backlogItems(a.id).none { it.kind != MailBacklogKind.KEEP && it.id !in doneIds }
+        if (all.isNotEmpty()) {
+            writeTidy(a, batchId, MailBacklogRules.batchFields(startedAt, account, all.groupingBy { it.tidy }.eachCount()))
+        }
+        writeMail(a, entityId, MailBacklogRules.progressFields(all.size, startedAt, if (finished) nowMs else null, plan.putBack), EntityTypes.MAIL_BACKLOG)
     }
 
     /**
@@ -674,7 +739,8 @@ class Integrations(
     private fun undoTidies(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
         val due = reader.entities(a.householdId, EntityTypes.MAIL_TIDY)
             .mapNotNull { (id, f) -> MailAutopilotRules.readBatch(id, f) }
-            .filter { MailAutopilotRules.undoDue(it, now()) }
+            // Slice 8b: the backlog clean-up's tidy is put back a few hundred a check by [applyBacklog].
+            .filter { MailAutopilotRules.undoDue(it, now()) && !it.backlog }
         for (b in due) {
             val items = ms.tidied(a.id, b.id)
             if (items.isEmpty()) continue // another account's tidy

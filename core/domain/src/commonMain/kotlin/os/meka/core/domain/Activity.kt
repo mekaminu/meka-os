@@ -590,6 +590,25 @@ class ActivityLog(
     fun mailBacklogs(): List<MailBacklog> = replica.entities(EntityTypes.MAIL_BACKLOG)
         .mapNotNull { s -> MailBacklogRules.read(s.ref.entityId, s.fields) }
 
+    /**
+     * Slice 8b: **Approve** on an account's backlog clean-up (Mail): the server applies the plan from its next check, a
+     * few hundred emails a check, as one tidy with Undo. The line the bar shows; nothing written when it can't be approved.
+     */
+    fun approveBacklog(id: String): String {
+        val b = mailBacklogs().firstOrNull { it.id == id } ?: return MailBacklogRules.NOT_APPROVED
+        if (!MailBacklogRules.canApprove(b)) return if (b.approved) MailBacklogRules.APPROVED_BAR else MailBacklogRules.NOT_APPROVED
+        replica.commitLocal(EntityTypes.MAIL_BACKLOG, id, MailBacklogRules.approveFields(nowMs()))
+        return MailBacklogRules.APPROVED_BAR
+    }
+
+    /** Slice 8b: the bar's Undo after Approve: withdrawn while nothing has moved; after that the tidy's Undo puts it back. */
+    fun unapproveBacklog(id: String): Boolean {
+        val b = mailBacklogs().firstOrNull { it.id == id } ?: return false
+        if (!MailBacklogRules.canUnapprove(b)) return false
+        replica.commitLocal(EntityTypes.MAIL_BACKLOG, id, MailBacklogRules.unapproveFields())
+        return true
+    }
+
     private fun calendarEdits(): List<ActivityItem> {
         val now = nowMs()
         return replica.entities(EntityTypes.EVENT_EDIT)

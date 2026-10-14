@@ -4044,6 +4044,25 @@ class MekaCore(
     }
 
     /**
+     * Inbox autopilot, slice 8b: **Approve** on an account's backlog clean-up in Mail (synced; the server applies the
+     * plan from its next check as one tidy whose Undo puts everything back for 30 days). Returns the bar's line and the
+     * pane as it is now.
+     */
+    suspend fun approveMailBacklog(id: String): MailSwitched {
+        val line = onCore { activity.approveBacklog(id).also { refresh() } }
+        return MailSwitched(line, lastMailFacts?.let { mailView(it) })
+    }
+
+    /** Slice 8b: Cancel after Approve (only while nothing has moved). Returns Mail's line and the pane. */
+    suspend fun unapproveMailBacklog(id: String): MailSwitched {
+        val undone = onCore { activity.unapproveBacklog(id).also { if (it) refresh() } }
+        return MailSwitched(
+            if (undone) os.meka.core.domain.MailBacklogRules.UNAPPROVED_BAR else os.meka.core.domain.MailBacklogRules.ALREADY_STARTED,
+            lastMailFacts?.let { mailView(it) },
+        )
+    }
+
+    /**
      * Inbox autopilot, slice 5a: Unsubscribe on one newsletter or promo sender in Mail. Synced; the server does it at its
      * next check (one-click, else an email to the list's unsubscribe address from that account, else the sender's page
      * handed back to open) and writes the outcome, which Mail and Activity show. Returns what Mail says and the pane.

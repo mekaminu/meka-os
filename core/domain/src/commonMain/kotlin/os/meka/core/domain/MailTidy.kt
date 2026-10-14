@@ -147,6 +147,8 @@ object MailTidyBatchFields {
     const val ARCHIVED = "archived"
     /** Slice 5b: later mail from unsubscribed senders moved to Trash. */
     const val TRASHED = "trashed"
+    /** Slice 8b: the backlog clean-up's tidy (Bool): Mail shows it under Backlog clean-up, "Archived for you" leaves it out. */
+    const val BACKLOG = "backlog"
 
     /** The count field of each tidy kind. */
     fun kindField(t: MailTidy): String? = when (t) {
@@ -171,6 +173,8 @@ data class MailTidyBatch(
     val undoNote: String?,
     /** Slice 4: how many of each kind (empty on a batch written before slice 4). */
     val kinds: Map<MailTidy, Int> = emptyMap(),
+    /** Slice 8b: the backlog clean-up's one tidy. */
+    val backlog: Boolean = false,
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -255,6 +259,7 @@ object MailAutopilotRules {
                 val k = MailTidyBatchFields.kindField(t) ?: return@mapNotNull null
                 (f[k] as? FieldValue.Int64)?.value?.toInt()?.takeIf { it > 0 }?.let { t to it }
             }.toMap(),
+            backlog = f[MailTidyBatchFields.BACKLOG]?.boolOrNull == true,
         )
     }
 

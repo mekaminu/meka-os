@@ -1036,6 +1036,18 @@ final class CoreModel {
         if let v = r.view { mail = v } else { await loadMail() }
     }
 
+    /// Inbox autopilot, slice 8b: Approve (or Cancel, before anything moved) on an account's backlog clean-up.
+    func approveMailBacklog(_ id: String, approve: Bool) async {
+        guard let core else { return }
+        if approve { MekaHaptics.medium() } else { MekaHaptics.light() }
+        mailMessage = nil
+        let result: MailSwitched?
+        if approve { result = try? await core.approveMailBacklog(id: id) } else { result = try? await core.unapproveMailBacklog(id: id) }
+        guard let r = result else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
     // MARK: Calendar editing: Add event (slice 2b)
 
     /// Reads which accounts allow editing (the Calendar section asks when it appears).

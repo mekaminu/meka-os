@@ -61,6 +61,7 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.MailAccountRow
+import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailAccountsView
 import os.meka.core.domain.MailAutopilotPanel
@@ -162,6 +163,16 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         if (now != null) view = Result.success(now) else reload++
     }
 
+    // Slice 8b: Approve / Cancel on an account's backlog clean-up (synced; the server applies it from its next check).
+    fun approveBacklog(id: String, approve: Boolean) = scope.launch {
+        if (approve) haptics.medium() else haptics.light()
+        message = null
+        val r = if (approve) core.approveMailBacklog(id) else core.unapproveMailBacklog(id)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
     fun undoTidy(id: String) = scope.launch {
         haptics.light()
         message = null
@@ -199,6 +210,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         onDisconnect = { disconnect(row) },
                         onUndo = { undoTidy(it) },
                         onUnsubscribe = { unsubscribe(it) },
+                        onApprove = { id, yes -> approveBacklog(id, yes) },
                     )
                 }
                 v.toConnect?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
@@ -219,7 +231,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 @Composable
 private fun MailAccountCard(
     row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
-    onUndo: (String) -> Unit, onUnsubscribe: (String) -> Unit = {},
+    onUndo: (String) -> Unit, onUnsubscribe: (String) -> Unit = {}, onApprove: (String, Boolean) -> Unit = { _, _ -> },
 ) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -297,6 +309,17 @@ private fun MailAccountCard(
                     }
                     b.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
                     Text(b.note, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    // Slice 8b: Approve (the plan is final), Cancel (approved, nothing moved yet), Undo (the clean-up's tidy).
+                    val action = b.approveId?.let { MailBacklogRules.APPROVE to { onApprove(it, true) } }
+                        ?: b.cancelId?.let { MailBacklogRules.CANCEL to { onApprove(it, false) } }
+                        ?: b.undoId?.let { MailBacklogRules.UNDO to { onUndo(it) } }
+                    Crossfade(action?.first, animationSpec = MekaMotion.appear(reduced), label = "mail-backlog-action") { label ->
+                        if (label != null) {
+                            Text(label, style = MekaType.itemMeta,
+                                color = if (label == MailBacklogRules.CANCEL) Meka.colors.textSecondary else Meka.colors.accent,
+                                modifier = Modifier.clickable(role = Role.Button) { action?.second?.invoke() }.minTouch())
+                        }
+                    }
                 }
             }
         }
