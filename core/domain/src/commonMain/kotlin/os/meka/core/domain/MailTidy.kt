@@ -161,6 +161,13 @@ object MailTidyBatchFields {
     const val JUNK_TRASHED = "junkTrashed"
     const val RESCUED = "rescued"
     const val JUNK = "junk"
+    /**
+     * Slice 3d: what the batch's receipts cost (Int64, pence, the priced ones only), how many were priced (Int64) and
+     * who from (Text, names one per line, most first); absent when none said.
+     */
+    const val RECEIPTS_PENCE = "receiptsPence"
+    const val RECEIPTS_PRICED = "receiptsPriced"
+    const val MERCHANTS = "merchants"
 
     /** The count field of each tidy kind. */
     fun kindField(t: MailTidy): String? = when (t) {
@@ -191,6 +198,11 @@ data class MailTidyBatch(
     val backlog: Boolean = false,
     /** Slice 3c: a daily Junk review. */
     val junk: Boolean = false,
+    /** Slice 3d: the priced receipts' total in pence and how many were priced (null/0 when none said). */
+    val receiptsPence: Long? = null,
+    val receiptsPriced: Int = 0,
+    /** Slice 3d: who the receipts were from, most first. */
+    val merchants: List<String> = emptyList(),
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -239,17 +251,35 @@ object MailAutopilotRules {
      * What the batch says in Activity and Mail: "Tidied 6 emails · Personal" over "3 newsletters → Navilife/Newsletters
      * · 2 receipts and orders → Navilife/Receipts · 1 notification or promo archived". [counts] KEEP ignored.
      */
-    fun lines(counts: Map<MailTidy, Int>, account: String): Pair<String, String> {
+    fun lines(counts: Map<MailTidy, Int>, account: String, receipts: List<MailReceipt> = emptyList()): Pair<String, String> {
         val parts = MailTidy.entries.filter { it != MailTidy.KEEP }.mapNotNull { t -> counts[t]?.takeIf { it > 0 }?.let { it to t } }
         val total = parts.sumOf { it.first }
         val summary = "Tidied $total ${if (total == 1) "email" else "emails"} · $account"
-        val detail = parts.joinToString(" · ") { (n, t) -> "$n ${if (n == 1) t.one else t.many} ${t.destination}" }
+        // Slice 3d: "2 receipts and orders → Navilife/Receipts · £84.20 · Amazon, Tesco".
+        val receiptSuffix = MailReceiptRules.suffix(
+            counts[MailTidy.RECEIPT] ?: 0, receipts.count { it.pence != null },
+            MailReceiptRules.total(receipts), MailReceiptRules.merchants(receipts),
+        )
+        val detail = parts.joinToString(" · ") { (n, t) ->
+            "$n ${if (n == 1) t.one else t.many} ${t.destination}" + if (t == MailTidy.RECEIPT) receiptSuffix else ""
+        }
         return summary to detail
     }
 
-    fun batchFields(atMs: Long, account: String, counts: Map<MailTidy, Int>): Map<String, FieldValue> {
-        val (summary, detail) = lines(counts, account)
-        return mapOf(
+    /** Slice 3d: the receipts' fields on a batch (none when nothing was priced or named). */
+    fun receiptFields(receipts: List<MailReceipt>): Map<String, FieldValue> {
+        val out = mutableMapOf<String, FieldValue>()
+        MailReceiptRules.total(receipts)?.let {
+            out[MailTidyBatchFields.RECEIPTS_PENCE] = it.fv()
+            out[MailTidyBatchFields.RECEIPTS_PRICED] = receipts.count { r -> r.pence != null }.toLong().fv()
+        }
+        MailReceiptRules.merchants(receipts).takeIf { it.isNotEmpty() }?.let { out[MailTidyBatchFields.MERCHANTS] = it.take(10).joinToString("\n").fv() }
+        return out
+    }
+
+    fun batchFields(atMs: Long, account: String, counts: Map<MailTidy, Int>, receipts: List<MailReceipt> = emptyList()): Map<String, FieldValue> {
+        val (summary, detail) = lines(counts, account, receipts)
+        return receiptFields(receipts) + mapOf(
             MailTidyBatchFields.AT to atMs.fv(),
             MailTidyBatchFields.ACCOUNT to account.fv(),
             MailTidyBatchFields.SUMMARY to summary.fv(),
@@ -277,6 +307,9 @@ object MailAutopilotRules {
             }.toMap(),
             backlog = f[MailTidyBatchFields.BACKLOG]?.boolOrNull == true,
             junk = f[MailTidyBatchFields.JUNK]?.boolOrNull == true,
+            receiptsPence = (f[MailTidyBatchFields.RECEIPTS_PENCE] as? FieldValue.Int64)?.value?.takeIf { it > 0 },
+            receiptsPriced = (f[MailTidyBatchFields.RECEIPTS_PRICED] as? FieldValue.Int64)?.value?.toInt() ?: 0,
+            merchants = text(MailTidyBatchFields.MERCHANTS)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
         )
     }
 

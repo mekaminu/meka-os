@@ -515,7 +515,7 @@ class MailSyncTest {
         // The day is over: mail that arrives now is tidied; the backlog and n1 (dry-run day) stay.
         now += day
         gmail.mailbox["n2"] = msg("n2", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
-        gmail.mailbox["r2"] = msg("r2", 0, "auto-confirm@shop.example").copy(subject = "Your order has shipped")
+        gmail.mailbox["r2"] = msg("r2", 0, "auto-confirm@shop.example").copy(subject = "Your order has shipped", preview = "Order total: £12.50 · arriving Friday")
         gmail.mailbox["u2"] = msg("u2", 0, "noreply@x.example")
         gmail.mailbox["p2"] = msg("p2", 0) // a person: Needs you, kept
         gmail.mailbox["b2"] = msg("b2", 0, "alerts@barclays.co.uk").copy(listId = "<alerts.barclays.co.uk>") // a bank: kept
@@ -529,6 +529,10 @@ class MailSyncTest {
         val (batchId, f) = tidies(ops).entries.single()
         assertEquals(FieldValue.Text("Tidied 3 emails · Personal"), f[MailTidyBatchFields.SUMMARY])
         assertEquals(FieldValue.Int64(3), f[MailTidyBatchFields.COUNT])
+        // Slice 3d: the receipt's amount and who from, read from its subject and preview.
+        assertEquals(FieldValue.Int64(1250), f[MailTidyBatchFields.RECEIPTS_PENCE])
+        assertEquals(FieldValue.Text("Shop"), f[MailTidyBatchFields.MERCHANTS])
+        assertTrue((f[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains("→ Navilife/Receipts · £12.50 · Shop"))
         assertEquals(3, ms.tidied(id, batchId).size)
         // The next check plans nothing again.
         gmail.nextRound = { MailChanges(cursor = "h4") }

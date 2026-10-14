@@ -90,8 +90,16 @@ object ArchivedForYouRules {
         val standing = batches.filter { it.undoneAtMs == null && it.undoAskedAtMs == null }
         val total = standing.sumOf { it.count }
         if (total == 0) return ALL_PUT_BACK
+        // Slice 3d: the receipts' total when the tidies priced them: "3 receipts and orders £84.20" ("… £84.20 on 2").
+        val priced = standing.sumOf { it.receiptsPriced }
+        val pence = standing.mapNotNull { it.receiptsPence }.takeIf { it.isNotEmpty() }?.sum()
         val parts = listOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.TRASH, MailTidy.JUNK_TRASH, MailTidy.RESCUE).mapNotNull { t ->
-            standing.sumOf { it.kinds[t] ?: 0 }.takeIf { it > 0 }?.let { n -> "$n ${if (n == 1) t.one else t.many}" }
+            standing.sumOf { it.kinds[t] ?: 0 }.takeIf { it > 0 }?.let { n ->
+                val money = if (t == MailTidy.RECEIPT && pence != null && priced > 0) {
+                    " " + MailReceiptRules.format(pence) + if (priced < n) " on $priced" else ""
+                } else ""
+                "$n ${if (n == 1) t.one else t.many}$money"
+            }
         }
         return (listOf("Tidied $total") + parts).joinToString(" · ")
     }

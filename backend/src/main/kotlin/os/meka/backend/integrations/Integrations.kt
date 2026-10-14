@@ -5,6 +5,7 @@ import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
+import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailBacklogFacts
 import os.meka.core.domain.MailBacklog
 import os.meka.core.domain.MailBacklogKind
@@ -732,7 +733,11 @@ class Integrations(
         // Out of the inbox now, so the next check doesn't plan them again before the provider's feed says so.
         done.forEach { (h, _) -> ms.put(hh, a.id, h.copy(inInbox = false)) }
         val account = MailLabel.of(a.label)?.label ?: "Mail"
-        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount()))
+        // Slice 3d: what the receipts cost and who from, read from the subject and the kept preview (never the body).
+        val receiptHeaders = done.filter { it.second == MailTidy.RECEIPT }.map { it.first }
+        val previews = if (receiptHeaders.isEmpty()) emptyMap() else ms.previews(a.id, receiptHeaders.map { it.id })
+        val receipts = receiptHeaders.map { h -> MailReceiptRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview) }
+        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts))
         // Slice 5b: each unsubscribed sender's row in Mail says how many later emails went to Trash.
         done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
             writeSender(a, id, MailUnsubscribeRules.trashedFields(ss.first().trashed, ss.size, at))
