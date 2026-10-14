@@ -94,6 +94,12 @@ interface MailProvider {
      * Outlook whole headers. Null when this provider can't list it (nothing is planned).
      */
     fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage? = null
+
+    /**
+     * Slice 3c, the daily Junk review: the headers of what sits in the Junk folder (Gmail's Spam) received since
+     * [sinceMs], at most [limit]; never a body. Null when this provider can't list it (nothing is reviewed).
+     */
+    fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader>? = null
 }
 
 /** Slice 8a: one page of the inbox's older mail; [next] null once the listing is done. */
@@ -308,17 +314,20 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         val done = LinkedHashMap<String, String>()
         for ((t, ids) in items.entries.groupBy({ it.value }, { it.key })) {
             if (t == MailTidy.KEEP) continue
-            if (t == MailTidy.TRASH) {
+            if (t == MailTidy.TRASH || t == MailTidy.JUNK_TRASH) {
                 // Slice 5b: messages.trash (Gmail keeps it 30 days; never a permanent delete).
                 ids.forEach { id -> if (http.call("POST", "$API/messages/${Http.enc(id)}/trash", accessToken).status in 200..299) done[id] = id }
                 continue
             }
-            val add = t.label?.let { listOf(labelId(accessToken, it)) }.orEmpty()
+            val label = t.label?.let { listOf(labelId(accessToken, it)) }.orEmpty()
+            // Slice 3c: a rescued email leaves Spam for the inbox, starred and labelled; the rest leave the inbox.
+            val rescue = t == MailTidy.RESCUE
+            val adding = if (rescue) label + listOf("INBOX", "STARRED") else label
             for (chunk in ids.chunked(1000)) {
                 val a = http.call("POST", "$API/messages/batchModify", accessToken, buildJsonObject {
                     putJsonArray("ids") { chunk.forEach { add(it) } }
-                    putJsonArray("addLabelIds") { add.forEach { add(it) } }
-                    putJsonArray("removeLabelIds") { add("INBOX") }
+                    putJsonArray("addLabelIds") { adding.forEach { add(it) } }
+                    putJsonArray("removeLabelIds") { add(if (rescue) "SPAM" else "INBOX") }
                 })
                 if (a.status in 200..299) chunk.forEach { done[it] = it }
             }
@@ -331,15 +340,17 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         val labels = HashMap<String, String?>()
         val done = LinkedHashMap<String, String>()
         for ((id, t) in items) {
-            if (t == MailTidy.TRASH) {
-                // Out of Trash with the labels it had (INBOX included: trashing never took it off).
+            if (t == MailTidy.TRASH || t == MailTidy.JUNK_TRASH) {
+                // Out of Trash with the labels it had (INBOX, or slice 3c's SPAM: trashing never took them off).
                 if (http.call("POST", "$API/messages/${Http.enc(id)}/untrash", accessToken).status in 200..299) done[id] = id
                 continue
             }
             val label = t.label?.let { name -> labels.getOrPut(name) { runCatching { labelId(accessToken, name) }.getOrNull() } }
+            // Slice 3c: a rescued email goes back to Spam, out of the inbox, unstarred.
+            val rescue = t == MailTidy.RESCUE
             val a = http.call("POST", "$API/messages/${Http.enc(id)}/modify", accessToken, buildJsonObject {
-                putJsonArray("addLabelIds") { add("INBOX") }
-                putJsonArray("removeLabelIds") { label?.let { add(it) } }
+                putJsonArray("addLabelIds") { add(if (rescue) "SPAM" else "INBOX") }
+                putJsonArray("removeLabelIds") { label?.let { add(it) }; if (rescue) { add("INBOX"); add("STARRED") } }
             })
             if (a.status in 200..299) done[id] = id
         }
@@ -378,6 +389,14 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
         val ids = (body["messages"] as? JsonArray)?.mapNotNull { m -> (m as? JsonObject)?.get("id").str() }.orEmpty()
         return MailBacklogPage(ids = ids, next = body["nextPageToken"].str())
+    }
+
+    /** Slice 3c: `in:spam after:<seconds>` (one page of ids), then each one's headers. */
+    override fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader> {
+        val q = mapOf("q" to "in:spam after:${sinceMs / 1000}", "maxResults" to limit.coerceIn(1, 500).toString())
+        val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
+        val ids = (body["messages"] as? JsonArray)?.mapNotNull { m -> (m as? JsonObject)?.get("id").str() }.orEmpty()
+        return ids.mapNotNull { header(accessToken, it) }.filter { "SPAM" in it.labels }
     }
 
     companion object {
@@ -479,6 +498,12 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     private fun setCategories(accessToken: String, id: String, cats: List<String>) =
         http.call("PATCH", "$GRAPH/me/messages/${Http.enc(id)}", accessToken, buildJsonObject { putJsonArray("categories") { cats.forEach { add(it) } } })
 
+    /** Slice 3c: Outlook's follow-up flag on or off. */
+    private fun setFlag(accessToken: String, id: String, on: Boolean) =
+        http.call("PATCH", "$GRAPH/me/messages/${Http.enc(id)}", accessToken, buildJsonObject {
+            put("flag", buildJsonObject { put("flagStatus", if (on) "flagged" else "notFlagged") })
+        })
+
     /** Moves [id] to a well-known folder; the message's id there, or null when it has gone. */
     private fun move(accessToken: String, id: String, folder: String): String? {
         val a = http.call("POST", "$GRAPH/me/messages/${Http.enc(id)}/move", accessToken, buildJsonObject { put("destinationId", folder) })
@@ -494,8 +519,16 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
                 val cats = categories(accessToken, id) ?: return@let
                 if (label !in cats) setCategories(accessToken, id, cats + label)
             }
-            // Slice 5b: an unsubscribed sender's later mail to Deleted Items (recoverable; never a permanent delete).
-            move(accessToken, id, if (t == MailTidy.TRASH) "deleteditems" else "archive")?.let { done[id] = it }
+            // Slice 5b: an unsubscribed sender's later mail to Deleted Items (recoverable; never a permanent delete); slice 3c:
+            // junk the same, a rescued email to the Inbox, flagged.
+            val folder = when (t) {
+                MailTidy.TRASH, MailTidy.JUNK_TRASH -> "deleteditems"
+                MailTidy.RESCUE -> "inbox"
+                else -> "archive"
+            }
+            val moved = move(accessToken, id, folder) ?: continue
+            if (t == MailTidy.RESCUE) runCatching { setFlag(accessToken, moved, true) }
+            done[id] = moved
         }
         return done
     }
@@ -504,7 +537,10 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
         val done = LinkedHashMap<String, String>()
         for ((id, t) in items) {
-            val back = move(accessToken, id, "inbox") ?: continue
+            // Slice 3c: the Junk review's moves go back to Junk.
+            val junk = t == MailTidy.JUNK_TRASH || t == MailTidy.RESCUE
+            val back = move(accessToken, id, if (junk) "junkemail" else "inbox") ?: continue
+            if (t == MailTidy.RESCUE) runCatching { setFlag(accessToken, back, false) }
             t.label?.let { label -> categories(accessToken, back)?.takeIf { label in it }?.let { setCategories(accessToken, back, it - label) } }
             done[id] = back
         }
@@ -556,6 +592,16 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             "&\$orderby=" + Http.enc("receivedDateTime desc"))
         val body = http.call("GET", url, accessToken).body ?: error("Outlook answered without a body")
         return MailBacklogPage(headers = GraphDelta.read(body).headers, next = body["@odata.nextLink"].str())
+    }
+
+    /** Slice 3c: the Junk Email folder's messages received since [sinceMs], whole headers, newest first. */
+    override fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader> {
+        val url = "$GRAPH/me/mailFolders/junkemail/messages?\$top=${limit.coerceIn(1, 100)}" +
+            "&\$select=" + Http.enc("from,subject,receivedDateTime,isRead,conversationId") +
+            "&\$filter=" + Http.enc("receivedDateTime ge " + graphTime(sinceMs)) +
+            "&\$orderby=" + Http.enc("receivedDateTime desc")
+        val body = http.call("GET", url, accessToken).body ?: error("Outlook answered without a body")
+        return GraphDelta.read(body).headers.map { it.copy(inInbox = false) }
     }
 
     private companion object {

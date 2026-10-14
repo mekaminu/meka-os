@@ -2778,15 +2778,22 @@ final class MekaCoreBridgeTests: XCTestCase {
         let batch = MailTidyBatch(id: "t1", atMs: 1_000, account: "Personal", summary: "Tidied 5 emails · Personal",
                                   detail: "3 newsletters → Navilife/Newsletters · 2 receipts and orders → Navilife/Receipts", count: 5,
                                   undoAskedAtMs: nil, undoneAtMs: nil, undoNote: nil,
-                                  kinds: [MailTidy.newsletter: KotlinInt(int: 3), MailTidy.receipt: KotlinInt(int: 2)])
+                                  kinds: [MailTidy.newsletter: KotlinInt(int: 3), MailTidy.receipt: KotlinInt(int: 2)],
+                                  backlog: false, junk: false)
         XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [batch]), "Tidied 5 · 3 newsletters · 2 receipts and orders")
         // Slice 5b: an unsubscribed sender's later mail goes to Trash, counted with the rest.
         let trashed = MailTidyBatch(id: "t2", atMs: 2_000, account: "Personal", summary: "Tidied 2 emails · Personal",
                                     detail: "2 from unsubscribed senders → Trash", count: 2,
                                     undoAskedAtMs: nil, undoneAtMs: nil, undoNote: nil,
-                                    kinds: [MailTidy.trash: KotlinInt(int: 2)])
+                                    kinds: [MailTidy.trash: KotlinInt(int: 2)], backlog: false, junk: false)
         XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [trashed]), "Tidied 2 · 2 from unsubscribed senders")
         XCTAssertEqual(MailTidy.trash.destination, "→ Trash")
+        // Slice 3c: the daily Junk review's tidy reads the same way.
+        let junk = MailAutopilotRules.shared.readBatch(id: "t3", f: MailJunkRules.shared.batchFields(atMs: 3_000, account: "Personal",
+                                                       counts: [MailTidy.junkTrash: KotlinInt(int: 2), MailTidy.rescue: KotlinInt(int: 1)]))
+        XCTAssertEqual(junk?.summary, "Junk checked · 2 to Trash · 1 rescued · Personal")
+        XCTAssertEqual(junk?.junk, true)
+        XCTAssertEqual(MailTidy.rescue.destination, "→ inbox, flagged")
         // Slice 5c: no not-opened senders, no offer; its answers still say something offline.
         XCTAssertNil(core.mailUnopened.value)
         let none = try await core.unsubscribeUnopened()

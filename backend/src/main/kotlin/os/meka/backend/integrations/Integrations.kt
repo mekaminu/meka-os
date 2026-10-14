@@ -13,6 +13,8 @@ import os.meka.core.domain.MailTidyFacts
 import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
+import os.meka.core.domain.MailJunkFacts
+import os.meka.core.domain.MailJunkRules
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSender
@@ -449,6 +451,8 @@ class Integrations(
         runCatching { mailSenders(a, m, token, ms) }
         // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
         runCatching { autopilot(a, m, token, ms) }
+        // Slice 3c: the daily Junk review (same switch and dry-run day as Autopilot).
+        runCatching { junkReview(a, m, token, ms) }
         // Slice 8a: the backlog clean-up's plan (read-only: nothing in the mailbox moves).
         runCatching { backlog(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
@@ -735,6 +739,55 @@ class Integrations(
         }
     }
 
+    /** Slice 3c: when each account's Junk was last looked at (this process; a restart looks again, which moves nothing twice). */
+    private val junkReviewedAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Inbox autopilot, slice 3c: once a day, while Autopilot may act ([MailAutopilotRules.since]), the Junk folder's last
+     * [MailJunkRules.WINDOW_MS] is looked at (headers only): obvious scams go to Trash, an email from his partner, a
+     * thread he wrote in or an address that already writes to him goes back to the inbox, flagged ([MailJunkRules.verdict]);
+     * everything else stays. One `mail_tidy` batch with Undo (back to Junk); a rescued email is never tidied after, and
+     * one an Undo returned is never reviewed again. Can't tell which threads he wrote in: nothing moves this check.
+     */
+    internal fun junkReview(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        val nowMs = now()
+        if (!MailJunkRules.due(junkReviewedAt[a.id], nowMs)) return
+        val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
+        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, nowMs) ?: return
+        // Autopilot's start only gates the review: Junk is a folder he never sorts, so its last few days are looked at.
+        val from = nowMs - MailJunkRules.WINDOW_MS
+        val never = ms.neverTidied(a.id)
+        val junk = (m.junk(token, from, MailJunkRules.MAX_PER_REVIEW) ?: return).filter { it.id !in never }
+        if (junk.isEmpty()) { junkReviewedAt[a.id] = nowMs; return }
+        val replied = m.repliedThreads(token, from - MAIL_WINDOW_MS)
+        val keep = keepAddresses(hh)
+        val known = ms.inboxSorted(a.id)
+            .filter { (h, s) -> h.inInbox && (s.sort == MailSort.NEEDS_YOU || s.sort == MailSort.FYI) }
+            .mapNotNull { it.first.fromAddress?.lowercase() }.toSet()
+        val plan = junk.mapNotNull { h ->
+            val t = MailJunkRules.tidyOf(MailJunkRules.verdict(MailJunkFacts(
+                h.fromAddress, h.fromName, h.subject, keep,
+                replied = h.threadId?.let { it in replied } == true,
+                knownSender = h.fromAddress?.lowercase()?.let { it in known } == true,
+            )))
+            if (t == MailTidy.KEEP) null else h to t
+        }.take(MailJunkRules.MAX_PER_REVIEW)
+        junkReviewedAt[a.id] = nowMs
+        if (plan.isEmpty()) return
+        val batchId = MailJunkRules.batchId(a.id, nowMs)
+        val moved = m.tidy(token, plan.associate { (h, t) -> h.id to t })
+        val done = plan.filter { (h, _) -> h.id in moved }
+        if (done.isEmpty()) return
+        ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
+        // A rescued email is Meka's to deal with: Autopilot never archives it.
+        val rescued = done.filter { it.second == MailTidy.RESCUE }
+        if (rescued.isNotEmpty()) ms.neverTidy(a.id, rescued.map { it.first.id } + rescued.map { moved.getValue(it.first.id) })
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()))
+    }
+
     /** Puts back every tidy of this account an app asked to undo (within its 30 days), once. */
     private fun undoTidies(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
         val due = reader.entities(a.householdId, EntityTypes.MAIL_TIDY)
@@ -748,7 +801,7 @@ class Integrations(
             ms.neverTidy(a.id, items.map { it.id } + items.map { it.movedId } + back.values)
             writeTidy(a, b.id, mapOf(
                 MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
-                MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(back.size, items.size)),
+                MailTidyBatchFields.UNDO_NOTE to FieldValue.Text(MailAutopilotRules.undoneNote(back.size, items.size, if (b.junk) "in Junk" else "in the inbox")),
             ))
         }
     }

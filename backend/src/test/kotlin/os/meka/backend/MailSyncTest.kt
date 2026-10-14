@@ -190,14 +190,25 @@ class MailSyncTest {
         }
         override fun tidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> {
             tidyCalls += items
-            return items.filterKeys { it in mailbox }.mapValues { (id, t) ->
+            // Slice 3c: the Junk review's moves out of Junk.
+            val fromJunk = items.filterKeys { it in junkBox }.mapValues { (id, t) ->
+                val h = junkBox.remove(id)!!
+                if (t == MailTidy.RESCUE) mailbox[id] = h.copy(inInbox = true, labels = h.labels - "SPAM" + "INBOX" + "STARRED")
+                else trashBox[id] = h
+                id
+            }
+            return fromJunk + items.filterKeys { it in mailbox && it !in fromJunk }.mapValues { (id, t) ->
                 val h = mailbox.getValue(id)
                 mailbox[id] = h.copy(inInbox = false, labels = h.labels - "INBOX" + listOfNotNull(t.label))
                 id
             }
         }
         override fun untidy(accessToken: String, items: Map<String, MailTidy>): Map<String, String> =
-            items.filterKeys { it in mailbox }.mapValues { (id, t) ->
+            items.filter { (_, t) -> t == MailTidy.JUNK_TRASH || t == MailTidy.RESCUE }.mapNotNull { (id, _) ->
+                val h = trashBox.remove(id) ?: mailbox.remove(id) ?: return@mapNotNull null
+                junkBox[id] = h.copy(inInbox = false)
+                id to id
+            }.toMap() + items.filter { (id, t) -> id in mailbox && t != MailTidy.JUNK_TRASH && t != MailTidy.RESCUE }.mapValues { (id, t) ->
                 val h = mailbox.getValue(id)
                 mailbox[id] = h.copy(inInbox = true, labels = h.labels.filter { it != t.label } + "INBOX")
                 id
@@ -221,6 +232,15 @@ class MailSyncTest {
             val pages = backlogPages ?: return null
             backlogAsked += beforeMs to page
             return pages[page]
+        }
+
+        // Slice 3c: the Junk folder, what went to Trash, and the reviews asked.
+        val junkBox = linkedMapOf<String, MailHeader>()
+        val trashBox = linkedMapOf<String, MailHeader>()
+        var junkAsked = 0
+        override fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader> {
+            junkAsked++
+            return junkBox.values.filter { it.receivedAtMs >= sinceMs }.take(limit)
         }
 
         // Slice 6b-2a: replies sent.
@@ -514,6 +534,82 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(cursor = "h4") }
         i.syncAccount(id)
         assertEquals(1, gmail.tidyCalls.size)
+    }
+
+    // ---- Slice 3c: the daily Junk review ----
+
+    private fun junkMsg(id: String, from: String, subject: String, thread: String = "t-$id") =
+        MailHeader(id, thread, from, null, subject, now - 3_600_000L, unread = true, inInbox = false, labels = listOf("SPAM"))
+
+    @Test
+    fun junkIsReviewedOnceADayScamsToTrashRealMailRescuedWithUndo() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        gmail.junkBox["s0"] = junkMsg("s0", "prizes@win.example", "You have WON a prize")
+        i.syncAccount(id)
+        // The dry-run day: Junk isn't looked at.
+        assertEquals(0, gmail.junkAsked)
+        now += 2 * day
+        gmail.mailbox["p1"] = msg("p1", 0, "coach@club.example") // someone who writes to him: Needs you
+        gmail.nextRound = { MailChanges(fetch = listOf("p1"), cursor = "h2") }
+        gmail.junkBox.clear()
+        gmail.junkBox["s1"] = junkMsg("s1", "prizes@win.example", "Congratulations, you have WON")
+        gmail.junkBox["k1"] = junkMsg("k1", "coach@club.example", "Training on Saturday")
+        gmail.junkBox["r1"] = junkMsg("r1", "billing@supplier.example", "Re: the invoice", thread = "sent-thread")
+        gmail.junkBox["b1"] = junkMsg("b1", "alerts@barclays.co.uk", "Your account has been suspended")
+        gmail.junkBox["u1"] = junkMsg("u1", "hello@random.example", "Meeting notes")
+        gmail.sentThreads += "sent-thread"
+        i.syncAccount(id)
+        assertEquals(mapOf("s1" to MailTidy.JUNK_TRASH, "k1" to MailTidy.RESCUE, "r1" to MailTidy.RESCUE), gmail.tidyCalls.single())
+        assertEquals(setOf("b1", "u1"), gmail.junkBox.keys)
+        assertTrue(gmail.mailbox.getValue("k1").inInbox && "STARRED" in gmail.mailbox.getValue("k1").labels)
+        assertTrue("s1" in gmail.trashBox)
+        val (batchId, f) = tidies(ops).entries.single()
+        assertEquals(FieldValue.Text("Junk checked · 1 to Trash · 2 rescued · Personal"), f[MailTidyBatchFields.SUMMARY])
+        assertEquals(FieldValue.Bool(true), f[MailTidyBatchFields.JUNK])
+        assertEquals(FieldValue.Int64(2), f[MailTidyBatchFields.RESCUED])
+        // A rescued email is never tidied by Autopilot after.
+        assertTrue("k1" in ms.neverTidied(id))
+        // The same day: not looked at again.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, gmail.junkAsked)
+        // Undo: everything back in Junk, and never reviewed again.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        i.syncAccount(id)
+        assertEquals(setOf("b1", "u1", "s1", "k1", "r1"), gmail.junkBox.keys)
+        assertEquals(FieldValue.Text("Put back 3 emails in Junk"), tidies(ops).getValue(batchId)[MailTidyBatchFields.UNDO_NOTE])
+        now += day
+        gmail.junkBox.replaceAll { _, h -> h.copy(receivedAtMs = now - 3_600_000L) }
+        i.syncAccount(id)
+        assertEquals(2, gmail.junkAsked)
+        assertEquals(1, gmail.tidyCalls.size)
+    }
+
+    @Test
+    fun junkReviewWaitsWhenAutopilotIsOffOrHisThreadsCantBeRead() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += 2 * day
+        autopilotOn(ops, on = false)
+        gmail.junkBox["s1"] = junkMsg("s1", "prizes@win.example", "You have WON")
+        i.syncAccount(id)
+        assertEquals(0, gmail.junkAsked)
+        autopilotOn(ops, on = true)
+        gmail.repliedFails = true
+        i.syncAccount(id)
+        assertEquals(1, gmail.junkAsked)
+        assertTrue(gmail.tidyCalls.isEmpty())
+        // Next check (not marked reviewed): his threads read, the scam goes.
+        gmail.repliedFails = false
+        i.syncAccount(id)
+        assertEquals(mapOf("s1" to MailTidy.JUNK_TRASH), gmail.tidyCalls.single())
     }
 
     @Test

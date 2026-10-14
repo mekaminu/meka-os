@@ -27,12 +27,20 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
      * Slice 5b: a newsletter or promo from a sender Meka unsubscribed from, arriving after the unsubscribe: moved to
      * Trash (recoverable for 30 days, never deleted for good), with Undo like any tidy.
      */
-    TRASH("from an unsubscribed sender", "from unsubscribed senders", null);
+    TRASH("from an unsubscribed sender", "from unsubscribed senders", null),
+    /**
+     * Slice 3c, the daily Junk review: an obvious scam or spam in the Junk folder moved to Trash (recoverable for 30 days,
+     * never deleted for good); Undo puts it back in Junk.
+     */
+    JUNK_TRASH("junk email", "junk emails", null),
+    /** Slice 3c: an email that looks real rescued from Junk to the inbox and flagged (Gmail: starred, labelled); Undo returns it to Junk. */
+    RESCUE("email rescued from Junk", "emails rescued from Junk", "Navilife/Rescued");
 
-    /** How a batch line names where it went: "→ Navilife/Newsletters", "archived", "→ Trash". */
+    /** How a batch line names where it went: "→ Navilife/Newsletters", "archived", "→ Trash", "→ inbox, flagged". */
     val destination: String get() = when {
+        this == RESCUE -> "→ inbox, flagged"
         label != null -> "→ $label"
-        this == TRASH -> "→ Trash"
+        this == TRASH || this == JUNK_TRASH -> "→ Trash"
         else -> "archived"
     }
 
@@ -149,6 +157,10 @@ object MailTidyBatchFields {
     const val TRASHED = "trashed"
     /** Slice 8b: the backlog clean-up's tidy (Bool): Mail shows it under Backlog clean-up, "Archived for you" leaves it out. */
     const val BACKLOG = "backlog"
+    /** Slice 3c: the daily Junk review's counts (Int64) and its flag (Bool). */
+    const val JUNK_TRASHED = "junkTrashed"
+    const val RESCUED = "rescued"
+    const val JUNK = "junk"
 
     /** The count field of each tidy kind. */
     fun kindField(t: MailTidy): String? = when (t) {
@@ -156,6 +168,8 @@ object MailTidyBatchFields {
         MailTidy.RECEIPT -> RECEIPTS
         MailTidy.ARCHIVE -> ARCHIVED
         MailTidy.TRASH -> TRASHED
+        MailTidy.JUNK_TRASH -> JUNK_TRASHED
+        MailTidy.RESCUE -> RESCUED
         MailTidy.KEEP -> null
     }
 }
@@ -175,6 +189,8 @@ data class MailTidyBatch(
     val kinds: Map<MailTidy, Int> = emptyMap(),
     /** Slice 8b: the backlog clean-up's one tidy. */
     val backlog: Boolean = false,
+    /** Slice 3c: a daily Junk review. */
+    val junk: Boolean = false,
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -260,12 +276,13 @@ object MailAutopilotRules {
                 (f[k] as? FieldValue.Int64)?.value?.toInt()?.takeIf { it > 0 }?.let { t to it }
             }.toMap(),
             backlog = f[MailTidyBatchFields.BACKLOG]?.boolOrNull == true,
+            junk = f[MailTidyBatchFields.JUNK]?.boolOrNull == true,
         )
     }
 
-    /** The server's answer to an Undo: "Put back 6 emails" or, when some had gone (deleted since), "Put back 4 of 6 · 2 had gone". */
-    fun undoneNote(putBack: Int, total: Int): String = when {
-        putBack == total -> "Put back $total ${if (total == 1) "email" else "emails"} in the inbox"
+    /** The server's answer to an Undo: "Put back 6 emails in the inbox" (slice 3c's Junk review: "in Junk") or, when some had gone (deleted since), "Put back 4 of 6 · 2 had gone". */
+    fun undoneNote(putBack: Int, total: Int, place: String = "in the inbox"): String = when {
+        putBack == total -> "Put back $total ${if (total == 1) "email" else "emails"} $place"
         else -> "Put back $putBack of $total · ${total - putBack} had gone"
     }
 
@@ -307,7 +324,8 @@ object MailAutopilotPanelRules {
     const val TURN_ON = "Turn on"
     const val UNDO = "Undo"
     const val ON_LINE = "On · newsletters, receipts, notifications and promos are archived as they arrive, each with Undo " +
-        "here and in Activity; a sender you unsubscribed from goes to Trash. Never mail from people, schools, banks or threads " +
+        "here and in Activity; a sender you unsubscribed from goes to Trash. Junk is checked once a day: obvious scams to Trash, " +
+        "anything that looks real back in the inbox, flagged. Never mail from people, schools, banks or threads " +
         "you wrote in. Each account's first day is a dry run."
     const val OFF_LINE = "Off · new mail stays where it lands. Turn on to have Navilife tidy it as it arrives."
     const val PAUSED_LINE = "Paused with everything Navilife does on its own · Resume in What Navilife may do"
