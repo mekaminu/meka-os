@@ -98,6 +98,8 @@ class CarBluetoothTest {
         val note = CarBluetoothRules.savedNote(saved)
         assertEquals("Saved where the Golf is · ±8 m", note.title)
         assertEquals("Add the bay", note.action)
+        assertEquals(ParkingRules.PHOTO, note.photoAction)
+        assertEquals(null, CarBluetoothRules.askNote("the Golf").photoAction)
         assertEquals("Save spot", CarBluetoothRules.failedNote("the Golf").action)
         assertEquals(CarBluetoothRules.ALWAYS_ON, CarBluetoothRules.modeLine(true))
     }

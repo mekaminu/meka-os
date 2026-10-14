@@ -91,6 +91,9 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
     // Push via Firebase (build plan M1): FCM only, configured from res/values/firebase.xml (no google-services plugin).
     implementation(libs.firebase.messaging)
+    // Reading the bay's sign off its photo (car and parking slice 4), on the phone: the bundled model, nothing downloaded
+    // or sent (Needs Meka #23: yes to ML Kit on the Fold).
+    implementation(libs.mlkit.text.recognition)
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(kotlin("test-junit")) // JUnit4 binding for kotlin.test under AGP unit tests

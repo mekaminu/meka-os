@@ -16,6 +16,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,6 +47,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -96,15 +102,25 @@ import os.meka.core.facade.MekaCore
  * [findFirst]: opened from Talk ("where did I park?"): the first parked car's Find my car is already open.
  * [parkFirst]: opened from "Parked the Golf?" (slice 3, the car's Bluetooth disconnected): that car's spot is saved
  * straight away. BLUETOOTH links each car to one of the phone's paired devices ([CarBluetooth], on this phone only).
+ * Slice 4: "Photo of the bay" opens the phone's camera app (no camera permission: the camera app takes it) and keeps
+ * the picture beside the spot ([ParkingStore.keepPhoto], on this phone only); the card shows it small (a tap shows it
+ * full width, with Remove photo) and Find my car shows it over the arrow. With no bay typed, the sign's words, read on
+ * the phone ([ParkingStore.readSign], ML Kit), fill it in ("Photo kept · read “Level 3 · Row F” from the sign"). [photoFirst]: opened from "Photo of the bay"
+ * on the parked notification: the camera opens for that car straight away.
  *
  * Motion: the pane springs up (MekaPane) with the tile's title travelling in; lines cross-fade ("Finding where you
  * are…" → "Saved where the Golf is · ±6 m", the accent when refused, light haptic on a save, a tick when refused);
  * parked cards arrive and leave with the list's item motion; Find my car unfolds with the expand spring and its arrow
  * turns on a soft spring (the shortest way round), brightening to the accent once within 15 m. Reduced motion: the
- * arrow snaps, unfold and fades become cross-fades.
+ * arrow snaps, unfold and fades become cross-fades. Slice 4: the photo fades in once loaded (a new one cross-fades
+ * over the old), a tap grows it to full width and back; a kept photo gives a light haptic, a refusal blends the line
+ * to the accent with a tick. Reduced motion: cross-fades.
  */
 @Composable
-fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst: Boolean = false, parkFirst: String? = null) {
+fun CarPane(
+    core: MekaCore, onClose: () -> Unit, onDates: () -> Unit,
+    findFirst: Boolean = false, parkFirst: String? = null, photoFirst: String? = null,
+) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -143,7 +159,7 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
             saving = false
             said = r.line
             refused = !r.saved
-            if (r.saved) { spots = r.spots; undo = null; haptics.light() } else haptics.tick()
+            if (r.saved) { spots = r.spots; undo = null; ParkingStore.tidyPhotos(context, spots); haptics.light() } else haptics.tick()
         }
     }
     val askPrecise = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -161,6 +177,50 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
         if (refused) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "park-said",
     )
     LaunchedEffect(parkFirst) { parkFirst?.let { startPark(it) } }
+    // Car and parking, slice 4: the bay's photo, by the phone's camera app, kept on this phone only.
+    var photoFor by remember { mutableStateOf<String?>(null) }
+    var photoTick by remember { mutableStateOf(0) }
+    LaunchedEffect(Unit) { ParkingStore.tidyPhotos(context, spots, undo) }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val car = photoFor
+        photoFor = null
+        if (car != null && !ok) { said = ParkingRules.PHOTO_NONE; refused = true }
+        if (car != null && ok) {
+            scope.launch {
+                if (ParkingStore.keepPhoto(context, car)) {
+                    spots = ParkingRules.withPhoto(ParkingStore.spots(context), car, System.currentTimeMillis())
+                    ParkingStore.store(context, spots)
+                    photoTick++
+                    said = ParkingRules.PHOTO_KEPT; refused = false
+                    haptics.light()
+                    // The sign read on the phone fills the bay when none was typed.
+                    if (spots[car]?.label == null) {
+                        val read = ParkingRules.labelFromSign(ParkingStore.readSign(context, car))
+                        if (read != null && spots[car]?.label == null) {
+                            spots = ParkingRules.withLabel(spots, car, read)
+                            ParkingStore.store(context, spots)
+                            said = ParkingRules.photoKeptLine(read)
+                        }
+                    }
+                } else {
+                    said = ParkingRules.PHOTO_FAILED; refused = true
+                    haptics.tick()
+                }
+            }
+        }
+    }
+    fun takePhoto(carId: String) {
+        if (spots[carId] == null) return
+        photoFor = carId
+        try {
+            takePicture.launch(ParkingStore.captureUri(context))
+        } catch (e: android.content.ActivityNotFoundException) {
+            photoFor = null; said = ParkingRules.NO_CAMERA; refused = true
+        } catch (e: IllegalArgumentException) {
+            photoFor = null; said = ParkingRules.PHOTO_FAILED; refused = true
+        }
+    }
+    LaunchedEffect(photoFirst) { photoFirst?.let { takePhoto(it) } }
     // Car and parking, slice 3: each car's Bluetooth device (kept on this phone only).
     var links by remember { mutableStateOf(CarBluetooth.links(context)) }
     var picking by remember { mutableStateOf<String?>(null) }
@@ -287,7 +347,7 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
         }
         itemsIndexed(rows, key = { _, r -> "parked-${r.carId}" }) { i, r ->
             ParkedCard(
-                r, open = finding == r.carId,
+                r, open = finding == r.carId, photoTick = photoTick,
                 modifier = Modifier.animateItem().appear(rememberAppearance(3 + i)),
                 onFind = { haptics.tick(); finding = if (finding == r.carId) null else r.carId },
                 onLabel = { text ->
@@ -295,11 +355,21 @@ fun CarPane(core: MekaCore, onClose: () -> Unit, onDates: () -> Unit, findFirst:
                     ParkingStore.store(context, spots)
                     haptics.light()
                 },
+                onPhoto = { haptics.tick(); takePhoto(r.carId) },
+                onRemovePhoto = {
+                    haptics.tick()
+                    spots = ParkingRules.withoutPhoto(spots, r.carId)
+                    ParkingStore.store(context, spots)
+                    ParkingStore.tidyPhotos(context, spots, undo)
+                    photoTick++
+                    said = ParkingRules.PHOTO_REMOVED; refused = false
+                },
                 onDroveOff = {
                     haptics.tick()
                     undo = spots[r.carId]
                     spots = ParkingRules.droveOff(spots, r.carId)
                     ParkingStore.store(context, spots)
+                    ParkingStore.tidyPhotos(context, spots, undo)
                     if (finding == r.carId) finding = null
                     said = null
                 },
@@ -475,10 +545,11 @@ private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onE
 /** One parked car: its title, the bay, when and how sure; Find my car (unfolding the arrow), the bay field and Drove off. */
 @Composable
 private fun ParkedCard(
-    row: ParkedRow, open: Boolean, modifier: Modifier,
-    onFind: () -> Unit, onLabel: (String) -> Unit, onDroveOff: () -> Unit,
+    row: ParkedRow, open: Boolean, photoTick: Int, modifier: Modifier,
+    onFind: () -> Unit, onLabel: (String) -> Unit, onPhoto: () -> Unit, onRemovePhoto: () -> Unit, onDroveOff: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
+    var big by remember(row.carId) { mutableStateOf(false) }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
@@ -489,10 +560,29 @@ private fun ParkedCard(
             row.label?.let { Text(it, style = MekaType.metaStrong, color = Meka.colors.accent) }
             Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
+        if (row.spot.photoAtMs != null) {
+            BayPhoto(
+                row.carId, "${row.spot.photoAtMs}-$photoTick", big = big,
+                modifier = Modifier.clickable(role = Role.Button) { big = !big }
+                    .semantics { contentDescription = "${ParkingRules.PHOTO}: ${row.title}. ${ParkingRules.PHOTO_HINT}" },
+            )
+            AnimatedVisibility(
+                big,
+                enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+            ) {
+                Text(ParkingRules.REMOVE_PHOTO, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { big = false; onRemovePhoto() }
+                        .semantics { contentDescription = "${ParkingRules.REMOVE_PHOTO}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             Text(ParkingRules.FIND, style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFind)
                     .semantics { contentDescription = "${ParkingRules.FIND}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
+            Text(ParkingRules.photoAction(row.spot), style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPhoto)
+                    .semantics { contentDescription = "${ParkingRules.photoAction(row.spot)}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
             Text(ParkingRules.DROVE_OFF, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onDroveOff)
                     .semantics { contentDescription = "${ParkingRules.DROVE_OFF}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
@@ -502,7 +592,7 @@ private fun ParkedCard(
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            FindMyCar(row.spot)
+            FindMyCar(row.spot, photoKey = "${row.spot.photoAtMs}-$photoTick")
         }
         Field(ParkingRules.LABEL_HINT, Modifier.padding(top = MekaSpace.xxs), onDone = onLabel)
     }
@@ -510,7 +600,7 @@ private fun ParkedCard(
 
 /** The arrow and the distance, live while shown: GPS and the compass run only while this is on screen. */
 @Composable
-private fun FindMyCar(spot: ParkedSpot) {
+private fun FindMyCar(spot: ParkedSpot, photoKey: String) {
     val context = LocalContext.current
     val reduced = Meka.reducedMotion
     var here by remember { mutableStateOf<LocationFix?>(null) }
@@ -539,6 +629,8 @@ private fun FindMyCar(spot: ParkedSpot) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
+        // Slice 4: the bay's photo over the arrow (underground it is the best guide).
+        if (spot.photoAtMs != null) BayPhoto(spot.carId, photoKey, big = false, modifier = Modifier.clearAndSetSemantics { })
         val ring = Meka.colors.hairline
         if (view.arrowDeg != null) {
             Canvas(Modifier.size(120.dp).rotate(turn.value).clearAndSetSemantics { }) {
@@ -563,5 +655,30 @@ private fun FindMyCar(spot: ParkedSpot) {
                     context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ParkingRules.mapsUrl(spot))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 }
             }.minTouch().padding(MekaSpace.xs))
+    }
+}
+
+/**
+ * The bay's photo (slice 4), read off the phone's files away from the main thread: 96 dp tall and cropped on the card
+ * and over Find my car; full width at its own shape when [big]. [key] changes when a new photo is kept, so it reloads
+ * (and cross-fades over the old one).
+ */
+@Composable
+private fun BayPhoto(carId: String, key: String, big: Boolean, modifier: Modifier) {
+    val context = LocalContext.current
+    val reduced = Meka.reducedMotion
+    var image by remember(carId) { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(carId, key) {
+        image = ParkingStore.loadPhoto(context, carId, ParkingRules.PHOTO_MAX_PX)?.asImageBitmap()
+    }
+    Crossfade(image, animationSpec = MekaMotion.appear(reduced), label = "bay-photo") { img ->
+        if (img != null) {
+            val size = if (big) Modifier.fillMaxWidth().heightIn(max = 480.dp) else Modifier.fillMaxWidth().height(96.dp)
+            Image(
+                img, contentDescription = null,
+                contentScale = if (big) ContentScale.Fit else ContentScale.Crop,
+                modifier = modifier.then(size).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised),
+            )
+        }
     }
 }

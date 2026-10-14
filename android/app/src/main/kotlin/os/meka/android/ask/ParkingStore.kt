@@ -55,6 +55,105 @@ object ParkingStore {
         prefs(context).edit().putString(KEY_SPOTS, ParkingRules.encode(spots.values)).apply()
     }
 
+    // ---- slice 4: the bay's photo (files/parking/, never backed up: data_extraction_rules.xml) ----
+
+    private const val PHOTO_DIR = "parking"
+    private const val CAPTURE = "capture.jpg"
+
+    private fun photoDir(context: Context): java.io.File = java.io.File(context.filesDir, PHOTO_DIR).apply { mkdirs() }
+
+    fun photoFile(context: Context, carId: String): java.io.File = java.io.File(photoDir(context), ParkingRules.photoFile(carId))
+
+    /**
+     * Where the camera app writes the picture: a content URI (the FileProvider shared with updates) over one scratch
+     * file, so the camera never needs storage access and no copy lands in the gallery.
+     */
+    fun captureUri(context: Context): android.net.Uri {
+        val f = java.io.File(photoDir(context), CAPTURE)
+        runCatching { f.delete() }
+        return androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.updates", f)
+    }
+
+    /**
+     * Keeps the picture just taken as [carId]'s bay photo: decoded upright (ImageDecoder follows the camera's
+     * orientation), shrunk to [ParkingRules.PHOTO_MAX_PX] and written as a fresh JPEG, so the camera's location tag and
+     * other metadata don't come with it. The scratch file is deleted either way. False when there's nothing to keep.
+     */
+    suspend fun keepPhoto(context: Context, carId: String): Boolean = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val src = java.io.File(photoDir(context), CAPTURE)
+        try {
+            if (!src.exists() || src.length() == 0L) return@withContext false
+            val bitmap = android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(src)) { d, info, _ ->
+                val (w, h) = ParkingRules.photoSize(info.size.width, info.size.height)
+                d.setTargetSize(w, h)
+                d.allocator = android.graphics.ImageDecoder.ALLOCATOR_SOFTWARE
+            }
+            val out = photoFile(context, carId)
+            val tmp = java.io.File(out.parentFile, out.name + ".part")
+            tmp.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, it) }
+            bitmap.recycle()
+            tmp.renameTo(out)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        } finally {
+            runCatching { src.delete() }
+        }
+    }
+
+    /** [carId]'s bay photo, shrunk to about [maxPx] on its long side; null without one. Never throws. */
+    suspend fun loadPhoto(context: Context, carId: String, maxPx: Int): android.graphics.Bitmap? =
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val f = photoFile(context, carId)
+            if (!f.exists()) return@withContext null
+            runCatching {
+                android.graphics.ImageDecoder.decodeBitmap(android.graphics.ImageDecoder.createSource(f)) { d, info, _ ->
+                    val (w, h) = ParkingRules.photoSize(info.size.width, info.size.height, maxPx)
+                    d.setTargetSize(w, h)
+                }
+            }.getOrNull()
+        }
+
+    /**
+     * The words on [carId]'s bay photo, read on the phone by ML Kit's bundled text recognition (the picture never leaves
+     * the phone); null when nothing could be read within a few seconds. Never throws.
+     */
+    suspend fun readSign(context: Context, carId: String): String? {
+        val bitmap = loadPhoto(context, carId, ParkingRules.PHOTO_MAX_PX) ?: return null
+        val soft = if (bitmap.config == android.graphics.Bitmap.Config.HARDWARE) bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false) else bitmap
+        val recognizer = com.google.mlkit.vision.text.TextRecognition.getClient(
+            com.google.mlkit.vision.text.latin.TextRecognizerOptions.DEFAULT_OPTIONS,
+        )
+        return try {
+            kotlinx.coroutines.withTimeoutOrNull(SIGN_READ_MS) {
+                kotlinx.coroutines.suspendCancellableCoroutine<String?> { cont ->
+                    recognizer.process(com.google.mlkit.vision.common.InputImage.fromBitmap(soft ?: bitmap, 0))
+                        .addOnSuccessListener { t -> if (cont.isActive) cont.resumeWith(Result.success(t.text)) }
+                        .addOnFailureListener { if (cont.isActive) cont.resumeWith(Result.success(null)) }
+                        .addOnCanceledListener { if (cont.isActive) cont.resumeWith(Result.success(null)) }
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        } finally {
+            runCatching { recognizer.close() }
+        }
+    }
+
+    private const val SIGN_READ_MS = 6_000L
+
+    /** Deletes the bay photos no parked car uses ([keep]: a Drove off still offering Undo). Never throws. */
+    fun tidyPhotos(context: Context, spots: Map<String, ParkedSpot>, keep: ParkedSpot? = null) {
+        runCatching {
+            val dir = photoDir(context)
+            val names = dir.list()?.toList().orEmpty()
+            ParkingRules.photosToDelete(spots, names, keep).forEach { java.io.File(dir, it).delete() }
+        }
+    }
+
     /**
      * "I've parked here" for [carId]: a few seconds of fixes, the best saved. Never throws. [maxMs]: how long to wait
      * for a first fix (slice 3: the car's Bluetooth disconnecting saves by itself in at most 15 s).

@@ -94,6 +94,16 @@ object CarBluetooth {
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
 
+    /** Slice 4: "Photo of the bay" → the Car pane with the camera open for [carId]'s bay. */
+    private fun photoIntent(context: Context, carId: String): PendingIntent = PendingIntent.getActivity(
+        context, notificationId(carId) + 2,
+        Intent(context, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_CAR_PHOTO_PREFIX + carId)
+            .putExtra(MainActivity.EXTRA_CANCEL, notificationId(carId))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+
     fun post(context: Context, carId: String, note: ParkedNote, save: Boolean): Boolean {
         if (!WorkAlerts.canPost(context)) return false
         ensureChannel(context)
@@ -113,6 +123,7 @@ object CarBluetooth {
             .setContentIntent(tap)
             .addAction(0, note.action, tap)
             .setAutoCancel(true)
+        note.photoAction?.let { b.addAction(0, it, photoIntent(context, carId)) }
         return try { os.meka.android.notify.MekaPost.notify(context, notificationId(carId), b.build()); true } catch (e: SecurityException) { false }
     }
 
@@ -120,7 +131,7 @@ object CarBluetooth {
 }
 
 /** The parked notification's tap: the Car pane for [carId], saving its spot when [save]. */
-data class CarOpen(val carId: String, val save: Boolean)
+data class CarOpen(val carId: String, val save: Boolean, val photo: Boolean = false)
 
 /**
  * Android's Bluetooth connect/disconnect broadcasts (protected: only the system sends them). Only a device linked to a
@@ -142,7 +153,9 @@ class CarBluetoothReceiver : BroadcastReceiver() {
                 val r = CarBluetoothRules.onConnect(links, spots, address, now)
                 CarBluetooth.store(app, r.links)
                 r.droveOff?.let { car ->
-                    ParkingStore.store(app, ParkingRules.droveOff(spots, car))
+                    val left = ParkingRules.droveOff(spots, car)
+                    ParkingStore.store(app, left)
+                    ParkingStore.tidyPhotos(app, left)
                     CarBluetooth.cancel(app, car)
                 }
             }

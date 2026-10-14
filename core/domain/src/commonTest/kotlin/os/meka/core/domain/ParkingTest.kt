@@ -208,4 +208,62 @@ class ParkingTest {
         assertTrue(TalkRules.reply("where did I park", 0, TalkOpenRules.FOLD) is TalkReply.Open)
         assertNotNull(HelpRules.entry("car"))
     }
+
+    @Test
+    fun theBaysPhotoRidesOnTheSpotOnThePhoneAndIsTidiedWhenItGoes() {
+        val now = at(10, 0)
+        var spots = ParkingRules.save(emptyMap(), "car", "the Golf", LocationFix(lat, lon, 5.0, now), now).spots
+        spots = ParkingRules.save(spots, "car2", "the van", LocationFix(lat + 0.01, lon, 8.0, now), now).spots
+        assertEquals(ParkingRules.PHOTO, ParkingRules.photoAction(spots.getValue("car")))
+        // Not parked: nothing to attach it to.
+        assertEquals(spots, ParkingRules.withPhoto(spots, "car3", now))
+        spots = ParkingRules.withPhoto(spots, "car", now + 60_000)
+        assertEquals(now + 60_000, spots.getValue("car").photoAtMs)
+        assertEquals(ParkingRules.RETAKE, ParkingRules.photoAction(spots.getValue("car")))
+        // Kept with the spot on the phone, and a spot saved before slice 4 (six fields) still reads.
+        assertEquals(spots, ParkingRules.decode(ParkingRules.encode(spots.values)))
+        val old = "car\t51.5\t-0.1\t6.0\t$now\tLevel 2"
+        assertNull(ParkingRules.decode(old).getValue("car").photoAtMs)
+        assertEquals("Level 2", ParkingRules.decode(old).getValue("car").label)
+        // The row says there's a photo.
+        assertTrue(ParkingRules.rows(spots, cars("the Golf", "the van"), now + 120_000, cal).first().line.endsWith(" · photo"))
+        // A new spot for the car starts without one.
+        val again = ParkingRules.save(spots, "car", "the Golf", LocationFix(lat, lon, 5.0, now), now + 3_600_000).spots
+        assertNull(again.getValue("car").photoAtMs)
+        assertNull(ParkingRules.withoutPhoto(spots, "car").getValue("car").photoAtMs)
+
+        // File names can't leave the folder.
+        assertEquals("bay-car2.jpg", ParkingRules.photoFile("car2"))
+        assertEquals("bay----etc.jpg", ParkingRules.photoFile("../etc"))
+        assertEquals("bay-car.jpg", ParkingRules.photoFile(""))
+        // Tidying: photos no parked car uses go; one kept for Undo stays; other files are never touched.
+        val files = listOf("bay-car.jpg", "bay-car2.jpg", "bay-car3.jpg", "notes.txt", "bay-car.tmp")
+        assertEquals(listOf("bay-car2.jpg", "bay-car3.jpg"), ParkingRules.photosToDelete(spots, files))
+        val droveOff = ParkingRules.droveOff(spots, "car")
+        assertEquals(listOf("bay-car.jpg", "bay-car2.jpg", "bay-car3.jpg"), ParkingRules.photosToDelete(droveOff, files))
+        assertEquals(listOf("bay-car2.jpg", "bay-car3.jpg"), ParkingRules.photosToDelete(droveOff, files, keep = spots.getValue("car")))
+
+        // Shrunk to 1600 px on the long side, the shape kept; small ones as they are.
+        assertEquals(1600 to 1200, ParkingRules.photoSize(4000, 3000))
+        assertEquals(900 to 1600, ParkingRules.photoSize(2250, 4000))
+        assertEquals(800 to 600, ParkingRules.photoSize(800, 600))
+    }
+
+    @Test
+    fun theBayIsReadOffThePhotoOfTheSignOnlyWhenItNamesOne() {
+        assertEquals("Level 3 · Zone F", ParkingRules.labelFromSign("WELCOME\nLEVEL 3\nZONE F\nPay at machine"))
+        assertEquals("Level 2 · Blue zone", ParkingRules.labelFromSign("LEVEL\n2\nBLUE ZONE"))
+        assertEquals("Level 3 · Row F", ParkingRules.labelFromSign("Level 3 Row F"))
+        assertEquals("Bay 112", ParkingRules.labelFromSign("Oakfield Centre\nBAY 112"))
+        // Two at most; the same line read twice counts once.
+        assertEquals("Level 1 · Row C", ParkingRules.labelFromSign("LEVEL 1\nLEVEL 1\nROW C\nBAY 9"))
+        // Nothing like a bay: not guessed at.
+        assertNull(ParkingRules.labelFromSign("EXIT\nPay at machine"))
+        assertNull(ParkingRules.labelFromSign("Car park entrance"))
+        assertNull(ParkingRules.labelFromSign("Pay and display before leaving your vehicle level 3"))
+        assertNull(ParkingRules.labelFromSign(""))
+        assertNull(ParkingRules.labelFromSign(null))
+        assertEquals(ParkingRules.PHOTO_KEPT, ParkingRules.photoKeptLine(null))
+        assertEquals("Photo kept · read “Level 3 · Zone F” from the sign", ParkingRules.photoKeptLine("Level 3 · Zone F"))
+    }
 }

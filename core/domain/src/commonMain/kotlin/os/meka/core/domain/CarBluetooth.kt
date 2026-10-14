@@ -36,7 +36,7 @@ data class DisconnectOutcome(val links: Map<String, CarLink>, val parkedCar: Str
 data class ConnectOutcome(val links: Map<String, CarLink>, val droveOff: String?)
 
 /** The parked notification's words. */
-data class ParkedNote(val title: String, val text: String, val action: String)
+data class ParkedNote(val title: String, val text: String, val action: String, val photoAction: String? = null)
 
 object CarBluetoothRules {
     /** Connected at least this long before the disconnect counts as a drive (and so a park). */
@@ -161,7 +161,7 @@ object CarBluetoothRules {
 
     /** Saved by itself: "Saved where the Golf is · ±8 m" · "Add the bay?" (rough fixes say so). */
     fun savedNote(saved: ParkSaved): ParkedNote =
-        ParkedNote(saved.line, "Add the bay from the sign, so Find my car takes you to it", "Add the bay")
+        ParkedNote(saved.line, "Add the bay from the sign, or a photo of it, so Find my car takes you to it", "Add the bay", ParkingRules.PHOTO)
 
     /** Saving by itself failed (no fix in the car park): ask for the tap instead, which also takes the bay. */
     fun failedNote(title: String): ParkedNote =

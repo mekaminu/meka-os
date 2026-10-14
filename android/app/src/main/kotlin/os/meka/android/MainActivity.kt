@@ -97,12 +97,16 @@ class MainActivity : ComponentActivity() {
                 app.openDestination.value = ShellDestination.ASK
             }
             // "Parked the Golf?" (car and parking, slice 3): Ask with the Car pane up, saving the spot or for the bay.
-            open.startsWith(OPEN_CAR_PARK_PREFIX) || open.startsWith(OPEN_CAR_PREFIX) -> {
+            // Slice 4: "Photo of the bay" on "Saved where the Golf is" opens the camera for that car's bay.
+            open.startsWith(OPEN_CAR_PARK_PREFIX) || open.startsWith(OPEN_CAR_PREFIX) || open.startsWith(OPEN_CAR_PHOTO_PREFIX) -> {
                 val save = open.startsWith(OPEN_CAR_PARK_PREFIX)
-                val car = open.removePrefix(if (save) OPEN_CAR_PARK_PREFIX else OPEN_CAR_PREFIX)
+                val photo = open.startsWith(OPEN_CAR_PHOTO_PREFIX)
+                val car = open.removePrefix(
+                    when { save -> OPEN_CAR_PARK_PREFIX; photo -> OPEN_CAR_PHOTO_PREFIX; else -> OPEN_CAR_PREFIX },
+                )
                 val id = intent.getIntExtra(EXTRA_CANCEL, 0)
                 if (id != 0) androidx.core.app.NotificationManagerCompat.from(this).cancel(id)
-                if (car.isNotBlank()) app.openCarFrom.value = os.meka.android.ask.CarOpen(car, save)
+                if (car.isNotBlank()) app.openCarFrom.value = os.meka.android.ask.CarOpen(car, save, photo)
                 app.openDestination.value = ShellDestination.ASK
             }
             open == OPEN_LEAVE -> {
@@ -167,6 +171,8 @@ class MainActivity : ComponentActivity() {
         /** "car-park:car2": the Car pane saving car 2's spot; "car:car2": the Car pane (its bay to add). */
         const val OPEN_CAR_PARK_PREFIX = "car-park:"
         const val OPEN_CAR_PREFIX = "car:"
+        /** "car-photo:car2": the Car pane with the camera open for car 2's bay (car and parking, slice 4). */
+        const val OPEN_CAR_PHOTO_PREFIX = "car-photo:"
         /** "dest:LISTS" opens Lists. */
         const val OPEN_DESTINATION_PREFIX = "dest:"
         /** "news:<story id>" opens News over Today on that story; "news:" opens News. */

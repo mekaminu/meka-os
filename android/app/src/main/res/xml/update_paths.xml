@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Only the kept update download (AppUpdater.downloadDir), for Android's own installer. -->
+<!-- The kept update download (AppUpdater.downloadDir), for Android's own installer; and the camera's scratch file for
+     the bay's photo (ParkingStore.captureUri, car and parking slice 4), which the camera app writes into. -->
 <paths>
     <cache-path name="update" path="update/" />
+    <files-path name="parking" path="parking/" />
 </paths>

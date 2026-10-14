@@ -21,6 +21,13 @@ import kotlin.math.sqrt
  * maps app only when he taps it. Drove off clears the spot (with Undo).
  *
  * The Car tile on Ask's Life grid says where the car is while one is parked, else the next of the cars' dates ([carLine]).
+ *
+ * Slice 4 (the bay's photo): "Photo of the bay" takes a picture of the bay or pillar sign with the phone's camera app;
+ * it is kept beside the spot in the phone's own files (shrunk, the camera's location tag dropped; never synced, sent or
+ * backed up) and shown on the parked card and over Find my car's arrow, where it matters most underground. A new spot
+ * for the car starts without a photo; Drove off forgets it ([photosToDelete] tidies the files). The phone reads the
+ * sign's words on the device (ML Kit text recognition, Needs Meka #23's yes; the picture never leaves the phone) and,
+ * when no bay was typed, [labelFromSign] makes the bay of them ("Level 3 · Row F").
  */
 
 /** One car's saved spot, on this phone only. [label]: "Level 3 · Row F", or null. */
@@ -31,6 +38,8 @@ data class ParkedSpot(
     val accuracyM: Double,
     val savedAtMs: Long,
     val label: String? = null,
+    /** Slice 4: when the bay's photo was taken (the file is [ParkingRules.photoFile]); null without one. */
+    val photoAtMs: Long? = null,
 )
 
 /** One location fix as the phone gave it ([accuracyM] null when the phone gave none). */
@@ -92,10 +101,25 @@ object ParkingRules {
     const val LOCATION_OFF = "Location is off on the phone · turn it on to save the spot"
     const val NOT_PARKED = "Not parked · tap “I've parked here” when you leave the car"
     const val WHICH_CAR = "Which car?"
-    const val PRIVACY = "Where you park stays on this phone: it's never synced or sent. Walk there in Maps hands the spot to your maps app only when you tap it."
+    const val PRIVACY = "Where you park, and the bay's photo, stay on this phone: never synced, sent or backed up. Walk there in Maps hands the spot to your maps app only when you tap it."
     const val DATES_LINE = "MOT, tax, insurance and service · in Lists → Renewals"
     const val DATES_ACTION = "Dates ›"
     const val COMPASS_HINT = "Hold the phone flat and point it ahead"
+
+    // Slice 4: the bay's photo.
+    const val PHOTO = "Photo of the bay"
+    const val RETAKE = "Retake"
+    const val REMOVE_PHOTO = "Remove photo"
+    const val PHOTO_KEPT = "Photo of the bay kept · on this phone only"
+    const val PHOTO_NONE = "No photo taken"
+    const val PHOTO_FAILED = "Couldn't keep the photo · try again"
+    const val PHOTO_REMOVED = "Photo removed"
+    const val NO_CAMERA = "No camera app to take the photo"
+    const val PHOTO_HINT = "Tap the photo to see it bigger"
+    /** The longest side a kept photo is shrunk to (enough to read a sign; small on the phone). */
+    const val PHOTO_MAX_PX = 1600
+    const val PHOTO_PREFIX = "bay-"
+    const val PHOTO_SUFFIX = ".jpg"
 
     /** Talk: "where did I park?", "find my car". */
     const val OPENING = "Here's where you parked."
@@ -105,17 +129,22 @@ object ParkingRules {
 
     fun encode(spots: Collection<ParkedSpot>): String =
         spots.sortedBy { it.carId }.joinToString("\n") { s ->
-            listOf(clean(s.carId), s.latitude, s.longitude, s.accuracyM, s.savedAtMs, clean(s.label.orEmpty())).joinToString("\t")
+            listOf(clean(s.carId), s.latitude, s.longitude, s.accuracyM, s.savedAtMs, clean(s.label.orEmpty()), s.photoAtMs?.toString().orEmpty())
+                .joinToString("\t")
         }
 
     fun decode(text: String?): Map<String, ParkedSpot> =
         text.orEmpty().lines().mapNotNull { line ->
             val f = line.split('\t')
-            if (f.size != 6 || f[0].isBlank()) return@mapNotNull null
+            // Six fields before slice 4 (no photo), seven since.
+            if (f.size !in 6..7 || f[0].isBlank()) return@mapNotNull null
             val lat = f[1].toDoubleOrNull() ?: return@mapNotNull null
             val lon = f[2].toDoubleOrNull() ?: return@mapNotNull null
             if (!ErrandPlaceRules.valid(lat, lon)) return@mapNotNull null
-            ParkedSpot(f[0], lat, lon, f[3].toDoubleOrNull() ?: MAX_ACCURACY_M, f[4].toLongOrNull() ?: 0L, f[5].takeIf { it.isNotBlank() })
+            ParkedSpot(
+                f[0], lat, lon, f[3].toDoubleOrNull() ?: MAX_ACCURACY_M, f[4].toLongOrNull() ?: 0L, f[5].takeIf { it.isNotBlank() },
+                f.getOrNull(6)?.toLongOrNull(),
+            )
         }.associateBy { it.carId }
 
     private fun clean(s: String) = s.replace('\t', ' ').replace('\n', ' ')
@@ -149,6 +178,89 @@ object ParkingRules {
     fun withLabel(spots: Map<String, ParkedSpot>, carId: String, text: String?): Map<String, ParkedSpot> {
         val s = spots[carId] ?: return spots
         return spots + (carId to s.copy(label = cleanLabel(text)))
+    }
+
+    // ---- slice 4: the bay's photo ----
+
+    /** The photo's file name for [carId] ("bay-car2.jpg"): letters, digits and '-' only, so an id can't reach elsewhere. */
+    fun photoFile(carId: String): String {
+        val safe = carId.lowercase().map { if (it in 'a'..'z' || it in '0'..'9' || it == '-') it else '-' }.joinToString("").take(40)
+        return PHOTO_PREFIX + safe.ifEmpty { "car" } + PHOTO_SUFFIX
+    }
+
+    /** [carId]'s spot now has a photo taken at [atMs]. Unchanged when the car isn't parked. */
+    fun withPhoto(spots: Map<String, ParkedSpot>, carId: String, atMs: Long): Map<String, ParkedSpot> {
+        val s = spots[carId] ?: return spots
+        return spots + (carId to s.copy(photoAtMs = atMs))
+    }
+
+    /** [carId]'s spot without its photo. */
+    fun withoutPhoto(spots: Map<String, ParkedSpot>, carId: String): Map<String, ParkedSpot> {
+        val s = spots[carId] ?: return spots
+        return spots + (carId to s.copy(photoAtMs = null))
+    }
+
+    /**
+     * Which of the photo files on the phone ([files], names) no spot uses any more: every bay photo whose car isn't
+     * parked with a photo, except [keep]'s (a Drove off still offering Undo). Other files are never touched.
+     */
+    fun photosToDelete(spots: Map<String, ParkedSpot>, files: Collection<String>, keep: ParkedSpot? = null): List<String> {
+        val used = (spots.values + listOfNotNull(keep)).filter { it.photoAtMs != null }.map { photoFile(it.carId) }.toSet()
+        return files.filter { it.startsWith(PHOTO_PREFIX) && it.endsWith(PHOTO_SUFFIX) && it !in used }.sorted()
+    }
+
+    /** Words that make a bay on their own after a colour or name ("BLUE ZONE", "NORTH AREA"). */
+    private val NAMED = setOf("zone", "area", "section", "block")
+
+    /** A longer line read off a sign is a notice ("Pay and display before leaving your vehicle"), not a bay. */
+    private const val SIGN_MAX_LINE = 30
+
+    /**
+     * The bay from the text ML Kit read off the photo of the sign (on the phone): the lines that name a level, row,
+     * bay, zone… with a code ("LEVEL 3", "ROW F", "BAY 112", "BLUE ZONE"), a keyword alone on a line taking the next
+     * line's code ("LEVEL" / "3"), at most two, cleaned like a typed bay: "Level 3 · Row F". Null when the sign says
+     * nothing like that (an "EXIT" or "Pay at machine" sign isn't guessed at).
+     */
+    fun labelFromSign(text: String?): String? {
+        val lines = text.orEmpty().lines().map { it.replace('\t', ' ').trim() }.filter { it.isNotEmpty() && it.length <= SIGN_MAX_LINE }
+        val hits = mutableListOf<String>()
+        var i = 0
+        while (i < lines.size && hits.size < 2) {
+            val ws = lines[i].split(' ', ':', '-').filter { it.isNotBlank() }
+            val lone = ws.singleOrNull()?.lowercase()
+            val next = lines.getOrNull(i + 1)?.trim()
+            when {
+                // "LEVEL" on one line and "3" on the next.
+                lone != null && LABEL_WORDS[lone] != null && next != null && next.split(' ').size == 1 && looksLikeCode(next) &&
+                    next.any { it.isLetterOrDigit() } -> { "$lone $next".let { if (it !in hits) hits += it }; i += 2; continue }
+                ws.indices.any { j ->
+                    val key = ws[j].lowercase()
+                    val after = ws.getOrNull(j + 1)
+                    LABEL_WORDS[key] != null && (
+                        (after != null && LABEL_WORDS[after.lowercase()] == null && looksLikeCode(after) && after.any { it.isLetterOrDigit() }) ||
+                            (key in NAMED && j > 0 && ws.size <= 3)
+                        )
+                } -> ws.joinToString(" ").let { if (it !in hits) hits += it }
+            }
+            i++
+        }
+        if (hits.isEmpty()) return null
+        return cleanLabel(hits.joinToString(", "))
+    }
+
+    /** What the pane says once the photo is kept: with the bay read off it, or not. */
+    fun photoKeptLine(read: String?): String = if (read == null) PHOTO_KEPT else "Photo kept · read “$read” from the sign"
+
+    /** "Photo of the bay" until there is one, then "Retake". */
+    fun photoAction(spot: ParkedSpot): String = if (spot.photoAtMs == null) PHOTO else RETAKE
+
+    /** A shrunk photo's size: the longest side at most [max], the shape kept; never 0. */
+    fun photoSize(width: Int, height: Int, max: Int = PHOTO_MAX_PX): Pair<Int, Int> {
+        if (width <= 0 || height <= 0) return max to max
+        val long = maxOf(width, height)
+        if (long <= max) return width to height
+        val scale = max.toDouble() / long
+        return (width * scale).roundToLong().toInt().coerceAtLeast(1) to (height * scale).roundToLong().toInt().coerceAtLeast(1)
     }
 
     private val LABEL_WORDS = mapOf(
@@ -327,7 +439,8 @@ object ParkingRules {
         return known.sortedBy { order.indexOf(it.carId).let { i -> if (i < 0) Int.MAX_VALUE else i } }.map { s ->
             val title = titleOf(s.carId, cars)
             val rough = if (s.accuracyM > ROUGH_M) " · rough" else ""
-            ParkedRow(s.carId, title, s.label, parkedLine(s.savedAtMs, nowMs, cal) + " · ±${metres(s.accuracyM)}$rough", s)
+            val photo = if (s.photoAtMs != null) " · photo" else ""
+            ParkedRow(s.carId, title, s.label, parkedLine(s.savedAtMs, nowMs, cal) + " · ±${metres(s.accuracyM)}$rough$photo", s)
         }
     }
 
