@@ -28,7 +28,7 @@ struct AskScreen: View {
                     .padding(.bottom, MekaSpace.m)
                     .staggeredAppear(0)
                 // Ask MEKA (V1 AI layer, slice 3b): the field asks in your own words; Search sits beside it.
-                AskMekaSection(palette: palette)
+                AskMekaSection(palette: palette, openHelp: openHelp)
                     .staggeredAppear(1)
                 // Setup or Health, one row, only when something needs a look.
                 if let status = ShellNav.statusItem(healthAttention: Int(model.health?.attention ?? 0), setupLeft: Int(model.setup?.toDo ?? 0)) {
@@ -141,6 +141,18 @@ struct AskScreen: View {
             .foregroundStyle(palette.textTertiary)
             .padding(.top, first ? 0 : MekaSpace.m)
             .accessibilityAddTraits(.isHeader)
+    }
+
+    /// Take me there under a help answer: the sheet or place whose `MoreItem` case is the place's key; Appearance,
+    /// Navilife's AI and Settings unfold Settings in place.
+    private func openHelp(_ place: HelpPlace) {
+        guard let item = MoreItem.allCases.first(where: { "\($0)" == place.key }) else { return }
+        switch item {
+        case .appearance, .ai, .settings:
+            withAnimation(MekaMotion.expand(reduced: reduceMotion)) { settingsOpen = true }
+        default:
+            open(item)
+        }
     }
 
     private func open(_ item: MoreItem) {

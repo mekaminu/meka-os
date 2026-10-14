@@ -18,6 +18,8 @@ import SwiftUI
 /// ends. It stops when Ask leaves the screen or MEKA isn't the app in front.
 struct AskMekaSection: View {
     let palette: MekaPalette
+    /// Take me there under a help answer (Ask knows how Navilife itself works): opens that sheet or place.
+    var openHelp: (HelpPlace) -> Void = { _ in }
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var text = ""
@@ -184,6 +186,21 @@ struct AskMekaSection: View {
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                         }
                     }
+                    // Ask knows how Navilife itself works: Take me there under an answer from the help.
+                    if let link = reply.help {
+                        Button {
+                            MekaHaptics.light()
+                            openHelp(link.place)
+                        } label: {
+                            Text(link.button + " ›").font(MekaType.itemMeta)
+                                .foregroundStyle(palette.onAccent)
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(palette.accent, in: Capsule())
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel(link.button)
+                        .staggeredAppear(reply.lines.count + reply.did.count + reply.cards.count)
+                    }
                     // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
                     if let offer = model.askTrustOffer {
                         TrustOfferRow(offer: offer, palette: palette,
@@ -247,7 +264,7 @@ struct AskMekaSection: View {
         talk.attach(model)
         talk.onAnswer = { q, out in
             let r: AskReplyView = switch onEnum(of: out) {
-            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did)
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help)
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q

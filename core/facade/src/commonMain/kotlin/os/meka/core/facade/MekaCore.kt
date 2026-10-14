@@ -4570,6 +4570,12 @@ class MekaCore(
      */
     var notificationHealthSource: (() -> os.meka.core.domain.NotificationHealth?)? = null
 
+    /**
+     * Ask knows how Navilife itself works: true on the Mac, so help answers give the Mac's paths and Take me there opens
+     * the Mac's sheets (the Fold leaves it false).
+     */
+    var helpOnMac: Boolean = false
+
     private suspend fun ask(question: String, history: List<os.meka.core.domain.TalkTurn>, voice: Boolean): os.meka.core.domain.AskOutcome {
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
@@ -4587,6 +4593,15 @@ class MekaCore(
         // that need him (other people's words: the context turns untrusted); without the AI the device answers itself.
         val mailAsked = os.meka.core.domain.MailAskRules.isAbout(q)
         val mailItems = if (!mailAsked) emptyList() else onCore { activity.mailItems() }
+        // Ask knows how Navilife itself works: a question plainly about one of Navilife's own features ("flex mode",
+        // "how do I set up the bedside clock?") is answered here from the bundled help, with Take me there, and no AI
+        // call; one that only mentions a feature takes the matching entries to the AI. Questions the rules above answer
+        // from his own data (notifications, email, the commute) are theirs.
+        val helpMatch = if (notifyAsked || mailAsked || os.meka.core.domain.CommuteAskRules.isAbout(q)) null else os.meka.core.domain.HelpRules.lookup(q)
+        if (helpMatch?.strong == true) {
+            return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.HelpRules.answer(helpMatch.entry, helpOnMac))
+        }
+        val helpLines = if (helpMatch == null) emptyList() else os.meka.core.domain.HelpRules.askLines(q, helpOnMac)
         fun unavailable(line: String): os.meka.core.domain.AskOutcome {
             val local = (if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null)
                 ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal) else null)
@@ -4651,7 +4666,9 @@ class MekaCore(
                 // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
                 commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake()),
                 // Inbox autopilot, slice 9a: only for a question about his email, so "what did the school say?" has an answer.
-                mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) else emptyList())
+                mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) else emptyList(),
+                // Ask knows how Navilife itself works: the help entries the question mentions.
+                help = helpLines)
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)

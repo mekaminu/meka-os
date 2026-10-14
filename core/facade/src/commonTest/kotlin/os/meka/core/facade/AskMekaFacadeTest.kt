@@ -97,6 +97,37 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun aQuestionAboutNavilifeItselfIsAnsweredFromTheBundledHelp() = runTest {
+        // Ask knows how Navilife itself works: "flex mode" is answered on the device, with Take me there, no AI call.
+        val c = core()
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("flex mode"))
+        assertTrue(server.asked.isEmpty())
+        assertTrue(out.answer.text.startsWith("Bedside clock: "), out.answer.text)
+        assertEquals(os.meka.core.domain.HelpPlace.BEDSIDE, out.answer.help?.place)
+        // Offline and with AI off it still answers.
+        server.down = true
+        assertIs<AskOutcome.Answered>(c.askMeka("How does the call assistant work?"))
+        // On the Mac: the Mac's words, and no button for a Fold-only feature.
+        c.helpOnMac = true
+        val mac = assertIs<AskOutcome.Answered>(c.askMeka("bedside clock"))
+        assertTrue(mac.answer.text.startsWith("Bedside clock is on the Fold only"), mac.answer.text)
+        assertEquals(null, mac.answer.help)
+        assertTrue(server.asked.isEmpty())
+    }
+
+    @Test
+    fun aQuestionThatOnlyMentionsAFeatureTakesItsHelpToTheAi() = runTest {
+        val c = core()
+        c.askMeka("Can the call assistant take a message from my boss?")
+        val ctx = server.asked.single().second
+        val help = ctx.items.filter { it.kind == AskItemKind.HELP }
+        assertTrue(help.isNotEmpty() && help.all { it.line.startsWith("Help · Call assistant") }, help.toString())
+        // A question about the day carries no help lines.
+        c.askMeka("What's on today?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.HELP })
+    }
+
+    @Test
     fun aQuestionCarriesTheSchoolYearAsSchoolLines() = runTest {
         val c = core()
         c.askMeka("When's half term?")

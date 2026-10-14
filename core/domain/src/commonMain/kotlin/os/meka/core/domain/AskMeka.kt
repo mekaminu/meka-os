@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -104,7 +104,11 @@ data class AskCard(val proposal: AskProposal, val line: String, val button: Stri
  * An answer as Ask shows it: the words, and up to [AskRules.MAX_CARDS] cards. [did]: what MEKA already did on its own
  * under earned trust ([TrustRules]; each with Undo), so those proposals are not cards.
  */
-data class AskAnswer(val text: String, val cards: List<AskCard>, val did: List<AskAutoDone> = emptyList())
+data class AskAnswer(
+    val text: String, val cards: List<AskCard>, val did: List<AskAutoDone> = emptyList(),
+    /** Ask knows how Navilife itself works: Take me there under an answer from the help index ([HelpRules.answer]). */
+    val help: HelpLink? = null,
+)
 
 /** What asking came to: an answer, or why there is none (AI off, the month's budget spent, offline, a failure). */
 sealed interface AskOutcome {
@@ -210,7 +214,7 @@ object AskRules {
                 car: List<String> = emptyList(), lifeAdmin: String? = null, gifts: List<String> = emptyList(),
                 people: List<String> = emptyList(), trips: List<String> = emptyList(),
                 notifications: List<String> = emptyList(), commute: List<String> = emptyList(),
-                mail: List<String> = emptyList()): AskContext {
+                mail: List<String> = emptyList(), help: List<String> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -308,7 +312,10 @@ object AskRules {
         // previews are other people's words, so they make the context untrusted (below). First in the tail with the
         // notifications, so the lines that answer the question are the last to be cut.
         val mailLines = mail.take(MailAskRules.ASK_LINES).map { AskItem("", AskItemKind.MAIL, line(it)) }
-        val tail = notifyLines + mailLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Ask knows how Navilife itself works ([HelpRules.askLines]): only with a question that mentions a feature; the
+        // help index's own words, never untrusted; first, so the lines that answer the question are the last to be cut.
+        val helpLines = help.take(HelpRules.ASK_ENTRIES * 4).map { AskItem("", AskItemKind.HELP, it.take(MAX_LINE)) }
+        val tail = helpLines + notifyLines + mailLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))

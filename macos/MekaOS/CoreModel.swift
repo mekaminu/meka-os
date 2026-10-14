@@ -395,6 +395,8 @@ final class CoreModel {
             }
         }
         self.core = core
+        // Ask knows how Navilife itself works: help answers give the Mac's paths and open the Mac's sheets.
+        core.helpOnMac = true
         // Trading approvals, slice 2: this Mac's Touch ID-only approval key is known (synced) before the first yes, so
         // Kestrel can pin it. Nothing without Touch ID and a Secure Enclave.
         if MacBiometric.available, let approvalKey = MacApprovalKey.publicKey() {
@@ -1760,7 +1762,7 @@ final class CoreModel {
         if let out = try? await core.askMeka(question: question) {
             switch onEnum(of: out) {
             case .answered(let a):
-                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did)
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help)
             case .unavailable(let u):
                 reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
@@ -4000,6 +4002,8 @@ struct AskReplyView {
     let unavailable: String?
     /// Earned trust: what MEKA already did on its own for this answer, each with Undo.
     var did: [AskAutoDone] = []
+    /// Ask knows how Navilife itself works: Take me there under an answer from the help.
+    var help: HelpLink? = nil
 }
 
 /// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.

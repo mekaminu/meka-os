@@ -148,6 +148,16 @@ fun AskRoute(
             ShellNav.opens(item) -> pane = item
         }
     }
+    // Ask knows how Navilife itself works: Take me there opens the screen a help answer names, or Android's own page.
+    val helpContext = LocalContext.current
+    val openHelp: (os.meka.core.domain.HelpPlace) -> Unit = { p ->
+        when {
+            p.system -> HelpSettingsPages.open(helpContext, p)
+            p == os.meka.core.domain.HelpPlace.APPEARANCE -> { settingsOpen = true; appearanceOpen = true }
+            p == os.meka.core.domain.HelpPlace.SETTINGS || p == os.meka.core.domain.HelpPlace.AI -> settingsOpen = true
+            else -> MoreItem.entries.firstOrNull { it.name == p.name }?.let { open(it) }
+        }
+    }
     val undo = rememberEventUndo()
     // Today's health line → Open Health (Reliability first, item 3).
     val healthApp = LocalContext.current.applicationContext as? os.meka.android.MekaApplication
@@ -217,6 +227,7 @@ fun AskRoute(
                     modifier = Modifier.appear(rememberAppearance(1)),
                     openItem = openItem,
                     searchEpoch = searchEpoch,
+                    openHelp = openHelp,
                 )
             }
             // Setup or Health, one row, only when something needs a look (Fold review 2026-10-12, item 7).
@@ -677,5 +688,22 @@ internal object AskPrefs {
 
     fun saveSetUpOpen(context: android.content.Context, open: Boolean) {
         context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean(SET_UP_OPEN, open).apply()
+    }
+}
+
+/** Android's own settings pages a help answer can open (Fold only); the Settings app itself if a page won't open. */
+internal object HelpSettingsPages {
+    fun open(context: android.content.Context, place: os.meka.core.domain.HelpPlace) {
+        val pkg = context.packageName
+        val intent = when (place) {
+            os.meka.core.domain.HelpPlace.SYSTEM_SCREEN_SAVER -> android.content.Intent(android.provider.Settings.ACTION_DREAM_SETTINGS)
+            os.meka.core.domain.HelpPlace.SYSTEM_DEFAULT_APPS -> android.content.Intent(android.provider.Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+            os.meka.core.domain.HelpPlace.SYSTEM_APP_NOTIFICATIONS -> android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, pkg)
+            else -> android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:$pkg"))
+        }.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+        runCatching { context.startActivity(intent) }.onFailure {
+            runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
     }
 }

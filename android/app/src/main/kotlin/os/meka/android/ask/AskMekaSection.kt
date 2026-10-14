@@ -121,6 +121,8 @@ fun AskMekaSection(
     matches: Boolean = true,
     /** Bumped when Search everything closes, so the field searches its own text again. */
     searchEpoch: Int = 0,
+    /** Take me there under a help answer (Ask knows how Navilife itself works): opens that screen. */
+    openHelp: (os.meka.core.domain.HelpPlace) -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
@@ -400,6 +402,14 @@ fun AskMekaSection(
                                     AskCardRow(card, Modifier.appear(rememberAppearance(lines.size + o.answer.did.size + j))) { tap(j, card) }
                                 }
                             }
+                            // Ask knows how Navilife itself works: Take me there under an answer from the help.
+                            o.answer.help?.let { link ->
+                                HelpLinkRow(link, Modifier.appear(rememberAppearance(lines.size + o.answer.did.size + o.answer.cards.size))) {
+                                    keyboard?.hide()
+                                    haptics.light()
+                                    openHelp(link.place)
+                                }
+                            }
                             // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
                             AnimatedVisibility(
                                 visible = offer != null,
@@ -426,6 +436,7 @@ const val ASK_MIC_TAG = "ask-mic"
 const val ASK_MATCH_TAG = "ask-match"
 const val ASK_AUTO_TAG = "ask-auto"
 const val ASK_TRUST_TAG = "ask-trust"
+const val ASK_HELP_TAG = "ask-help"
 
 /**
  * The best matches for what's typed: the title, then "Task · Planned today 14:00"; a task, list item, goal or habit
@@ -543,6 +554,20 @@ private fun TrustOfferRow(o: TrustOffer, onYes: () -> Unit, onNo: () -> Unit) {
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
         }
     }
+}
+
+/** Take me there under a help answer: one accent pill, a 48 dp target; opens the screen the answer names. */
+@Composable
+private fun HelpLinkRow(link: os.meka.core.domain.HelpLink, modifier: Modifier, onTap: () -> Unit) {
+    Text(
+        link.button + " ›", style = MekaType.itemMeta, color = Meka.colors.onAccent,
+        modifier = modifier.padding(top = MekaSpace.xxs).minTouch().clip(RoundedCornerShape(MekaRadius.pill))
+            .background(Meka.colors.accent)
+            .clickable(role = Role.Button, onClick = onTap)
+            .testTag(ASK_HELP_TAG)
+            .semantics { contentDescription = link.button }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
 
 /** A proposal: its line and one pill; nothing happens until it is tapped. */
