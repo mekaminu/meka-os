@@ -46,12 +46,18 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.SchoolRow
 import os.meka.core.domain.SchoolRules
+import os.meka.core.domain.SchoolTermCard
+import os.meka.core.domain.SchoolTerms
 import os.meka.core.facade.MekaCore
 
 /**
  * Ask → More → School (school rhythm, slice 1): Rex's and Logan's school year, typed once, one line each — "INSET
  * 27 Oct", "Half term 26–30 Oct", "Rex PE Tue", "Logan's trip 20 Nov" — in three groups: days off, dates and every
  * week, each row with Remove. A week before a day off that falls on an office day, Needs you asks who's covering.
+ *
+ * School dates filled in (slice 1): a card under the summary offers the councils whose holidays Navilife knows; Fill in
+ * writes them as days off (each row says "Council dates · checked … · check with the school"), Remove all takes them out,
+ * and the line after either has Undo. Under it a second field takes the school's INSET days pasted as dates or a letter.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
  * cross-fade (the "couldn't read" line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with
@@ -67,6 +73,14 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
     var said by remember { mutableStateOf<String?>(null) }
     val saidColor by animateColorAsState(
         if (said == SchoolRules.NOT_READ) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "school-said",
+    )
+
+    // The council card's last action, for its line and Undo: true after Fill in, false after Remove all.
+    var terms by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+    var termsSaid by remember { mutableStateOf<String?>(null) }
+    var insetSaid by remember { mutableStateOf<String?>(null) }
+    val insetColor by animateColorAsState(
+        if (insetSaid == SchoolTerms.INSET_NONE) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "school-inset",
     )
 
     LazyColumn(
@@ -87,6 +101,36 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
+        v.terms?.let { card ->
+            item(key = "terms") {
+                TermsCard(
+                    card, termsSaid, undo = terms != null,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2)),
+                    onFill = { id ->
+                        haptics.light()
+                        scope.launch {
+                            termsSaid = runCatching { core.fillSchoolTerms(id) }.getOrNull()
+                            terms = termsSaid?.let { id to true }
+                        }
+                    },
+                    onRemove = { id ->
+                        haptics.tick()
+                        scope.launch {
+                            termsSaid = runCatching { core.removeSchoolTerms(id) }.getOrNull()
+                            terms = termsSaid?.let { id to false }
+                        }
+                    },
+                    onUndo = {
+                        val (id, filled) = terms ?: return@TermsCard
+                        haptics.tick()
+                        scope.launch {
+                            runCatching { if (filled) core.removeSchoolTerms(id) else core.fillSchoolTerms(id) }
+                            terms = null; termsSaid = null
+                        }
+                    },
+                )
+            }
+        }
         item(key = "field") {
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Field(SchoolRules.ADD_HINT) { text ->
@@ -95,6 +139,17 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "school-added") { line ->
                     line?.let { Text(it, style = MekaType.caption, color = saidColor) }
+                }
+            }
+        }
+        item(key = "inset") {
+            Column(Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Field(SchoolTerms.INSET_HINT) { text ->
+                    haptics.light()
+                    scope.launch { insetSaid = runCatching { core.addSchoolInset(text) }.getOrNull() ?: SchoolTerms.INSET_NONE }
+                }
+                Crossfade(insetSaid, animationSpec = MekaMotion.appear(reduced), label = "school-inset-said") { line ->
+                    line?.let { Text(it, style = MekaType.caption, color = insetColor) }
                 }
             }
         }
@@ -132,6 +187,7 @@ private fun SchoolRowView(row: SchoolRow, modifier: Modifier, onRemove: () -> Un
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
             row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+            row.source?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
         Text(
             "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -140,5 +196,73 @@ private fun SchoolRowView(row: SchoolRow, modifier: Modifier, onRemove: () -> Un
                 .semantics { contentDescription = "Remove ${row.title}" }
                 .padding(MekaSpace.xs),
         )
+    }
+}
+
+/**
+ * The council card: the councils to pick from (each with Fill in) while none is in, else what's in with Remove all; the
+ * line after either cross-fades in with Undo.
+ */
+@Composable
+private fun TermsCard(
+    card: SchoolTermCard,
+    said: String?,
+    undo: Boolean,
+    modifier: Modifier,
+    onFill: (String) -> Unit,
+    onRemove: (String) -> Unit,
+    onUndo: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+        Crossfade(card.line, animationSpec = MekaMotion.appear(reduced), label = "school-terms-line") { line ->
+            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        card.choices.forEach { c ->
+            Row(Modifier.fillMaxWidth().minTouch(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = "${c.name}. ${c.line}" }) {
+                    Text(c.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+                Text(
+                    "Fill in", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { onFill(c.id) }
+                        .semantics { contentDescription = "Fill in ${c.name}'s holidays" }
+                        .padding(MekaSpace.xs),
+                )
+            }
+        }
+        card.filled?.let { f ->
+            Text(
+                "Remove all", style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button) { onRemove(f.id) }
+                    .semantics { contentDescription = "Remove all of ${f.name}'s holidays" }
+                    .minTouch().padding(MekaSpace.xs),
+            )
+        }
+        if (card.filled == null && card.choices.isNotEmpty()) {
+            Text(SchoolTerms.NOT_LISTED, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
+        Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "school-terms-said") { line ->
+            line?.let {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f, fill = false))
+                    if (undo) {
+                        Text(
+                            "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                .clickable(role = Role.Button, onClick = onUndo).minTouch().padding(MekaSpace.xs),
+                        )
+                    }
+                }
+            }
+        }
     }
 }

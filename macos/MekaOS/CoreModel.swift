@@ -3431,6 +3431,41 @@ final class CoreModel {
 
     func removeSchool(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeSchool(id: id) } }
 
+    // MARK: School dates filled in (slice 1)
+
+    /// Fill in on the council card (and Undo after Remove all); only the council's id (a String) crosses. Returns the
+    /// line to show, or nil for a council not in the table.
+    func fillSchoolTerms(_ councilId: String) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.light()
+        do { return try await core.fillSchoolTerms(councilId: councilId) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Remove all on the council card (and Undo after Fill in); only the council's id crosses.
+    func removeSchoolTerms(_ councilId: String) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do { return try await core.removeSchoolTerms(councilId: councilId) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The school's INSET days pasted as dates or a letter; only the String crosses. The line to show, or that no date
+    /// was found in it.
+    func addSchoolInset(_ text: String) async -> String? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return nil }
+        MekaHaptics.light()
+        do { return try await core.addSchoolInset(text: t) ?? SchoolTerms.shared.INSET_NONE } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// I'll work from home ([home]) or Covered on a school day off's cover question; only the id and a Bool cross.
     /// The undo bar rises with what it did.
     func answerSchoolCover(_ id: String, home: Bool) {

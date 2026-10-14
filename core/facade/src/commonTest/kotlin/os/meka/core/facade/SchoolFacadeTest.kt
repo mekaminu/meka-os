@@ -101,4 +101,30 @@ class SchoolFacadeTest {
         mac.syncNow()
         assertEquals(listOf("Due Wed 14 Oct · Trip payment"), school(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).map { it.title })
     }
+
+    @Test
+    fun theCouncilsHolidaysAreFilledInOnHisPickRemovedWithUndoAndInsetDaysPasted() = runTest {
+        now = 1_791_968_400_000L // Wed 14 Oct 2026, 10:00 in London
+        val fold = core("android")
+        val mac = core("mac")
+        val card = fold.schoolView.value.terms!!
+        assertNull(card.filled)
+        val id = card.choices.single().id
+        assertEquals("Filled in 14 holidays from Central Bedfordshire · add the school's INSET days below", fold.fillSchoolTerms(id))
+        assertEquals("Central Bedfordshire", fold.schoolView.value.terms?.filled?.name)
+        assertEquals("Next day off: October half term · Mon 26 – Fri 30 Oct", fold.schoolView.value.summary)
+        assertNull(fold.fillSchoolTerms("nowhere"))
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Council dates · checked 14 Oct 2026 · check with the school", mac.schoolView.value.off.first().source)
+        assertEquals("Added 1 INSET day · Mon 2 Nov", mac.addSchoolInset("INSET day: Monday 2 November"))
+        assertNull(mac.addSchoolInset("see you soon"))
+
+        // Remove all on the Mac, then Undo (filling in again): both apps follow.
+        assertEquals("Removed 14 council holidays", mac.removeSchoolTerms(id))
+        assertEquals(1, mac.schoolView.value.off.size)
+        assertTrue(mac.fillSchoolTerms(id)!!.startsWith("Filled in 14"))
+        mac.syncNow(); fold.syncNow()
+        assertEquals(15, fold.schoolView.value.off.size)
+    }
 }

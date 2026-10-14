@@ -138,6 +138,7 @@ class MekaCore(
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val school = os.meka.core.domain.School(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val schoolTerms = os.meka.core.domain.SchoolTermsStore(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val bins = os.meka.core.domain.Bins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val gifts = os.meka.core.domain.Gifts(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val trips = os.meka.core.domain.Trips(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -2498,6 +2499,26 @@ class MekaCore(
 
     /** Removes a school line for good (typed by mistake). */
     suspend fun removeSchool(id: String): Boolean = onCore { school.remove(id) }
+
+    /**
+     * School dates filled in (slice 1): fills in [councilId]'s holidays still to come (the council card's choice,
+     * [os.meka.core.domain.SchoolTerms.COUNCILS]) as days off for both boys, marked with the council and the day its page
+     * was checked. Returns the line to show ("Filled in 8 holidays from …", or that they're in already); null for a
+     * council not in the table. Days off he typed win: a holiday overlapping one isn't added. Undo is [removeSchoolTerms].
+     */
+    suspend fun fillSchoolTerms(councilId: String): String? = onCore { schoolTerms.fill(councilId)?.first }
+
+    /** Remove all on the council card (and Undo after filling in): every holiday from [councilId] goes; the line to show. */
+    suspend fun removeSchoolTerms(councilId: String): String = onCore {
+        os.meka.core.domain.SchoolTerms.removedLine(schoolTerms.removeAll(councilId))
+    }
+
+    /**
+     * The INSET days pasted from the school's website or letter ("2 Nov, 4 Jan and 12–13 Apr"): each a day off for both
+     * boys. The line to show ("Added 3 INSET days · …"), or null when there's no date in it
+     * ([os.meka.core.domain.SchoolTerms.INSET_NONE]).
+     */
+    suspend fun addSchoolInset(text: String): String? = onCore { schoolTerms.addInset(text) }
 
     /**
      * Answers a day off's cover question in Needs you: [home] makes each office day it falls on a work-from-home day

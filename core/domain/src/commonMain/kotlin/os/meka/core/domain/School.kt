@@ -37,6 +37,10 @@ object SchoolFields {
     /** The days Meka chose to work from home for it (comma-separated epoch days), so the row can say so and Undo can take them back. */
     const val COVER_DAYS = "coverDays"
     const val DELETED = ActionableFields.DELETED
+    /** Where a line came from: absent for one he typed, "council:<id>" for a council's holiday ([SchoolTerms]). */
+    const val SOURCE = "source"
+    /** The day the council's dates were checked against its page (epoch day); absent for typed lines. */
+    const val CHECKED = "checkedDay"
 }
 
 enum class SchoolKind(val wire: String) {
@@ -76,6 +80,9 @@ data class SchoolItem(
     val cover: String?,
     val coverDays: List<Long>,
     val addedAtMs: Long,
+    /** [SchoolFields.SOURCE]: null for a line he typed. */
+    val source: String? = null,
+    val checkedDay: Long? = null,
 )
 
 /** A row in the School pane: "INSET day" · "Mon 27 Oct · Rex and Logan" · "You're working from home". */
@@ -87,6 +94,8 @@ data class SchoolRow(
     val note: String?,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
+    /** Where it came from, quietly: "Council dates · checked 14 Oct 2026 · check with the school"; null when he typed it. */
+    val source: String? = null,
 )
 
 /**
@@ -133,6 +142,8 @@ data class SchoolView(
     /** The next day off's title and first day from today (Ask's School tile: "Half term in 14 days"); null when none. */
     val nextOffTitle: String? = null,
     val nextOffDay: Long? = null,
+    /** The council card: pick the school's council to fill in its holidays, or what's in and Remove all. */
+    val terms: SchoolTermCard? = null,
 ) {
     val isEmpty: Boolean get() = off.isEmpty() && dates.isEmpty() && weekly.isEmpty()
 
@@ -267,6 +278,30 @@ object SchoolRules {
         return SpanFound.Days(d, d, s.removeRange(m.range))
     }
 
+    /**
+     * The first date or range in [s] as [findSpan] finds it, for reading several from one pasted text: the days (null
+     * when that one can't be right, so it is skipped rather than ending the read) and [s] with it taken out; null when
+     * there is no date left.
+     */
+    fun findSpanAt(s: String, today: Long): Pair<Pair<Long, Long>?, String>? {
+        shortRange.find(s)?.let { m ->
+            val g = m.groupValues
+            val month = monthOf(g[5])
+            val year = g[6].toIntOrNull()
+            val span = month?.let { rangeDays(g[2].toInt(), it, year, g[4].toInt(), it, year, today, today) }
+            return span to s.replaceRange(m.range, " ")
+        }
+        fullRange.find(s)?.let { m ->
+            val a = dateParts(m.groupValues.subList(1, 11))
+            val b = dateParts(m.groupValues.subList(11, 21))
+            val span = if (a != null && b != null) rangeDays(a.day, a.month, a.year, b.day, b.month, b.year, today, today) else null
+            return span to s.replaceRange(m.range, " ")
+        }
+        val m = dateRe.find(s) ?: return null
+        val day = dateParts(m.groupValues.subList(1, 11))?.let { dayOf(it.day, it.month, it.year, today) }
+        return day?.let { it to it } to s.replaceRange(m.range, " ")
+    }
+
     /** Words left after the date: connectors trimmed, at most [MAX_TITLE], first letter up. */
     fun cleanTitle(rest: String): String {
         var t = tidy(rest)
@@ -343,6 +378,8 @@ object SchoolRules {
             s.f(SchoolFields.COVER).textOrNull?.takeIf { it == COVER_HOME || it == COVER_COVERED },
             WorkHours.decodeHomeDays(s.f(SchoolFields.COVER_DAYS).textOrNull).sorted(),
             s.f(SchoolFields.ADDED_AT).longOrNull ?: 0L,
+            s.f(SchoolFields.SOURCE).textOrNull?.takeIf { it.isNotBlank() },
+            s.f(SchoolFields.CHECKED).longOrNull,
         )
     }
 
@@ -420,7 +457,8 @@ object SchoolRules {
         val offRows = off.map { o ->
             val line = "${spanLabel(o.startDay, o.endDay)} · ${whoLabel(o.who)}"
             val note = coverNote(o)
-            SchoolRow(o.id, o.title, line, note, listOfNotNull(o.title, line, note).joinToString(". "))
+            val source = SchoolTerms.sourceLine(o)
+            SchoolRow(o.id, o.title, line, note, listOfNotNull(o.title, line, note, source).joinToString(". "), source)
         }
         val dateRows = dates.map { d ->
             val line = "${dayWord(d.startDay, today)} · ${whoLabel(d.who)}"
@@ -441,6 +479,7 @@ object SchoolRules {
         return SchoolView(
             offRows, dateRows, weeklyRows, covers(off, today, hours), summary,
             firstOff?.title, firstOff?.let { maxOf(it.startDay, today) },
+            SchoolTerms.card(items, today),
         )
     }
 
@@ -546,7 +585,8 @@ object SchoolRules {
                     COVER_COVERED -> "covered"
                     else -> null
                 }
-                listOfNotNull("Day off", o.title, spanLabel(o.startDay, o.endDay), whoLabel(o.who), cover).joinToString(" · ")
+                val council = SchoolTerms.councilOf(o.source)?.let { "council's date, the school may differ" }
+                listOfNotNull("Day off", o.title, spanLabel(o.startDay, o.endDay), whoLabel(o.who), cover, council).joinToString(" · ")
             }
         val dates = items.filter { it.kind == SchoolKind.DAY && it.startDay >= today }
             .sortedWith(compareBy<SchoolItem> { it.startDay }.thenBy { it.addedAtMs }.thenBy { it.id }).take(ASK_DATES)

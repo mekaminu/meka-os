@@ -8,6 +8,9 @@ import SwiftUI
 /// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (the "couldn't read"
 /// line lit in the accent); rows stagger in and arrive or leave on the expand spring; Add gives a light haptic, Remove
 /// a tick. Reduce Motion: cross-fades.
+///
+/// School dates filled in (slice 1): the council card under the summary (Fill in a council's holidays, or Remove all,
+/// each followed by a line with Undo) and a second field for the school's INSET days pasted as dates or a letter.
 struct SchoolSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -16,6 +19,11 @@ struct SchoolSheet: View {
     @State private var text = ""
     /// What the last Add said, while the sheet is open.
     @State private var said: String?
+    @State private var inset = ""
+    @State private var insetSaid: String?
+    /// The council card's last action for Undo: the council's id and whether it was Fill in.
+    @State private var termsDone: (id: String, filled: Bool)?
+    @State private var termsSaid: String?
 
     var body: some View {
         let v = model.school
@@ -29,6 +37,9 @@ struct SchoolSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.summary)
                 .staggeredAppear(1)
+            if let card = v?.terms {
+                termsCard(card).staggeredAppear(2)
+            }
             TextField(SchoolRules.shared.ADD_HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit {
@@ -44,6 +55,21 @@ struct SchoolSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
+            }
+            TextField(SchoolTerms.shared.INSET_HINT, text: $inset)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let pasted = inset
+                    inset = ""
+                    Task { insetSaid = await model.addSchoolInset(pasted) }
+                }
+                .staggeredAppear(3)
+            if let insetSaid {
+                Text(insetSaid).font(MekaType.caption)
+                    .foregroundStyle(insetSaid == SchoolTerms.shared.INSET_NONE ? palette.accent : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: insetSaid)
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -65,6 +91,81 @@ struct SchoolSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 460)
         .background(palette.surface)
+    }
+
+    /// The council card: councils to pick from with Fill in, or what's in with Remove all; then the last action's line
+    /// with Undo. Only the council's id crosses to the core.
+    @ViewBuilder
+    private func termsCard(_ card: SchoolTermCard) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(card.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+            Text(card.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: card.line)
+            ForEach(card.choices, id: \.id) { c in
+                HStack(spacing: MekaSpace.xs) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(c.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(c.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer()
+                    Button("Fill in") {
+                        let id = c.id
+                        Task {
+                            termsSaid = await model.fillSchoolTerms(id)
+                            termsDone = termsSaid == nil ? nil : (id, true)
+                        }
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Fill in \(c.name)'s holidays")
+                }
+            }
+            if let f = card.filled {
+                Button("Remove all") {
+                    let id = f.id
+                    Task {
+                        termsSaid = await model.removeSchoolTerms(id)
+                        termsDone = termsSaid == nil ? nil : (id, false)
+                    }
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.textTertiary)
+                .accessibilityLabel("Remove all of \(f.name)'s holidays")
+            } else if !card.choices.isEmpty {
+                Text(SchoolTerms.shared.NOT_LISTED).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            if let termsSaid {
+                HStack(spacing: MekaSpace.s) {
+                    Text(termsSaid).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if let done = termsDone {
+                        Button("Undo") {
+                            let id = done.id
+                            let filled = done.filled
+                            Task {
+                                if filled { _ = await model.removeSchoolTerms(id) } else { _ = await model.fillSchoolTerms(id) }
+                                termsDone = nil
+                                self.termsSaid = nil
+                            }
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: termsSaid)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: card.filled?.id)
     }
 
     @ViewBuilder
@@ -96,6 +197,9 @@ private struct SchoolRowView: View {
                 Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 if let note = row.note {
                     Text(note).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                if let source = row.source {
+                    Text(source).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
             }
             .accessibilityElement(children: .combine)
