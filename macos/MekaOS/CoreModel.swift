@@ -4300,6 +4300,19 @@ final class CoreModel {
         }
     }
 
+    /// Book it on an email whose reply picks one of the times he offered (Scheduling assistant, slice 2): the event goes to
+    /// his calendar after the usual five seconds' Undo on the bar; nothing is sent to them. Only the id (a String) crosses.
+    func bookMeetingPick(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.bookMeetingPick(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// The chase written by the AI in "Time to chase" (Follow-up radar, slice 5): nothing is written or sent (Send does that,
     /// on his tap). Only the id (a String) crosses to the core; the draft's two Strings come back.
     func draftMailChase(_ id: String) async -> (text: String?, line: String) {

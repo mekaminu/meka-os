@@ -33,7 +33,11 @@ class MailDraftFacadeTest {
     private val hour = 3_600_000L
     private val serverOps = InMemoryServerOpStore()
 
-    private inner class Server : SyncTransport, AiApi {
+    private inner class Server : SyncTransport, AiApi, AccountsApi {
+        var calendars = emptyList<ConnectedAccount>()
+        override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart = ConnectStart.NotSetUp
+        override suspend fun accounts(): List<ConnectedAccount> = calendars
+        override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> = calendars
         private val sync = os.meka.core.testing.FaultyTransport(SyncService(serverOps))
         val sent = mutableListOf<MailDraftCodec.Request>()
         var reply = MailDraftCodec.Response("answered", "Hi Sam,\n\nYes, I can drive on Saturday.\n\nM")
@@ -245,7 +249,7 @@ class MailDraftFacadeTest {
         assertEquals(
             "Hi Sam,\n\nHappy to meet. I'm free at any of these times (UK time):\n\n" +
                 "• Monday 19 October, 11:30–12:30\n• Tuesday 20 October, 13:00–14:00\n• Wednesday 21 October, 09:00–10:00\n\n" +
-                "Let me know which suits you and I'll send an invite.\n\nAlex",
+                "Let me know which suits you and I'll put it in the diary.\n\nAlex",
             d.text,
         )
         // No AI asked, nothing written: the card is still there and the server has no new op.
@@ -254,5 +258,52 @@ class MailDraftFacadeTest {
         assertEquals(opsBefore, serverOps.after("hh", 0, 100_000).size)
         assertEquals(listOf(id), fold.mailNeeds.value?.rows?.map { it.id })
         assertEquals(os.meka.core.domain.MeetingRequestRules.UNKNOWN, fold.suggestMeetingTimes("nothing").line)
+    }
+
+    /** Scheduling assistant, slice 2: their answer picks one of his offered times; Book it adds it to his calendar, Undo takes it back. */
+    @Test
+    fun theirPickIsBookedOnHisTapAndUndoTakesItBack() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        val offer = MailNeedsRules.itemId("acc1", "ask")
+        serverWrite(offer, MailNeedsRules.serverFields("Business", "Sam Taylor", "sam@example.com", "Catch up?", "Can we meet next week?", at(15, 9), 1, threadKey = "th1"))
+        serverWrite(offer, mapOf(
+            os.meka.core.domain.MailItemFields.DONE_ASKED_AT to FieldValue.Int64(at(16, 10)),
+            os.meka.core.domain.MailItemFields.REPLY_ASKED_AT to FieldValue.Int64(at(16, 10)),
+            os.meka.core.domain.MailItemFields.REPLY_TEXT to FieldValue.Text(
+                "Hi Sam,\n\n• Monday 19 October, 11:30–12:30\n• Tuesday 20 October, 13:00–14:00\n\nLet me know which suits you.\n\nAlex",
+            ),
+            os.meka.core.domain.MailItemFields.REPLY_SENT_AT to FieldValue.Int64(at(16, 10, 1)),
+        ))
+        val answer = MailNeedsRules.itemId("acc1", "answer")
+        serverWrite(answer, MailNeedsRules.serverFields("Business", "Sam Taylor", "sam@example.com", "Re: Catch up?", "Tuesday at 1pm works for me, thanks!", at(17, 9), 2, threadKey = "th1"))
+        val fold = core()
+        assertTrue(fold.syncNow())
+        val row = fold.mailNeeds.value!!.rows.single()
+        assertEquals(answer, row.id)
+        assertEquals("Sam picked Tue 20 Oct, 13:00–14:00 · one of the times you offered", row.pickedLine)
+        assertTrue(row.canBook)
+
+        // No calendar he lets Navilife edit yet: said in words, nothing written.
+        assertEquals(os.meka.core.domain.MeetingPickRules.NO_ACCOUNT, fold.bookMeetingPick(answer))
+        server.calendars = listOf(ConnectedAccount("google", "alex@example.com", "ok", null, canEdit = true))
+        fold.refreshCalendarAccounts()
+
+        assertEquals("Adding “Meeting with Sam Taylor” to Google · Tue 20 Oct, 13:00 · write back to confirm", fold.bookMeetingPick(answer))
+        assertEquals("Adding “Meeting with Sam Taylor” to Google", fold.calendarEditLines.value.single().text)
+        val booked = fold.mailNeeds.value!!.rows.single()
+        assertEquals("Booked · Tue 20 Oct, 13:00–14:00 · in your calendar", booked.pickedLine)
+        assertEquals(false, booked.canBook)
+        // Undo inside the five seconds: no event, and Book it is back.
+        fold.undoMailItem()
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertTrue(fold.mailNeeds.value!!.rows.single().canBook)
+        // Booked again and synced: the email carries the booking for his other devices; nothing was asked of the AI.
+        fold.bookMeetingPick(answer)
+        now += 10_000
+        assertTrue(fold.syncNow())
+        val ops = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityId == answer && it.field == os.meka.core.domain.MailItemFields.MEETING_EDIT_ID }
+        assertTrue((ops.last().value as FieldValue.Text).value.isNotEmpty())
+        assertTrue(server.sent.isEmpty())
     }
 }

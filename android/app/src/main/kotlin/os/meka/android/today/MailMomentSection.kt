@@ -160,6 +160,7 @@ private fun MomentSession(session: MailMomentSession, core: MekaCore, undo: (Str
                     onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
                     onDraft = { core.draftMailReply(row.id) },
                     onSuggestTimes = { core.suggestMeetingTimes(row.id) },
+                    onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
                     onSend = { text, sent ->
                         haptics.medium()
                         scope.launch {

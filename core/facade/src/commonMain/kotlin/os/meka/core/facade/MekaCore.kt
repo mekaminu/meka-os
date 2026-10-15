@@ -4781,6 +4781,38 @@ class MekaCore(
     }
 
     /**
+     * Scheduling assistant, slice 2: **Book it** on an email whose words pick one of the times he offered
+     * ([os.meka.core.domain.MeetingPickRules.pickFor]). The event ("Meeting with Sam Taylor", the offered time, the email
+     * named in the notes) goes to the calendar account he last added to, as a calendar edit that waits five seconds for
+     * Undo before it reaches Google/Outlook; the email records it so the row says "Booked · …" on every device. Nothing
+     * is sent to them. Undo on the bar takes it back while the edit is still waiting. Refused in words.
+     */
+    suspend fun bookMeetingPick(id: String): String = onCore {
+        val P = os.meka.core.domain.MeetingPickRules
+        val items = activity.mailItems()
+        val item = items.firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        val cal = ZoneCalendar(timeZone)
+        val offer = P.offerFor(item, items, cal) ?: return@onCore P.NO_PICK
+        val pick = P.pickFor(item, items, nowMs(), cal)
+            ?: return@onCore if (P.pick(item.preview, offer.second, cal) != null) P.GONE else P.NO_PICK
+        if (P.booked(item, pick)) return@onCore P.bookedLine(pick.slot, cal)
+        val accounts = _editAccounts.value
+        val account = accounts.firstOrNull { it.key == os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()) }
+            ?: accounts.firstOrNull() ?: return@onCore P.NO_ACCOUNT
+        when (val r = calendarEdits.add(account.provider, account.email, P.draft(pick, item.account, item.subject))) {
+            is os.meka.core.domain.EventEditResult.Refused -> r.reason
+            is os.meka.core.domain.EventEditResult.Made -> {
+                replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, P.bookedFields(r.id, pick.slot.startMs))
+                mailNeedsUndo = {
+                    if (calendarEdits.undo(r.id)) replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, P.unbookedFields())
+                }
+                mailNeedsChanged()
+                P.bookingLine(pick, account.provider, cal)
+            }
+        }
+    }
+
+    /**
      * Follow-up radar, slice 5: **the chase written by the AI** in "Time to chase". One call to MEKA's AI
      * (`POST /v1/ai/mail-draft` with a `chase`, metered `mail.chase`) with what the row knows: who, the email's subject
      * (and, for an email he received, its preview), what he's waiting for, since when, whether he chased before, his

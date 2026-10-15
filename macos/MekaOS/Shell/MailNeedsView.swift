@@ -60,7 +60,8 @@ struct MailNeedsView: View {
                                                  alwaysTidy: { model.alwaysTidyMailItem(row.id) },
                                                  incoming: incoming[row.id],
                                                  onEditor: { t in texts[row.id] = t },
-                                                 suggestTimes: { await model.suggestMeetingTimes(row.id) })
+                                                 suggestTimes: { await model.suggestMeetingTimes(row.id) },
+                                                 book: { model.bookMeetingPick(row.id) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -173,6 +174,8 @@ struct MailNeedsRowView: View {
     var onEditor: ((String?) -> Void)? = nil
     /// Scheduling assistant, slice 1: his free times as a reply for an email that asks to meet (nil: not offered here).
     var suggestTimes: (@MainActor () async -> (text: String?, line: String))? = nil
+    /// Scheduling assistant, slice 2: Book the time their reply picked from his offer (nil: not offered here).
+    var book: (() -> Void)? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var replying = false
     @State private var text = ""
@@ -201,6 +204,12 @@ struct MailNeedsRowView: View {
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                 if row.asksToMeet {
                     Text(MeetingRequestRules.shared.ASKS).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+                // Scheduling assistant, slice 2: the time they picked, then "Booked · …" (cross-fades in place).
+                if let picked = row.pickedLine {
+                    Text(picked).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        .id(picked)
+                        .transition(.opacity)
                 }
                 if let notice = row.notice {
                     Text(notice).font(MekaType.itemMeta).foregroundStyle(palette.critical)
@@ -244,6 +253,12 @@ struct MailNeedsRowView: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
             HStack(spacing: MekaSpace.xs) {
+                // Scheduling assistant, slice 2: Book it adds their pick to his calendar (five seconds' Undo on the bar).
+                if row.canBook, let book {
+                    MailNeedsPill(label: MeetingPickRules.shared.BOOK, palette: palette,
+                                  spoken: "Book it: \(row.pickedLine ?? ""), in your calendar",
+                                  action: { book() })
+                }
                 // Scheduling assistant, slice 1: the editor opens (expand spring) with his free times; never over his words.
                 if row.asksToMeet, suggestTimes != nil, MailDraftRules.shared.canDraft(editor: text, lastDraft: lastDraft) {
                     MailNeedsPill(label: suggesting ? MeetingRequestRules.shared.FINDING : MeetingRequestRules.shared.SUGGEST,

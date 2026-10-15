@@ -155,7 +155,7 @@ object MeetingRequestRules {
             append("\n\n")
             slots.forEach { append("• ").append(slotLabel(it, cal)).append('\n') }
             append('\n')
-            append(if (slots.size == 1) "Let me know if that suits you and I'll send an invite." else "Let me know which suits you and I'll send an invite.")
+            append(if (slots.size == 1) "Let me know if that suits you and I'll put it in the diary." else "Let me know which suits you and I'll put it in the diary.")
             sign?.trim()?.takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }
         }
     }

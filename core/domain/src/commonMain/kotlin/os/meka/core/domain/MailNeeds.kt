@@ -74,6 +74,9 @@ object MailItemFields {
     /** Slice 10b (the server): it wrote the sender's rule for that ask, and (after an Undo) took it off again. */
     const val TIDY_RULE_AT = "tidyRuleAtMs"
     const val TIDY_CLEARED_AT = "tidyClearedAtMs"
+    /** Scheduling assistant, slice 2 (an app's): Book it's calendar edit ("" once undone) and the start it booked (0). */
+    const val MEETING_EDIT_ID = "meetingEditId"
+    const val MEETING_AT = "meetingAtMs"
 }
 
 data class MailItem(
@@ -115,6 +118,9 @@ data class MailItem(
     val tidyAskedAtMs: Long? = null,
     val tidyRuleAtMs: Long? = null,
     val tidyClearedAtMs: Long? = null,
+    /** Scheduling assistant, slice 2: Book it's calendar edit and the start it booked, or null. */
+    val meetingEditId: String? = null,
+    val meetingAtMs: Long? = null,
 )
 
 /** One email on the card. */
@@ -146,6 +152,13 @@ data class MailNeedsRow(
      * the row says "Asks to meet" and offers Suggest times.
      */
     val asksToMeet: Boolean = false,
+    /**
+     * Scheduling assistant, slice 2: their reply picks one of the times he offered ("Sam picked Tue 20 Oct,
+     * 13:00–14:00 · one of the times you offered"), or "Booked · …" once he tapped Book it; null otherwise.
+     */
+    val pickedLine: String? = null,
+    /** Slice 2: Book it is offered (picked, not booked yet). */
+    val canBook: Boolean = false,
 )
 
 data class MailNeedsCard(
@@ -308,6 +321,8 @@ object MailNeedsRules {
             tidyAskedAtMs = ms(MailItemFields.TIDY_ASKED_AT),
             tidyRuleAtMs = ms(MailItemFields.TIDY_RULE_AT),
             tidyClearedAtMs = ms(MailItemFields.TIDY_CLEARED_AT),
+            meetingEditId = text(MailItemFields.MEETING_EDIT_ID),
+            meetingAtMs = ms(MailItemFields.MEETING_AT),
         )
     }
 
@@ -408,7 +423,7 @@ object MailNeedsRules {
         val all = showingSorted(items, nowMs)
         if (all.isEmpty()) return null
         val groups = MailLinkRules.groups(all)
-        val rows = rowsOf(groups.take(SHOWN), nowMs, cal)
+        val rows = rowsOf(groups.take(SHOWN), nowMs, cal, items)
         val more = groups.drop(SHOWN).sumOf { it.size }
         val snoozedCount = items.count { snoozed(it, nowMs) }
         return MailNeedsCard(
@@ -426,9 +441,9 @@ object MailNeedsRules {
 
     /** Slice 7: every row that needs him (linked emails sharing one), newest first — the ten-minute inbox goes through them all. */
     fun allRows(items: List<MailItem>, nowMs: Long, cal: LocalCalendar): List<MailNeedsRow> =
-        rowsOf(MailLinkRules.groups(showingSorted(items, nowMs)), nowMs, cal)
+        rowsOf(MailLinkRules.groups(showingSorted(items, nowMs)), nowMs, cal, items)
 
-    private fun rowsOf(groups: List<List<MailItem>>, nowMs: Long, cal: LocalCalendar): List<MailNeedsRow> =
+    private fun rowsOf(groups: List<List<MailItem>>, nowMs: Long, cal: LocalCalendar, all: List<MailItem>): List<MailNeedsRow> =
         groups.map { group ->
             val i = group.first()
             val thread = if (i.threadCount > 1) "${i.threadCount} in this thread" else null
@@ -439,17 +454,23 @@ object MailNeedsRules {
                 MailLinkedRow(l.id, l.from, l.subject, listOf(l.account, whenLabel(l.receivedAtMs, nowMs, cal)).joinToString(" · "))
             }
             val linkedLine = MailLinkRules.linkedLine(group)
-            val meet = !replySent(i) && MeetingRequestRules.asks(i.subject, i.preview)
+            // Scheduling assistant, slice 2: their answer to the times he offered.
+            val pick = if (replySent(i)) null else MeetingPickRules.pickFor(i, all, nowMs, cal)
+            val booked = pick != null && MeetingPickRules.booked(i, pick)
+            val pickedLine = pick?.let { if (booked) MeetingPickRules.bookedLine(it.slot, cal) else MeetingPickRules.pickedLine(i.from, it.slot, cal) }
+            val meet = !replySent(i) && pick == null && MeetingRequestRules.asks(i.subject, i.preview)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet }, linkedLine, notice).joinToString(". "),
+                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet }, pickedLine, linkedLine, notice).joinToString(". "),
                 notice = notice,
                 replyDraft = if (notice != null) i.replyText else null,
                 replyLine = "To ${i.from} · sent from ${i.account} only when you tap Send",
                 linked = linked,
                 linkedLine = linkedLine,
                 asksToMeet = meet,
+                pickedLine = pickedLine,
+                canBook = pick != null && !booked,
             )
         }
 

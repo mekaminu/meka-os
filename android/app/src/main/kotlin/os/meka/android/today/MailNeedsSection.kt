@@ -62,6 +62,7 @@ import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailSendAllRules
+import os.meka.core.domain.MeetingPickRules
 import os.meka.core.domain.MeetingRequestRules
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.facade.MekaCore
@@ -170,6 +171,7 @@ internal fun MailNeedsSection(
                             onAlwaysTidy = { haptics.medium(); answer { core.alwaysTidyMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSuggestTimes = { core.suggestMeetingTimes(row.id) },
+                            onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
                             onSend = { text, sent ->
                                 haptics.medium()
                                 scope.launch {
@@ -201,6 +203,8 @@ internal fun MailNeedsRowView(
     onEditor: ((String?) -> Unit)? = null,
     /** Scheduling assistant, slice 1: his free times as a reply, for an email that asks to meet (null: not offered here). */
     onSuggestTimes: (suspend () -> MailDraft)? = null,
+    /** Scheduling assistant, slice 2: Book the time their reply picked from his offer (null: not offered here). */
+    onBook: (() -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -237,6 +241,13 @@ internal fun MailNeedsRowView(
             row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             if (row.asksToMeet) Text(MeetingRequestRules.ASKS, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-asks-to-meet"))
+            // Scheduling assistant, slice 2: the time they picked, then "Booked · …" (cross-fades in place).
+            AnimatedContent(
+                row.pickedLine, label = "mail-picked",
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() },
+            ) { picked ->
+                if (picked != null) Text(picked, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-picked"))
+            }
             row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
         }
         // Slice 6c: the emails linked to this one, folded under it; the line unfolds them (expand spring; reduced
@@ -320,6 +331,10 @@ internal fun MailNeedsRowView(
             Modifier.padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
+            // Scheduling assistant, slice 2: Book it adds their pick to his calendar (five seconds' Undo on the bar).
+            if (row.canBook && onBook != null) {
+                MailNeedsPill(MeetingPickRules.BOOK, spoken = "Book it: ${row.pickedLine ?: ""}, in your calendar", onClick = onBook)
+            }
             // Scheduling assistant, slice 1: the editor opens (expand spring) with his free times; never over his own words.
             if (row.asksToMeet && onSuggestTimes != null && MailDraftRules.canDraft(text, lastDraft)) {
                 MailNeedsPill(

@@ -66,7 +66,7 @@ class MeetingRequestTest {
         assertEquals(
             "Hi Sam,\n\nHappy to meet. I'm free at any of these times (UK time):\n\n" +
                 "• Friday 16 October, 10:00–11:00\n• Tuesday 20 October, 14:00–15:00\n\n" +
-                "Let me know which suits you and I'll send an invite.\n\nAlex",
+                "Let me know which suits you and I'll put it in the diary.\n\nAlex",
             text,
         )
         assertTrue(MeetingRequestRules.draft("bookings@example.com", slots, cal, null, null)!!.startsWith("Hi,\n\n"))

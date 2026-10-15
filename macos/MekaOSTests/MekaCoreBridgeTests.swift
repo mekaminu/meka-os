@@ -3027,6 +3027,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         let noTimes = try await core.suggestMeetingTimes(id: "nothing")
         XCTAssertNil(noTimes.text)
         XCTAssertEqual(noTimes.line, MeetingRequestRules.shared.UNKNOWN)
+        // Scheduling assistant, slice 2: their pick is booked on his tap; an unknown email books nothing.
+        XCTAssertEqual(MeetingPickRules.shared.BOOK, "Book it")
+        let unknownBooking = try await core.bookMeetingPick(id: "nothing")
+        XCTAssertEqual(unknownBooking, MailNeedsRules.shared.UNKNOWN)
         // Follow-up radar: his emails with no reply share the card.
         XCTAssertEqual(MailFollowUpRules.shared.TITLE, "No reply yet")
         // Follow-up radar, slice 3: per-person waits.
