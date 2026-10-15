@@ -365,18 +365,19 @@ enum DayRingPlayback: Equatable { case full, quick, still }
 private struct StaggeredAppear: ViewModifier {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.mekaExpressiveMotion) private var expressive
+    @Environment(\.mekaStaggerPlays) private var groupPlays
     let index: Int
     let play: Bool
     @State private var shown = false
 
     func body(content: Content) -> some View {
-        let visible = shown || !play
+        let visible = shown || !play || !groupPlays
         content
             .opacity(visible ? 1 : 0)
             .scaleEffect(visible ? 1 : MotionMath.entryScale(expressive: expressive, reduced: reduceMotion))
             .offset(y: visible || reduceMotion ? 0 : MotionMath.riseDistance(expressive: expressive))
             .onAppear {
-                guard play, !shown else { return }
+                guard play, groupPlays, !shown else { return }
                 let delay = MotionMath.staggerDelay(index: index, reduced: reduceMotion, expressive: expressive)
                 withAnimation(MekaMotion.appear(reduced: reduceMotion, expressive: expressive).delay(delay)) {
                     shown = true

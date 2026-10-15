@@ -36,6 +36,10 @@ private struct MekaExpressiveMotionKey: EnvironmentKey {
     static let defaultValue = false
 }
 
+private struct MekaStaggerPlaysKey: EnvironmentKey {
+    static let defaultValue = true
+}
+
 extension EnvironmentValues {
     /// MEKA's reduced motion: cross-fades only, no movement. Use this, not `accessibilityReduceMotion`.
     var mekaReduceMotion: Bool {
@@ -47,6 +51,13 @@ extension EnvironmentValues {
     var mekaExpressiveMotion: Bool {
         get { self[MekaExpressiveMotionKey.self] }
         set { self[MekaExpressiveMotionKey.self] = newValue }
+    }
+
+    /// False where a group's entrance has already played (Mac presentation pass, item 9: Today's side columns stagger
+    /// in once with Today's opening, not again on every Close): `staggeredAppear` below it is simply there.
+    var mekaStaggerPlays: Bool {
+        get { self[MekaStaggerPlaysKey.self] }
+        set { self[MekaStaggerPlaysKey.self] = newValue }
     }
 }
 

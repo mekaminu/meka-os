@@ -55,21 +55,29 @@ struct TodayView: View {
         let columns = rules.columns(layout: layout, taskOpen: model.selected != nil)
         let widths = rules.widths(contentWidthPt: Float(width), layout: layout).map { max(0, CGFloat($0.floatValue)) }
         let three = columns.contains(CommandColumn.comingUp)
+        // Mac presentation pass, item 9 (core MacCommandCentreRules.entrance): with Today's opening the side columns
+        // follow it 40 ms apart, sliding in from the right; after it they and their cards are simply there.
+        let side = columns.count > 1
+            ? rules.entrance(columns: columns, column: columns[1], opening: play, reduced: reduceMotion) : nil
+        let coming = three
+            ? rules.entrance(columns: columns, column: CommandColumn.comingUp, opening: play, reduced: reduceMotion) : nil
         HStack(spacing: 0) {
             todayColumn
                 .environment(\.selectionNamespace, selection)
                 .frame(width: widths.first ?? 0)
-            if columns.count > 1, widths.count > 1 {
+            if let side, widths.count > 1 {
                 CommandSideView(column: columns[1], palette: palette)
+                    .columnEntrance(step: Int(side.step), slide: CGFloat(side.slidePt), play: side.staggers)
                     .frame(width: widths[1])
                     .overlay(alignment: .leading) { columnRule }
-                    .transition(.opacity)
+                    .transition(.column(slide: CGFloat(side.slidePt)))
             }
-            if three, widths.count > 2 {
+            if let coming, widths.count > 2 {
                 ComingUpColumnView(shared: false, palette: palette)
+                    .columnEntrance(step: Int(coming.step), slide: CGFloat(coming.slidePt), play: coming.staggers)
                     .frame(width: widths[2])
                     .overlay(alignment: .leading) { columnRule }
-                    .transition(.opacity)
+                    .transition(.column(slide: CGFloat(coming.slidePt)))
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: layout.name)
@@ -501,6 +509,7 @@ struct TodayView: View {
                     // Mac presentation pass, slice 1: two columns put Coming up and News under Today's own day.
                     if MacCommandCentreRules.shared.comingUpUnderToday(layout: MacCommandCentreRules.shared.layout(contentWidthPt: Float(width))) {
                         ComingUpColumnView(shared: true, palette: palette, embedded: true)
+                            .environment(\.mekaStaggerPlays, play)
                             .padding(.top, MekaSpace.l)
                             .transition(.opacity)
                     }

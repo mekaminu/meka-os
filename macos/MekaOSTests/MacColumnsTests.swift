@@ -48,4 +48,17 @@ final class MacColumnsTests: XCTestCase {
         XCTAssertFalse(MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: 1000))
         XCTAssertTrue(MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: 1440))
     }
+
+    // Mac presentation pass, item 9: the side columns ease in with Today's opening, once.
+    func testSideColumnsFollowTodayAndStaggerOnlyWithTheOpening() {
+        let cols = rules.columns(layout: rules.layout(contentWidthPt: 1440), taskOpen: false)
+        let needs = rules.entrance(columns: cols, column: CommandColumn.needsYou, opening: true, reduced: false)
+        let coming = rules.entrance(columns: cols, column: CommandColumn.comingUp, opening: true, reduced: false)
+        XCTAssertEqual(Int(needs.step), 1)
+        XCTAssertEqual(Int(coming.step), 2)
+        XCTAssertEqual(CGFloat(needs.slidePt), 24)
+        XCTAssertTrue(needs.staggers)
+        XCTAssertFalse(rules.entrance(columns: cols, column: CommandColumn.needsYou, opening: false, reduced: false).staggers)
+        XCTAssertEqual(CGFloat(rules.entrance(columns: cols, column: CommandColumn.comingUp, opening: true, reduced: true).slidePt), 0)
+    }
 }

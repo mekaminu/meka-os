@@ -151,3 +151,41 @@ class MacHeaderTest {
         assertTrue(r.sidebarOnOpen(1440f))
     }
 }
+
+/** Mac presentation pass, item 9: the columns ease in with Today's opening, once. */
+class MacColumnEntranceTest {
+    private val r = MacCommandCentreRules
+    private val three = listOf(CommandColumn.TODAY, CommandColumn.NEEDS_YOU, CommandColumn.COMING_UP)
+
+    @Test
+    fun columnsFollowTodayOneStepApartSlidingInFromTheRight() {
+        val today = r.entrance(three, CommandColumn.TODAY, opening = true, reduced = false)
+        val needs = r.entrance(three, CommandColumn.NEEDS_YOU, opening = true, reduced = false)
+        val coming = r.entrance(three, CommandColumn.COMING_UP, opening = true, reduced = false)
+        assertEquals(listOf(0, 1, 2), listOf(today.step, needs.step, coming.step))
+        assertEquals(0f, today.slidePt)
+        assertEquals(r.COLUMN_SLIDE_PT, needs.slidePt)
+        assertEquals(r.COLUMN_SLIDE_PT, coming.slidePt)
+        assertTrue(needs.staggers && coming.staggers)
+    }
+
+    @Test
+    fun theDetailTakesNeedsYousStep() {
+        val cols = r.columns(CommandLayout.TWO, taskOpen = true)
+        assertEquals(1, r.entrance(cols, CommandColumn.DETAIL, opening = true, reduced = false).step)
+    }
+
+    @Test
+    fun outsideTheOpeningNothingStaggersAgain() {
+        // Closing a task brings Needs you back: it cross-fades in whole, its cards don't replay the opening.
+        val back = r.entrance(three, CommandColumn.NEEDS_YOU, opening = false, reduced = false)
+        assertFalse(back.staggers)
+    }
+
+    @Test
+    fun reduceMotionNeverSlides() {
+        val e = r.entrance(three, CommandColumn.COMING_UP, opening = true, reduced = true)
+        assertEquals(0f, e.slidePt)
+        assertEquals(2, e.step)
+    }
+}

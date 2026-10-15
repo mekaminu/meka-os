@@ -67,3 +67,46 @@ struct StickyColumnHeader: View {
             .accessibilityAddTraits(.isHeader)
     }
 }
+
+/// Mac presentation pass, item 9 (core MacCommandCentreRules.entrance): with Today's opening, a column beside Today
+/// fades up and slides in from the right one stagger step after the column before it; its cards stagger in under it.
+/// Outside the opening it is simply there (and its cards don't replay), so a Close or a return cross-fades it whole.
+/// Reduce Motion: a cross-fade, no slide.
+private struct ColumnEntranceModifier: ViewModifier {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    @Environment(\.mekaExpressiveMotion) private var expressive
+    let step: Int
+    let slide: CGFloat
+    let play: Bool
+    @State private var shown = false
+
+    func body(content: Content) -> some View {
+        let visible = shown || !play
+        content
+            .environment(\.mekaStaggerPlays, play)
+            .opacity(visible ? 1 : 0)
+            .offset(x: visible || reduceMotion ? 0 : slide)
+            .onAppear {
+                guard play, !shown else { return }
+                let delay = MotionMath.staggerDelay(index: step, reduced: reduceMotion, expressive: expressive)
+                withAnimation(MekaMotion.appear(reduced: reduceMotion, expressive: expressive).delay(delay)) {
+                    shown = true
+                }
+            }
+    }
+}
+
+extension View {
+    /// How a Today column enters (plain values from core `ColumnEntrance`: its step, slide and whether it staggers).
+    func columnEntrance(step: Int, slide: CGFloat, play: Bool) -> some View {
+        modifier(ColumnEntranceModifier(step: step, slide: slide, play: play))
+    }
+}
+
+extension AnyTransition {
+    /// A column arriving or leaving as the window crosses a breakpoint: it slides `slide` pt from the right as it
+    /// fades; Reduce Motion (slide 0): a cross-fade.
+    static func column(slide: CGFloat) -> AnyTransition {
+        slide == 0 ? .opacity : .opacity.combined(with: .offset(x: slide))
+    }
+}

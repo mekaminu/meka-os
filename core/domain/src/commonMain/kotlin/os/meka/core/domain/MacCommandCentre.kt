@@ -76,11 +76,38 @@ object MacCommandCentreRules {
         return EdgeFades(top = offsetPt > EDGE_SLOP_PT, bottom = below > EDGE_SLOP_PT)
     }
 
+    /** How far a column slides in from the trailing side as it enters (the 8/16/24 rhythm). */
+    const val COLUMN_SLIDE_PT = 24f
+
+    /**
+     * How [column] enters (Mac presentation pass, item 9; catalogue "Command centre"): with Today's opening, the
+     * columns beside Today follow it one stagger step apart (Today 0, then Needs you or the detail, then Coming up),
+     * each sliding [COLUMN_SLIDE_PT] in from the right as it fades up; its own cards stagger in under it. Outside the
+     * opening ([opening] false) — a task closed, the window widened, back from another section — the column and its
+     * cards are simply there, cross-fading as a whole, so the stagger plays once per opening and never again on
+     * every Close. Reduce Motion: a cross-fade with no slide.
+     */
+    fun entrance(columns: List<CommandColumn>, column: CommandColumn, opening: Boolean, reduced: Boolean): ColumnEntrance {
+        val step = columns.indexOf(column).coerceAtLeast(0)
+        return ColumnEntrance(
+            step = step,
+            slidePt = if (reduced || step == 0) 0f else COLUMN_SLIDE_PT,
+            staggers = opening,
+        )
+    }
+
     private fun floor(v: Float): Float = kotlin.math.floor(v)
 
     /** [v] kept within [lo]..[hi]; when the window is too narrow for both minimums, [lo] wins. */
     private fun clamp(v: Float, lo: Float, hi: Float): Float = maxOf(lo, minOf(v, hi))
 }
+
+/**
+ * How one of the Mac's Today columns enters: its place in the opening stagger ([step], 40 ms apart), how far it slides
+ * in from the right ([slidePt], 0 for Today and under Reduce Motion), and whether it and its cards stagger in now
+ * ([staggers]: only with Today's opening).
+ */
+data class ColumnEntrance(val step: Int, val slidePt: Float, val staggers: Boolean)
 
 /** The fades a scrolling column shows at its edges. */
 data class EdgeFades(val top: Boolean, val bottom: Boolean)
