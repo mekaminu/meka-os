@@ -127,17 +127,21 @@ class MailDraftFacadeTest {
         // Both leave the card, the third stays; each carries its own words and is held for Undo's window.
         assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
         assertTrue(fold.syncNow())
-        val mac = core()
+        val mac = MekaCore(
+            householdId = "hh", deviceId = "mac", store = InMemoryReplicaStore(), transport = server,
+            secureRandom = Random(2), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
         assertTrue(mac.syncNow())
-        val items = mac.mailNeeds.value!!.rows.map { it.id }
-        assertEquals(listOf(c), items)
+        assertEquals(listOf(c), mac.mailNeeds.value!!.rows.map { it.id })
         // One Undo brings both back.
+        now += 1_000
         fold.undoMailItem()
         assertEquals(setOf(a, b, c), fold.mailNeeds.value?.rows?.map { it.id }?.toSet())
         // A blank reply is never sent; with nothing sendable, nothing is written.
         assertEquals(MailNeedsRules.REPLY_EMPTY, fold.replyToMailItems(listOf(a), listOf("  ")))
         assertEquals(MailNeedsRules.UNKNOWN, fold.replyToMailItems(listOf("nope"), listOf("Hi")))
         assertEquals(3, fold.mailNeeds.value?.rows?.size)
+        now += 1_000
         // One that can go and one that can't: the good one goes, with the one-reply line from its own account.
         assertEquals(MailNeedsRules.replySendingLine("Business"), fold.replyToMailItems(listOf(a, b), listOf("Yes.", "")))
         assertEquals(setOf(b, c), fold.mailNeeds.value?.rows?.map { it.id }?.toSet())
