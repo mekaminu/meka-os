@@ -154,6 +154,39 @@ class MailFindFacadeTest {
     }
 
     @Test
+    fun aPersonsOwnWaitHoldsTheRowOnBothAppsAndUndoPutsTheDefaultBack() = runTest {
+        // Sent Wed 14 Oct, today Sat 17 Oct: three days, so it's offered with the default wait.
+        val sentDay = CivilDate.toEpochDay(2026, 10, 14)
+        val own = setOf("alex@example.com")
+        val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 3 * 86_400_000L), own, false)!!
+        val id = MailFollowUpRules.findId("acc1", "w1")
+        serverWrite(id, MailFollowUpRules.serverFields(fu, "Personal", "Quote", sentDay))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val row = fold.mailFinds.value!!.rows.single()
+        assertEquals("Wait 3 days ▾", row.waitPill)
+        assertEquals(listOf(3), row.waits.filter { it.chosen }.map { it.days })
+
+        // A week for Sam: the row waits until Wed 21 Oct, on both apps.
+        assertEquals("Waiting 1 week for Sam Taylor's replies · this one comes back Wed 21 Oct", fold.setFollowUpWait(id, 7))
+        assertNull(fold.mailFinds.value)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertNull(mac.mailFinds.value)
+        now += 4 * 86_400_000L
+        assertTrue(mac.syncNow())
+        assertEquals("Wait 1 week ▾", mac.mailFinds.value!!.rows.single().waitPill)
+
+        // Back to Saturday; 1 day keeps it showing; Undo puts the week back; a choice off the list does nothing.
+        now -= 4 * 86_400_000L
+        assertEquals("Waiting 1 day for Sam Taylor's replies from now on", mac.setFollowUpWait(id, 1))
+        assertEquals("Wait 1 day ▾", mac.mailFinds.value!!.rows.single().waitPill)
+        mac.undoMailFind()
+        assertNull(mac.mailFinds.value)
+        assertEquals(MailRenewalRules.UNKNOWN, mac.setFollowUpWait(id, 4))
+    }
+
+    @Test
     fun aFollowUpOnWaitingForIsChasedFromTimeToChaseAndTheirReplyComesBackToGotIt() = runTest {
         val sentDay = CivilDate.toEpochDay(2026, 10, 12)
         val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 5 * 86_400_000L), setOf("alex@example.com"), false)!!

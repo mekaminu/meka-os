@@ -518,8 +518,9 @@ class Integrations(
      * Follow-up radar, slice 1: at most every [FOLLOW_UPS_EVERY_MS], the account's sent mail of the last
      * [MailFollowUpRules.WINDOW_DAYS] days ([MailProvider.sent]: recipients, subject, preview, time; never a body). The
      * newest email he sent in each conversation that [MailFollowUpRules.read] says asks someone something, sent at
-     * least [MailFollowUpRules.DAYS] days ago, with no email in that conversation from anyone else since, becomes one
-     * `mail_find` (kind FOLLOW_UP), written once; its mirror row keeps when it was sent and the conversation (server
+     * least [MailFollowUpRules.MIN_DAYS] day ago, with no email in that conversation from anyone else since, becomes one
+     * `mail_find` (kind FOLLOW_UP), written once (slice 3: the apps show it once that person's wait has passed, 3 days
+     * unless he chose his own); its mirror row keeps when it was sent and the conversation (server
      * only). Each later check marks an open one answered when someone replies in the conversation or he writes in it
      * again, and the apps drop it. Nothing goes on Waiting for and nothing is sent here: the apps' Add does the first.
      */

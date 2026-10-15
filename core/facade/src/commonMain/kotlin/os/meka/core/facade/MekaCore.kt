@@ -4320,7 +4320,39 @@ class MekaCore(
         replica.entities(os.meka.core.domain.EntityTypes.OBLIGATION).map { it.fields }
 
     private fun mailFindsChanged() {
-        _mailFinds.value = os.meka.core.domain.MailRenewalRules.card(activity.mailFinds(), radarFields(), nowMs(), ZoneCalendar(timeZone), lists.waitingItems())
+        _mailFinds.value = os.meka.core.domain.MailRenewalRules.card(
+            activity.mailFinds(), radarFields(), nowMs(), ZoneCalendar(timeZone), lists.waitingItems(), followUpWaits(),
+        )
+    }
+
+    /** Follow-up radar, slice 3: his own waits per person (absent = the default 3 days). */
+    private fun followUpWaits(): List<os.meka.core.domain.FollowUpWait> =
+        replica.entities(os.meka.core.domain.EntityTypes.FOLLOW_UP_WAIT)
+            .mapNotNull { os.meka.core.domain.MailFollowUpRules.readWait(it.ref.entityId, it.fields) }
+
+    /**
+     * Follow-up radar, slice 3: a chip under **Wait 3 days ▾** on a No reply yet row — how many days he waits for that
+     * person's replies before Navilife offers a chase ([os.meka.core.domain.MailFollowUpRules.WAIT_CHOICES]), for this
+     * email and every later one to them, on both apps. The row waits until then if that day hasn't come. Undo puts the
+     * last wait back. Nothing is sent. Returns the line to show.
+     */
+    suspend fun setFollowUpWait(findId: String, days: Int): String = onCore {
+        val U = os.meka.core.domain.MailFollowUpRules
+        val f = activity.mailFinds().firstOrNull { it.id == findId && it.kind == U.KIND_FOLLOW_UP }
+            ?: return@onCore os.meka.core.domain.MailRenewalRules.UNKNOWN
+        if (days !in U.WAIT_CHOICES) return@onCore os.meka.core.domain.MailRenewalRules.UNKNOWN
+        val who = U.title(f)
+        val wid = U.waitId(f.merchant)
+        val before = replica.entity(os.meka.core.domain.EntityTypes.FOLLOW_UP_WAIT, wid)?.fields
+        replica.commitLocal(os.meka.core.domain.EntityTypes.FOLLOW_UP_WAIT, wid, U.waitFields(who, days, nowMs()))
+        mailFindUndo = {
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.FOLLOW_UP_WAIT, wid,
+                before?.let { it + mapOf(os.meka.core.domain.FollowUpWaitFields.AT to nowMs().fv()) } ?: U.waitFields(who, 0, nowMs()),
+            )
+        }
+        mailFindsChanged()
+        U.waitSetLine(f, days, ZoneCalendar(timeZone).epochDayOf(nowMs()))
     }
 
     /**

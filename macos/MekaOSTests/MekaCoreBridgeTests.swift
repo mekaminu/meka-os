@@ -3015,6 +3015,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MailPromiseRules.shared.TITLE, "Promises from your mail")
         // Follow-up radar: his emails with no reply share the card.
         XCTAssertEqual(MailFollowUpRules.shared.TITLE, "No reply yet")
+        // Follow-up radar, slice 3: per-person waits.
+        XCTAssertEqual(MailFollowUpRules.shared.waitPill(days: 7), "Wait 1 week ▾")
+        XCTAssertEqual(MailFollowUpRules.shared.waitChoices(who: "Sam", current: 3).filter { $0.chosen }.map { $0.days }, [3])
         XCTAssertEqual(MailRenewalRules.shared.headline(renewals: 0, promises: 0, followUps: 1), "1 email with no reply · nothing goes on Waiting for until you tap Add")
         // Slice 7: the ten-minute inbox — no email, no card; a session over nothing ends "Inbox clear"; the time's key.
         XCTAssertNil(core.mailMoment.value)

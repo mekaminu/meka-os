@@ -544,6 +544,7 @@ internal fun MailFindSection(
                             row,
                             onAdd = { haptics.medium(); answer { core.addMailFind(row.id) } },
                             onNotNeeded = { haptics.light(); answer { core.notNeededMailFind(row.id) } },
+                            onWait = { days -> haptics.tick(); answer { core.setFollowUpWait(row.id, days) } },
                         )
                     }
                 }
@@ -555,7 +556,9 @@ internal fun MailFindSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: () -> Unit) {
+private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: () -> Unit, onWait: (Int) -> Unit) {
+    // Follow-up radar, slice 3: "Wait 3 days ▾" unfolds the chips for how long he waits for this person's replies.
+    var waitOpen by rememberSaveable(row.id) { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().testTag("mail-find-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -578,6 +581,19 @@ private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: ()
         ) {
             MailNeedsPill(MailRenewalRules.ADD, spoken = row.addSpoken, onClick = onAdd)
             MailNeedsPill(MailRenewalRules.NOT_NEEDED, spoken = row.notNeededSpoken, quiet = true, onClick = onNotNeeded)
+            row.waitPill?.let { pill ->
+                MailNeedsPill(pill, spoken = row.waitSpoken ?: pill, quiet = true, onClick = { waitOpen = !waitOpen })
+            }
+        }
+        AnimatedVisibility(waitOpen && row.waits.isNotEmpty(), enter = unfold(), exit = fold()) {
+            Column(Modifier.padding(top = MekaSpace.xs).testTag("mail-find-wait-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                row.waitHeading?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    row.waits.forEach { c ->
+                        MailNeedsPill(c.label, spoken = c.spoken, quiet = !c.chosen, onClick = { waitOpen = false; if (!c.chosen) onWait(c.days) })
+                    }
+                }
+            }
         }
     }
 }

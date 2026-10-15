@@ -50,8 +50,10 @@ class MailFollowUpTest {
     }
 
     @Test
-    fun dueAfterThreeDaysUntilAnswered() {
-        assertFalse(MailFollowUpRules.due(sentDay, sentDay + 2))
+    fun writtenFromADayUntilAnswered() {
+        // The server writes it from a day on (a one-day person); the apps wait that person's days.
+        assertFalse(MailFollowUpRules.due(sentDay, sentDay))
+        assertTrue(MailFollowUpRules.due(sentDay, sentDay + 1))
         assertTrue(MailFollowUpRules.due(sentDay, sentDay + 3))
         assertTrue(MailFollowUpRules.due(sentDay, sentDay + MailFollowUpRules.WINDOW_DAYS))
         assertFalse(MailFollowUpRules.due(sentDay, sentDay + MailFollowUpRules.WINDOW_DAYS + 1))
@@ -100,6 +102,44 @@ class MailFollowUpTest {
         // Not needed: gone.
         val dismissed = f.copy(state = MailFindState.DISMISSED)
         assertFalse(MailFollowUpRules.showable(dismissed, emptyList(), today))
+    }
+
+    @Test
+    fun eachPersonWaitsTheirOwnDaysElseThree() {
+        val fu = read("Quote for the kitchen", "Could you send the quote?")!!
+        val f = MailRenewalRules.read("mf9", MailFollowUpRules.serverFields(fu, "Personal", "Quote for the kitchen", sentDay))!!
+        // The default: hidden on days 1–2, shown from day 3.
+        assertFalse(MailFollowUpRules.showable(f, emptyList(), sentDay + 2))
+        assertTrue(MailFollowUpRules.showable(f, emptyList(), sentDay + 3))
+        // His own week for Sam (the name folded, the newest choice winning); someone else keeps three.
+        val wid = MailFollowUpRules.waitId("Sam Taylor")
+        assertEquals(wid, MailFollowUpRules.waitId("  sam   taylor "))
+        val old = MailFollowUpRules.readWait(wid, MailFollowUpRules.waitFields("Sam Taylor", 1, 1L))!!
+        val week = MailFollowUpRules.readWait(wid, MailFollowUpRules.waitFields("sam taylor", 7, 2L))!!
+        val waits = listOf(old, week)
+        assertEquals(7, MailFollowUpRules.daysFor("Sam Taylor", waits))
+        assertEquals(3, MailFollowUpRules.daysFor("Ann Lee", waits))
+        assertFalse(MailFollowUpRules.showable(f, emptyList(), sentDay + 6, waits))
+        assertTrue(MailFollowUpRules.showable(f, emptyList(), sentDay + 7, waits))
+        assertTrue(MailFollowUpRules.showable(f, emptyList(), sentDay + 7 + MailFollowUpRules.STALE_DAYS, waits))
+        assertFalse(MailFollowUpRules.showable(f, emptyList(), sentDay + 8 + MailFollowUpRules.STALE_DAYS, waits))
+        // One day: shown the day after.
+        val day = MailFollowUpRules.readWait(wid, MailFollowUpRules.waitFields("Sam Taylor", 1, 3L))!!
+        assertTrue(MailFollowUpRules.showable(f, emptyList(), sentDay + 1, listOf(day)))
+        // 0 (Undo of a first choice) or off the scale reads as none.
+        assertNull(MailFollowUpRules.readWait(wid, MailFollowUpRules.waitFields("Sam Taylor", 0, 4L)))
+        assertNull(MailFollowUpRules.readWait(wid, MailFollowUpRules.waitFields("Sam Taylor", 30, 4L)))
+        // The row: the pill, the heading and the chips, his choice marked.
+        val row = MailFollowUpRules.row(f, sentDay + 7, waits)
+        assertEquals("Wait 1 week ▾", row.waitPill)
+        assertEquals("How long to wait for Sam Taylor's replies before offering a chase", row.waitHeading)
+        assertEquals(listOf("1 day", "2 days", "3 days", "5 days", "1 week", "2 weeks"), row.waits.map { it.label })
+        assertEquals("Wait 1 week for Sam Taylor, chosen", row.waits.single { it.chosen }.spoken)
+        // A renewal's row has none.
+        assertNull(MailRenewalRules.card(listOf(f.copy(kind = MailRenewalRules.KIND_RENEWAL, renewDay = sentDay + 30)), emptyList(), cal.toEpochMs(sentDay, 600), cal)!!.rows.single().waitPill)
+        // The bar's lines.
+        assertEquals("Waiting 1 week for Sam Taylor's replies · this one comes back Mon 19 Oct", MailFollowUpRules.waitSetLine(f, 7, sentDay + 3))
+        assertEquals("Waiting 2 days for Sam Taylor's replies from now on", MailFollowUpRules.waitSetLine(f, 2, sentDay + 3))
     }
 
     @Test

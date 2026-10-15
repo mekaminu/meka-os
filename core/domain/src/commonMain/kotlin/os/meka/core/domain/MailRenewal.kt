@@ -108,6 +108,11 @@ data class MailFindRow(
     val addSpoken: String = "Add $title to Renewals",
     /** What Not needed says: "Netflix isn't needed on Renewals". */
     val notNeededSpoken: String = "$title isn't needed on Renewals",
+    /** Follow-up radar, slice 3 (follow-ups only, else null/empty): "Wait 3 days ▾", what it says, the chips' heading and chips. */
+    val waitPill: String? = null,
+    val waitSpoken: String? = null,
+    val waitHeading: String? = null,
+    val waits: List<WaitChoice> = emptyList(),
 )
 
 data class MailFindCard(
@@ -366,7 +371,7 @@ object MailRenewalRules {
      */
     fun card(
         finds: List<MailFind>, obligations: Collection<Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar,
-        waiting: List<WaitingItem> = emptyList(),
+        waiting: List<WaitingItem> = emptyList(), waits: List<FollowUpWait> = emptyList(),
     ): MailFindCard? {
         val today = cal.epochDayOf(nowMs)
         val renewals = finds.filter { f ->
@@ -374,12 +379,12 @@ object MailRenewalRules {
                 !alreadyOnRadar(f.merchant, f.renewDay, obligations, cal)
         }
         val promises = finds.filter { MailPromiseRules.showable(it, waiting, today) }
-        val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today) }
+        val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today, waits) }
         val open = (renewals + promises + followUps).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
         if (open.isEmpty()) return null
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
-            if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today)
+            if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today, waits)
             val title = title(f)
             val line = line(f, today)
             MailFindRow(

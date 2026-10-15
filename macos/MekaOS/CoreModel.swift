@@ -4343,6 +4343,19 @@ final class CoreModel {
         }
     }
 
+    /// Follow-up radar, slice 3: a chip under "Wait 3 days ▾" — how many days he waits for that person's replies, on
+    /// both apps; Undo on the bar puts the last wait back. Only the id and the number cross.
+    func setFollowUpWait(_ id: String, days: Int32) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                let line = try await core.setFollowUpWait(findId: id, days: days)
+                offerEventUndo(line, .mailFind)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Not needed on "Renewals from your mail": gone on both apps, Undo on the bar. Only the id crosses.
     func notNeededMailFind(_ id: String) {
         guard let core else { return }

@@ -786,7 +786,7 @@ class MailSyncTest {
         val (gmail, _, i) = world(ms, ops = ops)
         val id = connect(i)
         gmail.sentMail += sentMsg("s1", 4, "Could you send the quote?")
-        gmail.sentMail += sentMsg("s2", 1, "Can you make Friday?") // too soon
+        gmail.sentMail += sentMsg("s2", 0, "Can you make Friday?") // too soon: sent today
         gmail.sentMail += sentMsg("s3", 5, "Thanks, all good.") // asks nothing
         gmail.sentMail += sentMsg("s4", 5, "Any update?", thread = "t-r4") // answered already
         gmail.sentMail += sentMsg("s5", 6, "Can you check?", to = "noreply@shop.example")

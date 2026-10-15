@@ -125,6 +125,8 @@ object EntityTypes {
     const val KID_CHORE_TICK = "kid_chore_tick"
     /** Promises, receipts and renewals from email, slice 1 (2026-10-15): one find the server read from a mail account (a renewal to add), with Add / Not needed (see [MailRenewalRules]). */
     const val MAIL_FIND = "mail_find"
+    /** Follow-up radar, slice 3 (2026-10-15): how many days he waits for one person's reply, id "fw" + a hash of the name (see [MailFollowUpRules]). */
+    const val FOLLOW_UP_WAIT = "follow_up_wait"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -135,6 +137,7 @@ object EntityTypes {
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
+        FOLLOW_UP_WAIT,
     )
 }
 
@@ -432,6 +435,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.PARCEL -> MergePolicy.Lww
         // Mail finds: the server writes the find once; Add / Not needed (and their Undo) come from either app, latest wins.
         entityType == EntityTypes.MAIL_FIND -> MergePolicy.Lww
+        // Follow-up waits: one per person, set (and put back with Undo) on either app; the latest choice wins.
+        entityType == EntityTypes.FOLLOW_UP_WAIT -> MergePolicy.Lww
         // Drive times: only the server writes them; its latest answer wins.
         entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
         // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.

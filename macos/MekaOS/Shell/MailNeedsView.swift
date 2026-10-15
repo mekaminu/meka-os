@@ -537,7 +537,8 @@ struct MailFindView: View {
                             ForEach(card.rows, id: \.id) { row in
                                 MailFindRowView(row: row, palette: palette,
                                                 add: { model.addMailFind(row.id) },
-                                                notNeeded: { model.notNeededMailFind(row.id) })
+                                                notNeeded: { model.notNeededMailFind(row.id) },
+                                                wait: { days in model.setFollowUpWait(row.id, days: days) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -566,6 +567,10 @@ private struct MailFindRowView: View {
     let palette: MekaPalette
     let add: () -> Void
     let notNeeded: () -> Void
+    let wait: (Int32) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    /// Follow-up radar, slice 3: "Wait 3 days ▾" unfolds the chips for how long he waits for this person's replies.
+    @State private var waitOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -589,8 +594,31 @@ private struct MailFindRowView: View {
                               spoken: row.addSpoken, action: add)
                 MailNeedsPill(label: MailRenewalRules.shared.NOT_NEEDED, palette: palette, quiet: true,
                               spoken: row.notNeededSpoken, action: notNeeded)
+                if let pill = row.waitPill {
+                    MailNeedsPill(label: pill, palette: palette, quiet: true,
+                                  spoken: row.waitSpoken ?? pill, action: { waitOpen.toggle() })
+                }
             }
             .padding(.top, MekaSpace.xxs)
+            if waitOpen, !row.waits.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    if let heading = row.waitHeading {
+                        Text(heading).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    }
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(row.waits, id: \.days) { c in
+                            MailNeedsPill(label: c.label, palette: palette, quiet: !c.chosen, spoken: c.spoken,
+                                          action: {
+                                              waitOpen = false
+                                              if !c.chosen { wait(c.days) }
+                                          })
+                        }
+                    }
+                }
+                .padding(.top, MekaSpace.xs)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
         }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: waitOpen)
     }
 }
