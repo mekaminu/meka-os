@@ -90,4 +90,21 @@ class TriageCardsTest {
         assertEquals(TriageCard.LOCAL_LINE, card.gist)
         assertEquals(CaptureApp.WHATSAPP, card.app)
     }
+
+    @Test
+    fun aOneToOneChatsNumberTravelsSoTheMacCanOpenWhatsAppAndGoesOnceResolved() {
+        // WhatsApp replies, slice 1: the number the notification carried rides on a 1:1 card, never a group's.
+        val card = assertNotNull(fold.save(tunde.copy(chatNumber = "+447700900456"), reply))
+        assertEquals("+447700900456", card.number)
+        val group = CapturedItem("wa-g", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, "Femi", "Meka?", "Barça lads", at(fri, 14 * 60 + 1), chatNumber = "+447700900789")
+        assertNull(assertNotNull(fold.save(group, reply)).number)
+        syncBoth()
+        val onMac = mac.find("wa-1")!!
+        assertEquals("+447700900456", onMac.number)
+        assertEquals(TriageCardPrimary.REPLY_IN_APP, TriageReplyRules.primary(onMac, live = false, canSend = false))
+        assertTrue(mac.resolve("wa-1", TriageResolution.SEEN))
+        syncBoth()
+        val e = a.replica.entities(EntityTypes.TRIAGE_CARD).first { it[TriageCardFields.MESSAGE_ID].textOrNull == "wa-1" }
+        assertNull(e[TriageCardFields.NUMBER].textOrNull)
+    }
 }

@@ -71,7 +71,7 @@ object ChatShadeRules {
     const val ARRIVAL_OFF = "Stop clearing this chat from the shade"
     const val ARRIVAL_SETTING_TITLE = "Cleared from the shade as they come"
     const val ARRIVAL_SETTING_LINE =
-        "Navilife keeps every message and its card; WhatsApp still shows them unread. Send then opens the chat with the reply copied."
+        "Navilife keeps every message and its card; WhatsApp still shows them unread. A message waiting for your reply stays in the shade until you send or finish it."
 
     /** The chat key of a captured message, the same as [TriageChatRules.key] gives its card. */
     fun key(item: CapturedItem): String {
@@ -105,11 +105,22 @@ object ChatShadeRules {
      * retry needs WhatsApp's re-post); never when any message is from family or the always-notify list, or is urgent
      * (those alert). Hiding only: it never marks read and never deletes anything in WhatsApp.
      */
-    fun clearsOnArrival(items: List<CapturedItem>, settings: TriageSettings, lists: PeopleLists, had: Set<String>): Boolean =
-        settings.clearOnArrival.isNotEmpty() && items.isNotEmpty() && items.all { item ->
+    fun clearsOnArrival(
+        items: List<CapturedItem>, settings: TriageSettings, lists: PeopleLists, had: Set<String>,
+        /**
+         * The message ids with a reply card still waiting ([pendingReplies]): such a notification stays in the shade, so
+         * Send keeps the notification's own Reply to answer through (WhatsApp replies, slice 1, item 3).
+         */
+        pending: Set<String> = emptySet(),
+    ): Boolean =
+        settings.clearOnArrival.isNotEmpty() && items.isNotEmpty() && items.none { it.id in pending } && items.all { item ->
             key(item) in settings.clearOnArrival && item.id in had && item.kind == CaptureKind.MESSAGE &&
                 !lists.isFamily(item.personName) && !lists.isAlwaysNotify(item.personName) && Capture.breakThrough(item, lists) == null
         }
+
+    /** The message ids whose Needs a reply card (with a drafted reply) is still open: their notifications aren't cleared. */
+    fun pendingReplies(cards: List<TriageCard>): Set<String> =
+        cards.filter { it.lane == TriageLane.NEEDS_REPLY && it.draft != null }.mapTo(HashSet()) { it.id }
 
     /** "Open WhatsApp to mark read": the notification has gone, so only the app can mark it. */
     fun openToMarkLabel(app: CaptureApp?): String = "Open ${TriageReplyRules.appName(app)} to mark read"

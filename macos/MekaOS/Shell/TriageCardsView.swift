@@ -123,7 +123,8 @@ private struct TriageCardRow: View {
 
     var body: some View {
         let rules = TriageReplyRules.shared
-        let lead = rules.label(primary: rules.primary(card: card, live: false, canSend: false))
+        let primary = rules.primary(card: card, live: false, canSend: false)
+        let lead = rules.label(primary: primary)
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             // Someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): "Jordan asked", in brass.
             if let name = card.askedBy {
@@ -142,12 +143,17 @@ private struct TriageCardRow: View {
                     .padding(.top, MekaSpace.xs)
             }
             HStack(spacing: MekaSpace.xs) {
-                pill(lead, filled: true, spoken: card.draft != nil ? rules.copiedLine(card: card) : lead) { answer(true) }
+                pill(lead, filled: true, spoken: primary == .replyInApp ? "Open WhatsApp with your reply to \(rules.who(card: card)) typed"
+                     : (card.draft != nil ? rules.copiedLine(card: card) : lead)) { answer(true) }
                 if let quiet = rules.secondary(card: card) {
                     pill(quiet, filled: false, quiet: true, spoken: "\(quiet): \(rules.who(card: card))") { answer(false) }
                 }
             }
             .padding(.top, MekaSpace.xs)
+            // Which way the reply goes (WhatsApp replies, slice 1, item 4).
+            if let route = rules.routeLine(card: card, primary: primary) {
+                Text(route).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
         }
         // Less inner padding at the Mac's type sizes, still on the 8/16 rhythm.
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)

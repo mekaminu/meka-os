@@ -6,6 +6,11 @@ enum class TriageCardPrimary {
     SEND,
     /** Open the chat (the drafted reply copied first, when there is one); Meka taps send in the app. */
     OPEN_CHAT,
+    /**
+     * Open WhatsApp's chat with the reply already typed (its official click-to-chat link); Meka taps send there. When
+     * Send can't go from here: the notification has gone, or on the Mac. One-to-one chats with a known number only.
+     */
+    REPLY_IN_APP,
     /** Copy the drafted reply (the Mac never sends). */
     COPY,
     /** An FYI read. */
@@ -31,6 +36,13 @@ object TriageReplyRules {
     const val NOT_NOW = "Not now"
     const val SEEN = "Seen"
     const val REPLY_HINT = "Your reply"
+    const val REPLY_IN_WHATSAPP = "Reply in WhatsApp"
+
+    /** The line under a reply card's buttons saying which way the reply will go (WhatsApp replies, slice 1, item 4). */
+    const val ROUTE_SEND = "Sends from your phone"
+    const val ROUTE_REPLY_IN_APP = "Opens WhatsApp with your reply typed · you tap send"
+    const val ROUTE_OPEN_CHAT = "Opens the chat with your reply copied · paste and send"
+    const val ROUTE_COPY = "Copies your reply · paste it in the chat"
 
     /** An edited reply is Meka's own words: kept whole up to this length (WhatsApp's own limit is far above it). */
     const val MAX_REPLY = 2_000
@@ -38,26 +50,87 @@ object TriageReplyRules {
     /** A reply this short, one paragraph, in a 1:1 chat, may go out with the others under "Send all". */
     const val MAX_EASY = 100
 
-    /** The first button of [card]: Send while the message's Reply action is live on this phone ([live]), else Open chat. */
+    /**
+     * The first button of [card]: Send while the message's Reply action is live on this phone ([live]); otherwise, for a
+     * one-to-one WhatsApp chat whose number is known, Reply in WhatsApp (the chat opens with the reply typed); else Open
+     * chat (the reply copied) on the Fold and Copy reply on the Mac ([canSend] false). Never sends by itself.
+     */
     fun primary(card: TriageCard, live: Boolean, canSend: Boolean = true): TriageCardPrimary = when {
         card.lane != TriageLane.NEEDS_REPLY -> TriageCardPrimary.SEEN
+        canSend && live && card.draft != null -> TriageCardPrimary.SEND
+        card.draft != null && replyLink(card, card.draft) != null -> TriageCardPrimary.REPLY_IN_APP
         !canSend -> if (card.draft != null) TriageCardPrimary.COPY else TriageCardPrimary.SEEN
-        live && card.draft != null -> TriageCardPrimary.SEND
         else -> TriageCardPrimary.OPEN_CHAT
     }
 
     fun label(primary: TriageCardPrimary): String = when (primary) {
         TriageCardPrimary.SEND -> SEND
+        TriageCardPrimary.REPLY_IN_APP -> REPLY_IN_WHATSAPP
         TriageCardPrimary.OPEN_CHAT -> OPEN_CHAT
         TriageCardPrimary.COPY -> COPY
         TriageCardPrimary.SEEN -> SEEN
     }
 
+    /** Which way [primary] sends a reply card's words, shown quietly under its buttons; null for an FYI's Seen. */
+    fun routeLine(card: TriageCard, primary: TriageCardPrimary): String? = when {
+        card.lane != TriageLane.NEEDS_REPLY || card.draft == null -> null
+        primary == TriageCardPrimary.SEND -> ROUTE_SEND
+        primary == TriageCardPrimary.REPLY_IN_APP -> ROUTE_REPLY_IN_APP
+        primary == TriageCardPrimary.OPEN_CHAT -> ROUTE_OPEN_CHAT.replace("the chat", appName(card.app))
+        primary == TriageCardPrimary.COPY -> ROUTE_COPY
+        else -> null
+    }
+
+    /**
+     * WhatsApp's official click-to-chat link opening [card]'s chat with [text] typed ("https://wa.me/447700900123?text=…"):
+     * only a one-to-one WhatsApp chat with a number; null otherwise (a group, a text message, no number, a blank reply).
+     * Opening it sends nothing: Meka taps WhatsApp's own send.
+     */
+    fun replyLink(card: TriageCard, text: String?): String? {
+        if (card.app != CaptureApp.WHATSAPP || card.group != null || card.mentioned) return null
+        val words = cleanReply(text) ?: return null
+        return LeavingRules.waLink(card.number ?: return null, words)
+    }
+
+    /** The undo bar after Reply in WhatsApp. */
+    fun replyInAppLine(card: TriageCard): String = "Opened WhatsApp with your reply to ${who(card)} · tap send there"
+
+    /** Send was tapped but the notification had gone: WhatsApp opened with the reply typed instead. */
+    const val SEND_FAILED_TO_APP_LINE = "Couldn't send from here · opened WhatsApp with your reply typed"
+
+    /**
+     * A one-to-one chat's phone number from what the Fold's notification carried, first that reads as one: WhatsApp's
+     * chat id ([shortcutId], "447700900123@s.whatsapp.net"; never a group's "@g.us" or a hidden "@lid" id), the
+     * sender's link ([personUri], "tel:+447700900123"), or the sender shown as a number ([personName]). Kept as digits
+     * with a leading + when international; null when none is a phone number.
+     */
+    fun chatNumber(personName: String?, personUri: String?, shortcutId: String?): String? {
+        shortcutId?.trim()?.takeIf { it.endsWith("@s.whatsapp.net") }?.substringBefore('@')?.let { id ->
+            cleanNumber("+" + id.filter { it.isDigit() })?.let { return it }
+        }
+        personUri?.trim()?.takeIf { it.startsWith("tel:", ignoreCase = true) }?.let { cleanNumber(it.drop(4))?.let { n -> return n } }
+        val name = personName?.trim().orEmpty()
+        if (name.isNotEmpty() && name.all { it.isDigit() || it in " +-()" }) return cleanNumber(name)
+        return null
+    }
+
+    /** [raw] as a phone number to keep: digits (a leading + kept), 8–15 digits, never a short code; null otherwise. */
+    fun cleanNumber(raw: String?): String? {
+        val t = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val digits = t.filter { it.isDigit() }
+        if (digits.length !in 8..15) return null
+        return if (t.startsWith("+")) "+$digits" else digits
+    }
+
     /** The second, quiet button: Not now for a reply, nothing more for an FYI (Seen already leads). */
     fun secondary(card: TriageCard): String? = if (card.lane == TriageLane.NEEDS_REPLY) NOT_NOW else null
 
-    /** Whether Edit shows: a reply with a draft that this device can send. */
-    fun editable(card: TriageCard, live: Boolean): Boolean = card.lane == TriageLane.NEEDS_REPLY && card.draft != null && live
+    /**
+     * Whether Edit shows: a reply with a draft this device can send, or one that opens WhatsApp with the words typed
+     * (the edited words are what's typed there).
+     */
+    fun editable(card: TriageCard, live: Boolean): Boolean =
+        card.lane == TriageLane.NEEDS_REPLY && card.draft != null && (live || replyLink(card, card.draft) != null)
 
     /**
      * Meka's edited reply as it will be sent: trimmed, line ends kept, at most [MAX_REPLY] characters; null when blank

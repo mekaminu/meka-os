@@ -59,6 +59,8 @@ import os.meka.core.domain.TriageSendAll
 sealed interface TriageChoice {
     data class Send(val reply: String) : TriageChoice
     data object OpenChat : TriageChoice
+    /** Reply in WhatsApp: the chat opens with [reply] typed; Meka taps send there (WhatsApp replies, slice 1). */
+    data class ReplyInApp(val reply: String) : TriageChoice
     data object NotNow : TriageChoice
     data object Seen : TriageChoice
 }
@@ -131,12 +133,14 @@ internal fun TriageCardView(
             val label = rules.label(primary)
             TriagePill(label, filled = true, spoken = when (primary) {
                 TriageCardPrimary.SEND -> "Send to ${rules.who(card)}: ${sendable ?: ""}"
+                TriageCardPrimary.REPLY_IN_APP -> "Open WhatsApp with your reply to ${rules.who(card)} typed: ${sendable ?: ""}"
                 TriageCardPrimary.OPEN_CHAT -> "Open the chat with ${rules.who(card)}" + if (card.draft != null) ", the reply copied" else ""
                 else -> label
             }) {
                 haptics.light()
                 when (primary) {
                     TriageCardPrimary.SEND -> sendable?.let { onChoice(TriageChoice.Send(it)) }
+                    TriageCardPrimary.REPLY_IN_APP -> sendable?.let { onChoice(TriageChoice.ReplyInApp(it)) }
                     TriageCardPrimary.OPEN_CHAT -> onChoice(TriageChoice.OpenChat)
                     else -> onChoice(TriageChoice.Seen)
                 }
@@ -150,6 +154,14 @@ internal fun TriageCardView(
             }
             markLabel?.let { mark ->
                 TriagePill(mark, filled = false, spoken = "$mark: ${rules.who(card)}") { haptics.light(); onMark() }
+            }
+        }
+        // Which way the reply goes (WhatsApp replies, slice 1, item 4); cross-fades when the notification comes or goes.
+        val route = rules.routeLine(card, primary)
+        Crossfade(route, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "triage-route") { line ->
+            if (line != null) {
+                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(top = MekaSpace.xxs).testTag("triage-route-${card.id}"))
             }
         }
     }

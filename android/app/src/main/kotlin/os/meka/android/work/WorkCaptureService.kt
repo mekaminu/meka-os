@@ -22,6 +22,7 @@ import os.meka.core.domain.ChatTitleRules
 import os.meka.core.domain.GroupDigestRules
 import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.RequestWatchRules
+import os.meka.core.domain.TriageReplyRules
 import os.meka.core.facade.RequestRead
 import os.meka.core.facade.TriageRead
 
@@ -89,6 +90,8 @@ class WorkCaptureService : NotificationListenerService() {
             } else if (ChatShadeRules.clearsOnArrival(
                     items, meka.captures.triageSettings.value, meka.captures.lists.value,
                     meka.captures.triageSeen() + meka.captures.digestKept(),
+                    // A message with a reply card waiting keeps its notification (and so Send's route) until finished.
+                    pending = ChatShadeRules.pendingReplies(meka.core.triage.value),
                 )
             ) {
                 // A chat Meka set to "Clear from the shade as soon as MEKA has it" (messages grouped per chat, slice
@@ -175,15 +178,22 @@ class WorkCaptureService : NotificationListenerService() {
         if (style != null && style.messages.isNotEmpty()) {
             // Without WhatsApp's "(2 messages)" count, so a bundled re-post is the same group and the same message ids.
             val group = if (style.isGroupConversation) ChatTitleRules.cleanOrNull(style.conversationTitle?.toString()) else null
+            // A one-to-one WhatsApp chat's number (WhatsApp replies, slice 1): the chat id, the sender's tel: link, or the
+            // sender shown as a number; so Reply in WhatsApp can open the chat with the reply typed once this goes.
+            val shortcut = n.shortcutId
             return style.messages.mapNotNull { m ->
                 val sender = m.person?.name?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null // null = Meka himself
                 val body = m.text?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                item(app, CaptureKind.MESSAGE, sender, body, group, m.timestamp.takeIf { it > 0 } ?: at)
+                val number = if (group == null && app == CaptureApp.WHATSAPP) TriageReplyRules.chatNumber(sender, m.person?.uri, shortcut) else null
+                item(app, CaptureKind.MESSAGE, sender, body, group, m.timestamp.takeIf { it > 0 } ?: at, number)
             }
         }
         if (NotificationRules.isSummaryOnly(title, text)) return emptyList()
         val (group, sender) = NotificationRules.splitGroupTitle(title!!.trim())
-        return listOf(item(app, CaptureKind.MESSAGE, sender, text!!.trim(), ChatTitleRules.cleanOrNull(group), at))
+        val number = if (group == null && app == CaptureApp.WHATSAPP) {
+            TriageReplyRules.chatNumber(sender, null, n.shortcutId)
+        } else null
+        return listOf(item(app, CaptureKind.MESSAGE, sender, text!!.trim(), ChatTitleRules.cleanOrNull(group), at, number))
     }
 
     companion object {
@@ -200,6 +210,7 @@ class WorkCaptureService : NotificationListenerService() {
         }
     }
 
-    private fun item(app: CaptureApp, kind: CaptureKind, who: String, text: String?, group: String?, at: Long) =
+    private fun item(app: CaptureApp, kind: CaptureKind, who: String, text: String?, group: String?, at: Long, number: String? = null) =
         CapturedItem(Capture.itemId(app, kind, who, group, at, text), app, kind, who.take(200), text?.take(2_000), group?.take(200), at)
+            .copy(chatNumber = number)
 }

@@ -230,10 +230,22 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                         undo.show(rules.sentLine(card), null)
                         CardFinish.SENT
                     } else {
-                        // The notification went meanwhile: the reply copied, the chat opened; Meka sends it there.
-                        LiveReplies.open(context, card.id, card.app, choice.reply)
+                        // The notification went meanwhile: WhatsApp opens with the reply typed when the chat's number is
+                        // known (WhatsApp replies, slice 1), else the reply is copied and the chat opened; Meka sends it there.
+                        val link = rules.replyLink(card, choice.reply)
+                        val typed = link != null && LiveReplies.openLink(context, link)
+                        if (!typed) LiveReplies.open(context, card.id, card.app, choice.reply)
                         runCatching { core.seenTriage(card.id) }
-                        undo.show(TriageReplyRules.SEND_FAILED_LINE, null)
+                        undo.show(if (typed) TriageReplyRules.SEND_FAILED_TO_APP_LINE else TriageReplyRules.SEND_FAILED_LINE, null)
+                        CardFinish.OPENED
+                    }
+                    // Reply in WhatsApp (slice 1): the chat opens with his words typed; he taps WhatsApp's send.
+                    is TriageChoice.ReplyInApp -> {
+                        val link = rules.replyLink(card, choice.reply)
+                        val typed = link != null && LiveReplies.openLink(context, link)
+                        if (!typed) LiveReplies.open(context, card.id, card.app, choice.reply)
+                        runCatching { core.seenTriage(card.id) }
+                        undo.show(if (typed) rules.replyInAppLine(card) else rules.openChatLine(card, rules.appName(card.app)), null)
                         CardFinish.OPENED
                     }
                     TriageChoice.OpenChat -> {

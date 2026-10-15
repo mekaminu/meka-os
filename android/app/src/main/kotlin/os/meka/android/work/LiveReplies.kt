@@ -142,6 +142,18 @@ object LiveReplies {
         return runCatching { context.startActivity(launch) }.isSuccess
     }
 
+    /**
+     * Reply in WhatsApp (WhatsApp replies, slice 1): opens [link], WhatsApp's own click-to-chat link
+     * ([os.meka.core.domain.TriageReplyRules.replyLink]), so the chat opens with the reply typed and Meka taps send
+     * there. Only ever called from his tap; nothing is sent by opening it. False when nothing could open it.
+     */
+    fun openLink(context: Context, link: String): Boolean {
+        val view = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(link)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        // WhatsApp first, so the chat opens straight away rather than through the browser.
+        val inApp = Intent(view).setPackage("com.whatsapp")
+        return runCatching { context.startActivity(inApp) }.isSuccess || runCatching { context.startActivity(view) }.isSuccess
+    }
+
     fun copyText(context: Context, text: String, label: String = "Navilife reply") {
         val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
         clipboard.setPrimaryClip(ClipData.newPlainText(label, text))

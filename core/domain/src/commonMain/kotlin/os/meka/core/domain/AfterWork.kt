@@ -56,6 +56,12 @@ data class CapturedItem(
     val urgentBy: String? = null,
     /** The AI's one-line summary of a voice message's words ([HeldMessageFields.SUMMARY]); null = none. */
     val summary: String? = null,
+    /**
+     * A one-to-one chat's phone number as the Fold's notification gave it ([TriageReplyRules.chatNumber]: WhatsApp's
+     * chat id, the sender's tel: link, or the sender shown as a number), so a reply card can open the chat with the
+     * reply typed (WhatsApp's own click-to-chat link). Null for groups and when the notification didn't carry one.
+     */
+    val chatNumber: String? = null,
 ) {
     val personKey: String get() = People.key(personName)
 

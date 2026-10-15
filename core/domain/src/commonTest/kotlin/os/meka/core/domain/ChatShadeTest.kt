@@ -66,8 +66,18 @@ class ChatShadeTest {
         assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("5", "Tunde", text = "URGENT call me")), on, lists, had = setOf("5")))
         // Another chat's message isn't touched.
         assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("6", "Tunde", group = "Work")), on, lists, had = setOf("6")))
+        // WhatsApp replies, slice 1: a message whose reply card is waiting keeps its notification (Send's route).
+        assertFalse(ChatShadeRules.clearsOnArrival(chatter, on, lists, had = setOf("1", "2"), pending = setOf("2")))
+        assertTrue(ChatShadeRules.clearsOnArrival(chatter, on, lists, had = setOf("1", "2"), pending = setOf("9")))
         // Switching off forgets it.
         assertTrue(ChatShadeRules.setClearOnArrival(on.clearOnArrival, chat, on = false).isEmpty())
+    }
+
+    @Test
+    fun onlyOpenRepliesWithADraftHoldTheirNotification() {
+        val reply = card("r", "Tunde", 3, group = null).copy(lane = TriageLane.NEEDS_REPLY, draft = "Yes")
+        val noDraft = card("n", "Femi", 4, group = null).copy(lane = TriageLane.NEEDS_REPLY)
+        assertEquals(setOf("r"), ChatShadeRules.pendingReplies(listOf(reply, noDraft, card("a", "Obi", 1))))
     }
 
     @Test

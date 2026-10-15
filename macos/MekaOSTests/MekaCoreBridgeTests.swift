@@ -1367,19 +1367,28 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testTriageReplyRulesReachSwift() {
         let rules = TriageReplyRules.shared
         let card = TriageCard(id: "wa-1", lane: .needsReply, personKey: "tunde", from: "Tunde · 14:02", gist: "Asks if you're coming",
-                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde", group: nil, askedBy: nil)
+                              draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde", group: nil, askedBy: nil, number: nil)
         XCTAssertEqual(rules.label(primary: rules.primary(card: card, live: false, canSend: false)), "Copy reply")
         XCTAssertEqual(rules.secondary(card: card), "Not now")
         XCTAssertEqual(rules.copiedLine(card: card), "Reply to Tunde copied")
         XCTAssertEqual(rules.notNowLine(card: card), "Not now · Tunde")
         XCTAssertEqual(card.lane.label, "Needs a reply")
+        // WhatsApp replies, slice 1: with the chat's number the Mac's button opens WhatsApp with the reply typed.
+        let numbered = TriageCard(id: "wa-2", lane: .needsReply, personKey: "tunde", from: "Tunde · 14:02", gist: "Asks if you're coming",
+                                  draft: "Yes, see you then", app: .whatsapp, mentioned: false, atMs: 1_000, spoken: "Tunde", group: nil,
+                                  askedBy: nil, number: "+447700900123")
+        let primary = rules.primary(card: numbered, live: false, canSend: false)
+        XCTAssertEqual(rules.label(primary: primary), "Reply in WhatsApp")
+        XCTAssertEqual(rules.replyLink(card: numbered, text: numbered.draft), "https://wa.me/447700900123?text=Yes%2C%20see%20you%20then")
+        XCTAssertEqual(rules.routeLine(card: numbered, primary: primary), "Opens WhatsApp with your reply typed · you tap send")
+        XCTAssertEqual(rules.routeLine(card: card, primary: rules.primary(card: card, live: false, canSend: false)), "Copies your reply · paste it in the chat")
     }
 
     /// Messages grouped per chat (slice 1): one card per conversation reaches Swift with its count and Done line.
     func testTriageChatsReachSwift() {
         let cards = (1...3).map { i in
             TriageCard(id: "g\(i)", lane: .fyi, personKey: i == 2 ? "obi" : "femi", from: "\(i == 2 ? "Obi" : "Femi") in Barça lads · 14:0\(i)",
-                       gist: "Lineup talk", draft: nil, app: .whatsapp, mentioned: true, atMs: Int64(i), spoken: "x", group: "Barça lads", askedBy: nil)
+                       gist: "Lineup talk", draft: nil, app: .whatsapp, mentioned: true, atMs: Int64(i), spoken: "x", group: "Barça lads", askedBy: nil, number: nil)
         }
         let chat = TriageChatRules.shared.chats(cards: cards).first!
         XCTAssertEqual(chat.title, "Barça lads")
@@ -1407,12 +1416,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 3c: a busy chat's synced summary leads its card; with none the card is as before.
         let busy = TriageChatRules.shared.chats(cards: cards + [
             TriageCard(id: "g4", lane: .fyi, personKey: "femi", from: "Femi in Barça lads · 14:04", gist: "Kick-off time",
-                       draft: nil, app: .whatsapp, mentioned: true, atMs: 4, spoken: "x", group: "Barça lads", askedBy: nil),
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 4, spoken: "x", group: "Barça lads", askedBy: nil, number: nil),
         ])
         // Fold review 2026-10-12, bug 3: a question from someone Meka watches for lifts the group with "Jordan asked".
         let asked = TriageChatRules.shared.chats(cards: cards + [
             TriageCard(id: "j1", lane: .fyi, personKey: "jordan", from: "Jordan in WTFC U7s · 14:05", gist: "Asks if there's no match Saturday",
-                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "WTFC U7s", askedBy: "Jordan"),
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "WTFC U7s", askedBy: "Jordan", number: nil),
         ])
         XCTAssertEqual(asked.map(\.title), ["WTFC U7s", "Barça lads"])
         XCTAssertEqual(asked.first?.askedBy, "Jordan")

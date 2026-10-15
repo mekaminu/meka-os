@@ -4183,7 +4183,13 @@ final class CoreModel {
         if lead {
             MekaHaptics.light()
             let line: String
-            if let draft = card.draft {
+            // Reply in WhatsApp (WhatsApp replies, slice 1): the chat opens in WhatsApp (the desktop app, else the web)
+            // with the reply typed; Meka presses send there. Nothing is sent from here.
+            if rules.primary(card: card, live: false, canSend: false) == .replyInApp,
+               let link = rules.replyLink(card: card, text: card.draft), let url = URL(string: link),
+               NSWorkspace.shared.open(url) {
+                line = rules.replyInAppLine(card: card)
+            } else if let draft = card.draft {
                 let board = NSPasteboard.general
                 board.clearContents()
                 board.setString(draft, forType: .string)

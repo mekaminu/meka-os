@@ -12,8 +12,9 @@ class TriageReplyTest {
     private fun card(
         id: String, from: String = "Tunde · 14:02", lane: TriageLane = TriageLane.NEEDS_REPLY,
         draft: String? = "Yes, I'll be there — what time?", mentioned: Boolean = false, at: Long = 1_000L,
+        number: String? = null, app: CaptureApp = CaptureApp.WHATSAPP,
     ) = TriageCard(id, lane, People.key(from.substringBefore(" ")), from, "Asks if you're coming Saturday", draft,
-        CaptureApp.WHATSAPP, mentioned, at, "spoken")
+        app, mentioned, at, "spoken", group = if (mentioned) "Barça lads" else null, number = number)
 
     private val rules = TriageReplyRules
 
@@ -87,5 +88,67 @@ class TriageReplyTest {
         assertEquals("Reply copied · paste it in WhatsApp", rules.openChatLine(c, rules.appName(CaptureApp.WHATSAPP)))
         assertEquals("Opening Messages", rules.openChatLine(card("n", draft = null), rules.appName(CaptureApp.SMS)))
         assertEquals("Reply to Tunde copied", rules.copiedLine(c))
+    }
+
+    // --- WhatsApp replies that always have a way to send (slice 1) ---
+
+    @Test
+    fun replyInWhatsAppLeadsWhenSendCantGoAndTheChatsNumberIsKnown() {
+        val numbered = card("a", number = "+447700900123")
+        // The live notification still wins on the Fold.
+        assertEquals(TriageCardPrimary.SEND, rules.primary(numbered, live = true))
+        assertEquals(TriageCardPrimary.REPLY_IN_APP, rules.primary(numbered, live = false))
+        // The Mac never sends, but it can open WhatsApp with the words typed.
+        assertEquals(TriageCardPrimary.REPLY_IN_APP, rules.primary(numbered, live = true, canSend = false))
+        assertEquals("Reply in WhatsApp", rules.label(TriageCardPrimary.REPLY_IN_APP))
+        // No number, a group, a text message or no draft: as before.
+        assertEquals(TriageCardPrimary.OPEN_CHAT, rules.primary(card("b"), live = false))
+        assertEquals(TriageCardPrimary.COPY, rules.primary(card("b"), live = false, canSend = false))
+        assertEquals(TriageCardPrimary.OPEN_CHAT, rules.primary(card("g", mentioned = true, number = "+447700900123"), live = false))
+        assertEquals(TriageCardPrimary.OPEN_CHAT, rules.primary(card("s", number = "+447700900123", app = CaptureApp.SMS), live = false))
+        assertEquals(TriageCardPrimary.OPEN_CHAT, rules.primary(card("n", draft = null, number = "+447700900123"), live = false))
+        // Edit shows where the words go somewhere: sent, or typed into WhatsApp.
+        assertTrue(rules.editable(numbered, live = false))
+        assertFalse(rules.editable(card("b"), live = false))
+    }
+
+    @Test
+    fun theLinkIsWhatsAppsOwnClickToChatWithTheEditedWords() {
+        val numbered = card("a", number = "+447700900123")
+        assertEquals("https://wa.me/447700900123?text=See%20you%20at%206%20%F0%9F%91%8D", rules.replyLink(numbered, " See you at 6 👍 "))
+        assertEquals("https://wa.me/447700900123?text=Line%20one%0Aline%20two", rules.replyLink(numbered, "Line one\r\nline two"))
+        // A UK number written 07… is made international.
+        assertEquals("https://wa.me/447700900123?text=Yes", rules.replyLink(card("u", number = "07700900123"), "Yes"))
+        assertNull(rules.replyLink(numbered, "   "))
+        assertNull(rules.replyLink(card("b"), "Yes"))
+        assertNull(rules.replyLink(card("g", mentioned = true, number = "+447700900123"), "Yes"))
+        assertEquals("Opened WhatsApp with your reply to Tunde · tap send there", rules.replyInAppLine(numbered))
+    }
+
+    @Test
+    fun eachCardSaysWhichWayItsReplyGoes() {
+        val numbered = card("a", number = "+447700900123")
+        assertEquals("Sends from your phone", rules.routeLine(numbered, rules.primary(numbered, live = true)))
+        assertEquals("Opens WhatsApp with your reply typed · you tap send", rules.routeLine(numbered, rules.primary(numbered, live = false)))
+        assertEquals("Opens WhatsApp with your reply copied · paste and send", rules.routeLine(card("b"), rules.primary(card("b"), live = false)))
+        assertEquals("Copies your reply · paste it in the chat", rules.routeLine(card("b"), rules.primary(card("b"), live = false, canSend = false)))
+        assertNull(rules.routeLine(card("i", lane = TriageLane.FYI, draft = null), TriageCardPrimary.SEEN))
+        assertNull(rules.routeLine(card("n", draft = null), TriageCardPrimary.OPEN_CHAT))
+    }
+
+    @Test
+    fun theChatsNumberComesFromWhatTheNotificationCarriedNeverAHiddenIdOrAGroup() {
+        assertEquals("+447700900123", rules.chatNumber("Tunde", null, "447700900123@s.whatsapp.net"))
+        assertEquals("+447700900123", rules.chatNumber("Tunde", "tel:+44 7700 900123", null))
+        assertEquals("07700900123", rules.chatNumber("07700 900123", null, null))
+        assertEquals("+447700900123", rules.chatNumber("+44 7700 900123", null, "120363000000000000@g.us"))
+        // A group's id, WhatsApp's hidden "@lid" ids, a name, a short code: none is a number.
+        assertNull(rules.chatNumber("Tunde", null, "120363000000000000@g.us"))
+        assertNull(rules.chatNumber("Tunde", null, "123456789012345@lid"))
+        assertNull(rules.chatNumber("Tunde", "mailto:t@example.com", null))
+        assertNull(rules.chatNumber("Tunde", null, null))
+        assertNull(rules.chatNumber("88088", null, null))
+        assertNull(rules.cleanNumber("12"))
+        assertEquals("+447700900123", rules.cleanNumber(" +44 (0)7700-900123 ".replace("(0)", "")))
     }
 }

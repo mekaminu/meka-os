@@ -35,6 +35,11 @@ object TriageCardFields {
     const val WATCHED = "watched"
     /** True when the message never went to the AI (a person or group Meka keeps from it). */
     const val LOCAL = "local"
+    /**
+     * A one-to-one chat's phone number ([CapturedItem.chatNumber]; WhatsApp replies that always have a way to send,
+     * slice 1), so Reply in WhatsApp opens that chat with the reply typed on the Fold and the Mac. Blanked once resolved.
+     */
+    const val NUMBER = "number"
     /** Sent, Not now or Seen on either device: gone from Needs you on both (TrueWins). */
     const val RESOLVED = "resolved"
     /** [TriageResolution.wire]. */
@@ -77,6 +82,8 @@ data class TriageCard(
      * "Jordan asked" and its chat goes to the top of Needs you. Null for a 1:1 chat or anyone else.
      */
     val askedBy: String? = null,
+    /** A one-to-one chat's phone number ([TriageCardFields.NUMBER]); null for groups or when the notification had none. */
+    val number: String? = null,
 ) {
     companion object {
         const val LOCAL_LINE = "Not sent to Navilife's AI"
@@ -111,6 +118,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
                 triage.summary?.let { put(TriageCardFields.SUMMARY, it.take(MessageTriageRules.MAX_SUMMARY + 1).fv()) }
                 if (triage.lane == TriageLane.NEEDS_REPLY) triage.draft?.let { put(TriageCardFields.DRAFT, it.fv()) }
                 if (local) put(TriageCardFields.LOCAL, true.fv())
+                if (group == null) TriageReplyRules.cleanNumber(item.chatNumber)?.let { put(TriageCardFields.NUMBER, it.fv()) }
                 if (watched && group != null) put(TriageCardFields.WATCHED, true.fv())
             },
         )
@@ -153,6 +161,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
                 TriageCardFields.RESOLVED_AT to nowMs().fv(),
                 TriageCardFields.SUMMARY to FieldValue.Null,
                 TriageCardFields.DRAFT to FieldValue.Null,
+                TriageCardFields.NUMBER to FieldValue.Null,
             ),
         )
         return true
@@ -186,6 +195,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         val local: Boolean,
         val resolved: Boolean,
         val watched: Boolean = false,
+        val number: String? = null,
     )
 
     private fun stored(): List<Stored> = replica.entities(EntityTypes.TRIAGE_CARD).mapNotNull { e ->
@@ -203,6 +213,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             local = e[TriageCardFields.LOCAL].boolOrNull == true,
             resolved = e[TriageCardFields.RESOLVED].boolOrNull == true,
             watched = e[TriageCardFields.WATCHED].boolOrNull == true,
+            number = e[TriageCardFields.NUMBER].textOrNull,
         )
     }
 
@@ -230,6 +241,7 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             app = s.app, mentioned = s.group != null, atMs = s.atMs, spoken = spoken,
             group = s.group?.trim()?.take(40)?.takeIf { it.isNotEmpty() },
             askedBy = askedBy,
+            number = if (s.group == null) TriageReplyRules.cleanNumber(s.number) else null,
         )
     }
 

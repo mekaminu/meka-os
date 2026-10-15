@@ -382,10 +382,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "messages",
             title = "Messages from WhatsApp",
-            keywords = listOf("whatsapp", "messages", "message cards", "chat cards", "notification access", "reply from navilife"),
+            keywords = listOf("whatsapp", "messages", "message cards", "chat cards", "notification access", "reply from navilife", "reply in whatsapp", "can't send"),
             what = "Navilife reads your WhatsApp notifications (never WhatsApp itself) and groups them into chat cards in Needs you, with a reply you send yourself.",
             how = "Give Navilife notification access when Work mode → Messages asks, and keep WhatsApp's notifications on (WhatsApp settings there shows how).",
-            tips = listOf("Nothing is ever sent without your tap.", "If cards stop arriving, check Navilife still has notification access in Android's settings."),
+            tips = listOf("Nothing is ever sent without your tap.", "If cards stop arriving, check Navilife still has notification access in Android's settings.", "Send goes through WhatsApp's own notification while it's still in the shade; once it's gone (or on the Mac), Reply in WhatsApp opens that person's chat with your reply typed and you tap send there. Each card says which way its reply will go.", "A message waiting for your reply keeps its notification in the shade until you send or finish its card, so Send keeps working."),
             fold = HelpPlace.WORK,
             foldWhere = "Ask → Settings → Work mode → Messages",
             mac = null,
