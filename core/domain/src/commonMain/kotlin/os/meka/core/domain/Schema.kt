@@ -123,6 +123,8 @@ object EntityTypes {
     const val KID_CHORE = "kid_chore"
     /** Kids' admin, slice 5 (2026-10-15): one chore ticked on one day, id `<chore id>@<epoch day>` (see [KidChores]). */
     const val KID_CHORE_TICK = "kid_chore_tick"
+    /** Promises, receipts and renewals from email, slice 1 (2026-10-15): one find the server read from a mail account (a renewal to add), with Add / Not needed (see [MailRenewalRules]). */
+    const val MAIL_FIND = "mail_find"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -132,7 +134,7 @@ object EntityTypes {
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
-        MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK,
+        MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
     )
 }
 
@@ -428,6 +430,8 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.MAIL_BACKLOG -> MergePolicy.Lww
         // Parcels: only the server writes them, from the shipping emails; its latest reading wins.
         entityType == EntityTypes.PARCEL -> MergePolicy.Lww
+        // Mail finds: the server writes the find once; Add / Not needed (and their Undo) come from either app, latest wins.
+        entityType == EntityTypes.MAIL_FIND -> MergePolicy.Lww
         // Drive times: only the server writes them; its latest answer wins.
         entityType == EntityTypes.TRAVEL_TIME -> MergePolicy.Lww
         // School: a line removed on any device is gone for good; the cover answer and its Undo, the latest wins.

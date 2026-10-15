@@ -9,6 +9,7 @@ import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
+import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
@@ -496,6 +497,44 @@ class Integrations(
         runCatching { parcels(a, ms) }
         // Slice 3h: bills due, from the bill emails (whether or not Autopilot has tidied them).
         runCatching { bills(a, ms) }
+        // Promises, receipts and renewals, slice 1: renewals to add, from the renewal emails (on his tap in the apps).
+        runCatching { renewals(a, ms) }
+    }
+
+    /**
+     * Promises, receipts and renewals from email, slice 1: the emails of the last [MailRenewalRules.WINDOW_DAYS] days
+     * that the rules didn't sort as newsletters, promos or junk are read by [MailRenewalRules.read] from the sender,
+     * subject and kept preview; each renewal still to come becomes one `mail_find` (kind RENEWAL) under an id from the
+     * account, company and renewal day, written once (an id already in the mirror is never written again, so his Add or
+     * Not needed stands), and none when the radar already has that company near that day. Nothing goes on the radar
+     * here: the apps' Add does that.
+     */
+    internal fun renewals(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= MailRenewalRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val today = LONDON.epochDayOf(nowMs)
+        val reads = candidates.mapNotNull { h ->
+            val day = LONDON.epochDayOf(h.receivedAtMs)
+            MailRenewalRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, day)
+                ?.takeIf { it.renewDay >= today }?.let { Triple(h, day, it) }
+        }
+        if (reads.isEmpty()) return
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        val radar = reader.entities(a.householdId, EntityTypes.OBLIGATION).values
+        val written = mutableSetOf<String>()
+        for ((h, day, r) in reads.sortedBy { it.first.receivedAtMs }) {
+            val id = MailRenewalRules.findId(a.id, h.id, r)
+            if (id in written || mirror.containsKey(id) || MailRenewalRules.alreadyOnRadar(r.merchant, r.renewDay, radar, LONDON)) continue
+            writeMail(a, id, MailRenewalRules.serverFields(r, account, h.subject, day), EntityTypes.MAIL_FIND)
+            written += id
+        }
     }
 
     /**
@@ -1692,7 +1731,7 @@ class Integrations(
         private val RULE_FIELDS = setOf(os.meka.core.domain.MailSenderFields.RULE, os.meka.core.domain.MailSenderFields.RULE_AT)
         const val SERVER_DEVICE = "server"
         /** Delete mail data: what the server publishes from one mail account (Renewals, Waiting for and tasks are his). */
-        val MAIL_DATA_TYPES = listOf(EntityTypes.MAIL_ITEM, EntityTypes.MAIL_TIDY, EntityTypes.MAIL_SENDER, EntityTypes.MAIL_BACKLOG, EntityTypes.PARCEL)
+        val MAIL_DATA_TYPES = listOf(EntityTypes.MAIL_ITEM, EntityTypes.MAIL_TIDY, EntityTypes.MAIL_SENDER, EntityTypes.MAIL_BACKLOG, EntityTypes.PARCEL, EntityTypes.MAIL_FIND)
         const val STATE_TTL_MS = 15 * 60_000L
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         /** Inbox autopilot, slice 1c: the mail MEKA keeps headers for (Meka: the last 60 days). */

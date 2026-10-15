@@ -3002,6 +3002,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MailChaseRules.shared.headline(n: 2), "2 to chase by email")
         XCTAssertEqual(MailChaseRules.shared.draft(from: "Sam Taylor", shownName: nil),
                        "Hi Sam,\n\nJust checking in on this — is there any news?\n\nThanks")
+        // Renewals from your mail: nothing found, no card; Add and Not needed on an unknown id say so.
+        XCTAssertNil(core.mailFinds.value)
+        let unknownAdd = try await core.addMailFind(id: "nothing")
+        XCTAssertEqual(unknownAdd, MailRenewalRules.shared.UNKNOWN)
+        let unknownDismiss = try await core.notNeededMailFind(id: "nothing")
+        XCTAssertEqual(unknownDismiss, MailRenewalRules.shared.UNKNOWN)
+        try await core.undoMailFind()
+        XCTAssertEqual(MailRenewalRules.shared.headline(n: 1), "1 to add to Renewals · nothing goes on until you tap Add")
         // Slice 7: the ten-minute inbox — no email, no card; a session over nothing ends "Inbox clear"; the time's key.
         XCTAssertNil(core.mailMoment.value)
         try await core.startMailMoment()

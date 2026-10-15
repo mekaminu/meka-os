@@ -99,6 +99,7 @@ import os.meka.core.sync.ReplicaStore
 import os.meka.core.sync.SyncClient
 import os.meka.core.sync.SyncStatus
 import os.meka.core.sync.SyncTransport
+import os.meka.core.sync.fv
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -928,6 +929,16 @@ class MekaCore(
 
     /** Takes back the last Send, Got it or Not yet on "Time to chase" on this device; null after an Undo. */
     private var mailChaseUndo: (() -> Unit)? = null
+
+    private val _mailFinds = MutableStateFlow<os.meka.core.domain.MailFindCard?>(null)
+    /**
+     * Promises, receipts and renewals from email, slice 1: Needs you's "Renewals from your mail" card — each renewal the
+     * server read from a renewal email, with Add (onto Lists → Renewals) and Not needed; null when none are open.
+     */
+    val mailFinds: StateFlow<os.meka.core.domain.MailFindCard?> = _mailFinds.asStateFlow()
+
+    /** Takes back the last Add or Not needed on "Renewals from your mail" on this device; null after an Undo. */
+    private var mailFindUndo: (() -> Unit)? = null
 
     private val _mailMoment = MutableStateFlow<os.meka.core.domain.MailMomentCard?>(null)
     /**
@@ -4302,6 +4313,61 @@ class MekaCore(
         _mailChases.value = os.meka.core.domain.MailChaseRules.card(
             items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone),
         )
+        mailFindsChanged()
+    }
+
+    private fun radarFields(): List<Map<String, FieldValue>> =
+        replica.entities(os.meka.core.domain.EntityTypes.OBLIGATION).map { it.fields }
+
+    private fun mailFindsChanged() {
+        _mailFinds.value = os.meka.core.domain.MailRenewalRules.card(activity.mailFinds(), radarFields(), nowMs(), ZoneCalendar(timeZone))
+    }
+
+    /**
+     * Promises, receipts and renewals from email, slice 1: **Add** on a renewal in "Renewals from your mail": it goes on
+     * Lists → Renewals (one reminder per find, so Add on both apps lands on the same one) with the day, price, kind and
+     * repeat the email gave, and the find is answered on both apps. Undo takes the reminder off and brings the find back.
+     * Nothing is paid or cancelled. Returns the line to show.
+     */
+    suspend fun addMailFind(id: String): String = onCore {
+        val R = os.meka.core.domain.MailRenewalRules
+        val f = activity.mailFinds().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val cal = ZoneCalendar(timeZone)
+        val oid = R.obligationId(id)
+        val before = replica.entity(os.meka.core.domain.EntityTypes.OBLIGATION, oid)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, R.obligationFields(f, nowMs(), cal))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
+        mailFindUndo = {
+            if (before == null) {
+                replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, mapOf(
+                    os.meka.core.domain.ActionableFields.LIFECYCLE to os.meka.core.domain.Lifecycle.CANCELLED.name.fv(),
+                    os.meka.core.domain.ActionableFields.COMPLETED_AT to nowMs().fv(),
+                ))
+            } else {
+                replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, before.fields)
+            }
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs()))
+        }
+        refresh()
+        R.addedLine(f, cal.epochDayOf(nowMs()))
+    }
+
+    /** **Not needed** on a renewal in "Renewals from your mail": gone on both apps, never offered again (with Undo). */
+    suspend fun notNeededMailFind(id: String): String = onCore {
+        val R = os.meka.core.domain.MailRenewalRules
+        activity.mailFinds().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.DISMISSED, nowMs()))
+        mailFindUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs())) }
+        mailFindsChanged()
+        R.NOT_NEEDED_LINE
+    }
+
+    /** Undo on the bar after Add or Not needed: the find comes back (and an added reminder comes off). */
+    suspend fun undoMailFind() = onCore {
+        val undo = mailFindUndo ?: return@onCore
+        mailFindUndo = null
+        undo()
+        refresh()
     }
 
     /** The Waiting for item's chase fields as they are, so an Undo can put them back exactly. */

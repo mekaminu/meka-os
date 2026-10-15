@@ -53,6 +53,9 @@ import os.meka.core.domain.MailChaseCard
 import os.meka.core.domain.MailChaseRow
 import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailDraft
+import os.meka.core.domain.MailFindCard
+import os.meka.core.domain.MailFindRow
+import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
@@ -490,6 +493,90 @@ private fun MailChaseRowView(row: MailChaseRow, onGot: () -> Unit, onNotYet: () 
             if (!chasing) MailNeedsPill(MailChaseRules.CHASE, spoken = "Chase ${row.from} by email; Navilife has drafted it, nothing is sent until you tap Send", onClick = { chasing = true })
             MailNeedsPill(MailChaseRules.GOT_IT, spoken = "Got it: ${row.title} arrived, off Waiting for", onClick = onGot)
             MailNeedsPill(MailChaseRules.NOT_YET, quiet = true, spoken = "Not yet: chase ${row.from} again in 3 days", onClick = onNotYet)
+        }
+    }
+}
+
+/**
+ * Promises, receipts and renewals from email, slice 1: "Renewals from your mail" in Needs you — each renewal the server
+ * read from a renewal email (who, when it renews, the price and how often, the kind, the account and the email's
+ * subject), with **Add** (onto Lists → Renewals; Undo on the bar takes it off) and **Not needed** (gone on both apps;
+ * Undo brings it back). Nothing reaches the radar without Add. Tapping the header folds the rows in and out (expand
+ * spring; reduced motion: cross-fade); an answered row leaves on the same fold.
+ */
+@Composable
+internal fun MailFindSection(
+    card: MailFindCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+) {
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
+    var open by rememberSaveable { mutableStateOf(true) }
+    val reduced = Meka.reducedMotion
+    fun answer(action: suspend () -> String) {
+        scope.launch {
+            val said = runCatching { action() }.getOrNull() ?: return@launch
+            undo(said) { runCatching { core.undoMailFind() } }
+        }
+    }
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .padding(MekaSpace.m).testTag("mail-finds"),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); open = !open }
+                .semantics(mergeDescendants = true) { contentDescription = "${card.title}. ${card.headline}" },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                SectionLabel(card.title)
+                AnimatedContent(card.headline, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-finds-headline") {
+                    Text(it, style = MekaType.body, color = Meka.colors.textPrimary)
+                }
+            }
+        }
+        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+            Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                card.rows.forEach { row ->
+                    androidx.compose.runtime.key(row.id) {
+                        MailFindRowView(
+                            row,
+                            onAdd = { haptics.medium(); answer { core.addMailFind(row.id) } },
+                            onNotNeeded = { haptics.light(); answer { core.notNeededMailFind(row.id) } },
+                        )
+                    }
+                }
+                card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: () -> Unit) {
+    Column(Modifier.fillMaxWidth().testTag("mail-find-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false))
+                if (row.business) {
+                    Text(
+                        MailNeedsRules.BUSINESS_CHIP, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+                            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+                    )
+                }
+            }
+            Text(row.line, style = MekaType.body, color = Meka.colors.textSecondary)
+            Text(row.from, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        FlowRow(
+            Modifier.padding(top = MekaSpace.xxs),
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            MailNeedsPill(MailRenewalRules.ADD, spoken = "Add ${row.title} to Renewals", onClick = onAdd)
+            MailNeedsPill(MailRenewalRules.NOT_NEEDED, spoken = "${row.title} isn't needed on Renewals", quiet = true, onClick = onNotNeeded)
         }
     }
 }

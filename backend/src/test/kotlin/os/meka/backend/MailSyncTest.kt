@@ -38,6 +38,7 @@ import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
+import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.ParcelFields
 import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.ParcelState
@@ -677,6 +678,33 @@ class MailSyncTest {
         gmail.nextRound = { MailChanges(cursor = "h3") }
         i.syncAccount(id)
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
+    }
+
+    @Test
+    fun aRenewalEmailPublishesOneFindAndNothingOnTheRadar() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        val day = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of("Europe/London")).toLocalDate().plusDays(20)
+        val dayText = day.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        gmail.mailbox["r1"] = msg("r1", 0, "info@streamco.example").copy(subject = "Your membership renews soon", preview = "It renews on $dayText for £10.99 a month")
+        gmail.mailbox["r2"] = msg("r2", 0, "info@streamco.example").copy(subject = "Reminder: your plan renews on $dayText", preview = "£10.99 a month")
+        gmail.mailbox["c1"] = msg("c1", 0, "info@otherco.example").copy(subject = "Your subscription was cancelled", preview = "It will not renew on $dayText")
+        gmail.nextRound = { MailChanges(fetch = listOf("r1", "r2", "c1"), cursor = "h2") }
+        i.syncAccount(id)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
+        val (_, f) = finds.entries.single()
+        assertEquals(FieldValue.Text(MailRenewalRules.KIND_RENEWAL), f[os.meka.core.domain.MailFindFields.KIND])
+        assertEquals(FieldValue.Text("Streamco"), f[os.meka.core.domain.MailFindFields.MERCHANT])
+        assertEquals(FieldValue.Int64(1099), f[os.meka.core.domain.MailFindFields.PENCE])
+        // Nothing reaches the radar without his Add.
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
+        // Written once: the next check adds nothing.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
     }
 
     // ---- Slice 3c: the daily Junk review ----

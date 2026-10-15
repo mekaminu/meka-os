@@ -563,6 +563,10 @@ class ActivityLog(
     fun mailItems(): List<MailItem> = replica.entities(EntityTypes.MAIL_ITEM)
         .mapNotNull { i -> MailNeedsRules.read(i.ref.entityId, i.fields) }
 
+    /** Promises, receipts and renewals from email, slice 1: the finds the server read from the mail (renewals to add). */
+    fun mailFinds(): List<MailFind> = replica.entities(EntityTypes.MAIL_FIND)
+        .mapNotNull { i -> MailRenewalRules.read(i.ref.entityId, i.fields) }
+
     /** Inbox autopilot, slice 3g: the parcels the server read from shipping emails (Today's "arriving today" line). */
     fun parcels(): List<Parcel> = replica.entities(EntityTypes.PARCEL)
         .mapNotNull { i -> ParcelRules.read(i.ref.entityId, i.fields) }

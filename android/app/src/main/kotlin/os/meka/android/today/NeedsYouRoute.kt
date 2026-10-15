@@ -353,6 +353,7 @@ internal fun NeedsYouColumn(
     val unopened by core.mailUnopened.collectAsState()
     val mailNeeds by core.mailNeeds.collectAsState()
     val mailChases by core.mailChases.collectAsState()
+    val mailFinds by core.mailFinds.collectAsState()
     val mailMoment by core.mailMoment.collectAsState()
     val mailMomentSession by core.mailMomentSession.collectAsState()
     val gists by core.groupGists.collectAsState()
@@ -424,6 +425,13 @@ internal fun NeedsYouColumn(
         mailChases?.let { c ->
             item(key = "mail-chases") {
                 MailChaseSection(c, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Promises, receipts and renewals, slice 1: renewals read from his mail, each added to Renewals only on his tap.
+        mailFinds?.let { f ->
+            item(key = "mail-finds") {
+                MailFindSection(f, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }

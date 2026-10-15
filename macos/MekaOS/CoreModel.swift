@@ -196,6 +196,8 @@ final class CoreModel {
     private(set) var mailNeeds: MailNeedsCard?
     /// Inbox autopilot, slice 6b-3: "Time to chase" — Waiting for items from email whose chase is due, each drafted.
     private(set) var mailChases: MailChaseCard?
+    /// Promises, receipts and renewals, slice 1: "Renewals from your mail" — renewals to add, each only on his tap.
+    private(set) var mailFinds: MailFindCard?
     /// Inbox autopilot, slice 7: the ten-minute inbox's card in Needs you (from the moment while emails need him).
     private(set) var mailMoment: MailMomentCard?
     /// Slice 7: the ten-minute inbox under way on this Mac (one email at a time), or nil.
@@ -446,6 +448,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.mailChases { self?.mailChases = c }
+        })
+        observers.append(Task { [weak self] in
+            for await f in core.mailFinds { self?.mailFinds = f }
         })
         observers.append(Task { [weak self] in
             for await m in core.mailMoment { self?.mailMoment = m }
@@ -3058,6 +3063,7 @@ final class CoreModel {
         case .mailUnopened: run { try await $0.undoUnopened() }
         case .mailItem: run { try await $0.undoMailItem() }
         case .mailChase: run { try await $0.undoMailChase() }
+        case .mailFind: run { try await $0.undoMailFind() }
         case .mailMoment: run { try await $0.undoMailMoment() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
@@ -4325,6 +4331,30 @@ final class CoreModel {
         }
     }
 
+    /// Add on "Renewals from your mail": onto Lists → Renewals, Undo on the bar. Only the id crosses.
+    func addMailFind(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.addMailFind(id: id)
+                offerEventUndo(line, .mailFind)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Not needed on "Renewals from your mail": gone on both apps, Undo on the bar. Only the id crosses.
+    func notNeededMailFind(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.notNeededMailFind(id: id)
+                offerEventUndo(line, .mailFind)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Got it on "Time to chase": off Waiting for, Undo on the bar. Only the id crosses.
     func gotMailChase(_ id: String) {
         guard let core else { return }
@@ -4660,6 +4690,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case mailItem
         /// Send, Got it or Not yet on "Time to chase": the chase is stopped (if not sent yet) and the date put back.
         case mailChase
+        /// Add or Not needed on "Renewals from your mail": the find comes back (an added reminder comes off).
+        case mailFind
         /// Not today on the ten-minute inbox: its card comes back on both apps.
         case mailMoment
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.

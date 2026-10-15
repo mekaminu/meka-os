@@ -501,3 +501,95 @@ private struct MailChaseRowView: View {
         }
     }
 }
+
+/// "Renewals from your mail" on the Mac (Promises, receipts and renewals from email, slice 1), in Needs you under "Time
+/// to chase": each renewal the server read from a renewal email — who, when it renews, the price and how often, the
+/// kind, the account and the email's subject — with Add (onto Lists → Renewals; Undo on the bar takes it off) and Not
+/// needed (gone on both apps; Undo brings it back). Nothing reaches the radar without Add. Clicking the header folds the
+/// rows on the expand spring; reduced motion: cross-fades.
+struct MailFindView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    var firstIndex: Int = 2
+    @State private var open = true
+
+    var body: some View {
+        Group {
+            if let card = model.mailFinds {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Button { MekaHaptics.tick(); open.toggle() } label: {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text(card.title.uppercased())
+                                .font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                            Text(card.headline).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                .contentTransition(.opacity)
+                                .animation(MekaMotion.expand(reduced: reduceMotion), value: card.headline)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(card.title). \(card.headline)")
+                    if open {
+                        VStack(alignment: .leading, spacing: MekaSpace.m) {
+                            ForEach(card.rows, id: \.id) { row in
+                                MailFindRowView(row: row, palette: palette,
+                                                add: { model.addMailFind(row.id) },
+                                                notNeeded: { model.notNeededMailFind(row.id) })
+                            }
+                            if let more = card.moreLine {
+                                Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            }
+                        }
+                        .padding(.top, MekaSpace.xs)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .padding(MekaSpace.m)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                .mekaHoverLift()
+                .staggeredAppear(firstIndex)
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailFinds == nil)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailFinds?.rows.map(\.id) ?? [])
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+    }
+}
+
+private struct MailFindRowView: View {
+    let row: MailFindRow
+    let palette: MekaPalette
+    let add: () -> Void
+    let notNeeded: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    if row.business {
+                        Text(MailNeedsRules.shared.BUSINESS_CHIP)
+                            .font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                            .background(palette.surface, in: Capsule())
+                    }
+                }
+                Text(row.line).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                Text(row.from).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(2)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(row.spoken)
+            HStack(spacing: MekaSpace.xs) {
+                MailNeedsPill(label: MailRenewalRules.shared.ADD, palette: palette,
+                              spoken: "Add \(row.title) to Renewals", action: add)
+                MailNeedsPill(label: MailRenewalRules.shared.NOT_NEEDED, palette: palette, quiet: true,
+                              spoken: "\(row.title) isn't needed on Renewals", action: notNeeded)
+            }
+            .padding(.top, MekaSpace.xxs)
+        }
+    }
+}
