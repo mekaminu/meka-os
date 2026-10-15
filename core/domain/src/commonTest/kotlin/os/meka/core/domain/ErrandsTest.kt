@@ -31,7 +31,7 @@ class ErrandsTest {
         assertEquals(ErrandParse("B&Q", listOf("fish and chips")), ErrandRules.parse("next time im passing B&Q: fish and chips"))
         // No place: a plain list, a sentence with a colon, or a place with nothing to do there.
         assertNull(ErrandRules.parse("milk, batteries"))
-        assertNull(ErrandRules.parse("Remember to tell the school this: Rex is off"))
+        assertNull(ErrandRules.parse("Remember to tell the school this: Theo is off"))
         assertNull(ErrandRules.parse("Tesco:"))
         assertNull(ErrandRules.parse("near Tesco"))
         assertNull(ErrandRules.parse("   "))

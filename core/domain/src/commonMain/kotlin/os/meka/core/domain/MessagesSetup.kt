@@ -54,7 +54,7 @@ object MessagesSetupRules {
         "Navilife sees only what a notification shows: long messages are cut short.",
         "Voice notes and photos can't be read; a voice note becomes a \"listen later\" card.",
         "A muted chat sends no notification, and a message read first on another device may not notify.",
-        "A reply to you in a group can't be seen in a notification; only your name (Meka, Chukwuemeka, @Meka) counts as a mention.",
+        "A reply to you in a group can't be seen in a notification; only your name (Meka, @Meka, or the name in About you) counts as a mention.",
     )
 
     /**

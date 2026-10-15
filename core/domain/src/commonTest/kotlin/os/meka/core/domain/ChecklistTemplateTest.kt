@@ -78,7 +78,7 @@ class ChecklistTemplateTest {
         assertEquals(listOf("Weekly shop", "Packing", "Football kit"), v.starters.map { it.name })
         assertTrue(v.starters.all { it.starter && it.id.startsWith(ChecklistTemplateRules.STARTER_PREFIX) })
         val kit = assertNotNull(foldTemplates.find("${ChecklistTemplateRules.STARTER_PREFIX}kit"))
-        val id = fold.tasks.create(NewTask("Rex football"))
+        val id = fold.tasks.create(NewTask("Theo football"))
         // A template's item with a comma stays one item (never split again).
         fold.tasks.addChecklistTexts(id, ChecklistTemplateRules.toAdd(kit, fold.tasks.get(id)!!) + "Snacks, drinks")
         assertEquals(kit.items.size + 1, fold.tasks.get(id)!!.checklist.size)

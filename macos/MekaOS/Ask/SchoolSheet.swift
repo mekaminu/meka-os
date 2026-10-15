@@ -1,8 +1,8 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → More → School on the Mac (school rhythm, slice 1), like the Fold's SchoolPane: Rex's and Logan's school year,
-/// typed once, one line each ("INSET 27 Oct", "Half term 26–30 Oct", "Rex PE Tue"), in three groups — days off, dates
+/// Ask → More → School on the Mac (school rhythm, slice 1), like the Fold's SchoolPane: Theo's and Finn's school year,
+/// typed once, one line each ("INSET 27 Oct", "Half term 26–30 Oct", "Theo PE Tue"), in three groups — days off, dates
 /// and every week — each row with Remove. Only Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (the "couldn't read"
@@ -286,7 +286,7 @@ private struct SchoolRowView: View {
 }
 
 /// School rhythm, slice 1: the week-ahead cover questions in Needs you, above the requests, like the Fold's
-/// SchoolCoverCardView: "Rex and Logan are off Mon 27 Oct" · "INSET day · in 5 days" · the question · what working from
+/// SchoolCoverCardView: "Theo and Finn are off Mon 27 Oct" · "INSET day · in 5 days" · the question · what working from
 /// home changes · I'll work from home · Covered. A card folds away on the expand spring and the undo bar rises.
 /// Reduce Motion: cross-fades. Nothing is sent to anyone. Date night's week-before card (slice 2) follows them, like the
 /// Fold's DateNightCardView: "In 7 days · from 19:00" · "Date night · Fri 23 Oct" · Booked · Skip this one. Then one

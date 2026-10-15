@@ -153,7 +153,7 @@ struct TodayView: View {
                             .accessibilityLabel(route.spoken)
                             .staggeredAppear(0, play: play)
                     }
-                    // School rhythm, slice 2: what the school says about today, "Rex: PE today"; cross-fades as it changes.
+                    // School rhythm, slice 2: what the school says about today, "Theo: PE today"; cross-fades as it changes.
                     if let school = model.today?.school {
                         Text(school.text).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
                             .contentTransition(.opacity)
@@ -162,7 +162,7 @@ struct TodayView: View {
                             .staggeredAppear(0, play: play)
                     }
                     // Fold review 2026-10-12, bug 4: the first event still to come during work, in the accent:
-                    // "Training at 16:55 while you're at work — who's taking Rex?"; cross-fades as it changes.
+                    // "Training at 16:55 while you're at work — who's taking Theo?"; cross-fades as it changes.
                     if let clash = model.today?.timeline.clashLine {
                         Text(clash).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2)
                             .contentTransition(.opacity)

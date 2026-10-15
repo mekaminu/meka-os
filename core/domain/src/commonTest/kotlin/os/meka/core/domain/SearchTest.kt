@@ -227,9 +227,9 @@ class SearchTest {
 
     @Test
     fun promisesAreFoundByTitleOrPersonBeforeWaitingFor() {
-        lists.addPromise("Fix the bike", to = "Rex", byInDays = 0)
-        lists.addPromise("Bike lights", to = "Logan")
-        lists.addWaiting("Bike pump", who = "Rex")
+        lists.addPromise("Fix the bike", to = "Theo", byInDays = 0)
+        lists.addPromise("Bike lights", to = "Finn")
+        lists.addWaiting("Bike pump", who = "Theo")
         val v = search("bike")
         assertEquals(listOf(SearchKind.PROMISED, SearchKind.WAITING), v.groups.map { it.kind })
         val promised = v.groups.first()
@@ -237,14 +237,14 @@ class SearchTest {
         assertEquals(listOf("Bike lights", "Fix the bike"), promised.hits.map { it.title }, "a title starting with the word comes first")
         assertTrue(promised.hits.all { it.target == SearchTarget.LISTS_WAITING })
 
-        val rex = search("rex")
-        assertEquals(listOf("Fix the bike"), rex.groups.first().hits.map { it.title })
-        assertEquals("Rex · due today", rex.groups.first().hits.single().detail)
-        assertEquals(listOf(SearchKind.PROMISED, SearchKind.WAITING), rex.groups.map { it.kind })
+        val theo = search("theo")
+        assertEquals(listOf("Fix the bike"), theo.groups.first().hits.map { it.title })
+        assertEquals("Theo · due today", theo.groups.first().hits.single().detail)
+        assertEquals(listOf(SearchKind.PROMISED, SearchKind.WAITING), theo.groups.map { it.kind })
 
         val kept = lists.promisedItems().single { it.title == "Fix the bike" }.id
         lists.kept(kept)
-        assertEquals(listOf(SearchKind.WAITING), search("rex").groups.map { it.kind }, "a kept promise isn't found")
+        assertEquals(listOf(SearchKind.WAITING), search("theo").groups.map { it.kind }, "a kept promise isn't found")
         assertEquals("You promised", AskFieldRules.kindWord(SearchKind.PROMISED))
     }
 }

@@ -219,7 +219,7 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
         p.workLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         // Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
         p.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        // School rhythm, slice 2: the evening before, "Tomorrow · Rex: PE kit", in the accent so the kit gets packed.
+        // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent so the kit gets packed.
         p.school?.let { Text(it.text, style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.semantics { contentDescription = it.spoken }) }
         // The summary rolls over to its new value as items are carried in.

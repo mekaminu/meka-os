@@ -8,7 +8,7 @@ import os.meka.core.sync.fv
 enum class WeekAheadKind { EVENT, FIXTURE, SCHOOL, DATE_NIGHT, DUE, APPOINTMENT, BINS, OCCASION, TRIP, MAIL, PARCEL }
 
 /**
- * One thing on a day of the week ahead: "17:30 · Barça v Getafe", "Rex: PE", "Date night from 19:00". [time] leads the
+ * One thing on a day of the week ahead: "17:30 · Barça v Getafe", "Theo: PE", "Date night from 19:00". [time] leads the
  * line when it has one ("All day" for an all-day event); [lit] colours it in the accent (the boys off while Meka is in
  * the office, a cancel-by date). [spoken] is the screen reader's label.
  */
@@ -67,10 +67,10 @@ data class WeekAheadView(
     val title: String,
     /** "Mon 12 – Sun 18 Oct" */
     val rangeLabel: String,
-    /** "4 office days · 1 from home · 2 matches · Rex and Logan off Fri"; "A quiet week so far" with nothing in it. */
+    /** "4 office days · 1 from home · 2 matches · Theo and Finn off Fri"; "A quiet week so far" with nothing in it. */
     val summary: String,
     val days: List<WeekAheadDay>,
-    /** The family sync: things that need both of them ("Fri 16 Oct · Rex and Logan are off and you're in the office — who's covering?"). */
+    /** The family sync: things that need both of them ("Fri 16 Oct · Theo and Finn are off and you're in the office — who's covering?"). */
     val sync: List<String>,
     /** The whole week read out: the summary, then each day with something in it, then the family sync and the goals. */
     val spoken: String,
@@ -340,7 +340,7 @@ object WeekAheadRules {
         return out.distinct().take(MAX_SYNC)
     }
 
-    /** "4 office days · 1 from home · 2 matches · Rex and Logan off Fri · date night Fri"; [QUIET] when there's nothing. */
+    /** "4 office days · 1 from home · 2 matches · Theo and Finn off Fri · date night Fri"; [QUIET] when there's nothing. */
     fun summary(inputs: WeekAheadInputs, days: List<WeekAheadDay>): String {
         val office = days.count { isOfficeDay(inputs.work, it.epochDay) }
         val home = days.count { inputs.work.isWorkDay(it.epochDay) && it.epochDay in inputs.work.homeDays }

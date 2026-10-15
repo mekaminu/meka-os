@@ -265,7 +265,7 @@ object TalkRules {
         }
         // "note silk scarf as a gift idea for Mum's birthday" / "noted …".
         is AskProposal.AddGiftIdea -> (if (past) "noted " else "note ") + clean(p.idea) + " as a gift idea for " + clean(p.title)
-        // "add your promise to Rex: fix his bike, by tomorrow" / "added …".
+        // "add your promise to Theo: fix his bike, by tomorrow" / "added …".
         is AskProposal.AddPromise -> (if (past) "added " else "add ") + "your promise" + (p.to?.let { " to " + clean(it) } ?: "") + ": " +
             clean(p.title) + (p.byDay?.let { ", by " + spokenWhen(it, null, today) } ?: "")
         // "add Flight BA478 on Saturday 14 November at 07:40 to the Barcelona trip" / "added …".

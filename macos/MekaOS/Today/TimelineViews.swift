@@ -173,7 +173,7 @@ struct TimelineEventRow: View {
     let palette: MekaPalette
 
     var body: some View {
-        // Mac presentation pass, item 7: "Rex or Logan?" read as a glitch inline; a club session nobody is set for shows
+        // Mac presentation pass, item 7: "Theo or Finn?" read as a glitch inline; a club session nobody is set for shows
         // a small "Whose is it? ›" chip (a menu of the children) and the place on its own line.
         let club = ClubChildRules.shared
         let asking = !past && row.event != nil && club.asking(detail: row.detail)
@@ -204,7 +204,7 @@ struct TimelineEventRow: View {
                 if !line.isEmpty {
                     Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
                 }
-                // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Rex?" in the accent.
+                // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in the accent.
                 if let clash = row.clash {
                     Text(clash).font(MekaType.caption).foregroundStyle(past ? palette.textTertiary : palette.accent)
                 }

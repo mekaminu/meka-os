@@ -25,12 +25,31 @@ class MessageTriageTest {
     fun aGroupMessageMentionsMekaOnlyByHisNameAsAWord() {
         assertTrue(MessageTriageRules.mentions("@Meka are you coming?"))
         assertTrue(MessageTriageRules.mentions("meka, you in?"))
-        assertTrue(MessageTriageRules.mentions("Ask CHUKWUEMEKA about the tickets"))
         assertTrue(MessageTriageRules.mentions("Tickets for Meka."))
         assertFalse(MessageTriageRules.mentions("Mekanism is a band"))
         assertFalse(MessageTriageRules.mentions("Ameka said hi"))
         assertFalse(MessageTriageRules.mentions("lineup for Getafe?"))
         assertTrue(MessageTriageRules.mentions("Emeka: your turn", listOf("Emeka")))
+    }
+
+    @Test
+    fun hisOtherNamesComeFromAboutYouNeverFromTheCode() {
+        // Rule 13, release 2 slice 4: with no name in About you only the app's short name counts.
+        assertEquals(listOf("Meka"), MessageTriageRules.names(HouseholdNames.EMPTY))
+        assertFalse(MessageTriageRules.mentions("Ask ALEXANDER about the tickets", MessageTriageRules.names(HouseholdNames.EMPTY)))
+        val named = HouseholdNames(shown = "Alexander Reed-Lane")
+        assertEquals(listOf("Meka", "Alexander Reed-Lane", "Alexander", "Reed", "Lane"), MessageTriageRules.names(named))
+        assertTrue(MessageTriageRules.mentions("Ask ALEXANDER about the tickets", MessageTriageRules.names(named)))
+        assertTrue(MessageTriageRules.mentions("@meka you in?", MessageTriageRules.names(named)))
+        // The settings' default reads the household the facade set from About you.
+        val before = Household.names
+        try {
+            Household.useShownName("Alexander Reed")
+            assertTrue("Alexander" in TriageSettings().names)
+            assertEquals(TriageRoute.AskAi(mentioned = true), MessageTriageRules.route(msg("Tunde", "Alexander, you coming?", "Barça lads"), TriageSettings()))
+        } finally {
+            Household.set(before)
+        }
     }
 
     @Test

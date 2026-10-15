@@ -5,7 +5,7 @@ package os.meka.core.domain
  * (either way: "You promised" or "Waiting for") or a birthday in Gifts, with what's owed both ways, their next birthday
  * and the last contact MEKA already knows of (the synced triage cards and the messages held at work: "Last message
  * Tue 13:02 · WhatsApp", "You replied Tue 13:10 · WhatsApp"). Nothing new is read and nothing leaves the phone: every
- * input is already synced. Non-AI and pure; names matched with [People.key], so "rex" and "Rex" are one row.
+ * input is already synced. Non-AI and pure; names matched with [People.key], so "theo" and "Theo" are one row.
  */
 data class ContactSeen(
     val person: String,
@@ -76,7 +76,7 @@ object PeopleRules {
         var last: ContactSeen? = null
         var listed: String? = null
         fun offer(n: String) {
-            // The first spelling seen wins, unless a later one is capitalised and the first wasn't ("rex" → "Rex").
+            // The first spelling seen wins, unless a later one is capitalised and the first wasn't ("theo" → "Theo").
             if (name.isEmpty() || (name.first().isLowerCase() && n.first().isUpperCase())) name = n
         }
     }
@@ -210,7 +210,7 @@ object PeopleRules {
 
 /**
  * People, slice 3: Ask and Talk know the People pane ("what did I promise Jordan?", "what am I waiting on from
- * Rex?", "when did Mum last message?"), and a model's `add_promise` ("Rex: fix his bike", a by-day optional) becomes a
+ * Theo?", "when did Mum last message?"), and a model's `add_promise` ("Theo: fix his bike", a by-day optional) becomes a
  * card that adds the promise to Lists → Promises on Meka's tap, with Undo. Plain rules; nothing is sent to anyone.
  */
 object PeopleAskRules {
@@ -224,8 +224,8 @@ object PeopleAskRules {
 
     /**
      * The pane as MEKA describes it to the model (Ask's `people` lines): "People · 3 people · 1 promise due", then
-     * per person "Rex · you promised 1 · waiting for 1 · birthday Tue 3 Nov · in 22 days · turns 12 · last message Tue
-     * 13:02 · WhatsApp" and a line for each thing owed: "Rex · you promised: Fix his bike · by tomorrow", "Rex ·
+     * per person "Theo · you promised 1 · waiting for 1 · birthday Tue 3 Nov · in 22 days · turns 12 · last message Tue
+     * 13:02 · WhatsApp" and a line for each thing owed: "Theo · you promised: Fix his bike · by tomorrow", "Theo ·
      * waiting for: The drill back · chase today". Nothing at all while the pane is empty.
      */
     fun askLines(view: PeopleView): List<String> {
@@ -250,16 +250,16 @@ object PeopleAskRules {
         return out.take(ASK_LINES)
     }
 
-    /** A promise's or waiting-for's meta without the person it already names ("Rex · by tomorrow" → "by tomorrow"). */
+    /** A promise's or waiting-for's meta without the person it already names ("Theo · by tomorrow" → "by tomorrow"). */
     fun bareMeta(meta: String, key: String): String {
         val first = meta.substringBefore(" · ")
         return if (meta.contains(" · ") && People.key(first) == key) meta.substringAfter(" · ") else meta
     }
 
     /**
-     * A model's `add_promise` as a card: "Rex: fix his bike" (the person, a colon, what Meka promised) or just "Fix
+     * A model's `add_promise` as a card: "Theo: fix his bike" (the person, a colon, what Meka promised) or just "Fix
      * the shed door" (nobody named), by [byDay] or no date. A person the pane already has is written as the pane
-     * writes them ("rex" → "Rex"). Null with nothing promised, or one already open to the same person.
+     * writes them ("theo" → "Theo"). Null with nothing promised, or one already open to the same person.
      */
     fun proposal(rows: List<PersonRow>, promised: List<PromiseItem>, title: String?, byDay: Long?): AskProposal.AddPromise? {
         val t = title?.replace('\n', ' ')?.split(' ', '\t')?.filter { it.isNotEmpty() }?.joinToString(" ") ?: return null
@@ -277,11 +277,11 @@ object PeopleAskRules {
 
     private fun byWords(byDay: Long?, today: Long): String? = byDay?.let { "by " + ListRules.dayWord(it, today) }
 
-    /** The card's words: "Promise to Rex · Fix his bike · by tomorrow" / "Promise · Fix the shed door". */
+    /** The card's words: "Promise to Theo · Fix his bike · by tomorrow" / "Promise · Fix the shed door". */
     fun cardLine(p: AskProposal.AddPromise, today: Long): String =
         listOfNotNull(p.to?.let { "Promise to $it" } ?: "Promise", p.title, byWords(p.byDay, today)).joinToString(" · ")
 
-    /** The undo bar's line: "Added your promise to Rex: Fix his bike · by tomorrow". */
+    /** The undo bar's line: "Added your promise to Theo: Fix his bike · by tomorrow". */
     fun doneLine(p: AskProposal.AddPromise, today: Long): String =
         "Added your promise" + (p.to?.let { " to $it: " } ?: ": ") + p.title + (byWords(p.byDay, today)?.let { " · $it" } ?: "")
 }

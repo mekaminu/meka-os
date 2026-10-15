@@ -79,7 +79,7 @@ class BriefSpeechTest {
             day = listOf(
                 TomorrowRow("e-1", "10:00", "OTFC U7s v Hilltop", true, "Bury Field"),
                 TomorrowRow("e-2", "11:30", "OTFC U10s v Wexley Town", true, null),
-                TomorrowRow("e-3", "14:15", "OTFC U9s vs Sandy", true, null),
+                TomorrowRow("e-3", "14:15", "OTFC U9s vs Westley", true, null),
                 TomorrowRow("e-4", "Until 12:00", "HRFC U7s training", true, null),
             ),
             events = 4, summary = "4 events · first at 10:00",
@@ -88,7 +88,7 @@ class BriefSpeechTest {
         val s = BriefSpeech.script(v)
         assertTrue("Max's under-sevens play Hilltop at ten o'clock" in s, s)
         assertTrue("Felix's under-tens play Wexley Town at half past eleven" in s, s)
-        assertTrue("Lindenbrook United under-nines play Sandy at quarter past two" in s, s)
+        assertTrue("Lindenbrook United under-nines play Westley at quarter past two" in s, s)
         assertTrue("Max's under-sevens training until 12:00" in s, s)
         assertTrue("From BBC Sport: Barça versus Getafe: line-ups." in s, s)
         assertFalse("U7" in s || "OTFC" in s || " v " in s, s)

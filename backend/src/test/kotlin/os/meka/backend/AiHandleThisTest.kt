@@ -74,11 +74,11 @@ class AiHandleThisTest {
     fun aReplyComesBackAsADraftOnlyWithItsWords() {
         // Slice 3: one drafted reply, its words in "body"; a reply without words is dropped.
         val model = FakeModel(answered(
-            """{"proposals":[{"kind":"reply","title":"Reply to Mrs Patel","body":"Hi Mrs Patel,\n\nYes, Rex will be there. Thank you!"},{"kind":"reply","title":"Empty"}]}""",
+            """{"proposals":[{"kind":"reply","title":"Reply to Mrs Patel","body":"Hi Mrs Patel,\n\nYes, Theo will be there. Thank you!"},{"kind":"reply","title":"Empty"}]}""",
         ))
         val r = HandleThisService(model).read(request)
         assertEquals(
-            listOf(MessageRequestCodec.Proposal("reply", "Reply to Mrs Patel", body = "Hi Mrs Patel,\n\nYes, Rex will be there. Thank you!")),
+            listOf(MessageRequestCodec.Proposal("reply", "Reply to Mrs Patel", body = "Hi Mrs Patel,\n\nYes, Theo will be there. Thank you!")),
             r.proposals,
         )
         val sent = model.asked.single()

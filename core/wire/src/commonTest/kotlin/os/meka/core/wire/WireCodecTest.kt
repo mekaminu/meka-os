@@ -21,7 +21,7 @@ class WireCodecTest {
     @Test
     fun opsRoundTripForEveryValueType() {
         listOf(
-            FieldValue.Text("Logan football — kit ✓ \"quoted\" \n newline"),
+            FieldValue.Text("Finn football — kit ✓ \"quoted\" \n newline"),
             FieldValue.Int64(Long.MAX_VALUE),
             FieldValue.Int64(Long.MIN_VALUE),
             FieldValue.Bool(true),

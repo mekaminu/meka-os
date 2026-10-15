@@ -873,7 +873,7 @@ class MekaCoreTest {
             os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(start),
             os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(start + 3_600_000L),
             os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
-            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Hilltop Town FC, Hitchin Rd"),
+            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Hilltop Town FC, Station Rd"),
             os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
             os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
             os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
@@ -884,7 +884,7 @@ class MekaCoreTest {
         fixture("fc1", "OTFC U9s v Hilltop", at(10, 10))
         fixture("fc2", "OTFC U9s v Hilltop (cup)", at(17, 10))
         assertTrue(a.syncNow()); assertTrue(m.syncNow())
-        val first = os.meka.core.domain.CalendarEvent("fc1", "OTFC U9s v Hilltop", at(10, 10), at(10, 11), false, "Hilltop Town FC, Hitchin Rd", "google", "meka@gmail.com", "Personal")
+        val first = os.meka.core.domain.CalendarEvent("fc1", "OTFC U9s v Hilltop", at(10, 10), at(10, 11), false, "Hilltop Town FC, Station Rd", "google", "meka@gmail.com", "Personal")
         val second = first.copy(id = "fc2", title = "OTFC U9s v Hilltop (cup)", startAtMs = at(17, 10), endAtMs = at(17, 11))
         assertNull(a.eventDetail(second).leaveOfferLabel)
 

@@ -26,7 +26,7 @@ class LifeFactsTest {
     fun aLineIsReadAsANameAndAFact() {
         assertEquals(FactLine("Car reg", "AB12 CDE"), FactRules.read("Car reg: AB12 CDE"))
         assertEquals(FactLine("Shoe size", "10"), FactRules.read("my shoe size is 10"))
-        assertEquals(FactLine("Rex's school", "Oakfield Academy"), FactRules.read("Rex's school is Oakfield Academy"))
+        assertEquals(FactLine("Theo's school", "Oakfield Academy"), FactRules.read("Theo's school is Oakfield Academy"))
         assertEquals(FactLine("Energy supplier", "Octopus"), FactRules.read("energy supplier - Octopus"))
         assertNull(FactRules.read("AB12 CDE"))
         assertNull(FactRules.read(": nothing before it"))
@@ -38,10 +38,10 @@ class LifeFactsTest {
     fun aFactsNameChoosesItsGroup() {
         assertEquals(FactGroup.CAR, FactRules.groupOf("Car reg"))
         assertEquals(FactGroup.CAR, FactRules.groupOf("Car insurer"))
-        assertEquals(FactGroup.SIZES, FactRules.groupOf("Rex shoe size"))
+        assertEquals(FactGroup.SIZES, FactRules.groupOf("Theo shoe size"))
         assertEquals(FactGroup.HEALTH, FactRules.groupOf("GP"))
         assertEquals(FactGroup.HOME, FactRules.groupOf("Energy supplier"))
-        assertEquals(FactGroup.FAMILY, FactRules.groupOf("Rex's school"))
+        assertEquals(FactGroup.FAMILY, FactRules.groupOf("Theo's school"))
         assertEquals(FactGroup.OTHER, FactRules.groupOf("Favourite takeaway"))
         // Rule 13: the family's own names come from About you (invented here), never the code.
         assertEquals(FactGroup.OTHER, FactRules.groupOf("Max passport"))
@@ -103,11 +103,11 @@ class LifeFactsTest {
     fun onlyFactsThatBearOnTheQuestionGoWithIt() {
         fun f(label: String, value: String, aiOff: Boolean = false) =
             LifeFact(label, label, value, FactRules.groupOf(label), aiOff, 0L)
-        val all = listOf(f("Car reg", "AB12 CDE"), f("Rex shoe size", "13"), f("Energy supplier", "Octopus"), f("Bin day", "Tuesday", aiOff = true))
+        val all = listOf(f("Car reg", "AB12 CDE"), f("Theo shoe size", "13"), f("Energy supplier", "Octopus"), f("Bin day", "Tuesday", aiOff = true))
         assertEquals(listOf("Facts · 3 kept · 1 bears on the question", "Fact · Car · Car reg: AB12 CDE"),
             FactAskRules.askLines(all, "what's the car's reg?"))
         // A group's word ties the question to every fact in it ("shoes" → Sizes).
-        assertEquals(listOf("Rex shoe size"), FactAskRules.relevant(all, "What size shoes does Rex take?").map { it.label })
+        assertEquals(listOf("Theo shoe size"), FactAskRules.relevant(all, "What size shoes does Theo take?").map { it.label })
         assertEquals(listOf("Energy supplier"), FactAskRules.relevant(all, "who's our gas supplier").map { it.label })
         // Kept from AI never goes, even when asked directly.
         assertTrue(FactAskRules.relevant(all, "when is bin day?").none { it.label == "Bin day" })

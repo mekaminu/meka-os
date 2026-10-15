@@ -10,7 +10,7 @@ package os.meka.core.domain
  * a fast, and every headline the pane shows (Barça first, as listed), each "From BBC Sport: …". Abbreviations are written out ("Fri 9 Oct" → "Friday 9 October", "09:30" → "9:30",
  * "9–15°" → "9 to 15 degrees", "v" → "versus") and the pane's " · " separators become pauses, so either voice reads it
  * naturally. The kids' matches are said the way people say them (Meka, 2026-10-10: "the matches bit sounded robotic"):
- * "BUFC U7s v Arlesey" at 10:00 is "Rex's under-sevens play Arlesey at ten o'clock" ([FootballRules.spokenFixture]).
+ * "WTFC U7s v Eastfield" at 10:00 is "Theo's under-sevens play Eastfield at ten o'clock" ([FootballRules.spokenFixture]).
  * The day's part is bounded by [MAX_CHARS], cut at a sentence, so a crowded morning stays a minute or so of listening;
  * the news is never cut (Meka, 2026-10-09: Listen read 3 of the 5 headlines shown), only an overlong title is shortened
  * at a word ([MAX_HEADLINE_CHARS]). Each story is its own sentence, so the voice pauses between them.
@@ -116,7 +116,7 @@ object BriefSpeech {
     }
 
     /**
-     * One timed thing by name: a club fixture the way people say it ("Rex's under-sevens play Arlesey at ten o'clock",
+     * One timed thing by name: a club fixture the way people say it ("Theo's under-sevens play Eastfield at ten o'clock",
      * [FootballRules.spokenFixture], [FootballRules.spokenClock]); anything else "Standup at 9:30".
      */
     private fun named(title: String, time: String): String {

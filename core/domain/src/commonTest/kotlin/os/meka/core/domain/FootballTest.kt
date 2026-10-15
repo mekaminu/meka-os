@@ -167,8 +167,8 @@ class FootballTest {
 
     @Test
     fun aGroundsKeyIgnoresCaseAndPunctuationAndALinkIsNoGround() {
-        assertEquals("hilltop town fc hitchin rd", FootballRules.venueKey("  Hilltop Town FC,  Hitchin Rd. "))
-        assertEquals(FootballRules.venueKey("hilltop town fc hitchin rd"), FootballRules.venueKey("Hilltop Town FC, Hitchin Rd"))
+        assertEquals("hilltop town fc station rd", FootballRules.venueKey("  Hilltop Town FC,  Station Rd. "))
+        assertEquals(FootballRules.venueKey("hilltop town fc station rd"), FootballRules.venueKey("Hilltop Town FC, Station Rd"))
         assertEquals("camp nou", FootballRules.venueKey("Camp Nou!"))
         assertNull(FootballRules.venueKey("https://meet.google.com/abc"))
         assertNull(FootballRules.venueKey("  "))

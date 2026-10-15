@@ -837,7 +837,7 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = r.spoken })
                         }
                     }
-                    // School rhythm, slice 2: what the school says about today, "Rex: PE today"; cross-fades as it changes.
+                    // School rhythm, slice 2: what the school says about today, "Theo: PE today"; cross-fades as it changes.
                     today.school?.let { school ->
                         Crossfade(school, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "school-line") { l ->
                             Text(l.text, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2,
@@ -846,7 +846,7 @@ private fun TodayPane(
                         }
                     }
                     // Fold review 2026-10-12, bug 4: the first event still to come during work, in the accent:
-                    // "Training at 16:55 while you're at work — who's taking Rex?"; cross-fades as it changes.
+                    // "Training at 16:55 while you're at work — who's taking Theo?"; cross-fades as it changes.
                     today.timeline.clashLine?.let { clash ->
                         Crossfade(clash, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "clash-line") { l ->
                             Text(l, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2,

@@ -184,15 +184,15 @@ class HandleThisFacadeTest {
         server.reply = MessageRequestCodec.Response(
             "answered",
             listOf(
-                MessageRequestCodec.Proposal("reply", "Reply to Mrs Patel", body = "Hi Mrs Patel,\n\nYes, Rex will be on the trip. Thank you!"),
-                MessageRequestCodec.Proposal("task", "Pack Rex a lunch", words = "by Friday"),
+                MessageRequestCodec.Proposal("reply", "Reply to Mrs Patel", body = "Hi Mrs Patel,\n\nYes, Theo will be on the trip. Thank you!"),
+                MessageRequestCodec.Proposal("task", "Pack Theo a lunch", words = "by Friday"),
             ),
         )
-        val ask = "Dear parent, can you confirm whether Rex will join the museum trip? Please send a packed lunch by Friday."
+        val ask = "Dear parent, can you confirm whether Theo will join the museum trip? Please send a packed lunch by Friday."
         val cards = assertIs<HandleOutcome.Cards>(c.handleThis(ask, "Museum trip")).cards
         val reply = cards.first { it.proposal.kind == os.meka.core.domain.RequestKind.REPLY }
         assertEquals("Draft reply: Reply to Mrs Patel", reply.action)
-        assertEquals("Hi Mrs Patel,\n\nYes, Rex will be on the trip. Thank you!", reply.draft)
+        assertEquals("Hi Mrs Patel,\n\nYes, Theo will be on the trip. Thank you!", reply.draft)
         assertEquals("Copy reply", reply.addLabel)
         assertEquals(null, c.changeRequest(reply.id))
 
@@ -206,7 +206,7 @@ class HandleThisFacadeTest {
         assertEquals(os.meka.core.domain.HandleThisRules.COPIED_LINE, done.line)
         assertTrue(c.today.value.yourDay.isEmpty() && c.today.value.upNext == null)
         assertEquals(false, c.undoRequest(done))
-        assertEquals(listOf("Pack Rex a lunch"), c.requests.value.map { it.proposal.title })
+        assertEquals(listOf("Pack Theo a lunch"), c.requests.value.map { it.proposal.title })
         c.syncNow(); mac.syncNow()
         assertTrue(mac.requests.value.none { it.id == reply.id })
     }

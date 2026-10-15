@@ -456,7 +456,7 @@ class MekaCore(
     private val _documents = MutableStateFlow(os.meka.core.domain.DocumentsView.EMPTY)
 
     /**
-     * The Vault (V2, slice 1): the household's documents with the day each runs out ("Rex passport 20 May 2027"), the
+     * The Vault (V2, slice 1): the household's documents with the day each runs out ("Theo passport 20 May 2027"), the
      * ones to renew first; their expiry dates reach the plan as heads-ups ([os.meka.core.domain.DocumentRules.notices]).
      */
     val documentsView: StateFlow<os.meka.core.domain.DocumentsView> = _documents.asStateFlow()
@@ -502,8 +502,8 @@ class MekaCore(
      */
     val barcaNearView: StateFlow<List<os.meka.core.domain.CalendarEvent>> = _barcaNear.asStateFlow()
     /**
-     * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
-     * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
+     * School rhythm (V1, slice 1): Theo's and Finn's days off, dates and weekly things (Ask → More → School), and the
+     * week-ahead questions ("Theo and Finn are off Mon 27 Oct · You're in the office that day. Who's covering?") that
      * Needs you shows above the requests. Synced, so both apps show the same; an answer on either clears both.
      */
     val schoolView: StateFlow<os.meka.core.domain.SchoolView> = _school.asStateFlow()
@@ -1416,8 +1416,8 @@ class MekaCore(
     }
 
     /**
-     * Fold review 17:56, slice 3: whose club session [event]'s whole series is ([child] "Rex"; null clears it), so the
-     * Calendar and Today name him and a clash with work asks "who's taking Rex?". Returns the undo bar's line and who
+     * Fold review 17:56, slice 3: whose club session [event]'s whole series is ([child] "Theo"; null clears it), so the
+     * Calendar and Today name him and a clash with work asks "who's taking Theo?". Returns the undo bar's line and who
      * it was before ([undoClubChild]), or null when the session names its child itself.
      */
     suspend fun setClubChild(event: os.meka.core.domain.CalendarEvent, child: String?): os.meka.core.domain.ClubChildSaved? = onCore {
@@ -3020,8 +3020,8 @@ class MekaCore(
     // ---- School rhythm (V1, slice 1; Ask → More → School, and Needs you's cover questions) ----
 
     /**
-     * Adds one typed line ("INSET 27 Oct", "Half term 26–30 Oct", "Rex PE Tue"; [os.meka.core.domain.SchoolRules.read]).
-     * Returns the line to show ("Added INSET day · Tue 27 Oct · Rex and Logan"), or null when MEKA couldn't read a date
+     * Adds one typed line ("INSET 27 Oct", "Half term 26–30 Oct", "Theo PE Tue"; [os.meka.core.domain.SchoolRules.read]).
+     * Returns the line to show ("Added INSET day · Tue 27 Oct · Theo and Finn"), or null when MEKA couldn't read a date
      * or weekday in it (nothing is written; the pane says [os.meka.core.domain.SchoolRules.NOT_READ]).
      */
     suspend fun addSchool(text: String): String? = onCore {

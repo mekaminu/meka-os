@@ -61,7 +61,7 @@ struct ShutdownSheet: View {
                         if let weather = v.tomorrow.weatherLine {
                             Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)
                         }
-                        // School rhythm, slice 2: the evening before, "Tomorrow · Rex: PE kit", in the accent.
+                        // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent.
                         if let school = v.tomorrow.school {
                             Text(school.text).font(MekaType.caption).foregroundStyle(palette.accent)
                                 .accessibilityLabel(school.spoken).staggeredAppear(2)

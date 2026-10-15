@@ -27,7 +27,7 @@ final class CoreModel {
     /// The approvals inbox (V1, slice 1): requests to trade, pay or share a document, first in Needs you. Approve asks
     /// for Touch ID every time; synced with the Fold.
     private(set) var approvals: [ApprovalCard] = []
-    /// School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
+    /// School rhythm (V1, slice 1): Theo's and Finn's days off, dates and weekly things (Ask → More → School), and the
     /// week-ahead cover questions Needs you shows above the requests. Synced with the Fold.
     private(set) var school: SchoolView?
     /// The open cover questions (none until the core has said).
@@ -2917,7 +2917,7 @@ final class CoreModel {
         }
     }
 
-    /// Fold review 17:56, slice 3: whose club session the event's whole series is ("Rex"; nil clears it), so the
+    /// Fold review 17:56, slice 3: whose club session the event's whole series is ("Theo"; nil clears it), so the
     /// Calendar and Today name the child; Undo puts back who was set. The event crosses to the core once; the saved
     /// value comes back once for its undo.
     func setClubChild(_ event: CalendarEvent, _ child: String?) {
@@ -3919,7 +3919,7 @@ final class CoreModel {
 
     // MARK: School rhythm (slice 1)
 
-    /// Adds one typed line ("INSET 27 Oct", "Rex PE Tue"); only a String crosses. Returns the line to show under the
+    /// Adds one typed line ("INSET 27 Oct", "Theo PE Tue"); only a String crosses. Returns the line to show under the
     /// field: what was added, or that MEKA couldn't read a date in it.
     func addSchool(_ text: String) async -> String? {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)

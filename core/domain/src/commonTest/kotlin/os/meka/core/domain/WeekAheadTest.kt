@@ -46,7 +46,7 @@ class WeekAheadTest {
         events = listOf(
             ev("p", "Parents' evening", mon + 1, 18, calendar = "Family"),
             ev("b", "Barça v Getafe", mon + 5, 17, provider = "fixtures", calendar = null),
-            ev("f", "OTFC U10 v Hilltop", mon + 6, 10, place = "Hilltop Town FC, Hitchin Rd"),
+            ev("f", "OTFC U10 v Hilltop", mon + 6, 10, place = "Hilltop Town FC, Station Rd"),
             ev("w", "Team lunch", mon, 12),
             allDay("h", "Half term", mon + 3, mon + 4),
         ),

@@ -28,13 +28,13 @@ class PromisesFacadeTest {
     fun aPromiseMadeOnTheFoldComesDueOnTheMacAndKeptClearsBoth() = runTest {
         val fold = core("android")
         val mac = core("mac")
-        val id = fold.addPromise("Fix Rex's bike", "Rex", 2)
+        val id = fold.addPromise("Fix Theo's bike", "Theo", 2)
         fold.addWaiting("Refund", "Argos", null)
-        assertEquals(listOf("Rex · by Mon 12 Oct"), fold.listsView.value.promised.map { it.meta })
+        assertEquals(listOf("Theo · by Mon 12 Oct"), fold.listsView.value.promised.map { it.meta })
         assertEquals(listOf("Refund"), fold.listsView.value.waiting.map { it.title })
 
         fold.syncNow(); mac.syncNow()
-        assertEquals(listOf("Fix Rex's bike"), mac.listsView.value.promised.map { it.title })
+        assertEquals(listOf("Fix Theo's bike"), mac.listsView.value.promised.map { it.title })
         assertEquals(2, mac.listsView.value.promisesBothWays)
 
         now += 2 * day

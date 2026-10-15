@@ -12,6 +12,8 @@ import kotlin.concurrent.Volatile
  * "to sort out with …" read [partner], and the family-event words read [familyWords], never a name in the code.
  * Release 2 slice 3 (2026-10-15): home and work for the weather ([home], [work]) and the call assistant's number
  * ([assistantNumber]) too; with none typed the weather falls back to a generic place and the number isn't shown.
+ * Release 2 slice 4 (2026-10-15): his own name as About you has it ([shown]), so a group message naming him counts as
+ * a mention without his full name in the code.
  */
 data class HouseholdNames(
     /** Age group → the child's first name ("7" → "Alex"); a child without an age group isn't here. */
@@ -30,6 +32,11 @@ data class HouseholdNames(
     val work: String? = null,
     /** The call assistant's number as About you has it ("01632 960000"); null with none typed. */
     val assistantNumber: String? = null,
+    /**
+     * About you's "Your name" as typed ("Sam Lane"); null with none (release 2 slice 4): the names a group message
+     * mentions him by ([MessageTriageRules.names]) add it to the app's own short name.
+     */
+    val shown: String? = null,
 ) {
     /** The partner's first name ("Sam" for "Sam Lane"); null with none. */
     val partnerFirst: String? get() = partner?.trim()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
@@ -56,6 +63,7 @@ data class HouseholdNames(
                 home = a.home?.let(WeatherPlaceRules::normalize),
                 work = a.work?.let(WeatherPlaceRules::normalize),
                 assistantNumber = a.assistantNumber?.trim()?.takeIf { it.isNotEmpty() },
+                shown = a.shownName?.trim()?.takeIf { it.isNotEmpty() },
             )
         }
     }
@@ -92,6 +100,9 @@ object Household {
         work = WeatherPlaceRules.normalize(work),
         assistantNumber = assistantNumber.trim().takeIf { it.isNotEmpty() },
     ))
+
+    /** About you's "Your name" as typed (tests and the Mac's bridge tests; blank for none), keeping the rest. */
+    fun useShownName(name: String): Boolean = set(names.copy(shown = name.trim().takeIf { it.isNotEmpty() }))
 
     /** Sets [n] directly (tests, and [use]); true when it changed. */
     fun set(n: HouseholdNames): Boolean {

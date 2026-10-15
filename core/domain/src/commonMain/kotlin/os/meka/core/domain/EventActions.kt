@@ -206,7 +206,7 @@ class EventActions(
         ClubChildRules.read(replica.entities(EntityTypes.CLUB_SERIES).map { it.ref.entityId to it[ClubSeriesFields.CHILD].textOrNull })
 
     /**
-     * Fold review 17:56, slice 3: [child] ("Rex"; null clears it) is whose club session [e]'s whole series is. Returns
+     * Fold review 17:56, slice 3: [child] ("Theo"; null clears it) is whose club session [e]'s whole series is. Returns
      * who it was before; nothing is written for a session that names its child itself, for a name that isn't a child's,
      * or when nothing changed.
      */

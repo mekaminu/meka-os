@@ -18,8 +18,8 @@ class AskCodecTest {
         // The shopping list's one line (family sharing): a kind of its own.
         val shop = req.copy(items = listOf(AskCodec.Item("", "shopping", "Shopping list · 2 to buy: milk, eggs")))
         assertEquals(shop, AskCodec.decodeRequest(AskCodec.encodeRequest(shop)))
-        // Rex's and Logan's school year (school rhythm, slice 2b): a kind of its own.
-        val school = req.copy(items = listOf(AskCodec.Item("", "school", "Day off · Half term · Mon 26 – Fri 30 Oct · Rex and Logan")))
+        // Theo's and Finn's school year (school rhythm, slice 2b): a kind of its own.
+        val school = req.copy(items = listOf(AskCodec.Item("", "school", "Day off · Half term · Mon 26 – Fri 30 Oct · Theo and Finn")))
         assertEquals(school, AskCodec.decodeRequest(AskCodec.encodeRequest(school)))
         // The week's dinners (meal plan, slice 2): a kind of its own.
         val meals = req.copy(items = listOf(AskCodec.Item("", "meals", "Dinners · tonight: Chilli · Tomorrow: not planned")))
@@ -34,7 +34,7 @@ class AskCodecTest {
         val gifts = req.copy(items = listOf(AskCodec.Item("", "gifts", "Mum's birthday · Tue 3 Nov · in 22 days · ideas: Silk scarf")))
         assertEquals(gifts, AskCodec.decodeRequest(AskCodec.encodeRequest(gifts)))
         // People (slice 3): a kind of its own.
-        val people = req.copy(items = listOf(AskCodec.Item("", "people", "Rex · you promised: Fix his bike · by tomorrow")))
+        val people = req.copy(items = listOf(AskCodec.Item("", "people", "Theo · you promised: Fix his bike · by tomorrow")))
         assertEquals(people, AskCodec.decodeRequest(AskCodec.encodeRequest(people)))
         // Travel mode (slice 2a): a kind of its own.
         val trips = req.copy(items = listOf(AskCodec.Item("", "trips", "Barcelona · Flight · Sat 14 Nov 07:40 · Flight BA478 · ref ABC123")))

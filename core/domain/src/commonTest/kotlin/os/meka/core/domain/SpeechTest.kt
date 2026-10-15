@@ -208,7 +208,7 @@ class SpeechTest {
 
     @Test
     fun aReadingIsAskedForInShortPiecesAFewAtOnceAndWaitsForLatePiecesInMekasVoice() {
-        val text = "Good morning, Meka. " + (1..12).joinToString(" ") { "Rex's under-sevens play Arlesey at ten o'clock, then lunch number $it." }
+        val text = "Good morning, Meka. " + (1..12).joinToString(" ") { "Theo's under-sevens play Eastfield at ten o'clock, then lunch number $it." }
         val read = SpeechRules.pieces(text, reading = true)
         assertTrue(read.size > SpeechRules.pieces(text).size)
         assertTrue(read.all { it.length <= SpeechRules.READ_PIECE }, read.toString())

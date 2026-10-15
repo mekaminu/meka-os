@@ -13,12 +13,12 @@ class ChatTitlesTest {
 
     @Test
     fun theAppsCountComesOffTheName() {
-        assertEquals("BUFC U7s", ChatTitleRules.clean("BUFC U7s (2 messages)"))
-        assertEquals("BUFC U7s", ChatTitleRules.clean("  BUFC   U7s (1 message) "))
-        assertEquals("BUFC U7s", ChatTitleRules.clean("BUFC U7s (3 new messages)"))
-        assertEquals("BUFC U7s", ChatTitleRules.clean("BUFC U7s: 12 New Messages"))
-        assertEquals("BUFC U7s", ChatTitleRules.clean("BUFC U7s · 2 new messages"))
-        assertEquals("BUFC U7s", ChatTitleRules.clean("BUFC U7s - 4 messages"))
+        assertEquals("WTFC U7s", ChatTitleRules.clean("WTFC U7s (2 messages)"))
+        assertEquals("WTFC U7s", ChatTitleRules.clean("  WTFC   U7s (1 message) "))
+        assertEquals("WTFC U7s", ChatTitleRules.clean("WTFC U7s (3 new messages)"))
+        assertEquals("WTFC U7s", ChatTitleRules.clean("WTFC U7s: 12 New Messages"))
+        assertEquals("WTFC U7s", ChatTitleRules.clean("WTFC U7s · 2 new messages"))
+        assertEquals("WTFC U7s", ChatTitleRules.clean("WTFC U7s - 4 messages"))
         // Names that only look a little like a count stay as they are.
         assertEquals("Class of 2015 (Year 6)", ChatTitleRules.clean("Class of 2015 (Year 6)"))
         assertEquals("Top 5 messages", ChatTitleRules.clean("Top 5 messages"))
@@ -33,13 +33,13 @@ class ChatTitlesTest {
         // The first message arrives alone, then WhatsApp re-posts it bundled with the second under "(2 messages)".
         val first = at(9, 0)
         val items = listOf(
-            msg("Coach Dan", "Training moved to 5", "BUFC U7s", first),
-            msg("Coach Dan", "Training moved to 5", "BUFC U7s (2 messages)", first),
-            msg("Amy", "Is there no match this Saturday?", "BUFC U7s (2 messages)", at(9, 5)),
+            msg("Coach Dan", "Training moved to 5", "WTFC U7s", first),
+            msg("Coach Dan", "Training moved to 5", "WTFC U7s (2 messages)", first),
+            msg("Amy", "Is there no match this Saturday?", "WTFC U7s (2 messages)", at(9, 5)),
         )
         val view = GroupDigestRules.view(items, TriageSettings(), emptyMap(), day, 12 * 60 + 30)!!
         val card = view.cards.single()
-        assertEquals("BUFC U7s", card.title)
+        assertEquals("WTFC U7s", card.title)
         assertEquals(2, card.count)
         assertEquals("1 group · 2 messages", view.line)
     }
@@ -50,13 +50,13 @@ class ChatTitlesTest {
             TriageCard(id, lane, People.key(who), "$who in $group · 14:00", "Asks about Saturday", null, CaptureApp.WHATSAPP, true, at, "spoken", group)
         val chats = TriageChatRules.chats(
             listOf(
-                card("a", "Amy", 10, "BUFC U7s"),
-                card("b", "Amy", 10, "BUFC U7s (2 messages)", TriageLane.NEEDS_REPLY),
-                card("c", "Dan", 12, "BUFC U7s (2 messages)"),
+                card("a", "Amy", 10, "WTFC U7s"),
+                card("b", "Amy", 10, "WTFC U7s (2 messages)", TriageLane.NEEDS_REPLY),
+                card("c", "Dan", 12, "WTFC U7s (2 messages)"),
             ),
         )
         val chat = chats.single()
-        assertEquals("BUFC U7s", chat.title)
+        assertEquals("WTFC U7s", chat.title)
         assertEquals(listOf("b", "c"), chat.cards.map { it.id })
         assertEquals(listOf("a"), chat.repeatIds)
         assertEquals(listOf("b", "c", "a"), chat.ids)

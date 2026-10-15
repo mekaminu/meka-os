@@ -184,7 +184,7 @@ object TravelRules {
         "Leave by ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs - travelMin(d.driveMin) * MIN_MS))} · ${driveLabel(d.driveMin)}"
 
     /**
-     * "Leave 15 min earlier for BUFC U7s v Arlesey" · "Traffic · leave by 08:45 · 40 min drive": a heads-up once traffic
+     * "Leave 15 min earlier for WTFC U7s v Eastfield" · "Traffic · leave by 08:45 · 40 min drive": a heads-up once traffic
      * has moved a followed Leave by [EARLIER_NOTICE_MIN] minutes or more earlier than Meka set it, from the answer's time
      * until the new leaving time (never later). A later leaving time just moves quietly. Hidden and started events
      * don't notify.

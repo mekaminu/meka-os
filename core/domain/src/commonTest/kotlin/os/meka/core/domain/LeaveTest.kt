@@ -136,8 +136,8 @@ class LeaveTest {
         // The school still has the boys in on Meka's leave, and asks no cover question for those days.
         assertFalse(hours.holidays.isHoliday(tue))
         val sc = school(fold)
-        sc.add("Rex off 28 Oct")
-        assertTrue(SchoolRules.isSchoolDay(sc.items(), tue, "Rex", hours.holidays))
+        sc.add("Theo off 28 Oct")
+        assertTrue(SchoolRules.isSchoolDay(sc.items(), tue, "Theo", hours.holidays))
         assertTrue(SchoolRules.covers(sc.items(), tue, hours).isEmpty())
         // A bank holiday keeps its own name under leave.
         assertEquals("Christmas Day", LeaveRules.withLeave(holidays, setOf(d(12, 25), d(12, 24))).title(d(12, 25)))

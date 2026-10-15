@@ -108,9 +108,9 @@ class LeavingNowTest {
         assertEquals("%E2%80%94", LeavingRules.percentEncode("—"))
         assertTrue(LeavingRules.samePerson("Jordan", "jordan lane"))
         assertFalse(LeavingRules.samePerson("Jordan", "Jean"))
-        assertEquals("Jordan A", LeavingRules.familyEntry("Jordan", listOf("Rex", "Jordan A")))
+        assertEquals("Jordan A", LeavingRules.familyEntry("Jordan", listOf("Theo", "Jordan A")))
         assertEquals("Wife", LeavingRules.familyEntry("wife", listOf("Wife", "Wife's sister")))
-        assertNull(LeavingRules.familyEntry("Jordan", listOf("Rex")))
+        assertNull(LeavingRules.familyEntry("Jordan", listOf("Theo")))
 
         val world = SyncWorld()
         val fold = world.device("fold")

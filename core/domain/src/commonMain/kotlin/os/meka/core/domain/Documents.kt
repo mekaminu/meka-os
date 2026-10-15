@@ -6,7 +6,7 @@ import os.meka.core.sync.fv
 
 /**
  * The Vault (V2), slice 1: the household's documents and when they run out, typed once — "Passport expires 3 Mar
- * 2029", "Alex passport 20 May 2027", "Driving licence 12 Jun 2031", "Railcard 05/2027", "Birth certificate Rex" — a row
+ * 2029", "Alex passport 20 May 2027", "Driving licence 12 Jun 2031", "Railcard 05/2027", "Birth certificate Theo" — a row
  * each with how long is left ("Renew now · expires in 4 months", lit), and the expiry put onto the plan: a heads-up at
  * 09:00 when the renewal window opens (six months before a passport, two before a licence…), a month and a week
  * before, and on the day. Plain, non-AI rules; nothing leaves Meka's synced data.
@@ -16,7 +16,7 @@ import os.meka.core.sync.fv
  * addendum 2026-10-12): `vault_doc`.
  */
 object VaultDocFields {
-    /** "Rex passport" (at most [DocumentRules.MAX_TITLE]). */
+    /** "Theo passport" (at most [DocumentRules.MAX_TITLE]). */
     const val TITLE = "title"
     /** [DocKind.wire]. */
     const val KIND = "kind"
@@ -47,7 +47,7 @@ enum class DocKind(val wire: String, val label: String, val leadDays: Int, val h
 /** One stored document. */
 data class DocumentItem(val id: String, val title: String, val kind: DocKind, val expiresDay: Long?, val addedAtMs: Long)
 
-/** A row in the Vault: "Rex passport" · "Passport · expires Thu 20 May 2027" · "Renew now · expires in 7 months" ([statusLit]). */
+/** A row in the Vault: "Theo passport" · "Passport · expires Thu 20 May 2027" · "Renew now · expires in 7 months" ([statusLit]). */
 data class DocumentRow(
     val id: String,
     val title: String,
@@ -111,7 +111,7 @@ object DocumentRules {
 
     private fun bare(w: String): String = w.trim { !it.isLetterOrDigit() && it != '/' }.lowercase()
 
-    /** The kind any word names ("Rex's passport", "Home insurance", "16-25 Railcard"); "ID card" by its pair. */
+    /** The kind any word names ("Theo's passport", "Home insurance", "16-25 Railcard"); "ID card" by its pair. */
     fun kindOf(text: String): DocKind {
         val ws = text.split(' ').map(::bare).filter { it.isNotEmpty() }
         for (i in ws.indices) {
@@ -175,7 +175,7 @@ object DocumentRules {
 
     /**
      * Reads a line typed in the Vault: a date (any of School's forms, "3 Mar 2029", "03/03/2029", or a month,
-     * "05/2027", "May 2027") is when it runs out; with none it doesn't ("Birth certificate Rex"). The kind is the
+     * "05/2027", "May 2027") is when it runs out; with none it doesn't ("Birth certificate Theo"). The kind is the
      * document word anywhere in the line; the title is the words left, without "expires" and without anything that
      * looks like a document number.
      */
@@ -285,7 +285,7 @@ object DocumentRules {
         return DocumentsView(rows, summary)
     }
 
-    /** The line after adding: "Added Rex passport · expires Thu 20 May 2027 · renew from Fri 20 Nov 2026". */
+    /** The line after adding: "Added Theo passport · expires Thu 20 May 2027 · renew from Fri 20 Nov 2026". */
     fun addedLine(e: DocumentEntry, today: Long, replaced: Boolean): String {
         val verb = if (replaced) "Updated" else "Added"
         val e2 = e.expiresDay ?: return "$verb ${e.title} · no expiry"
@@ -300,7 +300,7 @@ object DocumentRules {
 
     /**
      * The heads-ups: at [NOTICE_MIN] on the day each document's renewal window opens ([DocKind.leadDays] before it
-     * runs out), then a month and a week before and on the day, each only on its own day — "Rex passport expires
+     * runs out), then a month and a week before and on the day, each only on its own day — "Theo passport expires
      * Thu 20 May 2027" · "In 6 months · many countries want six months left on a passport…". Opens the Vault.
      */
     fun notices(items: List<DocumentItem>, nowMs: Long, cal: LocalCalendar): List<Notice> {

@@ -46,7 +46,7 @@ enum class GroupMode(val wire: String, val label: String) {
 data class TriageSettings(
     val groupModes: Map<String, GroupMode> = emptyMap(),
     val neverToAi: Set<String> = emptySet(),
-    val names: List<String> = MessageTriageRules.DEFAULT_NAMES,
+    val names: List<String> = MessageTriageRules.names(),
     /** "Mark read when I finish a card" (messages grouped per chat, slice 2): Done also fires Mark as read. Off by default. */
     val markReadOnDone: Boolean = false,
     /**
@@ -57,7 +57,7 @@ data class TriageSettings(
     /**
      * The people Meka watches for ([RequestWatchRules.everyone]: the Family list and Watch for requests from), filled in
      * by the Fold when it triages (never stored with these settings): a question or ask from one of them in a group is
-     * read like a mention (Fold review 2026-10-12, bug 3: his wife asking in BUFC U7s).
+     * read like a mention (Fold review 2026-10-12, bug 3: his wife asking in WTFC U7s).
      */
     val watched: Set<String> = emptySet(),
 ) {
@@ -121,7 +121,21 @@ data class GroupDigestCard(
 )
 
 object MessageTriageRules {
-    val DEFAULT_NAMES = listOf("Meka", "Chukwuemeka")
+    /**
+     * The name every household answers to in a group (rule 13, release 2 slice 4): only the app's own short name. Any
+     * other name he goes by comes from About you's "Your name" ([HouseholdNames.shown]), never from the code.
+     */
+    val BASE_NAMES = listOf("Meka")
+
+    /**
+     * The names a group message mentions him by: [BASE_NAMES], then About you's name as typed ("Sam Lane") and each of
+     * its words of 3 letters or more ("Sam", "Lane"), once each, any case.
+     */
+    fun names(h: HouseholdNames = Household.names): List<String> {
+        val shown = h.shown?.trim()?.takeIf { it.isNotEmpty() } ?: return BASE_NAMES
+        val words = shown.split(' ', '-').map { it.trim() }.filter { it.length >= 3 }
+        return (BASE_NAMES + shown + words).distinctBy { it.lowercase() }
+    }
     const val MAX_DRAFT = 400
     const val MAX_SUMMARY = 120
     /** Lines shown under a group's digest card before it is expanded. */
@@ -133,10 +147,10 @@ object MessageTriageRules {
     private val phone = Regex("""\+?\d[\d ()-]{7,}\d""")
 
     /**
-     * Whether a group message names Meka: "@Meka", "Meka," or "Chukwuemeka" as a whole word, any case. A reply to him
-     * isn't visible in a notification, so it only counts when the text names him.
+     * Whether a group message names Meka: "@Meka", "Meka," or a name from About you ([names]) as a whole word, any case.
+     * A reply to him isn't visible in a notification, so it only counts when the text names him.
      */
-    fun mentions(text: String, names: List<String> = DEFAULT_NAMES): Boolean = names.any { n ->
+    fun mentions(text: String, names: List<String> = MessageTriageRules.names()): Boolean = names.any { n ->
         val name = n.trim()
         if (name.isEmpty()) return@any false
         var at = text.indexOf(name, ignoreCase = true)

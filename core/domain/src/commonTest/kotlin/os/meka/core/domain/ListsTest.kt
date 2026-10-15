@@ -119,7 +119,7 @@ class ListsTest {
 
     @Test
     fun decisionsComeUpForReviewAndCanBeKeptRevisitedOrReplaced() {
-        val id = l.recordDecision("Logan stays at Norwich U10 this season", "Coach is great; travel is fine", reviewInDays = 30)
+        val id = l.recordDecision("Finn stays at Norwich U10 this season", "Coach is great; travel is fine", reviewInDays = 30)
         val item = l.decisionItems().single()
         assertEquals("Coach is great; travel is fine", item.rationale)
         assertEquals(DueState.LATER, item.state)
@@ -135,7 +135,7 @@ class ListsTest {
         assertEquals("Revisiting", l.decisionItems().single().meta)
         assertEquals(DueState.DUE, l.decisionItems().single().state)
 
-        val newId = l.replaceDecision(id, "Logan moves to the U11 squad", reviewInDays = null)
+        val newId = l.replaceDecision(id, "Finn moves to the U11 squad", reviewInDays = null)
         val shown = l.decisionItems().single()
         assertEquals(newId, shown.id)
         assertEquals(id, shown.supersedesId)
@@ -189,25 +189,25 @@ class ListsTest {
 
     @Test
     fun aPromiseHasABeforeDayComesDueAndKeptRemovesIt() {
-        val id = l.addPromise("  Fix the bike ", to = "Rex", byInDays = 2)
+        val id = l.addPromise("  Fix the bike ", to = "Theo", byInDays = 2)
         val p = l.promisedItems().single()
         assertEquals(id, p.id)
         assertEquals("Fix the bike", p.title)
-        assertEquals("Rex", p.to)
-        assertEquals("Rex · by ${CivilDate.shortLabel(today() + 2)}", p.meta)
+        assertEquals("Theo", p.to)
+        assertEquals("Theo · by ${CivilDate.shortLabel(today() + 2)}", p.meta)
         assertEquals(DueState.LATER, p.state)
         // A promise is not something you're waiting for, and doesn't count as one.
         assertTrue(l.waitingItems().isEmpty())
         assertNull(l.view(d.tasks.all()).dueLine)
 
         world.clock.advance(day)
-        assertEquals("Rex · by tomorrow", l.promisedItems().single().meta)
+        assertEquals("Theo · by tomorrow", l.promisedItems().single().meta)
         world.clock.advance(day)
-        assertEquals("Rex · due today", l.promisedItems().single().meta)
+        assertEquals("Theo · due today", l.promisedItems().single().meta)
         assertEquals(DueState.DUE, l.promisedItems().single().state)
         assertEquals("1 promise due", l.view(d.tasks.all()).dueLine)
         world.clock.advance(day)
-        assertEquals("Rex · was due ${CivilDate.shortLabel(today() - 1)}", l.promisedItems().single().meta)
+        assertEquals("Theo · was due ${CivilDate.shortLabel(today() - 1)}", l.promisedItems().single().meta)
 
         l.kept(id)
         assertTrue(l.promisedItems().isEmpty())

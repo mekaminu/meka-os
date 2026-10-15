@@ -9,13 +9,13 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Fold review 2026-10-12, bug 3: Jordan asking "Is there no match this Saturday?" in BUFC U7s lifts that group's card
+ * Fold review 2026-10-12, bug 3: Jordan asking "Is there no match this Saturday?" in WTFC U7s lifts that group's card
  * to the top of Needs you with "Jordan asked" — someone Meka watches for counts in groups too.
  */
 class GroupAskTest {
     private val watching = TriageSettings(watched = setOf("Jordan", "Mum"))
 
-    private fun msg(who: String, text: String, group: String? = "BUFC U7s", at: Long = 0) =
+    private fun msg(who: String, text: String, group: String? = "WTFC U7s", at: Long = 0) =
         CapturedItem("id-$who-$text-$at", CaptureApp.WHATSAPP, CaptureKind.MESSAGE, who, text, group, at)
 
     @Test
@@ -26,22 +26,22 @@ class GroupAskTest {
         )
         assertEquals(
             TriageRoute.AskAi(mentioned = true, watched = true),
-            MessageTriageRules.route(msg("jordan ", "Can someone take Rex to training"), watching),
+            MessageTriageRules.route(msg("jordan ", "Can someone take Theo to training"), watching),
         )
         // Her chatter that asks nothing stays in the digest; so does anyone else's question.
-        assertEquals(TriageRoute.Digest("bufc u7s"), MessageTriageRules.route(msg("Jordan", "Great game today 👏"), watching))
-        assertEquals(TriageRoute.Digest("bufc u7s"), MessageTriageRules.route(msg("Coach Dave", "Is everyone ok for Saturday?"), watching))
+        assertEquals(TriageRoute.Digest("wtfc u7s"), MessageTriageRules.route(msg("Jordan", "Great game today 👏"), watching))
+        assertEquals(TriageRoute.Digest("wtfc u7s"), MessageTriageRules.route(msg("Coach Dave", "Is everyone ok for Saturday?"), watching))
         // A mention from her is still a mention, marked as hers.
         assertEquals(TriageRoute.AskAi(mentioned = true, watched = true), MessageTriageRules.route(msg("Jordan", "Meka has the kit"), watching))
         // A 1:1 message is triaged as before, never "asked in a group".
         assertEquals(TriageRoute.AskAi(mentioned = false), MessageTriageRules.route(msg("Jordan", "Milk?", group = null), watching))
         // An ignored group is never read, not even her; WhatsApp's count in the title doesn't hide the group.
-        val ignored = watching.copy(groupModes = mapOf("BUFC U7s" to GroupMode.IGNORE))
-        assertEquals(TriageRoute.Skip, MessageTriageRules.route(msg("Jordan", "Is there no match?", "BUFC U7s (2 messages)"), ignored))
+        val ignored = watching.copy(groupModes = mapOf("WTFC U7s" to GroupMode.IGNORE))
+        assertEquals(TriageRoute.Skip, MessageTriageRules.route(msg("Jordan", "Is there no match?", "WTFC U7s (2 messages)"), ignored))
         // With no one watched (the Mac, or before the Fold fills it), a group question is digest chatter.
-        assertEquals(TriageRoute.Digest("bufc u7s"), MessageTriageRules.route(msg("Jordan", "Is there no match this Saturday?"), TriageSettings()))
+        assertEquals(TriageRoute.Digest("wtfc u7s"), MessageTriageRules.route(msg("Jordan", "Is there no match this Saturday?"), TriageSettings()))
         // A notification holding her question is not cleared from the shade like chatter.
-        assertFalse(GroupDigestRules.clearsNotification(listOf(msg("Jordan", "Who's taking Logan?")), watching, setOf("id-Jordan-Who's taking Logan?-0")))
+        assertFalse(GroupDigestRules.clearsNotification(listOf(msg("Jordan", "Who's taking Finn?")), watching, setOf("id-Jordan-Who's taking Finn?-0")))
     }
 
     @Test
@@ -62,7 +62,7 @@ class GroupAskTest {
         val fyi = MessageTriage(TriageLane.FYI, summary = "Asks if there's no match this Saturday")
         val hers = assertNotNull(fold.save(msg("Jordan", "Is there no match this Saturday?", at = 9 * 60_000L), fyi, watched = true))
         assertEquals("Jordan", hers.askedBy)
-        assertTrue(hers.spoken.startsWith("Jordan asked. Jordan in BUFC U7s"))
+        assertTrue(hers.spoken.startsWith("Jordan asked. Jordan in WTFC U7s"))
         // A 1:1 message is never "asked in a group", even marked watched.
         val dm = assertNotNull(fold.save(msg("Jordan", "Milk?", group = null, at = 8 * 60_000L), fyi, watched = true))
         assertNull(dm.askedBy)
@@ -75,13 +75,13 @@ class GroupAskTest {
 
         val chats = TriageChatRules.chats(fold.open())
         // Her group first (even above a chat waiting on a reply), with her line on top.
-        assertEquals(listOf("BUFC U7s", "Barça lads", "Jordan"), chats.map { it.title })
-        val bufc = chats.first()
-        assertEquals("Jordan", bufc.askedBy)
-        assertEquals("Jordan asked", TriageChatRules.askedLine(bufc.askedBy!!))
-        assertEquals("Jordan: Asks if there's no match this Saturday", bufc.top.first())
-        assertEquals(listOf(hers.id, coach.id), bufc.ids)
-        assertTrue(bufc.spoken.startsWith("Jordan asked in BUFC U7s, 2 new"))
+        assertEquals(listOf("WTFC U7s", "Barça lads", "Jordan"), chats.map { it.title })
+        val wtfc = chats.first()
+        assertEquals("Jordan", wtfc.askedBy)
+        assertEquals("Jordan asked", TriageChatRules.askedLine(wtfc.askedBy!!))
+        assertEquals("Jordan: Asks if there's no match this Saturday", wtfc.top.first())
+        assertEquals(listOf(hers.id, coach.id), wtfc.ids)
+        assertTrue(wtfc.spoken.startsWith("Jordan asked in WTFC U7s, 2 new"))
         assertNull(chats[1].askedBy)
         assertNull(chats[2].askedBy)
     }

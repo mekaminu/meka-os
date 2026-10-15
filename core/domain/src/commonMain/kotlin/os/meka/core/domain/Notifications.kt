@@ -170,7 +170,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     TRIPS("Trips: the evening before you go", NoticeTier.HEADS_UP),
     /**
      * The Vault, slice 1 ([DocumentRules.notices]): a document's renewal window opening (six months before a passport),
-     * a month and a week before it runs out and on the day, at 09:00 — "Rex passport expires Thu 20 May 2027".
+     * a month and a week before it runs out and on the day, at 09:00 — "Theo passport expires Thu 20 May 2027".
      */
     DOCUMENTS("Vault: documents running out", NoticeTier.HEADS_UP),
     /**

@@ -34,7 +34,7 @@ data class Today(
      * late or today has no room left.
      */
     val upNextLaterMs: Long? = null,
-    /** School rhythm, slice 2: "Rex: PE today" under the weather in Today's header ([SchoolRules.todayLine]); set by the facade. */
+    /** School rhythm, slice 2: "Theo: PE today" under the weather in Today's header ([SchoolRules.todayLine]); set by the facade. */
     val school: SchoolLine? = null,
     /** Meal plan, slice 1: "Dinner tonight: Chilli" in Today's header from 15:00 to 21:00 ([MealRules.tonightLine]); set by the facade. */
     val dinner: MealLine? = null,

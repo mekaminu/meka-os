@@ -140,7 +140,7 @@ object FactRules {
         return FactLine(label.replaceFirstChar { it.uppercase() }, value)
     }
 
-    /** A word as the matching sees it: lower case, no possessive, no plural "s" (shoes → shoe, Rex's → rex). */
+    /** A word as the matching sees it: lower case, no possessive, no plural "s" (shoes → shoe, Theo's → theo). */
     fun word(w: String): String {
         var s = w.lowercase().filter { it.isLetterOrDigit() || it == '\'' }.removeSuffix("'s").removeSuffix("'").filter { it.isLetterOrDigit() }
         if (s.length > 3 && s.endsWith("s") && !s.endsWith("ss")) s = s.dropLast(1)

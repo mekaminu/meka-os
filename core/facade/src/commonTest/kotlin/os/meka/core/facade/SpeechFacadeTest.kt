@@ -234,9 +234,9 @@ class SpeechFacadeTest {
         val c = core()
         // The matches bit took Polly 10 s: a conversation's later piece goes to the device after 6 s…
         server.slowMs = 10_000
-        assertNull(c.speechClip("Rex's under-sevens play Arlesey at ten o'clock.", first = false, reading = false))
+        assertNull(c.speechClip("Theo's under-sevens play Eastfield at ten o'clock.", first = false, reading = false))
         // …the brief waits for it in MEKA's voice (up to 15 s), and slow still isn't a refusal.
-        assertEquals("bXAz" + "Logan's under-tens play Potton.".length, c.speechClip("Logan's under-tens play Potton.", first = false, reading = true))
+        assertEquals("bXAz" + "Finn's under-tens play Northam.".length, c.speechClip("Finn's under-tens play Northam.", first = false, reading = true))
         assertEquals(false, c.speechResting())
         // Past 15 s only that piece goes to the device.
         server.slowMs = 16_000

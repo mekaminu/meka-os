@@ -167,7 +167,7 @@ object CalendarTones {
  *   section. Days before today or past the window are dimmed.
  * - Work days ([WorkHours], bank holidays off) carry "Work 09:00–17:30" and so are never folded away as "Nothing
  *   planned"; work isn't counted in the busy dots or the counts. An event during work carries its mark
- *   ([TimelineRow.clash], [WorkClashRules]): "Clashes with work · who's taking Rex?".
+ *   ([TimelineRow.clash], [WorkClashRules]): "Clashes with work · who's taking Theo?".
  */
 object CalendarAgenda {
     const val DAYS = 30
@@ -398,7 +398,7 @@ object CalendarAgenda {
 
     private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 
-    /** "Rex · Oakfield Park" · "Rex or Logan? · …" for a club session ([ClubChildRules.line]) first, then the place. */
+    /** "Theo · Oakfield Park" · "Theo or Finn? · …" for a club session ([ClubChildRules.line]) first, then the place. */
     private fun eventDetail(e: CalendarEvent, child: String? = null): String? = listOfNotNull(
         child,
         e.location,

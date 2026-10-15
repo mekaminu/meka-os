@@ -42,7 +42,7 @@ data class WaitingItem(
 data class PromiseItem(
     val id: String,
     val title: String,
-    /** Who it was promised to ("Jordan", "Rex's coach"); null when not said. */
+    /** Who it was promised to ("Jordan", "Theo's coach"); null when not said. */
     val to: String?,
     val notes: String?,
     val sinceMs: Long,

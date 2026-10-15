@@ -46,7 +46,7 @@ import os.meka.core.domain.DocumentRules
 import os.meka.core.facade.MekaCore
 
 /**
- * The Vault's documents (V2, slice 1), above Your data: one field — "Passport expires 3 Mar 2029", "Rex passport 20
+ * The Vault's documents (V2, slice 1), above Your data: one field — "Passport expires 3 Mar 2029", "Theo passport 20
  * May 2027", "Railcard 05/2027" — and a row per document with how long is left, the ones to renew first (their status
  * lit). Tap a row for Remove. The expiry dates reach the plan as heads-ups (six months before a passport…).
  *

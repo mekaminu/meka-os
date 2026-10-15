@@ -51,7 +51,7 @@ data class TomorrowPreview(
     val glance: String = ShutdownRules.GLANCE_EMPTY,
     /** Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat"; set by the facade. */
     val weatherLine: String? = null,
-    /** School rhythm, slice 2: "Tomorrow · Rex: PE kit" ([SchoolRules.tomorrowLine]); set by the facade. */
+    /** School rhythm, slice 2: "Tomorrow · Theo: PE kit" ([SchoolRules.tomorrowLine]); set by the facade. */
     val school: SchoolLine? = null,
 )
 

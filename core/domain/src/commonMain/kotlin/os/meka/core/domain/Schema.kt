@@ -54,7 +54,7 @@ object EntityTypes {
     const val VENUE = "venue"
     /** One club fixture's drive from home with traffic, written by the server (see [TravelRules]); id from the event. */
     const val TRAVEL_TIME = "travel_time"
-    /** One line of Rex's and Logan's school year: a day off, a date or a weekly thing (see [School]). */
+    /** One line of Theo's and Finn's school year: a day off, a date or a weekly thing (see [School]). */
     const val SCHOOL_ITEM = "school_item"
     /** One favourite dinner and its ingredients (see [MealPlan]). */
     const val MEAL = "meal"
@@ -94,7 +94,7 @@ object EntityTypes {
     const val TRIP = "trip"
     /** Travel mode, slice 1 (2026-10-12): one booking on a trip, "Flight BA478 Sat 14 Nov 07:40 ref ABC123". */
     const val TRIP_BOOKING = "trip_booking"
-    /** The Vault, slice 1 (2026-10-12): one document and the day it runs out, "Rex passport 20 May 2027" (see [Documents]). */
+    /** The Vault, slice 1 (2026-10-12): one document and the day it runs out, "Theo passport 20 May 2027" (see [Documents]). */
     const val VAULT_DOC = "vault_doc"
     /** Messages grouped per chat, slice 3c (2026-10-12): a busy chat's one-line AI summary (never the messages, see [ChatSummaries]). */
     const val CHAT_SUMMARY = "chat_summary"

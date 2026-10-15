@@ -80,7 +80,7 @@ data class MorningBriefView(
     val readElsewhereLine: String? = null,
     /** Today's weather under the date (Weather slice 2): "9–15°, light rain from 15:00 — take a coat"; set by the facade. */
     val weatherLine: String? = null,
-    /** School rhythm, slice 2: "Rex: PE today" under the weather ([SchoolRules.todayLine]); also on the card's line. */
+    /** School rhythm, slice 2: "Theo: PE today" under the weather ([SchoolRules.todayLine]); also on the card's line. */
     val school: SchoolLine? = null,
     /** A morning brief worth listening to, slice 1: what the spoken brief adds ([BriefScriptRules.script]); set by the facade. */
     val story: BriefStory = BriefStory.EMPTY,

@@ -26,20 +26,20 @@ class PeopleTest {
     @Test
     fun onePersonPerNameWithWhatsOwedBothWaysAndTheirBirthday() {
         val v = PeopleRules.view(
-            promises = listOf(promise("p1", "Fix the bike", "rex"), promise("p2", "Lift to football", "Rex", DueState.DUE, "Rex · due today")),
+            promises = listOf(promise("p1", "Fix the bike", "theo"), promise("p2", "Lift to football", "Theo", DueState.DUE, "Theo · due today")),
             waiting = listOf(waiting("w1", "Refund", "Argos"), waiting("w2", "Photos", "Mum", DueState.DUE, "Mum · chase today")),
             occasions = listOf(
-                birthday("Mum", 11, 3, 1966), birthday("Rex", 10, 15, 2016),
+                birthday("Mum", 11, 3, 1966), birthday("Theo", 10, 15, 2016),
                 birthday("", 8, 20, kind = OccasionKind.ANNIVERSARY), birthday("Mum and Dad", 5, 12, kind = OccasionKind.ANNIVERSARY),
             ),
             contacts = emptyList(), today = today, nowMs = now, cal = cal,
         )
-        assertEquals(listOf("Mum", "Rex", "Argos"), v.rows.map { it.name }) // lit first, then by name
-        val rex = v.rows[1]
-        assertEquals("You promised 2", rex.owedLine)
-        assertEquals(listOf("Lift to football", "Fix the bike"), rex.promised.map { it.title }) // due first
-        assertEquals("Birthday Thu 15 Oct · in 3 days · turns 10", rex.birthday)
-        assertTrue(rex.lit)
+        assertEquals(listOf("Mum", "Theo", "Argos"), v.rows.map { it.name }) // lit first, then by name
+        val theo = v.rows[1]
+        assertEquals("You promised 2", theo.owedLine)
+        assertEquals(listOf("Lift to football", "Fix the bike"), theo.promised.map { it.title }) // due first
+        assertEquals("Birthday Thu 15 Oct · in 3 days · turns 10", theo.birthday)
+        assertTrue(theo.lit)
         val mum = v.rows[0]
         assertEquals("Waiting for 1", mum.owedLine)
         assertEquals("Birthday Tue 3 Nov · in 22 days · turns 60", mum.birthday)
@@ -48,7 +48,7 @@ class PeopleTest {
         assertFalse(argos.lit)
         assertNull(argos.birthday)
         assertEquals("3 people · 1 promise due · 1 to chase", v.summary)
-        assertTrue(rex.spoken.startsWith("Rex. You promised: Lift to football, Rex · due today."))
+        assertTrue(theo.spoken.startsWith("Theo. You promised: Lift to football, Theo · due today."))
         // Anniversaries are nobody's row; a promise to no one is no row either.
         assertTrue(PeopleRules.view(listOf(promise("p", "Tidy", null)), emptyList(), listOf(birthday("", 8, 20, kind = OccasionKind.ANNIVERSARY)), emptyList(), today, now, cal).isEmpty)
         assertEquals(PeopleRules.EMPTY_LINE, PeopleView.EMPTY.summary)
@@ -71,18 +71,18 @@ class PeopleTest {
         val contacts = listOf(
             ContactSeen("Jordan Lane", at(today - 1, 18 * 60 + 40), CaptureApp.WHATSAPP, fromMe = false),
             ContactSeen("Jordan Lane", at(today, 13 * 60 + 2), CaptureApp.WHATSAPP, fromMe = true),
-            ContactSeen("Rex", at(today - 3, 9 * 60), CaptureApp.PHONE, false, CaptureKind.MISSED_CALL),
+            ContactSeen("Theo", at(today - 3, 9 * 60), CaptureApp.PHONE, false, CaptureKind.MISSED_CALL),
             ContactSeen("Tunde", at(today, 14 * 60), CaptureApp.SMS, false), // no row: not listed
         )
         val v = PeopleRules.view(
-            listOf(promise("p", "Book the table", "Jordan"), promise("q", "Fix the bike", "Rex")), emptyList(), emptyList(),
+            listOf(promise("p", "Book the table", "Jordan"), promise("q", "Fix the bike", "Theo")), emptyList(), emptyList(),
             contacts, today, now, cal,
         )
-        assertEquals(listOf("Jordan", "Rex"), v.rows.map { it.name })
+        assertEquals(listOf("Jordan", "Theo"), v.rows.map { it.name })
         assertEquals("You replied 13:02 · WhatsApp", v.rows[0].lastContact)
         assertEquals("Missed call Fri 9 Oct 09:00 · Phone", v.rows[1].lastContact)
         // A first name only one row has joins; two rows sharing it join neither.
-        assertEquals("jordan", PeopleRules.match("jordan lane", listOf("jordan", "rex")))
+        assertEquals("jordan", PeopleRules.match("jordan lane", listOf("jordan", "theo")))
         assertEquals("jordan lane", PeopleRules.match("jordan", listOf("jordan lane")))
         assertNull(PeopleRules.match("jo", listOf("jo smith", "jo brown")))
         assertNull(PeopleRules.match("tunde", listOf("jordan")))
@@ -111,7 +111,7 @@ class PeopleTest {
     fun askAndTalkKnowThePeopleAndAddAPromise() {
         assertTrue(PeopleAskRules.askLines(PeopleView.EMPTY).isEmpty())
         val promised = listOf(
-            promise("p1", "Fix the bike", "rex"), promise("p2", "Lift to football", "Rex", DueState.DUE, "Rex · due today"),
+            promise("p1", "Fix the bike", "theo"), promise("p2", "Lift to football", "Theo", DueState.DUE, "Theo · due today"),
             promise("p3", "Tidy the shed", null, meta = "since Sat 10 Oct"),
         )
         val v = PeopleRules.view(
@@ -126,14 +126,14 @@ class PeopleTest {
                 "People · 2 people · 1 promise due · 1 to chase",
                 "Mum · waiting for 1 · birthday Tue 3 Nov · in 22 days · turns 60 · last message 14:00 · WhatsApp",
                 "Mum · waiting for: Photos · chase today",
-                "Rex · you promised 2",
-                "Rex · you promised: Lift to football · due today",
-                "Rex · you promised: Fix the bike · by Thu 15 Oct",
+                "Theo · you promised 2",
+                "Theo · you promised: Lift to football · due today",
+                "Theo · you promised: Fix the bike · by Thu 15 Oct",
             ),
             PeopleAskRules.askLines(v),
         )
-        assertEquals("by tomorrow", PeopleAskRules.bareMeta("rex · by tomorrow", "rex"))
-        assertEquals("since today", PeopleAskRules.bareMeta("since today", "rex"))
+        assertEquals("by tomorrow", PeopleAskRules.bareMeta("theo · by tomorrow", "theo"))
+        assertEquals("since today", PeopleAskRules.bareMeta("since today", "theo"))
 
         val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), now, cal, people = PeopleAskRules.askLines(v))
         assertEquals(6, ctx.items.count { it.kind == AskItemKind.PEOPLE })
@@ -142,13 +142,13 @@ class PeopleTest {
         fun card(title: String?, date: String? = null) =
             AskRules.card(AskRawAction("add_promise", title = title, date = date), ctx, emptyMap(), now, cal, people = v, promised = promised)
         // A person the pane has is written as the pane writes them; a by-day reads from the date.
-        val c = card("rex: sort his bike lights", "2026-10-13")!!
-        assertEquals(AskProposal.AddPromise("Rex", "Sort his bike lights", today + 1), c.proposal)
-        assertEquals("Promise to Rex · Sort his bike lights · by tomorrow", c.line)
+        val c = card("theo: sort his bike lights", "2026-10-13")!!
+        assertEquals(AskProposal.AddPromise("Theo", "Sort his bike lights", today + 1), c.proposal)
+        assertEquals("Promise to Theo · Sort his bike lights · by tomorrow", c.line)
         assertEquals("Add", c.button)
-        assertEquals("Added your promise to Rex: Sort his bike lights · by tomorrow", AskRules.doneLine(c.proposal, today))
-        assertEquals("add your promise to Rex: Sort his bike lights, by tomorrow", TalkRules.phrase(c.proposal, today, past = false))
-        assertEquals("added your promise to Rex: Sort his bike lights, by tomorrow", TalkRules.phrase(c.proposal, today, past = true))
+        assertEquals("Added your promise to Theo: Sort his bike lights · by tomorrow", AskRules.doneLine(c.proposal, today))
+        assertEquals("add your promise to Theo: Sort his bike lights, by tomorrow", TalkRules.phrase(c.proposal, today, past = false))
+        assertEquals("added your promise to Theo: Sort his bike lights, by tomorrow", TalkRules.phrase(c.proposal, today, past = true))
         assertNull(TrustRules.kindOf(c.proposal))
         // Someone new keeps the name as given; nobody named, no date.
         assertEquals(AskProposal.AddPromise("Jordan", "The photos", null), card("Jordan: the photos")!!.proposal)
@@ -157,7 +157,7 @@ class PeopleTest {
         assertEquals("Promise · Clear the gutters", nobody.line)
         assertEquals("Added your promise: Clear the gutters", AskRules.doneLine(nobody.proposal, today))
         // Nothing promised, a bad or past date, or one already open to the same person: no card.
-        for ((t, d) in listOf("Rex:  " to null, null to null, "Rex: fix the BIKE" to null, "Rex: a thing" to "2026-10-11", "Rex: a thing" to "soon")) {
+        for ((t, d) in listOf("Theo:  " to null, null to null, "Theo: fix the BIKE" to null, "Theo: a thing" to "2026-10-11", "Theo: a thing" to "soon")) {
             assertNull(card(t, d), "$t $d")
         }
     }

@@ -153,7 +153,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
                 v.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
-                // School rhythm, slice 2: "Rex: PE today".
+                // School rhythm, slice 2: "Theo: PE today".
                 v.school?.let { Text(it.text, style = MekaType.caption, color = Meka.colors.textSecondary,
                     modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = it.spoken }) }
                 ListenPill(speaking = speaker.speaking, preparing = preparing != null, modifier = Modifier.padding(top = MekaSpace.m)) {

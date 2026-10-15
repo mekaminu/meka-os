@@ -61,7 +61,7 @@ class BriefAiTest {
     @Test
     fun sentencesAndWordsAreReadByHand() {
         assertEquals(listOf("One.", "Two at 9.30 today!", "Three?", "And four."), BriefAiRules.sentences("One. Two at 9.30 today! Three?\nAnd four"))
-        assertEquals(listOf("Rex’s", "U7s", "o'clock", "9", "30"), BriefAiRules.tokens("Rex’s U7s, o'clock — 9:30"))
+        assertEquals(listOf("Theo’s", "U7s", "o'clock", "9", "30"), BriefAiRules.tokens("Theo’s U7s, o'clock — 9:30"))
     }
 
     @Test

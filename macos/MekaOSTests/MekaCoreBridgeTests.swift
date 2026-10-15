@@ -135,10 +135,10 @@ final class MekaCoreBridgeTests: XCTestCase {
             databaseKeyHex: nil, encrypted: false,
             databaseDirectory: NSTemporaryDirectory(), databaseName: "promises-\(UUID().uuidString).db", deviceKey: nil
         )
-        let id = try await core.addPromise(title: "Fix the bike", to: "Rex", byInDays: KotlinInt(int: 0))
+        let id = try await core.addPromise(title: "Fix the bike", to: "Theo", byInDays: KotlinInt(int: 0))
         _ = try await core.addWaiting(title: "Refund", who: "Shop", chaseInDays: nil)
         let lists = core.listsView.value
-        XCTAssertEqual(lists.promised.map(\.meta), ["Rex · due today"])
+        XCTAssertEqual(lists.promised.map(\.meta), ["Theo · due today"])
         XCTAssertEqual(lists.promised.first?.state, .due)
         XCTAssertEqual(lists.promisesBothWays, 2)
         XCTAssertEqual(lists.dueLine, "1 promise due")
@@ -158,11 +158,11 @@ final class MekaCoreBridgeTests: XCTestCase {
             databaseKeyHex: nil, encrypted: false,
             databaseDirectory: NSTemporaryDirectory(), databaseName: "people-\(UUID().uuidString).db", deviceKey: nil
         )
-        let id = try await core.addPromise(title: "Fix the bike", to: "Rex", byInDays: KotlinInt(int: 0))
-        _ = try await core.addWaiting(title: "Football photos", who: "rex", chaseInDays: nil)
+        let id = try await core.addPromise(title: "Fix the bike", to: "Theo", byInDays: KotlinInt(int: 0))
+        _ = try await core.addWaiting(title: "Football photos", who: "theo", chaseInDays: nil)
         let row = try XCTUnwrap(core.peopleView.value.rows.first)
         XCTAssertEqual(core.peopleView.value.rows.count, 1)
-        XCTAssertEqual(row.name, "Rex")
+        XCTAssertEqual(row.name, "Theo")
         XCTAssertEqual(row.owedLine, "You promised 1 · Waiting for 1")
         XCTAssertTrue(row.lit)
         XCTAssertEqual(row.promised.map(\.id), [id])
@@ -1411,10 +1411,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         ])
         // Fold review 2026-10-12, bug 3: a question from someone Meka watches for lifts the group with "Jordan asked".
         let asked = TriageChatRules.shared.chats(cards: cards + [
-            TriageCard(id: "j1", lane: .fyi, personKey: "jordan", from: "Jordan in BUFC U7s · 14:05", gist: "Asks if there's no match Saturday",
-                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "BUFC U7s", askedBy: "Jordan"),
+            TriageCard(id: "j1", lane: .fyi, personKey: "jordan", from: "Jordan in WTFC U7s · 14:05", gist: "Asks if there's no match Saturday",
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "WTFC U7s", askedBy: "Jordan"),
         ])
-        XCTAssertEqual(asked.map(\.title), ["BUFC U7s", "Barça lads"])
+        XCTAssertEqual(asked.map(\.title), ["WTFC U7s", "Barça lads"])
         XCTAssertEqual(asked.first?.askedBy, "Jordan")
         XCTAssertEqual(TriageChatRules.shared.askedLine(name: "Jordan"), "Jordan asked")
         XCTAssertNil(asked.last?.askedBy)
@@ -1883,7 +1883,7 @@ final class MekaCoreBridgeTests: XCTestCase {
 
     func testLeaveOfferReachesSwift() {
         // Weekend football, slice 2: a ground's key and the remembered grounds reach the Mac.
-        XCTAssertEqual(FootballRules.shared.venueKey(place: "Arlesey Town FC, Hitchin Rd"), "arlesey town fc hitchin rd")
+        XCTAssertEqual(FootballRules.shared.venueKey(place: "Eastfield Town FC, Station Rd"), "eastfield town fc station rd")
         XCTAssertNil(FootballRules.shared.venueKey(place: "https://meet.google.com/abc"))
         XCTAssertEqual(FootballRules.shared.AS_LAST_TIME, "as last time")
         XCTAssertEqual(EventMarks.companion.NONE.venues.count, 0)
@@ -1981,11 +1981,11 @@ final class MekaCoreBridgeTests: XCTestCase {
     }
 
     func testPromiseFromAskReachesSwift() {
-        // "I told Rex I'd fix his bike" in Ask and Talk (People, slice 3): the card's words reach the Mac.
-        let card = AskRules.shared.cardOf(p: AskProposalAddPromise(to: "Rex", title: "Fix his bike", byDay: KotlinLong(value: 1)), today: 0)
-        XCTAssertEqual(card.line, "Promise to Rex · Fix his bike · by tomorrow")
+        // "I told Theo I'd fix his bike" in Ask and Talk (People, slice 3): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalAddPromise(to: "Theo", title: "Fix his bike", byDay: KotlinLong(value: 1)), today: 0)
+        XCTAssertEqual(card.line, "Promise to Theo · Fix his bike · by tomorrow")
         XCTAssertEqual(card.button, "Add")
-        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "added your promise to Rex: Fix his bike, by tomorrow")
+        XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "added your promise to Theo: Fix his bike, by tomorrow")
         XCTAssertEqual(AskItemKind.people.wire, "people")
     }
 
@@ -2517,7 +2517,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         let details = RenewalDetails(kind: .insurance, repeat: .yearly, costPence: KotlinLong(value: 41_200))
         XCTAssertEqual(MessageRequestRules.shared.renewalDetailLine(r: details, day: nil), "Insurance · every year · £412")
         // Slice 3: a reply's draft is checked in the core; Swift only shows `card.draft` and copies `done.copyText`.
-        XCTAssertEqual(rules.cleanReply(s: "Yes, Rex will be there."), "Yes, Rex will be there.")
+        XCTAssertEqual(rules.cleanReply(s: "Yes, Theo will be there."), "Yes, Theo will be there.")
         XCTAssertNil(rules.cleanReply(s: "Pay at www.example.com"))
         XCTAssertEqual(rules.COPY_REPLY, "Copy reply")
         // What MEKA knows, slice 4: a shared form answered from the facts page in the core, with no connection at all.
@@ -2641,7 +2641,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         // The Vault, slice 1: a typed document goes through the facade (only a String crosses) and its row, status
         // and the Vault's notice target reach the Mac.
         let rules = DocumentRules.shared
-        XCTAssertEqual(rules.kindOf(text: "Rex passport"), .passport)
+        XCTAssertEqual(rules.kindOf(text: "Theo passport"), .passport)
         XCTAssertEqual(DocumentsView.companion.EMPTY.summary, rules.EMPTY_LINE)
         XCTAssertEqual(NoticeTarget.vault.name, "VAULT")
         let core = MacCoreFactory.shared.create(
@@ -2779,12 +2779,12 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testSchoolDayLinesReachSwift() {
         // School rhythm, slice 2: Today's header, the brief and the shutdown read SchoolLine's two Strings.
         let rules = SchoolRules.shared
-        let pe = SchoolThing(id: "x", kind: .weekly, title: "PE", who: "Rex")
-        XCTAssertEqual(rules.thingText(t: pe, kit: false), "Rex: PE")
-        XCTAssertEqual(rules.thingText(t: pe, kit: true), "Rex: PE kit")
-        XCTAssertEqual(rules.spokenThing(t: pe), "Rex has PE")
-        let line = SchoolLine(text: "Rex: PE today", spoken: "School today: Rex has PE.")
-        XCTAssertEqual(line.text, "Rex: PE today")
+        let pe = SchoolThing(id: "x", kind: .weekly, title: "PE", who: "Theo")
+        XCTAssertEqual(rules.thingText(t: pe, kit: false), "Theo: PE")
+        XCTAssertEqual(rules.thingText(t: pe, kit: true), "Theo: PE kit")
+        XCTAssertEqual(rules.spokenThing(t: pe), "Theo has PE")
+        let line = SchoolLine(text: "Theo: PE today", spoken: "School today: Theo has PE.")
+        XCTAssertEqual(line.text, "Theo: PE today")
     }
 
     func testRecoveryKeyReachesSwift() async throws {

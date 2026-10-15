@@ -6,7 +6,7 @@ import os.meka.core.sync.fv
 
 /**
  * Gift planner (V1), slice 1: birthdays and anniversaries typed once — "Mum's birthday 3 Nov", "Jordan birthday 14
- * March 1988", "Wedding anniversary 20 Aug 2015", "Rex 5 June · delivery 5 days" — gift ideas noted against each, and
+ * March 1988", "Wedding anniversary 20 Aug 2015", "Theo 5 June · delivery 5 days" — gift ideas noted against each, and
  * an order-by date worked out from how long delivery takes (3 days unless typed, plus a spare day).
  *
  * Two weeks before at 09:00 a heads-up "Mum's birthday in 2 weeks · Sat 31 Oct" with the ideas and the order-by date;
@@ -171,7 +171,7 @@ object GiftRules {
 
     /**
      * What one typed line says, or null when it names no day and month MEKA can read, or no one for a birthday.
-     * "Mum's birthday 3 Nov", "Jordan birthday 14 March 1988", "3rd November: Dad", "Rex 5/6/2016", "Wedding
+     * "Mum's birthday 3 Nov", "Jordan birthday 14 March 1988", "3rd November: Dad", "Theo 5/6/2016", "Wedding
      * anniversary 20 Aug 2015", "Mum birthday 3 Nov delivery 5 days". With no kind word it's a birthday.
      */
     fun read(text: String, thisYear: Int): OccasionEntry? {

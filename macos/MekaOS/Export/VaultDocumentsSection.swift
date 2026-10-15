@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// The Vault's documents on the Mac (V2, slice 1), like the Fold's VaultDocuments: one field ("Passport expires 3 Mar
-/// 2029", "Rex passport 20 May 2027", "Railcard 05/2027") and a row per document with how long is left, the ones to
+/// 2029", "Theo passport 20 May 2027", "Railcard 05/2027") and a row per document with how long is left, the ones to
 /// renew first (status lit). Click a row for Remove. Only Strings cross to the core.
 ///
 /// Motion: the section staggers in with the screen; the summary and the line under the field cross-fade (a refused

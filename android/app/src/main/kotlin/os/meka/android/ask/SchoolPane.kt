@@ -53,8 +53,8 @@ import os.meka.core.domain.SchoolTermsAdded
 import os.meka.core.facade.MekaCore
 
 /**
- * Ask → More → School (school rhythm, slice 1): Rex's and Logan's school year, typed once, one line each — "INSET
- * 27 Oct", "Half term 26–30 Oct", "Rex PE Tue", "Logan's trip 20 Nov" — in three groups: days off, dates and every
+ * Ask → More → School (school rhythm, slice 1): Theo's and Finn's school year, typed once, one line each — "INSET
+ * 27 Oct", "Half term 26–30 Oct", "Theo PE Tue", "Finn's trip 20 Nov" — in three groups: days off, dates and every
  * week, each row with Remove. A week before a day off that falls on an office day, Needs you asks who's covering.
  *
  * School dates filled in (slice 1): a card under the summary offers the councils whose holidays Navilife knows; Fill in

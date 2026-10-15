@@ -87,8 +87,8 @@ data class EventDetailView(
     val resultNote: String? = null,
     /**
      * Fold review 17:56, slice 3: a club session whose title and calendar don't say whose it is offers the children
-     * ("Rex", "Logan") to set once for its series; empty otherwise. [clubChild] is who is set (null: nobody yet) and
-     * [clubChildLine] "For Rex · every Wed 16:55".
+     * ("Theo", "Finn") to set once for its series; empty otherwise. [clubChild] is who is set (null: nobody yet) and
+     * [clubChildLine] "For Theo · every Wed 16:55".
      */
     val clubChildChoices: List<String> = emptyList(),
     val clubChild: String? = null,

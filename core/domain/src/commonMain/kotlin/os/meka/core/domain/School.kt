@@ -5,25 +5,25 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * School rhythm (build plan V1, Meka approved 2026-10-10), slice 1: Rex's and Logan's school year, entered once by
+ * School rhythm (build plan V1, Meka approved 2026-10-10), slice 1: Theo's and Finn's school year, entered once by
  * typing one line at a time, and the week-ahead question "the boys are off on the 27th and you're in the office — who's
  * covering?". Plain, non-AI rules; nothing here leaves Meka's own synced data.
  *
  * One synced `school_item` entity per line (ADR-008 addendum 2026-10-10), of three kinds:
  * - [SchoolKind.OFF]: days with no school (term holidays, half term, INSET days, closures): "INSET 27 Oct",
- *   "Half term 26–30 Oct", "Christmas holidays 18 Dec – 4 Jan", "Rex off 3 Nov".
+ *   "Half term 26–30 Oct", "Christmas holidays 18 Dec – 4 Jan", "Theo off 3 Nov".
  * - [SchoolKind.DAY]: a one-off date to remember (non-uniform day, a trip, a payment due): "Non-uniform day Fri 13 Nov",
- *   "Logan's trip to the zoo 20 Nov".
- * - [SchoolKind.WEEKLY]: something every school week on one weekday (PE): "Alex PE Tue", "Logan swimming Thursdays".
+ *   "Finn's trip to the zoo 20 Nov".
+ * - [SchoolKind.WEEKLY]: something every school week on one weekday (PE): "Alex PE Tue", "Finn swimming Thursdays".
  *
- * A child named in the line ("Rex", "Logan's") makes it theirs; otherwise it is both boys'. School days are Monday to
+ * A child named in the line ("Theo", "Finn's") makes it theirs; otherwise it is both boys'. School days are Monday to
  * Friday, not a UK bank holiday and not inside a day off for that child.
  */
 object SchoolFields {
     /** [SchoolKind.wire]. */
     const val KIND = "kind"
     const val TITLE = "title"
-    /** One child's name ("Rex"), or empty for both. */
+    /** One child's name ("Theo"), or empty for both. */
     const val WHO = "who"
     /** First day (epoch day); a weekly item's first week. */
     const val START = "startDay"
@@ -60,7 +60,7 @@ sealed interface SpanFound {
 data class SchoolEntry(
     val kind: SchoolKind,
     val title: String,
-    /** "Rex", "Logan", or "" for both. */
+    /** "Theo", "Finn", or "" for both. */
     val who: String,
     val startDay: Long,
     val endDay: Long,
@@ -85,7 +85,7 @@ data class SchoolItem(
     val checkedDay: Long? = null,
 )
 
-/** A row in the School pane: "INSET day" · "Mon 27 Oct · Rex and Logan" · "You're working from home". */
+/** A row in the School pane: "INSET day" · "Mon 27 Oct · Theo and Finn" · "You're working from home". */
 data class SchoolRow(
     val id: String,
     val title: String,
@@ -99,7 +99,7 @@ data class SchoolRow(
 )
 
 /**
- * The week-ahead question in Needs you: "Rex and Logan are off Mon 27 Oct" · "INSET day · in 5 days" · "You're in the
+ * The week-ahead question in Needs you: "Theo and Finn are off Mon 27 Oct" · "INSET day · in 5 days" · "You're in the
  * office that day. Who's covering?" with [homeLabel] and [coveredLabel].
  */
 data class SchoolCover(
@@ -117,8 +117,8 @@ data class SchoolCover(
 )
 
 /**
- * The school's say on one day (slice 2): Today's header and the brief ("Rex: PE today"), the shutdown's tomorrow
- * ("Tomorrow · Rex: PE kit"). [spoken] is the screen reader's and the read-aloud brief's sentence.
+ * The school's say on one day (slice 2): Today's header and the brief ("Theo: PE today"), the shutdown's tomorrow
+ * ("Tomorrow · Theo: PE kit"). [spoken] is the screen reader's and the read-aloud brief's sentence.
  */
 data class SchoolLine(val text: String, val spoken: String)
 
@@ -197,10 +197,10 @@ object SchoolRules {
     /** Trimmed, inner runs of spaces made one. */
     fun tidy(text: String): String = text.trim().replace(Regex("""\s+"""), " ")
 
-    /** "" → "Rex and Logan"; "Rex" → "Rex". */
+    /** "" → "Theo and Finn"; "Theo" → "Theo". */
     fun whoLabel(who: String): String = who.ifEmpty { CHILDREN.joinToString(" and ") }
 
-    /** "Rex and Logan are off", "Rex is off". */
+    /** "Theo and Finn are off", "Theo is off". */
     fun offSubject(who: String): String = if (who.isEmpty()) "${whoLabel(who)} are off" else "$who is off"
 
     /**
@@ -535,13 +535,13 @@ object SchoolRules {
         return (off + dates + weekly).map { SchoolThing(it.id, it.kind, it.title, it.who) }
     }
 
-    /** "Rex: PE", "INSET day" (both boys' things carry no name); the evening before, a PE day reads "Rex: PE kit". */
+    /** "Theo: PE", "INSET day" (both boys' things carry no name); the evening before, a PE day reads "Theo: PE kit". */
     fun thingText(t: SchoolThing, kit: Boolean = false): String {
         val title = if (kit && t.kind == SchoolKind.WEEKLY && kitRe.containsMatchIn(t.title) && !t.title.endsWith(" kit", ignoreCase = true)) "${t.title} kit" else t.title
         return if (t.who.isEmpty()) title else "${t.who}: $title"
     }
 
-    /** "Rex has PE", "Rex is off", "INSET day, no school", "Non-uniform day". */
+    /** "Theo has PE", "Theo is off", "INSET day, no school", "Non-uniform day". */
     fun spokenThing(t: SchoolThing): String = when {
         t.kind == SchoolKind.OFF && t.who.isNotEmpty() -> "${t.who} is off" + if (t.title == NO_SCHOOL) "" else ", ${t.title}"
         t.kind == SchoolKind.OFF -> if (t.title == NO_SCHOOL) "no school" else "${t.title}, no school"
@@ -549,13 +549,13 @@ object SchoolRules {
         else -> t.title
     }
 
-    /** Today's header and the brief: "Rex: PE today", "INSET day · Logan: Swimming today"; null when the school says nothing. */
+    /** Today's header and the brief: "Theo: PE today", "INSET day · Finn: Swimming today"; null when the school says nothing. */
     fun todayLine(items: List<SchoolItem>, today: Long, holidays: HolidayCalendar): SchoolLine? {
         val things = onDay(items, today, holidays).takeIf { it.isNotEmpty() } ?: return null
         return SchoolLine(things.joinToString(" · ") { thingText(it) } + " today", "School today: " + listWords(things.map(::spokenThing)) + ".")
     }
 
-    /** The evening before, in the shutdown's tomorrow: "Tomorrow · Rex: PE kit · Non-uniform day"; null when nothing. */
+    /** The evening before, in the shutdown's tomorrow: "Tomorrow · Theo: PE kit · Non-uniform day"; null when nothing. */
     fun tomorrowLine(items: List<SchoolItem>, today: Long, holidays: HolidayCalendar): SchoolLine? {
         val things = onDay(items, today + 1, holidays).takeIf { it.isNotEmpty() } ?: return null
         val spoken = things.map { t ->
@@ -574,7 +574,7 @@ object SchoolRules {
 
     /**
      * The school year as MEKA describes it to the model (Ask's `school` lines), so "when's half term?", "are the boys
-     * off on Monday?" and "when's Rex's PE?" can be answered: days off still to come or under way (soonest first, with
+     * off on Monday?" and "when's Theo's PE?" can be answered: days off still to come or under way (soonest first, with
      * Meka's cover answer), one-off dates from today on, and weekly things with their next school day. Meka's own typed
      * lines, so never untrusted. Empty when nothing is entered.
      */
@@ -638,13 +638,13 @@ object SchoolRules {
      * The school's heads-ups (source [NoticeSource.SCHOOL]), through the governor like every other notice, so quiet
      * hours and the digests apply:
      * - each open week-ahead question ([covers]) at 09:00 on the day it first shows, standing until the first office day
-     *   off begins: "Rex and Logan are off Mon 27 Oct" · "You're in the office that day. Who's covering?" (Needs you);
+     *   off begins: "Theo and Finn are off Mon 27 Oct" · "You're in the office that day. Who's covering?" (Needs you);
      * - a one-off date that is something to pay, sign or send back ([isDue]) at 09:00 [DUE_LEAD_DAYS] days before,
-     *   standing until the day is over: "Due Fri 20 Nov · Logan: Trip payment";
+     *   standing until the day is over: "Due Fri 20 Nov · Finn: Trip payment";
      * - any other one-off date (a trip, a non-uniform day) the evening before at 19:00, gone by 08:00 on the day:
-     *   "Tomorrow · Logan: Trip to the zoo".
+     *   "Tomorrow · Finn: Trip to the zoo".
      * One posted once per key; nothing for days off (Today's header says those) or weekly things (the shutdown's
-     * tomorrow says "Rex: PE kit").
+     * tomorrow says "Theo: PE kit").
      */
     fun notices(items: List<SchoolItem>, covers: List<SchoolCover>, nowMs: Long, cal: LocalCalendar): List<Notice> {
         val today = cal.epochDayOf(nowMs)
@@ -679,7 +679,7 @@ object SchoolRules {
         return out
     }
 
-    /** The line after adding: "Added INSET day · Mon 27 Oct", "Added PE · every Tuesday · Rex". */
+    /** The line after adding: "Added INSET day · Mon 27 Oct", "Added PE · every Tuesday · Theo". */
     fun addedLine(e: SchoolEntry): String = when (e.kind) {
         SchoolKind.WEEKLY -> "Added ${e.title} · every ${CivilDate.DAY_LONG[e.weekday - 1]} · ${whoLabel(e.who)}"
         else -> "Added ${e.title} · ${spanLabel(e.startDay, e.endDay)} · ${whoLabel(e.who)}"

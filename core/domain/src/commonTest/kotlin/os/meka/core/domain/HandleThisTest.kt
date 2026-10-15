@@ -113,8 +113,8 @@ class HandleThisTest {
     fun aReplyDraftKeepsItsParagraphsAndIsDroppedWhenUnsafe() {
         // Slice 3: the model's draft as Meka will copy it.
         assertEquals(
-            "Hi Mrs Patel,\n\nYes, Rex will be on the trip.\nThank you!",
-            HandleThisRules.cleanReply("  \"Hi   Mrs Patel,\r\n\r\n\r\nYes, Rex will be on the trip.\nThank you!\u0007\"  "),
+            "Hi Mrs Patel,\n\nYes, Theo will be on the trip.\nThank you!",
+            HandleThisRules.cleanReply("  \"Hi   Mrs Patel,\r\n\r\n\r\nYes, Theo will be on the trip.\nThank you!\u0007\"  "),
         )
         assertEquals(null, HandleThisRules.cleanReply(null))
         assertEquals(null, HandleThisRules.cleanReply("   \n\n "))
@@ -131,14 +131,14 @@ class HandleThisTest {
     @Test
     fun aReplyCardCopiesItsDraftAndOnlyAShareMakesOne() {
         val raw = listOf(
-            RawRequestProposal("reply", "reply to Mrs Patel", body = "Yes, Rex will be there."),
+            RawRequestProposal("reply", "reply to Mrs Patel", body = "Yes, Theo will be there."),
             RawRequestProposal("reply", "Second reply", body = "Another one."),
             RawRequestProposal("reply", "Unsafe", body = "Pay at https://x.example"),
         )
         // A watched person's message never becomes a reply card; a share makes at most one.
         assertTrue(MessageRequestRules.check(raw, sat, 600).isEmpty())
         val p = MessageRequestRules.check(raw, sat, 600, allowReply = true).single()
-        assertEquals(RequestProposal(RequestKind.REPLY, "Reply to Mrs Patel", null, null, reply = "Yes, Rex will be there."), p)
+        assertEquals(RequestProposal(RequestKind.REPLY, "Reply to Mrs Patel", null, null, reply = "Yes, Theo will be there."), p)
         assertEquals(
             null,
             MessageRequestRules.check(listOf(RawRequestProposal("reply", "No words")), sat, 600, allowReply = true).singleOrNull(),
@@ -146,18 +146,18 @@ class HandleThisTest {
         // No title: "Reply".
         assertEquals("Reply", MessageRequestRules.check(listOf(RawRequestProposal("reply", body = "Yes.")), sat, 600, allowReply = true).single().title)
 
-        val message = RequestMessage(HandleThisRules.messageId("Can Rex come?", "Trip", sat), HandleThisRules.PERSON, "Trip · Can Rex come?", at)
+        val message = RequestMessage(HandleThisRules.messageId("Can Theo come?", "Trip", sat), HandleThisRules.PERSON, "Trip · Can Theo come?", at)
         val card = MessageRequestRules.card(message, 0, p, sat, cal)
         assertEquals("Draft reply: Reply to Mrs Patel", card.action)
         assertEquals("Copy reply", card.addLabel)
         assertEquals(null, card.changeLabel)
         assertEquals("Not needed", card.declineLabel)
-        assertEquals("Yes, Rex will be there.", card.draft)
+        assertEquals("Yes, Theo will be there.", card.draft)
         assertEquals(null, card.detail)
-        assertTrue(card.spoken.endsWith("The draft says: Yes, Rex will be there."), card.spoken)
+        assertTrue(card.spoken.endsWith("The draft says: Yes, Theo will be there."), card.spoken)
 
         val plan = RequestAcceptRules.plan(p, canAddEvent = true)
-        assertEquals(RequestPlan.CopyReply("Reply to Mrs Patel", "Yes, Rex will be there."), plan)
+        assertEquals(RequestPlan.CopyReply("Reply to Mrs Patel", "Yes, Theo will be there."), plan)
         assertEquals(null, RequestAcceptRules.plan(p, canAddEvent = true, change = true))
         assertEquals(HandleThisRules.COPIED_LINE, RequestAcceptRules.doneLine(plan!!, RequestKind.REPLY, sat))
     }

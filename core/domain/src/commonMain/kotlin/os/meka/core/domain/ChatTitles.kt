@@ -2,15 +2,15 @@ package os.meka.core.domain
 
 /**
  * A chat's name as the person sees it in the app, without the count a messaging app adds to a bundled notification
- * (Fold review 2026-10-12, bug 1: WhatsApp titles a group's notification "BUFC U7s (2 messages)" once a second message
+ * (Fold review 2026-10-12, bug 1: WhatsApp titles a group's notification "WTFC U7s (2 messages)" once a second message
  * arrives, so the same group showed as two cards). Non-AI and pure; read by hand (no regex) so the JVM and
  * Kotlin/Native read it the same.
  */
 object ChatTitleRules {
 
     /**
-     * "BUFC U7s (2 messages)" → "BUFC U7s"; also "(3 new messages)", "BUFC U7s: 3 new messages", "BUFC U7s · 2 new
-     * messages" and "BUFC U7s - 2 messages". A name that is only a count, or has nothing after the cut, is kept as it
+     * "WTFC U7s (2 messages)" → "WTFC U7s"; also "(3 new messages)", "WTFC U7s: 3 new messages", "WTFC U7s · 2 new
+     * messages" and "WTFC U7s - 2 messages". A name that is only a count, or has nothing after the cut, is kept as it
      * came (trimmed, runs of spaces made one).
      */
     fun clean(name: String): String {

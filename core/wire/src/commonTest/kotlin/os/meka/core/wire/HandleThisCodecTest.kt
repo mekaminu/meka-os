@@ -65,7 +65,7 @@ class HandleThisCodecTest {
     @Test
     fun aReplyCarriesItsWordsAndOnlyHandleThisReadsIt() {
         // Slice 3: a drafted reply's words come in "body" (whole, up to MAX_BODY; none or too many and it's dropped).
-        val words = "Hi Mrs Patel,\n\nYes, Rex will be on the trip. Thank you!"
+        val words = "Hi Mrs Patel,\n\nYes, Theo will be on the trip. Thank you!"
         val answer = """{"proposals":[
             {"kind":"reply","title":"Reply to Mrs Patel","body":${kotlinx.serialization.json.JsonPrimitive(words)}},
             {"kind":"reply","title":"No words"},

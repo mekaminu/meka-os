@@ -59,7 +59,7 @@ data class TimelineRow(
     val late: Boolean = false,
     /**
      * An event during work hours ([WorkClashRules], Fold review 2026-10-12, bug 4): "Clashes with work · who's taking
-     * Rex?", shown under the event in the accent colour on Today and the Calendar; null otherwise.
+     * Theo?", shown under the event in the accent colour on Today and the Calendar; null otherwise.
      */
     val clash: String? = null,
 )
@@ -117,7 +117,7 @@ data class DayTimeline(
      */
     val clashes: List<WorkClash> = emptyList(),
 ) {
-    /** "Training at 16:55 while you're at work — who's taking Rex?"; null when nothing clashes. */
+    /** "Training at 16:55 while you're at work — who's taking Theo?"; null when nothing clashes. */
     val clashLine: String? get() = clashes.firstOrNull()?.line
 
     /** Timed events (or booked sessions) still to come or running today. */
@@ -196,7 +196,7 @@ object TimelineRules {
         work: List<WorkBlock> = emptyList(),
         /** Anytime tasks still to do today, Up next's included (the now line counts them at work: "4 anytime tasks"). */
         anytimeLeft: Int = anytime.size,
-        /** Whom Meka set for each club series ([ClubChildRules]): the clash asks "who's taking Rex?", the row names him. */
+        /** Whom Meka set for each club series ([ClubChildRules]): the clash asks "who's taking Theo?", the row names him. */
         children: Map<String, String> = emptyMap(),
         /** Today's commute bands ([CommuteRules.bands]); none unless it's an office day. */
         commute: List<CommuteBand> = emptyList(),

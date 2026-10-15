@@ -24,7 +24,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.SchoolCover
 
 /**
- * School rhythm, slice 1: the week-ahead question in Needs you, above the requests — "Rex and Logan are off Mon
+ * School rhythm, slice 1: the week-ahead question in Needs you, above the requests — "Theo and Finn are off Mon
  * 27 Oct" · "INSET day · in 5 days" · "You're in the office that day. Who's covering?" · what working from home changes
  * · I'll work from home · Covered. Each press gives a light haptic (Covered a tick); the card folds away with the list's
  * item motion and the undo bar rises. Nothing is sent to anyone.

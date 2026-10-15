@@ -451,7 +451,7 @@ private fun EventRow(r: TimelineRow, past: Boolean, tone: Int?, modifier: Modifi
                     color = if (!past && (r.running || fixture)) Meka.colors.accent else Meka.colors.textTertiary,
                 )
             }
-            // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Rex?" in the accent.
+            // During work (Fold review 2026-10-12, bug 4): "Clashes with work · who's taking Theo?" in the accent.
             r.clash?.let { Text(it, style = MekaType.caption, color = if (past) Meka.colors.textTertiary else Meka.colors.accent) }
         }
     }

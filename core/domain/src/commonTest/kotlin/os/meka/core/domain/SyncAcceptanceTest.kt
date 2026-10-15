@@ -19,13 +19,13 @@ class SyncAcceptanceTest {
         val android = w.device("android")
         val mac = w.device("mac")
 
-        val id = android.tasks.create(NewTask("Buy Rex new boots"))
+        val id = android.tasks.create(NewTask("Buy Theo new boots"))
         android.sync(); mac.sync()
-        assertEquals("Buy Rex new boots", mac.tasks.get(id)!!.title)
+        assertEquals("Buy Theo new boots", mac.tasks.get(id)!!.title)
 
         android.goOffline()
         w.clock.advance(60_000)
-        android.tasks.edit(id, TaskEdit(title = "Buy Rex new boots (size 4)"))
+        android.tasks.edit(id, TaskEdit(title = "Buy Theo new boots (size 4)"))
         android.tasks.complete(id)
         assertFailsWith<TransportException> { android.sync() }
         // title + lifecycle + completedAt
@@ -147,7 +147,7 @@ class SyncAcceptanceTest {
         val w = SyncWorld()
         val android = w.device("android")
         val mac = w.device("mac")
-        val id = android.tasks.create(NewTask("Logan football kit"))
+        val id = android.tasks.create(NewTask("Finn football kit"))
         android.sync(); mac.sync()
         android.goOffline()
         android.tasks.addChecklistItem(id, "Boots")

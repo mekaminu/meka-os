@@ -478,24 +478,24 @@ class AskMekaFacadeTest {
     @Test
     fun askHearsThePeopleAndAddsAPromiseWithUndo() = runTest {
         val c = core()
-        c.askMeka("What did I promise Rex?")
+        c.askMeka("What did I promise Theo?")
         assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.PEOPLE })
-        c.addPromise("Fix his bike", "Rex", null)
+        c.addPromise("Fix his bike", "Theo", null)
 
-        server.reply = AskReply.Answered("Added.", listOf(AskRawAction("add_promise", title = "rex: lift to football")))
-        val out = assertIs<AskOutcome.Answered>(c.askMeka("I told Rex I'd give him a lift to football"))
+        server.reply = AskReply.Answered("Added.", listOf(AskRawAction("add_promise", title = "theo: lift to football")))
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("I told Theo I'd give him a lift to football"))
         val ctx = server.asked.last().second
         assertEquals(
-            listOf("People · 1 person", "Rex · you promised 1", "Rex · you promised: Fix his bike · since today"),
+            listOf("People · 1 person", "Theo · you promised 1", "Theo · you promised: Fix his bike · since today"),
             ctx.items.filter { it.kind == AskItemKind.PEOPLE }.map { it.line },
         )
         assertFalse(ctx.untrusted)
-        assertEquals(listOf("Promise to Rex · Lift to football"), out.answer.cards.map { it.line })
+        assertEquals(listOf("Promise to Theo · Lift to football"), out.answer.cards.map { it.line })
         // Nothing until tapped.
         assertEquals(1, c.listsView.value.promised.size)
 
         val done = c.doAsk(out.answer.cards.single())
-        assertEquals("Added your promise to Rex: Lift to football", done.line)
+        assertEquals("Added your promise to Theo: Lift to football", done.line)
         assertEquals(listOf("Fix his bike", "Lift to football"), c.listsView.value.promised.map { it.title }.sorted())
         assertEquals("You promised 2", c.peopleView.value.rows.single().owedLine)
         assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }

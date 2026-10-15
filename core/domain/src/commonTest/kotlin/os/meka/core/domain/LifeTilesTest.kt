@@ -12,14 +12,14 @@ class LifeTilesTest {
                 binsTonight = "Black bin out tonight", binsSummary = "Next: Black bin · Tue 13 Oct",
                 dinnerTonight = "Dinner tonight: Chilli", dinnerTitle = "Chilli", mealsSummary = "2 of 7 dinners planned",
                 dateNightToday = "Date night tonight from 19:00", dateNightSummary = "Every other Friday from 19:00 · next Fri 16 Oct",
-                schoolToday = "Rex: PE today", schoolSummary = "Next day off: INSET day · Mon 27 Oct",
+                schoolToday = "Theo: PE today", schoolSummary = "Next day off: INSET day · Mon 27 Oct",
                 listsDue = "2 to chase", toBuy = 4,
             ),
         )
         assertEquals(LifeTileLine("Black bin out tonight", true), l.of(LifeTile.BINS))
         assertEquals(LifeTileLine("Dinner tonight: Chilli", true), l.of(LifeTile.DINNERS))
         assertEquals(LifeTileLine("Date night tonight from 19:00", true), l.of(LifeTile.DATE_NIGHT))
-        assertEquals(LifeTileLine("Rex: PE today", true), l.of(LifeTile.SCHOOL))
+        assertEquals(LifeTileLine("Theo: PE today", true), l.of(LifeTile.SCHOOL))
         assertEquals(LifeTileLine("2 to chase", true), l.of(LifeTile.LISTS))
     }
 

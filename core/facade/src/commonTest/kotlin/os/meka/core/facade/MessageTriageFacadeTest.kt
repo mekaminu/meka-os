@@ -88,14 +88,14 @@ class MessageTriageFacadeTest {
         val c = core()
         server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks if there's no match Saturday", draft = "No match this week")
         val settings = TriageSettings(watched = setOf("Jordan"))
-        val read = assertIs<TriageRead.Read>(c.triageMessage(msg("Jordan", "Is there no match this Saturday?", group = "BUFC U7s (2 messages)"), settings))
-        assertEquals("BUFC U7s (2 messages)", server.sent.single().group)
+        val read = assertIs<TriageRead.Read>(c.triageMessage(msg("Jordan", "Is there no match this Saturday?", group = "WTFC U7s (2 messages)"), settings))
+        assertEquals("WTFC U7s (2 messages)", server.sent.single().group)
         val card = assertNotNull(read.card)
         assertEquals("Jordan", card.askedBy)
-        assertEquals("BUFC U7s", card.group)
+        assertEquals("WTFC U7s", card.group)
         // The same question from someone else, or with no one watched, is the digest's chatter: nothing goes out.
-        assertIs<TriageRead.Digest>(c.triageMessage(msg("Coach", "Is there no match this Saturday?", group = "BUFC U7s"), settings))
-        assertIs<TriageRead.Digest>(c.triageMessage(msg("Jordan", "Anyone got spare shin pads?", group = "BUFC U7s", at = now - 1_000)))
+        assertIs<TriageRead.Digest>(c.triageMessage(msg("Coach", "Is there no match this Saturday?", group = "WTFC U7s"), settings))
+        assertIs<TriageRead.Digest>(c.triageMessage(msg("Jordan", "Anyone got spare shin pads?", group = "WTFC U7s", at = now - 1_000)))
         assertEquals(1, server.sent.size)
     }
 

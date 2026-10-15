@@ -115,7 +115,7 @@ data class BriefStory(
     val recentLines: List<String> = emptyList(),
     /**
      * Fold review 2026-10-12, bug 4: today's events during work, each already spoken ([WorkClash.spoken]): "Heads up:
-     * Rex's under-sevens training at 4:55, while you're at work. Who's taking Rex?".
+     * Theo's under-sevens training at 4:55, while you're at work. Who's taking Theo?".
      */
     val workClashes: List<String> = emptyList(),
     /** Inbox autopilot, slice 9a: the emails that need him now ([MailAskRules.brief]); null when none (or no mail). */

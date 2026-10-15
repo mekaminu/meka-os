@@ -4,7 +4,7 @@ package os.meka.core.domain
 object VenueFields {
     /** The ground's key ([FootballRules.venueKey]): the place in lower case, words only. */
     const val KEY = "key"
-    /** The place as the fixture had it ("Hilltown Town FC, Hitchin Rd"). */
+    /** The place as the fixture had it ("Hilltown Town FC, Station Rd"). */
     const val PLACE = "place"
     /** Minutes it took to get there (Int, 1–240). */
     const val TRAVEL_MIN = "travelMin"
@@ -95,8 +95,8 @@ object FootballRules {
     // ---- Slice 2: the travel time Meka set for each ground ----
 
     /**
-     * A ground's key: the place in lower case with only its words ("Hilltown Town FC, Hitchin Rd" →
-     * "arlesey town fc hitchin rd"), so a stray comma or capital still finds it. Null for no place or just a call link.
+     * A ground's key: the place in lower case with only its words ("Hilltown Town FC, Station Rd" →
+     * "eastfield town fc station rd"), so a stray comma or capital still finds it. Null for no place or just a call link.
      */
     fun venueKey(place: String?): String? {
         val p = place?.trim()?.takeIf { it.isNotEmpty() && !ReminderRules.isLink(it) } ?: return null
