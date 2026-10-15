@@ -126,7 +126,7 @@ struct NeedsYouStackView: View {
     private func perform(_ card: DecisionCard, _ move: DecisionMove) {
         guard !busy else { return }
         let effect = card.effect(move: move)
-        let leaves = effect == .completeTask || effect == .snoozeTask || effect == .setAside
+        let leaves = effect == .completeTask || effect == .snoozeTask || effect == .setAside || effect == .approveBacklog
         let id = card.id
         if leaves {
             busy = true

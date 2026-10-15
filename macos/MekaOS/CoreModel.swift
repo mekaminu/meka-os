@@ -3096,6 +3096,7 @@ final class CoreModel {
         case .addDocument(let text, let subject): addDocumentFromShared(text, subject)
         case .removeDocument(let id): run { _ = try await $0.removeDocument(id: id) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
+        case .unapproveBacklog(let id): run { _ = try await $0.unapproveMailBacklog(id: id) }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
         case .later(let move): run { try await $0.undoMoveLater(move: move) }
@@ -4683,6 +4684,18 @@ final class CoreModel {
             // Top up (the call assistant's credit): the billing page in the browser; MEKA never pays anything.
             MekaHaptics.light()
             if let link = card.link, let url = URL(string: link) { NSWorkspace.shared.open(url) }
+        case .approveBacklog:
+            // Inbox fixes, slice 2: Approve on an account's clean-up (synced); Undo withdraws it while nothing moved.
+            guard let core else { return }
+            MekaHaptics.medium()
+            let id = card.id
+            Task {
+                guard let r = try? await core.approveMailBacklog(id: id) else { return }
+                offerEventUndo(r.line, .unapproveBacklog(id))
+            }
+        case .openMail:
+            // Review: Mail, where the plan lists what goes where.
+            showMail = true
         case .setAside:
             MekaHaptics.light()
             withAnimation(MekaMotion.replan(reduced: reduced)) {
@@ -4822,6 +4835,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case decision(DecisionUndo)
         /// A card set aside with Later comes back to the front.
         case unsetAside(String)
+        /// Approve on a Needs you clean-up card (inbox fixes, slice 2): withdrawn while nothing has moved.
+        case unapproveBacklog(String)
         /// Add event (calendar editing): taken back inside the five seconds, so nothing is sent.
         case eventEdit(String)
         /// Plan my day's blocks on their way to the calendar (slice 2e): taken back; the tasks stay planned.

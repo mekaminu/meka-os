@@ -193,6 +193,17 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
                     runCatching { context.startActivity(view) }
                 }
+                // Inbox fixes, slice 2: Approve on an account's clean-up (synced; the server moves it from its next
+                // check); Undo withdraws it while nothing has moved.
+                DecisionEffect.APPROVE_BACKLOG -> scope.launch {
+                    val r = runCatching { core.approveMailBacklog(card.id) }.getOrNull() ?: return@launch
+                    undo.show(r.line) { core.unapproveMailBacklog(card.id); Unit }
+                }
+                // Review: Ask with Mail up, where the plan lists what goes where.
+                DecisionEffect.OPEN_MAIL -> (context as? os.meka.android.MekaApplication)?.let { app ->
+                    app.openMail.value = true
+                    app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
+                }
                 DecisionEffect.SET_ASIDE -> {
                     aside.value = aside.value - card.id + card.id
                     undo.show(NeedsYouStackRules.message(card, move)) { aside.value = aside.value - card.id }

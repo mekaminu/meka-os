@@ -13,6 +13,7 @@ package os.meka.core.domain
  * | Due today, no time planned | Done | Tomorrow | Open |
  * | From your lists (chases, reviews, renewals due) | Go through (opens Lists) | Later | Open Lists |
  * | The call assistant's credit low or paused ([CallCreditRules.card]) | Top up (opens the billing page) | Later | Open Twilio |
+ * | An account's backlog clean-up ready ([MailBacklogRules.cards]) | Approve (synced; Undo while nothing moved) | Later | Review (Mail) |
  *
  * "Later" on a card that can't be snoozed only sets it aside for this screen ([NeedsYouStackRules.ordered]); nothing is
  * written. Done and Tomorrow are ordinary task edits (synced, undoable from the undo bar).
@@ -22,9 +23,13 @@ enum class DecisionMove { YES, LATER, OPEN }
 /** What a move on a card does. The core does the task edits; the apps do the opening and the setting aside. */
 enum class DecisionEffect { COMPLETE_TASK, SNOOZE_TASK, OPEN_TASK, OPEN_LISTS, SET_ASIDE,
     /** Opens [DecisionCard.link] in the browser (the call assistant's Top up). */
-    OPEN_LINK }
+    OPEN_LINK,
+    /** Inbox fixes, slice 2: approves the backlog clean-up whose `mail_backlog` id is the card's id. */
+    APPROVE_BACKLOG,
+    /** Inbox fixes, slice 2: opens Mail (Ask → Settings → Mail). */
+    OPEN_MAIL }
 
-enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT }
+enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT, MAIL_CLEANUP }
 
 data class DecisionCard(
     /** The task's id, or [NeedsYouStackRules.LISTS_ID]. */
@@ -91,10 +96,15 @@ object NeedsYouStackRules {
      * Today's Needs you (conflicts, overdue, due today unscheduled, in that order), then the lists card. A lit [credit]
      * card (the call assistant paused or under £2) goes first; a merely low one after the tasks.
      */
-    fun build(today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar, credit: DecisionCard? = null): NeedsYouStack {
+    fun build(
+        today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar, credit: DecisionCard? = null,
+        mail: List<DecisionCard> = emptyList(),
+    ): NeedsYouStack {
         val todayDay = calendar.epochDayOf(nowMs)
         val cards = today.needsYou.map { card(it, todayDay, calendar) }.toMutableList()
         if (credit != null) { if (credit.urgent) cards.add(0, credit) else cards += credit }
+        // Inbox fixes, slice 2: each account's backlog clean-up waiting for Approve, after the tasks.
+        cards += mail
         if (listsDueLine != null) {
             cards += DecisionCard(
                 id = LISTS_ID, kind = DecisionKind.LISTS, title = "From your lists", why = listsDueLine, taskId = null,
@@ -165,7 +175,8 @@ object NeedsYouStackRules {
         DecisionEffect.COMPLETE_TASK -> "Done · ${card.title}"
         DecisionEffect.SNOOZE_TASK -> "Tomorrow · ${card.title}"
         DecisionEffect.SET_ASIDE -> "Set aside for later"
-        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK -> card.title
+        DecisionEffect.APPROVE_BACKLOG -> MailBacklogRules.APPROVED_BAR
+        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK, DecisionEffect.OPEN_MAIL -> card.title
     }
 
     /** The hint under the top card: "→ Done · ← Tomorrow · ↑ Open". */

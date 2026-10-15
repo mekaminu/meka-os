@@ -83,6 +83,8 @@ interface MailStore {
     fun removeBacklog(accountId: String, id: String)
     /** Slice 8a: every planned email of the account's backlog. */
     fun backlogItems(accountId: String): List<BacklogItem>
+    /** Inbox fixes, slice 2: forgets the account's backlog plan and scan, so the next check starts it again. */
+    fun resetBacklog(accountId: String)
 }
 
 /** Slice 8a: where the backlog scan has got to: mail received before [beforeMs]; [nextPage] continues the listing. */
@@ -156,6 +158,7 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun putBacklog(accountId: String, items: Collection<BacklogItem>) { val b = backlogOf(accountId); items.forEach { b[it.id] = it } }
     @Synchronized override fun removeBacklog(accountId: String, id: String) { backlogOf(accountId).remove(id) }
     @Synchronized override fun backlogItems(accountId: String) = backlogOf(accountId).values.filterNotNull()
+    @Synchronized override fun resetBacklog(accountId: String) { scans.remove(accountId); backlog.remove(accountId) }
     @Synchronized override fun messages(accountId: String) = of(accountId).values.filterNotNull().sortedByDescending { it.receivedAtMs }
     @Synchronized override fun lastFrom(accountId: String, addresses: Collection<String>, beforeMs: Long): Map<String, MailHeader> {
         val want = addresses.map { it.lowercase() }.toSet()
@@ -603,6 +606,12 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
         c.prepareStatement("DELETE FROM mail_backlog_item WHERE account_id = ? AND message_id = ?").use { st ->
             st.setString(1, accountId); st.setString(2, id); st.executeUpdate()
         }
+        Unit
+    }
+
+    override fun resetBacklog(accountId: String) = c { c ->
+        c.prepareStatement("DELETE FROM mail_backlog_item WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
+        c.prepareStatement("DELETE FROM mail_backlog_scan WHERE account_id = ?").use { st -> st.setString(1, accountId); st.executeUpdate() }
         Unit
     }
 

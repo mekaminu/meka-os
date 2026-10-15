@@ -87,6 +87,8 @@ class MekaApplication : Application() {
     val openWeekAhead = MutableStateFlow(false)
     /** The size-check heads-up (kids' admin, slice 6): Ask with the Kids pane up. */
     val openKids = MutableStateFlow(false)
+    /** Review on a Needs you clean-up card (inbox fixes, slice 2): Ask with the Mail pane up. */
+    val openMail = MutableStateFlow(false)
     /** Listen on Sunday's week-ahead heads-up (slice 2): the pane opens reading the week aloud; the pane clears it. */
     val listenWeekAhead = MutableStateFlow(false)
     /** A call notification's tap (call notifications, slice 5) → Ask → More → Activity on Calls, that call unfolded. */

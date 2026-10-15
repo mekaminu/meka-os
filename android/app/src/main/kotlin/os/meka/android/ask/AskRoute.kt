@@ -204,6 +204,11 @@ fun AskRoute(
     LaunchedEffect(openKids) {
         if (openKids) { pane = MoreItem.KIDS; healthApp?.openKids?.value = false }
     }
+    // Review on a Needs you clean-up card (inbox fixes, slice 2) → the Mail pane, where the plan says what goes where.
+    val openMail by remember(healthApp) { healthApp?.openMail ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openMail) {
+        if (openMail) { pane = MoreItem.MAIL; healthApp?.openMail?.value = false }
+    }
     val openWeekAhead by remember(healthApp) { healthApp?.openWeekAhead ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openWeekAhead) {
         if (openWeekAhead) { pane = MoreItem.WEEK_AHEAD; healthApp?.openWeekAhead?.value = false }

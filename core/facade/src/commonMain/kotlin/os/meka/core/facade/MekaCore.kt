@@ -7243,6 +7243,8 @@ class MekaCore(
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),
+            // Inbox fixes, slice 2: each account's backlog clean-up ready for his Approve.
+            mail = os.meka.core.domain.MailBacklogRules.cards(activity.mailBacklogs(), autonomy.paused()),
         )
         _fasting.value = fastingNow
         _goals.value = goalsNow

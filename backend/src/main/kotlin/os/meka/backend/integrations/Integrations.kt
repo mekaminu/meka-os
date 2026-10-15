@@ -810,6 +810,17 @@ class Integrations(
      */
     internal fun backlog(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
         val nowMs = now()
+        // Inbox fixes, slice 2: a plan made by older rules (30 days, the old sort) that he hasn't approved and nothing has
+        // moved under is started again, so the plan he approves is what today's rules would do.
+        val entityId0 = MailBacklogRules.entityId(a.id)
+        if (ms.backlogScan(a.id) != null) {
+            val before = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId0) }.getOrNull()
+                ?.let { MailBacklogRules.read(entityId0, it) }
+            if (MailBacklogRules.needsReplan(before) && ms.tidied(a.id, MailBacklogRules.tidyBatchId(a.id)).isEmpty()) {
+                ms.resetBacklog(a.id)
+                backlogBulk.remove(a.id)
+            }
+        }
         val scan = ms.backlogScan(a.id) ?: BacklogScan(
             beforeMs = minOf(nowMs, (a.grantedAtMs ?: nowMs) + MailAutopilotRules.DRY_RUN_MS), startedMs = nowMs,
             nextPage = null, listed = false, readyMs = null,
@@ -819,7 +830,39 @@ class Integrations(
         // Completeness: a sender Meka keeps in the inbox is kept by the clean-up too (read once a check).
         val keptIds = runCatching { reader.entities(a.householdId, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
             .filter { (_, f) -> MailSenderRuleRules.read(f) == MailSenderRule.KEEP }.keys
-        fun planned(h: MailHeader): BacklogItem {
+        // Inbox fixes, slice 2: Outlook's listing has no list headers, so (like new mail's [bulkLook]) a person-looking
+        // email's own headers are read, once per sender (a newsletter's every email carries the same), up to
+        // [BACKLOG_SENDER_LOOKS_PER_CHECK] senders a check; a refusal ends this check's reads.
+        val senders = backlogBulk.computeIfAbsent(a.id) { java.util.concurrent.ConcurrentHashMap() }
+        var looks = 0
+        var refused = false
+        fun withBulk(h: MailHeader): MailHeader {
+            if (m.id != MailProviders.OUTLOOK || refused) return h
+            if (!h.listUnsubscribe.isNullOrBlank() || !h.listId.isNullOrBlank() || MailSortRules.BULK_LABEL in h.labels) return h
+            if (!MailSortRules.wantsHeaderLook(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId), h.inInbox)) return h
+            val key = h.fromAddress?.lowercase() ?: return h
+            val got = senders[key]?.orElse(null) ?: run {
+                if (senders.containsKey(key) || looks >= BACKLOG_SENDER_LOOKS_PER_CHECK) return h
+                looks++
+                val read = try {
+                    m.bulkHeaders(token, h.id)
+                } catch (e: ReconnectRequired) {
+                    throw e
+                } catch (e: Exception) {
+                    refused = true
+                    return h
+                }
+                senders[key] = java.util.Optional.ofNullable(read)
+                read
+            } ?: return h
+            if (got.listUnsubscribe.isNullOrBlank() && got.listId.isNullOrBlank() && !got.bulk) return h
+            return h.copy(
+                listUnsubscribe = got.listUnsubscribe, listId = got.listId,
+                labels = if (got.bulk && MailSortRules.BULK_LABEL !in h.labels) h.labels + MailSortRules.BULK_LABEL else h.labels,
+            )
+        }
+        fun planned(raw: MailHeader): BacklogItem {
+            val h = withBulk(raw)
             val sorted = MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
             val kept = h.fromAddress?.lowercase()?.takeIf { MailUnsubscribeRules.senderId(a.id, it) in keptIds }
             val keep = if (kept != null) keepBase + kept else keepBase
@@ -1238,6 +1281,12 @@ class Integrations(
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()))
     }
+
+    /**
+     * Inbox fixes, slice 2: what each Outlook sender's own headers said when the backlog read one of its emails (this
+     * process), by account and sender address; empty for a sender with none that matter.
+     */
+    private val backlogBulk = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<MailBulkHeaders>>>()
 
     /** Inbox fixes, slice 1: his "Mark tidied mail as read" (on unless he turned it off). */
     private fun markingRead(householdId: String): Boolean =
@@ -2115,6 +2164,8 @@ class Integrations(
         /** Slice 8a: backlog headers read per check (Gmail), and the next page is listed only while fewer than this wait. */
         const val BACKLOG_HEADERS_PER_CHECK = 300
         const val BACKLOG_LIST_BELOW = 500
+        /** Inbox fixes, slice 2: Outlook senders whose headers the backlog reads per check (a page is 100 emails). */
+        const val BACKLOG_SENDER_LOOKS_PER_CHECK = 100
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
         /** Meeting prep, slice 4: guests' newest emails are written for meetings starting within this… */
         const val GUEST_MAIL_AHEAD_MS = 36 * 3_600_000L

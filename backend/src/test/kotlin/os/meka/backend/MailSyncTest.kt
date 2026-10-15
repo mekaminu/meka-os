@@ -1742,7 +1742,7 @@ class MailSyncTest {
         gmail.mailbox["n1"] = msg("n1", 45, "editor@weekly.example").copy(listId = "<weekly.example>")
         gmail.mailbox["r1"] = msg("r1", 40, "auto-confirm@shop.example").copy(subject = "Your order has shipped")
         gmail.mailbox["p1"] = msg("p1", 50) // a person: kept
-        gmail.mailbox["n2"] = msg("n2", 10, "editor@weekly.example").copy(listId = "<weekly.example>") // too recent: kept
+        gmail.mailbox["n2"] = msg("n2", 5, "editor@weekly.example").copy(listId = "<weekly.example>") // under a week: kept
         gmail.mailbox["b1"] = msg("b1", 60, "alerts@barclays.co.uk").copy(listId = "<alerts.barclays.co.uk>") // a bank: kept
         gmail.mailbox["t1"] = msg("t1", 45, "editor@weekly.example").copy(listId = "<weekly.example>") // his thread: kept
         gmail.mailbox["a1"] = msg("a1", 45, "editor@weekly.example").copy(listId = "<weekly.example>", inInbox = false) // archived since
@@ -1806,6 +1806,72 @@ class MailSyncTest {
         val (other, _, j) = world(InMemoryMailStore(), ops = InMemoryServerOpStore())
         assertNull(other.backlogPages)
         j.syncAccount(connect(j))
+    }
+
+    @Test
+    fun aPlanMadeByOlderRulesIsStartedAgainUnlessApproved() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n1"] = msg("n1", 10, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["p1"] = msg("p1", 50)
+        gmail.backlogPages = mapOf(null to MailBacklogPage(ids = listOf("n1", "p1"), next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        val id = connect(i)
+        val entityId = MailBacklogRules.entityId(id)
+        fun plan() = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        i.syncAccount(id); now += 300_000
+        assertTrue(plan().ready)
+        assertEquals(MailBacklogRules.PLAN_VERSION, plan().planVersion)
+        // 10 days old: archived under the week rule.
+        assertEquals(mapOf(MailBacklogKind.NEWSLETTER to 1, MailBacklogKind.KEEP to 1), plan().counts)
+        i.syncAccount(id); now += 300_000
+        assertEquals(1, gmail.backlogAsked.size)
+        // A plan the older rules wrote (version 1): the next check starts again from the listing.
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.PLAN_VERSION, FieldValue.Int64(1))
+        now += 1
+        i.syncAccount(id); now += 300_000
+        assertEquals(2, gmail.backlogAsked.size)
+        assertEquals(MailBacklogRules.PLAN_VERSION, plan().planVersion)
+        assertTrue(plan().ready)
+        assertEquals(mapOf(MailBacklogKind.NEWSLETTER to 1, MailBacklogKind.KEEP to 1), plan().counts)
+        // Approved: an old version is left as it is.
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.APPROVED_AT, FieldValue.Int64(now))
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.PLAN_VERSION, FieldValue.Int64(1))
+        now += 1
+        i.syncAccount(id); now += 300_000
+        assertEquals(2, gmail.backlogAsked.size)
+        assertEquals(listOf("n1"), gmail.tidyCalls.single().keys.toList())
+    }
+
+    @Test
+    fun outlooksBacklogReadsEachSendersHeadersOnce() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val outlook = FakeGmail(id = MailProviders.OUTLOOK)
+        val i = Integrations(
+            InMemoryIntegrationStore(), ops, emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
+            Cipher(), "https://meka.example", { now }, mail = mapOf(MailProviders.OUTLOOK to outlook), mailStore = ms,
+        )
+        val olds = listOf(
+            msg("a1", 20, "hello@shop.example"), msg("a2", 30, "hello@shop.example"), msg("a3", 40, "hello@shop.example"),
+            msg("s1", 20), // a person (no list headers): kept
+        )
+        olds.forEach { outlook.mailbox[it.id] = it }
+        outlook.bulk["a1"] = MailBulkHeaders("<mailto:leave@shop.example>", false, null, false)
+        outlook.backlogPages = mapOf(null to MailBacklogPage(headers = olds, next = null))
+        outlook.nextRound = { MailChanges(cursor = "h1") }
+        val url = assertIs<Integrations.StartResult.Url>(i.start("home", MailProviders.OUTLOOK)).url
+        val state = URI(url).query.split("&").first { it.startsWith("state=") }.removePrefix("state=")
+        val id = assertIs<Integrations.CallbackResult.Connected>(i.callback("google", state, "code", null)).accountId
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        val b = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        assertTrue(b.ready)
+        // The shop's three emails are one sender: its headers read once (from the first), all three newsletters.
+        assertEquals(mapOf(MailBacklogKind.NEWSLETTER to 3, MailBacklogKind.KEEP to 1), b.counts)
+        assertEquals(2, outlook.bulkReads.size)
+        assertTrue("a1" in outlook.bulkReads && "s1" in outlook.bulkReads)
     }
 
     // ---- Slice 8b: Approve, applied a few hundred a check, Undo ----
@@ -1991,6 +2057,12 @@ class MailSyncTest {
             assertEquals(MailBacklogKind.KEEP, ms.backlogItems(acc).single().kind)
             ms.removeBacklog(acc, "b2")
             assertTrue(ms.backlogPending(acc, 10).isEmpty())
+            // Inbox fixes, slice 2: a re-plan forgets the scan and the planned emails.
+            ms.resetBacklog(acc)
+            assertNull(ms.backlogScan(acc))
+            assertTrue(ms.backlogItems(acc).isEmpty())
+            ms.setBacklogScan(acc, BacklogScan(now, now, null, true, now + 1))
+            ms.putBacklog(acc, listOf(planned))
             ms.forget(acc)
             assertNull(ms.cursor(acc))
             assertNull(ms.backlogScan(acc))

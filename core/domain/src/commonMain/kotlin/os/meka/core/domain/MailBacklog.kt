@@ -17,7 +17,7 @@ import os.meka.core.sync.fv
  * The plan reuses Autopilot's never-touch rules ([MailTidyRules.plan]: only sure newsletters, receipts, notifications
  * and promos still in the inbox; never people, public bodies and schools, banks, his partner, or a thread he wrote in)
  * and adds two of its own from Meka's brief: tidy-kind mail is only planned once it is older than [ARCHIVE_AFTER_DAYS]
- * days ("Archive 3,412 newsletters/promos older than 30 days"), and mail the rules call junk (Gmail's spam label) goes to
+ * days (7 since Inbox fixes, slice 2: "Archive 3,412 newsletters/promos older than a week"), and mail the rules call junk (Gmail's spam label) goes to
  * Trash (recoverable for 30 days, never deleted for good). Everything else is kept ("keep 212 that may need you").
  */
 enum class MailBacklogKind(val one: String, val many: String, val tidy: MailTidy) {
@@ -67,6 +67,11 @@ object MailBacklogFields {
     const val APPLY_STARTED_AT = "applyStartedAtMs"
     const val FINISHED_AT = "finishedAtMs"
     const val PUT_BACK = "putBack"
+    /**
+     * Inbox fixes, slice 2: which planning rules made the plan ([MailBacklogRules.PLAN_VERSION]; absent = 1, the
+     * 30-day rules). A plan made by older rules, not yet approved, is made again from scratch by the server.
+     */
+    const val PLAN_VERSION = "planVersion"
 
     fun countField(k: MailBacklogKind): String = when (k) {
         MailBacklogKind.KEEP -> KEPT
@@ -93,6 +98,8 @@ data class MailBacklog(
     val finishedAtMs: Long? = null,
     /** Slice 8b: how many an Undo has put back so far. */
     val putBack: Int = 0,
+    /** Inbox fixes, slice 2: the planning rules' version (1 before it was written). */
+    val planVersion: Int = 1,
 ) {
     val ready: Boolean get() = readyAtMs != null
     val approved: Boolean get() = approvedAtMs != null
@@ -121,8 +128,18 @@ data class MailBacklogRow(
 )
 
 object MailBacklogRules {
-    /** Tidy-kind mail is only planned once it is this old (Meka's brief: "older than 30 days"). */
-    const val ARCHIVE_AFTER_DAYS = 30
+    /**
+     * Tidy-kind mail is only planned once it is this old. Meka's brief said 30 days; Inbox fixes (2026-10-15 20:59,
+     * "hundreds of unread messages, nothing is archived") lowered it to 7 for newsletters, promos and notifications.
+     */
+    const val ARCHIVE_AFTER_DAYS = 7
+
+    /**
+     * Inbox fixes, slice 2: the planning rules' version. 2 = the 7-day age and slice 1's better sort (bulk headers,
+     * Outlook's list headers read per sender). A plan written under an older version that nothing has moved under is
+     * started again by the server ([needsReplan]).
+     */
+    const val PLAN_VERSION = 2
     private const val DAY_MS = 86_400_000L
     /** How many senders the plan names. */
     const val TOP_SENDERS = 3
@@ -156,6 +173,12 @@ object MailBacklogRules {
     /** What an app writes on Approve (Meka's tap), and on the bar's Undo before anything moved. */
     fun approveFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailBacklogFields.APPROVED_AT to nowMs.fv())
     fun unapproveFields(): Map<String, FieldValue> = mapOf(MailBacklogFields.APPROVED_AT to 0L.fv())
+
+    /**
+     * Inbox fixes, slice 2: the server starts the plan again (forgetting what it read) when it was made by older rules
+     * and Meka hasn't approved it and nothing has moved: what he'd approve is then what today's rules would do.
+     */
+    fun needsReplan(b: MailBacklog?): Boolean = b != null && b.planVersion < PLAN_VERSION && !b.approved && b.applied == 0
 
     /** Approve is offered once the plan is final, has something to move, and nothing has moved yet. */
     fun canApprove(b: MailBacklog): Boolean = b.ready && b.toMove > 0 && !b.approved && b.applied == 0
@@ -232,8 +255,10 @@ object MailBacklogRules {
             MailBacklogFields.STARTED_AT to startedAtMs.fv(),
             MailBacklogFields.SCANNED to scanned.toLong().fv(),
             MailBacklogFields.TOP to (top ?: "").fv(),
-        ) + MailBacklogKind.entries.associate { MailBacklogFields.countField(it) to (counts[it] ?: 0).toLong().fv() } +
-            (readyAtMs?.let { mapOf(MailBacklogFields.READY_AT to it.fv()) } ?: emptyMap())
+            MailBacklogFields.PLAN_VERSION to PLAN_VERSION.toLong().fv(),
+            // Inbox fixes, slice 2: 0 while scanning, so a plan made again isn't shown as final.
+            MailBacklogFields.READY_AT to (readyAtMs ?: 0L).fv(),
+        ) + MailBacklogKind.entries.associate { MailBacklogFields.countField(it) to (counts[it] ?: 0).toLong().fv() }
 
     fun read(id: String, f: Map<String, FieldValue>): MailBacklog? {
         fun text(k: String) = (f[k] as? FieldValue.Text)?.value?.takeIf { it.isNotBlank() }
@@ -252,6 +277,7 @@ object MailBacklogRules {
             applyStartedAtMs = long(MailBacklogFields.APPLY_STARTED_AT)?.takeIf { it > 0 },
             finishedAtMs = long(MailBacklogFields.FINISHED_AT)?.takeIf { it > 0 },
             putBack = long(MailBacklogFields.PUT_BACK)?.toInt() ?: 0,
+            planVersion = long(MailBacklogFields.PLAN_VERSION)?.toInt() ?: 1,
         )
     }
 
@@ -284,7 +310,7 @@ object MailBacklogRules {
             b.counts[k]?.takeIf { it > 0 }?.let { c -> "${n(c)} ${if (c == 1) k.one else k.many} ${k.tidy.destination}" }
         }
         val detail = listOfNotNull(
-            each.takeIf { it.isNotEmpty() }?.joinToString(" · ")?.let { "$it · only mail older than $ARCHIVE_AFTER_DAYS days" },
+            each.takeIf { it.isNotEmpty() }?.joinToString(" · ")?.let { "$it · only mail older than a week" },
             junk.takeIf { it > 0 }?.let { "Junk → Trash, recoverable for 30 days" },
             b.top?.let { "Most from $it" },
         ).joinToString("\n").takeIf { it.isNotEmpty() }
@@ -330,4 +356,39 @@ object MailBacklogRules {
         backlogs.filter { it.account == account }.maxByOrNull { it.startedAtMs }?.let { b ->
             row(b, batches.firstOrNull { it.backlog && it.account == account }, paused, nowMs)
         }
+
+    /** Inbox fixes, slice 2: the Needs you card's words. */
+    const val CARD_YES = "Approve"
+    const val CARD_LATER = "Later"
+    const val CARD_OPEN = "Review"
+
+    /**
+     * Inbox fixes, slice 2 (Meka hadn't found Approve in Mail): one Needs you card per account whose plan is final and
+     * waiting for his Approve: "Clean up Personal" · "Archive 2,140 newsletters and promos · Trash 310 junk · keep 212
+     * that may need you · nothing moves until you approve". → Approve (the same synced approval as Mail's, Undo while
+     * nothing has moved), ← Later (set aside on this screen), ↑ Review (Mail, where the plan lists what goes where).
+     * Newest plan per account; accounts in the order given (Mail's order). Not while Navilife is paused.
+     */
+    fun cards(backlogs: List<MailBacklog>, paused: Boolean = false): List<DecisionCard> {
+        if (paused) return emptyList()
+        return backlogs.groupBy { it.account }.values.mapNotNull { list -> list.maxByOrNull { it.startedAtMs } }
+            .filter { canApprove(it) }
+            .map { b ->
+                val archive = listOf(MailBacklogKind.NEWSLETTER, MailBacklogKind.RECEIPT, MailBacklogKind.ARCHIVE).sumOf { b.counts[it] ?: 0 }
+                val junk = b.counts[MailBacklogKind.JUNK] ?: 0
+                val kept = b.counts[MailBacklogKind.KEEP] ?: 0
+                val why = listOfNotNull(
+                    archive.takeIf { it > 0 }?.let { "Archive ${n(it)} ${if (it == 1) "newsletter or promo" else "newsletters and promos"} older than a week" },
+                    junk.takeIf { it > 0 }?.let { "Trash ${n(it)} junk" },
+                    kept.takeIf { it > 0 }?.let { "keep ${n(it)} that may need you" },
+                    "nothing moves until you approve",
+                ).joinToString(" · ")
+                DecisionCard(
+                    id = b.id, kind = DecisionKind.MAIL_CLEANUP, title = "Clean up ${b.account}", why = why, taskId = null,
+                    yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
+                    yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_MAIL,
+                    urgent = false,
+                )
+            }
+    }
 }

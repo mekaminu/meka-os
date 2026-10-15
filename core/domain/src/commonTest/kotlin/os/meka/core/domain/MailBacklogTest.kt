@@ -29,9 +29,11 @@ class MailBacklogTest {
     }
 
     @Test
-    fun onlyMailOlderThanThirtyDaysIsArchived() {
-        assertEquals(MailBacklogKind.KEEP, plan(sure(MailSort.NEWSLETTER), ageDays = 29))
-        assertEquals(MailBacklogKind.NEWSLETTER, plan(sure(MailSort.NEWSLETTER), ageDays = 30))
+    fun onlyMailOlderThanAWeekIsArchived() {
+        // Inbox fixes, slice 2: a week, not 30 days.
+        assertEquals(MailBacklogKind.KEEP, plan(sure(MailSort.NEWSLETTER), ageDays = 6))
+        assertEquals(MailBacklogKind.NEWSLETTER, plan(sure(MailSort.NEWSLETTER), ageDays = 7))
+        assertEquals(MailBacklogKind.ARCHIVE, plan(sure(MailSort.PROMO), ageDays = 8))
         // Junk goes whatever its age.
         assertEquals(MailBacklogKind.JUNK, plan(sure(MailSort.JUNK), ageDays = 1))
     }
@@ -69,7 +71,7 @@ class MailBacklogTest {
         assertEquals("Archive 3,412 · Trash 640 junk · keep 212 that may need you", r.line)
         assertEquals(
             "2,100 newsletters → Navilife/Newsletters · 900 receipts and orders → Navilife/Receipts · " +
-                "412 notifications and promos archived · only mail older than 30 days\n" +
+                "412 notifications and promos archived · only mail older than a week\n" +
                 "Junk → Trash, recoverable for 30 days\nMost from Weekly Digest 412",
             r.detail,
         )
@@ -228,5 +230,65 @@ class MailBacklogTest {
         m.sync(); a.sync()
         assertFalse(la.mailBacklogs().single().approved)
         assertFalse(la.unapproveBacklog("mb1"))
+    }
+
+    @Test
+    fun aPlanMadeByOlderRulesIsMadeAgainUntilApproved() {
+        val counts = mapOf(MailBacklogKind.NEWSLETTER to 10, MailBacklogKind.KEEP to 100)
+        val f = MailBacklogRules.fields("Personal", now, 110, counts, null, readyAtMs = now)
+        val current = MailBacklogRules.read("mb1", f)!!
+        assertEquals(MailBacklogRules.PLAN_VERSION, current.planVersion)
+        assertFalse(MailBacklogRules.needsReplan(current))
+        // Written before the version existed: version 1.
+        val old = MailBacklogRules.read("mb1", f - MailBacklogFields.PLAN_VERSION)!!
+        assertEquals(1, old.planVersion)
+        assertTrue(MailBacklogRules.needsReplan(old))
+        assertFalse(MailBacklogRules.needsReplan(null))
+        // Approved, or already moving: kept as it is.
+        assertFalse(MailBacklogRules.needsReplan(old.copy(approvedAtMs = now)))
+        assertFalse(MailBacklogRules.needsReplan(old.copy(applied = 3)))
+        // Scanning again writes readiness as 0: not final.
+        val scanning = MailBacklogRules.read("mb1", MailBacklogRules.fields("Personal", now, 0, emptyMap(), null, readyAtMs = null))!!
+        assertFalse(scanning.ready)
+    }
+
+    @Test
+    fun aReadyPlanIsANeedsYouCardWithApproveLaterAndReview() {
+        val counts = mapOf(MailBacklogKind.NEWSLETTER to 2000, MailBacklogKind.ARCHIVE to 140, MailBacklogKind.JUNK to 310,
+            MailBacklogKind.KEEP to 212)
+        val ready = MailBacklogRules.read("mbP", MailBacklogRules.fields("Personal", now, 2662, counts, null, readyAtMs = now))!!
+        val scanning = MailBacklogRules.read("mbB", MailBacklogRules.fields("Business", now, 40, counts, null, readyAtMs = null))!!
+        val cards = MailBacklogRules.cards(listOf(ready, scanning))
+        assertEquals(1, cards.size)
+        val c = cards.single()
+        assertEquals("mbP", c.id)
+        assertEquals(DecisionKind.MAIL_CLEANUP, c.kind)
+        assertEquals("Clean up Personal", c.title)
+        assertEquals(
+            "Archive 2,140 newsletters and promos older than a week · Trash 310 junk · keep 212 that may need you · " +
+                "nothing moves until you approve",
+            c.why,
+        )
+        assertEquals(DecisionEffect.APPROVE_BACKLOG, c.effect(DecisionMove.YES))
+        assertEquals(DecisionEffect.SET_ASIDE, c.effect(DecisionMove.LATER))
+        assertEquals(DecisionEffect.OPEN_MAIL, c.effect(DecisionMove.OPEN))
+        assertEquals("→ Approve · ← Later · ↑ Review", NeedsYouStackRules.hint(c))
+        assertEquals(MailBacklogRules.APPROVED_BAR, NeedsYouStackRules.message(c, DecisionMove.YES))
+        // Approved, nothing to move, or paused: no card.
+        assertTrue(MailBacklogRules.cards(listOf(ready.copy(approvedAtMs = now))).isEmpty())
+        assertTrue(MailBacklogRules.cards(listOf(ready.copy(counts = mapOf(MailBacklogKind.KEEP to 5)))).isEmpty())
+        assertTrue(MailBacklogRules.cards(listOf(ready), paused = true).isEmpty())
+        // The newest plan per account only.
+        val older = ready.copy(id = "mbOld", startedAtMs = now - day)
+        assertEquals(listOf("mbP"), MailBacklogRules.cards(listOf(older, ready)).map { it.id })
+    }
+
+    @Test
+    fun theCardsGoAfterTheTasksInNeedsYou() {
+        val counts = mapOf(MailBacklogKind.NEWSLETTER to 5)
+        val ready = MailBacklogRules.read("mbP", MailBacklogRules.fields("Personal", now, 5, counts, null, readyAtMs = now))!!
+        val cal = LocalCalendar.fixedOffset(0)
+        val stack = NeedsYouStackRules.build(Today(emptyList(), null, emptyList(), emptyList()), "2 to chase", now, cal, mail = MailBacklogRules.cards(listOf(ready)))
+        assertEquals(listOf(DecisionKind.MAIL_CLEANUP, DecisionKind.LISTS), stack.cards.map { it.kind })
     }
 }
