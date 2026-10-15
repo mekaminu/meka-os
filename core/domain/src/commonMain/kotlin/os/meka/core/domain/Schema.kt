@@ -244,6 +244,12 @@ object ObligationFields {
      * row and the reminder's Pay; http(s) only ([SessionRules.cleanAppLink]). MEKA only opens it, never pays.
      */
     const val PAY_LINK = "payLink"
+    /**
+     * Kids' admin, slice 2 (2026-10-15, additive, LWW): the child a club fee is for, as the `kid_admin` id
+     * ([KidsRules.idFor], "c-alex"); Null for every other radar item. The fee is an ordinary bill (kind BILL), so Bills
+     * due's one reminder covers it.
+     */
+    const val FOR_CHILD = "forChild"
 }
 
 object GoalFields {

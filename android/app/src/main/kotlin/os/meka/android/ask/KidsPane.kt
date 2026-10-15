@@ -43,6 +43,7 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.KidCard
+import os.meka.core.domain.KidFeeRow
 import os.meka.core.domain.KidSaved
 import os.meka.core.domain.KidsRules
 import os.meka.core.facade.MekaCore
@@ -51,6 +52,8 @@ import os.meka.core.facade.MekaCore
  * Ask → Life → Kids (Kids' admin, slice 1): a card per child from About you with their sizes — shoes, football boots,
  * tops, trousers, coat, school jumper — one field each (type and Done keeps it, Clear removes it, Undo puts it
  * back), when they were last checked (lit three months on) and **All still fit**. No children yet: a line and About you.
+ * Slice 2: CLUB FEES under the sizes — each fee with its line (brass within 3 days of due), Paid and Remove (Undo), and
+ * one field that reads "Football £35 monthly from 1 Nov"; each fee is a bill on the radar, so Bills due reminds once.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, the checked line and the line
  * under a card cross-fade (the checked line's colour blends to the accent when due; a refusal blends its line to the
@@ -67,6 +70,9 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
     val texts = remember { mutableStateMapOf<String, String>() }
     val said = remember { mutableStateMapOf<String, KidSaved>() }
     val undoSize = remember { mutableStateMapOf<String, String>() }
+    // Slice 2: per child, what the fee field holds and what the last fee action said (with the fee id Undo takes back).
+    val feeTexts = remember { mutableStateMapOf<String, String>() }
+    val feeSaid = remember { mutableStateMapOf<String, KidSaved>() }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -123,6 +129,37 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
                             said[kid.name] = KidSaved(line)
                         }
                     },
+                    feeText = feeTexts[kid.name] ?: "",
+                    onFeeText = { feeTexts[kid.name] = it },
+                    feeSaid = feeSaid[kid.name],
+                    onAddFee = { typed ->
+                        scope.launch {
+                            val r = runCatching { core.addKidFee(kid.name, typed) }.getOrNull() ?: return@launch
+                            feeSaid[kid.name] = r
+                            if (r.refused) { haptics.tick(); feeTexts[kid.name] = typed } else { haptics.light(); feeTexts.remove(kid.name) }
+                        }
+                    },
+                    onFeePaid = { id ->
+                        scope.launch {
+                            val r = runCatching { core.kidFeePaid(id) }.getOrNull() ?: return@launch
+                            if (r.refused) haptics.tick() else haptics.light()
+                            feeSaid[kid.name] = r
+                        }
+                    },
+                    onFeeRemove = { id ->
+                        scope.launch {
+                            val r = runCatching { core.removeKidFee(id) }.getOrNull() ?: return@launch
+                            haptics.light()
+                            feeSaid[kid.name] = r
+                        }
+                    },
+                    onFeeUndo = { id ->
+                        scope.launch {
+                            val ok = runCatching { core.undoKidFee(id) }.getOrDefault(false)
+                            haptics.light()
+                            if (ok) feeSaid.remove(kid.name) else feeSaid[kid.name] = KidSaved(KidsRules.FEE_NOTHING_TO_UNDO, refused = true)
+                        }
+                    },
                 )
             }
         }
@@ -142,6 +179,13 @@ private fun KidCardView(
     onSave: (size: String, typed: String) -> Unit,
     onUndo: (String) -> Unit,
     onFit: () -> Unit,
+    feeText: String,
+    onFeeText: (String) -> Unit,
+    feeSaid: KidSaved?,
+    onAddFee: (String) -> Unit,
+    onFeePaid: (String) -> Unit,
+    onFeeRemove: (String) -> Unit,
+    onFeeUndo: (String) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val checkedColor by animateColorAsState(
@@ -201,5 +245,50 @@ private fun KidCardView(
                 }
             }
         }
+        // Slice 2: club fees — each on the radar as a bill (one reminder 3 days before), Paid / Remove with Undo.
+        Text(KidsRules.FEE_HEAD, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+        kid.fees.forEach { fee ->
+            KidFeeRowView(fee, onPaid = { onFeePaid(fee.id) }, onRemove = { onFeeRemove(fee.id) })
+        }
+        Field(KidsRules.FEE_HINT, modifier = Modifier.fillMaxWidth(), value = feeText, onValue = onFeeText) { typed -> onAddFee(typed) }
+        val feeSaidColor by animateColorAsState(
+            if (feeSaid?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "kid-fee-said-${kid.name}",
+        )
+        Crossfade(feeSaid, animationSpec = MekaMotion.appear(reduced), label = "kid-fee-line-${kid.name}") { s ->
+            if (s != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    Text(s.line, style = MekaType.caption, color = feeSaidColor, modifier = Modifier.weight(1f))
+                    s.feeUndo?.let { id ->
+                        Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onFeeUndo(id) }
+                                .minTouch().padding(MekaSpace.xs))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One club fee: its title and line ("£35 · every month · next Sun 1 Nov", brass when due within 3 days), Paid, Remove. */
+@Composable
+private fun KidFeeRowView(fee: KidFeeRow, onPaid: () -> Unit, onRemove: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val lineColor by animateColorAsState(
+        if (fee.due) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "kid-fee-${fee.id}",
+    )
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = fee.spoken },
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            Text(fee.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(fee.line, animationSpec = MekaMotion.appear(reduced), label = "kid-fee-line-${fee.id}") { l ->
+                Text(l, style = MekaType.caption, color = lineColor)
+            }
+        }
+        Text("Paid", style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPaid)
+                .semantics { contentDescription = "${fee.title} paid" }.minTouch().padding(MekaSpace.xs))
+        Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
+                .semantics { contentDescription = "Remove ${fee.title}" }.minTouch().padding(MekaSpace.xs))
     }
 }

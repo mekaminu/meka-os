@@ -606,6 +606,62 @@ class MekaCore(
         else if (kids.allFit(child)) os.meka.core.domain.KidsRules.fitLine(child) else null
     }
 
+    // Kids' admin, slice 2: what Undo puts back per fee id — a Paid (its before) or a Remove (null). In memory only.
+    private val kidFeeUndo = mutableMapOf<String, os.meka.core.domain.RenewalDoneUndo?>()
+
+    /**
+     * Kids' admin, slice 2: adds a club fee for [child] from one typed line ("Football £35 monthly from 1 Nov"). It goes
+     * on the radar as a bill (subject the child, [os.meka.core.domain.ObligationFields.FOR_CHILD] their id), so Bills
+     * due's single reminder covers it and Lists → Renewals shows it. Refused, nothing written, when the line names no
+     * date or what it's for, or the child isn't in About you.
+     */
+    suspend fun addKidFee(child: String, text: String): os.meka.core.domain.KidSaved = onCore {
+        val id = os.meka.core.domain.KidsRules.idFor(child)
+        if (id == null || aboutYou.profile().children.none { it.name == child }) {
+            return@onCore os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.NOT_CHILD, refused = true)
+        }
+        val today = todayEpochDay()
+        val (draft, why) = os.meka.core.domain.KidsRules.readFee(text, today)
+        if (draft == null) return@onCore os.meka.core.domain.KidSaved(why ?: os.meka.core.domain.KidsRules.FEE_NO_DATE, refused = true)
+        try {
+            renewals.add(
+                title = draft.title, kind = os.meka.core.domain.ObligationKind.BILL, dueDay = draft.dueDay, repeat = draft.repeat,
+                cost = draft.costPence?.let { os.meka.core.domain.RenewalRules.formatPence(it).removePrefix("£").replace(",", "") },
+                subject = child.trim(), forChild = id,
+            )
+        } catch (e: os.meka.core.domain.ValidationException) {
+            return@onCore os.meka.core.domain.KidSaved(e.message ?: os.meka.core.domain.KidsRules.FEE_NO_DATE, refused = true)
+        }
+        os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.feeAddedLine(draft, today))
+    }
+
+    /** Kids' admin, slice 2: [feeId] paid (a repeating fee moves to its next time, a one-off closes); Undo by [undoKidFee]. */
+    suspend fun kidFeePaid(feeId: String): os.meka.core.domain.KidSaved = onCore {
+        val item = renewals.items().firstOrNull { it.id == feeId && it.forChild != null }
+            ?: return@onCore os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.FEE_GONE, refused = true)
+        val before = try { renewals.doneFromAsk(feeId, item.dueDay) } catch (_: os.meka.core.domain.ValidationException) {
+            return@onCore os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.FEE_GONE, refused = true)
+        }
+        kidFeeUndo[feeId] = before
+        os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.feePaidLine(item.title, before.afterDueDay), feeUndo = feeId)
+    }
+
+    /** Kids' admin, slice 2: takes [feeId] off the child's card and the radar; Undo by [undoKidFee]. */
+    suspend fun removeKidFee(feeId: String): os.meka.core.domain.KidSaved = onCore {
+        val item = renewals.items().firstOrNull { it.id == feeId && it.forChild != null }
+            ?: return@onCore os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.FEE_GONE, refused = true)
+        renewals.delete(feeId)
+        kidFeeUndo[feeId] = null
+        os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.feeRemovedLine(item.title), feeUndo = feeId)
+    }
+
+    /** Undo for [kidFeePaid] or [removeKidFee] on [feeId]; false when there's nothing to take back (changed since). */
+    suspend fun undoKidFee(feeId: String): Boolean = onCore {
+        if (!kidFeeUndo.containsKey(feeId)) return@onCore false
+        val before = kidFeeUndo.remove(feeId)
+        if (before == null) renewals.restore(feeId) else renewals.undoDone(before)
+    }
+
     private val _emergency = MutableStateFlow(os.meka.core.domain.EmergencyView.EMPTY)
     /**
      * The emergency card (V1, slice 1): who to call, where important documents are and key accounts by name only
@@ -6466,7 +6522,7 @@ class MekaCore(
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
         _aboutYou.value = aboutYou.view(cal)
-        _kids.value = os.meka.core.domain.KidsRules.view(aboutYou.profile().children, kids.records(), todayDay, cal)
+        _kids.value = os.meka.core.domain.KidsRules.view(aboutYou.profile().children, kids.records(), todayDay, cal, listsNow.renewals.all)
         _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
         _errands.value = errands.view()

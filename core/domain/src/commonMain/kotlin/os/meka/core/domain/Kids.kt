@@ -57,7 +57,18 @@ data class KidCard(
     val checkedLine: String,
     val due: Boolean,
     val spoken: String,
+    /** Slice 2: the child's club fees (on the radar as bills), soonest first. */
+    val fees: List<KidFeeRow> = emptyList(),
 )
+
+/**
+ * Slice 2: one club fee on a child's card: [title] ("Football"), [line] ("£35 · every month · next Sun 1 Nov"), lit
+ * ([due]) from three days before it's due (Bills due's reminder) and when overdue; [id] is the radar item's.
+ */
+data class KidFeeRow(val id: String, val title: String, val line: String, val due: Boolean, val dueDay: Long, val spoken: String)
+
+/** A typed fee read ([KidsRules.readFee]): what it's for, the cost in pence (null: not said), its repeat and first due day. */
+data class KidFeeDraft(val title: String, val costPence: Long?, val repeat: RenewalRepeat, val dueDay: Long)
 
 /** The Kids pane: a [summary], one card per child (About you's order), and [empty] when there are no children yet. */
 data class KidsView(val summary: String, val kids: List<KidCard>, val empty: String?, val tile: LifeTileLine?) {
@@ -68,13 +79,16 @@ data class KidsView(val summary: String, val kids: List<KidCard>, val empty: Str
     }
 }
 
-/** What a size save said: [line] under the field, [refused] when nothing was written, [undo] the value before a clear. */
-data class KidSaved(val line: String, val refused: Boolean = false, val undo: String? = null)
+/**
+ * What a size save said: [line] under the field, [refused] when nothing was written, [undo] the value before a clear.
+ * Slice 2, for a club fee: [feeUndo] the fee id Undo puts back (Paid or Remove, kept by the facade).
+ */
+data class KidSaved(val line: String, val refused: Boolean = false, val undo: String? = null, val feeUndo: String? = null)
 
 /** Non-AI, pure. */
 object KidsRules {
     const val TITLE = "Kids"
-    const val ROW_LINE = "Each child's sizes · a nudge to check them every 3 months"
+    const val ROW_LINE = "Each child's sizes and club fees · a nudge to check sizes every 3 months"
     /** Three months, near enough: a size typed or confirmed more than this long ago asks for a check. */
     const val CHECK_DAYS = 91
     const val MAX_SIZE = 16
@@ -144,7 +158,7 @@ object KidsRules {
     /** "Alex's", or "Alex's and Sam's" for the tile and summary. */
     private fun possessive(ns: List<String>): String = names(ns.map { "$it's" })
 
-    fun card(c: AboutChild, r: KidRecord?, todayDay: Long, cal: LocalCalendar): KidCard {
+    fun card(c: AboutChild, r: KidRecord?, todayDay: Long, cal: LocalCalendar, fees: List<KidFeeRow> = emptyList()): KidCard {
         val sizes = r?.sizes.orEmpty()
         val line = sizesLine(sizes)
         val checked = checkedLine(r, todayDay, cal)
@@ -156,6 +170,7 @@ object KidsRules {
             checkedLine = checked,
             due = due(r, todayDay, cal),
             spoken = listOfNotNull(c.name, line, checked).joinToString(". "),
+            fees = fees,
         )
     }
 
@@ -163,9 +178,16 @@ object KidsRules {
      * The pane and the tile for the children About you holds, in its order; a record whose child has left About you is
      * not shown. The tile asks for a check (lit) when one is due, else names the first child's shoe size (or first size).
      */
-    fun view(children: List<AboutChild>, records: Map<String, KidRecord>, todayDay: Long, cal: LocalCalendar): KidsView {
+    fun view(
+        children: List<AboutChild>, records: Map<String, KidRecord>, todayDay: Long, cal: LocalCalendar,
+        /** Slice 2: the radar's items; the club fees are those with [RenewalItem.forChild]. */
+        radar: List<RenewalItem> = emptyList(),
+    ): KidsView {
         if (children.isEmpty()) return KidsView.EMPTY
-        val cards = children.map { c -> card(c, idFor(c.name)?.let { records[it] }, todayDay, cal) }
+        val cards = children.map { c ->
+            val id = idFor(c.name)
+            card(c, id?.let { records[it] }, todayDay, cal, feesFor(id, radar, todayDay))
+        }
         val dueNames = cards.filter { it.due }.map { it.name }
         val withSizes = cards.filter { it.sizesLine != null }
         val summary = when {
@@ -178,13 +200,146 @@ object KidsRules {
     }
 
     private fun tile(cards: List<KidCard>, dueNames: List<String>): LifeTileLine? {
+        // Slice 2: a fee due within 3 days (or overdue) leads, lit: "Alex's Football · £35 due tomorrow".
+        cards.flatMap { c -> c.fees.filter { it.due }.map { c.name to it } }.minByOrNull { it.second.dueDay }?.let { (name, f) ->
+            val more = cards.sumOf { c -> c.fees.count { it.due } } - 1
+            return LifeTileLine("$name's ${f.title} · " + f.line.substringAfterLast(" · ").let { w ->
+                f.line.split(" · ").firstOrNull { it.startsWith("£") }?.let { "$it $w" } ?: w
+            } + if (more > 0) " · +$more" else "", true)
+        }
         if (dueNames.isNotEmpty()) return LifeTileLine("Check ${possessive(dueNames)} sizes", true)
-        val first = cards.firstOrNull { it.sizesLine != null } ?: return null
+        val first = cards.firstOrNull { it.sizesLine != null } ?: return cards.flatMap { c -> c.fees.map { c.name to it } }
+            .minByOrNull { it.second.dueDay }?.let { (name, f) -> LifeTileLine("$name's ${f.title} · ${f.line.substringAfterLast(" · ")}", false) }
         val shoes = first.sizes.firstOrNull { it.size == KidSize.SHOES.key }?.value
         val size = if (shoes != null) "shoes $shoes" else first.sizes.first { it.value != null }.let { "${it.label.lowercase()} ${it.value}" }
         val more = cards.count { it.sizesLine != null } - 1
         return LifeTileLine("${first.name} · $size" + if (more > 0) " · +$more" else "", false)
     }
+
+    // ---- Slice 2: club fees ----
+
+    const val FEE_HINT = "Add a fee… (Football £35 monthly from 1 Nov)"
+    const val FEE_HEAD = "CLUB FEES"
+    const val FEE_FOOT = "On the radar as a bill too: one reminder 3 days before, in Lists → Renewals. Navilife never pays."
+    const val FEE_NO_DATE = "Say when it's due: “Football £35 monthly from 1 Nov” or “Swimming £60 on the 5th every month”."
+    const val FEE_NO_TITLE = "Say what it's for: “Football £35 monthly from 1 Nov”."
+    const val FEE_BAD_COST = "Type the amount in pounds after a £, like £35 or £12.50."
+    const val FEE_GONE = "That fee has changed since · look in Lists → Renewals"
+    const val FEE_NOTHING_TO_UNDO = "Nothing to undo"
+    /** Lit, and Bills due's reminder comes, this many days before ([BillRules.REMIND_DAYS]). */
+    val FEE_SOON_DAYS: Int get() = BillRules.REMIND_DAYS
+    private const val FEE_MAX_TITLE = 40
+
+    private val I = setOf(RegexOption.IGNORE_CASE)
+    private val costRe = Regex("""£\s?(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)|\b(\d{1,5}(?:\.\d{1,2})?)\s?(?:pounds|quid|gbp)\b""", I)
+    private val repeatRes: List<Pair<Regex, RenewalRepeat>> = listOf(
+        Regex("""\b(?:every|each|a|per)\s+(?:3|three)\s+months\b|\bquarterly\b""", I) to RenewalRepeat.QUARTERLY,
+        Regex("""\b(?:every|each|a|per)\s+(?:6|six)\s+months\b|\bhalf[\s-]?yearly\b|\btwice\s+a\s+year\b""", I) to RenewalRepeat.HALF_YEARLY,
+        Regex("""\b(?:every|each|a|per)\s+month\b|\bmonthly\b|\bpcm\b""", I) to RenewalRepeat.MONTHLY,
+        Regex("""\b(?:every|each|a|per)\s+year\b|\byearly\b|\bannual(?:ly)?\b|\bfor\s+the\s+year\b""", I) to RenewalRepeat.YEARLY,
+        Regex("""\b(?:just\s+)?once\b|\bone[\s-]?off\b""", I) to RenewalRepeat.NONE,
+    )
+    /** "on the 1st", "the 5th", "1st of the month", "on the 28th of each month". */
+    private val dayOfMonthRe = Regex("""\b(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)(?:\s+of\s+(?:the|each|every)\s+month)?\b""", I)
+    private val connectorsLead = Regex("""^(?:\s|,|;|:|-|–|—|&|·|\bfor\b|\bfrom\b|\bon\b|\bdue\b|\bstarting\b|\bnext\b|\bthe\b|\bis\b|\bof\b)+""", I)
+    private val connectorsTail = Regex("""(?:\s|,|;|:|-|–|—|&|·|\bfor\b|\bfrom\b|\bon\b|\bdue\b|\bstarting\b|\bnext\b|\bthe\b|\bis\b|\bof\b|\bevery\b)+$""", I)
+
+    /**
+     * Reads one typed fee: "Football £35 monthly from 1 Nov", "Swimming £60 on the 5th every month", "Club subs £120
+     * yearly 1 Sep", "Trip £15 20 Nov" (no repeat word: once). A date without a year is its next time from [today]; "the
+     * 5th" alone is the next 5th. Returns the draft, or the line saying what's missing (nothing is written then).
+     */
+    fun readFee(typed: String, today: Long): Pair<KidFeeDraft?, String?> {
+        var s = " " + typed.trim().replace(Regex("""\s+"""), " ") + " "
+        if (s.isBlank()) return null to FEE_NO_TITLE
+        var cost: Long? = null
+        costRe.find(s)?.let { m ->
+            val n = (m.groupValues[1].ifEmpty { m.groupValues[2] }).replace(",", "")
+            cost = try { RenewalRules.parseCost(n) } catch (_: ValidationException) { return null to FEE_BAD_COST }
+            s = s.replaceRange(m.range, " ")
+        }
+        if (cost == null && s.contains('£')) return null to FEE_BAD_COST
+        var repeat = RenewalRepeat.NONE
+        for ((re, r) in repeatRes) {
+            val m = re.find(s) ?: continue
+            repeat = r
+            s = s.replaceRange(m.range, " ")
+            break
+        }
+        var due: Long? = null
+        when (val f = SchoolRules.findSpan(s, today)) {
+            SpanFound.Bad -> return null to FEE_NO_DATE
+            is SpanFound.Days -> { if (f.endDay != f.startDay) return null to FEE_NO_DATE; due = f.startDay; s = f.rest }
+            SpanFound.None -> dayOfMonthRe.find(s)?.let { m ->
+                val dom = m.groupValues[1].toInt()
+                if (dom !in 1..31) return null to FEE_NO_DATE
+                due = nextDayOfMonth(dom, today)
+                s = s.replaceRange(m.range, " ")
+                if (repeat == RenewalRepeat.NONE && Regex("""\bof\s+(?:each|every)\s+month\b""", I).containsMatchIn(m.value)) repeat = RenewalRepeat.MONTHLY
+            }
+        }
+        val title = s.replace(connectorsLead, "").replace(connectorsTail, "").replace(Regex("""\s+"""), " ").trim()
+            .replaceFirstChar { it.uppercase() }
+        if (title.isEmpty()) return null to FEE_NO_TITLE
+        val day = due ?: return null to FEE_NO_DATE
+        return KidFeeDraft(title.take(FEE_MAX_TITLE).trim(), cost, repeat, day) to null
+    }
+
+    /** The next [dom] of a month on or after [today] (a short month takes its last day). */
+    fun nextDayOfMonth(dom: Int, today: Long): Long {
+        val t = CivilDate.fromEpochDay(today)
+        var y = t.year
+        var m = t.month
+        repeat(2) {
+            val d = minOf(dom, CivilDate.lengthOfMonth(y, m))
+            val day = CivilDate.toEpochDay(y, m, d)
+            if (day >= today) return day
+            m += 1
+            if (m > 12) { m = 1; y += 1 }
+        }
+        return CivilDate.toEpochDay(y, m, minOf(dom, CivilDate.lengthOfMonth(y, m)))
+    }
+
+    /** "today", "tomorrow", "Sun 1 Nov". */
+    private fun feeDay(day: Long, today: Long): String = when (day - today) {
+        0L -> "today"
+        1L -> "tomorrow"
+        else -> CivilDate.shortLabel(day)
+    }
+
+    /** A fee's row: "£35 · every month · next Sun 1 Nov" (lit soon: "due tomorrow", overdue: "was due Fri 30 Oct"). */
+    fun feeRow(item: RenewalItem, today: Long): KidFeeRow {
+        val left = item.dueDay - today
+        val cost = item.costPence?.let(RenewalRules::formatPence)
+        val repeat = item.repeats?.let { r -> if (r == RenewalRepeat.NONE) "once" else RenewalRules.repeatLabel(r).lowercase() } ?: item.repeatLabel.lowercase()
+        val whenWord = when {
+            left < 0 -> "was due ${CivilDate.shortLabel(item.dueDay)}"
+            left <= FEE_SOON_DAYS -> "due ${feeDay(item.dueDay, today)}"
+            item.repeats != null && item.repeats != RenewalRepeat.NONE -> "next ${CivilDate.shortLabel(item.dueDay)}"
+            else -> "due ${CivilDate.shortLabel(item.dueDay)}"
+        }
+        val line = listOfNotNull(cost, repeat, whenWord).joinToString(" · ")
+        return KidFeeRow(item.id, item.title, line, left <= FEE_SOON_DAYS, item.dueDay, "${item.title}. $line")
+    }
+
+    /** The line after a fee is added: "Added Football · £35 · every month · next Sun 1 Nov · reminds you 3 days before". */
+    fun feeAddedLine(d: KidFeeDraft, today: Long): String {
+        val cost = d.costPence?.let(RenewalRules::formatPence)
+        val repeat = if (d.repeat == RenewalRepeat.NONE) "once" else RenewalRules.repeatLabel(d.repeat).lowercase()
+        return "Added ${d.title} · " + listOfNotNull(cost, repeat, "due ${feeDay(d.dueDay, today)}").joinToString(" · ") +
+            " · reminds you $FEE_SOON_DAYS days before"
+    }
+
+    /** After Paid: "Paid Football · next Tue 1 Dec" or "Paid Football · done". */
+    fun feePaidLine(title: String, next: Long?): String =
+        if (next == null) "Paid $title · done" else "Paid $title · next ${CivilDate.shortLabel(next)}"
+
+    fun feeRemovedLine(title: String): String = "Removed $title · Undo puts it back"
+
+    /** The fees of [items] for the child [id], soonest first. */
+    fun feesFor(id: String?, items: List<RenewalItem>, today: Long): List<KidFeeRow> =
+        if (id == null) emptyList()
+        else items.filter { it.forChild == id }.sortedWith(compareBy<RenewalItem> { it.dueDay }.thenBy { it.title }).map { feeRow(it, today) }
 
     /** The line after a save: "Saved · shoes 13". */
     fun savedLine(size: KidSize, value: String): String = "Saved · ${size.label.lowercase()} $value"

@@ -1729,6 +1729,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(rules.tidy(typed: "big"))
         XCTAssertEqual(rules.idFor(name: "Mary Jane"), "c-mary-jane")
         XCTAssertEqual(KidsView.companion.EMPTY.empty, rules.NO_CHILDREN)
+        // Slice 2: a typed club fee is read (or turned away with why).
+        XCTAssertEqual(rules.readFee(typed: "Football £35 monthly", today: 20_741).second as? String, rules.FEE_NO_DATE)
+        XCTAssertEqual(rules.readFee(typed: "Football £35 monthly from 1 Nov", today: 20_741).first?.title, "Football")
     }
 
     func testReflectionRulesReachSwift() {

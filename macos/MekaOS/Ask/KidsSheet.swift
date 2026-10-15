@@ -1,10 +1,11 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Life → Kids on the Mac (Kids' admin, slice 1), like the Fold's KidsPane: a card per child from About you with
+/// Ask → Life → Kids on the Mac (Kids' admin, slices 1–2), like the Fold's KidsPane: a card per child from About you with
 /// their sizes (shoes, football boots, tops, trousers, coat, school jumper), when they were last checked (in the accent
-/// three months on) and All still fit. Type a size and press Return to keep it; clear it to remove it, with Undo. Only
-/// Strings cross to the core.
+/// three months on) and All still fit. Type a size and press Return to keep it; clear it to remove it, with Undo.
+/// Slice 2: CLUB FEES under the sizes (each a bill on the radar, the line in the accent within 3 days of due) with Paid
+/// and Remove (Undo), and a field that reads "Football £35 monthly from 1 Nov". Only Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and each card's lines cross-fade; cards stagger in; the checked
 /// line blends to the accent when due; a save gives a light haptic, a refusal a tick. Reduce Motion: cross-fades.
@@ -17,6 +18,9 @@ struct KidsSheet: View {
     @State private var texts: [String: String] = [:]
     /// Per child: what the last save or All still fit said.
     @State private var said: [String: CoreModel.KidSaid] = [:]
+    /// Slice 2, per child: the fee field's text and what the last fee action said.
+    @State private var feeTexts: [String: String] = [:]
+    @State private var feeSaid: [String: CoreModel.KidSaid] = [:]
 
     var body: some View {
         let v = model.kids ?? KidsView.companion.EMPTY
@@ -102,6 +106,7 @@ struct KidsSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
             }
+            fees(kid)
         }
         .padding(MekaSpace.m)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
@@ -127,6 +132,65 @@ struct KidsSheet: View {
                         if !r.refused { texts[key] = nil } // the kept value shows again
                     }
                 }
+        }
+    }
+
+    /// Slice 2: the child's club fees, Paid / Remove with Undo, and the field that adds one.
+    @ViewBuilder
+    private func fees(_ kid: KidCard) -> some View {
+        let name = kid.name
+        Text(KidsRules.shared.FEE_HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            .padding(.top, MekaSpace.xs)
+        ForEach(kid.fees, id: \.id) { fee in
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(fee.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(fee.line).font(MekaType.caption)
+                        .foregroundStyle(fee.due ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: fee.line)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(fee.spoken)
+                Spacer()
+                let id = fee.id
+                Button("Paid") {
+                    Task { if let r = await model.kidFeePaid(id: id) { feeSaid[name] = r } }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                Button("Remove") {
+                    Task { if let r = await model.removeKidFee(id: id) { feeSaid[name] = r } }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+        }
+        TextField(KidsRules.shared.FEE_HINT, text: Binding(get: { feeTexts[name] ?? "" }, set: { feeTexts[name] = $0 }))
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                let typed = feeTexts[name] ?? ""
+                Task {
+                    guard let r = await model.addKidFee(child: name, text: typed) else { return }
+                    feeSaid[name] = r
+                    if !r.refused { feeTexts[name] = nil }
+                }
+            }
+        if let line = feeSaid[name] {
+            HStack(spacing: MekaSpace.xs) {
+                Text(line.line).font(MekaType.caption)
+                    .foregroundStyle(line.refused ? palette.accent : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let id = line.feeUndo {
+                    Button("Undo") {
+                        Task {
+                            if await model.undoKidFee(id: id) { feeSaid[name] = nil }
+                            else { feeSaid[name] = CoreModel.KidSaid(line: KidsRules.shared.FEE_NOTHING_TO_UNDO, refused: true, undo: nil) }
+                        }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+            }
+            .contentTransition(.opacity)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
         }
     }
 }

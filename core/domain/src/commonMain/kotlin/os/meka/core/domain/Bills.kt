@@ -59,7 +59,9 @@ object BillRules {
             val link = item.payLink
             Notice(
                 key = "bill:${item.id}:${item.dueDay}", source = NoticeSource.BILLS, tier = NoticeTier.HEADS_UP,
-                title = "${item.title} due $dayWord" + (item.costPence?.let { " · ${RenewalRules.formatPence(it)}" } ?: ""),
+                // Kids' admin, slice 2: a child's club fee says whose it is ("Alex's Football due tomorrow · £35").
+                title = (if (item.forChild != null && !item.subject.isNullOrBlank()) "${item.subject!!.trim()}'s ${item.title}" else item.title) +
+                    " due $dayWord" + (item.costPence?.let { " · ${RenewalRules.formatPence(it)}" } ?: ""),
                 text = "$inWords · " + when {
                     link != null -> "Pay opens ${site(link)}"
                     // Mail slice 3h: a Direct Debit read from a bill email has nothing to pay by hand.

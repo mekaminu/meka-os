@@ -3151,6 +3151,56 @@ final class CoreModel {
         let line: String
         let refused: Bool
         let undo: String?
+        /// Slice 2: the club fee Undo takes back (after Paid or Remove).
+        var feeUndo: String? = nil
+    }
+
+    /// Kids' admin, slice 2: adds a club fee for a child from one typed line ("Football £35 monthly from 1 Nov"); it goes
+    /// on the radar as a bill. Only Strings cross to the core.
+    func addKidFee(child: String, text: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.addKidFee(child: child, text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return KidSaid(line: r.line, refused: r.refused, undo: nil)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// A child's club fee paid (moves on to its next time, or closes); Undo with `undoKidFee`.
+    func kidFeePaid(id: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.kidFeePaid(feeId: id)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return KidSaid(line: r.line, refused: r.refused, undo: nil, feeUndo: r.feeUndo)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Takes a child's club fee off the card and the radar; Undo with `undoKidFee`.
+    func removeKidFee(id: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.removeKidFee(feeId: id)
+            MekaHaptics.light()
+            return KidSaid(line: r.line, refused: r.refused, undo: nil, feeUndo: r.feeUndo)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Undo for Paid or Remove on a club fee; false when it changed since.
+    func undoKidFee(id: String) async -> Bool {
+        guard let core else { return false }
+        let ok = (try? await core.undoKidFee(feeId: id))?.boolValue ?? false
+        MekaHaptics.light()
+        return ok
     }
 
     /// Keeps one size for a child (blank clears it); only Strings cross to the core.

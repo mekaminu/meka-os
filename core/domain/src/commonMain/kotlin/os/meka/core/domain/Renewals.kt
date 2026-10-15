@@ -63,6 +63,8 @@ data class RenewalItem(
     val nextDueDay: Long? = null,
     /** Bills due: where Meka pays it (http(s)), or null; MEKA only opens it. */
     val payLink: String? = null,
+    /** Kids' admin, slice 2: the child a club fee is for (the `kid_admin` id, "c-alex"), or null. */
+    val forChild: String? = null,
 ) {
     /** Shown in Needs you and counted in its badge. */
     val needsAttention: Boolean get() = state != RenewalState.LATER
@@ -385,6 +387,8 @@ class Renewals(
         subject: String? = null,
         /** Days ahead to show it; null takes the kind's default ([RenewalRules.defaultLeadDays]). */
         leadDays: Int? = null,
+        /** Kids' admin, slice 2: the child a club fee is for ([ObligationFields.FOR_CHILD]). */
+        forChild: String? = null,
     ): String {
         val t = cleanTitle(title)
         checkDay(dueDay)
@@ -410,6 +414,7 @@ class Renewals(
         }
         cancelByDaysBefore?.let { fields[ObligationFields.CANCEL_BY_AT] = dayMs(dueDay - it).fv() }
         subject?.trim()?.takeIf { it.isNotEmpty() }?.let { fields[ObligationFields.SUBJECT_LABEL] = it.take(Lists.MAX_TITLE).fv() }
+        forChild?.let { fields[ObligationFields.FOR_CHILD] = it.fv() }
         replica.commitLocal(EntityTypes.OBLIGATION, id, fields)
         return id
     }
@@ -575,6 +580,14 @@ class Renewals(
         replica.commitLocal(EntityTypes.OBLIGATION, id, mapOf(ActionableFields.DELETED to true.fv()))
     }
 
+    /** Undo for [delete] (Kids' admin, slice 2): puts it back on the radar; false when it isn't a deleted item. */
+    fun restore(id: String): Boolean {
+        val s = replica.entity(EntityTypes.OBLIGATION, id) ?: return false
+        if (!s.deleted) return false
+        replica.commitLocal(EntityTypes.OBLIGATION, id, mapOf(ActionableFields.DELETED to false.fv()))
+        return true
+    }
+
     // ---- Reads ----
 
     fun items(): List<RenewalItem> {
@@ -609,6 +622,7 @@ class Renewals(
                     hasConflict = replica.conflictsFor(EntityTypes.OBLIGATION, s.ref.entityId).isNotEmpty(),
                     nextDueDay = rule?.next(due),
                     payLink = SessionRules.cleanAppLink(s[ObligationFields.PAY_LINK].textOrNull),
+                    forChild = s[ObligationFields.FOR_CHILD].textOrNull?.takeIf { it.isNotBlank() },
                 )
             }
     }
