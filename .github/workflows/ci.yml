@@ -3,7 +3,9 @@ name: ci
 on:
   push:
     branches: [main]
-    paths-ignore: ["docs/**", "**/*.md"]   # docs-only commits don't spend Actions minutes
+    # Docs-only commits don't spend Actions minutes, except docs/help (it generates core's HelpIndex.kt, which
+    # tokens-and-infra checks with gen-help --check). Later patterns win.
+    paths: ["**", "!docs/**", "!**/*.md", "docs/help/**"]
   pull_request:
   schedule:
     - cron: "17 3 * * 0" # weekly (Sunday): the macOS job runs here and on manual dispatch only
