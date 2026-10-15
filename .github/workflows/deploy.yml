@@ -98,7 +98,16 @@ jobs:
           aws ecr get-login-password | docker login --username AWS --password-stdin "${REPO%%/*}"
           # The engine's own builder (no buildx container: booting one pulls moby/buildkit from Docker Hub, which timed
           # out twice on 2026-10-09). No RUN steps, so the arm64 image builds on this x86 runner without emulation.
-          tools/ci-run.sh docker build --platform linux/arm64 -t "$REPO:$SHA" backend
+          # The base image from AWS's public mirror first, then Google's and Docker Hub's copies of the same official
+          # image: public.ecr.aws answered 429 "Data limit exceeded" on 2026-10-14 and on every deploy of 2026-10-15
+          # morning, so the server stopped deploying (the CI's Postgres has the same fallback, tools/ci-postgres.sh).
+          built=""
+          for base in public.ecr.aws/docker/library/eclipse-temurin:21-jre mirror.gcr.io/library/eclipse-temurin:21-jre docker.io/library/eclipse-temurin:21-jre; do
+            if docker build --platform linux/arm64 --build-arg BASE="$base" -t "$REPO:$SHA" backend; then built="$base"; break; fi
+            echo "::warning title=Base image::couldn't build from $base; trying the next mirror"
+          done
+          [ -n "$built" ] || { echo "::error title=Base image::no mirror served eclipse-temurin:21-jre"; exit 1; }
+          echo "::notice title=Base image::$built"
           tools/ci-run.sh docker push "$REPO:$SHA"
 
       - name: Deploy service stack
