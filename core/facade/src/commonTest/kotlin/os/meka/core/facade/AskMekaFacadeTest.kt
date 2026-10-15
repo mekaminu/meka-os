@@ -1105,6 +1105,35 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun askHearsTheChildrenOnlyWhenAskedAndAnswersSizesWithoutTheAi() = runTest {
+        val c = core()
+        c.askMeka("What size shoes is Alex?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.KIDS }) // no children yet
+        c.addAboutYouChild("Alex, U7, Oakfield School")
+        c.addAboutYouChild("Sam, U10")
+        c.setKidSize("Alex", "shoes", "13")
+        c.addKidFee("Sam", "Football £35 monthly from 1 Nov")
+        c.askMeka("What size shoes is Alex?")
+        val ctx = server.asked.last().second
+        val kids = ctx.items.filter { it.kind == AskItemKind.KIDS }.map { it.line }
+        assertEquals("Kids · 2 children: Alex and Sam", kids[0])
+        assertTrue(kids[1].startsWith("Alex · ") && kids[1].contains("sizes: Shoes 13 · Sizes checked today"), kids[1])
+        assertTrue(kids[2].startsWith("Sam · ") && kids[2].endsWith("no sizes kept"), kids[2])
+        assertEquals("Sam's club fee · Football · £35 · every month · next Sun 1 Nov", kids[3])
+        assertTrue(kids.any { it.startsWith("This week · ") })
+        assertFalse(ctx.untrusted)
+        // A question about something else carries none of it.
+        c.askMeka("When's the MOT?")
+        assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.KIDS })
+        // Without the AI the device answers a size itself.
+        server.down = true
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("What size shoes is Alex?"))
+        assertEquals("Alex's shoes: 13 · sizes checked today.", out.answer.text)
+        val coat = assertIs<AskOutcome.Answered>(c.askMeka("what coat size does Sam take"))
+        assertEquals("Sam's coat size isn't kept yet · add it in Ask → Life → Kids.", coat.answer.text)
+    }
+
+    @Test
     fun askHearsTheCarAndItsDates() = runTest {
         val c = core()
         c.askMeka("When's the MOT?")

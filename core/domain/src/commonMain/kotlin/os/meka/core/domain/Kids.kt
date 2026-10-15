@@ -353,7 +353,11 @@ object KidsRules {
 }
 
 /** Slice 3: one thing in the week list: "Alex: PE kit", "Sam: Training 16:55", "Alex's Football · £35 due"; [lit] wants doing. */
-data class KidWeekItem(val text: String, val lit: Boolean, val spoken: String)
+data class KidWeekItem(
+    val text: String, val lit: Boolean, val spoken: String,
+    /** Slice 4: a club session from a calendar (its title is the club's words, so Ask treats it as untrusted). */
+    val fromCalendar: Boolean = false,
+)
 
 /** Slice 3: one day of the week list: [label] "Today", "Tomorrow" or "Mon 19 Oct". */
 data class KidWeekDay(val day: Long, val label: String, val items: List<KidWeekItem>)
@@ -432,7 +436,7 @@ object KidsWeekRules {
                 val time = LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))
                 val what = e.title.trim().ifEmpty { "Training" }.take(40)
                 val text = (if (who != null) "$who: " else "") + "$what $time"
-                items += KidWeekItem(text, false, "$label. $text")
+                items += KidWeekItem(text, false, "$label. $text", fromCalendar = true)
             }
             radar.filter { it.forChild != null && it.forChild in ids && (it.dueDay == d || (d == today && it.dueDay < today)) }
                 .sortedWith(compareBy<RenewalItem> { it.dueDay }.thenBy { it.title })
@@ -449,6 +453,100 @@ object KidsWeekRules {
         val soon = days.filter { it.day - today <= 1 }.sumOf { it.items.size }
         val line = "$n ${if (n == 1) "thing" else "things"} in the next 7 days" + if (soon > 0) " · $soon today or tomorrow" else ""
         return KidWeek(line, days)
+    }
+}
+
+/**
+ * Kids' admin, slice 4: **Ask and Talk know the children** — "what size shoes is Alex?", "what do the boys need this
+ * week?", "when's the football fee due?". Only for a question about them ([isAbout]: a child's name or a word about
+ * sizes, kit, fees or the children), the Kids pane as lines for the AI ([askLines]), and the device's own answer when
+ * the AI can't be reached ([localAnswer]). Non-AI, pure; nothing is stored.
+ */
+object KidAskRules {
+    /** At most this many lines go with a question (the head, up to 4 children, 6 fees, the week's head and 10 things). */
+    const val ASK_LINES = 22
+    private const val ASK_CHILDREN = 4
+    private const val ASK_FEES = 6
+    private const val ASK_WEEK = 10
+
+    private val WORDS = Regex(
+        """\b(kids?|child(ren)?|boys?|sons?|daughters?|girls?|sizes?|shoes?|trainers|boots?|tops?|trousers|coats?|jumpers?|uniform|pe|kit|club fees?|fees?|subs|training|matches|need(s)? this week)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /** Whether [question] is about the children: one of their names (About you's), or a word about sizes, kit or fees. */
+    fun isAbout(question: String, names: List<String>): Boolean {
+        val q = question.lowercase()
+        if (names.any { n -> n.isNotBlank() && Regex("""\b${Regex.escape(n.trim().lowercase())}('s)?\b""").containsMatchIn(q) }) return true
+        return WORDS.containsMatchIn(q)
+    }
+
+    /**
+     * The Kids pane as Ask's kids lines: "Kids · 2 children: Alex and Sam", then per child "Alex · Under 7s · Oakfield
+     * School · sizes: Shoes 13 · Tops 7–8 · Sizes checked Wed 14 Oct", each fee "Alex's club fee · Football · £35 ·
+     * every month · next Sun 1 Nov", then "This week · 3 things in the next 7 days" and "Tomorrow (Fri 16 Oct) · Alex:
+     * PE kit". Empty with no children.
+     */
+    fun askLines(v: KidsView): List<String> {
+        if (v.kids.isEmpty()) return emptyList()
+        val out = mutableListOf<String>()
+        val n = v.kids.size
+        out += "Kids · $n ${if (n == 1) "child" else "children"}: ${KidsRules.names(v.kids.map { it.name })}"
+        v.kids.take(ASK_CHILDREN).forEach { c ->
+            val sizes = c.sizesLine?.let { "sizes: $it" } ?: "no sizes kept"
+            out += listOf(c.name, c.line.takeIf { it.isNotBlank() }, sizes, c.checkedLine.takeIf { c.sizesLine != null }).filterNotNull().joinToString(" · ")
+        }
+        v.kids.flatMap { c -> c.fees.map { c.name to it } }.sortedBy { it.second.dueDay }.take(ASK_FEES).forEach { (name, f) ->
+            out += "$name's club fee · ${f.title} · ${f.line}"
+        }
+        val week = v.week
+        if (week != null) {
+            out += "This week · ${week.line}"
+            week.days.flatMap { d -> d.items.map { d to it } }.take(ASK_WEEK).forEach { (d, i) ->
+                val label = if (d.label == "Today" || d.label == "Tomorrow") "${d.label} (${CivilDate.shortLabel(d.day)})" else d.label
+                out += "$label · ${i.text}"
+            }
+        }
+        return out.take(ASK_LINES)
+    }
+
+    /** Whether the week's lines carry a club calendar's words. */
+    fun fromOthers(v: KidsView): Boolean = v.week?.days?.any { d -> d.items.any { it.fromCalendar } } == true
+
+    private val SIZE_WORDS: List<Pair<KidSize, Regex>> = listOf(
+        KidSize.BOOTS to Regex("""\b(football )?boots?\b""", RegexOption.IGNORE_CASE),
+        KidSize.SHOES to Regex("""\b(shoes?|trainers|feet|foot)\b""", RegexOption.IGNORE_CASE),
+        KidSize.TOPS to Regex("""\b(tops?|t-?shirts?|shirts?)\b""", RegexOption.IGNORE_CASE),
+        KidSize.TROUSERS to Regex("""\b(trousers|jeans|joggers)\b""", RegexOption.IGNORE_CASE),
+        KidSize.COAT to Regex("""\b(coats?|jackets?)\b""", RegexOption.IGNORE_CASE),
+        KidSize.JUMPER to Regex("""\b(jumpers?|sweatshirts?)\b""", RegexOption.IGNORE_CASE),
+    )
+    private val WEEK_Q = Regex("""\b(this week|need|needs|coming up|kit)\b""", RegexOption.IGNORE_CASE)
+
+    /**
+     * The device's own answer when the AI can't be reached: a size ("Alex's shoes: 13 · checked Wed 14 Oct"; "Alex's
+     * coat size isn't kept yet · add it in Ask → Life → Kids"), or what they need this week (the first few things); null
+     * when [question] is neither.
+     */
+    fun localAnswer(question: String, v: KidsView): String? {
+        if (v.kids.isEmpty() || !isAbout(question, v.kids.map { it.name })) return null
+        val q = question.lowercase()
+        val named = v.kids.filter { c -> Regex("""\b${Regex.escape(c.name.trim().lowercase())}('s)?\b""").containsMatchIn(q) }
+        val size = SIZE_WORDS.firstOrNull { it.second.containsMatchIn(q) }?.first
+        if (size != null && (q.contains("size") || q.contains("what") || q.contains("wear") || q.contains("take"))) {
+            val who = named.ifEmpty { v.kids }
+            return who.joinToString(" ") { c ->
+                val value = c.sizes.firstOrNull { it.size == size.key }?.value
+                if (value != null) "${c.name}'s ${size.label.lowercase()}: $value · ${c.checkedLine.replaceFirstChar { it.lowercase() }}."
+                else "${c.name}'s ${size.label.lowercase()} size isn't kept yet · add it in Ask → Life → Kids."
+            }
+        }
+        val week = v.week ?: return null
+        if (!WEEK_Q.containsMatchIn(q)) return null
+        if (week.isEmpty) return week.line
+        val things = week.days.flatMap { d -> d.items.map { "${d.label}: ${it.text}" } }
+        val shown = things.take(4)
+        return "${week.line}. " + shown.joinToString("; ") + (if (things.size > shown.size) "; and ${things.size - shown.size} more in Ask → Life → Kids." else ".")
     }
 }
 

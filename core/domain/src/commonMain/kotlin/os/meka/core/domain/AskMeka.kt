@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -219,7 +219,8 @@ object AskRules {
                 car: List<String> = emptyList(), lifeAdmin: String? = null, gifts: List<String> = emptyList(),
                 people: List<String> = emptyList(), trips: List<String> = emptyList(),
                 notifications: List<String> = emptyList(), commute: List<String> = emptyList(),
-                mail: List<String> = emptyList(), help: List<String> = emptyList()): AskContext {
+                mail: List<String> = emptyList(), help: List<String> = emptyList(),
+                kids: List<String> = emptyList(), kidsFromOthers: Boolean = false): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -261,10 +262,10 @@ object AskRules {
         val shop = shopping?.takeIf { it.toBuy.isNotEmpty() || it.got.isNotEmpty() }?.let { shoppingLine(it) }
         // The forecast (weather item): numbers MEKA wrote into words itself, so never untrusted; kept whatever the day holds.
         val forecast = weather.take(WeatherRules.MAX_ASK_LINES).map { AskItem("", AskItemKind.WEATHER, it.take(MAX_LINE)) }
-        // Rex's and Logan's school year (school items, [SchoolRules.askLines]): Meka's own typed lines, never untrusted.
+        // The children's school year (school items, [SchoolRules.askLines]): Meka's own typed lines, never untrusted.
         val schoolYear = school.take(SchoolRules.ASK_OFF + SchoolRules.ASK_DATES + SchoolRules.ASK_WEEKLY).map { AskItem("", AskItemKind.SCHOOL, line(it)) }
-        // The week's dinners and the favourites (Meal plan slice 2, [MealRules.askLine]): Meka's and Jeanette's own
-        // dinner names; Jeanette's favourites make the context untrusted like her shopping (below).
+        // The week's dinners and the favourites (Meal plan slice 2, [MealRules.askLine]): Meka's and his wife's own
+        // dinner names; his wife's favourites make the context untrusted like her shopping (below).
         val dinners = meals?.let { AskItem("", AskItemKind.MEALS, line(it)) }
         // Date night (slice 3, [DateNightRules.askLine]): Meka's own setting in MEKA's words, never untrusted.
         val evening = dateNight?.let { AskItem("", AskItemKind.DATE_NIGHT, line(it)) }
@@ -320,15 +321,18 @@ object AskRules {
         // Ask knows how Navilife itself works ([HelpRules.askLines]): only with a question that mentions a feature; the
         // help index's own words, never untrusted; first, so the lines that answer the question are the last to be cut.
         val helpLines = help.take(HelpRules.ASK_ENTRIES * 4).map { AskItem("", AskItemKind.HELP, it.take(MAX_LINE)) }
-        val tail = helpLines + notifyLines + mailLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // Kids' admin, slice 4 ([KidAskRules.askLines]): only with a question about the children; sizes and fees are
+        // Meka's own, but a club session's title comes from a club's calendar, so [kidsFromOthers] makes it untrusted.
+        val kidLines = kids.take(KidAskRules.ASK_LINES).map { AskItem("", AskItemKind.KIDS, line(it)) }
+        val tail = helpLines + notifyLines + mailLines + kidLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))
         val kept = items.take(MAX_ITEMS - tailKept.size) + tailKept
         val keptRefs = kept.map { it.ref }.toSet()
-        // Things Jeanette added are someone else's words, like a calendar invitation's title.
+        // Things his wife added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty())
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers))
     }
 
     /** "Shopping list · 3 to buy: milk, eggs, bread" / "Shopping list · nothing to buy". */

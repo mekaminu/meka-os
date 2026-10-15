@@ -5200,10 +5200,14 @@ class MekaCore(
             return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.HelpRules.answer(helpMatch.entry, helpOnMac))
         }
         val helpLines = if (helpMatch == null) emptyList() else os.meka.core.domain.HelpRules.askLines(q, helpOnMac)
+        // Kids' admin, slice 4: "what size shoes is Alex?" / "what do the boys need this week?" carry the Kids pane.
+        val kidsNow = _kids.value
+        val kidsAsked = !kidsNow.isEmpty && os.meka.core.domain.KidAskRules.isAbout(q, kidsNow.kids.map { it.name })
         fun unavailable(line: String): os.meka.core.domain.AskOutcome {
             val local = (if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null)
                 ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal) else null)
                 ?: commuteLocal
+                ?: (if (kidsAsked) os.meka.core.domain.KidAskRules.localAnswer(q, kidsNow) else null)
             return if (local != null) os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(local, emptyList()))
             else os.meka.core.domain.AskOutcome.Unavailable(line)
         }
@@ -5266,7 +5270,10 @@ class MekaCore(
                 // Inbox autopilot, slice 9a: only for a question about his email, so "what did the school say?" has an answer.
                 mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) else emptyList(),
                 // Ask knows how Navilife itself works: the help entries the question mentions.
-                help = helpLines)
+                help = helpLines,
+                // Kids' admin, slice 4: only for a question about the children, so "what size shoes is Alex?" has an answer.
+                kids = if (kidsAsked) os.meka.core.domain.KidAskRules.askLines(kidsNow) else emptyList(),
+                kidsFromOthers = kidsAsked && os.meka.core.domain.KidAskRules.fromOthers(kidsNow))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
