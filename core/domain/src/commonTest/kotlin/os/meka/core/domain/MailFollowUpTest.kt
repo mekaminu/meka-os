@@ -190,4 +190,20 @@ class MailFollowUpTest {
         assertEquals("Waiting 2 weeks for Sam Taylor's replies from now on", FollowUpWaitsRules.changedLine("Sam Taylor", 14))
         assertEquals("Sam Taylor back to the usual 3 days", FollowUpWaitsRules.resetLine("Sam Taylor"))
     }
+
+    @Test
+    fun theAiChaseNeverWritesOverHisOwnWords() {
+        val D = MailChaseDraftRules
+        val plain = MailChaseRules.followUpDraft("Sam Taylor", "Alex")
+        val ai = "Hi Sam,\n\nAny news on the quote?\n\nThanks,\nAlex"
+        assertTrue(D.canDraft("", plain, null))
+        assertTrue(D.canDraft(plain, plain, null))
+        assertTrue(D.canDraft(" $ai \n", plain, ai))
+        assertFalse(D.canDraft("Sam, nudge on the quote please", plain, ai))
+        assertEquals(D.DRAFT, D.label(plain, null))
+        assertEquals(D.AGAIN, D.label(ai, ai))
+        val row = MailChaseRow("f", "w", "Sam Taylor", "Reply about Quote", "Personal", false, plain, "To Sam", null, "")
+        assertTrue(D.autoDraft(row))
+        assertFalse(D.autoDraft(row.copy(notice = "Chase didn't send · try again · your words are kept")))
+    }
 }

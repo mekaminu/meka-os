@@ -397,6 +397,7 @@ struct MailChaseView: View {
                                 MailChaseRowView(row: row, palette: palette,
                                                  got: { model.gotMailChase(row.id) },
                                                  notYet: { model.notYetMailChase(row.id) },
+                                                 draft: { await model.draftMailChase(row.id) },
                                                  send: { text, sent in model.chaseMailItem(row.id, text, sent: sent) })
                             }
                             if let more = card.moreLine {
@@ -426,10 +427,30 @@ private struct MailChaseRowView: View {
     let palette: MekaPalette
     let got: () -> Void
     let notYet: () -> Void
+    /// Follow-up radar, slice 5: the chase written by the AI (only the id crosses; two Strings come back).
+    let draft: @MainActor () async -> (text: String?, line: String)
     let send: (String, @escaping @MainActor () -> Void) -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var chasing = false
     @State private var text = ""
+    @State private var lastDraft: String?
+    @State private var draftLine: String?
+    @State private var drafting = false
+
+    private var rules: MailChaseDraftRules { MailChaseDraftRules.shared }
+
+    private func writeChase() {
+        guard !drafting, rules.canDraft(editor: text, plain: row.draft, lastDraft: lastDraft) else { return }
+        drafting = true
+        draftLine = rules.DRAFTING
+        Task { @MainActor in
+            let d = await draft()
+            drafting = false
+            // Only if the editor still holds what was there: a word he typed meanwhile wins.
+            if let t = d.text, rules.canDraft(editor: text, plain: row.draft, lastDraft: lastDraft) { text = t; lastDraft = t }
+            draftLine = d.line
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -462,15 +483,26 @@ private struct MailChaseRowView: View {
                         .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
                         .accessibilityLabel("Chase \(row.from)")
                     Text(row.replyLine).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    if let line = draftLine {
+                        Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            .transition(.opacity)
+                    }
                     if problem == MailNeedsRules.shared.REPLY_TOO_LONG {
                         Text(MailNeedsRules.shared.REPLY_TOO_LONG).font(MekaType.itemMeta).foregroundStyle(palette.critical)
                     }
                     HStack(spacing: MekaSpace.xs) {
                         MailNeedsPill(label: MailNeedsRules.shared.SEND, palette: palette,
                                       spoken: "Send this chase to \(row.from) now",
-                                      action: { send(text) { chasing = false } })
-                            .disabled(problem != nil)
+                                      action: { send(text) { chasing = false; lastDraft = nil; draftLine = nil } })
+                            .disabled(problem != nil || drafting)
                             .keyboardShortcut(.return, modifiers: .command)
+                        if rules.canDraft(editor: text, plain: row.draft, lastDraft: lastDraft) {
+                            MailNeedsPill(label: drafting ? rules.DRAFTING : rules.label(editor: text, lastDraft: lastDraft),
+                                          palette: palette, quiet: true,
+                                          spoken: "Let Navilife write the chase to \(row.from) from your email; nothing is sent",
+                                          action: { MekaHaptics.tick(); writeChase() })
+                                .disabled(drafting)
+                        }
                         MailNeedsPill(label: MailNeedsRules.shared.CANCEL, palette: palette, quiet: true,
                                       spoken: "Close the chase without sending", action: { chasing = false })
                     }
@@ -481,8 +513,13 @@ private struct MailChaseRowView: View {
             HStack(spacing: MekaSpace.xs) {
                 if !chasing {
                     MailNeedsPill(label: MailChaseRules.shared.CHASE, palette: palette,
-                                  spoken: "Chase \(row.from) by email; Navilife has drafted it, nothing is sent until you tap Send",
-                                  action: { text = row.draft; chasing = true })
+                                  spoken: "Chase \(row.from) by email; Navilife drafts it, nothing is sent until you tap Send",
+                                  action: {
+                                      if lastDraft == nil { text = row.draft }
+                                      chasing = true
+                                      // A fresh chase asks the AI once for one written from the email; the plain one shows meanwhile.
+                                      if rules.autoDraft(row: row) && lastDraft == nil { writeChase() }
+                                  })
                 }
                 MailNeedsPill(label: MailChaseRules.shared.GOT_IT, palette: palette,
                               spoken: "Got it: \(row.title) arrived, off Waiting for", action: got)
@@ -492,6 +529,7 @@ private struct MailChaseRowView: View {
             .padding(.top, MekaSpace.xxs)
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: chasing)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: draftLine)
         .onAppear {
             // A chase that didn't send opens again with his words.
             if row.notice != nil { text = row.draft; chasing = true }

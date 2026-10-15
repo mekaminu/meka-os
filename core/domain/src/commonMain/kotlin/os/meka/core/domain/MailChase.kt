@@ -236,3 +236,36 @@ object MailChaseRules {
         )
     }
 }
+
+/**
+ * Follow-up radar, slice 5: **the chase written by Navilife's AI** (Meka, 2026-10-12: "a chase drafted"). Non-AI, pure,
+ * unit-tested.
+ *
+ * When **Chase** opens the editor on a row in "Time to chase" still holding Navilife's plain chase ([MailChaseRow.draft],
+ * no failure or reply notice), the device asks MEKA's AI once (`POST /v1/ai/mail-draft` with a `chase`, metered
+ * `mail.chase`) with what the row already knows — who, the subject or what he's waiting for, since when, whether it was
+ * chased before, his name to sign with and a few of his own sent replies for tone. The chase comes back into the editor
+ * (checked like Draft it: [MailDraftRules.check]) and the plain one stays when the AI is off, over budget, offline or the
+ * draft is unusable, with a line saying so. It is sent only by his tap on Send (Level 3), and never over his own words:
+ * [canDraft] holds while the editor is empty, or still holds the plain chase or the AI's last chase unchanged.
+ */
+object MailChaseDraftRules {
+    const val DRAFTING = "Writing the chase…"
+    const val AGAIN = "Another draft"
+    const val DRAFT = "Draft it"
+    const val DRAFTED_LINE = "Navilife wrote this from your email · change anything · it goes only when you tap Send"
+    const val UNUSABLE_LINE = "Navilife couldn't write this one · the plain chase is kept"
+
+    /** Opening the editor drafts by itself only for a fresh chase (no failed send or reply to show). */
+    fun autoDraft(row: MailChaseRow): Boolean = row.notice == null
+
+    /** Never over his own words: the editor is empty, or still the plain chase, or still the AI's last chase. */
+    fun canDraft(editor: String, plain: String, lastDraft: String?): Boolean {
+        val t = editor.trim()
+        return t.isEmpty() || t == plain.trim() || (lastDraft != null && t == lastDraft.trim())
+    }
+
+    /** [AGAIN] once the editor holds the AI's chase, else [DRAFT]. */
+    fun label(editor: String, lastDraft: String?): String =
+        if (lastDraft != null && editor.trim() == lastDraft.trim()) AGAIN else DRAFT
+}

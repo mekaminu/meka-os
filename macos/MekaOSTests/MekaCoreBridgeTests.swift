@@ -2998,6 +2998,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(unknownGot, MailChaseRules.shared.UNKNOWN)
         let unknownNotYet = try await core.notYetMailChase(id: "nothing")
         XCTAssertEqual(unknownNotYet, MailChaseRules.shared.UNKNOWN)
+        // Follow-up radar, slice 5: the AI's chase on an unknown id brings no text; its rules reach Swift.
+        let unknownChaseDraft = try await core.draftMailChase(id: "nothing")
+        XCTAssertNil(unknownChaseDraft.text)
+        XCTAssertEqual(unknownChaseDraft.line, MailChaseRules.shared.UNKNOWN)
+        XCTAssertTrue(MailChaseDraftRules.shared.canDraft(editor: "Plain", plain: "Plain", lastDraft: nil))
+        XCTAssertFalse(MailChaseDraftRules.shared.canDraft(editor: "My words", plain: "Plain", lastDraft: "AI"))
+        XCTAssertEqual(MailChaseDraftRules.shared.label(editor: "AI", lastDraft: "AI"), MailChaseDraftRules.shared.AGAIN)
         try await core.undoMailChase()
         XCTAssertEqual(MailChaseRules.shared.headline(n: 2), "2 to chase by email")
         XCTAssertEqual(MailChaseRules.shared.draft(from: "Sam Taylor", shownName: nil),

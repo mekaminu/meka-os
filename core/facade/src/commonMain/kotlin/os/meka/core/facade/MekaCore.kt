@@ -4759,6 +4759,64 @@ class MekaCore(
         return os.meka.core.domain.MailDraft(text, R.DRAFTED_LINE)
     }
 
+    /**
+     * Follow-up radar, slice 5: **the chase written by the AI** in "Time to chase". One call to MEKA's AI
+     * (`POST /v1/ai/mail-draft` with a `chase`, metered `mail.chase`) with what the row knows: who, the email's subject
+     * (and, for an email he received, its preview), what he's waiting for, since when, whether he chased before, his
+     * name from About you to sign with, and up to three of his own sent replies for tone. Nothing is written or sent:
+     * the checked chase goes back to the editor, and only his Send sends it ([chaseMailItem]). AI off, over budget,
+     * offline or an unusable chase: no text (the editor keeps the plain chase) and a line saying so.
+     */
+    suspend fun draftMailChase(id: String): os.meka.core.domain.MailDraft {
+        val R = os.meka.core.domain.MailDraftRules
+        val D = os.meka.core.domain.MailChaseDraftRules
+        val codec = os.meka.core.wire.MailDraftCodec
+        val cal = ZoneCalendar(timeZone)
+        val request = onCore {
+            val row = chaseRow(id) ?: return@onCore null
+            val waiting = lists.waitingItems().firstOrNull { it.id == row.waitingId } ?: return@onCore null
+            val items = activity.mailItems()
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            val name = aboutYou.profile().shownName?.trim()?.takeIf { it.isNotEmpty() }?.take(codec.MAX_SIGN)
+            val base = os.meka.core.wire.MailDraftCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}"
+                    .take(os.meka.core.wire.MessageRequestCodec.MAX_NOW),
+                account = "", business = false, from = row.from.take(codec.MAX_FROM), subject = "",
+                examples = R.examples(items).map { it.take(codec.MAX_EXAMPLE) }.take(codec.MAX_EXAMPLES),
+                what = waiting.title.trim().takeIf { it.isNotEmpty() }?.take(codec.MAX_SUBJECT),
+                chasedBefore = waiting.lastChasedMs != null, sign = name,
+            )
+            val find = activity.mailFinds().firstOrNull { it.id == id }
+            val req = if (find != null) {
+                base.copy(
+                    account = find.account.take(codec.MAX_ACCOUNT), business = row.business,
+                    subject = (find.subject ?: "").trim().take(codec.MAX_SUBJECT), chase = codec.CHASE_FOLLOW_UP,
+                    since = os.meka.core.domain.CivilDate.shortLabel(find.receivedDay).take(codec.MAX_SINCE),
+                )
+            } else {
+                val item = items.firstOrNull { it.id == id } ?: return@onCore null
+                base.copy(
+                    account = item.account.take(codec.MAX_ACCOUNT), business = row.business,
+                    from = item.from.take(codec.MAX_FROM), subject = item.subject.trim().take(codec.MAX_SUBJECT),
+                    preview = item.preview?.trim()?.takeIf { it.isNotEmpty() }?.take(codec.MAX_PREVIEW), chase = codec.CHASE_WAITING,
+                    since = os.meka.core.domain.CivilDate.shortLabel(cal.epochDayOf(waiting.sinceMs)).take(codec.MAX_SINCE),
+                )
+            }
+            req.takeIf { it.account.isNotEmpty() && it.from.isNotBlank() }
+        } ?: return os.meka.core.domain.MailDraft(null, os.meka.core.domain.MailChaseRules.UNKNOWN)
+        val api = aiApi ?: return os.meka.core.domain.MailDraft(null, os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val reply = try { api.mailDraft(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return os.meka.core.domain.MailDraft(null, os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return os.meka.core.domain.MailDraft(null, os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        val text = R.check(reply.draft) ?: return os.meka.core.domain.MailDraft(null, D.UNUSABLE_LINE)
+        return os.meka.core.domain.MailDraft(text, D.DRAFTED_LINE)
+    }
+
     // ---- Inbox autopilot, slice 7: the ten-minute inbox ----
 
     private fun mailMomentSetting(): os.meka.core.domain.MailMomentSetting = os.meka.core.domain.MailMomentRules.read(

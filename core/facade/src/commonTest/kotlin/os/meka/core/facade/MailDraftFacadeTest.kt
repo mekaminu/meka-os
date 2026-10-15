@@ -5,6 +5,7 @@ import kotlinx.datetime.TimeZone
 import os.meka.core.domain.AskContext
 import os.meka.core.domain.AskRules
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MailDraft
 import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.TalkTurn
@@ -63,6 +64,68 @@ class MailDraftFacadeTest {
         val id = MailNeedsRules.itemId("acc1", message)
         serverWrite(id, MailNeedsRules.serverFields(account, from, "sam@example.com", subject, "Are you still OK to drive on Saturday?", now - hour, 1))
         return id
+    }
+
+    @Test
+    fun theChaseIsWrittenFromWhatTheRowKnowsAndNothingIsSent() = runTest {
+        val sentDay = os.meka.core.domain.CivilDate.toEpochDay(2026, 10, 12)
+        val fu = os.meka.core.domain.MailFollowUpRules.read(
+            os.meka.core.domain.MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 5 * 86_400_000L),
+            setOf("alex@example.com"), false,
+        )!!
+        val fid = os.meka.core.domain.MailFollowUpRules.findId("acc1", "s1")
+        os.meka.core.domain.MailFollowUpRules.serverFields(fu, "Business", "Quote for the website", sentDay).forEach { (f, v) ->
+            serverOps.append(Op("srvmd${k++}", "hh", EntityTypes.MAIL_FIND, fid, f, v, clock.now(), emptyList(), "server"))
+        }
+        val fold = core()
+        assertTrue(fold.syncNow())
+        fold.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Alex")
+        fold.addMailFind(fid)
+        val row = fold.mailChases.value!!.rows.single()
+        assertTrue(os.meka.core.domain.MailChaseDraftRules.autoDraft(row))
+        server.reply = MailDraftCodec.Response("answered", "Hi Sam,\n\nJust checking in on the website quote — any news?\n\nThanks,\nAlex")
+        assertTrue(fold.syncNow())
+        val opsBefore = serverOps.after("hh", 0, 100_000).size
+
+        val d = fold.draftMailChase(fid)
+        assertEquals("Hi Sam,\n\nJust checking in on the website quote — any news?\n\nThanks,\nAlex", d.text)
+        assertEquals(os.meka.core.domain.MailChaseDraftRules.DRAFTED_LINE, d.line)
+        val asked = server.sent.single()
+        assertEquals(MailDraftCodec.CHASE_FOLLOW_UP, asked.chase)
+        assertEquals("Sam Taylor", asked.from)
+        assertEquals("Quote for the website", asked.subject)
+        assertEquals("Business", asked.account)
+        assertEquals(row.business, asked.business)
+        assertEquals(row.title, asked.what)
+        assertEquals("Mon 12 Oct", asked.since)
+        assertEquals("Alex", asked.sign)
+        assertNull(asked.preview)
+        // Nothing written or sent by drafting: the row is still there and the server has no new op.
+        assertTrue(fold.syncNow())
+        assertEquals(opsBefore, serverOps.after("hh", 0, 100_000).size)
+        assertEquals(listOf(fid), fold.mailChases.value!!.rows.map { it.id })
+
+        // An email he received, on Waiting for and due: chased in reply to their email, with its preview.
+        val a = email("m1", "Jo Bloggs", "Signed contract")
+        assertTrue(fold.syncNow())
+        fold.waitingFromMailItem(a)
+        now += 4 * 24 * hour
+        fold.draftMailChase(a)
+        val waiting = server.sent.last()
+        assertEquals(MailDraftCodec.CHASE_WAITING, waiting.chase)
+        assertEquals("Jo Bloggs", waiting.from)
+        assertEquals("Signed contract", waiting.subject)
+        assertEquals("Are you still OK to drive on Saturday?", waiting.preview)
+        assertEquals("Sat 17 Oct", waiting.since)
+
+        // A usable answer only: a link drops it whole and the plain chase stays; AI off and offline say why.
+        server.reply = MailDraftCodec.Response("answered", "Hi Sam, see https://example.com")
+        assertEquals(MailDraft(null, os.meka.core.domain.MailChaseDraftRules.UNUSABLE_LINE), fold.draftMailChase(fid))
+        server.reply = MailDraftCodec.Response("off", reason = "Navilife's AI is off")
+        assertNull(fold.draftMailChase(fid).text)
+        server.down = true
+        assertEquals(MailDraft(null, AskRules.OFFLINE_LINE), fold.draftMailChase(fid))
+        assertEquals(os.meka.core.domain.MailChaseRules.UNKNOWN, fold.draftMailChase("nothing").line)
     }
 
     @Test

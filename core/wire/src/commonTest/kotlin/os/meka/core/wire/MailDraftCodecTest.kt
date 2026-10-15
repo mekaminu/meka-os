@@ -24,6 +24,20 @@ class MailDraftCodecTest {
     }
 
     @Test
+    fun aChaseRoundTripsAndAnOlderRequestIsAReply() {
+        val chase = request.copy(
+            preview = null, chase = MailDraftCodec.CHASE_FOLLOW_UP, what = "Reply about the quote", since = "Mon 12 Oct",
+            chasedBefore = true, sign = "Alex",
+        )
+        assertEquals(chase, MailDraftCodec.decodeRequest(MailDraftCodec.encodeRequest(chase)))
+        val waiting = request.copy(chase = MailDraftCodec.CHASE_WAITING, what = "Signed contract")
+        assertEquals(waiting, MailDraftCodec.decodeRequest(MailDraftCodec.encodeRequest(waiting)))
+        // A reply carries none of the chase's keys, so it reads as before.
+        val reply = MailDraftCodec.encodeRequest(request)
+        listOf("chase", "what", "since", "chasedBefore", "sign").forEach { k -> kotlin.test.assertFalse("\"$k\"" in reply, k) }
+    }
+
+    @Test
     fun aRequestOutsideTheLimitsIsRefused() {
         val bad = listOf(
             request.copy(date = "13/10/2026"),
@@ -34,6 +48,10 @@ class MailDraftCodecTest {
             request.copy(preview = "x".repeat(MailDraftCodec.MAX_PREVIEW + 1)),
             request.copy(examples = List(MailDraftCodec.MAX_EXAMPLES + 1) { "Reply $it" }),
             request.copy(examples = listOf("x".repeat(MailDraftCodec.MAX_EXAMPLE + 1))),
+            request.copy(chase = "nag"),
+            request.copy(chase = MailDraftCodec.CHASE_WAITING, what = "x".repeat(MailDraftCodec.MAX_SUBJECT + 1)),
+            request.copy(chase = MailDraftCodec.CHASE_WAITING, since = "x".repeat(MailDraftCodec.MAX_SINCE + 1)),
+            request.copy(chase = MailDraftCodec.CHASE_WAITING, sign = "x".repeat(MailDraftCodec.MAX_SIGN + 1)),
         )
         bad.forEach { b -> assertFailsWith<WireFormatException> { MailDraftCodec.decodeRequest(MailDraftCodec.encodeRequest(b)) } }
     }

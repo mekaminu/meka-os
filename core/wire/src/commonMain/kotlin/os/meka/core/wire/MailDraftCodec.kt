@@ -31,6 +31,11 @@ object MailDraftCodec {
     /** What is read of a model's answer at most (the device keeps 1,200). */
     const val MAX_DRAFT = 2_000
     const val MAX_REASON = 300
+    /** Follow-up radar, slice 5: what [Request.chase] may be. */
+    const val CHASE_FOLLOW_UP = "follow_up"
+    const val CHASE_WAITING = "waiting"
+    const val MAX_SINCE = 40
+    const val MAX_SIGN = 80
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -44,6 +49,19 @@ object MailDraftCodec {
         val subject: String,
         val preview: String? = null,
         val examples: List<String> = emptyList(),
+        /**
+         * Follow-up radar, slice 5: a chase rather than a reply. [CHASE_FOLLOW_UP]: his own email ([from] is who he
+         * wrote to, [subject] his subject) has had no answer; [CHASE_WAITING]: [from] said they'd send or do [what] and
+         * hasn't. Null for a reply (slice 6b-2b).
+         */
+        val chase: String? = null,
+        /** What he's waiting for (the Waiting for item's title). */
+        val what: String? = null,
+        /** When he wrote, or since when he's waited: "Mon 12 Oct". */
+        val since: String? = null,
+        val chasedBefore: Boolean = false,
+        /** His name as About you shows it ("Alex"), for the chase to be signed with; null signs "Thanks". */
+        val sign: String? = null,
     )
 
     /** [state]: the same states as Ask's; [draft] only when answered. */
@@ -59,6 +77,11 @@ object MailDraftCodec {
         put("subject", r.subject)
         r.preview?.let { put("preview", it) }
         putJsonArray("examples") { r.examples.forEach { add(JsonPrimitive(it)) } }
+        r.chase?.let { put("chase", it) }
+        r.what?.let { put("what", it) }
+        r.since?.let { put("since", it) }
+        if (r.chasedBefore) put("chasedBefore", true)
+        r.sign?.let { put("sign", it) }
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("mail draft request") {
@@ -83,7 +106,16 @@ object MailDraftCodec {
             t
         }
         require(examples.size <= MAX_EXAMPLES) { "examples" }
-        Request(date, now, account, business, from, subject, preview, examples)
+        val chase = o.optTrim("chase")
+        require(chase == null || chase == CHASE_FOLLOW_UP || chase == CHASE_WAITING) { "chase" }
+        val what = o.optTrim("what")
+        require(what == null || what.length <= MAX_SUBJECT) { "what" }
+        val since = o.optTrim("since")
+        require(since == null || since.length <= MAX_SINCE) { "since" }
+        val chasedBefore = (o["chasedBefore"] as? JsonPrimitive)?.booleanOrNull ?: false
+        val sign = o.optTrim("sign")
+        require(sign == null || sign.length <= MAX_SIGN) { "sign" }
+        Request(date, now, account, business, from, subject, preview, examples, chase, what, since, chasedBefore, sign)
     }
 
     fun encodeResponse(r: Response): String = buildJsonObject {
@@ -119,6 +151,9 @@ object MailDraftCodec {
 
     private fun JsonObject.str(k: String): String =
         (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw IllegalArgumentException(k)
+
+    private fun JsonObject.optTrim(k: String): String? =
+        (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
 
     private fun JsonObject.optStr(k: String, max: Int): String? =
         (this[k] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.take(max)

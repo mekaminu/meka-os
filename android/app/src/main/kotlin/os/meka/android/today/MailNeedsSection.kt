@@ -50,6 +50,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.core.domain.MailChaseCard
+import os.meka.core.domain.MailChaseDraftRules
 import os.meka.core.domain.MailChaseRow
 import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailDraft
@@ -413,6 +414,7 @@ internal fun MailChaseSection(
                             row,
                             onGot = { haptics.medium(); answer { core.gotMailChase(row.id) } },
                             onNotYet = { haptics.light(); answer { core.notYetMailChase(row.id) } },
+                            onDraft = { core.draftMailChase(row.id) },
                             onSend = { text, sent ->
                                 haptics.medium()
                                 scope.launch {
@@ -433,11 +435,31 @@ internal fun MailChaseSection(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MailChaseRowView(row: MailChaseRow, onGot: () -> Unit, onNotYet: () -> Unit, onSend: (String, () -> Unit) -> Unit) {
+private fun MailChaseRowView(
+    row: MailChaseRow, onGot: () -> Unit, onNotYet: () -> Unit, onDraft: suspend () -> MailDraft, onSend: (String, () -> Unit) -> Unit,
+) {
     val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
     // A chase that didn't send opens again with his words.
     var chasing by rememberSaveable(row.id, row.notice) { mutableStateOf(row.notice != null) }
     var text by rememberSaveable(row.id, row.draft) { mutableStateOf(row.draft) }
+    // Follow-up radar, slice 5: the AI's last chase (never written over his own words) and the line under the editor.
+    var lastDraft by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
+    var draftLine by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
+    var drafting by remember { mutableStateOf(false) }
+    fun draft() {
+        if (drafting || !MailChaseDraftRules.canDraft(text, row.draft, lastDraft)) return
+        drafting = true
+        draftLine = MailChaseDraftRules.DRAFTING
+        scope.launch {
+            val d = runCatching { onDraft() }.getOrNull()
+            drafting = false
+            // Only if the editor still holds what was there: a word he typed meanwhile wins.
+            if (d?.text != null && MailChaseDraftRules.canDraft(text, row.draft, lastDraft)) { text = d.text!!; lastDraft = d.text }
+            draftLine = d?.line ?: MailChaseDraftRules.UNUSABLE_LINE
+        }
+    }
     Column(Modifier.fillMaxWidth().testTag("mail-chase-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -476,12 +498,23 @@ private fun MailChaseRowView(row: MailChaseRow, onGot: () -> Unit, onNotYet: () 
                     )
                 }
                 Text(row.replyLine, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                // The AI's line cross-fades in under the editor (reduced motion: the plain fade).
+                AnimatedContent(draftLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-chase-draft-line") { line ->
+                    if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-chase-draft-line"))
+                }
                 if (problem == MailNeedsRules.REPLY_TOO_LONG) Text(problem, style = MekaType.itemMeta, color = Meka.colors.critical)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     MailNeedsPill(
-                        MailNeedsRules.SEND, enabled = problem == null,
-                        spoken = "Send this chase to ${row.from} now", onClick = { onSend(text) { chasing = false } },
+                        MailNeedsRules.SEND, enabled = problem == null && !drafting,
+                        spoken = "Send this chase to ${row.from} now", onClick = { onSend(text) { chasing = false; lastDraft = null; draftLine = null } },
                     )
+                    if (MailChaseDraftRules.canDraft(text, row.draft, lastDraft)) {
+                        MailNeedsPill(
+                            if (drafting) MailChaseDraftRules.DRAFTING else MailChaseDraftRules.label(text, lastDraft), quiet = true, enabled = !drafting,
+                            spoken = "Let Navilife write the chase to ${row.from} from your email; nothing is sent",
+                            onClick = { haptics.light(); draft() },
+                        )
+                    }
                     MailNeedsPill(MailNeedsRules.CANCEL, quiet = true, spoken = "Close the chase without sending", onClick = { chasing = false })
                 }
             }
@@ -490,7 +523,11 @@ private fun MailChaseRowView(row: MailChaseRow, onGot: () -> Unit, onNotYet: () 
             Modifier.padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            if (!chasing) MailNeedsPill(MailChaseRules.CHASE, spoken = "Chase ${row.from} by email; Navilife has drafted it, nothing is sent until you tap Send", onClick = { chasing = true })
+            if (!chasing) MailNeedsPill(
+                MailChaseRules.CHASE, spoken = "Chase ${row.from} by email; Navilife drafts it, nothing is sent until you tap Send",
+                // Opening a fresh chase asks the AI once for one written from the email; the plain one shows meanwhile.
+                onClick = { chasing = true; if (MailChaseDraftRules.autoDraft(row) && lastDraft == null) draft() },
+            )
             MailNeedsPill(MailChaseRules.GOT_IT, spoken = "Got it: ${row.title} arrived, off Waiting for", onClick = onGot)
             MailNeedsPill(MailChaseRules.NOT_YET, quiet = true, spoken = "Not yet: chase ${row.from} again in 3 days", onClick = onNotYet)
         }
