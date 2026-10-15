@@ -175,4 +175,18 @@ final class ShellNavTests: XCTestCase {
         XCTAssertEqual(ShellNav.dailyLine(.brief, lines: nil).text, MoreItem.brief.line)
         XCTAssertNil(ShellNav.dailyRow(.review))
     }
+
+    /// Meka, 2026-10-15: clicking a sidebar row didn't switch screens. Every row goes to its own screen, from any other.
+    @MainActor
+    func testEverySidebarRowSwitchesToItsScreen() {
+        XCTAssertEqual(ShellNav.sidebarRows.map(\.label),
+                       ["Today", "Needs you", "Calendar", "Ask", "Lists", "Goals", "Review", "Vault"])
+        XCTAssertEqual(Set(ShellNav.sidebarRows), Set(ShellDestination.allCases))
+        for from in ShellDestination.allCases {
+            for row in ShellNav.sidebarRows {
+                XCTAssertEqual(ShellNav.sidebarPick(row, current: from), row == from ? nil : row)
+            }
+            XCTAssertNil(ShellNav.sidebarPick(nil, current: from))
+        }
+    }
 }

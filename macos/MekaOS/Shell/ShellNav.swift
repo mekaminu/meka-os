@@ -248,6 +248,16 @@ enum ShellNav {
     /// The lit tab: itself, or Ask for a place reached from More.
     static func barSelection(_ current: ShellDestination) -> ShellDestination { parent(current) ?? current }
 
+    /// Every sidebar row on the Mac, top to bottom: the four tabs, then More's places (Lists · Goals · Review · Vault).
+    static var sidebarRows: [ShellDestination] { tabs + ShellDestination.allCases.filter { parent($0) != nil } }
+
+    /// Where a sidebar click goes (Meka, 2026-10-15: the sidebar's rows didn't switch screens on macOS 27): the
+    /// clicked row, or nil when there's nothing to do (no row, or the screen already showing).
+    static func sidebarPick(_ picked: ShellDestination?, current: ShellDestination) -> ShellDestination? {
+        guard let picked, picked != current else { return nil }
+        return picked
+    }
+
     /// +1 forward (content arrives from the trailing edge), -1 back, 0 for no change.
     static func direction(from: ShellDestination, to: ShellDestination) -> Int {
         max(-1, min(1, to.rawValue - from.rawValue))

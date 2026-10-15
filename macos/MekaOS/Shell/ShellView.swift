@@ -1,4 +1,5 @@
 @preconcurrency import MekaKit
+import OSLog
 import SwiftUI
 
 /// The Mac shell (build plan M1; Four tabs, one front door): a sidebar with the four tabs (Today · Needs you · Calendar ·
@@ -11,22 +12,29 @@ struct ShellView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     private var palette: MekaPalette { scheme == .dark ? .dark : .light }
 
+    /// The sidebar's own selection, a plain stored value (Meka, 2026-10-15: on macOS 27 a List bound to a computed
+    /// Binding into the model never switched screens). It follows the model, and a change made here goes to it.
+    @State private var sidebarPick: ShellDestination? = .today
+
     var body: some View {
         NavigationSplitView {
-            List(selection: selection) {
+            List(selection: $sidebarPick) {
                 ForEach(ShellNav.destinations(.rail)) { d in
-                    Label { Text(d.label) } icon: { TabIconView(symbol: d.symbol, lit: model.destination == d) }
+                    sidebarRow(d)
                         .badge(d == .needsYou ? ShellNav.badge(needsYouCount).map { Text($0) } : nil)
                         .accessibilityLabel(ShellNav.accessibilityLabel(d, needsYouCount: needsYouCount))
                         .tag(d as ShellDestination?)
                 }
                 Section("More") {
-                    ForEach(ShellDestination.allCases.filter { ShellNav.parent($0) != nil }) { d in
-                        Label { Text(d.label) } icon: { TabIconView(symbol: d.symbol, lit: model.destination == d) }
+                    ForEach(ShellNav.sidebarRows.filter { ShellNav.parent($0) != nil }) { d in
+                        sidebarRow(d)
                             .tag(d as ShellDestination?)
                     }
                 }
             }
+            .onChange(of: sidebarPick) { _, picked in go(picked, via: "selection") }
+            // ⌘1–⌘8, the command bar, search and notifications move the model; the highlight follows.
+            .onChange(of: model.destination, initial: true) { _, now in if sidebarPick != now { sidebarPick = now } }
             .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
         } detail: {
             ZStack {
@@ -57,13 +65,23 @@ struct ShellView: View {
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).
     private var needsYouCount: Int { (model.today?.needsYou.count ?? 0) + model.listsDue + model.approvals.count + model.requests.count + Int(TriageChatRules.shared.replyChats(cards: model.triage)) + model.needsYouAsks }
 
-    /// Sidebar selection that animates the switch (the List only ever sets a value; nil is ignored).
-    private var selection: Binding<ShellDestination?> {
-        Binding(
-            get: { model.destination },
-            set: { new in if let new { model.go(to: new, reduced: reduceMotion) } }
-        )
+    /// A sidebar row: the whole row width takes the click, and a click switches straight away as well as selecting
+    /// (a simultaneous tap, so the List's own selection still works; whichever comes first wins, the other is a no-op).
+    private func sidebarRow(_ d: ShellDestination) -> some View {
+        Label { Text(d.label) } icon: { TabIconView(symbol: d.symbol, lit: model.destination == d) }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .simultaneousGesture(TapGesture().onEnded { go(d, via: "click") })
     }
+
+    /// Animates the switch; nil or the screen already showing does nothing.
+    private func go(_ picked: ShellDestination?, via: String) {
+        guard let to = ShellNav.sidebarPick(picked, current: model.destination) else { return }
+        ShellView.log.debug("sidebar \(via, privacy: .public) → \(to.label, privacy: .public)")
+        model.go(to: to, reduced: reduceMotion)
+    }
+
+    private static let log = Logger(subsystem: "os.meka.MekaOS", category: "shell")
 
     private var transition: AnyTransition {
         if reduceMotion || model.lastDirection == 0 { return .opacity }
