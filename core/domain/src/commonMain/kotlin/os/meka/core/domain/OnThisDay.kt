@@ -114,8 +114,9 @@ object OnThisDayRules {
         if (kept.isEmpty()) return emptyList()
         val camera = kept.any(::fromCamera)
         val usable = if (camera) kept.filter(::fromCamera) else kept
-        val years = usable.groupBy { byDay.getValue(it.localEpochDay) }.toSortedMap()
-        val yearKeys = years.keys.toList()
+        val years = usable.groupBy { byDay.getValue(it.localEpochDay) }
+        // Sorted by hand: toSortedMap is JVM-only and breaks the Mac's Kotlin/Native build.
+        val yearKeys = years.keys.sorted()
         val start = (todayEpochDay.mod(yearKeys.size.toLong())).toInt()
         val rotated = yearKeys.drop(start) + yearKeys.take(start)
         val perYear = rotated.map { y ->
