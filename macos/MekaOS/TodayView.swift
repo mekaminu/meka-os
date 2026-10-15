@@ -131,6 +131,10 @@ struct TodayView: View {
                             .accessibilityLabel("Weather: " + (model.weather?.nowSpoken ?? line))
                             .staggeredAppear(0, play: play)
                     }
+                    // Mac presentation pass, slice 2 (item 4): what's left to set up and anything Health needs, as one
+                    // quiet line under the greeting ("Finish setting up · 4 steps · notifications are off · Open Setup ›").
+                    MacSetupLineView(palette: palette)
+                        .staggeredAppear(0, play: play)
                     // The trains on an office day's commute (Places item 4, TfL line status), lit in the accent when a
                     // line isn't running well; cross-fades as it changes.
                     if let route = model.weather?.route {
@@ -284,12 +288,6 @@ struct TodayView: View {
                         SignInLineView(line: line, palette: palette)
                             .staggeredAppear(0, play: play)
                     }
-                    // Anything else MEKA depends on that needs a look (Reliability first, item 3): one line, opens Health.
-                    HealthTodayLine(palette: palette)
-                        .staggeredAppear(0, play: play)
-                    // Setup checklist: a card while something is left to set up ("Not today" hides it until tomorrow).
-                    SetupTodayCard(palette: palette)
-                        .staggeredAppear(0, play: play)
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())
@@ -576,9 +574,14 @@ struct TodayView: View {
                 introPlayed = true
             }
             // News ticker (news ticker, slice 2): the drifting strip at the foot of Today; Appearance → News ticker.
-            NewsTickerStrip(palette: palette)
-                .padding(.horizontal, MekaSpace.m)
-                .padding(.top, MekaSpace.m)
+            // Mac presentation pass, slice 2 (item 5): only when Today stands alone; beside or under it the News list
+            // already has the same stories.
+            if width > 0, MacHeaderRules.shared.tickerInToday(layout: MacCommandCentreRules.shared.layout(contentWidthPt: Float(width))) {
+                NewsTickerStrip(palette: palette)
+                    .padding(.horizontal, MekaSpace.m)
+                    .padding(.top, MekaSpace.m)
+                    .transition(.opacity)
+            }
             CaptureField(palette: palette)
                 .padding(MekaSpace.m)
         }

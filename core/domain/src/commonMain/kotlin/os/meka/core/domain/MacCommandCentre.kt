@@ -84,3 +84,64 @@ object MacCommandCentreRules {
 
 /** The fades a scrolling column shows at its edges. */
 data class EdgeFades(val top: Boolean, val bottom: Boolean)
+
+/** What the Mac's one quiet setup line opens. */
+enum class MacHeaderOpens { SETUP, HEALTH }
+
+/**
+ * The Mac's one line under the greeting (Mac presentation pass, slice 2, item 4): "Finish setting up · 4 steps ·
+ * notifications are off" with Open Setup, in place of a red Health line plus a Setup card. [critical] only when there
+ * is nothing to set up and Health has something broken (then it is Health's own line, as before).
+ */
+data class MacSetupLine(
+    val text: String,
+    val action: String,
+    val opens: MacHeaderOpens,
+    val critical: Boolean,
+    val spoken: String,
+)
+
+/**
+ * The Mac's Today header (Mac presentation pass, slice 2; Meka 2026-10-15 13:48): greeting, date and weather on the
+ * left and the clock on the right, with the setup card and Health's line merged into one quiet line under them; no
+ * news ticker where the News list already shows (the Fold keeps its ticker); and the sidebar shown when the window
+ * opens wide.
+ */
+object MacHeaderRules {
+    /** A window at least this wide opens with the sidebar showing (still collapsible). */
+    const val SIDEBAR_PT = 1200f
+
+    fun sidebarOnOpen(windowWidthPt: Float): Boolean = windowWidthPt >= SIDEBAR_PT
+
+    /** The drifting ticker only when Today stands alone; otherwise the News list beside or under it has the stories. */
+    fun tickerInToday(layout: CommandLayout): Boolean = layout == CommandLayout.SINGLE
+
+    /**
+     * The one line, or null when nothing is left to set up and nothing needs a look. [setupShown] is the Setup card's
+     * own rule (something left, not hidden with Not today); [stepsLeft] its count.
+     */
+    fun setupLine(setupShown: Boolean, stepsLeft: Int, health: HealthView?): MacSetupLine? {
+        val issues = health?.rows.orEmpty().filter { it.needsLook && !ownLine(it.key) }
+        if (setupShown && stepsLeft > 0) {
+            val steps = if (stepsLeft == 1) "1 step" else "$stepsLeft steps"
+            val issue = when (issues.size) {
+                0 -> null
+                1 -> issuePhrase(issues[0])
+                else -> "${issues.size} things need a look"
+            }
+            val text = listOfNotNull("Finish setting up", steps, issue).joinToString(" · ")
+            val spoken = "Finish setting up: $steps left" + (issue?.let { ", and $it" } ?: "") + "."
+            return MacSetupLine(text, "Open Setup", MacHeaderOpens.SETUP, critical = false, spoken = spoken)
+        }
+        val line = health?.todayLine ?: return null
+        return MacSetupLine(line, "Open Health", MacHeaderOpens.HEALTH, critical = health.critical, spoken = "$line.")
+    }
+
+    /** "notifications are off" for the notifications row being off; else "<title> needs a look". */
+    fun issuePhrase(row: HealthRow): String =
+        if (row.key == "notifications" && row.line.startsWith("Off")) "notifications are off"
+        else row.title + " needs a look"
+
+    /** As Health's own Today line: battery and sign-ins have their own lines, About you is Setup's to ask. */
+    private fun ownLine(key: String) = key == "battery" || key == AboutYouRules.HEALTH_KEY || key.startsWith("calendar:")
+}

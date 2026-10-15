@@ -15,9 +15,13 @@ struct ShellView: View {
     /// The sidebar's own selection, a plain stored value (Meka, 2026-10-15: on macOS 27 a List bound to a computed
     /// Binding into the model never switched screens). It follows the model, and a change made here goes to it.
     @State private var sidebarPick: ShellDestination? = .today
+    /// Mac presentation pass, slice 2 (item 8): a window that opens wide (core MacHeaderRules.SIDEBAR_PT) shows the
+    /// sidebar, so the screens are in view on first launch; decided once per window, collapsible as before.
+    @State private var columns: NavigationSplitViewVisibility = .automatic
+    @State private var sidebarDecided = false
 
     var body: some View {
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: $columns) {
             List(selection: $sidebarPick) {
                 ForEach(ShellNav.destinations(.rail)) { d in
                     sidebarRow(d)
@@ -54,12 +58,22 @@ struct ShellView: View {
             }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.showCommandBar)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { openSidebarIfWide($0) }
         .background(palette.background)
         // The shell's sheets, in groups so each one type-checks quickly (one long chain timed out on the Mac CI).
         .modifier(ShellSheetsA(palette: palette))
         .modifier(ShellSheetsB(palette: palette))
         .modifier(ShellSheetsC(palette: palette))
         .modifier(ShellSheetsD(palette: palette))
+    }
+
+    /// The first real width this window gets: wide enough, the sidebar shows (on the expand spring; Reduce Motion: at
+    /// once). Later resizes leave his choice alone.
+    private func openSidebarIfWide(_ width: CGFloat) {
+        guard !sidebarDecided, width > 0 else { return }
+        sidebarDecided = true
+        guard MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: Float(width)), columns != .all else { return }
+        if reduceMotion { columns = .all } else { withAnimation(MekaMotion.expand(reduced: false)) { columns = .all } }
     }
 
     /// Due chases and decision reviews wait on you too, so they count in the badge (as on the Fold).

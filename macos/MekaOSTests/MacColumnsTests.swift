@@ -32,4 +32,20 @@ final class MacColumnsTests: XCTestCase {
         XCTAssertFalse(fits.top)
         XCTAssertFalse(fits.bottom)
     }
+
+    // Mac presentation pass, slice 2: the one setup line, no ticker beside the News list, the sidebar when wide.
+    func testSetupIsOneQuietLineThatOpensSetup() {
+        let line = MacHeaderRules.shared.setupLine(setupShown: true, stepsLeft: 4, health: nil)
+        XCTAssertEqual(line?.text, "Finish setting up · 4 steps")
+        XCTAssertEqual(line?.opens, MacHeaderOpens.setup)
+        XCTAssertEqual(line?.critical, false)
+        XCTAssertNil(MacHeaderRules.shared.setupLine(setupShown: false, stepsLeft: 4, health: nil))
+    }
+
+    func testTickerOnlyWhenTodayStandsAloneAndSidebarWhenWide() {
+        XCTAssertFalse(MacHeaderRules.shared.tickerInToday(layout: rules.layout(contentWidthPt: 1000)))
+        XCTAssertTrue(MacHeaderRules.shared.tickerInToday(layout: rules.layout(contentWidthPt: 500)))
+        XCTAssertFalse(MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: 1000))
+        XCTAssertTrue(MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: 1440))
+    }
 }

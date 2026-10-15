@@ -141,33 +141,3 @@ private struct HealthRowView: View {
     }
 }
 
-/// Today's health line on the Mac (Reliability first, item 3): under the sign-in line, the critical colour when
-/// something is broken, else the accent; clicking it opens Health (the sheet scale-fades). The line cross-fades.
-struct HealthTodayLine: View {
-    @Environment(CoreModel.self) private var model
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-    let palette: MekaPalette
-
-    var body: some View {
-        // A VStack rather than a Group, so the check below runs even while there is no line to show.
-        VStack(alignment: .leading, spacing: 0) {
-            if let view = model.health, let line = view.todayLine {
-                Button {
-                    MekaHaptics.tick()
-                    model.showHealth = true
-                } label: {
-                    Text(line).font(MekaType.caption)
-                        .foregroundStyle(view.critical ? palette.critical : palette.accent)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
-                }
-                .buttonStyle(MekaPressStyle())
-                .accessibilityHint("Opens Health")
-            }
-        }
-        .task { await model.refreshHealth(force: false) }
-    }
-}

@@ -154,54 +154,60 @@ private struct SetupStepView: View {
     }
 }
 
-/// Today's setup card on the Mac (Setup checklist): while something is left, "SET UP MEKA" and the line ("3 steps
-/// left · …") with Open Setup (light haptic; the sheet scale-fades) and Not today (tick haptic; folds away until
-/// tomorrow on the expand spring). Checked on open, the server asked at most every quarter hour.
-struct SetupTodayCard: View {
+/// Today's one quiet line on the Mac (Mac presentation pass, slice 2, item 4; core MacHeaderRules): what's left to set
+/// up and anything Health needs, merged — "Finish setting up · 4 steps · notifications are off" with Open Setup — in
+/// place of a red Health line plus a Setup card. With nothing left to set up it is Health's own line (critical colour
+/// when something is broken) with Open Health. Right-click → Not today hides the setup part until tomorrow (folds away
+/// on the expand spring). The text cross-fades; Setup and Health are checked on open.
+struct MacSetupLineView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @AppStorage(SetupSheet.hiddenKey) private var hiddenDay: Int = Int.min
     let palette: MekaPalette
 
-    private var shown: Bool {
+    private var line: MacSetupLine? {
         let hidden: KotlinLong? = hiddenDay == Int.min ? nil : KotlinLong(longLong: Int64(hiddenDay))
-        return SetupRules.shared.cardShown(view: model.setup, hiddenOnDay: hidden, today: SetupSheet.today())
+        let shown = SetupRules.shared.cardShown(view: model.setup, hiddenOnDay: hidden, today: SetupSheet.today())
+        return MacHeaderRules.shared.setupLine(setupShown: shown, stepsLeft: model.setup?.toDo ?? 0, health: model.health)
     }
 
     var body: some View {
-        // A VStack rather than a Group, so the check below runs even while there is no card to show.
+        // A VStack rather than a Group, so the checks below run even while there is no line to show.
         VStack(alignment: .leading, spacing: 0) {
-            if shown, let line = model.setup?.todayLine {
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text("SET UP Navilife")
-                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                        .foregroundStyle(palette.textTertiary)
-                    Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        .contentTransition(.opacity)
-                        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
-                    HStack(spacing: MekaSpace.m) {
-                        Button("Open Setup") {
-                            MekaHaptics.light()
-                            model.showSetup = true
-                        }
-                        .buttonStyle(MekaPressStyle())
-                        .foregroundStyle(palette.accent)
+            if let line {
+                let setup = line.opens == MacHeaderOpens.setup
+                Button {
+                    MekaHaptics.light()
+                    if setup { model.showSetup = true } else { model.showHealth = true }
+                } label: {
+                    HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                        Text(line.text)
+                            .foregroundStyle(line.critical ? palette.critical : palette.textSecondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: line.text)
+                        Text(line.action + " ›").foregroundStyle(palette.accent).fixedSize()
+                    }
+                    .font(MekaType.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityLabel(line.spoken)
+                .accessibilityHint(setup ? "Opens Setup" : "Opens Health")
+                .contextMenu {
+                    if setup {
                         Button("Not today") {
                             MekaHaptics.tick()
                             withAnimation(MekaMotion.expand(reduced: reduceMotion)) { hiddenDay = Int(SetupSheet.today()) }
                         }
-                        .buttonStyle(MekaPressStyle())
-                        .foregroundStyle(palette.textSecondary)
                     }
-                    .font(MekaType.itemMeta)
                 }
-                .padding(.horizontal, MekaSpace.m)
-                .padding(.vertical, MekaSpace.xs)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
         }
         .task { await model.refreshSetup(force: false) }
+        .task { await model.refreshHealth(force: false) }
     }
 }

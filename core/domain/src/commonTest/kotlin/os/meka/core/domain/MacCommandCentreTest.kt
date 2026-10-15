@@ -97,3 +97,57 @@ class MacCommandCentreTest {
         assertEquals(EdgeFades(top = false, bottom = false), r.edgeFades(-20f, 400f, 600f))
     }
 }
+
+class MacHeaderTest {
+    private val r = MacHeaderRules
+
+    private fun health(vararg rows: HealthRow, todayLine: String? = null, critical: Boolean = false) =
+        HealthView(rows.toList(), "", rows.count { it.needsLook }, critical, todayLine, 0L)
+
+    private val notificationsOff = HealthRow(
+        "notifications", "Notifications", "Off for Navilife in System Settings · nothing can reach this Mac",
+        HealthState.BAD, HealthFix.NOTIFICATIONS_ON, "Turn on",
+    )
+
+    @Test
+    fun setupAndNotificationsOffAreOneQuietLine() {
+        val h = health(notificationsOff, todayLine = "Notifications · Off for Navilife in System Settings", critical = true)
+        val line = r.setupLine(setupShown = true, stepsLeft = 4, health = h)!!
+        assertEquals("Finish setting up · 4 steps · notifications are off", line.text)
+        assertEquals("Open Setup", line.action)
+        assertEquals(MacHeaderOpens.SETUP, line.opens)
+        assertFalse(line.critical)
+        assertEquals("Finish setting up: 4 steps left, and notifications are off.", line.spoken)
+    }
+
+    @Test
+    fun oneStepAndSeveralIssues() {
+        val other = HealthRow("ai", "The AI", "Can't be reached", HealthState.WARN)
+        val battery = HealthRow("battery", "Battery", "Restricted", HealthState.BAD)
+        assertEquals("Finish setting up · 1 step", r.setupLine(true, 1, health(battery))!!.text)
+        assertEquals("Finish setting up · 1 step · The AI needs a look", r.setupLine(true, 1, health(other, battery))!!.text)
+        assertEquals("Finish setting up · 2 steps · 2 things need a look", r.setupLine(true, 2, health(other, notificationsOff))!!.text)
+        assertEquals("Finish setting up · 3 steps", r.setupLine(true, 3, null)!!.text)
+    }
+
+    @Test
+    fun withNothingToSetUpHealthKeepsItsOwnLine() {
+        val h = health(notificationsOff, todayLine = "Notifications · Off for Navilife in System Settings", critical = true)
+        val line = r.setupLine(setupShown = false, stepsLeft = 4, health = h)!!
+        assertEquals("Notifications · Off for Navilife in System Settings", line.text)
+        assertEquals(MacHeaderOpens.HEALTH, line.opens)
+        assertTrue(line.critical)
+        assertEquals(null, r.setupLine(setupShown = false, stepsLeft = 0, health = health()))
+        assertEquals(null, r.setupLine(setupShown = true, stepsLeft = 0, health = null))
+    }
+
+    @Test
+    fun noTickerBesideTheNewsListAndSidebarWhenWide() {
+        assertTrue(r.tickerInToday(CommandLayout.SINGLE))
+        assertFalse(r.tickerInToday(CommandLayout.TWO))
+        assertFalse(r.tickerInToday(CommandLayout.THREE))
+        assertFalse(r.sidebarOnOpen(1000f))
+        assertTrue(r.sidebarOnOpen(1200f))
+        assertTrue(r.sidebarOnOpen(1440f))
+    }
+}
