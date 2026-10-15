@@ -200,6 +200,10 @@ fun AskRoute(
         if (openLeave) { pane = MoreItem.LEAVE; healthApp?.openLeave?.value = false }
     }
     // Sunday's week-ahead heads-up (Sunday week ahead, slice 1) → the Week ahead pane.
+    val openKids by remember(healthApp) { healthApp?.openKids ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openKids) {
+        if (openKids) { pane = MoreItem.KIDS; healthApp?.openKids?.value = false }
+    }
     val openWeekAhead by remember(healthApp) { healthApp?.openWeekAhead ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openWeekAhead) {
         if (openWeekAhead) { pane = MoreItem.WEEK_AHEAD; healthApp?.openWeekAhead?.value = false }

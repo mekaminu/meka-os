@@ -65,6 +65,39 @@ class KidsFacadeTest {
     }
 
     @Test
+    fun theSizeCheckHeadsUpComesOnSaturdayAndAllStillFitAnswersItOnBothApps() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addAboutYouChild("Alex, U7, Oakfield School")
+        fold.setKidSize("Alex", "shoes", "13")
+        fold.syncNow(); mac.syncNow()
+        fun kids(r: os.meka.core.domain.GovernorResult) = r.post.filter { it.source == os.meka.core.domain.NoticeSource.KIDS }
+
+        // Wed 13 Jan 2027: due, but the heads-up waits for Saturday.
+        now += 92L * 86_400_000L
+        mac.tick()
+        assertTrue(kids(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+        // Sat 16 Jan, 09:30.
+        now += 3L * 86_400_000L + 30 * 60_000L
+        mac.tick()
+        val gov = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = kids(gov).single()
+        assertEquals("Time to check Alex's sizes", n.title)
+        assertEquals("Last checked Mon 12 Oct · Shoes 13 · do they still fit?", n.text)
+        assertEquals(listOf(os.meka.core.domain.NoticeAction.ALL_STILL_FIT), n.actions)
+        assertTrue(kids(mac.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty()) // once
+
+        // All still fit on the Mac's heads-up: the check is stamped, gone from the Fold's governor too.
+        assertNull(mac.kidsStillFit("date-night:1:nudge"))
+        assertEquals(KidsRules.fitLine("Alex"), mac.kidsStillFit(n.key))
+        assertEquals("Sizes checked today", mac.kidsView.value.kids.single().checkedLine)
+        mac.syncNow(); fold.syncNow()
+        fold.tick()
+        assertTrue(kids(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+        assertEquals("Alex · shoes 13", fold.lifeLines.value.of(LifeTile.KIDS)?.text)
+    }
+
+    @Test
     fun clubFeesGoOnTheRadarWithPaidRemoveAndUndo() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

@@ -2343,6 +2343,14 @@ final class CoreModel {
             }
             return
         }
+        // The size check: All still fit stamps it on both apps (kids' admin, slice 6).
+        if name == MacNotifier.allStillFitAction {
+            Task {
+                _ = try? await core.kidsStillFit(key: key)
+                MacNotifier.remove(key: key)
+            }
+            return
+        }
         Task {
             guard let action = NotifyRules.shared.actionFromName(name: name),
                   let card = try? await core.answerSessionNotice(key: key, action: action) else {

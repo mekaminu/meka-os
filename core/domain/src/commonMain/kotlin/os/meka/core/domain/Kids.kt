@@ -381,6 +381,64 @@ object KidsRules {
 
     /** The line after All still fit. */
     fun fitLine(name: String): String = "Marked $name's sizes as still fitting · Navilife asks again in 3 months"
+
+    // ---- Slice 6: the heads-up for the size check ----
+
+    /** The button on the pane and on the heads-up ([NoticeAction.ALL_STILL_FIT]). */
+    const val ALL_FIT = "All still fit"
+    /** The heads-up's key starts with this, then the child's kid_admin id, then the Saturday it is for. */
+    const val NOTICE_PREFIX = "kids:sizes:"
+    /** It comes at 09:00 on a Saturday, when they're home to try things on. */
+    const val NOTICE_MIN = 9 * 60
+    /** Unchecked, it asks again this many days on (every fourth Saturday). */
+    const val AGAIN_DAYS = 28
+    private const val SATURDAY = 6
+
+    /** The first Saturday on or after [day]. */
+    fun saturdayFrom(day: Long): Long = day + ((SATURDAY - CivilDate.isoDayOfWeek(day) + 7) % 7)
+
+    /**
+     * The Saturday the size check asks on for a child checked on [checkedDay], as of [today]: the first Saturday once
+     * [CHECK_DAYS] have gone by, then every [AGAIN_DAYS] while still unchecked — this weekend's if one falls on it (or
+     * the next one ahead). Null until the first is near.
+     */
+    fun askDay(checkedDay: Long, today: Long): Long {
+        val first = saturdayFrom(checkedDay + CHECK_DAYS)
+        if (today <= first + 1) return first
+        val n = (today - 1 - first + AGAIN_DAYS - 1) / AGAIN_DAYS
+        return first + n * AGAIN_DAYS
+    }
+
+    /**
+     * The size-check heads-ups ([NoticeSource.KIDS]), one per child in About you whose kept sizes were last checked
+     * [CHECK_DAYS] or more days ago: at [NOTICE_MIN] on the Saturday ([askDay]), standing through Sunday, with
+     * [NoticeAction.ALL_STILL_FIT]; opens Kids. Typing a size or All still fit stamps the check, so it goes (rules re-run
+     * on each evaluation). A child never stamped (sizes from before the stamp) gets none; the pane and tile still ask.
+     */
+    fun notices(children: List<AboutChild>, records: Map<String, KidRecord>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        return children.mapNotNull { c ->
+            val id = idFor(c.name) ?: return@mapNotNull null
+            val r = records[id] ?: return@mapNotNull null
+            val checked = r.checkedAtMs ?: return@mapNotNull null
+            if (!due(r, today, cal)) return@mapNotNull null
+            val checkedDay = cal.epochDayOf(checked)
+            val sat = askDay(checkedDay, today)
+            Notice(
+                key = "$NOTICE_PREFIX$id:$sat", source = NoticeSource.KIDS, tier = NoticeTier.HEADS_UP,
+                title = "Time to check ${c.name}'s sizes",
+                text = listOfNotNull("Last checked ${CivilDate.shortLabel(checkedDay)}", sizesLine(r.sizes), "do they still fit?")
+                    .joinToString(" · "),
+                atMs = cal.toEpochMs(sat, NOTICE_MIN), target = NoticeTarget.KIDS,
+                expiresAtMs = cal.toEpochMs(sat + 2, 0),
+                actions = listOf(NoticeAction.ALL_STILL_FIT),
+            )
+        }
+    }
+
+    /** The child's kid_admin id a size-check heads-up's [key] is about, or null for any other key. */
+    fun childIdOf(key: String?): String? =
+        key?.takeIf { it.startsWith(NOTICE_PREFIX) }?.removePrefix(NOTICE_PREFIX)?.substringBeforeLast(":")?.takeIf { it.isNotEmpty() }
 }
 
 /** Slice 3: one thing in the week list: "Alex: PE kit", "Sam: Training 16:55", "Alex's Football · £35 due"; [lit] wants doing. */

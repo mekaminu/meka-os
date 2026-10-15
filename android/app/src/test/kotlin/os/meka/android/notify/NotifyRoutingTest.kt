@@ -36,6 +36,9 @@ class NotifyRoutingTest {
         // A document running out opens the Vault (V2, slice 1).
         assertEquals(ShellDestination.VAULT, NotifyRouting.destination(NoticeTarget.VAULT))
         assertEquals(os.meka.android.MainActivity.OPEN_DESTINATION_PREFIX + "VAULT", NotifyRouting.openExtra(NoticeTarget.VAULT))
+        // "Time to check Alex's sizes" opens Ask with the Kids pane up (kids' admin, slice 6).
+        assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.KIDS))
+        assertEquals(os.meka.android.MainActivity.OPEN_KIDS, NotifyRouting.openExtra(NoticeTarget.KIDS))
     }
 
     @Test

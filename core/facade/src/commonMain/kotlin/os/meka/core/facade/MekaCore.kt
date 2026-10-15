@@ -607,6 +607,19 @@ class MekaCore(
         else if (kids.allFit(child)) os.meka.core.domain.KidsRules.fitLine(child) else null
     }
 
+    /**
+     * Kids' admin, slice 6: All still fit on the size-check heads-up [key] ([os.meka.core.domain.KidsRules.notices]).
+     * Returns the line for the shade ("Marked Alex's sizes as still fitting · …"), or null when the key isn't one, the
+     * child has left About you or nothing is kept for them. The heads-up then goes on both devices (the rules re-run).
+     */
+    suspend fun kidsStillFit(key: String): String? = onCore {
+        val id = os.meka.core.domain.KidsRules.childIdOf(key) ?: return@onCore null
+        val child = aboutYou.profile().children.firstOrNull { os.meka.core.domain.KidsRules.idFor(it.name) == id } ?: return@onCore null
+        if (!kids.allFit(child.name)) return@onCore null
+        refresh()
+        os.meka.core.domain.KidsRules.fitLine(child.name)
+    }
+
     // Kids' admin, slice 2: what Undo puts back per fee id — a Paid (its before) or a Remove (null). In memory only.
     private val kidFeeUndo = mutableMapOf<String, os.meka.core.domain.RenewalDoneUndo?>()
 
@@ -6802,6 +6815,8 @@ class MekaCore(
             parcels = activity.parcels(),
             // Car and parking, slice 2: ten minutes before a parking timer ends.
             parkingTimers = parkingTimers.all(), cars = _cars.value,
+            // Kids' admin, slice 6: the Saturday heads-up three months after a child's sizes were checked.
+            kids = aboutYou.profile().children, kidRecords = kids.records(),
         )
 
     /**

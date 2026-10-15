@@ -116,6 +116,8 @@ enum MacNotifier {
     static let wakeEarlierAction = "WAKE_EARLIER"
     /// Later tonight on Sunday's weekly review: the core's `NoticeAction.LATER_TONIGHT` name (weekly reflection, slice 4).
     static let laterTonightAction = "LATER_TONIGHT"
+    /// All still fit on "Time to check Alex's sizes": the core's `NoticeAction.ALL_STILL_FIT` name (kids' admin, slice 6).
+    static let allStillFitAction = "ALL_STILL_FIT"
 
     /// One macOS category per set of buttons: "meka.actions.WENT.DIDNT_GO".
     nonisolated static func categoryID(names: [String]) -> String { "meka.actions." + names.joined(separator: ".") }

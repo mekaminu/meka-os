@@ -1765,6 +1765,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(review.LATER_LABEL, "Later tonight")
         XCTAssertEqual(review.laterSaid(minute: 20 * 60 + 15), "Your weekly review comes back at 20:15")
         XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.laterTonight), "LATER_TONIGHT") // MacNotifier.laterTonightAction
+        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.allStillFit), "ALL_STILL_FIT") // MacNotifier.allStillFitAction, kids' admin, slice 6
+        XCTAssertEqual(NotifyRules.shared.targetName(t: .kids), "KIDS")
     }
 
     func testScreenshotRulesReachSwift() {

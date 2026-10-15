@@ -323,12 +323,14 @@ object NotifyRouting {
         NoticeTarget.LEAVE -> ShellDestination.ASK
         NoticeTarget.WEEK_AHEAD -> ShellDestination.ASK
         NoticeTarget.VAULT -> ShellDestination.VAULT
+        NoticeTarget.KIDS -> ShellDestination.ASK
     }
 
     /** What a tap hands MainActivity: a place ("dest:LISTS"), or Ask with the Annual leave pane up ("leave"). */
     fun openExtra(target: NoticeTarget): String = when (target) {
         NoticeTarget.LEAVE -> MainActivity.OPEN_LEAVE
         NoticeTarget.WEEK_AHEAD -> MainActivity.OPEN_WEEK_AHEAD
+        NoticeTarget.KIDS -> MainActivity.OPEN_KIDS
         else -> MainActivity.OPEN_DESTINATION_PREFIX + destination(target).name
     }
 
@@ -375,6 +377,10 @@ class NoticeActionReceiver : BroadcastReceiver() {
                             // Sunday's weekly review (weekly reflection, slice 4): back two hours on, on both apps.
                             runCatching { app.core.reviewLater(key) }
                             app.governor.cancel(key)
+                        } else if (action == NoticeAction.ALL_STILL_FIT) {
+                            // The size check (kids' admin, slice 6): stamped on both apps; a quiet line says so.
+                            val line = runCatching { app.core.kidsStillFit(key) }.getOrNull()
+                            if (line != null) app.governor.postSent(key, "Sizes still fit", line) else app.governor.cancel(key)
                         } else {
                             val card = action?.let { runCatching { app.core.answerSessionNotice(key, it) }.getOrNull() }
                             if (card != null) app.governor.postAnswered(key, card) else app.governor.cancel(key)

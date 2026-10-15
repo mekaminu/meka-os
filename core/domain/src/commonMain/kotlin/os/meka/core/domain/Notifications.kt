@@ -35,7 +35,7 @@ enum class NoticePrecision { CLOCK, SOFT }
  * Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2);
  * [WEEK_AHEAD] is Ask → More → Week ahead with its pane up (Sunday week ahead, slice 1).
  */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT }
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT, KIDS }
 
 /**
  * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
@@ -71,7 +71,12 @@ enum class NoticeAction(val label: String) {
      * Weekly reflection, slice 4 ([ReviewRules.laterMinute]): Sunday's weekly review heads-up comes back in two hours
      * (never after 22:00), on both devices. Both apps.
      */
-    LATER_TONIGHT(ReviewRules.LATER_LABEL);
+    LATER_TONIGHT(ReviewRules.LATER_LABEL),
+    /**
+     * Kids' admin, slice 6 ([KidsRules.notices]): the child's sizes still fit, so the check counts as done today and the
+     * next one is three months on. Both apps; it changes no size.
+     */
+    ALL_STILL_FIT(KidsRules.ALL_FIT);
 
     /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
     fun shownOn(send: Boolean): Boolean = when (this) {
@@ -184,6 +189,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * at 15:30" · "10 min left · extend it in your parking app, or move the car". Again for an extended time.
      */
     PARKING("Parking timer", NoticeTier.HEADS_UP),
+    /**
+     * Kids' admin, slice 6 ([KidsRules.notices]): three months after a child's sizes were checked, on the Saturday at
+     * 09:00 (again every four weeks while unchecked) — "Time to check Alex's sizes" · "Last checked Sat 11 Jul · …".
+     */
+    KIDS("Kids: time to check their sizes", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -618,6 +628,7 @@ object Governor {
         NoticeSource.MAIL_MOMENT -> "your ten-minute inbox"
         NoticeSource.PARCELS -> if (n == 1) "a parcel out for delivery" else "$n parcels out for delivery"
         NoticeSource.PARKING -> if (n == 1) "parking about to end" else "$n parking timers about to end"
+        NoticeSource.KIDS -> if (n == 1) "sizes to check" else "$n children's sizes to check"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -713,6 +724,9 @@ object NoticeSources {
         /** Car and parking, slice 2: the cars' parking timers, ten minutes before each ends ([ParkingTimerRules.notices]). */
         parkingTimers: List<ParkingTimer> = emptyList(),
         cars: CarsView = CarsView.EMPTY,
+        /** Kids' admin, slice 6: the children in About you and what Kids keeps for them ([KidsRules.notices]). */
+        kids: List<AboutChild> = emptyList(),
+        kidRecords: Map<String, KidRecord> = emptyMap(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -852,6 +866,7 @@ object NoticeSources {
         if (mailMoment != null) out += MailMomentRules.notices(mailMoment, mailWaiting, protectedFromMin, nowMs, cal)
         out += ParcelRules.notices(parcels, nowMs, cal)
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
+        out += KidsRules.notices(kids, kidRecords, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
