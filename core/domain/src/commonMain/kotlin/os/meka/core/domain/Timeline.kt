@@ -415,7 +415,7 @@ object TimelineRules {
     }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
     /**
-     * "Camp Nou · Outlook"; a row standing for the same event on several calendars lists them all: "SG18 · Personal ·
+     * "Camp Nou · Outlook"; a row standing for the same event on several calendars lists them all: "AB1 · Personal ·
      * Kids" ([DuplicateEvents]).
      */
     fun eventDetail(e: CalendarEvent): String? {

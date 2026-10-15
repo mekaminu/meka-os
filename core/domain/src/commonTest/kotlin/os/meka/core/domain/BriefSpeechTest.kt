@@ -49,7 +49,7 @@ class BriefSpeechTest {
                 TomorrowRow("e-1", "All day", "Bin day", true, null),
                 TomorrowRow("e-2", "09:30", "Standup", true, null),
                 TomorrowRow("t-3", "14:00", "Book dentist", false, "↻ Weekly"),
-                TomorrowRow("e-4", "18:00", "Training", true, "SG18"),
+                TomorrowRow("e-4", "18:00", "Training", true, "AB1"),
                 TomorrowRow("t-5", null, "Renew passport", false, "Overdue"),
             ),
             events = 3, tasks = 2, summary = "3 events · 2 tasks · first at 09:30", overdue = 1,

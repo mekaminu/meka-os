@@ -22,7 +22,7 @@ class WeatherTest {
     private fun wet(n: Int, t: Int = 12) = Array(n) { Triple(t, 61, 70) }
     private val days = listOf(WeatherDay(fri, 8, 15, 61, 70), WeatherDay(sat, 9, 15, 61, 80), WeatherDay(sat + 1, 7, 13, 3, 10))
 
-    private fun forecast(vararg h: Triple<Int, Int, Int>) = WeatherForecast("Biggleswade", hours(*h), days)
+    private fun forecast(vararg h: Triple<Int, Int, Int>) = WeatherForecast("Oakfield", hours(*h), days)
 
     @Test
     fun theForecastRoundTripsAndSkipsWhatItCantRead() {
@@ -69,7 +69,7 @@ class WeatherTest {
         assertEquals(WeatherView.EMPTY, WeatherRules.view(WeatherForecast.EMPTY, at(fri, 10), cal))
         val v = WeatherRules.view(f, at(fri, 10), cal)
         assertEquals("14 degrees · light rain from 16:00", v.nowSpoken)
-        assertEquals("Biggleswade", v.place)
+        assertEquals("Oakfield", v.place)
     }
 
     @Test
@@ -96,7 +96,7 @@ class WeatherTest {
     fun askHearsWhereNowEachDayAndEveryThirdHourThroughTomorrow() {
         val f = forecast(*dry(16), *wet(3), *dry(29))
         val lines = WeatherRules.askLines(f, at(fri, 10, 20), cal)
-        assertEquals("now in Biggleswade: 14° · light rain from 16:00", lines[0])
+        assertEquals("now in Oakfield: 14° · light rain from 16:00", lines[0])
         assertEquals("today (Fri 9 Oct): 8–15° light rain, up to 70 % chance of rain", lines[1])
         assertEquals("tomorrow (Sat 10 Oct): 9–15° light rain, up to 80 % chance of rain", lines[2])
         assertEquals("Sun 11 Oct: 7–13° cloudy, up to 10 % chance of rain", lines[3])
@@ -120,7 +120,7 @@ class WeatherTest {
             mapOf(
                 WeatherFields.HOURS to WeatherCodec.encodeHours(f.hours).fv(),
                 WeatherFields.DAYS to WeatherCodec.encodeDays(f.days).fv(),
-                WeatherFields.PLACE to "Biggleswade".fv(),
+                WeatherFields.PLACE to "Oakfield".fv(),
             ),
         )
         a.syncWithRetry(); m.syncWithRetry()
@@ -143,20 +143,40 @@ class WeatherTest {
         assertNull(WeatherPlaceRules.normalize("<script>"))
         assertNull(WeatherPlaceRules.normalize("x".repeat(61)))
         assertTrue(WeatherPlaceRules.isHome(null))
-        assertTrue(WeatherPlaceRules.isHome("biggleswade"))
+        assertTrue(WeatherPlaceRules.isHome(" "))
+        // Home is About you's (rule 13): with none, only blank is home.
+        Household.set(HouseholdNames.EMPTY)
+        assertTrue(!WeatherPlaceRules.isHome("oakfield"))
+        Household.usePlaces("Oakfield", "", "")
+        try {
+            assertTrue(WeatherPlaceRules.isHome("oakfield"))
+            assertEquals("Oakfield", WeatherPlaceRules.defaultName)
+            // The forecast follows the setting, else About you's home; neither is the generic place.
+            assertEquals("Bedford", WeatherPlaceRules.effective("Bedford", "Oakfield"))
+            assertEquals("Oakfield", WeatherPlaceRules.effective(null, "Oakfield"))
+            assertNull(WeatherPlaceRules.effective(null, null))
+        } finally {
+            Household.set(HouseholdNames.EMPTY)
+        }
     }
 
     @Test
     fun thePlaceSyncsAndItsLineSaysWhatTheForecastIsDoing() {
+        // Home is About you's (invented here); the server forecasts it by name.
+        Household.usePlaces("Oakfield", "", "")
+        try { placeSyncs() } finally { Household.set(HouseholdNames.EMPTY) }
+    }
+
+    private fun placeSyncs() {
         val world = SyncWorld()
         val a = world.device("android")
         val m = world.device("mac")
         val fold = WeatherPlaceStore(a.replica)
-        val home = forecast(*dry(24))
-        // Home by default: nothing stored, nothing written for home.
+        val home = forecast(*dry(24)).copy(asked = "Oakfield", found = true)
+        // About you's home by default: nothing stored, nothing written for it.
         assertNull(fold.wanted())
-        assertEquals(WeatherPlaceView.HOME, WeatherPlaceRules.view(null, home))
-        assertTrue(fold.set("Biggleswade"))
+        assertEquals(WeatherPlaceView("Oakfield", "Forecast for Oakfield · from Open-Meteo"), WeatherPlaceRules.view(null, home))
+        assertTrue(fold.set("Oakfield"))
         assertTrue(fold.set(""))
         assertNull(a.replica.entity(EntityTypes.CONTEXT_MODE, WeatherPlaceStore.ENTITY_ID))
         // Something that can't be a place is refused and nothing is written.
@@ -178,14 +198,17 @@ class WeatherTest {
         // Not found: still home's forecast, lit.
         val missing = home.copy(asked = "Xyzzy", found = false)
         val lit = WeatherPlaceRules.view("Xyzzy", missing)
-        assertEquals("Couldn't find “Xyzzy” — showing Biggleswade. Try the nearest town.", lit.line)
+        assertEquals("Couldn't find “Xyzzy” — showing Oakfield. Try the nearest town.", lit.line)
         assertTrue(lit.lit)
         // Back home: on its way until the server forecasts home again.
-        assertTrue(WeatherPlaceStore(m.replica).set("Biggleswade"))
+        assertTrue(WeatherPlaceStore(m.replica).set("Oakfield"))
         m.syncWithRetry(); a.syncWithRetry()
         assertNull(fold.wanted())
         assertTrue(WeatherPlaceRules.view(null, found).pending)
-        assertEquals(WeatherPlaceView.HOME, WeatherPlaceRules.view(null, home))
+        assertEquals("Forecast for Oakfield · from Open-Meteo", WeatherPlaceRules.view(null, home).line)
+        // No home in About you and no place set: the generic place, and where to add home.
+        assertEquals(WeatherPlaceView.NO_HOME, WeatherPlaceRules.view(null, forecast(*dry(24)), home = null))
+        assertTrue(WeatherPlaceRules.view(null, home, home = null).pending)
 
         // The server's answer reaches the store (asked, found) and the view carries the setting's line.
         a.replica.commitLocal(
@@ -193,7 +216,7 @@ class WeatherTest {
             mapOf(
                 WeatherFields.HOURS to WeatherCodec.encodeHours(home.hours).fv(),
                 WeatherFields.DAYS to WeatherCodec.encodeDays(home.days).fv(),
-                WeatherFields.PLACE to "Biggleswade".fv(),
+                WeatherFields.PLACE to "Oakfield".fv(),
                 WeatherFields.ASKED to "Xyzzy".fv(),
                 WeatherFields.FOUND to false.fv(),
             ),
@@ -203,7 +226,7 @@ class WeatherTest {
         assertEquals("Xyzzy", read.asked)
         assertTrue(!read.found)
         assertTrue(WeatherRules.view(read, at(fri, 9), cal, fold.wanted()).placeChoice.lit)
-        assertEquals(WeatherPlaceView.HOME.line, WeatherRules.view(WeatherForecast.EMPTY, at(fri, 9), cal).placeChoice.line)
+        assertEquals("Finding “Oakfield”… the forecast follows within a few minutes", WeatherRules.view(WeatherForecast.EMPTY, at(fri, 9), cal).placeChoice.line)
     }
 
     @Test
@@ -231,7 +254,7 @@ class WeatherTest {
         assertTrue(ring.copy(rain = listOf(DayBand(600, 660, current = true))).spokenLine.endsWith(" Raining now."))
     }
 
-    private fun event(id: String, title: String, h: Int, m: Int = 0, place: String? = "SG18 Sports Ground, Biggleswade", mins: Int = 60,
+    private fun event(id: String, title: String, h: Int, m: Int = 0, place: String? = "AB1 Sports Ground, Oakfield", mins: Int = 60,
                       provider: String = "google", join: String? = null, allDay: Boolean = false) =
         CalendarEvent(id, title, at(fri, h, m), at(fri, h, m) + mins * 60_000L, allDay, place, provider, "me@x", "Personal", joinUrl = join)
 
@@ -255,7 +278,7 @@ class WeatherTest {
         val sessions = SessionsView(emptyList(), listOf(gym), emptyMap())
         val n = WeatherRules.notices(f, events, marks, sessions, at(fri, 9), cal)
         assertEquals(
-            listOf("Light rain at 17:00 — Gym · Push", "Light rain at 17:30 — Training at SG18 Sports Ground", "Light rain at 19:45 — Five-a-side at SG18 Sports Ground"),
+            listOf("Light rain at 17:00 — Gym · Push", "Light rain at 17:30 — Training at AB1 Sports Ground", "Light rain at 19:45 — Five-a-side at AB1 Sports Ground"),
             n.map { it.title },
         )
         val t = n[1]
@@ -270,10 +293,10 @@ class WeatherTest {
         val midday = Governor.evaluate(n, settings, DeviceAlerts.ALL, GovernorState(), at(fri, 12, 30), cal)
         assertEquals("Midday digest · 3 things", midday.digest?.title)
         assertEquals("rain on 3 plans", midday.digest?.summary)
-        assertEquals("Light rain at 17:30 — Training at SG18 Sports Ground", midday.digest?.lines?.get(1))
+        assertEquals("Light rain at 17:30 — Training at AB1 Sports Ground", midday.digest?.lines?.get(1))
         assertTrue(midday.post.isEmpty())
         val evening = Governor.evaluate(WeatherRules.notices(f, events, marks, sessions, at(fri, 18), cal), settings, DeviceAlerts.ALL, midday.state, at(fri, 18), cal)
-        assertEquals(listOf("Light rain at 19:45 — Five-a-side at SG18 Sports Ground"), evening.digest?.lines)
+        assertEquals(listOf("Light rain at 19:45 — Five-a-side at AB1 Sports Ground"), evening.digest?.lines)
         // Lowered to app only, nothing is posted.
         val off = settings.copy(tiers = mapOf(NoticeSource.WEATHER to NoticeTier.SILENT))
         assertNull(Governor.evaluate(n, off, DeviceAlerts.ALL, GovernorState(), at(fri, 12, 30), cal).digest)
@@ -286,16 +309,16 @@ class WeatherTest {
         assertTrue(WeatherRules.notices(WeatherForecast.EMPTY, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).isEmpty())
         // Rain 17:00–18:00 only: the walk there at 17:30 is wet, so it's told at the start.
         val before = WeatherRules.notices(forecast(*dry(17), *wet(1), *dry(6)), events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal)
-        assertEquals(listOf("Light rain at 18:00 — Training at SG18 Sports Ground"), before.map { it.title })
+        assertEquals(listOf("Light rain at 18:00 — Training at AB1 Sports Ground"), before.map { it.title })
         // Rain from 16:00 to 17:00 is over before you leave (17:30).
         assertTrue(WeatherRules.notices(forecast(*dry(16), *wet(1), *dry(7)), events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).isEmpty())
         // Snow says so; a started plan isn't told; tomorrow's plans wait for tomorrow.
         val snow = forecast(*dry(18), *Array(2) { Triple(0, 73, 80) }, *dry(4))
-        assertEquals("Snow at 18:00 — Training at SG18 Sports Ground", WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).single().title)
+        assertEquals("Snow at 18:00 — Training at AB1 Sports Ground", WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 9), cal).single().title)
         assertTrue(WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri, 18, 5), cal).isEmpty())
         assertTrue(WeatherRules.notices(snow, events, EventMarks.NONE, SessionsView.EMPTY, at(fri - 1, 9), cal).isEmpty())
         // A long place is cut at its first comma and to 40 characters.
-        assertEquals("SG18", WeatherRules.shortPlace("SG18, Biggleswade"))
+        assertEquals("AB1", WeatherRules.shortPlace("AB1, Oakfield"))
         assertEquals(40, WeatherRules.shortPlace("A".repeat(60))!!.length)
         assertNull(WeatherRules.shortPlace(" , x"))
     }
@@ -307,6 +330,6 @@ class WeatherTest {
             ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, CalendarAgenda.let { TodayProjection.project(emptyList(), at(fri, 9), it.window(fri, cal), emptyList(), cal) },
             at(fri, 9), cal, events = listOf(event("t", "Training", 17, 30)), forecast = f,
         )
-        assertEquals(listOf("Light rain at 17:30 — Training at SG18 Sports Ground"), ns.filter { it.source == NoticeSource.WEATHER }.map { it.title })
+        assertEquals(listOf("Light rain at 17:30 — Training at AB1 Sports Ground"), ns.filter { it.source == NoticeSource.WEATHER }.map { it.title })
     }
 }

@@ -245,7 +245,7 @@ class FamilyShareTest {
             EmergencyRules.addPlan(section, text, emptyList(), nowMs) { "em${n++}" }.second
                 .flatMap { (e, f) -> mac.commitLocal(EntityTypes.EMERGENCY_ENTRY, e, f) }.forEach { ops.append(it) }
         }
-        add(EmergencySection.CALL, "GP: Dr Patel, 01767 123456")
+        add(EmergencySection.CALL, "GP: Dr Patel, 01632 123456")
         add(EmergencySection.ACCOUNTS, "Home insurance: Aviva")
         // A secret written past the apps' check (an older device, a hand-made op) is never answered.
         mac.commitLocal(EntityTypes.EMERGENCY_ENTRY, "bad", mapOf(
@@ -258,8 +258,8 @@ class FamilyShareTest {
         assertEquals(listOf("Who to call", "Key accounts"), groups.map { it.str("label") })
         val gp = groups[0]["rows"]!!.jsonArray.single().jsonObject
         assertEquals("GP", gp.str("title"))
-        assertEquals("Dr Patel, 01767 123456", gp.str("detail"))
-        assertEquals("01767123456", gp.str("phone"))
+        assertEquals("Dr Patel, 01632 123456", gp.str("detail"))
+        assertEquals("01632123456", gp.str("phone"))
         assertEquals(listOf("Home insurance"), groups[1]["rows"]!!.jsonArray.map { it.jsonObject.str("title") })
         assertTrue("4821" !in family.emergency(jordan).body)
         // The page can't write it: no route, and the server's writer refuses the type.

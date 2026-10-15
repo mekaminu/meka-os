@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 
 /**
  * Meka's route to work (build plan "Places, location weather, per-day work hours and trains", item 4; Meka 2026-10-09
- * 12:54): Thameslink Biggleswade → Farringdon, then the Elizabeth line to Canary Wharf; when Thameslink has problems,
+ * 12:54): Thameslink home → Farringdon, then the Elizabeth line to work; when Thameslink has problems,
  * Great Northern to King's Cross instead. Until the National Rail live departures key arrives (Needs Meka #16), the
  * lines' status comes from TfL's public line status (free, no key, nothing about Meka sent: the server asks for three
  * line names). The server mirrors it into one server-written `context_mode` entity, [LineStatusStore.ENTITY_ID]

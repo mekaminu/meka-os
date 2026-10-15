@@ -398,7 +398,7 @@ object CalendarAgenda {
 
     private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 
-    /** "Rex · Biggleswade Park" · "Rex or Logan? · …" for a club session ([ClubChildRules.line]) first, then the place. */
+    /** "Rex · Oakfield Park" · "Rex or Logan? · …" for a club session ([ClubChildRules.line]) first, then the place. */
     private fun eventDetail(e: CalendarEvent, child: String? = null): String? = listOfNotNull(
         child,
         e.location,

@@ -2239,7 +2239,7 @@ final class CoreModel {
     func confirmSuspectedCaller(_ key: String) { MekaHaptics.light(); run { _ = try await $0.confirmSuspectedCaller(key: key) } }
     /// Not spam: off Suspected spam; its calls are screened as before and MEKA never flags it again.
     func dismissSuspectedCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.dismissSuspectedCaller(key: key) } }
-    /// Weather place setting (Calendars → Weather): the town the forecast is for; blank or "Biggleswade" is home.
+    /// Weather place setting (Calendars → Weather): the town the forecast is for; blank or About you's home follows About you.
     /// False (nothing saved) for a name that can't be a town. The server follows it at its next poll.
     func setWeatherPlace(_ name: String) async -> Bool {
         guard let core else { return false }
@@ -2252,7 +2252,7 @@ final class CoreModel {
             return false
         }
     }
-    /// Where work is (Places item 2, Calendars → Weather → Work): blank or "Canary Wharf" is the default. False (nothing
+    /// Where work is (Places item 2, Calendars → Weather → Work): blank or About you's work follows About you. False (nothing
     /// saved) for a name that can't be a place. The server follows it at its next poll.
     func setWorkPlace(_ name: String) async -> Bool {
         guard let core else { return false }

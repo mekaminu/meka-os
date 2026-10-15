@@ -61,8 +61,8 @@ import os.meka.core.domain.WeatherPlaceView
 import os.meka.core.facade.MekaCore
 
 /**
- * Weather places (Calendars → Weather): **Home**, the town the forecast is for, Biggleswade unless Meka types another,
- * and **Work** (Places item 2), Canary Wharf unless he types another; on office days Today's weather line and the brief
+ * Weather places (Calendars → Weather): **Home**, the town the forecast is for, About you's home unless Meka types
+ * another, and **Work** (Places item 2), About you's work unless he types another (rule 13: no place in the code); on office days Today's weather line and the brief
  * say both, and the Day ring's rain follows where he'll be. Done saves a field (a name that can't be a town says so
  * with a tick haptic); a changed name also saves when the pane closes (typing is never lost). The line under each
  * cross-fades as the server follows ("Finding “Bedford”…" → "Forecast for Bedford · from Open-Meteo"), lit in the
@@ -76,13 +76,13 @@ internal fun WeatherPlaceSection(core: MekaCore, modifier: Modifier = Modifier) 
         Text("Home and work for Today's weather line, the brief and Ask. Only the names are sent to Open-Meteo.",
             style = MekaType.caption, color = Meka.colors.textTertiary)
         PlaceField(
-            label = "Home", choice = view.placeChoice, fallback = WeatherPlaceRules.HOME,
+            label = "Home", choice = view.placeChoice, fallback = WeatherPlaceRules.defaultName,
             isDefault = WeatherPlaceRules::isHome, resetLabel = "Use home", spokenLabel = "Weather for which town",
             save = { core.setWeatherPlace(it) },
         )
         PlaceField(
-            label = "Work", choice = view.workChoice, fallback = PlacesRules.WORK,
-            isDefault = PlacesRules::isDefaultWork, resetLabel = "Use ${PlacesRules.WORK}", spokenLabel = "Where work is",
+            label = "Work", choice = view.workChoice, fallback = PlacesRules.defaultWork,
+            isDefault = PlacesRules::isDefaultWork, resetLabel = "Use About you's", spokenLabel = "Where work is",
             save = { core.setWorkPlace(it) },
             modifier = Modifier.padding(top = MekaSpace.xs),
         )
@@ -196,7 +196,7 @@ private fun PlaceField(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                 .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
         ) {
-            if (text.isEmpty()) Text(fallback, style = MekaType.body, color = Meka.colors.textTertiary)
+            if (text.isEmpty()) Text(fallback.ifEmpty { "Your town" }, style = MekaType.body, color = Meka.colors.textTertiary)
             BasicTextField(
                 value = text,
                 onValueChange = { text = it.take(WeatherPlaceRules.MAX_NAME); bad = false },

@@ -89,7 +89,7 @@ class HereFacadeTest {
     fun atHomeOrWorkTodayKeepsItsLineButAskStillHearsHere() = runTest {
         val c = core()
         server.away = false
-        assertTrue(c.hereWeather(52.0868, -0.2645))
+        assertTrue(c.hereWeather(52.4012, -1.5021))
         assertNull(c.weatherView.value.nowLine)
         c.askMeka("what's the weather where I am?")
         assertTrue(server.asked.last().second.items.any { "where Meka is" in it.line })

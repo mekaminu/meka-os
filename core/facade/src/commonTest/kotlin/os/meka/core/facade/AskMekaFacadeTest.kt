@@ -186,7 +186,7 @@ class AskMekaFacadeTest {
         listOf(
             os.meka.core.domain.WeatherFields.HOURS to os.meka.core.domain.WeatherCodec.encodeHours(hours),
             os.meka.core.domain.WeatherFields.DAYS to os.meka.core.domain.WeatherCodec.encodeDays(days),
-            os.meka.core.domain.WeatherFields.PLACE to "Biggleswade",
+            os.meka.core.domain.WeatherFields.PLACE to "Oakfield",
         ).forEachIndexed { i, (field, text) ->
             serverOps.append(os.meka.core.sync.Op("srvwx$i", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
                 os.meka.core.domain.WeatherStore.ENTITY_ID, field, os.meka.core.sync.FieldValue.Text(text), clock.now(), emptyList(), "server"))
@@ -204,7 +204,7 @@ class AskMekaFacadeTest {
         val ctx = server.asked.single().second
         assertEquals("t1", ctx.items.first().ref)
         val weather = ctx.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
-        assertEquals("now in Biggleswade: 13° · light rain from 19:00", weather.first())
+        assertEquals("now in Oakfield: 13° · light rain from 19:00", weather.first())
         assertTrue("tomorrow (Fri 9 Oct): 8–15° cloudy, up to 10 % chance of rain" in weather, weather.toString())
         assertTrue("today 18:00 13° cloudy, 10 % chance of rain" in weather, weather.toString())
     }
@@ -228,20 +228,23 @@ class AskMekaFacadeTest {
                     entity, field, os.meka.core.sync.FieldValue.Text(text), clock.now(), emptyList(), "server"))
             }
         }
-        mirror(os.meka.core.domain.WeatherStore.ENTITY_ID, "Biggleswade", 11, 20, "srvwx")
-        mirror(os.meka.core.domain.WeatherStore.WORK_ENTITY_ID, "Canary Wharf", 15, 14, "srvww")
+        // Rule 13: home and work are About you's (invented here), never the code's.
+        c.setAboutYou(os.meka.core.domain.AboutField.HOME, "Oakfield")
+        c.setAboutYou(os.meka.core.domain.AboutField.WORK, "Riverside")
+        mirror(os.meka.core.domain.WeatherStore.ENTITY_ID, "Oakfield", 11, 20, "srvwx")
+        mirror(os.meka.core.domain.WeatherStore.WORK_ENTITY_ID, "Riverside", 15, 14, "srvww")
         c.syncNow()
-        assertEquals("Biggleswade 11° now · Canary Wharf 15°, light rain from 14:00 — take a coat", c.weatherView.value.nowLine)
+        assertEquals("Oakfield 11° now · Riverside 15°, light rain from 14:00 — take a coat", c.weatherView.value.nowLine)
         // The ring's rain follows where Meka will be: work's at 14:00, home's at 20:00.
         assertEquals(listOf(os.meka.core.domain.DayBand(14 * 60, 15 * 60), os.meka.core.domain.DayBand(20 * 60, 21 * 60)), c.today.value.dayRing.rain)
 
         c.askMeka("will it rain at work?")
         val weather = server.asked.single().second.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
-        assertEquals("now in Biggleswade: 11° · light rain from 20:00", weather.first())
-        assertTrue("now at work in Canary Wharf: 15° · light rain from 14:00" in weather, weather.toString())
+        assertEquals("now in Oakfield: 11° · light rain from 20:00", weather.first())
+        assertTrue("now at work in Riverside: 15° · light rain from 14:00" in weather, weather.toString())
 
         // The work place is set from the app and reaches the server.
-        assertEquals("Canary Wharf", c.weatherView.value.workChoice.name)
+        assertEquals("Riverside", c.weatherView.value.workChoice.name)
         assertTrue(!c.setWorkPlace("<nope>"))
         assertTrue(c.setWorkPlace("Cambridge"))
         assertEquals("Finding “Cambridge”… the forecast follows within a few minutes", c.weatherView.value.workChoice.line)
@@ -321,7 +324,10 @@ class AskMekaFacadeTest {
     @Test
     fun theWeatherPlaceIsSetFromTheAppAndReachesTheServer() = runTest {
         val c = core()
-        assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, c.weatherView.value.placeChoice)
+        // No home in About you: the generic place, and where to add home (rule 13: no home in the code).
+        assertEquals(os.meka.core.domain.WeatherPlaceView.NO_HOME, c.weatherView.value.placeChoice)
+        c.setAboutYou(os.meka.core.domain.AboutField.HOME, "Oakfield")
+        assertEquals("Oakfield", c.weatherView.value.placeChoice.name)
         assertTrue(!c.setWeatherPlace("<nope>"))
         assertTrue(c.setWeatherPlace("Bedford"))
         assertEquals("Finding “Bedford”… the forecast follows within a few minutes", c.weatherView.value.placeChoice.line)
@@ -330,9 +336,9 @@ class AskMekaFacadeTest {
         val sent = serverOps.after("hh", 0, 10_000).map { it.op }
             .single { it.entityId == os.meka.core.domain.WeatherPlaceStore.ENTITY_ID && it.field == os.meka.core.domain.WeatherPlaceFields.NAME }
         assertEquals(os.meka.core.sync.FieldValue.Text("Bedford"), sent.value)
-        // Home again: blank goes back to Biggleswade.
+        // Home again: blank goes back to About you's home.
         assertTrue(c.setWeatherPlace(""))
-        assertEquals("Biggleswade", c.weatherView.value.placeChoice.name)
+        assertEquals("Oakfield", c.weatherView.value.placeChoice.name)
     }
 
     @Test

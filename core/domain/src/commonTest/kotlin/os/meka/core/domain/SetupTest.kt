@@ -37,7 +37,8 @@ class SetupTest {
         voiceMessageSeen: Boolean = true,
         voiceChosen: String? = "Amy",
         connected: Boolean = true,
-    ) = SetupFacts(device, connected, server, accounts, signIns, ai, callAssistantOn, voiceMessageSeen, voiceChosen, nowMs = now)
+    ) = SetupFacts(device, connected, server, accounts, signIns, ai, callAssistantOn, voiceMessageSeen, voiceChosen,
+        homePlace = "Oakfield", workPlace = "Riverside", nowMs = now)
 
     private fun SetupView.step(key: String) = steps.first { it.key == key }
 
@@ -55,7 +56,8 @@ class SetupTest {
         assertEquals("Allowed on Google · add and move events from Navilife", v.step("calendar.editing").line)
         assertEquals("Jordan always ring", v.step("calls.family").line)
         assertEquals("Speaking as Amy", v.step("voice.picked").line)
-        assertEquals("Home Biggleswade · work Canary Wharf · change in Calendars", v.step("weather").line)
+        assertEquals("Home Oakfield · work Riverside · change in Calendars", v.step("weather").line)
+        assertEquals("Home not set, showing London · work not set · add them in About you", SetupRules.weatherLine(null, null))
         assertEquals("Connected", v.step("mac").line)
         assertEquals(
             listOf("Calendars", "Call assistant", "Messages", "Navilife's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
@@ -88,7 +90,13 @@ class SetupTest {
         check("device.notifications", SetupFix.NOTIFICATIONS, "Allow")
         check("device.battery", SetupFix.BATTERY, "Keep Navilife awake")
         check("mac", null, null)
-        assertEquals("Set your network's “forward when busy” to 01767 667246, then ring yourself and decline", v.step("calls.forwarding").line)
+        // The number is About you's (rule 13); with none typed the step names it generically.
+        assertEquals("Set your network's “forward when busy” to Navilife's number, then ring yourself and decline", v.step("calls.forwarding").line)
+        Household.usePlaces("", "", "01632 960000")
+        try {
+            assertEquals("Set your network's “forward when busy” to 01632 960000, then ring yourself and decline",
+                SetupRules.view(facts(voiceMessageSeen = false)).step("calls.forwarding").line)
+        } finally { Household.set(HouseholdNames.EMPTY) }
         assertEquals(11, v.toDo)
         assertEquals("11 steps left · ${v.done} of ${v.total} done", v.summary)
         assertEquals("11 steps left · Outlook calendar, Calendar editing, Call assistant…", v.todayLine)

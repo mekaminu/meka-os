@@ -34,7 +34,7 @@ class DuplicateEventsTest {
 
     private val meka = ev("a", "Training", calendar = "Personal")
     private val kids = ev("b", "Training", calendar = "Kids")
-    private val club = ev("c", "Training - 3G", calendar = "Club", location = "SG18")
+    private val club = ev("c", "Training - 3G", calendar = "Club", location = "AB1")
 
     @Test
     fun theFoldReviewsTrainingIsOneRowWithItsCalendars() {
@@ -130,7 +130,7 @@ class DuplicateEventsTest {
         assertEquals(listOf("e-c"), rows.map { it.id })
         assertEquals("Training - 3G", rows.single().title)
         // A club session names the child first (Fold review 17:56, slice 3: nobody set yet).
-        assertEquals("Max or Felix? · SG18 · Club · Personal · Kids", rows.single().detail)
+        assertEquals("Max or Felix? · AB1 · Club · Personal · Kids", rows.single().detail)
         // A lone event keeps its quiet line.
         assertEquals("Camp Nou · Outlook", TimelineRules.eventDetail(meka.copy(location = "Camp Nou", provider = "microsoft")))
     }

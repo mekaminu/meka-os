@@ -75,11 +75,14 @@ class SetupFacadeTest {
     fun theChecklistFollowsTheReplicaAndTodayReusesTheServersAnswers() = runTest {
         val c = core()
         c.syncNow()
+        // Home and work come from About you (invented here).
+        c.setAboutYou(os.meka.core.domain.AboutField.HOME, "Oakfield")
+        c.setAboutYou(os.meka.core.domain.AboutField.WORK, "Riverside")
         val v = c.refreshSetup(fold)
         assertEquals(1, server.healthAsked)
         assertEquals(SetupState.TODO, v.steps.first { it.key == "voice.picked" }.state)
         assertEquals(SetupState.TODO, v.steps.first { it.key == "mac" }.state)
-        assertEquals("Home Biggleswade · work Canary Wharf · change in Calendars", v.steps.first { it.key == "weather" }.line)
+        assertEquals("Home Oakfield · work Riverside · change in Calendars", v.steps.first { it.key == "weather" }.line)
         assertEquals(v, c.setupView.value)
 
         // Picking a voice ticks its step; Today's open within the quarter hour doesn't ask the server again.

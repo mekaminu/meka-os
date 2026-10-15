@@ -7,7 +7,7 @@ import kotlin.math.roundToInt
 /**
  * Weather (build plan "Weather and a voice Meka likes", item 1; Meka 2026-10-08: Talk said "I only know what's in the
  * app" when asked about tomorrow's weather). The server reads Open-Meteo's public forecast for one fixed place
- * (Biggleswade, home; no key, no account, nothing about Meka sent) every 30 minutes and mirrors it into one
+ * (home, as About you names it; no key, no account, nothing about Meka sent but the place) every 30 minutes and mirrors it into one
  * server-written `context_mode` entity with the fixed id [WeatherStore.ENTITY_ID] (ADR-008 addendum), only when it
  * changed, so every device has it offline. The apps never write it.
  *
@@ -19,7 +19,7 @@ object WeatherFields {
     const val HOURS = "hours"
     /** "2026-10-09=9,15,61,70;…": local day = min °C, max °C, WMO code, rain % (the day's highest chance). */
     const val DAYS = "days"
-    /** "Biggleswade": the place the forecast is for, as the geocoder names it. */
+    /** "Oakfield": the place the forecast is for, as the geocoder names it. */
     const val PLACE = "place"
     /**
      * The place name the server was asked for (Weather place setting: what Meka typed, normalised, from
@@ -37,7 +37,7 @@ object WeatherFields {
  * home's. LWW: the latest change on either device wins.
  */
 object WeatherPlaceFields {
-    /** "Bedford"; Null (or absent) for home ([WeatherPlaceRules.HOME]). */
+    /** "Bedford"; Null (or absent) for home (About you's, [WeatherPlaceRules.aboutHome]). */
     const val NAME = "name"
 }
 
@@ -133,9 +133,9 @@ data class WeatherView(
     val nowSpoken: String?,
     val place: String,
     /** The place setting (Calendars → Weather): what the field holds and the line under it. */
-    val placeChoice: WeatherPlaceView = WeatherPlaceView.HOME,
-    /** The work place setting (Calendars → Weather → Work, Places item 2): Canary Wharf unless Meka types another. */
-    val workChoice: WeatherPlaceView = WeatherPlaceView.WORK,
+    val placeChoice: WeatherPlaceView = WeatherPlaceView.NO_HOME,
+    /** The work place setting (Calendars → Weather → Work, Places item 2): About you's work unless Meka types another. */
+    val workChoice: WeatherPlaceView = WeatherPlaceView.NO_WORK,
     /**
      * The trains on an office day's commute (Places item 4, TfL line status): "Thameslink · Elizabeth line · good
      * service", lit when a line isn't running well; null outside the commute. Shown under the weather line.
@@ -148,21 +148,33 @@ data class WeatherView(
 }
 
 /**
- * The Weather place setting as the apps show it: [name] fills the field ("Biggleswade" for home), [line] says what the
+ * The Weather place setting as the apps show it: [name] fills the field (About you's home by default), [line] says what the
  * forecast is doing, lit in the accent colour ([lit]) when it couldn't follow the name.
  */
 data class WeatherPlaceView(val name: String, val line: String, val lit: Boolean = false, val pending: Boolean = false) {
     companion object {
-        val HOME = WeatherPlaceView(WeatherPlaceRules.HOME, "Forecast for ${WeatherPlaceRules.HOME} · from Open-Meteo")
-        val WORK = WeatherPlaceView(PlacesRules.WORK, PlacesRules.workLine(PlacesRules.WORK))
+        /** Neither the Weather place nor About you names home: the generic forecast, and where to add it. */
+        val NO_HOME = WeatherPlaceView("", WeatherPlaceRules.NO_HOME_LINE)
+        /** Neither the work place nor About you names work: no work forecast. */
+        val NO_WORK = WeatherPlaceView("", PlacesRules.NO_WORK_LINE)
     }
 }
 
 /** Non-AI, pure: the place name Meka types and what the forecast says about it. */
 object WeatherPlaceRules {
-    /** Home: the server forecasts it when no place is set (its coordinates are fixed, no lookup). */
-    const val HOME = "Biggleswade"
+    /**
+     * Rule 13 (release 2 slice 3, 2026-10-15): home comes from About you ([Household.names]), never the code. With
+     * neither the Weather place nor About you naming it, the server forecasts this generic place (nobody's home).
+     */
+    const val FALLBACK = "London"
+    const val NO_HOME_LINE = "Showing $FALLBACK's weather · add your home in Ask → Settings → About you"
     const val MAX_NAME = 60
+
+    /** About you's home as the weather follows it (on the device); null with none typed. */
+    val aboutHome: String? get() = Household.names.home
+
+    /** What the Home field shows when no other place is set: About you's home, else blank. */
+    val defaultName: String get() = aboutHome ?: ""
 
     /**
      * A typed name as stored: spaces collapsed, trimmed, at most [MAX_NAME]; null for one that can't be a place (blank,
@@ -175,24 +187,31 @@ object WeatherPlaceRules {
         return s
     }
 
-    fun isHome(name: String?): Boolean = name == null || name.equals(HOME, ignoreCase = true)
+    /** Blank, or About you's home (on the device): following home rather than a place of its own. */
+    fun isHome(name: String?): Boolean = name.isNullOrBlank() || aboutHome?.let { name.trim().equals(it, ignoreCase = true) } == true
+
+    /**
+     * The place the forecast is for: the Weather place setting ([setting]), else About you's home ([home]); null for
+     * neither (the server forecasts [FALLBACK]). The server works this out per household; the devices the same way.
+     */
+    fun effective(setting: String?, home: String?): String? = setting?.let(::normalize) ?: home?.let(::normalize)
 
     /** Whether [input] is something [normalize] would keep (or home); the apps don't save anything else. */
     fun accepts(input: String): Boolean = normalize(input) != null
 
     /**
-     * [wanted] is the stored name (null for home); [f] the mirrored forecast. "Forecast for Bedford · from Open-Meteo";
-     * "Finding “St Neots”… the forecast follows within a few minutes" until the server has answered; "Couldn't find
-     * “Xyzzy” — showing Biggleswade. Try the nearest town." (lit).
+     * [wanted] is the stored name (null for home: About you's, [home]); [f] the mirrored forecast. "Forecast for Bedford
+     * · from Open-Meteo"; "Finding “St Neots”… the forecast follows within a few minutes" until the server has answered;
+     * "Couldn't find “Xyzzy” — showing London. Try the nearest town." (lit); with no place at all [NO_HOME_LINE].
      */
-    fun view(wanted: String?, f: WeatherForecast): WeatherPlaceView {
-        val shown = f.place.ifEmpty { HOME }
-        if (isHome(wanted)) {
-            // Back to home: the server forecasts home again at its next poll.
-            return if (f.asked == null || f.isEmpty) WeatherPlaceView(HOME, "Forecast for $HOME · from Open-Meteo")
-            else WeatherPlaceView(HOME, "Going back to $HOME… the forecast follows within a few minutes", pending = true)
+    fun view(wanted: String?, f: WeatherForecast, home: String? = aboutHome): WeatherPlaceView {
+        val name = effective(wanted, home)
+        if (name == null) {
+            // Back to the generic place: the server follows at its next poll.
+            return if (f.asked == null || f.isEmpty) WeatherPlaceView.NO_HOME
+            else WeatherPlaceView("", "Going back to $FALLBACK's weather… add your home in Ask → Settings → About you", pending = true)
         }
-        val name = wanted!!
+        val shown = f.place.ifEmpty { FALLBACK }
         return when {
             !f.asked.equals(name, ignoreCase = true) ->
                 WeatherPlaceView(name, "Finding “$name”… the forecast follows within a few minutes", pending = true)
@@ -204,7 +223,7 @@ object WeatherPlaceRules {
 
 /** The place setting, synced (either app can change it). */
 class WeatherPlaceStore(private val replica: Replica) {
-    /** The stored name, or null for home. */
+    /** The stored name, or null for home (About you's). */
     fun wanted(): String? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WeatherPlaceFields.NAME)?.textOrNull
         ?.let(WeatherPlaceRules::normalize)?.takeUnless(WeatherPlaceRules::isHome)
 
@@ -391,7 +410,7 @@ object WeatherRules {
         if (f.isEmpty) return emptyList()
         val out = mutableListOf<String>()
         val today = cal.epochDayOf(nowMs)
-        nowLine(f, nowMs, cal)?.let { out += "now in ${f.place.ifEmpty { "Biggleswade" }}: $it" }
+        nowLine(f, nowMs, cal)?.let { out += "now in ${f.place.ifEmpty { "home" }}: $it" }
         f.days.filter { it.epochDay >= today }.forEach { d ->
             val label = when (d.epochDay) {
                 today -> "today (${CivilDate.shortLabel(d.epochDay)})"
@@ -417,7 +436,7 @@ object WeatherRules {
     private const val MAX_PLACE_CHARS = 40
 
     /**
-     * Weather nudges (Weather item 1: "Rain at 17:30 — Training at SG18"): one [NoticeSource.WEATHER] notice for each of
+     * Weather nudges (Weather item 1: "Rain at 17:30 — Training at AB1"): one [NoticeSource.WEATHER] notice for each of
      * today's plans still to come that you go out for — a timed event with a place and no video link, not a fixture
      * (watched, not attended) and not hidden from my day, and every booked session — when an hour from
      * [NUDGE_LEAD_MS] before it starts until it ends is wet ([isWet]). Digest by default (the governor sums them in the

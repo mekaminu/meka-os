@@ -253,11 +253,12 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         }
         Text(
             "At work, family, your always-notify list and anyone who calls twice within 3 minutes ring. Other calls are " +
-                "declined, and your network's \"forward when busy\" sends them to Navilife's assistant " +
-                "(${CallScreeningRules.ASSISTANT_NUMBER}), which takes a message. Declined calls still show as missed calls.",
+                "declined, and your network's \"forward when busy\" sends them to ${CallScreeningRules.assistantName()}, " +
+                "which takes a message. Declined calls still show as missed calls.",
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
-        Text("Test it: ring ${CallScreeningRules.ASSISTANT_NUMBER} from another phone", style = MekaType.caption, color = Meka.colors.textSecondary)
+        // The number is About you's (rule 13); without it the line says where to add it.
+        Text(CallScreeningRules.testLine(), style = MekaType.caption, color = Meka.colors.textSecondary)
         Spacer(Modifier.height(MekaSpace.m))
         RecordingKeepSection(work.recordingDays, Modifier.appear(rememberAppearance(4))) { d -> scope.launch { core.setRecordingDays(d) } }
         Spacer(Modifier.height(MekaSpace.m))

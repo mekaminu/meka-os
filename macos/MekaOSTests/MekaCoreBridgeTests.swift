@@ -886,17 +886,22 @@ final class MekaCoreBridgeTests: XCTestCase {
 
     /// Weather place setting: what the Calendars sheet's field accepts and the line it shows reach Swift.
     func testWeatherPlaceReachesSwift() {
-        XCTAssertEqual(WeatherPlaceRules.shared.HOME, "Biggleswade")
+        // Rule 13: home is About you's (invented here), never the code's; the generic place stands in without one.
+        XCTAssertEqual(WeatherPlaceRules.shared.FALLBACK, "London")
+        _ = Household.shared.usePlaces(home: "Oakfield", work: "", assistantNumber: "")
+        defer { _ = Household.shared.set(n: HouseholdNames.companion.EMPTY) }
+        XCTAssertEqual(WeatherPlaceRules.shared.defaultName, "Oakfield")
         XCTAssertEqual(WeatherPlaceRules.shared.normalize(input: "  St   Neots "), "St Neots")
         XCTAssertNil(WeatherPlaceRules.shared.normalize(input: "123"))
         XCTAssertTrue(WeatherPlaceRules.shared.accepts(input: "Bedford"))
         XCTAssertFalse(WeatherPlaceRules.shared.accepts(input: "<b>"))
-        XCTAssertTrue(WeatherPlaceRules.shared.isHome(name: "biggleswade"))
-        let home = WeatherForecast(place: "Biggleswade", hours: [], days: [], asked: "Xyzzy", found: false)
-        let lit = WeatherPlaceRules.shared.view(wanted: "Xyzzy", f: home)
+        XCTAssertTrue(WeatherPlaceRules.shared.isHome(name: "oakfield"))
+        let home = WeatherForecast(place: "London", hours: [], days: [], asked: "Xyzzy", found: false)
+        let lit = WeatherPlaceRules.shared.view(wanted: "Xyzzy", f: home, home: WeatherPlaceRules.shared.aboutHome)
         XCTAssertTrue(lit.lit)
-        XCTAssertEqual(lit.line, "Couldn't find “Xyzzy” — showing Biggleswade. Try the nearest town.")
-        XCTAssertTrue(WeatherPlaceRules.shared.view(wanted: "Bedford", f: home).pending)
+        XCTAssertEqual(lit.line, "Couldn't find “Xyzzy” — showing London. Try the nearest town.")
+        XCTAssertTrue(WeatherPlaceRules.shared.view(wanted: "Bedford", f: home, home: "Oakfield").pending)
+        XCTAssertEqual(WeatherPlaceRules.shared.view(wanted: nil, f: WeatherForecast.companion.EMPTY, home: nil), WeatherPlaceView.companion.NO_HOME)
     }
 
     /// MEKA's voice: Talk cuts a line into the pieces it asks MEKA's server to say, in Swift as on the Fold.
@@ -1645,14 +1650,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rows[0].line, "09:00–17:30 · usual")
     }
 
-    /// Places item 2: work is Canary Wharf by default, and the work field's line reaches Swift.
+    /// Places item 2: work is About you's (rule 13; invented here), and the work field's line reaches Swift.
     func testPlacesReachSwift() {
-        XCTAssertEqual(PlacesRules.shared.WORK, "Canary Wharf")
+        _ = Household.shared.usePlaces(home: "", work: "Riverside", assistantNumber: "")
+        defer { _ = Household.shared.set(n: HouseholdNames.companion.EMPTY) }
+        XCTAssertEqual(PlacesRules.shared.defaultWork, "Riverside")
         XCTAssertTrue(PlacesRules.shared.isDefaultWork(name: nil))
-        XCTAssertTrue(PlacesRules.shared.isDefaultWork(name: "canary wharf"))
+        XCTAssertTrue(PlacesRules.shared.isDefaultWork(name: "riverside"))
         XCTAssertFalse(PlacesRules.shared.isDefaultWork(name: "Cambridge"))
-        XCTAssertEqual(WeatherPlaceView.companion.WORK.line, "Work forecast for Canary Wharf · on office days")
-        XCTAssertEqual(WeatherView.companion.EMPTY.workChoice.name, "Canary Wharf")
+        XCTAssertEqual(PlacesRules.shared.workLine(place: "Riverside"), "Work forecast for Riverside · on office days")
+        XCTAssertEqual(WeatherView.companion.EMPTY.workChoice, WeatherPlaceView.companion.NO_WORK)
     }
 
     /** Places item 4: the commute's train line reaches Today on the Mac through the weather view. */
@@ -1670,7 +1677,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(BlockedCallersView.companion.EMPTY.line, BlockedCallerRules.shared.EMPTY_LINE)
         XCTAssertEqual(BlockedCallerRules.shared.display(number: "+441632960691"), "01632 960691")
         XCTAssertNil(BlockedCallerRules.shared.keyOf(number: "abc"))
-        XCTAssertEqual(CallScreeningRules.shared.ASSISTANT_NUMBER, "01767 667246")
+        // The assistant's number is About you's (rule 13; invented here).
+        XCTAssertEqual(CallScreeningRules.shared.testLine(number: "01632 960000"), "Test it: ring 01632 960000 from another phone")
+        XCTAssertEqual(CallScreeningRules.shared.assistantName(number: nil), "Navilife's assistant")
     }
 
     func testCallCreditReachesSwift() {
@@ -2331,7 +2340,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(reg?.label, "Car reg")
         XCTAssertEqual(reg?.value, "AB12 CDE")
         XCTAssertEqual(rules.groupOf(label: "Car reg"), FactGroup.car)
-        XCTAssertNil(rules.refusal(text: "GP: Dr Patel, 01767 123456"))
+        XCTAssertNil(rules.refusal(text: "GP: Dr Patel, 01632 123456"))
         XCTAssertEqual(rules.refusal(text: "Wifi password: BlueFox77"), rules.REFUSED_SECRET)
         XCTAssertEqual(rules.refusal(text: "Bank card: 4111 1111 1111 1111"), rules.REFUSED_BANK)
         XCTAssertEqual(rules.refusal(text: "Passport: 123456789"), rules.REFUSED_ID)
@@ -2358,13 +2367,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Emergency card, slice 1: a typed line is read by the core's rules, secrets and numbers are turned away, and the
         // card's parts reach the Mac (only Strings cross from the sheet).
         let rules = EmergencyRules.shared
-        let gp = rules.read(text: "GP: Dr Patel, 01767 123456")
+        let gp = rules.read(text: "GP: Dr Patel, 01632 123456")
         XCTAssertEqual(gp?.title, "GP")
-        XCTAssertEqual(gp?.detail, "Dr Patel, 01767 123456")
-        XCTAssertNil(rules.refusal(section: .call, text: "GP: Dr Patel, 01767 123456"))
+        XCTAssertEqual(gp?.detail, "Dr Patel, 01632 123456")
+        XCTAssertNil(rules.refusal(section: .call, text: "GP: Dr Patel, 01632 123456"))
         XCTAssertEqual(rules.refusal(section: .accounts, text: "Bank PIN: 4821"), rules.REFUSED_SECRET)
         XCTAssertEqual(rules.refusal(section: .documents, text: "Passport: 123456789"), rules.REFUSED_NUMBER)
-        XCTAssertEqual(rules.phone(detail: "Dr Patel, 01767 123456"), "01767123456")
+        XCTAssertEqual(rules.phone(detail: "Dr Patel, 01632 123456"), "01632123456")
         let empty = EmergencyView.companion.EMPTY
         XCTAssertEqual(empty.groups.map(\.label), ["Who to call", "Where things are", "Key accounts"])
         XCTAssertEqual(empty.groups.map(\.section), ["call", "documents", "accounts"])
@@ -2853,7 +2862,7 @@ final class MekaCoreBridgeTests: XCTestCase {
                                  notificationAccess: nil, callRoleHeld: nil, people: nil, watch: nil)
         let facts = SetupFacts(device: device, connected: true, server: nil, accounts: nil, signIns: [], ai: nil,
                                callAssistantOn: false, voiceMessageSeen: false, voiceChosen: nil,
-                               homePlace: "Biggleswade", workPlace: "Canary Wharf", nowMs: 0)
+                               homePlace: "Oakfield", workPlace: "Riverside", nowMs: 0)
         let view = SetupRules.shared.view(f: facts)
         let role = view.steps.first { $0.key == "calls.role" }
         XCTAssertEqual(role?.state, .elsewhere)

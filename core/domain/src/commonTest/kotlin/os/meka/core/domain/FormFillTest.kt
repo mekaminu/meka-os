@@ -15,7 +15,7 @@ class FormFillTest {
         fact("Car reg", "AB12 CDE"),
         fact("GP", "Dr Shah"),
         fact("GP surgery", "Ivel Medical Centre"),
-        fact("Home address", "1 Station Road, Biggleswade SG18 0AA"),
+        fact("Home address", "1 Station Road, Oakfield AB1 2CD"),
         fact("Shoe size", "10"),
         fact("Shirt size", "M"),
         fact("Energy supplier", "Octopus", aiOff = true),

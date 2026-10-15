@@ -11,8 +11,8 @@ class SpeechTest {
     @Test
     fun theFirstSentenceIsSaidAloneAndTheRestJoinedSoTheFirstAudioComesQuickly() {
         assertEquals(
-            listOf("You've got three things today.", "Training is at 18:00 at SG18. Anything else?"),
-            SpeechRules.pieces("  You've got three things today.  Training is at 18:00 at SG18.\nAnything else? "),
+            listOf("You've got three things today.", "Training is at 18:00 at AB1. Anything else?"),
+            SpeechRules.pieces("  You've got three things today.  Training is at 18:00 at AB1.\nAnything else? "),
         )
         assertEquals(listOf("Anything else?"), SpeechRules.pieces("Anything else?"))
         assertEquals(emptyList(), SpeechRules.pieces("   "))

@@ -220,7 +220,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     PROMISE("Promises you made", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
     OVERDUE("Overdue tasks", NoticeTier.DIGEST),
-    /** Rain or snow due at today's plans you go out for (Weather): "Light rain at 17:30 — Training at SG18". */
+    /** Rain or snow due at today's plans you go out for (Weather): "Light rain at 17:30 — Training at AB1". */
     WEATHER("Weather for your plans", NoticeTier.DIGEST),
     /**
      * A line on Meka's route to or from work not running well during the commute (Places item 4, from TfL's status

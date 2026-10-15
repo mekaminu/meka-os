@@ -87,11 +87,12 @@ struct WorkSheet: View {
             }
             .toggleStyle(.switch)
             .staggeredAppear(3)
-            Text("Family, the always-notify list and anyone calling twice within 3 minutes ring; other calls are declined and the network's \"forward when busy\" sends them to Navilife's assistant (\(CallScreeningRules.shared.ASSISTANT_NUMBER)), which takes a message. The Fold asks once for permission to screen calls.")
+            Text("Family, the always-notify list and anyone calling twice within 3 minutes ring; other calls are declined and the network's \"forward when busy\" sends them to \(CallScreeningRules.shared.assistantName(number: CallScreeningRules.shared.assistantNumber)), which takes a message. The Fold asks once for permission to screen calls.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(3)
-            Text("Test it: ring \(CallScreeningRules.shared.ASSISTANT_NUMBER) from another phone")
+            // The number is About you's (rule 13); without it the line says where to add it.
+            Text(CallScreeningRules.shared.testLine(number: CallScreeningRules.shared.assistantNumber))
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(3)
             keepRecordings.staggeredAppear(3)

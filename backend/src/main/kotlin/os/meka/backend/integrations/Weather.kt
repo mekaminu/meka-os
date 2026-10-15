@@ -7,11 +7,11 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
-import os.meka.core.domain.PlacesRules
 import os.meka.core.domain.WeatherCodec
 import os.meka.core.domain.WeatherDay
 import os.meka.core.domain.WeatherForecast
 import os.meka.core.domain.WeatherHour
+import os.meka.core.domain.WeatherPlaceRules
 import java.net.URLEncoder
 import java.time.Instant
 import java.util.Optional
@@ -25,15 +25,18 @@ import java.time.ZoneId
  */
 interface WeatherProvider {
     val id: String
-    /** Shown on the Calendars screen with the other feeds ("Open-Meteo · Biggleswade"). */
+    /** Shown on the Calendars screen with the other feeds ("Open-Meteo"). */
     val label: String
-    /** Home: forecast when no place is set (Weather place setting), at fixed coordinates, no lookup. */
+    /**
+     * The generic place forecast when neither the Weather place setting nor About you names home (rule 13, release 2
+     * slice 3: no one's home is in the code), at fixed coordinates, no lookup.
+     */
     val home: WeatherLocation
     /**
-     * Work (Places item 2): forecast too, into `context_mode/weather_work`, when no work place is set; null when this
-     * provider doesn't forecast work.
+     * Work (Places item 2): whether this provider also forecasts work, into `context_mode/weather_work`, for the work
+     * place setting or About you's work (looked up by name); never a place of its own.
      */
-    val work: WeatherLocation? get() = null
+    val forecastsWork: Boolean get() = false
     fun forecast(at: WeatherLocation = home): WeatherForecast
     /**
      * A town name Meka typed (Weather place setting) as a place to forecast; null when nothing matches. Only the name is
@@ -46,18 +49,18 @@ interface WeatherProvider {
 data class WeatherLocation(val name: String, val latitude: Double, val longitude: Double)
 
 /**
- * Open-Meteo (https://open-meteo.com, free for non-commercial use, CC BY 4.0) for Biggleswade (home) or the town Meka set. Hourly
+ * Open-Meteo (https://open-meteo.com, free for non-commercial use, CC BY 4.0) for the household's home (About you's, or the
+ * town Meka set; a generic place with neither). Hourly
  * temperature, WMO weather code and chance of rain, and each day's range, for 7 days in Europe/London time.
  */
 class OpenMeteoWeather internal constructor(
     private val fetch: (String) -> String,
     private val nowMs: () -> Long = System::currentTimeMillis,
-    val place: String = "Biggleswade",
-    private val latitude: Double = 52.0868,
-    private val longitude: Double = -0.2645,
+    val place: String = WeatherPlaceRules.FALLBACK,
+    private val latitude: Double = 51.5072,
+    private val longitude: Double = -0.1276,
     private val zone: ZoneId = ZoneId.of("Europe/London"),
-    /** Canary Wharf, London (Meka 2026-10-09), at fixed coordinates, no lookup. */
-    override val work: WeatherLocation? = WeatherLocation(PlacesRules.WORK, 51.5054, -0.0235),
+    override val forecastsWork: Boolean = true,
 ) : WeatherProvider {
     constructor() : this({ url -> GovUkBankHolidays.httpGet(url) })
 

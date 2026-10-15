@@ -38,7 +38,7 @@ class HereWeatherTest {
     private val asked = mutableListOf<String>()
     private var failing = false
     private val source = OpenMeteoWeather({ url -> asked += url; if (failing) error("no network"); sample() }, { now })
-    private val places = listOf(WeatherLocation("Biggleswade", 52.0868, -0.2645), WeatherLocation("Canary Wharf", 51.5054, -0.0235))
+    private val places = listOf(WeatherLocation("Oakfield", 52.40, -1.50), WeatherLocation("Riverside", 51.70, -1.20))
     private val here = HereWeather(source) { places }
 
     @Test
@@ -58,8 +58,8 @@ class HereWeatherTest {
         assertEquals(r.hours, back.hours)
         assertEquals(r.days, back.days)
         assertTrue(back.away)
-        // Sandy, 5 km from home: not away.
-        assertFalse(here.at("hh", HereCodec.Request(52.13, -0.29)).away)
+        // 4 km from home: not away.
+        assertFalse(here.at("hh", HereCodec.Request(52.43, -1.48)).away)
     }
 
     @Test
@@ -73,9 +73,10 @@ class HereWeatherTest {
     }
 
     @Test
-    fun withNoKnownPlacesTheDefaultsDecideAway() {
+    fun withNoKnownPlacesEverywhereIsAway() {
+        // Rule 13: no place in the code stands in, so with none known "here" is always news.
         val bare = HereWeather(source) { emptyList() }
-        assertFalse(bare.at("hh", HereCodec.Request(52.09, -0.26)).away)
+        assertTrue(bare.at("hh", HereCodec.Request(52.09, -0.26)).away)
         assertTrue(bare.at("hh", HereCodec.Request(53.48, -2.24)).away)
         val broken = HereWeather(source) { error("db down") }
         assertTrue(broken.at("hh", HereCodec.Request(53.48, -2.24)).away)

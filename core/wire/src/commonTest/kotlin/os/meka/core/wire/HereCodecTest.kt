@@ -12,19 +12,19 @@ class HereCodecTest {
 
     @Test
     fun aRoundedPointRoundTripsAndAFinerOneIsRefusedNotRounded() {
-        val r = HereCodec.Request(52.09, -0.26)
+        val r = HereCodec.Request(52.40, -1.50)
         assertEquals(r, HereCodec.decodeRequest(HereCodec.encodeRequest(r)))
         assertEquals(HereCodec.Request(-33.87, 151.21), HereCodec.decodeRequest("""{"w":1,"lat":-33.87,"lon":151.21}"""))
         assertEquals(HereCodec.Request(52.0, 0.0), HereCodec.decodeRequest("""{"w":1,"lat":52,"lon":0}"""))
         fun bad(body: String) = assertFailsWith<WireFormatException> { HereCodec.decodeRequest(body) }
         // A precise location never gets in, even by one more decimal place.
-        bad(HereCodec.encodeRequest(HereCodec.Request(52.0868, -0.2645)))
-        bad("""{"w":1,"lat":52.091,"lon":-0.26}""")
+        bad(HereCodec.encodeRequest(HereCodec.Request(52.4012, -1.5021)))
+        bad("""{"w":1,"lat":52.401,"lon":-1.50}""")
         bad("""{"w":1,"lat":91,"lon":0}""")
         bad("""{"w":1,"lat":0,"lon":-181}""")
-        bad("""{"w":1,"lat":"52.09","lon":-0.26}""")
-        bad("""{"w":1,"lat":52.09}""")
-        bad("""{"w":2,"lat":52.09,"lon":-0.26}""")
+        bad("""{"w":1,"lat":"52.40","lon":-1.50}""")
+        bad("""{"w":1,"lat":52.40}""")
+        bad("""{"w":2,"lat":52.40,"lon":-1.50}""")
         bad("not json")
     }
 

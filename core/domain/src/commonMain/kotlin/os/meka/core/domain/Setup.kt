@@ -72,8 +72,10 @@ data class SetupFacts(
     val voiceMessageSeen: Boolean,
     /** MEKA's voice as chosen in Ask → More → MEKA's voice; null while never chosen. */
     val voiceChosen: String?,
-    val homePlace: String = WeatherPlaceRules.HOME,
-    val workPlace: String = PlacesRules.WORK,
+    /** The place home's weather follows (the setting, else About you's); null for neither (rule 13: no default in code). */
+    val homePlace: String? = null,
+    /** The place work's weather follows; null for none. */
+    val workPlace: String? = null,
     val nowMs: Long,
 )
 
@@ -185,8 +187,13 @@ object SetupRules {
         return listOf(account("google", "calendar.google", "Google calendar"), account("microsoft", "calendar.outlook", "Outlook calendar"), editing)
     }
 
+    /** "Home Oakfield · work Riverside · change in Calendars"; a missing place says it's London's weather / add it. */
+    internal fun weatherLine(home: String?, work: String?): String =
+        "Home ${home ?: "not set, showing ${WeatherPlaceRules.FALLBACK}"} · work ${work ?: "not set"} · " +
+            if (home == null || work == null) "add them in About you" else "change in Calendars"
+
     private fun calls(f: SetupFacts): List<SetupStep> {
-        val number = CallScreeningRules.ASSISTANT_NUMBER
+        val number = CallScreeningRules.assistantNumber ?: "Navilife's number"
         val service = when (f.server?.calls) {
             null -> SetupStep("calls.number", "Navilife's number", COULDNT, SetupState.UNKNOWN)
             true -> SetupStep("calls.number", "Navilife's number", "$number takes messages for you", SetupState.DONE)
@@ -271,7 +278,7 @@ object SetupRules {
         val accounts = f.accounts
         val weather = when {
             accounts == null -> SetupStep("weather", "Weather", COULDNT, SetupState.UNKNOWN)
-            accounts.any { it.provider == "weather" } -> SetupStep("weather", "Weather", "Home ${f.homePlace} · work ${f.workPlace} · change in Calendars", SetupState.DONE)
+            accounts.any { it.provider == "weather" } -> SetupStep("weather", "Weather", weatherLine(f.homePlace, f.workPlace), SetupState.DONE)
             else -> SetupStep("weather", "Weather", "Not fetched yet · it starts with Navilife's server", SetupState.LATER)
         }
         val lines = when {

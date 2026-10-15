@@ -10,6 +10,8 @@ import kotlin.concurrent.Volatile
  * Fold's fixtures after a sync, and an empty profile means no child is named and no club fixture is spotted.
  * Release 2 slice 2 (2026-10-15): the partner too — Leaving now's draft, the Family link and the week ahead's
  * "to sort out with …" read [partner], and the family-event words read [familyWords], never a name in the code.
+ * Release 2 slice 3 (2026-10-15): home and work for the weather ([home], [work]) and the call assistant's number
+ * ([assistantNumber]) too; with none typed the weather falls back to a generic place and the number isn't shown.
  */
 data class HouseholdNames(
     /** Age group → the child's first name ("7" → "Alex"); a child without an age group isn't here. */
@@ -22,6 +24,12 @@ data class HouseholdNames(
     val partner: String? = null,
     /** Every child's first name, About you's order (with or without an age group). */
     val childNames: List<String> = emptyList(),
+    /** About you's home as a place the weather can follow ("Oakfield"); null with none typed. */
+    val home: String? = null,
+    /** About you's work place ("Riverside"); null with none typed. */
+    val work: String? = null,
+    /** The call assistant's number as About you has it ("01632 960000"); null with none typed. */
+    val assistantNumber: String? = null,
 ) {
     /** The partner's first name ("Sam" for "Sam Lane"); null with none. */
     val partnerFirst: String? get() = partner?.trim()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
@@ -45,6 +53,9 @@ data class HouseholdNames(
                 clubNames = clubs.mapNotNull { c -> c.name?.let { c.short to it } }.toMap(),
                 partner = a.partnerName?.trim()?.takeIf { it.isNotEmpty() },
                 childNames = a.children.map { it.name },
+                home = a.home?.let(WeatherPlaceRules::normalize),
+                work = a.work?.let(WeatherPlaceRules::normalize),
+                assistantNumber = a.assistantNumber?.trim()?.takeIf { it.isNotEmpty() },
             )
         }
     }
@@ -70,6 +81,16 @@ object Household {
         children = children.split('\n').mapNotNull { AboutYouRules.parseChild(it) },
         clubs = AboutYouRules.clubs(clubs),
         partnerName = partner.trim().takeIf { it.isNotEmpty() },
+    ))
+
+    /**
+     * The places and the call assistant's number as typed in About you (tests and the Mac's bridge tests; blank for
+     * none), keeping the children, clubs and partner already set.
+     */
+    fun usePlaces(home: String, work: String, assistantNumber: String): Boolean = set(names.copy(
+        home = WeatherPlaceRules.normalize(home),
+        work = WeatherPlaceRules.normalize(work),
+        assistantNumber = assistantNumber.trim().takeIf { it.isNotEmpty() },
     ))
 
     /** Sets [n] directly (tests, and [use]); true when it changed. */

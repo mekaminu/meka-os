@@ -49,7 +49,7 @@ import os.meka.core.facade.MekaCore
 
 /**
  * Ask → More → Emergency card (V1, slice 1): who to call, where things are and key accounts by name, one typed line at
- * a time under each part ("GP: Dr Patel, 01767 123456"), each with Remove. his wife reads the same card on her family
+ * a time under each part ("GP: Dr Patel, 01632 123456"), each with Remove. his wife reads the same card on her family
  * page. A line holding a password, PIN or card or account number is turned away: the line under its field says why,
  * lit in the accent, and the words stay in the field to fix.
  *

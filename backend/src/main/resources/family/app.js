@@ -163,7 +163,7 @@
     return li;
   }
 
-  // An emergency card line: "GP" · "Dr Patel, 01767 123456" · "Call 01767 123456" (a tel: link under Who to call).
+  // An emergency card line: "GP" · "Dr Patel, 01632 123456" · "Call 01632 123456" (a tel: link under Who to call).
   function cardRow(r) {
     const li = document.createElement("li");
     li.className = "row";

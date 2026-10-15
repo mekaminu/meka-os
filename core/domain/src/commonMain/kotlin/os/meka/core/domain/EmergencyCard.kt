@@ -18,7 +18,7 @@ object EmergencyFields {
     /** [EmergencySection.key]: `call` · `documents` · `accounts`. */
     const val SECTION = "section"
     const val TITLE = "title"
-    /** What follows the name ("Dr Patel, 01767 123456"); empty when only a name was typed. */
+    /** What follows the name ("Dr Patel, 01632 123456"); empty when only a name was typed. */
     const val DETAIL = "detail"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
@@ -26,7 +26,7 @@ object EmergencyFields {
 
 /** The card's three parts, in the order the card shows them. */
 enum class EmergencySection(val key: String, val label: String, val hint: String) {
-    CALL("call", "Who to call", "Add someone to call… (GP: Dr Patel, 01767 123456)"),
+    CALL("call", "Who to call", "Add someone to call… (GP: Dr Patel, 01632 123456)"),
     DOCUMENTS("documents", "Where things are", "Add where something is… (Passports: study desk, top drawer)"),
     ACCOUNTS("accounts", "Key accounts", "Add an account by name… (Home insurance: Aviva)"),
     ;
@@ -39,14 +39,14 @@ enum class EmergencySection(val key: String, val label: String, val hint: String
 /** One line as stored. */
 data class EmergencyEntry(val id: String, val section: EmergencySection, val title: String, val detail: String, val addedAtMs: Long)
 
-/** One line as the card shows it: "GP" · "Dr Patel, 01767 123456", with a number to ring when there is one. */
+/** One line as the card shows it: "GP" · "Dr Patel, 01632 123456", with a number to ring when there is one. */
 data class EmergencyRow(
     val id: String,
     val section: String,
     val title: String,
     /** Null when only a name was typed. */
     val detail: String?,
-    /** Under "Who to call": the phone number in the line as digits ("01767123456", "+447700900123"), for a tap to ring. */
+    /** Under "Who to call": the phone number in the line as digits ("01632123456", "+447700900123"), for a tap to ring. */
     val phone: String?,
     val spoken: String,
 )
@@ -82,7 +82,7 @@ object EmergencyRules {
     const val MAX_LINES = 60
 
     const val EMPTY_SUMMARY = "Empty. Add who to call, where important documents are and key accounts by name; your partner sees it on their family page."
-    const val NOT_READ = "Type a name, then a colon and the details: “GP: Dr Patel, 01767 123456”."
+    const val NOT_READ = "Type a name, then a colon and the details: “GP: Dr Patel, 01632 123456”."
     const val REFUSED_SECRET = "Navilife keeps passwords and PINs off the card. Write where they're kept instead: “Passwords: in the family password manager”."
     const val REFUSED_NUMBER = "Navilife keeps card, account and policy numbers off the card. Write the name and where the paperwork is: “Home insurance: Aviva, policy in the blue folder”."
     const val FULL = "The card is full. Remove a line first."
@@ -102,7 +102,7 @@ object EmergencyRules {
     private val FILLER = setOf("is", "are", "=", "-", "–", "—", ":", "my", "our", "the")
 
     /**
-     * Reads one typed line: "GP: Dr Patel, 01767 123456" → GP and the rest. A name alone is fine; a long line with no
+     * Reads one typed line: "GP: Dr Patel, 01632 123456" → GP and the rest. A name alone is fine; a long line with no
      * separator keeps its first words (up to [MAX_TITLE], cut at a word) as the name and the rest as the detail.
      */
     fun read(text: String): EmergencyLine? {

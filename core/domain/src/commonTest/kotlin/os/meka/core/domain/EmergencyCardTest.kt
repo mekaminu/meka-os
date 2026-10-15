@@ -22,7 +22,7 @@ class EmergencyCardTest {
 
     @Test
     fun aLineIsReadAsANameAndItsDetails() {
-        assertEquals(EmergencyLine("GP", "Dr Patel, 01767 123456"), EmergencyRules.read("GP: Dr Patel, 01767 123456"))
+        assertEquals(EmergencyLine("GP", "Dr Patel, 01632 123456"), EmergencyRules.read("GP: Dr Patel, 01632 123456"))
         assertEquals(EmergencyLine("Passports", "study desk, top drawer"), EmergencyRules.read(" passports - study desk, top drawer "))
         assertEquals(EmergencyLine("Mum", ""), EmergencyRules.read("mum"))
         assertNull(EmergencyRules.read("   "))
@@ -39,10 +39,10 @@ class EmergencyCardTest {
         val docs = EmergencySection.DOCUMENTS
         val accounts = EmergencySection.ACCOUNTS
         // Phone numbers are fine under "Who to call", nowhere else.
-        assertNull(EmergencyRules.refusal(call, "GP: Dr Patel, 01767 123456"))
+        assertNull(EmergencyRules.refusal(call, "GP: Dr Patel, 01632 123456"))
         assertNull(EmergencyRules.refusal(call, "Tunde: +44 7700 900123"))
         assertNull(EmergencyRules.refusal(call, "Emergency: 999"))
-        assertEquals(EmergencyRules.REFUSED_NUMBER, EmergencyRules.refusal(docs, "GP: Dr Patel, 01767 123456"))
+        assertEquals(EmergencyRules.REFUSED_NUMBER, EmergencyRules.refusal(docs, "GP: Dr Patel, 01632 123456"))
         // Card numbers, sort codes, account, policy and passport numbers: refused everywhere.
         assertEquals(EmergencyRules.REFUSED_NUMBER, EmergencyRules.refusal(accounts, "Barclays card: 4929 1234 5678 9012"))
         assertEquals(EmergencyRules.REFUSED_NUMBER, EmergencyRules.refusal(call, "Barclays card: 4929 1234 5678 9012"))
@@ -59,7 +59,7 @@ class EmergencyCardTest {
         // Ordinary words and small numbers are fine.
         assertNull(EmergencyRules.refusal(accounts, "Home insurance: Aviva, policy in the blue folder"))
         assertNull(EmergencyRules.refusal(docs, "Bins: Tuesday, 2 green bins"))
-        assertEquals("01767123456", EmergencyRules.phone("Dr Patel, 01767 123456"))
+        assertEquals("01632123456", EmergencyRules.phone("Dr Patel, 01632 123456"))
         assertEquals("+447700900123", EmergencyRules.phone("+44 7700 900123 (mobile)"))
         assertNull(EmergencyRules.phone("Dr Patel"))
     }
@@ -68,7 +68,7 @@ class EmergencyCardTest {
     fun mekaAddsEditsAndRemovesLinesOnEitherApp() {
         assertEquals(EmergencyView.EMPTY.summary, cFold.view().summary)
         assertEquals(listOf("Who to call", "Where things are", "Key accounts"), cFold.view().groups.map { it.label })
-        assertEquals(EmergencyAdded("Added GP to Who to call", false), cFold.add("call", "GP: Dr Patel, 01767 123456"))
+        assertEquals(EmergencyAdded("Added GP to Who to call", false), cFold.add("call", "GP: Dr Patel, 01632 123456"))
         world.clock.nowMs += 1_000
         assertEquals(EmergencyAdded("Added Passports to Where things are", false), cFold.add("documents", "Passports: study desk, top drawer"))
         world.clock.nowMs += 1_000
@@ -85,16 +85,16 @@ class EmergencyCardTest {
         assertEquals("3 lines · your partner sees it read-only on their family page", v.summary)
         val gp = v.groups[0].rows.single()
         assertEquals("GP", gp.title)
-        assertEquals("Dr Patel, 01767 123456", gp.detail)
-        assertEquals("01767123456", gp.phone)
-        assertEquals("GP. Dr Patel, 01767 123456", gp.spoken)
+        assertEquals("Dr Patel, 01632 123456", gp.detail)
+        assertEquals("01632123456", gp.phone)
+        assertEquals("GP. Dr Patel, 01632 123456", gp.spoken)
         assertNull(v.groups[1].rows.single().phone) // only "Who to call" rings
 
         // The same name again in the same part updates its details; with none typed it's left alone.
-        assertEquals(EmergencyAdded("Updated GP", false), cMac.add("call", "gp: Dr Shah, 01767 654321"))
+        assertEquals(EmergencyAdded("Updated GP", false), cMac.add("call", "gp: Dr Shah, 01632 654321"))
         assertEquals(EmergencyAdded("GP is already on the card", false), cMac.add("call", "GP"))
         sync()
-        assertEquals("Dr Shah, 01767 654321", cFold.view().groups[0].rows.single().detail)
+        assertEquals("Dr Shah, 01632 654321", cFold.view().groups[0].rows.single().detail)
 
         // Removed on one app, gone on both, for good.
         assertTrue(cFold.remove(gp.id))

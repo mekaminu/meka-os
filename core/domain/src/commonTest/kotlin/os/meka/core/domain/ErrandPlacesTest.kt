@@ -17,17 +17,17 @@ class ErrandPlacesTest {
     @Test
     fun aSpotIsSavedFromOneCloseFixAndKeptOnThePhoneAcrossARestart() {
         val none = emptyMap<String, SavedPlace>()
-        val ok = ErrandPlaceRules.save(none, "the tesco", 52.0861, -0.2614, 18.0, 1_000L)
+        val ok = ErrandPlaceRules.save(none, "the tesco", 52.3961, -1.4914, 18.0, 1_000L)
         assertTrue(ok.saved)
         assertEquals("Saved Tesco here · reminds you within 150 m", ok.line)
-        assertEquals(SavedPlace("tesco", 52.0861, -0.2614, 1_000L), ok.places["tesco"])
+        assertEquals(SavedPlace("tesco", 52.3961, -1.4914, 1_000L), ok.places["tesco"])
         // Too vague (indoors), no fix at all, or a blank fix: nothing saved.
         assertFalse(ErrandPlaceRules.save(none, "Tesco", 52.0, -0.2, 450.0, 1L).saved)
         assertEquals(ErrandPlaceRules.NO_FIX, ErrandPlaceRules.save(none, "Tesco", null, null, null, 1L).line)
         assertFalse(ErrandPlaceRules.save(none, "Tesco", 0.0, 0.0, 5.0, 1L).saved)
         // Saving again replaces it; the stored text reads back the same, and junk lines are skipped.
         val moved = ErrandPlaceRules.save(ok.places, "Tesco", 52.1, -0.27, 9.0, 2_000L).places
-        val boots = ErrandPlaceRules.save(moved, "Boots", 52.09, -0.26, 30.0, 3_000L).places
+        val boots = ErrandPlaceRules.save(moved, "Boots", 52.40, -1.50, 30.0, 3_000L).places
         assertEquals(2, boots.size)
         assertEquals(boots, ErrandPlaceRules.decode(ErrandPlaceRules.encode(boots.values)))
         assertEquals(boots, ErrandPlaceRules.decode(ErrandPlaceRules.encode(boots.values) + "\nbad line\nx\t91\t0\t1"))
@@ -41,7 +41,7 @@ class ErrandPlacesTest {
         errands.add("Boots: plasters")
         world.clock.advance(1_000)
         errands.add("post office: parcel")
-        val saved = ErrandPlaceRules.decode("tesco\t52.08\t-0.26\t1\npost office\t52.09\t-0.25\t1\nhalfords\t52.1\t-0.2\t1")
+        val saved = ErrandPlaceRules.decode("tesco\t52.39\t-1.50\t1\npost office\t52.40\t-1.49\t1\nhalfords\t52.1\t-0.2\t1")
         val v = errands.view()
         // Boots has no spot; Halfords has a spot but nothing waiting.
         assertEquals(listOf("Tesco", "Post office"), ErrandPlaceRules.toArm(v, saved).map { it.place })

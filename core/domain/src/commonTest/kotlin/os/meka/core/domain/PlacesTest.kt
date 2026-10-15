@@ -7,7 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Places item 2 (Meka 2026-10-09): home Biggleswade, work Canary Wharf; both on office days. */
+/** Places item 2 (Meka 2026-10-09): home and work (invented: Oakfield, Riverside); both on office days. */
 class PlacesTest {
     // Friday 9 October 2026, British Summer Time (UTC+1).
     private val cal = LocalCalendar.fixedOffset(3_600_000L)
@@ -22,9 +22,9 @@ class PlacesTest {
     private fun dry(n: Int, t: Int) = Array(n) { Triple(t, 2, 10) }
     private fun wet(n: Int, t: Int, code: Int = 61) = Array(n) { Triple(t, code, 70) }
 
-    private val home = WeatherForecast("Biggleswade", hours(fri, *dry(24, 9)), listOf(WeatherDay(fri, 6, 13, 2, 10)))
+    private val home = WeatherForecast("Oakfield", hours(fri, *dry(24, 9)), listOf(WeatherDay(fri, 6, 13, 2, 10)))
     /** Dry until 15:00, light rain 15:00–18:00, dry after. */
-    private val work = WeatherForecast("Canary Wharf", hours(fri, *dry(9, 12), *dry(6, 14), *wet(3, 13), *dry(6, 11)),
+    private val work = WeatherForecast("Riverside", hours(fri, *dry(9, 12), *dry(6, 14), *wet(3, 13), *dry(6, 11)),
         listOf(WeatherDay(fri, 10, 15, 61, 70), WeatherDay(sat, 11, 16, 3, 20)))
 
     private val hoursMeka = WorkHours(WorkSchedule.DEFAULT)
@@ -46,29 +46,29 @@ class PlacesTest {
     @Test
     fun bothPlacesShareOneLineUntilWorkEnds() {
         // Before leaving home: work's temperature at the start of work, and its rain from 15:00.
-        assertEquals("Biggleswade 9° now · Canary Wharf 14°, light rain from 15:00 — take a coat",
+        assertEquals("Oakfield 9° now · Riverside 14°, light rain from 15:00 — take a coat",
             PlacesRules.placesLine(home, work, at(fri, 7, 10), office, cal))
         // At work, raining until after work ends: no "until".
-        assertEquals("Biggleswade 9° now · Canary Wharf 13°, light rain — take a coat",
+        assertEquals("Oakfield 9° now · Riverside 13°, light rain — take a coat",
             PlacesRules.placesLine(home, work, at(fri, 16, 20), office, cal))
         // Raining as work starts, dry from 11:00.
         val morning = work.copy(hours = hours(fri, *dry(9, 12), *wet(2, 10), *dry(13, 12)))
-        assertEquals("Biggleswade 9° now · Canary Wharf 10°, light rain until 11:00 — take a coat",
+        assertEquals("Oakfield 9° now · Riverside 10°, light rain until 11:00 — take a coat",
             PlacesRules.placesLine(home, morning, at(fri, 8), office, cal))
         // Wet until work ends: no "until".
         val wetDay = work.copy(hours = hours(fri, *dry(9, 12), *wet(15, 10)))
-        assertEquals("Biggleswade 9° now · Canary Wharf 10°, light rain — take a coat",
+        assertEquals("Oakfield 9° now · Riverside 10°, light rain — take a coat",
             PlacesRules.placesLine(home, wetDay, at(fri, 10), office, cal))
         // Snow says wrap up.
         val snow = work.copy(hours = hours(fri, *dry(12, 1), *wet(12, 0, code = 71)))
-        assertEquals("Biggleswade 9° now · Canary Wharf 1°, light snow from 12:00 — wrap up",
+        assertEquals("Oakfield 9° now · Riverside 1°, light snow from 12:00 — wrap up",
             PlacesRules.placesLine(home, snow, at(fri, 8), office, cal))
         // Dry through work.
         val dryDay = work.copy(hours = hours(fri, *dry(24, 16)))
-        assertEquals("Biggleswade 9° now · Canary Wharf 16°, dry", PlacesRules.placesLine(home, dryDay, at(fri, 8), office, cal))
+        assertEquals("Oakfield 9° now · Riverside 16°, dry", PlacesRules.placesLine(home, dryDay, at(fri, 8), office, cal))
         // Rain after work doesn't count.
         val evening = work.copy(hours = hours(fri, *dry(18, 15), *wet(6, 12)))
-        assertEquals("Biggleswade 9° now · Canary Wharf 15°, dry", PlacesRules.placesLine(home, evening, at(fri, 8), office, cal))
+        assertEquals("Oakfield 9° now · Riverside 15°, dry", PlacesRules.placesLine(home, evening, at(fri, 8), office, cal))
         // From the end of work, or without either forecast: nothing (Today keeps home's own line).
         assertNull(PlacesRules.placesLine(home, work, at(fri, 17, 30), office, cal))
         assertNull(PlacesRules.placesLine(home, WeatherForecast.EMPTY, at(fri, 8), office, cal))
@@ -78,13 +78,14 @@ class PlacesTest {
     @Test
     fun todaysLineSaysBothPlacesOnlyOnAnOfficeDay() {
         val v = WeatherRules.view(home, at(fri, 7, 10), cal, null, work, null, office)
-        assertEquals("Biggleswade 9° now · Canary Wharf 14°, light rain from 15:00 — take a coat", v.nowLine)
-        assertEquals("Biggleswade 9 degrees now · Canary Wharf 14 degrees, light rain from 15:00 — take a coat", v.nowSpoken)
+        assertEquals("Oakfield 9° now · Riverside 14°, light rain from 15:00 — take a coat", v.nowLine)
+        assertEquals("Oakfield 9 degrees now · Riverside 14 degrees, light rain from 15:00 — take a coat", v.nowSpoken)
         // No office day: home's own line.
         assertEquals("9° · partly cloudy, dry today", WeatherRules.view(home, at(fri, 7, 10), cal, null, work, null, null).nowLine)
         // After work: home's own line again.
         assertEquals("9° · partly cloudy, dry today", WeatherRules.view(home, at(fri, 18), cal, null, work, null, office).nowLine)
-        assertEquals(WeatherPlaceView.WORK, v.workChoice)
+        // No work in About you (rule 13: none in the code): the field says where to add it.
+        assertEquals(WeatherPlaceView.NO_WORK, v.workChoice)
     }
 
     @Test
@@ -105,27 +106,35 @@ class PlacesTest {
     @Test
     fun askHearsWorksForecastToo() {
         val lines = PlacesRules.workAskLines(work, at(fri, 10), cal)
-        assertEquals("now at work in Canary Wharf: 14° · light rain from 15:00", lines[0])
-        assertEquals("today at work in Canary Wharf: 10–15°, light rain from 15:00 — take a coat", lines[1])
-        assertEquals("tomorrow at work in Canary Wharf: 11–16°, cloudy", lines[2])
+        assertEquals("now at work in Riverside: 14° · light rain from 15:00", lines[0])
+        assertEquals("today at work in Riverside: 10–15°, light rain from 15:00 — take a coat", lines[1])
+        assertEquals("tomorrow at work in Riverside: 11–16°, cloudy", lines[2])
         assertTrue(PlacesRules.workAskLines(WeatherForecast.EMPTY, at(fri, 10), cal).isEmpty())
     }
 
     @Test
     fun theWorkPlaceSyncsAndItsLineSaysWhatTheForecastIsDoing() {
+        // Work is About you's (invented here); with none there's no work forecast.
+        assertEquals(WeatherPlaceView.NO_WORK, PlacesRules.workView(null, work, work = null))
+        Household.usePlaces("", "Riverside", "")
+        try { workPlaceSyncs() } finally { Household.set(HouseholdNames.EMPTY) }
+    }
+
+    private fun workPlaceSyncs() {
         val world = SyncWorld()
         val a = world.device("android")
         val m = world.device("mac")
         val fold = WorkPlaceStore(a.replica)
-        // Canary Wharf by default: nothing stored, nothing written for it.
+        // About you's work by default: nothing stored, nothing written for it.
         assertNull(fold.wanted())
-        assertTrue(fold.set("Canary Wharf"))
+        assertTrue(fold.set("Riverside"))
         assertTrue(fold.set(""))
         assertNull(a.replica.entity(EntityTypes.CONTEXT_MODE, WorkPlaceStore.ENTITY_ID))
         assertTrue(!fold.set("???"))
         assertNull(a.replica.entity(EntityTypes.CONTEXT_MODE, WorkPlaceStore.ENTITY_ID))
-        assertEquals(WeatherPlaceView("Canary Wharf", "Work forecast for Canary Wharf · on office days"), PlacesRules.workView(null, work))
-        assertEquals(WeatherPlaceView.WORK, PlacesRules.workView(null, WeatherForecast.EMPTY))
+        assertEquals(WeatherPlaceView("Riverside", "Work forecast for Riverside · on office days"),
+            PlacesRules.workView(null, work.copy(asked = "Riverside", found = true)))
+        assertTrue(PlacesRules.workView(null, WeatherForecast.EMPTY).pending)
 
         // Set on the Fold, read on the Mac; on its way until the server answers.
         assertTrue(fold.set(" cambridge "))
@@ -135,10 +144,10 @@ class PlacesTest {
         val found = work.copy(place = "Cambridge", asked = "cambridge")
         assertEquals(WeatherPlaceView("cambridge", "Work forecast for Cambridge · on office days"), PlacesRules.workView("cambridge", found))
         val lit = PlacesRules.workView("Xyzzy", work.copy(asked = "Xyzzy", found = false))
-        assertEquals("Couldn't find “Xyzzy” — showing Canary Wharf. Try the nearest town.", lit.line)
+        assertEquals("Couldn't find “Xyzzy” · try the nearest town", lit.line)
         assertTrue(lit.lit)
-        // Back to Canary Wharf from the Mac.
-        assertTrue(WorkPlaceStore(m.replica).set("canary wharf"))
+        // Back to Riverside from the Mac.
+        assertTrue(WorkPlaceStore(m.replica).set("riverside"))
         m.syncWithRetry(); a.syncWithRetry()
         assertNull(fold.wanted())
         assertTrue(PlacesRules.workView(null, found).pending)
@@ -149,7 +158,7 @@ class PlacesTest {
             mapOf(
                 WeatherFields.HOURS to WeatherCodec.encodeHours(work.hours).fv(),
                 WeatherFields.DAYS to WeatherCodec.encodeDays(work.days).fv(),
-                WeatherFields.PLACE to "Canary Wharf".fv(),
+                WeatherFields.PLACE to "Riverside".fv(),
             ),
         )
         a.syncWithRetry(); m.syncWithRetry()

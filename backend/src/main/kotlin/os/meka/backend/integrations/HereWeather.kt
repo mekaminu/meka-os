@@ -35,8 +35,8 @@ class HereWeather(
             HereCodec.Response.OK,
             hours = hours,
             days = days,
-            // Without known places (none resolved) the defaults stand in, so "away" still means something.
-            away = HereRules.isAway(point, known.ifEmpty { listOf(HereRules.HOME, HereRules.WORK) }),
+            // Home (About you's, else the generic place) is always known; with nothing resolved, "here" is news.
+            away = HereRules.isAway(point, known),
         )
     }
 }

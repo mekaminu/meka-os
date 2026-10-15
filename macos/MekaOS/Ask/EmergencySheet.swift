@@ -2,7 +2,7 @@
 import SwiftUI
 
 /// Ask → More → Emergency card on the Mac (emergency card, slice 1), like the Fold's EmergencyPane: who to call, where
-/// things are and key accounts by name, one typed line at a time under each part ("GP: Dr Patel, 01767 123456"), each
+/// things are and key accounts by name, one typed line at a time under each part ("GP: Dr Patel, 01632 123456"), each
 /// with Remove. his wife reads the same card on her family page. A line holding a password, PIN or card or account
 /// number is turned away: the line under its field says why in the accent and the words stay to fix. Only Strings cross
 /// to the core.

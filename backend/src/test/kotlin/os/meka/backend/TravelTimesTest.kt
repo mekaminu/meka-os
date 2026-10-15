@@ -49,21 +49,22 @@ class TravelTimesTest {
         override fun decrypt(cipher: ByteArray, context: Map<String, String>) = cipher
     }
 
-    private val home = WeatherLocation("Lindenbrook", 52.09, -0.26)
+    private val home = WeatherLocation("Lindenbrook", 52.40, -1.50)
     private val weather = object : WeatherProvider {
         override val id = "weather"
         override val label = "Open-Meteo · Lindenbrook"
         override val home = this@TravelTimesTest.home
         override fun forecast(at: WeatherLocation) = WeatherForecast(at.name, emptyList(), emptyList())
-        override fun locate(name: String): WeatherLocation? = null
+        // Drives start from About you's home (release 2 slice 3), looked up by name.
+        override fun locate(name: String): WeatherLocation? = home.takeIf { name.equals(it.name, ignoreCase = true) }
     }
 
     @Test
     fun theRequestCarriesHomesCoordinatesAndThePlaceOnlyAndTheAnswerIsMinutes() {
-        val body = Json.parseToJsonElement(GoogleRoutes.request(52.09, -0.26, "Bury Field, Lindenbrook", at(thu + 2, 9, 5))).jsonObject
+        val body = Json.parseToJsonElement(GoogleRoutes.request(52.40, -1.50, "Bury Field, Lindenbrook", at(thu + 2, 9, 5))).jsonObject
         assertEquals(setOf("origin", "destination", "travelMode", "routingPreference", "departureTime", "regionCode"), body.keys)
         assertEquals("""{"address":"Bury Field, Lindenbrook"}""", body["destination"].toString())
-        assertEquals("""{"location":{"latLng":{"latitude":52.09,"longitude":-0.26}}}""", body["origin"].toString())
+        assertEquals("""{"location":{"latLng":{"latitude":52.40,"longitude":-1.50}}}""", body["origin"].toString())
         assertEquals("TRAFFIC_AWARE", body["routingPreference"]!!.jsonPrimitive.content)
         assertEquals("2026-10-10T08:05:00Z", body["departureTime"]!!.jsonPrimitive.content)
 
@@ -84,7 +85,7 @@ class TravelTimesTest {
         val routes = GoogleRoutes({ "AIzaKEY-123456789012345678901" }, { url, h, _ ->
             assertEquals(GoogleRoutes.URL, url); headers = h; 200 to """{"routes":[{"duration":"1500s"}]}"""
         })
-        assertEquals(25, routes.driveMinutes(52.09, -0.26, "Bury Field", now))
+        assertEquals(25, routes.driveMinutes(52.40, -1.50, "Bury Field", now))
         assertEquals("routes.duration", headers["X-Goog-FieldMask"])
         assertEquals("AIzaKEY-123456789012345678901", headers["X-Goog-Api-Key"])
         assertTrue(runCatching { GoogleRoutes({ "k".repeat(30) }, { _, _, _ -> 403 to "{}" }).driveMinutes(0.0, 0.0, "x", now) }.isFailure)
@@ -100,7 +101,7 @@ class TravelTimesTest {
         var drive = 1500
         val routes = GoogleRoutes({ key }, { _, _, body ->
             val o = Json.parseToJsonElement(body).jsonObject
-            asked += Triple(o["origin"].toString().let { if ("52.09" in it) 52.09 else 0.0 }, o["destination"]!!.jsonObject["address"]!!.jsonPrimitive.content,
+            asked += Triple(o["origin"].toString().let { if ("52.40" in it) 52.40 else 0.0 }, o["destination"]!!.jsonObject["address"]!!.jsonPrimitive.content,
                 java.time.Instant.parse(o["departureTime"]!!.jsonPrimitive.content).toEpochMilli())
             200 to """{"routes":[{"duration":"${drive}s"}]}"""
         })
@@ -126,7 +127,7 @@ class TravelTimesTest {
         // Rule 13, release 2: the household's clubs are in its About you (invented here), which the server reads; the
         // Fold's rules read the same through Household.
         ops.transaction {
-            mirror.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text("OTFC Lindenbrook United, HRFC")))
+            mirror.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text("OTFC Lindenbrook United, HRFC"), AboutYouFields.HOME to FieldValue.Text("Lindenbrook")))
                 .forEach { ops.append(it) }
         }
         Household.useTyped("", "OTFC Lindenbrook United, HRFC")
@@ -142,7 +143,7 @@ class TravelTimesTest {
         // Meka pastes the key: the fixture is looked up once, from home's coordinates to its place only.
         key = "AIzaKEY-123456789012345678901"
         integrations.syncAll()
-        assertEquals(listOf(Triple(52.09, "Bury Field, Lindenbrook", at(thu + 2, 9, 5))), asked)
+        assertEquals(listOf(Triple(52.40, "Bury Field, Lindenbrook", at(thu + 2, 9, 5))), asked)
         assertEquals("ok", store.accounts("home").single { it.provider == TravelRules.PROVIDER }.status)
         assertEquals(listOf("home"), woken)
 

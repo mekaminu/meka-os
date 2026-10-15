@@ -30,7 +30,7 @@ class EmergencyCardFacadeTest {
         val fold = core("android")
         val mac = core("mac")
         assertEquals(EmergencyView.EMPTY.summary, fold.emergencyView.value.summary)
-        assertEquals(EmergencyAdded("Added GP to Who to call", false), fold.addEmergency("call", "GP: Dr Patel, 01767 123456"))
+        assertEquals(EmergencyAdded("Added GP to Who to call", false), fold.addEmergency("call", "GP: Dr Patel, 01632 123456"))
         now += 1_000
         assertEquals(EmergencyAdded("Added Home insurance to Key accounts", false), fold.addEmergency("accounts", "Home insurance: Aviva"))
         assertEquals(EmergencyAdded(EmergencyRules.REFUSED_SECRET, true), fold.addEmergency("accounts", "Bank PIN: 4821"))
@@ -40,7 +40,7 @@ class EmergencyCardFacadeTest {
         val v = mac.emergencyView.value
         assertEquals("2 lines · your partner sees it read-only on their family page", v.summary)
         val gp = v.groups.first { it.section == "call" }.rows.single()
-        assertEquals("01767123456", gp.phone)
+        assertEquals("01632123456", gp.phone)
 
         assertTrue(mac.removeEmergency(gp.id))
         mac.syncNow(); fold.syncNow()

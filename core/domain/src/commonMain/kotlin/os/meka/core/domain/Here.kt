@@ -28,7 +28,7 @@ data class HereFix(val at: Coord, val forecast: WeatherForecast, val away: Boole
 /** The settings row's words (Ask → More → Settings → Where I am now). */
 data class HereSettingView(
     val on: Boolean,
-    /** "Off · the weather is Biggleswade's and Canary Wharf's" / "On · when you ask about “here”, …" / "Needs …". */
+    /** "Off · the weather is home's and work's" / "On · when you ask about “here”, …" / "Needs …". */
     val statusLine: String,
     /** Lit in the accent: on, but the phone hasn't allowed location (so nothing can be shared). */
     val lit: Boolean,
@@ -48,10 +48,6 @@ object HereRules {
 
     /** A fix is reused for this long (in memory only), so a conversation or a morning doesn't ask again and again. */
     const val FIX_FRESH_MS = 30 * 60_000L
-
-    /** The default places' coordinates (the server's own: Open-Meteo's Biggleswade and Canary Wharf). */
-    val HOME = Coord(52.0868, -0.2645)
-    val WORK = Coord(51.5054, -0.0235)
 
     private const val EARTH_KM = 6371.0
 
@@ -84,8 +80,11 @@ object HereRules {
         return 2 * EARTH_KM * asin(sqrt(h.coerceIn(0.0, 1.0)))
     }
 
-    /** Away from every place MEKA already forecasts ([places]: home and work), so "here" says something new. */
-    fun isAway(here: Coord, places: List<Coord> = listOf(HOME, WORK)): Boolean =
+    /**
+     * Away from every place MEKA already forecasts ([places]: home and work, as the server locates them from About you;
+     * rule 13, no place in the code), so "here" says something new. No known place: away.
+     */
+    fun isAway(here: Coord, places: List<Coord>): Boolean =
         places.isEmpty() || places.all { distanceKm(here, it) > AWAY_KM }
 
     private val HERE_PHRASES = listOf(

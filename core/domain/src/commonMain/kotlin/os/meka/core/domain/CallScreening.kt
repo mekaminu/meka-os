@@ -87,8 +87,20 @@ data class ScreenedCall(val callerKey: String, val atMs: Long)
 object CallScreeningRules {
     const val REPEAT_WINDOW_MS = 3 * 60_000L
     const val WITHHELD = "withheld"
-    /** The assistant's phone number (Twilio, live since 2026-10-09 20:49), as the Work screens show it. */
-    const val ASSISTANT_NUMBER = "01767 667246"
+    /**
+     * The assistant's phone number as About you has it (rule 13, release 2 slice 3: never in the code); null when it
+     * isn't typed there. The Work screens and Setup show it.
+     */
+    val assistantNumber: String? get() = Household.names.assistantNumber
+
+    /** "Navilife's assistant (01632 960000)", or without the number when About you has none. */
+    fun assistantName(number: String? = assistantNumber): String =
+        if (number == null) "Navilife's assistant" else "Navilife's assistant ($number)"
+
+    /** "Test it: ring 01632 960000 from another phone"; with no number, where to add it. */
+    fun testLine(number: String? = assistantNumber): String =
+        if (number == null) "Add the assistant's number in Ask → Settings → About you to see it here"
+        else "Test it: ring $number from another phone"
 
     /**
      * The Truecaller trade-off (call assistant polish 8, Meka switched from Truecaller on 2026-10-09): Android lets one

@@ -29,7 +29,7 @@ class WeatherTest {
      * timezone=Europe/London and timeformat=unixtime: hourly from local midnight, daily at local midnights.
      */
     private fun sample(rainFrom: Int = 16, hourCount: Int = 168, warm: Double = 14.4) = """
-        {"latitude":52.08,"longitude":-0.26,"generationtime_ms":0.1,"utc_offset_seconds":3600,"timezone":"Europe/London",
+        {"latitude":51.51,"longitude":-0.13,"generationtime_ms":0.1,"utc_offset_seconds":3600,"timezone":"Europe/London",
          "timezone_abbreviation":"GMT+1","elevation":36.0,
          "hourly_units":{"time":"unixtime","temperature_2m":"°C","weather_code":"wmo code","precipitation_probability":"%"},
          "hourly":{
@@ -58,10 +58,10 @@ class WeatherTest {
         var asked = ""
         val source = OpenMeteoWeather({ url -> asked = url; sample() }, { now })
         val f = source.forecast()
-        assertTrue(asked.startsWith("https://api.open-meteo.com/v1/forecast?latitude=52.0868&longitude=-0.2645&"), asked)
+        assertTrue(asked.startsWith("https://api.open-meteo.com/v1/forecast?latitude=51.5072&longitude=-0.1276&"), asked)
         assertTrue("timezone=Europe%2FLondon" in asked && "timeformat=unixtime" in asked)
-        assertEquals("Open-Meteo · Biggleswade", source.label)
-        assertEquals("Biggleswade", f.place)
+        assertEquals("Open-Meteo · London", source.label)
+        assertEquals("London", f.place)
         // From local midnight, 72 hours one after another (the one without a temperature borrows its neighbour's);
         // rounded readings.
         assertEquals(midnight * 1000, f.hours.first().startMs)
@@ -93,7 +93,7 @@ class WeatherTest {
     fun theForecastReachesDevicesEveryHalfHourOnlyWhenItChanged() {
         var fetches = 0
         var body = sample()
-        val source = OpenMeteoWeather({ fetches++; body }, { now }, work = null)
+        val source = OpenMeteoWeather({ fetches++; body }, { now }, forecastsWork = false)
         val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
         val ops = InMemoryServerOpStore()
         val woken = mutableListOf<String>()
@@ -102,7 +102,7 @@ class WeatherTest {
             weather = mapOf(source.id to source), onChanged = { woken += it },
         )
         integrations.syncAll()
-        assertEquals(listOf("Open-Meteo · Biggleswade"), store.accounts("home").map { it.email })
+        assertEquals(listOf("Open-Meteo · London"), store.accounts("home").map { it.email })
         assertEquals("weather", store.accounts("home").single().provider)
 
         val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
@@ -175,7 +175,7 @@ class WeatherTest {
         val f = source.forecast(at)
         assertTrue(asked.last().startsWith("https://api.open-meteo.com/v1/forecast?latitude=52.13459&longitude=-0.46632&"), asked.last())
         assertEquals("Bedford", f.place)
-        assertEquals("Biggleswade", source.forecast().place)
+        assertEquals("London", source.forecast().place)
         // Junk from the network finds nothing rather than a broken place.
         assertEquals(null, source.parseLocation("""{"results":[{"name":"Nowhere","latitude":"x"}]}"""))
     }
@@ -188,7 +188,7 @@ class WeatherTest {
                 "geocoding" in url -> if ("Xyzzy" in url) "{}" else bedford
                 else -> { forecasts += url.substringAfter("latitude=").substringBefore("&"); sample() }
             }
-        }, { now }, work = null)
+        }, { now }, forecastsWork = false)
         val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
         val ops = InMemoryServerOpStore()
         val integrations = Integrations(store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now }, weather = mapOf(source.id to source))
@@ -207,16 +207,16 @@ class WeatherTest {
             ))
         }
 
-        // Home by default: nothing extra written (hours, days, place).
+        // The generic place by default (no home in About you): nothing extra written (hours, days, place).
         integrations.syncAll()
         assertEquals(3, ops.after("home", 0, 10_000).size)
-        assertEquals(listOf("52.0868"), forecasts)
+        assertEquals(listOf("51.5072"), forecasts)
 
         // Meka types Bedford: followed at the next poll, inside the half hour.
         now += 5 * 60_000L
         setPlace("Bedford")
         integrations.syncAll()
-        assertEquals(listOf("52.0868", "52.13459"), forecasts)
+        assertEquals(listOf("51.5072", "52.13459"), forecasts)
         pull()
         val f = WeatherStore(r).forecast()
         assertEquals("Bedford", f.place)
@@ -228,14 +228,14 @@ class WeatherTest {
         integrations.syncAll()
         assertEquals(2, forecasts.size)
 
-        // A name that can't be found: home's forecast, said so.
+        // A name that can't be found: the generic place's forecast, said so.
         now += 5 * 60_000L
         setPlace("Xyzzy")
         integrations.syncAll()
-        assertEquals("52.0868", forecasts.last())
+        assertEquals("51.5072", forecasts.last())
         pull()
         val missing = WeatherStore(r).forecast()
-        assertEquals("Biggleswade", missing.place)
+        assertEquals("London", missing.place)
         assertEquals("Xyzzy", missing.asked)
         assertTrue(!missing.found)
         assertEquals("ok", store.accounts("home").single().status)
@@ -248,9 +248,13 @@ class WeatherTest {
         val back = WeatherStore(r).forecast()
         assertEquals(null, back.asked)
         assertTrue(back.found)
-        assertEquals(os.meka.core.domain.WeatherPlaceView.HOME, os.meka.core.domain.WeatherPlaceRules.view(null, back))
+        // With no home in About you either, the generic place, and where to add home.
+        assertEquals(os.meka.core.domain.WeatherPlaceView.NO_HOME, os.meka.core.domain.WeatherPlaceRules.view(null, back, home = null))
         assertTrue(r.conflicts(os.meka.core.domain.EntityTypes.CONTEXT_MODE).isEmpty())
     }
+
+    private val riverside = """
+        {"results":[{"id":1,"name":"Riverside","latitude":51.61,"longitude":-0.11,"country_code":"GB","admin1":"England"}],"generationtime_ms":0.4}"""
 
     @Test
     fun worksForecastIsMirroredApartFromHomesAndFollowsTheWorkPlace() {
@@ -258,11 +262,11 @@ class WeatherTest {
         var workDown = true
         val source = OpenMeteoWeather({ url ->
             when {
-                "geocoding" in url -> bedford
+                "geocoding" in url -> if ("Riverside" in url) riverside else bedford
                 else -> {
                     val lat = url.substringAfter("latitude=").substringBefore("&")
                     forecasts += lat
-                    if (lat == "51.5054" && workDown) "<html>down</html>" else sample(rainFrom = if (lat == "52.0868") 16 else 15)
+                    if (lat == "51.61" && workDown) "<html>down</html>" else sample(rainFrom = if (lat == "51.5072") 16 else 15)
                 }
             }
         }, { now })
@@ -274,27 +278,44 @@ class WeatherTest {
         fun pull() { val page = ops.after("home", cursor, 10_000); r.applyRemoteBatch(page.map { it.op }); page.lastOrNull()?.let { cursor = it.seq } }
         val work = { WeatherStore(r, WeatherStore.WORK_ENTITY_ID).forecast() }
 
-        // Work's forecast failing never holds up home's; it's tried again at the next poll, inside the half hour.
+        // Rule 13: no work in the code, so with none in About you (or the setting) there's no work forecast.
         integrations.syncAll()
-        assertEquals(listOf("52.0868", "51.5054"), forecasts)
+        assertEquals(listOf("51.5072"), forecasts)
+        pull()
+        assertTrue(work().isEmpty)
+
+        // About you names work (invented): looked up by name and forecast at once.
+        val aboutClock = HlcClock("mac", { now })
+        ops.transaction {
+            ops.append(os.meka.core.sync.Op(
+                "mac0", "home", os.meka.core.domain.EntityTypes.HOUSEHOLD_PROFILE, os.meka.core.domain.AboutYouRules.ENTITY_ID,
+                os.meka.core.domain.AboutYouFields.WORK, os.meka.core.sync.FieldValue.Text("Riverside"), aboutClock.now(), emptyList(), "mac",
+            ))
+        }
+        // Work's forecast failing never holds up home's; it's tried again at the next poll, inside the half hour.
+        now += 5 * 60_000L
+        integrations.syncAll()
+        assertEquals(listOf("51.5072", "51.5072", "51.61"), forecasts)
         assertEquals("ok", store.accounts("home").single().status)
         pull()
-        assertEquals("Biggleswade", WeatherStore(r).forecast().place)
+        assertEquals("London", WeatherStore(r).forecast().place)
         assertTrue(work().isEmpty)
         workDown = false
         now += 5 * 60_000L
         integrations.syncAll()
-        assertEquals(listOf("52.0868", "51.5054", "52.0868", "51.5054"), forecasts)
+        assertEquals(listOf("51.5072", "51.5072", "51.61", "51.5072", "51.61"), forecasts)
         pull()
-        assertEquals("Canary Wharf", work().place)
-        assertEquals(null, work().asked)
+        assertEquals("Riverside", work().place)
+        assertEquals("Riverside", work().asked)
+        assertTrue(work().found)
+        assertEquals("Work forecast for Riverside · on office days", os.meka.core.domain.PlacesRules.workView(null, work(), work = "Riverside").line)
         assertEquals("14° · light rain from 15:00", WeatherRules.nowLine(work(), now, bst))
         // Home's stays home's.
         assertEquals("14° · light rain from 16:00", WeatherRules.nowLine(WeatherStore(r).forecast(), now, bst))
         // Then the half-hour rhythm for both.
         now += 5 * 60_000L
         integrations.syncAll()
-        assertEquals(4, forecasts.size)
+        assertEquals(5, forecasts.size)
 
         // Meka sets work to Bedford on the Fold: followed at the next poll.
         val deviceClock = HlcClock("fold", { now })
@@ -311,8 +332,8 @@ class WeatherTest {
         assertEquals("Bedford", work().place)
         assertEquals("Bedford", work().asked)
         assertTrue(work().found)
-        assertEquals("Work forecast for Bedford · on office days", os.meka.core.domain.PlacesRules.workView("Bedford", work()).line)
-        assertEquals("Biggleswade", WeatherStore(r).forecast().place)
+        assertEquals("Work forecast for Bedford · on office days", os.meka.core.domain.PlacesRules.workView("Bedford", work(), work = "Riverside").line)
+        assertEquals("London", WeatherStore(r).forecast().place)
         assertTrue(r.conflicts(os.meka.core.domain.EntityTypes.CONTEXT_MODE).isEmpty())
     }
 }

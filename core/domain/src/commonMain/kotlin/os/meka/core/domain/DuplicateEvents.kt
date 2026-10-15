@@ -9,7 +9,7 @@ package os.meka.core.domain
  *   "Training - 3G"). Different times always stay separate rows.
  * - The row is the event with the fullest title ("Training - 3G"; then one with a place, then a call link, then the
  *   lowest id, so every device picks the same one); the others ride along in [CalendarEvent.alsoOn] and its line lists
- *   every calendar ("SG18 · Personal · Kids").
+ *   every calendar ("AB1 · Personal · Kids").
  * - An event Meka is adding or editing in MEKA (provisional, or with an edit on its way) is never merged, so the edit
  *   shows on its own row.
  * - Hiding any one of them hides the row ([EventMarks.visible], [hiddenIn]).

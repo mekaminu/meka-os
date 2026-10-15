@@ -15,8 +15,8 @@ class HereTest {
 
     @Test
     fun aPointLeavesTheDeviceRoundedToAboutAKilometre() {
-        assertEquals(Coord(52.09, -0.26), HereRules.round(52.0868, -0.2645))
-        assertEquals(Coord(51.51, -0.02), HereRules.round(51.5054, -0.0235))
+        assertEquals(Coord(52.40, -1.50), HereRules.round(52.4012, -1.5021))
+        assertEquals(Coord(51.7, -1.2), HereRules.round(51.7012, -1.2034))
         assertEquals(Coord(-33.87, 151.21), HereRules.round(-33.8688, 151.2093))
         // Rounding moves a point by well under a kilometre.
         val exact = Coord(52.13456, -0.31549)
@@ -31,19 +31,22 @@ class HereTest {
 
     @Test
     fun awayMeansFartherThanFifteenKilometresFromHomeAndWork() {
-        // Biggleswade to Canary Wharf is about 66 km.
-        val d = HereRules.distanceKm(HereRules.HOME, HereRules.WORK)
-        assertTrue(d in 60.0..70.0, "$d")
-        // At home, in Sandy (5 km), at work, in the City (6 km): not away.
-        assertFalse(HereRules.isAway(Coord(52.09, -0.26)))
-        assertFalse(HereRules.isAway(Coord(52.13, -0.29)))
-        assertFalse(HereRules.isAway(Coord(51.51, -0.02)))
-        assertFalse(HereRules.isAway(Coord(51.51, -0.09)))
-        // Cambridge (about 25 km from home) and Manchester: away.
-        assertTrue(HereRules.isAway(Coord(52.21, 0.12)))
-        assertTrue(HereRules.isAway(Coord(53.48, -2.24)))
+        // Invented places (rule 13): home Oakfield and work Riverside, about 85 km apart, as the server locates them.
+        val home = Coord(52.40, -1.50)
+        val work = Coord(51.70, -1.20)
+        val known = listOf(home, work)
+        val d = HereRules.distanceKm(home, work)
+        assertTrue(d in 75.0..90.0, "$d")
+        // At home, 4 km from home, at work, 6 km from work: not away.
+        assertFalse(HereRules.isAway(home, known))
+        assertFalse(HereRules.isAway(Coord(52.43, -1.48), known))
+        assertFalse(HereRules.isAway(work, known))
+        assertFalse(HereRules.isAway(Coord(51.70, -1.29), known))
+        // 25 km from home, and Manchester: away.
+        assertTrue(HereRules.isAway(Coord(52.21, -1.30), known))
+        assertTrue(HereRules.isAway(Coord(53.48, -2.24), known))
         // With no known places everywhere is away.
-        assertTrue(HereRules.isAway(Coord(52.09, -0.26), emptyList()))
+        assertTrue(HereRules.isAway(home, emptyList()))
     }
 
     @Test

@@ -63,7 +63,7 @@ class BriefScriptTest {
         assertEquals(3, smaller)
         val story = BriefStory(
             epochDay = day, officeDay = true, workEndMin = 17 * 60 + 30,
-            placesLine = "Lindenbrook 9° now · Canary Wharf 14°, light rain from 15:00 — take a coat",
+            placesLine = "Lindenbrook 9° now · Riverside 14°, light rain from 15:00 — take a coat",
             route = "Thameslink, Elizabeth line, good service",
             events = listOf(BriefEvent("Standup", 9 * 60 + 30, 9 * 60 + 45), BriefEvent("1:1 with Sam", 11 * 60, 11 * 60 + 30)),
             focus = focus, smallerCount = smaller, needsYou = 1,
@@ -81,7 +81,7 @@ class BriefScriptTest {
         )
         val expectedStart = "Good morning, Meka. It's Monday 12 October, an office day, finishing at half past 5. " +
             "On the trains: Thameslink, Elizabeth line, good service. " +
-            "Lindenbrook 9 degrees now, Canary Wharf 14 degrees, light rain from 15:00, take a coat. " +
+            "Lindenbrook 9 degrees now, Riverside 14 degrees, light rain from 15:00, take a coat. " +
             "First up, Standup at half past 9. Then 1:1 with Sam at 11 o'clock. Free after half past 11. " +
             "Three things to focus on. First, Renew passport, it's overdue. Then Call the garage, it's due at 3 o'clock. " +
             "And Send the Q4 deck, it moves your goal, Q4 plan. Plus 3 smaller ones. " +

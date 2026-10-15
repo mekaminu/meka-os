@@ -1,8 +1,8 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Weather places (Calendars → Weather): **Home**, the town the forecast is for, Biggleswade unless Meka types another,
-/// and **Work** (Places item 2), Canary Wharf unless he types another; on office days Today's weather line and the brief
+/// Weather places (Calendars → Weather): **Home**, the town the forecast is for, About you's home unless Meka types
+/// another, and **Work** (Places item 2), About you's work unless he types another (rule 13: no place in the code); on office days Today's weather line and the brief
 /// say both, and the Day ring's rain follows where he'll be. Return saves a field (a name that can't be a town says
 /// so); a changed name also saves when the sheet closes (typing is never lost). The line under each cross-fades as the
 /// server follows ("Finding “Bedford”…" → "Forecast for Bedford · from Open-Meteo"), in the accent colour when the name
@@ -17,16 +17,16 @@ struct WeatherPlaceSection: View {
             Text("Home and work for Today's weather line, the brief and Ask. Only the names are sent to Open-Meteo.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
             PlaceField(
-                label: "Home", choice: model.weather?.placeChoice, fallback: WeatherPlaceRules.shared.HOME,
-                fallbackLine: "Forecast for \(WeatherPlaceRules.shared.HOME) · from Open-Meteo",
+                label: "Home", choice: model.weather?.placeChoice, fallback: WeatherPlaceRules.shared.defaultName,
+                fallbackLine: WeatherPlaceView.companion.NO_HOME.line,
                 isDefault: { WeatherPlaceRules.shared.isHome(name: $0) }, resetLabel: "Use home",
                 spokenLabel: "Weather for which town", palette: palette,
                 save: { name in await model.setWeatherPlace(name) }
             )
             PlaceField(
-                label: "Work", choice: model.weather?.workChoice, fallback: PlacesRules.shared.WORK,
-                fallbackLine: PlacesRules.shared.workLine(place: PlacesRules.shared.WORK),
-                isDefault: { PlacesRules.shared.isDefaultWork(name: $0) }, resetLabel: "Use \(PlacesRules.shared.WORK)",
+                label: "Work", choice: model.weather?.workChoice, fallback: PlacesRules.shared.defaultWork,
+                fallbackLine: WeatherPlaceView.companion.NO_WORK.line,
+                isDefault: { PlacesRules.shared.isDefaultWork(name: $0) }, resetLabel: "Use About you's",
                 spokenLabel: "Where work is", palette: palette,
                 save: { name in await model.setWorkPlace(name) }
             )
@@ -60,7 +60,7 @@ private struct PlaceField: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             HStack(spacing: MekaSpace.m) {
-                TextField(fallback, text: $text)
+                TextField(fallback.isEmpty ? "Your town" : fallback, text: $text)
                     .textFieldStyle(.roundedBorder).font(MekaType.body).frame(maxWidth: 260)
                     .accessibilityLabel(spokenLabel)
                     .onSubmit { submit() }

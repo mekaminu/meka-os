@@ -152,10 +152,10 @@ class CallSpamTest {
         assertNull(ContactNumbers.e164("12"))
         assertNull(ContactNumbers.e164("Mum mobile"))
 
-        val l = PeopleLists(family = setOf("Jordan")).withNumbers("Jordan", listOf("07700 900444", "+44 7700 900444", null, "01767 600000"))
-        assertEquals(setOf("+447700900444", "+441767600000"), l.numbers["Jordan"])
+        val l = PeopleLists(family = setOf("Jordan")).withNumbers("Jordan", listOf("07700 900444", "+44 7700 900444", null, "01632 600000"))
+        assertEquals(setOf("+447700900444", "+441632600000"), l.numbers["Jordan"])
         assertEquals("Jordan", l.nameForNumber("07700900444"))
-        assertEquals("Jordan", l.nameForNumber("01767 600000"))
+        assertEquals("Jordan", l.nameForNumber("01632 600000"))
         assertFalse(PeopleLists(family = setOf("Jordan")).withNumbers("Jordan", listOf(null, "")).hasNumber("Jordan"))
     }
 

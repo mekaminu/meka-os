@@ -42,6 +42,7 @@ import os.meka.core.domain.MailItem
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
 import os.meka.core.domain.UnsubscribeState
+import os.meka.core.domain.AboutYou
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.BankHolidayFields
@@ -1398,9 +1399,11 @@ class Integrations(
         val mirror = store.transaction { store.mirror(a.householdId, a.id) }
         fun askedIn(id: String) = mirror[id]?.fieldOps?.get(WeatherFields.ASKED)?.second?.takeIf { it.startsWith("s:") }?.removePrefix("s:")
         val asked = askedIn(WeatherStore.ENTITY_ID)
-        // Work (Places item 2): forecast when the provider knows work; a new work place, or none yet, is followed at once.
+        // Work (Places item 2): forecast when the provider does and the household names work (the setting or About
+        // you); a new work place, or none yet, is followed at once.
         val wantedWork = wantedWorkPlace(a.householdId)
-        val workDue = source.work != null && (mirror[WeatherStore.WORK_ENTITY_ID] == null || askedIn(WeatherStore.WORK_ENTITY_ID) != wantedWork)
+        val workDue = source.forecastsWork && wantedWork != null &&
+            (mirror[WeatherStore.WORK_ENTITY_ID] == null || askedIn(WeatherStore.WORK_ENTITY_ID) != wantedWork)
         val last = a.lastSyncAtMs
         if (wanted == asked && !workDue && a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
         try {
@@ -1408,12 +1411,11 @@ class Integrations(
             val at = wanted?.let { source.locate(it) }
             applyWeather(a, source.forecast(at ?: source.home), asked = wanted, found = wanted == null || at != null)
             // Work's forecast never holds up home's: a failure is tried again at the next poll.
-            source.work?.let { default ->
-                runCatching {
-                    val workAt = wantedWork?.let { source.locate(it) }
-                    applyWeather(a, source.forecast(workAt ?: default), asked = wantedWork, found = wantedWork == null || workAt != null,
-                        entityId = WeatherStore.WORK_ENTITY_ID)
-                }
+            // A work place that can't be found has no forecast of its own (rule 13: no default work place in the code).
+            if (source.forecastsWork && wantedWork != null) runCatching {
+                val workAt = source.locate(wantedWork)
+                applyWeather(a, workAt?.let { source.forecast(it) } ?: WeatherForecast.EMPTY, asked = wantedWork, found = workAt != null,
+                    entityId = WeatherStore.WORK_ENTITY_ID)
             }
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: Exception) {
@@ -1543,7 +1545,9 @@ class Integrations(
         }.getOrDefault(emptyList())
         val due = TravelRules.due(events, hidden, known, now(), calendar, clubs)
         if (due.isEmpty()) return false
-        val home = weather.values.firstOrNull()?.let { knownPlaces(hh, it).firstOrNull() } ?: error("no home")
+        // Drives start from the household's own home (About you's or the place set), never the generic weather place.
+        val home = weather.values.firstOrNull()?.let { w -> wantedPlace(hh)?.let { runCatching { w.locate(it) }.getOrNull() } }
+            ?: error("no home")
         var wrote = false
         var failed = 0
         var tried = 0
@@ -1661,21 +1665,32 @@ class Integrations(
     /** Home's and work's coordinates as they are forecast (a set name only when it was found; the geocoder caches). */
     internal fun knownPlaces(householdId: String, source: WeatherProvider): List<WeatherLocation> {
         val home = wantedPlace(householdId)?.let { runCatching { source.locate(it) }.getOrNull() } ?: source.home
-        val work = source.work?.let { default -> wantedWorkPlace(householdId)?.let { runCatching { source.locate(it) }.getOrNull() } ?: default }
+        val work = if (!source.forecastsWork) null else wantedWorkPlace(householdId)?.let { runCatching { source.locate(it) }.getOrNull() }
         return listOfNotNull(home, work)
     }
 
-    /** The household's place setting ([WeatherPlaceStore]), normalised; null for home. */
-    internal fun wantedPlace(householdId: String): String? =
+    /**
+     * Where the household's home forecast is for: its place setting ([WeatherPlaceStore]), else its About you home
+     * (rule 13, release 2 slice 3: never a place in the code), normalised; null for neither (the provider's generic
+     * place).
+     */
+    internal fun wantedPlace(householdId: String): String? = WeatherPlaceRules.effective(
         runCatching { reader.entity(householdId, EntityTypes.CONTEXT_MODE, WeatherPlaceStore.ENTITY_ID) }.getOrNull()
-            ?.get(WeatherPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value }
-            ?.let(WeatherPlaceRules::normalize)?.takeUnless(WeatherPlaceRules::isHome)
+            ?.get(WeatherPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value },
+        aboutYou(householdId).home,
+    )
 
-    /** The household's work place setting ([WorkPlaceStore]), normalised; null for the default (Canary Wharf). */
-    internal fun wantedWorkPlace(householdId: String): String? =
+    /** Where the household's work is: its work place setting ([WorkPlaceStore]), else its About you work; null for none. */
+    internal fun wantedWorkPlace(householdId: String): String? = PlacesRules.effectiveWork(
         runCatching { reader.entity(householdId, EntityTypes.CONTEXT_MODE, WorkPlaceStore.ENTITY_ID) }.getOrNull()
-            ?.get(WorkPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value }
-            ?.let(WeatherPlaceRules::normalize)?.takeUnless(PlacesRules::isDefaultWork)
+            ?.get(WorkPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value },
+        aboutYou(householdId).work,
+    )
+
+    /** The household's own About you (empty when it can't be read). */
+    private fun aboutYou(householdId: String): AboutYou = runCatching {
+        AboutYouRules.read(reader.entity(householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID))
+    }.getOrDefault(AboutYou.EMPTY)
 
     /**
      * Writes the forecast into the household's one `context_mode/weather` entity (or [entityId]: work's, Places item 2), field by field and only what changed

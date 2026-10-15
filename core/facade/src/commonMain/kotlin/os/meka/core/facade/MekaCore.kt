@@ -330,7 +330,7 @@ class MekaCore(
     /**
      * Weather for home (weather item, slice 1): Today's header line ("14° · light rain from 16:00") and tomorrow's
      * ("Tomorrow 9–15°, light rain from 15:00 — take a coat"), from the forecast the server mirrors every 30 minutes
-     * (Open-Meteo, Biggleswade). Empty until the first forecast arrives; moves with the clock.
+     * (Open-Meteo, for About you's home). Empty until the first forecast arrives; moves with the clock.
      */
     val weatherView: StateFlow<os.meka.core.domain.WeatherView> = _weather.asStateFlow()
 
@@ -545,7 +545,13 @@ class MekaCore(
 
     /** Saves one About you line ([field]); blank clears it, with Undo ([os.meka.core.domain.AboutSaved.undo]). */
     suspend fun setAboutYou(field: os.meka.core.domain.AboutField, text: String): os.meka.core.domain.AboutSaved =
-        onCore { aboutYou.set(field, text).also { refreshAboutYouStep() } }
+        onCore {
+            aboutYou.set(field, text).also {
+                refreshAboutYouStep()
+                // Home, work, the partner or the assistant's number changed: what reads them follows at once.
+                if (os.meka.core.domain.HouseholdNames.of(aboutYou.profile()) != os.meka.core.domain.Household.names) refresh()
+            }
+        }
 
     /** [setAboutYou] by the field's key ("partnerName"), so only Strings cross from Swift; null for an unknown key. */
     suspend fun setAboutYouField(key: String, text: String): os.meka.core.domain.AboutSaved? {
@@ -588,9 +594,9 @@ class MekaCore(
         partnerWatch = true,
         // The children were copied on 13 Oct and live only in his profile now (both apps hold it).
         clubs = RELEASE_ONE_CLUBS,
-        home = weatherPlace.wanted() ?: os.meka.core.domain.WeatherPlaceRules.HOME,
-        work = workPlace.wanted() ?: os.meka.core.domain.PlacesRules.WORK,
-        assistantNumber = os.meka.core.domain.CallScreeningRules.ASSISTANT_NUMBER,
+        // Release 2 slice 3: home, work and the assistant's number were copied on 13 Oct and live only in his profile.
+        home = weatherPlace.wanted(),
+        work = workPlace.wanted(),
     )
 
     private val _kids = MutableStateFlow(os.meka.core.domain.KidsView.EMPTY)
@@ -2485,7 +2491,7 @@ class MekaCore(
     // ---- Emergency card (V1, slice 1; Ask → More → Emergency card) ----
 
     /**
-     * Adds one typed line to the card under [section] (`call` · `documents` · `accounts`): "GP: Dr Patel, 01767 123456".
+     * Adds one typed line to the card under [section] (`call` · `documents` · `accounts`): "GP: Dr Patel, 01632 123456".
      * The same name again in that part updates its details. A line holding a password, PIN or card, account or policy
      * number is refused and nothing is written; the answer says why (`refused`, lit in the accent).
      */
@@ -3856,14 +3862,14 @@ class MekaCore(
     }
 
     /**
-     * Where the forecast is for (Weather place setting, synced): a town name; blank or "Biggleswade" is home. Returns
+     * Where the forecast is for (Weather place setting, synced): a town name; blank or About you's home follows About you. Returns
      * false, saving nothing, for a name that can't be a place. The server follows it at its next poll (a few minutes);
      * [weatherView]'s `placeChoice` says when it has.
      */
     suspend fun setWeatherPlace(name: String): Boolean = onCore { weatherPlace.set(name).also { refresh() } }
 
     /**
-     * Where work is (Places item 2, synced): a town or district name; blank or "Canary Wharf" is the default. Returns
+     * Where work is (Places item 2, synced): a town or district name; blank or About you's work follows About you. Returns
      * false, saving nothing, for a name that can't be a place. The server forecasts it at its next poll; on office days
      * Today's weather line and the brief say both places, and the Day ring's rain follows where Meka will be.
      * [weatherView]'s `workChoice` says when the server has followed.
@@ -5420,8 +5426,8 @@ class MekaCore(
                 device = device, connected = connected, server = server.server, accounts = server.accounts,
                 signIns = signIns.all(), ai = server.ai, callAssistantOn = _workMode.value.callAssistant,
                 voiceMessageSeen = lastVoiceMessageMs() != null, voiceChosen = mekaVoice.chosen(),
-                homePlace = weatherPlace.wanted() ?: os.meka.core.domain.WeatherPlaceRules.HOME,
-                workPlace = workPlace.wanted() ?: os.meka.core.domain.PlacesRules.WORK,
+                homePlace = os.meka.core.domain.WeatherPlaceRules.effective(weatherPlace.wanted(), os.meka.core.domain.WeatherPlaceRules.aboutHome),
+                workPlace = os.meka.core.domain.PlacesRules.effectiveWork(workPlace.wanted(), os.meka.core.domain.PlacesRules.aboutWork),
                 nowMs = nowMs(),
             )
         }
