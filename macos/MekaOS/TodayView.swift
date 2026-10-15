@@ -219,6 +219,23 @@ struct TodayView: View {
                             .accessibilityLabel(parcels.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Meeting prep, slice 1: from 15 min before a meeting with other people, the countdown lit in the
+                    // accent, who's coming, then each guest's last email and what's open between you; cross-fades.
+                    if let prep = model.today?.meetingPrep {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text(prep.headline).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                            Text(prep.whoLine).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                            ForEach(Array(prep.lines.enumerated()), id: \.offset) { _, line in
+                                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                            }
+                        }
+                        .padding(.top, MekaSpace.xs)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: prep.headline)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(prep.spoken)
+                        .staggeredAppear(0, play: play)
+                    }
                     // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
                     // (lit on Monday); cross-fades.
                     if let thing = model.today?.reflection {

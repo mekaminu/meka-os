@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import os.meka.core.domain.EventDraft
+import os.meka.core.domain.EventFields
 import os.meka.core.domain.EventEditChange
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -49,7 +50,63 @@ data class RemoteEvent(
     val joinUrl: String? = null,
     /** The event's own page in the provider's web app (Google `htmlLink`, Outlook `webLink`); https only. */
     val webUrl: String? = null,
+    /** Meeting prep, slice 1: the other people on it, names only ([EventGuests]); never the owner, rooms or a decline. */
+    val guests: List<String> = emptyList(),
 )
+
+/**
+ * Meeting prep, slice 1: the other people on an event, as names only (an address is never synced: a guest with no
+ * display name is named from the part before the @, "sam.taylor" → "Sam Taylor"). Leaves out the account's owner,
+ * rooms and resources, and anyone who declined; at most [EventFields.MAX_GUESTS], in the provider's order.
+ */
+object EventGuests {
+    /** Google's `attendees` (and the `organizer`): `self`, `resource`, `responseStatus`, `displayName`, `email`. */
+    fun google(attendees: JsonArray?, organizer: JsonObject?): List<String> {
+        val people = attendees.orEmpty().filterIsInstance<JsonObject>().filter { a ->
+            a["self"]?.jsonPrimitive?.booleanOrNull != true && a["resource"]?.jsonPrimitive?.booleanOrNull != true &&
+                a["responseStatus"].str() != "declined"
+        }.map { it["displayName"].str() to it["email"].str() }
+        val org = organizer?.takeIf { it["self"]?.jsonPrimitive?.booleanOrNull != true }
+            ?.let { listOf(it["displayName"].str() to it["email"].str()) }.orEmpty()
+        return names(org + people)
+    }
+
+    /** Graph's `attendees` (`emailAddress{name,address}`, `type`, `status{response}`) and `organizer`, without [self]. */
+    fun graph(attendees: JsonArray?, organizer: JsonObject?, self: String?): List<String> {
+        fun pair(o: JsonObject?): Pair<String?, String?>? {
+            val e = o?.get("emailAddress") as? JsonObject ?: return null
+            return e["name"].str() to e["address"].str()
+        }
+        val me = self?.lowercase()
+        val people = attendees.orEmpty().filterIsInstance<JsonObject>().filter { a ->
+            a["type"].str() != "resource" && (a["status"] as? JsonObject)?.get("response").str() != "declined"
+        }.mapNotNull { pair(it) }
+        val org = listOfNotNull(pair(organizer))
+        return names((org + people).filter { (_, address) -> address == null || address.lowercase() != me })
+    }
+
+    fun names(people: List<Pair<String?, String?>>): List<String> {
+        val seenAddresses = HashSet<String>()
+        val out = LinkedHashMap<String, String>()
+        for ((name, address) in people) {
+            if (address != null && !seenAddresses.add(address.lowercase())) continue
+            val n = (name?.trim()?.takeIf { it.isNotEmpty() && '@' !in it } ?: address?.let(::fromAddress))
+                ?.replace('\n', ' ')?.trim()?.take(60) ?: continue
+            if (n.isEmpty()) continue
+            out.putIfAbsent(n.lowercase(), n)
+        }
+        return out.values.take(EventFields.MAX_GUESTS)
+    }
+
+    /** "sam.taylor@example.com" → "Sam Taylor"; null for a no-reply or room-like address. */
+    fun fromAddress(address: String): String? {
+        val local = address.substringBefore('@').substringBefore('+').trim()
+        if (local.isEmpty() || local.lowercase().let { it.startsWith("noreply") || it.startsWith("no-reply") }) return null
+        val words = local.split('.', '_', '-').filter { it.isNotEmpty() && it.any(Char::isLetter) }
+        if (words.isEmpty()) return null
+        return words.joinToString(" ") { w -> w.lowercase().replaceFirstChar { it.uppercase() } }
+    }
+}
 
 /** The refresh token was revoked or expired: the owner has to connect the account again. */
 class ReconnectRequired(message: String) : RuntimeException(message)
@@ -323,6 +380,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                             description = plainText(e["description"].str()),
                             joinUrl = httpsOrNull(e["hangoutLink"].str()) ?: httpsOrNull(video),
                             webUrl = httpsOrNull(e["htmlLink"].str()),
+                            guests = EventGuests.google(e["attendees"] as? JsonArray, e["organizer"] as? JsonObject),
                         ))
                     }
                     page = resp["nextPageToken"].str()
@@ -436,6 +494,8 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
 
     override fun events(accessToken: String, fromMs: Long, toMs: Long): List<RemoteEvent> {
         val utc = mapOf("Prefer" to "outlook.timezone=\"UTC\"")
+        // Meeting prep, slice 1: the account's own address, so Meka isn't listed among his own meetings' guests.
+        val self = runCatching { accountEmail(accessToken) }.getOrNull()
         val calendars = http.getJson("https://graph.microsoft.com/v1.0/me/calendars?\$select=id,name&\$top=50", accessToken)["value"]
             ?.jsonArray.orEmpty().map { it.jsonObject }
         return calendars.flatMap { cal ->
@@ -444,7 +504,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
             buildList {
                 var url: String? = "https://graph.microsoft.com/v1.0/me/calendars/${Http.enc(calId)}/calendarView?" + Http.query(mapOf(
                     "startDateTime" to rfc3339(fromMs), "endDateTime" to rfc3339(toMs), "\$top" to "500",
-                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink",
+                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink,attendees,organizer",
                 ))
                 while (url != null) {
                     val resp = http.getJson(url, accessToken, utc)
@@ -467,6 +527,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                             description = plainText(e["bodyPreview"].str()),
                             joinUrl = httpsOrNull(join),
                             webUrl = httpsOrNull(e["webLink"].str()),
+                            guests = EventGuests.graph(e["attendees"] as? JsonArray, e["organizer"] as? JsonObject, self),
                         ))
                     }
                     url = resp["@odata.nextLink"].str()

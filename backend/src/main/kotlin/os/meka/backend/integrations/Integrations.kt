@@ -1797,6 +1797,8 @@ class Integrations(
                     EventFields.JOIN_URL to (httpsOrNull(e.joinUrl)?.take(MAX_TEXT)?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     // The real event's page, to edit it there (calendar actions, slice 3). Additive like the above.
                     EventFields.WEB_URL to (httpsOrNull(e.webUrl)?.takeIf { it.length <= MAX_URL }?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                    // Meeting prep, slice 1: the other people on it, names only. Additive like the above.
+                    EventFields.GUESTS to (e.guests.takeIf { it.isNotEmpty() }?.joinToString("\n")?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 // A fixture whose kick-off moved while the old time was still ahead: remember the old time and when

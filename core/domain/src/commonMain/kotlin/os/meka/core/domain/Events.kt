@@ -35,6 +35,13 @@ object EventFields {
      */
     const val MOVED_FROM = "movedFromMs"
     const val MOVED_AT = "movedAtMs"
+    /**
+     * Meeting prep, slice 1: the other people on the event, their names only (never addresses), one per line, at most
+     * [MAX_GUESTS]; without Meka himself, rooms and anyone who declined. Written by the server's ingestion; additive
+     * (ADR-008 addendum), absent on events with nobody else and on events polled before it existed. Untrusted text.
+     */
+    const val GUESTS = "guests"
+    const val MAX_GUESTS = 20
 }
 
 /** Typed read model of a calendar event. */
@@ -57,6 +64,8 @@ data class CalendarEvent(
     /** A fixture's previous kick-off and when the move was seen (see [EventFields.MOVED_FROM]). */
     val movedFromMs: Long? = null,
     val movedAtMs: Long? = null,
+    /** Meeting prep, slice 1: the other people on it, names only ([EventFields.GUESTS]); empty for nobody else. */
+    val guests: List<String> = emptyList(),
     /**
      * Calendar editing (slice 2c-ii): Meka's own edit of this event is still on its way to the provider, and this is
      * the event as that edit leaves it ([PendingEditRules]); null for the mirror as it is. Never stored.
@@ -115,6 +124,8 @@ data class CalendarEvent(
                 webUrl = s[EventFields.WEB_URL].textOrNull?.takeIf { it.isNotBlank() },
                 movedFromMs = s[EventFields.MOVED_FROM].longOrNull,
                 movedAtMs = s[EventFields.MOVED_AT].longOrNull,
+                guests = s[EventFields.GUESTS].textOrNull.orEmpty().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+                    .distinct().take(EventFields.MAX_GUESTS),
             )
         }
     }

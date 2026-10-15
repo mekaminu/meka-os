@@ -209,6 +209,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * "Barça won · Lewandowski 23', Yamal 51' · LaLiga". Turn it off for goals only.
      */
     BARCA_RESULT("Barça full time", NoticeTier.HEADS_UP),
+    /**
+     * Meeting prep, slice 1 ([MeetingPrepRules.notices]): fifteen minutes before a meeting with other people — "Prep ·
+     * Quote review at 14:00" · "With Sam Taylor · last email Tue 13:02 · you promised 1". Opens Today.
+     */
+    MEETING_PREP("Meeting prep (15 min before)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -647,6 +652,7 @@ object Governor {
         NoticeSource.BARCA -> if (n == 1) "a Barça match soon" else "$n Barça matches soon"
         NoticeSource.BARCA_GOALS -> if (n == 1) "a Barça goal" else "$n Barça goals"
         NoticeSource.BARCA_RESULT -> if (n == 1) "a Barça result" else "$n Barça results"
+        NoticeSource.MEETING_PREP -> if (n == 1) "a meeting to prepare for" else "$n meetings to prepare for"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -745,6 +751,8 @@ object NoticeSources {
         /** Kids' admin, slice 6: the children in About you and what Kids keeps for them ([KidsRules.notices]). */
         kids: List<AboutChild> = emptyList(),
         kidRecords: Map<String, KidRecord> = emptyMap(),
+        /** Meeting prep, slice 1: the synced emails, for each guest's last one ([MeetingPrepRules.notices]). */
+        mail: List<MailItem> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -890,6 +898,8 @@ object NoticeSources {
         out += ParcelRules.notices(parcels, nowMs, cal)
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         out += KidsRules.notices(kids, kidRecords, nowMs, cal)
+        // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.
+        out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

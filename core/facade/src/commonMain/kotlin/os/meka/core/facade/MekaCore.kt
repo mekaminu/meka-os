@@ -7031,6 +7031,10 @@ class MekaCore(
             // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
             reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs()), review.startMinute()),
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
+            // Meeting prep, slice 1: from 15 min before a meeting with other people, who's coming and what's open.
+            meetingPrep = os.meka.core.domain.MeetingPrepRules.card(
+                dayEvents, marks, activity.mailItems(), listsNow.promised, listsNow.waiting, nowMs(), cal,
+            ),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
@@ -7267,6 +7271,8 @@ class MekaCore(
             parkingTimers = parkingTimers.all(), cars = _cars.value,
             // Kids' admin, slice 6: the Saturday heads-up three months after a child's sizes were checked.
             kids = aboutYou.profile().children, kidRecords = kids.records(),
+            // Meeting prep, slice 1: each guest's last email for the heads-up 15 min before.
+            mail = activity.mailItems(),
         )
 
     /**

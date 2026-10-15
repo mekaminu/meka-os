@@ -928,6 +928,23 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Meeting prep, slice 1: from 15 min before a meeting with other people, "Prep · Quote review at 14:00 ·
+                    // in 12 min" lit in the accent, who's coming, then each guest's last email and what's open between you
+                    // (at most four lines). Cross-fades as it comes, counts down and goes ten minutes after the start.
+                    today.meetingPrep?.let { prep ->
+                        Crossfade(prep, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "meeting-prep") { p ->
+                            Column(Modifier.padding(top = MekaSpace.xs).semantics(mergeDescendants = true) { contentDescription = p.spoken }) {
+                                Text(p.headline, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis)
+                                Text(p.whoLine, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
+                                p.lines.forEach { line ->
+                                    Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = MekaSpace.xxs))
+                                }
+                            }
+                        }
+                    }
                     // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
                     // (lit in the accent on Monday); cross-fades as it comes and changes.
                     today.reflection?.let { thing ->
