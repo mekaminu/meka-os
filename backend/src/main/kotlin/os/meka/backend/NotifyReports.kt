@@ -44,7 +44,8 @@ class NotifyReports(
             NotifyDiagnosticsCodec.Entry(e.atMs, if (e.automated) "automated" else "voice", AssistantCallReportRules.line(e))
         }
         val about = NotifyDiagnosticsCodec.Latest(
-            null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs, assistant = calls,
+            null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs,
+            aboutClubs = held?.clubs, aboutCouncil = held?.council, assistant = calls,
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)

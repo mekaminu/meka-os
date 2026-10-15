@@ -5,7 +5,7 @@ package os.meka.core.domain
  * of kind BILL, or any other item Meka has given a pay link (a subscription he pays by hand), except the car's dates and
  * the money dates, which have their own reminders. A few days before each payment, at 09:00, one heads-up with the
  * amount and, when Meka saved where he pays it, a **Pay** button that opens that page:
- * "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens centralbedfordshire.gov.uk".
+ * "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens oakfield.gov.uk".
  *
  * **MEKA never pays anything.** It only reminds and opens the page Meka typed; marking it Paid stays his tap in Lists.
  * The radar's digest line leaves bills to this reminder until one is overdue. Non-AI, pure; nothing leaves the device.

@@ -1,6 +1,7 @@
 package os.meka.core.domain
 
 import os.meka.core.testing.Device
+import os.meka.core.testing.InventedCouncil
 import os.meka.core.testing.SyncWorld
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -16,6 +17,8 @@ class SchoolTermsTest {
     fun household() {
         // Rule 13, release 2: the children and clubs come from About you; these are invented.
         Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+        // Release 2 slice 5: the council's table is his data too; this one is invented.
+        Household.useCouncil(InventedCouncil.OAKFIELD)
     }
 
     @AfterTest
@@ -33,7 +36,7 @@ class SchoolTermsTest {
     private fun school(dev: Device) = School(dev.replica, { "sch${n++}" }, { world.clock.nowMs }, cal)
     private fun terms(dev: Device) = SchoolTermsStore(dev.replica, { "sch${n++}" }, { world.clock.nowMs }, cal)
     private val work = WorkHours(WorkSchedule.DEFAULT)
-    private val council = SchoolTerms.CENTRAL_BEDFORDSHIRE.id
+    private val council = InventedCouncil.OAKFIELD.id
 
     init { world.clock.nowMs = at(wed, 10) }
 
@@ -41,13 +44,13 @@ class SchoolTermsTest {
 
     @Test
     fun theTableIsInOrderWithinTheSchoolYearsAndKeepsTheCouncilsOwnDays() {
-        val p = SchoolTerms.CENTRAL_BEDFORDSHIRE.periods
+        val p = InventedCouncil.OAKFIELD.periods
         assertTrue(p.zipWithNext().all { (a, b) -> a.endDay < b.startDay })
         assertTrue(p.all { it.endDay >= it.startDay && it.endDay - it.startDay < 60 })
         assertEquals(d(10, 26) to d(10, 30), p.first().let { it.startDay to it.endDay })
         // The council's own training days are there; no other INSET day is made up.
         assertEquals(listOf(d(4, 12, 2027), d(6, 7, 2027)), p.filter { it.title == "Training day" }.map { it.startDay })
-        assertEquals(d(10, 14), SchoolTerms.CENTRAL_BEDFORDSHIRE.checkedDay)
+        assertEquals(d(10, 14), InventedCouncil.OAKFIELD.checkedDay)
     }
 
     @Test
@@ -56,18 +59,18 @@ class SchoolTermsTest {
         assertTrue(v0.isEmpty)
         val card = assertNotNull(v0.terms)
         assertNull(card.filled)
-        assertEquals(listOf("Central Bedfordshire"), card.choices.map { it.name })
+        assertEquals(listOf("Oakfield"), card.choices.map { it.name })
         assertEquals("2026–27 and 2027–28 · 14 dates · checked 14 Oct 2026", card.choices.single().line)
 
         val (line, count) = assertNotNull(terms(fold).fill(council))
         assertEquals(14, count)
-        assertEquals("Filled in 14 holidays from Central Bedfordshire · add the school's INSET days below", line)
+        assertEquals("Filled in 14 holidays from Oakfield · add the school's INSET days below", line)
         val v = school(fold).view(work)
         assertEquals("October half term", v.off.first().title)
         assertEquals("Mon 26 – Fri 30 Oct · Max and Felix", v.off.first().line)
         assertEquals("Council dates · checked 14 Oct 2026 · check with the school", v.off.first().source)
-        assertEquals("Central Bedfordshire", v.terms?.filled?.name)
-        assertTrue(v.terms!!.line.startsWith("Central Bedfordshire · 14 holidays to come"), v.terms!!.line)
+        assertEquals("Oakfield", v.terms?.filled?.name)
+        assertTrue(v.terms!!.line.startsWith("Oakfield · 14 holidays to come"), v.terms!!.line)
 
         // Filling in again (or on the Mac at the same time) adds nothing twice.
         assertEquals(SchoolTerms.NOT_FILLED to 0, terms(fold).fill(council))
@@ -134,7 +137,7 @@ class SchoolTermsTest {
 
     @Test
     fun newDatesInALaterTableAreOfferedOnceAndAHolidayHeRemovedStaysRemoved() {
-        val cal = SchoolTerms.CENTRAL_BEDFORDSHIRE
+        val cal = InventedCouncil.OAKFIELD
         // As if an older Navilife had filled in 2026–27 only: the table's 2027–28 dates are new.
         cal.periods.filter { SchoolTerms.schoolYearOf(it.startDay) == 2026 }.forEach { p ->
             fold.replica.commitLocal(EntityTypes.SCHOOL_ITEM, SchoolTerms.idFor(cal, p), SchoolTerms.fields(cal, p, world.clock.nowMs))
@@ -145,12 +148,12 @@ class SchoolTermsTest {
         school(fold).remove(SchoolTerms.idFor(cal, removed))
 
         val r = assertNotNull(school(fold).view(work).terms?.refresh)
-        assertEquals("New dates from Central Bedfordshire · 2027–28 · 5 holidays", r.line)
+        assertEquals("New dates from Oakfield · 2027–28 · 5 holidays", r.line)
         assertEquals(SchoolTerms.ADD_THEM, r.action)
         assertEquals(council, r.councilId)
 
         val added = assertNotNull(terms(fold).addNew(council))
-        assertEquals("Added 5 new holidays from Central Bedfordshire · 2027–28", added.line)
+        assertEquals("Added 5 new holidays from Oakfield · 2027–28", added.line)
         assertNull(school(fold).view(work).terms?.refresh)
         assertNull(terms(fold).addNew(council))
         assertTrue(school(fold).items().none { it.startDay == removed.startDay })
@@ -206,10 +209,60 @@ class SchoolTermsTest {
         // June 2028: 2028–29 isn't in this table: check the council's page.
         world.clock.nowMs = at(d(6, 10, 2028), 10)
         val r = assertNotNull(school(fold).view(work).terms?.refresh)
-        assertTrue(r.line.startsWith("2028–29's holidays aren't in yet · Central Bedfordshire"), r.line)
+        assertTrue(r.line.startsWith("2028–29's holidays aren't in yet · Oakfield"), r.line)
         assertEquals(SchoolTerms.COUNCIL_PAGE, r.action)
-        assertEquals(SchoolTerms.CENTRAL_BEDFORDSHIRE.sourceUrl, r.url)
+        assertEquals(InventedCouncil.OAKFIELD.sourceUrl, r.url)
         val n = SchoolTerms.notices(school(fold).items(), world.clock.nowMs, cal).single()
-        assertEquals("Check Central Bedfordshire's dates and the school's INSET days · Ask → More → School", n.text)
+        assertEquals("Check Oakfield's dates and the school's INSET days · Ask → More → School", n.text)
+    }
+
+    // ---- Release 2 slice 5: the table lives in his data ----
+
+    @Test
+    fun withNoCouncilInHisDataTheCardOffersNoneAndSaysToTypeTheDates() {
+        Household.useCouncil(null)
+        val card = assertNotNull(school(fold).view(work).terms)
+        assertTrue(card.choices.isEmpty())
+        assertNull(card.filled)
+        assertNull(terms(fold).fill(council))
+        assertTrue(SchoolTerms.councils().isEmpty())
+    }
+
+    @Test
+    fun theTableRoundTripsThroughTheProfileTextAndBadLinesAreSkipped() {
+        val cal = InventedCouncil.OAKFIELD
+        assertEquals(cal, SchoolTerms.decode(SchoolTerms.encode(cal)))
+        assertNull(SchoolTerms.decode(null))
+        assertNull(SchoolTerms.decode("Oakfield"))
+        assertNull(SchoolTerms.decode("Oak Field|Oakfield|https://x.example|1|y"))
+        assertNull(SchoolTerms.decode("oakfield|Oakfield|http://x.example|1|y"))
+        val odd = SchoolTerms.decode("oakfield|Oakfield|https://x.example|1|y\nHalf term|20|10\nnope\nB|5|6\nA|1|2")!!
+        assertEquals(listOf("A", "B"), odd.periods.map { it.title })
+        // A '|' or line break in a name can't break the table.
+        val named = cal.copy(name = "Oak|field", periods = listOf(TermPeriod("Half\nterm", 1, 2)))
+        assertEquals("Oak field", SchoolTerms.decode(SchoolTerms.encode(named))?.name)
+        assertEquals("Half term", SchoolTerms.decode(SchoolTerms.encode(named))?.periods?.single()?.title)
+    }
+
+    @Test
+    fun theFoldCopiesTheTableIntoTheProfileOnceAndBothAppsReadIt() {
+        val about = AboutYouStore(fold.replica) { world.clock.nowMs }
+        // No profile yet: nothing is written.
+        assertTrue(!about.seedCouncilOnce(InventedCouncil.OAKFIELD))
+        about.set(AboutField.HOME, "Oakfield")
+        assertTrue(about.seedCouncilOnce(InventedCouncil.OAKFIELD))
+        assertTrue(!about.seedCouncilOnce(InventedCouncil.OAKFIELD.copy(name = "Elsewhere")))
+        sync()
+        val onMac = AboutYouStore(mac.replica) { world.clock.nowMs }.profile()
+        assertEquals(InventedCouncil.OAKFIELD, onMac.councilDates)
+        assertEquals(InventedCouncil.OAKFIELD, HouseholdNames.of(onMac).council)
+        // Not a typed line: a profile holding only the table still counts as empty.
+        assertTrue(AboutYou(councilDates = InventedCouncil.OAKFIELD).isEmpty)
+        // The publish job's gate says it's copied (never what it says).
+        val h = AboutYouRules.held(mac.replica.entity(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)?.fields)!!
+        assertEquals(true, h.council)
+        assertEquals(false, h.clubs)
+        assertEquals("the profile is empty", AboutYouRules.gateLine(h.copy(filled = false), { "t" }))
+        assertTrue(AboutYouRules.gateLine(h, { "t" }).endsWith("release 2 waits · clubs NOT copied yet · council dates copied"))
     }
 }

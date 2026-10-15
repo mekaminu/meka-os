@@ -111,13 +111,17 @@ class SchoolFacadeTest {
     @Test
     fun theCouncilsHolidaysAreFilledInOnHisPickRemovedWithUndoAndInsetDaysPasted() = runTest {
         now = 1_791_968_400_000L // Wed 14 Oct 2026, 10:00 in London
-        val fold = core("android")
+        val fold = core("android").apply { seedsAboutYou = true; releaseOneCouncil = os.meka.core.testing.InventedCouncil.OAKFIELD }
         val mac = core("mac")
+        // Release 2 slice 5: no council in the code; until his profile holds one, none is offered.
+        assertTrue(fold.schoolView.value.terms!!.choices.isEmpty())
+        fold.setAboutYou(os.meka.core.domain.AboutField.HOME, "Oakfield")
+        fold.syncNow()
         val card = fold.schoolView.value.terms!!
         assertNull(card.filled)
         val id = card.choices.single().id
-        assertEquals("Filled in 14 holidays from Central Bedfordshire · add the school's INSET days below", fold.fillSchoolTerms(id))
-        assertEquals("Central Bedfordshire", fold.schoolView.value.terms?.filled?.name)
+        assertEquals("Filled in 14 holidays from Oakfield · add the school's INSET days below", fold.fillSchoolTerms(id))
+        assertEquals("Oakfield", fold.schoolView.value.terms?.filled?.name)
         assertEquals("Next day off: October half term · Mon 26 – Fri 30 Oct", fold.schoolView.value.summary)
         assertNull(fold.fillSchoolTerms("nowhere"))
         // Slice 2: everything in the table is in, so no new dates and nothing for next year in October.

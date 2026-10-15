@@ -106,6 +106,25 @@ class AboutYouFacadeTest {
     }
 
     @Test
+    fun theCouncilsHolidaysMoveIntoTheProfileOnceAndTheMacsSchoolOffersThem() = runTest(timeout = SLOW_RUNNER) {
+        // Rule 13, release 2 slice 5: no council in the code; the Fold copies the table it carried (invented here).
+        val mac = core("mac")
+        mac.setAboutYou(AboutField.HOME, "Hilltown")
+        mac.syncNow()
+        assertTrue(mac.schoolView.value.terms!!.choices.isEmpty())
+        val fold = core("android").apply { seedsAboutYou = true; releaseOneCouncil = os.meka.core.testing.InventedCouncil.OAKFIELD }
+        fold.syncNow(); fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("Oakfield"), mac.schoolView.value.terms!!.choices.map { it.name })
+        assertEquals(os.meka.core.testing.InventedCouncil.OAKFIELD, os.meka.core.domain.Household.names.council)
+        // Not an About you line: the pane's rows don't change.
+        assertTrue(AboutField.entries.none { it.key == os.meka.core.domain.AboutYouFields.COUNCIL_DATES })
+        // A second Fold (or a later build carrying another table) never writes over it.
+        val again = core("android-2").apply { seedsAboutYou = true; releaseOneCouncil = os.meka.core.testing.InventedCouncil.OAKFIELD.copy(name = "Elsewhere") }
+        again.syncNow(); again.syncNow(); mac.syncNow()
+        assertEquals(listOf("Oakfield"), mac.schoolView.value.terms!!.choices.map { it.name })
+    }
+
+    @Test
     fun aReinstalledFoldPullsBeforeItCouldCopy() = runTest(timeout = SLOW_RUNNER) {
         val mac = core("mac")
         mac.setAboutYou(AboutField.HOME, "Hilltown")

@@ -155,7 +155,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     MONEY("Money dates: tax, ISA, contracts and pension", NoticeTier.HEADS_UP),
     /**
      * Bills due ([BillRules.notices]): three days before each bill at 09:00, with the amount and Pay when a pay link is
-     * saved — "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens centralbedfordshire.gov.uk". Never pays.
+     * saved — "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens oakfield.gov.uk". Never pays.
      */
     BILLS("Bills due: a few days before each payment", NoticeTier.HEADS_UP),
     /**

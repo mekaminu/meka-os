@@ -85,7 +85,7 @@ class OpenMeteoWeather internal constructor(
 
     /**
      * Open-Meteo's geocoder (same provider, no key). Of its matches, the first in Great Britain (home: "Bedford" is
-     * Bedfordshire's, not Texas's), else its first.
+     * England's, not Texas's), else its first.
      */
     override fun locate(name: String): WeatherLocation? {
         val key = name.trim().lowercase()

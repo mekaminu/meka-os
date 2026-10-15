@@ -19,9 +19,9 @@ data class TermPeriod(val title: String, val startDay: Long, val endDay: Long)
 
 /** One council's school holidays as published, with the page they were checked against. */
 data class TermCalendar(
-    /** Stable, generic key ("central-bedfordshire"); stored on each item as "council:<id>". */
+    /** Stable, generic key ("oakfield"); stored on each item as "council:<id>". */
     val id: String,
-    /** "Central Bedfordshire". */
+    /** "Oakfield". */
     val name: String,
     val sourceUrl: String,
     /** The day a build run checked the table against [sourceUrl] (epoch day). */
@@ -31,7 +31,7 @@ data class TermCalendar(
     val periods: List<TermPeriod>,
 )
 
-/** A council the School pane offers: "Central Bedfordshire" · "2026–27 and 2027–28 · 13 dates · checked 14 Oct 2026". */
+/** A council the School pane offers: "Oakfield" · "2026–27 and 2027–28 · 13 dates · checked 14 Oct 2026". */
 data class TermChoice(val id: String, val name: String, val line: String)
 
 /**
@@ -50,7 +50,7 @@ data class SchoolTermCard(
 
 /**
  * The council card's yearly line (School dates filled in, slice 2). Either the council's table holds holidays he
- * hasn't got (a later Navilife carries the next year's dates): [line] "New dates from Central Bedfordshire · 2028–29 ·
+ * hasn't got (the table in his data gained next year's dates): [line] "New dates from Oakfield · 2028–29 ·
  * 6 holidays" with [action] "Add them", which fills [councilId] in; or from June, next school year has no day off in
  * yet: "2027–28's holidays aren't in yet…" with [action] "Council's page" opening [url], or no action (type them).
  */
@@ -71,37 +71,11 @@ object SchoolTerms {
     private fun d(y: Int, m: Int, day: Int) = CivilDate.toEpochDay(y, m, day)
 
     /**
-     * Central Bedfordshire Council's school term and holiday dates, checked 2026-10-14 against the council's page
-     * (centralbedfordshire.gov.uk, "School term and holiday dates in Central Bedfordshire"). Bank holidays inside a
-     * holiday are part of it; a bank holiday on its own (early May) is left to the bank-holiday calendar. The council
-     * names two training days in 2026–27 (12 Apr, 7 Jun 2027); every other INSET day is the school's own.
+     * The councils the pane offers: the one whose table is kept in his own data (About you's `councilDates`, read through
+     * [Household.names]), never a council in the code (rule 13, release 2 slice 5, 2026-10-15). The Fold copied the
+     * table Navilife carried before into his profile once; with none held, the card just says to type the dates.
      */
-    val CENTRAL_BEDFORDSHIRE = TermCalendar(
-        id = "central-bedfordshire",
-        name = "Central Bedfordshire",
-        sourceUrl = "https://www.centralbedfordshire.gov.uk/info/3/schools_and_education/529/school_term_and_holiday_dates_in_central_bedfordshire",
-        checkedDay = d(2026, 10, 14),
-        years = "2026–27 and 2027–28",
-        periods = listOf(
-            TermPeriod("October half term", d(2026, 10, 26), d(2026, 10, 30)),
-            TermPeriod("Christmas holidays", d(2026, 12, 21), d(2027, 1, 4)),
-            TermPeriod("February half term", d(2027, 2, 15), d(2027, 2, 19)),
-            TermPeriod("Easter holidays", d(2027, 3, 26), d(2027, 4, 9)),
-            TermPeriod("Training day", d(2027, 4, 12), d(2027, 4, 12)),
-            TermPeriod("May half term", d(2027, 5, 31), d(2027, 6, 4)),
-            TermPeriod("Training day", d(2027, 6, 7), d(2027, 6, 7)),
-            TermPeriod("Summer holidays", d(2027, 7, 22), d(2027, 8, 31)),
-            TermPeriod("October half term", d(2027, 10, 25), d(2027, 10, 29)),
-            TermPeriod("Christmas holidays", d(2027, 12, 20), d(2028, 1, 3)),
-            TermPeriod("February half term", d(2028, 2, 14), d(2028, 2, 18)),
-            TermPeriod("Easter holidays", d(2028, 4, 3), d(2028, 4, 17)),
-            TermPeriod("May half term", d(2028, 5, 29), d(2028, 6, 2)),
-            TermPeriod("Summer holidays", d(2028, 7, 22), d(2028, 8, 31)),
-        ),
-    )
-
-    /** Every council the pane offers, by name. A council is added only once its dates are checked on its own page. */
-    val COUNCILS: List<TermCalendar> = listOf(CENTRAL_BEDFORDSHIRE)
+    fun councils(): List<TermCalendar> = listOfNotNull(Household.names.council)
 
     const val SOURCE_PREFIX = "council:"
     const val CARD_TITLE = "Holidays from the council"
@@ -110,7 +84,7 @@ object SchoolTerms {
     const val NOT_LISTED = "Not listed? Type the dates below, one line each."
     const val NOT_FILLED = "Nothing new to add: those holidays are in already."
 
-    fun calendar(id: String): TermCalendar? = COUNCILS.firstOrNull { it.id == id }
+    fun calendar(id: String): TermCalendar? = councils().firstOrNull { it.id == id }
 
     /** The council an item came from, or null for one he typed. */
     fun councilOf(source: String?): TermCalendar? =
@@ -144,7 +118,7 @@ object SchoolTerms {
     fun card(items: List<SchoolItem>, today: Long, known: Set<String> = emptySet()): SchoolTermCard {
         val filled = items.mapNotNull { councilOf(it.source) }.firstOrNull()
         if (filled == null) {
-            val choices = COUNCILS.filter { ahead(it, today).isNotEmpty() }.map { choice(it, today) }
+            val choices = councils().filter { ahead(it, today).isNotEmpty() }.map { choice(it, today) }
             return SchoolTermCard(CARD_TITLE, OFFER_LINE, choices, null, refresh(null, items, known, today, choices.isNotEmpty()))
         }
         val n = items.count { councilOf(it.source)?.id == filled.id && it.endDay >= today }
@@ -262,11 +236,11 @@ object SchoolTerms {
     /** The same id on every device for one council holiday, so the Fold and the Mac filling it in at once make one row. */
     fun idFor(cal: TermCalendar, p: TermPeriod): String = "council-${cal.id}-${p.startDay}"
 
-    /** "Filled in 8 holidays from Central Bedfordshire · check the school's INSET days". */
+    /** "Filled in 8 holidays from Oakfield · check the school's INSET days". */
     fun filledLine(cal: TermCalendar, n: Int): String =
         "Filled in $n ${if (n == 1) "holiday" else "holidays"} from ${cal.name} · add the school's INSET days below"
 
-    /** "Added 6 new holidays from Central Bedfordshire · 2028–29". */
+    /** "Added 6 new holidays from Oakfield · 2028–29". */
     fun addedNewLine(cal: TermCalendar, added: List<TermPeriod>): String {
         val years = added.map { schoolYearOf(it.startDay) }.distinct().sorted().joinToString(" and ") { yearLabel(it) }
         val n = added.size
@@ -275,6 +249,46 @@ object SchoolTerms {
 
     /** "Removed 8 council holidays". */
     fun removedLine(n: Int): String = "Removed $n council ${if (n == 1) "holiday" else "holidays"}"
+
+    // ---- The table as his data keeps it (rule 13, release 2 slice 5) ----
+
+    /** At most this many holidays in one table (two school years are ~14). */
+    const val MAX_PERIODS = 60
+    private val ID = Regex("[a-z0-9-]{1,40}")
+
+    /**
+     * The text About you's `councilDates` holds: "id|name|page|checked day|years", then one "title|first day|last day" per
+     * holiday (epoch days). '|' and line breaks in a name are dropped.
+     */
+    fun encode(cal: TermCalendar): String {
+        fun c(t: String) = t.replace('|', ' ').replace('\n', ' ').replace('\r', ' ').trim()
+        val head = listOf(cal.id, c(cal.name), c(cal.sourceUrl), cal.checkedDay.toString(), c(cal.years)).joinToString("|")
+        return (listOf(head) + cal.periods.take(MAX_PERIODS).map { "${c(it.title)}|${it.startDay}|${it.endDay}" }).joinToString("\n")
+    }
+
+    /**
+     * [encode]'s text back; null when the head can't be read (it's synced data). A holiday line that can't be right is
+     * skipped, not the table; the holidays come back in date order.
+     */
+    fun decode(text: String?): TermCalendar? {
+        val lines = text?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: return null
+        val head = lines.firstOrNull()?.split('|') ?: return null
+        if (head.size != 5) return null
+        val id = head[0].trim().takeIf { ID.matches(it) } ?: return null
+        val name = head[1].trim().takeIf { it.isNotEmpty() && it.length <= 80 } ?: return null
+        val url = head[2].trim().takeIf { it.startsWith("https://") && it.length <= 400 } ?: return null
+        val checked = head[3].trim().toLongOrNull() ?: return null
+        val years = head[4].trim().take(40)
+        val periods = lines.drop(1).take(MAX_PERIODS).mapNotNull { l ->
+            val f = l.split('|')
+            if (f.size != 3) return@mapNotNull null
+            val title = f[0].trim().takeIf { it.isNotEmpty() && it.length <= 60 } ?: return@mapNotNull null
+            val a = f[1].trim().toLongOrNull() ?: return@mapNotNull null
+            val b = f[2].trim().toLongOrNull() ?: return@mapNotNull null
+            if (b < a || b - a > 120) null else TermPeriod(title, a, b)
+        }.sortedBy { it.startDay }
+        return TermCalendar(id, name, url, checked, years, periods)
+    }
 
     // ---- INSET days pasted from the school's website or letter ----
 

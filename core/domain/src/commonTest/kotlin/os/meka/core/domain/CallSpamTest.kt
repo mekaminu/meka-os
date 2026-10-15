@@ -69,7 +69,7 @@ class CallSpamTest {
         // The household profile's numbers (partner, the assistant, voicemail) ring.
         assertEquals(CallReason.SWITCHED_OFF, decide("01632 960000", on = false, signals = failed.copy(household = true)).reason)
         // A caller whose network name claims the police rings, even when the check failed; a heads-up follows.
-        val police = decide("01632 960000", atWork = true, signals = failed.copy(networkName = "Bedfordshire Police"))
+        val police = decide("01632 960000", atWork = true, signals = failed.copy(networkName = "Eastshire Police"))
         assertEquals(CallVerdict.RING, police.verdict)
         assertEquals(CallReason.OFFICIAL_CLAIM, police.reason)
         assertTrue(UnknownCallRules.watch(police, "01632 960000", failed))

@@ -27,23 +27,23 @@ class BillsTest {
         val tax = r.add("Council tax", ObligationKind.BILL, today() + 3, RenewalRepeat.MONTHLY, cost = "180")
         // The pay link: cleaned to https, a typed non-address refused, blank clears it.
         assertFalse(r.setPayLink(tax, "not a link"))
-        assertTrue(r.setPayLink(tax, "www.centralbedfordshire.gov.uk/council-tax"))
+        assertTrue(r.setPayLink(tax, "www.oakfield.gov.uk/council-tax"))
         val item = r.items().single()
-        assertEquals("https://www.centralbedfordshire.gov.uk/council-tax", item.payLink)
-        assertEquals("Pay on centralbedfordshire.gov.uk ↗", BillRules.payLabel(item.payLink!!))
+        assertEquals("https://www.oakfield.gov.uk/council-tax", item.payLink)
+        assertEquals("Pay on oakfield.gov.uk ↗", BillRules.payLabel(item.payLink!!))
 
         val n = notices().single()
         assertEquals("Council tax due Thu 15 Oct · £180", n.title)
-        assertEquals("In 3 days · Pay opens centralbedfordshire.gov.uk", n.text)
+        assertEquals("In 3 days · Pay opens oakfield.gov.uk", n.text)
         assertEquals(listOf(NoticeAction.PAY), n.actions)
-        assertEquals("https://www.centralbedfordshire.gov.uk/council-tax", n.link)
+        assertEquals("https://www.oakfield.gov.uk/council-tax", n.link)
         assertEquals(NoticeSource.BILLS, n.source)
         assertEquals(cal.toEpochMs(today(), BillRules.NOTICE_MIN), n.atMs)
         assertEquals("bill:$tax:${today() + 3}", n.key)
 
         // The day before, the same key (it posts once) with the words for tomorrow.
         at(2026, 10, 14)
-        assertEquals("Council tax due tomorrow · £180" to "Tomorrow · Pay opens centralbedfordshire.gov.uk", notices().single().let { it.title to it.text })
+        assertEquals("Council tax due tomorrow · £180" to "Tomorrow · Pay opens oakfield.gov.uk", notices().single().let { it.title to it.text })
         // Paid moves it to next month: nothing until three days before then.
         r.done(tax)
         assertTrue(notices().isEmpty())

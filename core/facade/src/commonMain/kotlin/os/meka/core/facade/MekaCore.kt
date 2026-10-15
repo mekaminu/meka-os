@@ -536,6 +536,9 @@ class MekaCore(
      */
     var seedsAboutYou: Boolean = false
 
+    /** Release 2 slice 5's one-off council table (tests swap in an invented one, or null for none). */
+    internal var releaseOneCouncil: os.meka.core.domain.TermCalendar? = RELEASE_ONE_COUNCIL
+
     /**
      * Which app this is (About you, slice 2): after a clean sync with a filled-in profile, it writes once that it holds
      * it, so Health and the publish job can say whether the Fold and the Mac both have it (release 2's gate). The Fold
@@ -3033,7 +3036,7 @@ class MekaCore(
 
     /**
      * School dates filled in (slice 1): fills in [councilId]'s holidays still to come (the council card's choice,
-     * [os.meka.core.domain.SchoolTerms.COUNCILS]) as days off for both boys, marked with the council and the day its page
+     * [os.meka.core.domain.SchoolTerms.councils], from his profile) as days off for both boys, marked with the council and the day its page
      * was checked. Returns the line to show ("Filled in 8 holidays from …", or that they're in already); null for a
      * council not in the table. Days off he typed win: a holiday overlapping one isn't added. Undo is [removeSchoolTerms].
      */
@@ -4173,6 +4176,38 @@ class MekaCore(
         const val DIGEST_KEY = "meka.digest"
         /** Release 2 slice 1's one-off copy into About you's new Clubs line ([AboutYouStore.seedClubsOnce]); removed with the final slice. */
         private const val RELEASE_ONE_CLUBS = "BUFC Biggleswade United, SJFC"
+
+        private fun day(y: Int, m: Int, d: Int) = os.meka.core.domain.CivilDate.toEpochDay(y, m, d)
+
+        /**
+         * Release 2 slice 5's one-off copy into About you's council holidays ([AboutYouStore.seedCouncilOnce]): the table
+         * the School pane offered before (checked 2026-10-14 against the council's own page; the council names two
+         * training days in 2026–27, every other INSET day is the school's). Removed with the final slice, once a report
+         * shows the Fold holds it.
+         */
+        private val RELEASE_ONE_COUNCIL = os.meka.core.domain.TermCalendar(
+            id = "central-bedfordshire",
+            name = "Central Bedfordshire",
+            sourceUrl = "https://www.centralbedfordshire.gov.uk/info/3/schools_and_education/529/school_term_and_holiday_dates_in_central_bedfordshire",
+            checkedDay = day(2026, 10, 14),
+            years = "2026–27 and 2027–28",
+            periods = listOf(
+                os.meka.core.domain.TermPeriod("October half term", day(2026, 10, 26), day(2026, 10, 30)),
+                os.meka.core.domain.TermPeriod("Christmas holidays", day(2026, 12, 21), day(2027, 1, 4)),
+                os.meka.core.domain.TermPeriod("February half term", day(2027, 2, 15), day(2027, 2, 19)),
+                os.meka.core.domain.TermPeriod("Easter holidays", day(2027, 3, 26), day(2027, 4, 9)),
+                os.meka.core.domain.TermPeriod("Training day", day(2027, 4, 12), day(2027, 4, 12)),
+                os.meka.core.domain.TermPeriod("May half term", day(2027, 5, 31), day(2027, 6, 4)),
+                os.meka.core.domain.TermPeriod("Training day", day(2027, 6, 7), day(2027, 6, 7)),
+                os.meka.core.domain.TermPeriod("Summer holidays", day(2027, 7, 22), day(2027, 8, 31)),
+                os.meka.core.domain.TermPeriod("October half term", day(2027, 10, 25), day(2027, 10, 29)),
+                os.meka.core.domain.TermPeriod("Christmas holidays", day(2027, 12, 20), day(2028, 1, 3)),
+                os.meka.core.domain.TermPeriod("February half term", day(2028, 2, 14), day(2028, 2, 18)),
+                os.meka.core.domain.TermPeriod("Easter holidays", day(2028, 4, 3), day(2028, 4, 17)),
+                os.meka.core.domain.TermPeriod("May half term", day(2028, 5, 29), day(2028, 6, 2)),
+                os.meka.core.domain.TermPeriod("Summer holidays", day(2028, 7, 22), day(2028, 8, 31)),
+            ),
+        )
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
@@ -6905,6 +6940,8 @@ class MekaCore(
             if (seedsAboutYou && report.rejected.isEmpty()) aboutYou.seedOnce(aboutYouBefore())
             // Release 2 slice 1: a profile from before About you had Clubs gets the clubs MEKA knew, once.
             if (seedsAboutYou && report.rejected.isEmpty()) aboutYouBefore().clubs?.let { aboutYou.seedClubsOnce(it) }
+            // Release 2 slice 5: the council's holidays the code carried go into the profile once.
+            if (seedsAboutYou && report.rejected.isEmpty()) releaseOneCouncil?.let { aboutYou.seedCouncilOnce(it) }
             // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
             if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())

@@ -14,6 +14,7 @@ import kotlin.concurrent.Volatile
  * ([assistantNumber]) too; with none typed the weather falls back to a generic place and the number isn't shown.
  * Release 2 slice 4 (2026-10-15): his own name as About you has it ([shown]), so a group message naming him counts as
  * a mention without his full name in the code.
+ * Release 2 slice 5 (2026-10-15): the school's council's holidays ([council]), kept in his profile, not in the code.
  */
 data class HouseholdNames(
     /** Age group → the child's first name ("7" → "Alex"); a child without an age group isn't here. */
@@ -37,6 +38,11 @@ data class HouseholdNames(
      * mentions him by ([MessageTriageRules.names]) add it to the app's own short name.
      */
     val shown: String? = null,
+    /**
+     * The school's council's holidays as his data keeps them (About you's `councilDates`, release 2 slice 5); null with
+     * none. The School pane's council card offers only this ([SchoolTerms.councils]).
+     */
+    val council: TermCalendar? = null,
 ) {
     /** The partner's first name ("Sam" for "Sam Lane"); null with none. */
     val partnerFirst: String? get() = partner?.trim()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
@@ -64,6 +70,7 @@ data class HouseholdNames(
                 work = a.work?.let(WeatherPlaceRules::normalize),
                 assistantNumber = a.assistantNumber?.trim()?.takeIf { it.isNotEmpty() },
                 shown = a.shownName?.trim()?.takeIf { it.isNotEmpty() },
+                council = a.councilDates,
             )
         }
     }
@@ -103,6 +110,9 @@ object Household {
 
     /** About you's "Your name" as typed (tests and the Mac's bridge tests; blank for none), keeping the rest. */
     fun useShownName(name: String): Boolean = set(names.copy(shown = name.trim().takeIf { it.isNotEmpty() }))
+
+    /** The council's holidays as his profile would hold them (tests; null for none), keeping the rest. */
+    fun useCouncil(cal: TermCalendar?): Boolean = set(names.copy(council = cal))
 
     /** Sets [n] directly (tests, and [use]); true when it changed. */
     fun set(n: HouseholdNames): Boolean {

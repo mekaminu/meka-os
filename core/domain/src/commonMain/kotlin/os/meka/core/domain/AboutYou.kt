@@ -46,6 +46,12 @@ object AboutYouFields {
      */
     const val SCHOOL_WEBSITE = "schoolWebsite"
     const val ASSISTANT_NUMBER = "assistantNumber"
+    /**
+     * The school's council's holidays (release 2 slice 5, 2026-10-15): the table the School pane fills in from, as
+     * [SchoolTerms.encode] writes it. Not typed: the Fold copied the one Navilife carried once
+     * ([AboutYouStore.seedCouncilOnce]), so no council is named in the code.
+     */
+    const val COUNCIL_DATES = "councilDates"
     const val VOICEMAIL_NUMBER = "voicemailNumber"
     /** Int64: when the Fold copied MEKA's earlier values in (release 1); absent when he typed it all. */
     const val SEEDED_AT = "seededAtMs"
@@ -62,7 +68,17 @@ enum class AboutYouDevice { FOLD, MAC }
  * Whether each app has the profile (slice 2): [filled] when anything is in it, and when the Fold and the Mac each
  * first held it after a clean sync. Release 2 (deleting the old values from the code) waits until both have it.
  */
-data class AboutYouHeld(val filled: Boolean, val foldAtMs: Long?, val macAtMs: Long?) {
+data class AboutYouHeld(
+    val filled: Boolean,
+    val foldAtMs: Long?,
+    val macAtMs: Long?,
+    /**
+     * Release 2's last one-off copies (slice 5, 2026-10-15): whether the profile holds the clubs and the council's
+     * holidays, so a build run knows when the code's copies can go. Null when not known (an older server).
+     */
+    val clubs: Boolean? = null,
+    val council: Boolean? = null,
+) {
     val onBoth: Boolean get() = filled && foldAtMs != null && macAtMs != null
 }
 
@@ -88,6 +104,8 @@ data class AboutYou(
     val assistantNumber: String? = null,
     val voicemailNumber: String? = null,
     val seededAtMs: Long? = null,
+    /** The school's council's holidays ([AboutYouFields.COUNCIL_DATES]); not a typed line, so not part of [isEmpty]. */
+    val councilDates: TermCalendar? = null,
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
@@ -183,6 +201,8 @@ object AboutYouRules {
             filled = !read(fields).isEmpty,
             foldAtMs = fields[AboutYouFields.HELD_FOLD]?.longOrNull,
             macAtMs = fields[AboutYouFields.HELD_MAC]?.longOrNull,
+            clubs = AboutYouFields.CLUBS in fields,
+            council = read(fields).councilDates != null,
         )
     }
 
@@ -218,7 +238,9 @@ object AboutYouRules {
             h.foldAtMs?.let { "on the Fold since ${utc(it)}" } ?: "NOT on the Fold yet",
             h.macAtMs?.let { "on the Mac since ${utc(it)}" } ?: "NOT on the Mac yet",
             if (h.onBoth) "release 2 can start" else "release 2 waits",
-        ).joinToString(" · ")
+            h.clubs?.let { if (it) "clubs copied" else "clubs NOT copied yet" },
+            h.council?.let { if (it) "council dates copied" else "council dates NOT copied yet" },
+        ).filterNotNull().joinToString(" · ")
     }
 
     const val HEALTH_KEY = "about"
@@ -242,6 +264,7 @@ object AboutYouRules {
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
             seededAtMs = fields[AboutYouFields.SEEDED_AT]?.longOrNull,
+            councilDates = SchoolTerms.decode(fields[AboutYouFields.COUNCIL_DATES]?.textOrNull),
         )
     }
 
@@ -635,6 +658,20 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
         if (AboutYouFields.CLUBS in f) return false
         val v = AboutYouRules.clean(AboutField.CLUBS, clubs)?.takeIf { it.isNotEmpty() } ?: return false
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text(v)))
+        return true
+    }
+
+    /**
+     * Release 2 slice 5's one-off copy of the council's holidays (2026-10-15): the table the School pane offered was in
+     * the code; it is written into the profile once, only while the field has never been written and a profile exists,
+     * so the code can drop the council's name. True when it wrote.
+     */
+    fun seedCouncilOnce(cal: TermCalendar): Boolean {
+        val f = fields() ?: return false
+        if (AboutYouFields.COUNCIL_DATES in f) return false
+        if (SchoolTerms.decode(SchoolTerms.encode(cal)) == null) return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID,
+            mapOf(AboutYouFields.COUNCIL_DATES to FieldValue.Text(SchoolTerms.encode(cal))))
         return true
     }
 

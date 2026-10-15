@@ -29,7 +29,7 @@ class AboutYouHeldTest {
         s.set(AboutField.HOME, "")
         // A profile with nothing in it: still no mark.
         assertFalse(s.markHeld(AboutYouDevice.FOLD))
-        assertEquals(AboutYouHeld(false, null, null), s.held())
+        assertEquals(AboutYouHeld(false, null, null, clubs = false, council = false), s.held())
     }
 
     @Test
@@ -41,7 +41,7 @@ class AboutYouHeldTest {
         now += 60_000
         assertFalse(s.markHeld(AboutYouDevice.FOLD))
         assertTrue(s.markHeld(AboutYouDevice.MAC))
-        assertEquals(AboutYouHeld(true, first, now), s.held())
+        assertEquals(AboutYouHeld(true, first, now, clubs = false, council = false), s.held())
         assertTrue(s.held()!!.onBoth)
         // The marks don't make an otherwise empty profile count as filled, nor show in the pane.
         assertTrue(AboutYouRules.read(mapOf(AboutYouFields.HELD_FOLD to FieldValue.Int64(1))).isEmpty)
@@ -71,6 +71,8 @@ class AboutYouHeldTest {
         assertEquals("the profile is empty", AboutYouRules.gateLine(AboutYouHeld(false, 1, 2), ::utc))
         assertEquals("on the Fold since t1 · NOT on the Mac yet · release 2 waits", AboutYouRules.gateLine(AboutYouHeld(true, 1, null), ::utc))
         assertEquals("on the Fold since t1 · on the Mac since t2 · release 2 can start", AboutYouRules.gateLine(AboutYouHeld(true, 1, 2), ::utc))
+        assertEquals("on the Fold since t1 · on the Mac since t2 · release 2 can start · clubs copied · council dates NOT copied yet",
+            AboutYouRules.gateLine(AboutYouHeld(true, 1, 2, clubs = true, council = false), ::utc))
     }
 
     @Test

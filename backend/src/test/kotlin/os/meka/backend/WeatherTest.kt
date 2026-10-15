@@ -147,7 +147,7 @@ class WeatherTest {
         assertEquals(before + 1, fetches)
     }
 
-    /** Open-Meteo's /v1/search answer (fields we read): Bedford, Texas first, then Bedfordshire's. */
+    /** Open-Meteo's /v1/search answer (fields we read): Bedford, Texas first, then England's. */
     private val bedford = """
         {"results":[
           {"id":4673353,"name":"Bedford","latitude":32.84402,"longitude":-97.14307,"country_code":"US","admin1":"Texas"},

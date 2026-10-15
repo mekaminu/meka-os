@@ -11,8 +11,8 @@ import os.meka.core.sync.fv
  * English rule; never past Saturday). The evening before: Today's header and a heads-up at 19:00, "Black bin and food
  * caddy out tonight"; the week ahead shows each collection. Plain, non-AI rules; nothing leaves Meka's synced data.
  *
- * One synced `bin` entity per bin (ADR-008 addendum 2026-10-12). Central Bedfordshire Council's own collection days
- * (a later slice) would fill the same entities.
+ * One synced `bin` entity per bin (ADR-008 addendum 2026-10-12). The council's own collection days (a later slice)
+ * would fill the same entities.
  */
 object BinFields {
     /** "Black bin", "Food caddy" (at most [BinRules.MAX_NAME]; one bin per name, ignoring case). */
@@ -88,7 +88,7 @@ object BinRules {
     const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
     const val NOT_READ = "Navilife couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
     const val SHIFT_NOTE = "a day later for the bank holiday"
-    const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Central Bedfordshire's own collection days can fill this later."
+    const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Your council's own collection days can fill this later."
     /** A one-off moves a collection at most this many days either way. */
     const val MOVE_MAX_DAYS = 14
     private val SKIP_WORDS = setOf("no", "skip", "skipped", "cancelled", "canceled", "none", "not")

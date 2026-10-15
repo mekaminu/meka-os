@@ -1704,7 +1704,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testSpamProtectionIsAlwaysOnAndReachesSwift() {
         // Spam calls still ring, slice 1: the shared copy, and an official claim's heads-up.
         XCTAssertTrue(SpamProtectionRules.shared.HINT.hasPrefix("Spam protection is always on."))
-        XCTAssertEqual(OfficialCallerRules.shared.claim(networkName: "Bedfordshire Police"), OfficialClaim.police)
+        XCTAssertEqual(OfficialCallerRules.shared.claim(networkName: "Eastshire Police"), OfficialClaim.police)
         XCTAssertTrue(OfficialCallerRules.shared.isEmergency(number: "999"))
         XCTAssertEqual(AutoBlockRules.shared.blockedLine(number: "+441632960123"), "Blocked 01632 960123 · it won't ring again")
     }

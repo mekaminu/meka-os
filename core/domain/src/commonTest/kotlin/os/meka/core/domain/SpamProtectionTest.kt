@@ -10,7 +10,7 @@ import kotlin.test.assertTrue
 class SpamProtectionTest {
     @Test
     fun aNetworkNameClaimingAnOfficialBodyIsSpotted() {
-        assertEquals(OfficialClaim.POLICE, OfficialCallerRules.claim("Bedfordshire Police"))
+        assertEquals(OfficialClaim.POLICE, OfficialCallerRules.claim("Eastshire Police"))
         assertEquals(OfficialClaim.POLICE, OfficialCallerRules.claim("ACTION FRAUD"))
         assertEquals(OfficialClaim.BANK, OfficialCallerRules.claim("Barclays Fraud Dept"))
         assertEquals(OfficialClaim.NHS, OfficialCallerRules.claim("Oakfield Surgery"))
