@@ -208,13 +208,7 @@ class TravelTimesTest {
         }
         integrations.syncAll()
         Household.set(HouseholdNames.EMPTY)
+        // (The test above shows the same fixture looked up once the household's About you names its club.)
         assertEquals(emptyList(), asked)
-        // Its clubs added in About you (on either app): the fixture is looked up.
-        ops.transaction {
-            mirror.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text("OTFC")))
-                .forEach { ops.append(it) }
-        }
-        integrations.syncAll()
-        assertEquals(1, asked.size)
     }
 }
