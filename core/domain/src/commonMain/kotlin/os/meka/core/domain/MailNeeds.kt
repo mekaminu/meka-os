@@ -154,7 +154,8 @@ data class MailNeedsRow(
     val asksToMeet: Boolean = false,
     /**
      * Scheduling assistant, slice 2: their reply picks one of the times he offered ("Sam picked Tue 20 Oct,
-     * 13:00–14:00 · one of the times you offered"), or "Booked · …" once he tapped Book it; null otherwise.
+     * 13:00–14:00 · one of the times you offered"), or "Booked · …" once he tapped Book it; slice 3: "Sam can't make
+     * the times you offered · Suggest times finds others" when it turns them down (with [asksToMeet]); null otherwise.
      */
     val pickedLine: String? = null,
     /** Slice 2: Book it is offered (picked, not booked yet). */
@@ -457,12 +458,15 @@ object MailNeedsRules {
             // Scheduling assistant, slice 2: their answer to the times he offered.
             val pick = if (replySent(i)) null else MeetingPickRules.pickFor(i, all, nowMs, cal)
             val booked = pick != null && MeetingPickRules.booked(i, pick)
+            // Slice 3: an answer that turns his times down (or asks for others) offers Suggest times again.
+            val declined = !replySent(i) && pick == null && MeetingPickRules.declinedFor(i, all, nowMs, cal)
             val pickedLine = pick?.let { if (booked) MeetingPickRules.bookedLine(it.slot, cal) else MeetingPickRules.pickedLine(i.from, it.slot, cal) }
-            val meet = !replySent(i) && pick == null && MeetingRequestRules.asks(i.subject, i.preview)
+                ?: MeetingPickRules.declinedLine(i.from).takeIf { declined }
+            val meet = !replySent(i) && pick == null && (declined || MeetingRequestRules.asks(i.subject, i.preview))
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet }, pickedLine, linkedLine, notice).joinToString(". "),
+                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice).joinToString(". "),
                 notice = notice,
                 replyDraft = if (notice != null) i.replyText else null,
                 replyLine = "To ${i.from} · sent from ${i.account} only when you tap Send",

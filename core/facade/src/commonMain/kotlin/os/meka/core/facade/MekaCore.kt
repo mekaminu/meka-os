@@ -4764,18 +4764,29 @@ class MekaCore(
      * own calendars ([os.meka.core.domain.MeetingRequestRules.slots]: work days, inside the day's work hours, clear of
      * every event on any calendar and of protected time, a morning and an afternoon in turn), written as a reply for the
      * editor with his name from About you. Worked out on the device; no AI and nothing written, booked or sent: it goes
-     * only when he taps Send ([replyToMailItem]). No free time: no text and a line saying so.
+     * only when he taps Send ([replyToMailItem]). No free time: no text and a line saying so. Slice 3: on their answer
+     * that turned his times down, new times away from those days ("No problem. How about…"); with a zone their email
+     * names, the times also in their time and inside their working day.
      */
     suspend fun suggestMeetingTimes(id: String): os.meka.core.domain.MailDraft = onCore {
         val R = os.meka.core.domain.MeetingRequestRules
-        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailDraft(null, R.UNKNOWN)
+        val items = activity.mailItems()
+        val item = items.firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailDraft(null, R.UNKNOWN)
         val cal = ZoneCalendar(timeZone)
         val now = nowMs()
+        // Slice 3: times he offered before in this conversation (they couldn't make them) are left out, and a zone
+        // their emails name ("I'm in New York") keeps the times inside their working day and writes them in their time.
+        val offer = os.meka.core.domain.MeetingPickRules.offerFor(item, items, cal)
+        val named = os.meka.core.domain.MeetingZoneRules.named(listOf(item.subject, item.preview, offer?.first?.subject, offer?.first?.preview))
+        val theirs = named?.let { n ->
+            runCatching { TimeZone.of(n.id) }.getOrNull()?.takeIf { it.id != timeZone().id }
+                ?.let { z -> os.meka.core.domain.TheirZone(ZoneCalendar { z }, n.label) }
+        }
         val slots = R.slots(
             now, work.hours(localClock(), cal.epochDayOf(now)), currentEvents(), ::protectedSlots, cal,
-            R.minutes(item.subject, item.preview),
+            R.minutes(item.subject, item.preview), offer?.second.orEmpty(), theirs?.cal,
         )
-        val text = R.draft(item.from, slots, cal, R.zoneLabel(timeZone().id), aboutYou.profile().shownName)
+        val text = R.draft(item.from, slots, cal, R.zoneLabel(timeZone().id), aboutYou.profile().shownName, theirs, again = offer != null)
             ?: return@onCore os.meka.core.domain.MailDraft(null, R.NONE_FREE_LINE)
         os.meka.core.domain.MailDraft(text, R.SUGGESTED_LINE)
     }

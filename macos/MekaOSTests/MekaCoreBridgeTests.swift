@@ -3031,6 +3031,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MeetingPickRules.shared.BOOK, "Book it")
         let unknownBooking = try await core.bookMeetingPick(id: "nothing")
         XCTAssertEqual(unknownBooking, MailNeedsRules.shared.UNKNOWN)
+        // Slice 3: an answer turning the times down reads the same on the Mac.
+        XCTAssertTrue(MeetingPickRules.shared.declines(text: "None of those work for me, sorry"))
+        XCTAssertEqual(MeetingPickRules.shared.declinedLine(from: "Sam Taylor"), "Sam can't make the times you offered · Suggest times finds others")
         // Follow-up radar: his emails with no reply share the card.
         XCTAssertEqual(MailFollowUpRules.shared.TITLE, "No reply yet")
         // Follow-up radar, slice 3: per-person waits.

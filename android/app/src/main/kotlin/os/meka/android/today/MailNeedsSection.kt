@@ -240,7 +240,8 @@ internal fun MailNeedsRowView(
             Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-            if (row.asksToMeet) Text(MeetingRequestRules.ASKS, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-asks-to-meet"))
+            // Slice 3: an answer turning his times down says so in its own line instead.
+            if (row.asksToMeet && row.pickedLine == null) Text(MeetingRequestRules.ASKS, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-asks-to-meet"))
             // Scheduling assistant, slice 2: the time they picked, then "Booked · …" (cross-fades in place).
             AnimatedContent(
                 row.pickedLine, label = "mail-picked",

@@ -24,6 +24,7 @@ import os.meka.core.wire.MailDraftCodec
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -304,6 +305,44 @@ class MailDraftFacadeTest {
         assertTrue(fold.syncNow())
         val ops = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityId == answer && it.field == os.meka.core.domain.MailItemFields.MEETING_EDIT_ID }
         assertTrue((ops.last().value as FieldValue.Text).value.isNotEmpty())
+        assertTrue(server.sent.isEmpty())
+    }
+
+    /** Scheduling assistant, slice 3: they couldn't make his times; Suggest times offers others, in their time too. */
+    @Test
+    fun aDeclinedOfferSuggestsOtherDaysInTheirTime() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        val offer = MailNeedsRules.itemId("acc1", "ask")
+        serverWrite(offer, MailNeedsRules.serverFields("Business", "Sam Taylor", "sam@example.com", "Catch up?", "Can we meet next week? I'm based in New York.", at(15, 9), 1, threadKey = "th1"))
+        serverWrite(offer, mapOf(
+            os.meka.core.domain.MailItemFields.DONE_ASKED_AT to FieldValue.Int64(at(15, 10)),
+            os.meka.core.domain.MailItemFields.REPLY_ASKED_AT to FieldValue.Int64(at(15, 10)),
+            os.meka.core.domain.MailItemFields.REPLY_TEXT to FieldValue.Text(
+                "Hi Sam,\n\n• Monday 19 October, 11:30–12:30\n• Tuesday 20 October, 13:00–14:00\n\nLet me know which suits you.\n\nAlex",
+            ),
+            os.meka.core.domain.MailItemFields.REPLY_SENT_AT to FieldValue.Int64(at(15, 10, 1)),
+        ))
+        val answer = MailNeedsRules.itemId("acc1", "answer")
+        serverWrite(answer, MailNeedsRules.serverFields("Business", "Sam Taylor", "sam@example.com", "Re: Catch up?", "Sorry, none of those work for me. Any other times?", at(15, 11), 2, threadKey = "th1"))
+        val fold = core()
+        assertTrue(fold.syncNow())
+        val row = fold.mailNeeds.value!!.rows.single()
+        assertEquals("Sam can't make the times you offered · Suggest times finds others", row.pickedLine)
+        assertTrue(row.asksToMeet)
+
+        val d = fold.suggestMeetingTimes(answer)
+        val text = d.text!!
+        assertTrue(text.startsWith("Hi Sam,\n\nNo problem. How about one of these instead (UK time):"), text)
+        // Not Monday 19 or Tuesday 20 again, and each time also in New York's (five hours behind London this week).
+        assertFalse(text.contains("19 October") || text.contains("20 October"), text)
+        val lines = text.lines().filter { it.startsWith("• ") }
+        assertEquals(3, lines.size)
+        assertTrue(lines.all { it.endsWith(" New York time)") }, text)
+        // Read back as he'd send it, their time picks it.
+        val offered = os.meka.core.domain.MeetingPickRules.offered(text, now, ZoneCalendar { london })
+        assertEquals(3, offered.size)
+        assertTrue(offered.all { it.theirStartMin != null && it.theirStartMin!! >= 8 * 60 })
         assertTrue(server.sent.isEmpty())
     }
 }

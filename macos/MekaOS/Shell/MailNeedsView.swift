@@ -202,7 +202,8 @@ struct MailNeedsRowView: View {
                     Text(preview).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(2)
                 }
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
-                if row.asksToMeet {
+                // Slice 3: an answer turning his times down says so in its own line instead.
+                if row.asksToMeet, row.pickedLine == nil {
                     Text(MeetingRequestRules.shared.ASKS).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 }
                 // Scheduling assistant, slice 2: the time they picked, then "Booked · …" (cross-fades in place).

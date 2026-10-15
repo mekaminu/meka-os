@@ -27,8 +27,11 @@ object MeetingPickRules {
     const val NO_PICK = "They didn't pick one of the times you offered"
     const val NO_ACCOUNT = "Allow editing on a calendar in Calendars first, then Book it"
     const val GONE = "That time has passed · write back with another"
-    /** A pick still counts for this long after his reply was sent. */
-    const val WINDOW_DAYS = 21
+    /**
+     * A pick still counts for this long after his reply was sent; slice 3: after it, or once every time he offered
+     * has passed, the offer has cleared itself (no Book it, no "can't make those times").
+     */
+    const val WINDOW_DAYS = 14
     const val MAX_TITLE = 80
 
     private val WEEKDAYS = listOf(
@@ -40,7 +43,8 @@ object MeetingPickRules {
     /** One line of his list: "• Tuesday 20 October, 13:00–14:00" (the bullet optional). */
     private val OFFER = Regex(
         """^\s*(?:[•*\-–]\s*)?(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(\d{1,2})\s+""" +
-            """(January|February|March|April|May|June|July|August|September|October|November|December),?\s+(\d{1,2}):(\d{2})\s*[–\-]\s*(\d{1,2}):(\d{2})\s*$""",
+            """(January|February|March|April|May|June|July|August|September|October|November|December),?\s+(\d{1,2}):(\d{2})\s*[–\-]\s*(\d{1,2}):(\d{2})""" +
+            """(?:\s*\((?:[A-Za-z]{3}\s+)?(\d{1,2}):(\d{2})\s*[–\-]\s*\d{1,2}:\d{2}\s+[^()]{1,40}\btime\))?\s*$""",
         RegexOption.IGNORE_CASE,
     )
     /** Where the quoted earlier email starts in their reply. */
@@ -83,8 +87,9 @@ object MeetingPickRules {
                 .filter { dom in 1..CivilDate.lengthOfMonth(it, month) }
                 .map { CivilDate.toEpochDay(it, month, dom) }
                 .firstOrNull { it >= sentDay - 1 && CivilDate.isoDayOfWeek(it) == weekday } ?: return@mapNotNull null
-            FreeSlot(cal.toEpochMs(day, start), cal.toEpochMs(day, end))
-        }.distinct()
+            val theirs = g[8].takeIf { it.isNotEmpty() }?.let { h -> h.toInt() * 60 + g[9].toInt() }?.takeIf { it < LocalClock.MINUTES_PER_DAY }
+            FreeSlot(cal.toEpochMs(day, start), cal.toEpochMs(day, end), theirs)
+        }.distinctBy { it.startMs to it.endMs }
     }
 
     /** "re: Catch up?" and "Catch up?" are one conversation. */
@@ -107,10 +112,44 @@ object MeetingPickRules {
             .map { it to offered(it.replyText, it.replySentAtMs!!, cal) }
             .firstOrNull { it.second.isNotEmpty() }
 
+    /** Slice 3: an answer that turns all his times down or asks for others. */
+    private val DECLINE = Regex(
+        """\bnone\s+of\s+(?:those|these|them|the\s+(?:times|dates|days|slots|options))\b|""" +
+            """\b(?:can't|cant|cannot|can\s+not|couldn't|won't\s+be\s+able\s+to|unable\s+to|not\s+able\s+to)\s+(?:do|make|manage)\s+(?:any|either|those|these|them)\b|""" +
+            """\bneither\s+(?:of\s+(?:those|these|them)|works|suits|is\s+good)\b|""" +
+            """\b(?:those|these)\s+(?:times\s+|dates\s+|days\s+)?(?:don't|do\s+not|won't|wont|doesn't)\s+(?:work|suit)\b|""" +
+            """\b(?:any|some)\s+other\s+(?:times?|days?|dates?|slots?|options?)\b|""" +
+            """\b(?:other|different|alternative|later|earlier)\s+(?:times|days|dates|slots|options)\b|""" +
+            """\b(?:what|how)\s+about\s+(?:next|the\s+following)\s+week\b""",
+        RegexOption.IGNORE_CASE,
+    )
+    const val DECLINED_SUFFIX = "can't make the times you offered · Suggest times finds others"
+
+    /** Their words before the quoted earlier email. */
+    fun fresh(text: String): String = QUOTE.find(text)?.let { text.substring(0, it.range.first) } ?: text
+
+    /** Whether [text] (their words) turns his offered times down or asks for others. */
+    fun declines(text: String?): Boolean = !text.isNullOrBlank() && DECLINE.containsMatchIn(fresh(text))
+
+    /**
+     * Slice 3: [answer] answers his offer (inside [WINDOW_DAYS], some offered time still ahead) without picking one and
+     * turns them down or asks for other times. The row then says so and offers Suggest times again, away from those days.
+     */
+    fun declinedFor(answer: MailItem, items: List<MailItem>, nowMs: Long, cal: LocalCalendar): Boolean {
+        val (offer, slots) = offerFor(answer, items, cal) ?: return false
+        if (slots.none { it.endMs > nowMs }) return false
+        return declines(answerText(answer, offer))
+    }
+
+    /** "Sam can't make the times you offered · Suggest times finds others". */
+    fun declinedLine(from: String): String = "${from.trim().substringBefore(' ').ifEmpty { "They" }} $DECLINED_SUFFIX"
+
+    private fun answerText(answer: MailItem, offer: MailItem): String =
+        listOfNotNull(answer.subject.takeIf { !sameSubject(it, offer.subject) }, answer.preview).joinToString(". ")
+
     /** Their words before the quoted earlier email, with the clauses that turn a time down left out. */
     fun kept(text: String): String {
-        val fresh = QUOTE.find(text)?.let { text.substring(0, it.range.first) } ?: text
-        return fresh.split(CLAUSES).filter { it.isNotBlank() && !NEGATIVE.containsMatchIn(it) }.joinToString(" ")
+        return fresh(text).split(CLAUSES).filter { it.isNotBlank() && !NEGATIVE.containsMatchIn(it) }.joinToString(" ")
     }
 
     /**
@@ -157,7 +196,7 @@ object MeetingPickRules {
             (ordinals.isEmpty() || i in ordinals) &&
                 (weekdays.isEmpty() || CivilDate.isoDayOfWeek(day) in weekdays) &&
                 (dates.isEmpty() || dates.any { (m, d) -> d == ymd.day && (m == null || m == ymd.month) }) &&
-                (times.isEmpty() || cal.minuteOfDay(s.startMs) in times)
+                (times.isEmpty() || cal.minuteOfDay(s.startMs) in times || s.theirStartMin in times)
         }
         return fits.singleOrNull()?.value
     }
@@ -165,7 +204,7 @@ object MeetingPickRules {
     /** The time [answer] picks from his earlier offer, or null (none, ambiguous, or already past [nowMs]). */
     fun pickFor(answer: MailItem, items: List<MailItem>, nowMs: Long, cal: LocalCalendar): MeetingPick? {
         val (offer, slots) = offerFor(answer, items, cal) ?: return null
-        val slot = pick(listOfNotNull(answer.subject.takeIf { !sameSubject(it, offer.subject) }, answer.preview).joinToString(". "), slots, cal)
+        val slot = pick(answerText(answer, offer), slots, cal)
             ?: return null
         if (slot.endMs <= nowMs) return null
         return MeetingPick(offer.id, slot, title(answer.from))

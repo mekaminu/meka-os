@@ -14,8 +14,11 @@ package os.meka.core.domain
  * is (a "quick call" or "coffee" is half an hour, "15 min" is 15); they never reach the calendar or the times offered.
  */
 
-/** One free time offered in a reply. */
-data class FreeSlot(val startMs: Long, val endMs: Long)
+/**
+ * One free time offered in a reply. Slice 3: [theirStartMin], the start on their clock as his reply wrote it
+ * ("(08:00–09:00 New York time)"), so "8am works" picks it too; null when the reply gave only his time.
+ */
+data class FreeSlot(val startMs: Long, val endMs: Long, val theirStartMin: Int? = null)
 
 object MeetingRequestRules {
     const val SUGGEST = "Suggest times"
@@ -81,12 +84,23 @@ object MeetingRequestRules {
     /**
      * Up to [SHOWN] free times of [minutes] in the next [DAYS_AHEAD] days, each on its own work day ([work]), inside
      * that day's hours, no sooner than [MIN_LEAD_MIN] from [nowMs], [BUFFER_MIN] clear of [events] and outside
-     * [protectedOn]'s slots; a morning and an afternoon in turn where the day allows.
+     * [protectedOn]'s slots; a morning and an afternoon in turn where the day allows. Slice 3: never on a day of [avoid]
+     * (times he offered before that they couldn't make), and inside [theirs]'s working day when their email named a
+     * zone, unless no time fits it at all.
      */
     fun slots(
         nowMs: Long, work: WorkHours, events: List<CalendarEvent>, protectedOn: (Long) -> List<DayPlanner.Slot>,
-        cal: LocalCalendar, minutes: Int = DEFAULT_MIN,
+        cal: LocalCalendar, minutes: Int = DEFAULT_MIN, avoid: List<FreeSlot> = emptyList(), theirs: LocalCalendar? = null,
     ): List<FreeSlot> {
+        val inTheirDay = slotsFor(nowMs, work, events, protectedOn, cal, minutes, avoid, theirs)
+        return if (inTheirDay.isEmpty() && theirs != null) slotsFor(nowMs, work, events, protectedOn, cal, minutes, avoid, null) else inTheirDay
+    }
+
+    private fun slotsFor(
+        nowMs: Long, work: WorkHours, events: List<CalendarEvent>, protectedOn: (Long) -> List<DayPlanner.Slot>,
+        cal: LocalCalendar, minutes: Int, avoid: List<FreeSlot>, theirs: LocalCalendar?,
+    ): List<FreeSlot> {
+        val avoidDays = avoid.map { cal.epochDayOf(it.startMs) }.toSet()
         val need = minutes.coerceIn(15, 4 * 60) * MIN_MS
         val buffer = BUFFER_MIN * MIN_MS
         val earliest = nowMs + MIN_LEAD_MIN * MIN_MS
@@ -94,7 +108,7 @@ object MeetingRequestRules {
         val out = mutableListOf<FreeSlot>()
         for (day in today until today + DAYS_AHEAD) {
             if (out.size >= SHOWN) break
-            if (!work.isWorkDay(day)) continue
+            if (!work.isWorkDay(day) || day in avoidDays) continue
             val hours = work.hoursOn(day)
             if (hours.crossesMidnight || hours.endMinute <= hours.startMinute) continue
             val dayStart = cal.toEpochMs(day, 0)
@@ -106,6 +120,7 @@ object MeetingRequestRules {
             val busy = dayEvents.filter { !it.allDay }.map { DayPlanner.Slot(it.startAtMs - buffer, it.endAtMs + buffer) } + protectedOn(day)
             val free = DayPlanner.subtract(open, busy.sortedBy { it.startMs })
             val starts = free.flatMap { f -> startsIn(f, need, day, cal) }
+                .filter { theirs == null || MeetingZoneRules.inTheirDay(it, (need / MIN_MS).toInt(), theirs) }
             if (starts.isEmpty()) continue
             val wantAfternoon = out.size % 2 == 1
             val pick = if (wantAfternoon) starts.firstOrNull { cal.minuteOfDay(it) >= AFTERNOON_MIN } ?: starts.first()
@@ -144,16 +159,28 @@ object MeetingRequestRules {
 
     /**
      * The reply Suggest times puts in the editor: a greeting, the free times as a list ([zone] after them, e.g. "UK
-     * time"), an ask to pick one, and his name from About you when he gave one. Null when no time is free.
+     * time"), an ask to pick one, and his name from About you when he gave one. Null when no time is free. Slice 3:
+     * each time also in [theirs] when their email named a zone, and "No problem. How about…" when [again] (they couldn't
+     * make the times he offered before).
      */
-    fun draft(from: String, slots: List<FreeSlot>, cal: LocalCalendar, zone: String?, sign: String?): String? {
+    fun draft(
+        from: String, slots: List<FreeSlot>, cal: LocalCalendar, zone: String?, sign: String?,
+        theirs: TheirZone? = null, again: Boolean = false,
+    ): String? {
         if (slots.isEmpty()) return null
         val zonePart = zone?.trim()?.takeIf { it.isNotEmpty() }?.let { " ($it)" } ?: ""
         return buildString {
             append(greeting(from)).append("\n\n")
-            append(if (slots.size == 1) "Happy to meet. I'm free at this time$zonePart:" else "Happy to meet. I'm free at any of these times$zonePart:")
+            append(
+                when {
+                    again && slots.size == 1 -> "No problem. How about this time instead$zonePart:"
+                    again -> "No problem. How about one of these instead$zonePart:"
+                    slots.size == 1 -> "Happy to meet. I'm free at this time$zonePart:"
+                    else -> "Happy to meet. I'm free at any of these times$zonePart:"
+                },
+            )
             append("\n\n")
-            slots.forEach { append("• ").append(slotLabel(it, cal)).append('\n') }
+            slots.forEach { append("• ").append(slotLabel(it, cal)).append(MeetingZoneRules.theirPart(it, cal, theirs)).append('\n') }
             append('\n')
             append(if (slots.size == 1) "Let me know if that suits you and I'll put it in the diary." else "Let me know which suits you and I'll put it in the diary.")
             sign?.trim()?.takeIf { it.isNotEmpty() }?.let { append("\n\n").append(it) }

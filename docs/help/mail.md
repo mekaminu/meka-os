@@ -20,4 +20,5 @@ tip: To see or change everyone you've set a wait for, open Mail settings: Chase 
 tip: Once it's on Waiting for, Time to chase offers a short follow-up to send in the same conversation, to the people you wrote to, from the same account; nothing goes until you tap Send, and Undo stops it.
 tip: With Navilife's AI on, tapping Chase writes the follow-up from your email (who, the subject, how long it's been) in your usual tone; change anything, tap Another draft for a different one, and still nothing goes until you tap Send.
 tip: An email asking to meet says "Asks to meet" in Needs you; Suggest times opens the reply with three times you are free from your calendars, sent only when you tap Send.
+tip: If they can't make the times you offered, their answer says so with Suggest times for other days; if their email says where they are ("I'm in New York"), the times are also written in their time and kept inside their working day.
 tip: When they write back picking one of the times you offered, their email says "Sam picked Tue 20 Oct, 13:00–14:00"; Book it puts it in your calendar (Undo for five seconds), and nothing is sent to them.
