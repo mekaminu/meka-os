@@ -494,6 +494,12 @@ class MekaCore(
      * Synced (no location in it), so the Mac shows it too.
      */
     val parkingTimersView: StateFlow<os.meka.core.domain.TimersView> = _parkingTimers.asStateFlow()
+    private val _barcaNear = MutableStateFlow<List<os.meka.core.domain.CalendarEvent>>(emptyList())
+    /**
+     * Barça match day, slice 4: the Barça matches within a day or so of now (not hidden), with the lines the server
+     * wrote into their notes; the watch's screen and tile redraw when a sync brings a new score.
+     */
+    val barcaNearView: StateFlow<List<os.meka.core.domain.CalendarEvent>> = _barcaNear.asStateFlow()
     /**
      * School rhythm (V1, slice 1): Rex's and Logan's days off, dates and weekly things (Ask → More → School), and the
      * week-ahead questions ("Rex and Logan are off Mon 27 Oct · You're in the office that day. Who's covering?") that
@@ -3936,7 +3942,11 @@ class MekaCore(
      * make (Done · Tomorrow, Went · Didn't go) and the fast with Start or End. Pure and cheap. Nothing is stored.
      */
     fun watchHome(): os.meka.core.domain.WatchHomeView =
-        os.meka.core.domain.WatchHomeRules.view(coverNow(), _fasting.value, nowMs(), watchInbox(), watchParking())
+        os.meka.core.domain.WatchHomeRules.view(
+            coverNow(), _fasting.value, nowMs(), watchInbox(), watchParking(),
+            // Barça match day, slice 4: the match, worked out again at this minute from the last synced score.
+            os.meka.core.domain.WatchMatchRules.view(_barcaNear.value, nowMs(), ZoneCalendar(timeZone)),
+        )
 
     /**
      * Car and parking, slice 7: the cars' parking timers for the wrist, worked out again at this minute from the synced
@@ -6455,6 +6465,7 @@ class MekaCore(
         _eventMarks.value = marks
         val allEvents = currentEvents()
         val dayEvents = marks.visible(allEvents)
+        _barcaNear.value = os.meka.core.domain.WatchMatchRules.near(allEvents, marks, nowMs())
         val credit = callCredit.current()
         val workState = work.state(localClock(), todayEpochDay())
             .let { it.copy(callAssistantPaused = it.callAssistant && credit?.paused == true) }

@@ -44,6 +44,12 @@ data class WatchTileView(
      */
     val parkingLine: String? = null,
     val parkingLit: Boolean = false,
+    /**
+     * Barça match day, slice 4: "PSG v Barça · 20:00" · "Barça 2–1 Getafe · 67'" · "FT · Barça 2–1 Getafe" (lit from
+     * the hour before kick-off until full time); null with no match near. The inbox gives way to it too.
+     */
+    val matchLine: String? = null,
+    val matchLit: Boolean = false,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */
@@ -112,13 +118,15 @@ object WatchTileRules {
             home.line?.let(::add)
             if (f.running) add("${f.title}, ${spokenClock(f.clock)}")
             button?.let { add("Double tap ${it.label} to ${it.label.lowercase()}") }
-        }.joinToString(". ") + "." + (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
-        val inbox = home.inbox?.takeIf { fastLine == null && parking == null }
+        }.joinToString(". ") + "." + (home.match?.let { " " + it.spoken } ?: "") +
+            (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
+        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null }
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
             spoken = spoken, capture = true, inboxLine = inbox?.short, inboxLit = inbox?.lit == true,
             parkingLine = parking?.short, parkingLit = parking?.lit == true,
+            matchLine = home.match?.short, matchLit = home.match?.lit == true,
         )
     }
 
@@ -127,7 +135,7 @@ object WatchTileRules {
      * fast's clock runs or something is starting ("IN 12 MIN" counts down), else a quarter hour.
      */
     fun refreshAfterMs(home: WatchHomeView?, nowMs: Long): Long {
-        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended })
+        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended } || home.match?.lit == true)
         return if (counting) WatchHomeRules.nextTickMs(nowMs) - nowMs else CALM_REFRESH_MS
     }
 
@@ -143,6 +151,10 @@ object WatchTileRules {
             return WatchComplicationView(
                 text = p.left, title = "Park", value = p.leftShare, fasting = false, spoken = p.spoken,
             )
+        }
+        // Barça match day, slice 4: while a match is live the ring is the score and how far through it is.
+        home.match?.takeIf { it.live && it.score != null }?.let { m ->
+            return WatchComplicationView(text = m.score!!.take(7), title = "Barça", value = m.played, fasting = false, spoken = m.spoken)
         }
         val f = home.fast
         if (f.running) {

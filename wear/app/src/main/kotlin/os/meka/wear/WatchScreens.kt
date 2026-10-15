@@ -263,7 +263,9 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
     val mailMoment by core.mailMoment.collectAsState()
     // Car and parking, slice 7: the cars' parking timers (synced; set on the phone or the Mac).
     val parkingTimers by core.parkingTimersView.collectAsState()
-    val home = remember(today, fasting, tick, mailNeeds, mailMoment, parkingTimers) { core.watchHome() }
+    // Barça match day, slice 4: the match near now, redrawn when a sync brings a new score.
+    val barca by core.barcaNearView.collectAsState()
+    val home = remember(today, fasting, tick, mailNeeds, mailMoment, parkingTimers, barca) { core.watchHome() }
     val scope = rememberCoroutineScope()
 
     if ((sync as? SyncStatus.Failing)?.reason == MekaCore.SIGNED_OUT_MESSAGE) {
@@ -315,6 +317,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         Spacer(Modifier.height(MekaSpace.xs))
         CaptureBlock(core, reduced, listen, onListen)
 
+        MatchRow(home.match, reduced)
+
         ParkingRows(home.parking, reduced) { carId -> scope.launch { runCatching { core.watchParkingExtend(carId) } } }
 
         InboxRow(home.inbox, reduced)
@@ -361,6 +365,43 @@ private fun InboxRow(inbox: os.meka.core.domain.WatchInbox?, reduced: Boolean) {
                 label = "inboxCount",
             ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
             v.streakLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary)) }
+        }
+    }
+}
+
+/**
+ * Barça match day, slice 4: the match from the hour before kick-off — "BARÇA · 20:00", "PSG v Barça", where it's on —
+ * then the live score with the last goal and full time. It unfolds on the expand spring (reduced motion: a fade) and
+ * folds away in the evening; the score cross-fades when a goal comes in (the buzz is the phone's heads-up, which Wear
+ * OS brings to the watch). Lit in the accent until full time.
+ */
+@Composable
+private fun MatchRow(match: os.meka.core.domain.WatchMatch?, reduced: Boolean) {
+    // The last match shown, so the row folds away still showing it (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchMatch>(1) }
+    if (match != null) last[0] = match
+    AnimatedVisibility(
+        visible = match != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "match",
+    ) {
+        val v = match ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = MekaSpace.m)
+                .semantics(mergeDescendants = true) { contentDescription = v.spoken },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Line(v.label, MekaType.captionStrong.copy(color = if (v.lit) C.accent else C.textSecondary), maxLines = 1)
+            AnimatedContent(
+                targetState = v.line,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "matchScore",
+            ) { line -> Line(line, MekaType.metaStrong.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
+            v.note?.let { Line(it, MekaType.caption.copy(color = C.textSecondary)) }
         }
     }
 }
