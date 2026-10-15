@@ -1061,12 +1061,12 @@ private struct ContainerShape: Shape {
     var progress: Double
     let rowRadius: CGFloat
 
-    var animatableData: Double {
+    nonisolated var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
 
-    func path(in rect: CGRect) -> Path {
+    nonisolated func path(in rect: CGRect) -> Path {
         guard let from else { return Path(rect) }
         let bounds = MotionMath.containerBounds(from: from, to: rect, progress: progress)
         let corner = MotionMath.containerCorner(from: rowRadius, to: 0, progress: progress)

@@ -206,12 +206,12 @@ private struct FastRing: View {
 /// Twelve short rays spreading out from just outside the ring as [progress] goes 0 → 1.
 private struct BurstShape: Shape {
     var progress: Double
-    var animatableData: Double {
+    nonisolated var animatableData: Double {
         get { progress }
         set { progress = newValue }
     }
 
-    func path(in rect: CGRect) -> Path {
+    nonisolated func path(in rect: CGRect) -> Path {
         var p = Path()
         let c = CGPoint(x: rect.midX, y: rect.midY)
         let r0 = min(rect.width, rect.height) / 2 - 10 + 4 + 4 * progress
