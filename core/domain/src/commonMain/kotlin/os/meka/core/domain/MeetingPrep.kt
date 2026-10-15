@@ -142,7 +142,7 @@ object MeetingPrepRules {
         events: List<CalendarEvent> = emptyList(),
         marks: EventMarks? = null,
     ): MeetingPrep {
-        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal, lastMet(it, e, events, marks, nowMs, cal)) }
+        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal, lastMet(it, e, events, marks, nowMs, cal), mailbox(e, it)) }
         val lines = lines(people)
         val headline = headline(e, nowMs, cal)
         val who = whoLine(e.guests)
@@ -184,13 +184,18 @@ object MeetingPrepRules {
         nowMs: Long,
         cal: LocalCalendar,
         lastMet: String? = null,
+        /** Slice 4: their newest email in the mailboxes themselves (the server's lookup), when newer than any synced one. */
+        mailbox: GuestMail? = null,
     ): PrepPerson {
         val key = People.key(name)
         val theirs = mail.filter { same(it.from, key) && it.receivedAtMs <= nowMs }
         val last = theirs.maxWithOrNull(compareBy<MailItem> { latest(it, nowMs) }.thenBy { it.id })
-        val lastEmail = last?.let { m ->
+        val fromBox = mailbox?.takeIf { it.receivedAtMs <= nowMs && (last == null || it.receivedAtMs > latest(last, nowMs)) }
+        val lastEmail = if (fromBox != null) {
+            "Last email ${HeldPreviewRules.timeLabel(fromBox.receivedAtMs, nowMs, cal)}${quoted(fromBox.subject)}"
+        } else last?.let { m ->
             val replied = m.replySentAtMs?.takeIf { it in m.receivedAtMs..nowMs }
-            val subject = m.subject.trim().take(50).takeIf { it.isNotEmpty() }?.let { " · “$it”" }.orEmpty()
+            val subject = quoted(m.subject)
             if (replied != null) "You replied ${HeldPreviewRules.timeLabel(replied, nowMs, cal)}$subject"
             else "Last email ${HeldPreviewRules.timeLabel(m.receivedAtMs, nowMs, cal)}$subject"
         }
@@ -259,7 +264,7 @@ object MeetingPrepRules {
         isMeeting(e) && !marks.isHidden(e.id) && e.startAtMs + AFTER_START_MIN * 60_000L > nowMs &&
             e.startAtMs - nowMs <= NOTICE_HORIZON_H * 3_600_000L
     }.map { e ->
-        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal, lastMet(it, e, events, marks, nowMs, cal)) }
+        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal, lastMet(it, e, events, marks, nowMs, cal), mailbox(e, it)) }
         val at = LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))
         Notice(
             key = "prep:${e.id}:${e.startAtMs}", source = NoticeSource.MEETING_PREP, tier = NoticeTier.HEADS_UP,
@@ -291,6 +296,14 @@ object MeetingPrepRules {
         val parts = meta.split(" · ")
         val rest = if (parts.size > 1 && same(parts[0], key)) parts.drop(1) else if (same(meta, key)) emptyList() else parts
         return rest.joinToString(" · ").trim().takeIf { it.isNotEmpty() }
+    }
+
+    private fun quoted(subject: String): String = subject.trim().take(50).takeIf { it.isNotEmpty() }?.let { " · “$it”" }.orEmpty()
+
+    /** Slice 4: the server's newest email from this guest of [e] (same name as written in its guests), or null. */
+    fun mailbox(e: CalendarEvent, name: String): GuestMail? {
+        val key = People.key(name)
+        return e.guestMail.firstOrNull { People.key(it.name) == key }
     }
 
     private fun latest(m: MailItem, nowMs: Long): Long =

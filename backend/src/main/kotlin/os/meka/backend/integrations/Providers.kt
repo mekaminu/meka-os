@@ -52,6 +52,11 @@ data class RemoteEvent(
     val webUrl: String? = null,
     /** Meeting prep, slice 1: the other people on it, names only ([EventGuests]); never the owner, rooms or a decline. */
     val guests: List<String> = emptyList(),
+    /**
+     * Meeting prep, slice 4: each guest's address (lower case) by the name in [guests], for looking up their newest
+     * email in Meka's own mailboxes. Kept on the server only: never synced, stored or logged.
+     */
+    val guestAddresses: Map<String, String> = emptyMap(),
 )
 
 /**
@@ -61,18 +66,24 @@ data class RemoteEvent(
  */
 object EventGuests {
     /** Google's `attendees` (and the `organizer`): `self`, `resource`, `responseStatus`, `displayName`, `email`. */
-    fun google(attendees: JsonArray?, organizer: JsonObject?): List<String> {
+    fun google(attendees: JsonArray?, organizer: JsonObject?): List<String> = googlePeople(attendees, organizer).map { it.first }
+
+    /** Slice 4: [google]'s names, each with its address when the provider gave one. */
+    fun googlePeople(attendees: JsonArray?, organizer: JsonObject?): List<Pair<String, String?>> {
         val people = attendees.orEmpty().filterIsInstance<JsonObject>().filter { a ->
             a["self"]?.jsonPrimitive?.booleanOrNull != true && a["resource"]?.jsonPrimitive?.booleanOrNull != true &&
                 a["responseStatus"].str() != "declined"
         }.map { it["displayName"].str() to it["email"].str() }
         val org = organizer?.takeIf { it["self"]?.jsonPrimitive?.booleanOrNull != true }
             ?.let { listOf(it["displayName"].str() to it["email"].str()) }.orEmpty()
-        return names(org + people)
+        return pairs(org + people)
     }
 
     /** Graph's `attendees` (`emailAddress{name,address}`, `type`, `status{response}`) and `organizer`, without [self]. */
-    fun graph(attendees: JsonArray?, organizer: JsonObject?, self: String?): List<String> {
+    fun graph(attendees: JsonArray?, organizer: JsonObject?, self: String?): List<String> = graphPeople(attendees, organizer, self).map { it.first }
+
+    /** Slice 4: [graph]'s names, each with its address when the provider gave one. */
+    fun graphPeople(attendees: JsonArray?, organizer: JsonObject?, self: String?): List<Pair<String, String?>> {
         fun pair(o: JsonObject?): Pair<String?, String?>? {
             val e = o?.get("emailAddress") as? JsonObject ?: return null
             return e["name"].str() to e["address"].str()
@@ -82,21 +93,28 @@ object EventGuests {
             a["type"].str() != "resource" && (a["status"] as? JsonObject)?.get("response").str() != "declined"
         }.mapNotNull { pair(it) }
         val org = listOfNotNull(pair(organizer))
-        return names((org + people).filter { (_, address) -> address == null || address.lowercase() != me })
+        return pairs((org + people).filter { (_, address) -> address == null || address.lowercase() != me })
     }
 
-    fun names(people: List<Pair<String?, String?>>): List<String> {
+    fun names(people: List<Pair<String?, String?>>): List<String> = pairs(people).map { it.first }
+
+    /** Slice 4: [names] with each kept name's address (lower case; null when there was none). */
+    fun pairs(people: List<Pair<String?, String?>>): List<Pair<String, String?>> {
         val seenAddresses = HashSet<String>()
-        val out = LinkedHashMap<String, String>()
+        val out = LinkedHashMap<String, Pair<String, String?>>()
         for ((name, address) in people) {
             if (address != null && !seenAddresses.add(address.lowercase())) continue
             val n = (name?.trim()?.takeIf { it.isNotEmpty() && '@' !in it } ?: address?.let(::fromAddress))
                 ?.replace('\n', ' ')?.trim()?.take(60) ?: continue
             if (n.isEmpty()) continue
-            out.putIfAbsent(n.lowercase(), n)
+            out.putIfAbsent(n.lowercase(), n to address?.trim()?.lowercase()?.takeIf { '@' in it })
         }
         return out.values.take(EventFields.MAX_GUESTS)
     }
+
+    /** Slice 4: name → address for the people that have one. */
+    fun addresses(guests: List<Pair<String, String?>>): Map<String, String> =
+        guests.mapNotNull { (n, a) -> a?.let { n to it } }.toMap()
 
     /** "sam.taylor@example.com" → "Sam Taylor"; null for a no-reply or room-like address. */
     fun fromAddress(address: String): String? {
@@ -375,12 +393,14 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                         // Meet links arrive as hangoutLink, other conferencing as a "video" entry point.
                         val video = ((e["conferenceData"] as? JsonObject)?.get("entryPoints") as? JsonArray).orEmpty()
                             .filterIsInstance<JsonObject>().firstOrNull { it["entryPointType"].str() == "video" }?.get("uri").str()
+                        val guestPeople = EventGuests.googlePeople(e["attendees"] as? JsonArray, e["organizer"] as? JsonObject)
                         add(RemoteEvent(
                             "$calId/${e["id"].str()}", e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), calName,
                             description = plainText(e["description"].str()),
                             joinUrl = httpsOrNull(e["hangoutLink"].str()) ?: httpsOrNull(video),
                             webUrl = httpsOrNull(e["htmlLink"].str()),
-                            guests = EventGuests.google(e["attendees"] as? JsonArray, e["organizer"] as? JsonObject),
+                            guests = guestPeople.map { it.first },
+                            guestAddresses = EventGuests.addresses(guestPeople),
                         ))
                     }
                     page = resp["nextPageToken"].str()
@@ -522,12 +542,14 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                         }
                         val location = e["location"]?.jsonObject?.get("displayName").str()?.takeIf { it.isNotBlank() }
                         val join = (e["onlineMeeting"] as? JsonObject)?.get("joinUrl").str()
+                        val people = EventGuests.graphPeople(e["attendees"] as? JsonArray, e["organizer"] as? JsonObject, self)
                         add(RemoteEvent(
                             "$calId/${e["id"].str()}", e["subject"].str() ?: "", parse(start), parse(end), allDay, location, calName,
                             description = plainText(e["bodyPreview"].str()),
                             joinUrl = httpsOrNull(join),
                             webUrl = httpsOrNull(e["webLink"].str()),
-                            guests = EventGuests.graph(e["attendees"] as? JsonArray, e["organizer"] as? JsonObject, self),
+                            guests = people.map { it.first },
+                            guestAddresses = EventGuests.addresses(people),
                         ))
                     }
                     url = resp["@odata.nextLink"].str()

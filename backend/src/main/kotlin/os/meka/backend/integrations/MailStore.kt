@@ -29,6 +29,11 @@ interface MailStore {
     /** The account's headers, newest first (the sorting slice reads these; tests too). */
     fun messages(accountId: String): List<MailHeader>
     fun pendingCount(accountId: String): Int
+    /**
+     * Meeting prep, slice 4: the newest email (headers read, received by [beforeMs]) from each of these addresses (lower
+     * case), by address. Never logged.
+     */
+    fun lastFrom(accountId: String, addresses: Collection<String>, beforeMs: Long): Map<String, MailHeader>
     /** Slice 2a: headers not sorted yet (a header read again is unsorted again), newest first. */
     fun unsorted(accountId: String, limit: Int): List<MailHeader>
     fun setSorts(accountId: String, sorts: Map<String, MailSorted>)
@@ -151,6 +156,13 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun removeBacklog(accountId: String, id: String) { backlogOf(accountId).remove(id) }
     @Synchronized override fun backlogItems(accountId: String) = backlogOf(accountId).values.filterNotNull()
     @Synchronized override fun messages(accountId: String) = of(accountId).values.filterNotNull().sortedByDescending { it.receivedAtMs }
+    @Synchronized override fun lastFrom(accountId: String, addresses: Collection<String>, beforeMs: Long): Map<String, MailHeader> {
+        val want = addresses.map { it.lowercase() }.toSet()
+        return of(accountId).values.filterNotNull()
+            .filter { h -> h.receivedAtMs <= beforeMs && h.fromAddress?.lowercase() in want }
+            .groupBy { it.fromAddress!!.lowercase() }
+            .mapValues { (_, hs) -> hs.maxWith(compareBy<MailHeader> { it.receivedAtMs }.thenBy { it.id }) }
+    }
     @Synchronized override fun pendingCount(accountId: String) = of(accountId).values.count { it == null }
     @Synchronized override fun unsorted(accountId: String, limit: Int): List<MailHeader> {
         val done = sorts[accountId].orEmpty()
@@ -304,6 +316,25 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
         ).use { st ->
             st.setString(1, accountId)
             st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.header()) } }
+        }
+    }
+
+    override fun lastFrom(accountId: String, addresses: Collection<String>, beforeMs: Long): Map<String, MailHeader> {
+        val want = addresses.map { it.lowercase() }.distinct()
+        if (want.isEmpty()) return emptyMap()
+        return c { c ->
+            c.prepareStatement(
+                """SELECT DISTINCT ON (lower(from_address)) message_id, thread_id, from_address, from_name, subject, received_at_ms,
+                     unread, in_inbox, labels, list_unsubscribe, one_click_unsubscribe, list_id
+                   FROM mail_message WHERE account_id = ? AND headers_at IS NOT NULL AND received_at_ms <= ?
+                     AND lower(from_address) = ANY(?)
+                   ORDER BY lower(from_address), received_at_ms DESC, message_id DESC""",
+            ).use { st ->
+                st.setString(1, accountId); st.setLong(2, beforeMs); st.setArray(3, c.createArrayOf("text", want.toTypedArray()))
+                st.executeQuery().use { rs ->
+                    buildMap { while (rs.next()) { val h = rs.header(); h.fromAddress?.let { put(it.lowercase(), h) } } }
+                }
+            }
         }
     }
 

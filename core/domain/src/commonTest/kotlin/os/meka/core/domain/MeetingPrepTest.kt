@@ -156,4 +156,44 @@ class MeetingPrepTest {
         assertEquals(MeetingPrepLead.THIRTY, MeetingPrepLead.ofMinutes(90))
         assertEquals("Off · no prep on Today and no heads-up before meetings", MeetingPrepRules.settingLine(MeetingPrepLead.OFF))
     }
+
+    @Test
+    fun guestMailFromTheMailboxesIsReadAndRoundTrips() {
+        val items = listOf(GuestMail("Sam Taylor", at(9), "Re:\tquote\nfigures"), GuestMail("Alex Green", at(8), ""))
+        val text = GuestMail.format(items)
+        assertEquals(listOf(GuestMail("Sam Taylor", at(9), "Re: quote figures"), GuestMail("Alex Green", at(8), "")), GuestMail.parse(text))
+        // Bad lines are skipped; a name only once.
+        assertEquals(listOf(GuestMail("Sam", 5L, "x")), GuestMail.parse("Sam\t5\tx\nbroken\nRobin\tsoon\tx\nsam\t9\ty"))
+        val snap = EntitySnapshot(
+            EntityRef(EntityTypes.EVENT, "e1"), "hh",
+            mapOf(
+                EventFields.TITLE to FieldValue.Text("Quote review"), EventFields.START_AT to FieldValue.Int64(at(14)),
+                EventFields.GUESTS to FieldValue.Text("Sam Taylor"), EventFields.GUEST_MAIL to FieldValue.Text(text),
+            ),
+            Hlc(1, 0, "server"),
+        )
+        assertEquals(2, CalendarEvent.from(snap)!!.guestMail.size)
+        assertEquals(emptyList(), event("a", 14, listOf("Sam")).guestMail)
+    }
+
+    @Test
+    fun theMailboxesNewerEmailWinsOverTheSyncedOne() {
+        val now = at(13, 50)
+        val e = event("a", 14, listOf("Sam Taylor", "Alex Green", "Robin Lee"))
+            .copy(guestMail = listOf(GuestMail("Sam Taylor", at(11), "Figures attached"), GuestMail("Alex Green", at(9), "Agenda"),
+                GuestMail("Robin Lee", at(15), "Later than now")))
+        // Sam: a synced email from yesterday, the mailbox's from this morning wins. Alex: only the mailbox knows.
+        // Robin: the mailbox's is in the future (clock skew) and ignored.
+        val mails = listOf(mail("m1", "Sam Taylor", at(16, d = day - 1), "Re: quote"))
+        val p = MeetingPrepRules.prep(e, mails, emptyList(), emptyList(), now, cal)
+        assertEquals("Last email 11:00 · “Figures attached”", p.people[0].lastEmail)
+        assertEquals("Last email 09:00 · “Agenda”", p.people[1].lastEmail)
+        assertNull(p.people[2].lastEmail)
+        // A reply he sent after the mailbox's email keeps the synced line.
+        val replied = listOf(mail("m1", "Sam Taylor", at(8), "Re: quote", replied = at(12)))
+        assertEquals("You replied 12:00 · “Re: quote”", MeetingPrepRules.prep(e, replied, emptyList(), emptyList(), now, cal).people[0].lastEmail)
+        // The heads-up names the mailbox's email too.
+        val n = MeetingPrepRules.notices(listOf(e), noMarks, emptyList(), emptyList(), emptyList(), at(13, 40), cal).single()
+        assertEquals("With Sam Taylor, Alex Green and Robin Lee · last email 11:00", n.text)
+    }
 }

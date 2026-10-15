@@ -3,6 +3,7 @@ package os.meka.backend.integrations
 import os.meka.backend.OwnKeyReminders
 import os.meka.backend.Secrets
 import os.meka.core.domain.BankHoliday
+import os.meka.core.domain.GuestMail
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailReceipt
@@ -1774,7 +1775,15 @@ class Integrations(
      * Writes ops only for real changes, chaining each field on the server's previous op so nothing conflicts.
      * Returns whether anything was written.
      */
-    internal fun apply(a: AccountRow, events: List<RemoteEvent>, fromMs: Long, toMs: Long): Boolean = store.transaction {
+    internal fun apply(a: AccountRow, events: List<RemoteEvent>, fromMs: Long, toMs: Long): Boolean {
+        // Read before the write transaction (the mail headers are another store's).
+        val guestMail = guestMail(a, events)
+        return applyLocked(a, events, fromMs, toMs, guestMail)
+    }
+
+    private fun applyLocked(
+        a: AccountRow, events: List<RemoteEvent>, fromMs: Long, toMs: Long, guestMail: Map<String, List<GuestMail>>,
+    ): Boolean = store.transaction {
         ops.transaction {
             store.lockAccount(a.id)
             val mirror = store.mirror(a.householdId, a.id)
@@ -1799,6 +1808,9 @@ class Integrations(
                     EventFields.WEB_URL to (httpsOrNull(e.webUrl)?.takeIf { it.length <= MAX_URL }?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     // Meeting prep, slice 1: the other people on it, names only. Additive like the above.
                     EventFields.GUESTS to (e.guests.takeIf { it.isNotEmpty() }?.joinToString("\n")?.let { FieldValue.Text(it) } ?: FieldValue.Null),
+                    // Meeting prep, slice 4: each guest's newest email in his mailboxes, for meetings in the next day
+                    // and a half (cleared after). Additive like the above.
+                    EventFields.GUEST_MAIL to (guestMail[e.id]?.let { FieldValue.Text(GuestMail.format(it)) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 // A fixture whose kick-off moved while the old time was still ahead: remember the old time and when
@@ -1822,6 +1834,40 @@ class Integrations(
             }
             wrote
         }
+    }
+
+    /**
+     * Meeting prep, slice 4: for each of [events] with guests starting within [GUEST_MAIL_AHEAD_MS] (and not yet
+     * [GUEST_MAIL_AFTER_MS] past its start), each guest's newest email in the household's mail accounts (the headers the
+     * server keeps, 60 days), looked up by the guest's address, which stays here. Event id → the guests that have one,
+     * in the event's order. Empty without mail accounts or on any failure: prep then shows what the apps hold.
+     */
+    internal fun guestMail(a: AccountRow, events: List<RemoteEvent>): Map<String, List<GuestMail>> {
+        val ms = mailStore ?: return emptyMap()
+        if (a.provider in feeds) return emptyMap()
+        val t = now()
+        val soon = events.filter { e ->
+            !e.allDay && e.guestAddresses.isNotEmpty() && e.startMs <= t + GUEST_MAIL_AHEAD_MS && e.startMs + GUEST_MAIL_AFTER_MS > t
+        }
+        if (soon.isEmpty()) return emptyMap()
+        return runCatching {
+            val boxes = store.accounts(a.householdId).filter { it.provider in mail && it.status != "needs_reconnect" }
+            if (boxes.isEmpty()) return@runCatching emptyMap()
+            val addresses = soon.flatMap { it.guestAddresses.values }.distinct()
+            val newest = HashMap<String, MailHeader>()
+            for (box in boxes) {
+                ms.lastFrom(box.id, addresses, t).forEach { (address, h) ->
+                    val had = newest[address]
+                    if (had == null || h.receivedAtMs > had.receivedAtMs) newest[address] = h
+                }
+            }
+            soon.associate { e ->
+                e.id to e.guests.mapNotNull { name ->
+                    val h = e.guestAddresses[name]?.let { newest[it] } ?: return@mapNotNull null
+                    GuestMail(name, h.receivedAtMs, h.subject.orEmpty().trim().take(EventFields.MAX_GUEST_MAIL_SUBJECT))
+                }
+            }.filterValues { it.isNotEmpty() }
+        }.getOrDefault(emptyMap())
     }
 
     /** Returns whether any op was appended. */
@@ -1914,6 +1960,10 @@ class Integrations(
         const val BACKLOG_HEADERS_PER_CHECK = 300
         const val BACKLOG_LIST_BELOW = 500
         const val WINDOW_AHEAD_MS = 30 * 24 * 3_600_000L
+        /** Meeting prep, slice 4: guests' newest emails are written for meetings starting within this… */
+        const val GUEST_MAIL_AHEAD_MS = 36 * 3_600_000L
+        /** …and until this long after the start (prep shows until 10 min after). */
+        const val GUEST_MAIL_AFTER_MS = 15 * 60_000L
         private const val MAX_TEXT = 500
         private const val MAX_NOTES = 2_000
         // A cut link is a broken link: longer ones (none seen in practice) are left out rather than cut.

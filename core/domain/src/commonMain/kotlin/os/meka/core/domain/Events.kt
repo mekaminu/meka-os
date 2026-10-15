@@ -42,6 +42,34 @@ object EventFields {
      */
     const val GUESTS = "guests"
     const val MAX_GUESTS = 20
+    /**
+     * Meeting prep, slice 4: each guest's newest email in Meka's mailboxes (the server's 60 days of headers, matched by
+     * the guest's address, which never leaves the server), one guest per line: name, a tab, when it came (epoch ms), a
+     * tab and its subject (at most [MAX_GUEST_MAIL_SUBJECT]). Written by the server only for meetings starting within
+     * the next day and a half; cleared after. Additive (ADR-008 addendum), absent otherwise. Untrusted text.
+     */
+    const val GUEST_MAIL = "guestMail"
+    const val MAX_GUEST_MAIL_SUBJECT = 80
+}
+
+/** Meeting prep, slice 4: a guest's newest email in Meka's mailboxes ([EventFields.GUEST_MAIL]). */
+data class GuestMail(val name: String, val receivedAtMs: Long, val subject: String) {
+    companion object {
+        /** "name\tms\tsubject" lines; bad lines skipped. */
+        fun parse(text: String?): List<GuestMail> = text.orEmpty().split('\n').mapNotNull { line ->
+            val parts = line.split('\t', limit = 3)
+            if (parts.size < 2) return@mapNotNull null
+            val name = parts[0].trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+            val at = parts[1].trim().toLongOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
+            GuestMail(name, at, parts.getOrNull(2).orEmpty().trim().take(EventFields.MAX_GUEST_MAIL_SUBJECT))
+        }.distinctBy { it.name.lowercase() }.take(EventFields.MAX_GUESTS)
+
+        /** The field's text for these (one line each; tabs and newlines in a subject become spaces). */
+        fun format(items: List<GuestMail>): String = items.joinToString("\n") { g ->
+            fun clean(t: String) = t.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ').trim()
+            "${clean(g.name)}\t${g.receivedAtMs}\t${clean(g.subject).take(EventFields.MAX_GUEST_MAIL_SUBJECT)}"
+        }
+    }
 }
 
 /** Typed read model of a calendar event. */
@@ -66,6 +94,8 @@ data class CalendarEvent(
     val movedAtMs: Long? = null,
     /** Meeting prep, slice 1: the other people on it, names only ([EventFields.GUESTS]); empty for nobody else. */
     val guests: List<String> = emptyList(),
+    /** Meeting prep, slice 4: guests' newest emails from the mailboxes themselves ([EventFields.GUEST_MAIL]). */
+    val guestMail: List<GuestMail> = emptyList(),
     /**
      * Calendar editing (slice 2c-ii): Meka's own edit of this event is still on its way to the provider, and this is
      * the event as that edit leaves it ([PendingEditRules]); null for the mirror as it is. Never stored.
@@ -126,6 +156,7 @@ data class CalendarEvent(
                 movedAtMs = s[EventFields.MOVED_AT].longOrNull,
                 guests = s[EventFields.GUESTS].textOrNull.orEmpty().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
                     .distinct().take(EventFields.MAX_GUESTS),
+                guestMail = GuestMail.parse(s[EventFields.GUEST_MAIL].textOrNull),
             )
         }
     }

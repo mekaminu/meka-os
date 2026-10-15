@@ -1872,6 +1872,13 @@ class MailSyncTest {
             ms.put("hh-m", acc, full.copy(unread = false))
             assertEquals(mapOf("o1" to "Hi Alex, about Saturday"), ms.previews(acc, listOf("o1", "zz")))
             assertEquals(emptyMap(), ms.previews(acc, emptyList()))
+            // Meeting prep, slice 4: the newest email from each address asked, case folded, none after the cut-off.
+            ms.put("hh-m", acc, msg("lf1", 5, from = "Robin@Example.com"))
+            ms.put("hh-m", acc, msg("lf2", 2, from = "robin@example.com"))
+            ms.put("hh-m", acc, msg("lf3", 0, from = "robin@example.com"))
+            assertEquals(mapOf("robin@example.com" to "lf2"), ms.lastFrom(acc, listOf("ROBIN@example.com", "nobody@example.com"), now - day).mapValues { it.value.id })
+            assertEquals(emptyMap(), ms.lastFrom(acc, emptyList(), now))
+            listOf("lf1", "lf2", "lf3").forEach { ms.remove(acc, it) }
             // Slice 2a: sorting, counted only while in the inbox, cleared when the header is read again.
             assertEquals(listOf("o1"), ms.unsorted(acc, 10).map { it.id })
             ms.setSorts(acc, mapOf("o1" to MailSorted(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST, true), "nope" to MailSorted(MailSort.JUNK, MailSortReason.SPAM, true)))
