@@ -342,7 +342,8 @@ object NewsRules {
     /**
      * Today's Barça fixture for the top of the News place: the first fixture (not all-day) that starts today and
      * hasn't finished. Pass the events shown on my day, so a hidden fixture stays hidden. "Barça v Real Madrid ·
-     * 21:00 · in 3 h" / "· in 25 min" / "· kicking off", "· on now" once it has started, "· today · kick-off TBC".
+     * 21:00 · in 3 h" / "· in 25 min" / "· kicking off", "· on now" once it has started (the score once the server
+     * has it: "Barça 2–1 Real Madrid · 67'", then "· full time"), "· today · kick-off TBC".
      */
     fun matchday(events: List<CalendarEvent>, nowMs: Long, cal: LocalCalendar): NewsMatchday? {
         val today = cal.epochDayOf(nowMs)
@@ -351,15 +352,19 @@ object NewsRules {
         val tbc = e.title.trimEnd().endsWith(TBC_SUFFIX)
         val title = e.title.trimEnd().removeSuffix(TBC_SUFFIX).trim().ifEmpty { "Barça" }
         val live = !tbc && nowMs >= e.startAtMs
+        // Barça match day, slice 2: once it has started, the score the server wrote ("Barça 2–1 Getafe · 67'").
+        val score = if (live) BarcaMatchRules.score(e) else null
         val line = when {
             tbc -> "$title · today · kick-off TBC"
+            score != null && score.live -> score.line + (score.detail?.let { " · $it" } ?: "")
+            score != null -> "${score.line} · full time"
             live -> "$title · ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))} · on now"
             else -> {
                 val min = ((e.startAtMs - nowMs) / 60_000L).toInt()
                 "$title · ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))} · " + if (min <= 0) "kicking off" else "in ${TimelineRules.inLabel(min)}"
             }
         }
-        return NewsMatchday(e.id, title, line, live, e)
+        return NewsMatchday(e.id, title, line, live && score?.live != false, e)
     }
 
     /** Key that treats the same article in two topic feeds as one. */

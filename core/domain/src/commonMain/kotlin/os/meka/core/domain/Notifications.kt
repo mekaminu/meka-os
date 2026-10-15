@@ -199,6 +199,16 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * "Barça v Getafe · 20:00" · "LaLiga · kick-off in an hour · on Premier Sports 1".
      */
     BARCA("Barça match day", NoticeTier.HEADS_UP),
+    /**
+     * Barça match day, slice 2 ([BarcaMatchRules.goalNotices]): each goal while a Barça match is on — "Goal · Barça
+     * 1–0 Getafe" · "Lewandowski 23' · LaLiga". Turn it off (Silent) for full time only.
+     */
+    BARCA_GOALS("Barça goals", NoticeTier.HEADS_UP),
+    /**
+     * Barça match day, slice 2 ([BarcaMatchRules.fullTimeNotices]): the final score — "Full time · Barça 2–1 Getafe" ·
+     * "Barça won · Lewandowski 23', Yamal 51' · LaLiga". Turn it off for goals only.
+     */
+    BARCA_RESULT("Barça full time", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -635,6 +645,8 @@ object Governor {
         NoticeSource.PARKING -> if (n == 1) "parking about to end" else "$n parking timers about to end"
         NoticeSource.KIDS -> if (n == 1) "sizes to check" else "$n children's sizes to check"
         NoticeSource.BARCA -> if (n == 1) "a Barça match soon" else "$n Barça matches soon"
+        NoticeSource.BARCA_GOALS -> if (n == 1) "a Barça goal" else "$n Barça goals"
+        NoticeSource.BARCA_RESULT -> if (n == 1) "a Barça result" else "$n Barça results"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -847,6 +859,9 @@ object NoticeSources {
         out += FootballRules.notices(events, marks, nowMs, cal)
         // Barça match day: an hour before kick-off, with where to watch it in the UK.
         out += BarcaMatchRules.notices(events, marks, nowMs, cal)
+        // …and while it's on, each goal, then full time (one place per match, updated in place).
+        out += BarcaMatchRules.goalNotices(events, marks, nowMs)
+        out += BarcaMatchRules.fullTimeNotices(events, marks, nowMs)
         // Booked sessions (Gym): time to go, then "Did you go?" once the slot is over.
         out += SessionRules.notices(sessions, cal, sessionAskGraceMin)
         // Remind me, set on tasks.
