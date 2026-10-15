@@ -46,10 +46,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "appearance",
             title = "Appearance",
-            keywords = listOf("appearance", "dark mode", "light mode", "theme", "animations", "reduced motion", "motion"),
+            keywords = listOf("appearance", "dark mode", "light mode", "theme", "animations", "reduced motion", "motion", "text size", "font size", "bigger text", "smaller text"),
             what = "Dark, Light or Auto, and how much things move: Expressive, Subtle or Off.",
             how = "Pick them there; Off cross-fades only.",
-            tips = listOf("Dark is the default."),
+            tips = listOf("Dark is the default.", "On the Mac, View → Text Size (⌘+ · ⌘− · ⌘0) or Text size here makes all the text bigger or smaller."),
             fold = HelpPlace.APPEARANCE,
             foldWhere = "Ask → Settings → Appearance",
             mac = HelpPlace.APPEARANCE,

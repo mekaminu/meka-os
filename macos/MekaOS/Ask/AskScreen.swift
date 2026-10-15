@@ -347,6 +347,8 @@ private struct AppearanceRow: View {
                 .onChange(of: motion) { MekaHaptics.tick() }
             }
             MotionCheckView(motion: $motion, palette: palette)
+            // Text size (Mac text is too big, Meka 2026-10-15): the same four sizes as View → Text Size.
+            TextSizeRow(palette: palette)
             HStack {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("News ticker").font(MekaType.caption).foregroundStyle(palette.textSecondary)

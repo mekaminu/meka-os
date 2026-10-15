@@ -10,6 +10,11 @@ struct MekaOSApp: App {
     /// The floating ticker (news ticker, slice 2b), off by default.
     @AppStorage(FloatingTicker.enabledKey) private var floatingTicker = false
 
+    init() {
+        // View → Text Size: the stored size before the first window draws.
+        TextSizeSetting.apply()
+    }
+
     var body: some Scene {
         WindowGroup("Meka", id: "today") {
             ShellView()
@@ -18,6 +23,8 @@ struct MekaOSApp: App {
                 .mekaMotion()
                 .frame(minWidth: 760, minHeight: 560)
                 .task {
+                    // View → Text Size: ⌘= (no Shift) makes the text bigger too.
+                    TextSizeSetting.installKeyMonitor()
                     await model.start()
                     FloatingTicker.shared.attach(model)
                     // The desktop News widget (news ticker slice 3b) reads what this writes.
@@ -63,6 +70,8 @@ struct MekaOSApp: App {
                 Button(floatingTicker ? "Hide Floating Ticker" : "Show Floating Ticker") {
                     FloatingTicker.shared.setEnabled(!floatingTicker)
                 }
+                // View → Text Size (Mac text is too big, Meka 2026-10-15): ⌘− · ⌘0 · ⌘+.
+                TextSizeCommands()
             }
             CommandGroup(after: .textEditing) {
                 Button("Search Everything…") { model.showSearch = true }

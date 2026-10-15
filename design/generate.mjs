@@ -94,7 +94,7 @@ function kotlin(pkg = 'os.meka.android.designsystem') {
 }
 
 function swift() {
-  let s = header + 'import SwiftUI\n\n';
+  let s = header + 'import Observation\nimport SwiftUI\n\n';
   s += 'struct MekaPalette {\n' + entries(t.color.dark).map(([k]) => `    let ${k}: Color`).join('\n') + '\n}\n\n';
   for (const mode of ['dark', 'light']) {
     s += `extension MekaPalette {\n    static let ${mode} = MekaPalette(\n` + entries(t.color[mode]).map(([k, v]) => {
@@ -103,9 +103,21 @@ function swift() {
     }).join(',\n') + '\n    )\n}\n\n';
   }
   const weight = (w) => ({ 100: '.ultraLight', 200: '.thin', 300: '.light', 400: '.regular', 500: '.medium', 600: '.semibold', 700: '.bold', 800: '.heavy', 900: '.black' })[w];
+  // The Mac's own type scale (macSize, Meka 2026-10-15: the phone's sizes read too big on the Mac) times View → Text
+  // Size. Reading MekaTextScale.shared.factor inside a view's body is tracked by Observation, so every view redraws
+  // when the size changes. A token with no macSize (the clock) keeps its size, unscaled.
+  s += '/// View → Text Size on this Mac (⌘− · ⌘0 · ⌘+, and Settings → Appearance): the multiplier on every MekaType token.\n';
+  s += '/// Set on the main thread by the app (TextSizeSetting.swift); views read it through MekaType, so they redraw when it changes.\n';
+  s += '@Observable final class MekaTextScale {\n    static let shared = MekaTextScale()\n    var factor: CGFloat = 1\n\n';
+  s += '    /// A size at the current text size, to the half point so text stays crisp.\n';
+  s += '    static func size(_ base: CGFloat) -> CGFloat { (base * shared.factor * 2).rounded() / 2 }\n}\n\n';
   s += 'enum MekaType {\n';
   for (const [k, v] of entries(t.type)) {
-    s += `    static let ${k} = Font.system(size: ${v.size}, weight: ${weight(v.weight)})\n    static let ${k}Tracking: CGFloat = ${(v.tracking * v.size).toFixed(2)}\n`;
+    if (v.macSize === undefined) {
+      s += `    static let ${k} = Font.system(size: ${v.size}, weight: ${weight(v.weight)})\n    static let ${k}Tracking: CGFloat = ${(v.tracking * v.size).toFixed(2)}\n`;
+    } else {
+      s += `    static var ${k}: Font { Font.system(size: MekaTextScale.size(${v.macSize}), weight: ${weight(v.weight)}) }\n    static var ${k}Tracking: CGFloat { ${(v.tracking * v.macSize).toFixed(2)} * MekaTextScale.shared.factor }\n`;
+    }
   }
   s += '}\n\nenum MekaSpace {\n' + entries(t.space).map(([k, v]) => `    static let ${k}: CGFloat = ${v.$value}`).join('\n') + '\n}\n\n';
   s += 'enum MekaRadius {\n' + entries(t.radius).map(([k, v]) => `    static let ${k}: CGFloat = ${v.$value}`).join('\n') + '\n}\n\n';
