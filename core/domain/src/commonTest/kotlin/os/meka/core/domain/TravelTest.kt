@@ -1,6 +1,8 @@
 package os.meka.core.domain
 
 import os.meka.core.testing.SyncWorld
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -10,6 +12,15 @@ import kotlin.test.assertTrue
 
 /** Weekend football, slice 2b: the leave-by from the drive the server worked out with traffic (Google Routes). */
 class TravelTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val hour = 3_600_000L
     private val min = 60_000L
     private val world = SyncWorld()
@@ -27,9 +38,9 @@ class TravelTest {
     // Saturday 10:00 at Bury Field.
     private fun event(
         id: String = "ev1",
-        title: String = "BUFC U7s v Arlesey",
+        title: String = "OTFC U7s v Hilltop",
         start: Long = at(thu + 2, 10),
-        place: String? = "Bury Field, Biggleswade",
+        place: String? = "Bury Field, Lindenbrook",
         allDay: Boolean = false,
     ) = CalendarEvent(id, title, start, start + hour, allDay, place, "google", "meka@gmail.com", "Personal")
 
@@ -62,8 +73,8 @@ class TravelTest {
         val now = world.clock.nowMs
         // First sight: due, with the departure worked out from a 30-minute guess and only the place to send.
         val first = TravelRules.due(listOf(e), emptySet(), emptyMap(), now, cal).single()
-        assertEquals("Bury Field, Biggleswade", first.place)
-        assertEquals("bury field biggleswade", first.placeKey)
+        assertEquals("Bury Field, Lindenbrook", first.place)
+        assertEquals("bury field lindenbrook", first.placeKey)
         assertEquals(at(thu + 2, 9, 5), first.departAtMs)
         assertEquals(e.startAtMs, first.kickOffMs)
 
@@ -81,7 +92,7 @@ class TravelTest {
         // Once leaving has gone, never.
         assertFalse(TravelRules.isDue(e, evening, at(thu + 2, 9, 10), cal))
         // A new place or a moved kick-off asks again.
-        assertTrue(TravelRules.isDue(e, travel(e, 25, now, key = "potton rec"), now + hour, cal))
+        assertTrue(TravelRules.isDue(e, travel(e, 25, now, key = "wexley rec"), now + hour, cal))
         assertTrue(TravelRules.isDue(e, travel(e, 25, now, kickOff = at(thu + 2, 11)), now + hour, cal))
         // A long drive found at first sight doesn't ask again and again.
         assertFalse(TravelRules.isDue(e, travel(e, 90, now), now + 10 * min, cal))
@@ -131,10 +142,10 @@ class TravelTest {
     fun aDriveForAnOldPlaceOrPastLeavingFallsBackToTheGroundsOwnTime() {
         val e = event()
         serverAnswers(e, 25)
-        // The fixture moved to Potton: the old drive isn't used; the remembered time there is.
-        val moved = e.copy(location = "Potton Rec")
+        // The fixture moved to Wexley: the old drive isn't used; the remembered time there is.
+        val moved = e.copy(location = "Wexley Rec")
         assertNull(FootballRules.leaveOffer(moved, eaFold.marks(), world.clock.nowMs, cal))
-        val there = event(id = "ev0", start = at(thu - 5, 10), place = "Potton Rec")
+        val there = event(id = "ev0", start = at(thu - 5, 10), place = "Wexley Rec")
         eaFold.setLeaveBy(there.id, 30)
         eaFold.rememberVenue(there)
         assertEquals("Leave by 09:30 · as last time", FootballRules.leaveOffer(moved, eaFold.marks(), world.clock.nowMs, cal)?.label)
@@ -159,7 +170,7 @@ class TravelTest {
         answer(e, 25)
         // Thursday: "Leave by 09:10 · 25 min drive" taken, ringing as an alarm.
         val offer = assertNotNull(FootballRules.leaveOffer(e, eaFold.marks(), world.clock.nowMs, cal))
-        assertEquals("bury field biggleswade", offer.driveKey)
+        assertEquals("bury field lindenbrook", offer.driveKey)
         eaFold.setLeaveBy(e.id, offer.travelMin, offer.driveKey)
         eaFold.setLeaveAlarm(e.id, true)
         var marks = eaFold.marks()
@@ -179,7 +190,7 @@ class TravelTest {
         assertEquals(at(thu + 2, 8, 55), alarm.atMs)
         assertEquals(LeaveAlarmRules.id(e.id, e.startAtMs, 65), alarm.id)
         val notice = ReminderRules.notices(listOf(e), marks, world.clock.nowMs, cal).single()
-        assertEquals("Leave 15 min earlier for BUFC U7s v Arlesey", notice.title)
+        assertEquals("Leave 15 min earlier for OTFC U7s v Hilltop", notice.title)
         assertEquals("Traffic · leave by 08:55 · 40 min drive", notice.text)
         assertEquals(world.clock.nowMs, notice.atMs)
         assertEquals(at(thu + 2, 8, 55), notice.expiresAtMs)
@@ -212,14 +223,14 @@ class TravelTest {
 
     @Test
     fun anAnswerForAnotherPlaceOrAfterLeavingIsNotFollowed() {
-        val key = "bury field biggleswade"
+        val key = "bury field lindenbrook"
         val kick = at(thu + 2, 10)
         fun route(drive: Int, checked: Long, place: String = key) = TravelTime("ev1", place, drive, 0L, checked, kick)
         val set = mapOf("ev1" to 50)
         val keys = mapOf("ev1" to key)
         assertEquals(40, TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 1, 18))))["ev1"]?.driveMin)
         // The fixture moved ground: the old answer isn't for it; Meka's 50 stays until the new place is asked.
-        assertNull(TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 1, 18), place = "potton rec")))["ev1"])
+        assertNull(TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 1, 18), place = "wexley rec")))["ev1"])
         // Worked out at or after 09:10 (when he set to leave): he's gone or the alarm rang, so nothing moves.
         assertNull(TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 2, 9, 10))))["ev1"])
         assertEquals(40, TravelRules.follow(set, keys, mapOf("ev1" to route(40, at(thu + 2, 9, 9))))["ev1"]?.driveMin)
@@ -227,8 +238,8 @@ class TravelTest {
         assertTrue(TravelRules.follow(emptyMap(), keys, mapOf("ev1" to route(40, 0))).isEmpty())
         assertTrue(TravelRules.follow(set, emptyMap(), mapOf("ev1" to route(40, 0))).isEmpty())
         // The ground's "as last time" offer is Meka's own time, so it never follows.
-        assertNull(FootballRules.leaveOffer(event(place = "Potton Rec"), EventMarks.NONE.copy(
-            venues = mapOf("potton rec" to VenueTravel("Potton Rec", 30, false, 0L)),
+        assertNull(FootballRules.leaveOffer(event(place = "Wexley Rec"), EventMarks.NONE.copy(
+            venues = mapOf("wexley rec" to VenueTravel("Wexley Rec", 30, false, 0L)),
         ), world.clock.nowMs, cal)?.driveKey)
         assertEquals(15, DriveFollow(40, 50, 0L).earlierMin)
     }

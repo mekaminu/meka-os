@@ -4,7 +4,7 @@ package os.meka.core.domain
 object VenueFields {
     /** The ground's key ([FootballRules.venueKey]): the place in lower case, words only. */
     const val KEY = "key"
-    /** The place as the fixture had it ("Arlesey Town FC, Hitchin Rd"). */
+    /** The place as the fixture had it ("Hilltown Town FC, Hitchin Rd"). */
     const val PLACE = "place"
     /** Minutes it took to get there (Int, 1–240). */
     const val TRAVEL_MIN = "travelMin"
@@ -65,9 +65,10 @@ data class KitAdded(val taskId: String, val line: String)
  * his calendar. Non-AI, pure.
  *
  * - A **club fixture** is an event of Meka's own calendars whose title or calendar names one of the clubs ([CLUBS],
- *   "BUFC" and "SJFC", as whole words, any case): "BUFC U9s v Arlesey", "SJFC training" on a calendar called "SJFC".
+ *   the short names in About you, as whole words, any case): "OFC U9s v Hilltown", "HRFC training" on a calendar
+ *   called "HRFC".
  *   The fixtures feed (Barça) never counts, nor does an event still on its way to Google.
- * - **Kit reminder** on a club fixture's detail makes its kit task: "Pack the kit for BUFC U9s v Arlesey", planned at
+ * - **Kit reminder** on a club fixture's detail makes its kit task: "Pack the kit for OFC U9s v Hilltown", planned at
  *   [EVENING_MIN] (19:00) the evening before for [KIT_MINUTES] minutes, due at kick-off, with Remind me at that time
  *   (a heads-up through the task reminders), and the kit list as its steps to tick. Too late for the evening before
  *   (it's already past 19:00 that evening): no planned time and no reminder, just due at kick-off.
@@ -77,8 +78,11 @@ data class KitAdded(val taskId: String, val line: String)
  *   again after deleting it brings the same task back with the list unticked.
  */
 object FootballRules {
-    /** The clubs whose fixtures get kit reminders (whole words in the title or the calendar's name). */
-    val CLUBS = listOf("BUFC", "SJFC")
+    /**
+     * The clubs whose fixtures get kit reminders (whole words in the title or the calendar's name): About you's Clubs
+     * ([Household]; rule 13, never in the code). Empty until he adds them.
+     */
+    val CLUBS: List<String> get() = Household.names.clubs
     val DEFAULT_KIT = listOf("Boots", "Shin pads", "Kit and socks", "Water bottle", "Coat")
     /** The kit list's longest: more is dropped. */
     const val MAX_KIT = 20
@@ -91,7 +95,7 @@ object FootballRules {
     // ---- Slice 2: the travel time Meka set for each ground ----
 
     /**
-     * A ground's key: the place in lower case with only its words ("Arlesey Town FC, Hitchin Rd" →
+     * A ground's key: the place in lower case with only its words ("Hilltown Town FC, Hitchin Rd" →
      * "arlesey town fc hitchin rd"), so a stray comma or capital still finds it. Null for no place or just a call link.
      */
     fun venueKey(place: String?): String? {
@@ -161,7 +165,7 @@ object FootballRules {
     /**
      * The "running late" drafts on a club fixture's detail, one per [LATE_MINUTES], from [LATE_FROM_MIN] before
      * kick-off until [LATE_UNTIL_MIN] after it (an all-day tournament: from 09:00 on its first day); empty otherwise.
-     * "Hi, sorry, running about 10 min late for BUFC U9s v Arlesey. Should be there by 09:40." — by kick-off plus the
+     * "Hi, sorry, running about 10 min late for OFC U9s v Hilltown. Should be there by 09:40." — by kick-off plus the
      * minutes, or once kick-off has gone, now plus the minutes rounded up to five. Nothing is sent: Meka sends it.
      */
     fun lateDrafts(e: CalendarEvent, nowMs: Long, cal: LocalCalendar): List<LateDraft> {
@@ -275,7 +279,7 @@ object FootballRules {
 
     /**
      * The prompt after the match: a heads-up [RESULT_PROMPT_AFTER_MIN] minutes after the end of each club match
-     * (not training, not hidden) with nothing kept yet, "How did BUFC U9s v Arlesey go?", standing for
+     * (not training, not hidden) with nothing kept yet, "How did OFC U9s v Hilltown go?", standing for
      * [RESULT_PROMPT_HOURS] hours. Through Event reminders, so quiet hours and Notifications' choice apply.
      */
     fun notices(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<Notice> =
@@ -295,18 +299,21 @@ object FootballRules {
 
     // ---- Whose team it is, and saying a match the way people do (Meka, 2026-10-10) ----
 
-    /** The age group each child plays in: U7 fixtures are Rex's, U10 fixtures are Logan's (Meka, 2026-10-10). */
-    val CHILDREN: Map<Int, String> = mapOf(7 to "Rex", 10 to "Logan")
-    /** Club abbreviations said in full. */
-    val CLUB_NAMES: Map<String, String> = mapOf("BUFC" to "Biggleswade United")
+    /**
+     * The age group each child plays in (Meka, 2026-10-10: one boy's fixtures are U7, the other's U10), from About
+     * you's children ([Household]; rule 13, never in the code): 7 → "Alex".
+     */
+    val CHILDREN: Map<Int, String> get() = Household.names.children
+    /** Club short names said in full, from About you's Clubs ("OFC" → "Oakfield Town"). */
+    val CLUB_NAMES: Map<String, String> get() = Household.names.clubNames
 
     private val AGE_GROUP = Regex("""\b(?:U|Under)[\s-]?(\d{1,2})(?:s)?\b""", RegexOption.IGNORE_CASE)
     private val VERSUS = Regex("""\s+(?:v|vs|versus)\.?\s+""", RegexOption.IGNORE_CASE)
 
-    /** The age group a title names ("BUFC U7s v Arlesey" → 7, "Under-10s training" → 10), or null. */
+    /** The age group a title names ("OFC U7s v Hilltown" → 7, "Under-10s training" → 10), or null. */
     fun ageGroup(title: String): Int? = AGE_GROUP.find(title)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it in 5..18 }
 
-    /** Whose fixture [e] is ("Rex"), from its age group; null when it isn't a club fixture or the group isn't a child's. */
+    /** Whose fixture [e] is ("Alex"), from its age group; null when it isn't a club fixture or the group isn't a child's. */
     fun child(e: CalendarEvent): String? = if (isClubFixture(e)) ageGroup(e.title)?.let { CHILDREN[it] } else null
 
     /** 7 → "under-sevens", 6 → "under-sixes", 12 → "under-twelves". */
@@ -316,9 +323,9 @@ object FootballRules {
     }
 
     /**
-     * A club fixture's title as MEKA says it aloud (the spoken brief; null when [title] names no club): "BUFC U7s v
-     * Arlesey" → "Rex's under-sevens play Arlesey", "BUFC U9s v Arlesey" → "Biggleswade United under-nines play Arlesey",
-     * "SJFC U10s training" → "Logan's under-tens training". The club is dropped when the child is named.
+     * A club fixture's title as MEKA says it aloud (the spoken brief; null when [title] names no club): "OFC U7s v
+     * Hilltown" → "Alex's under-sevens play Hilltown", "OFC U9s v Hilltown" → "Oakfield Town under-nines play Hilltown",
+     * "HRFC U10s training" → "Sam's under-tens training". The club is dropped when the child is named.
      */
     fun spokenFixture(title: String): String? {
         val club = clubIn(title) ?: return null
@@ -370,18 +377,20 @@ object FootballRules {
     /** Whether [t] is a fixture's kit task. */
     fun isKitTask(t: Task): Boolean = t.eventId != null && t.id == kitTaskId(t.eventId)
 
-    /** The club [e] is a fixture of ("BUFC"), or null when it isn't one. */
-    fun club(e: CalendarEvent): String? {
-        if (e.isFixture || e.isProvisional) return null
-        return listOfNotNull(e.title, e.calendarTitle, e.calendarName).firstNotNullOfOrNull { clubIn(it) }
+    /** The club [e] is a fixture of ("OFC"), or null when it isn't one. */
+    fun club(e: CalendarEvent, clubs: List<String> = CLUBS): String? {
+        if (e.isFixture || e.isProvisional || clubs.isEmpty()) return null
+        return listOfNotNull(e.title, e.calendarTitle, e.calendarName).firstNotNullOfOrNull { clubIn(it, clubs) }
     }
 
-    fun isClubFixture(e: CalendarEvent): Boolean = club(e) != null
+    /** Whether [e] is a club fixture; [clubs] defaults to this household's ([CLUBS]); the server passes each household's. */
+    fun isClubFixture(e: CalendarEvent, clubs: List<String> = CLUBS): Boolean = club(e, clubs) != null
 
     /** The first club named in [text] as a whole word, any case. */
-    fun clubIn(text: String): String? {
+    fun clubIn(text: String, clubs: List<String> = CLUBS): String? {
+        if (clubs.isEmpty()) return null
         val words = text.split(Regex("[^A-Za-z0-9]+")).map { it.uppercase() }.toSet()
-        return CLUBS.firstOrNull { it in words }
+        return clubs.firstOrNull { it in words }
     }
 
     /** The local day the fixture is on: an all-day one's first day (its bounds are UTC midnights). */
@@ -401,7 +410,7 @@ object FootballRules {
         return Plan(title(e), ahead, ahead, kickOffMs(e, cal))
     }
 
-    /** "Pack the kit for BUFC U9s v Arlesey" (cut at a word to the task title's limit). */
+    /** "Pack the kit for OFC U9s v Hilltown" (cut at a word to the task title's limit). */
     fun title(e: CalendarEvent): String {
         val what = e.title.trim().ifEmpty { club(e) ?: "football" }
         val s = child(e)?.let { "Pack $it's kit for $what" } ?: "Pack the kit for $what"

@@ -29,6 +29,9 @@ final class MacNeedsYouCardsTests: XCTestCase {
     }
 
     func testTheTimelineChipTakesTheQuestionsPlaceAndKeepsThePlace() {
+        // Rule 13, release 2: the children come from About you (invented here).
+        _ = Household.shared.useTyped(children: "Max, U7\nFelix, U10", clubs: "")
+        defer { _ = Household.shared.useTyped(children: "", clubs: "") }
         let club = ClubChildRules.shared
         let detail = club.ASK + " · Oakfield School"
         XCTAssertTrue(club.asking(detail: detail))

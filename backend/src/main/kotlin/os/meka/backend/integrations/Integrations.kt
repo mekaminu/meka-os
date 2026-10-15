@@ -1537,7 +1537,11 @@ class Integrations(
         }
         val hidden = reader.entities(hh, EntityTypes.EVENT_MARK).filter { (_, f) -> (f[EventMarkFields.HIDDEN] as? FieldValue.Bool)?.value == true }.keys
         val known = reader.entities(hh, EntityTypes.TRAVEL_TIME).mapNotNull { (id, f) -> TravelRules.read(id, f) }.associateBy { it.eventId }
-        val due = TravelRules.due(events, hidden, known, now(), calendar)
+        // Rule 13, release 2: the household's clubs come from its About you (never the code, never another household's).
+        val clubs = runCatching {
+            AboutYouRules.clubList(AboutYouRules.read(reader.entity(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)).clubs).map { it.short }
+        }.getOrDefault(emptyList())
+        val due = TravelRules.due(events, hidden, known, now(), calendar, clubs)
         if (due.isEmpty()) return false
         val home = weather.values.firstOrNull()?.let { knownPlaces(hh, it).firstOrNull() } ?: error("no home")
         var wrote = false

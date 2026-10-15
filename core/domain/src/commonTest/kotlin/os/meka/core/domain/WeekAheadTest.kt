@@ -1,5 +1,7 @@
 package os.meka.core.domain
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -7,6 +9,15 @@ import kotlin.test.assertTrue
 
 /** The Sunday week ahead (Meka approved 2026-10-10), slice 1: the coming week day by day and the family sync. */
 class WeekAheadTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     // Sunday 11 October 2026, British Summer Time (UTC+1).
     private val offset = 3_600_000L
     private val cal = LocalCalendar.fixedOffset(offset)
@@ -34,7 +45,7 @@ class WeekAheadTest {
         events = listOf(
             ev("p", "Parents' evening", mon + 1, 18, calendar = "Family"),
             ev("b", "Barça v Getafe", mon + 5, 17, provider = "fixtures", calendar = null),
-            ev("f", "BUFC U10 v Arlesey", mon + 6, 10, place = "Arlesey Town FC, Hitchin Rd"),
+            ev("f", "OTFC U10 v Hilltop", mon + 6, 10, place = "Hilltop Town FC, Hitchin Rd"),
             ev("w", "Team lunch", mon, 12),
             allDay("h", "Half term", mon + 3, mon + 4),
         ),
@@ -42,7 +53,7 @@ class WeekAheadTest {
         holidays = HolidayCalendar.NONE,
         school = listOf(
             school("inset", SchoolKind.OFF, "INSET day", "", mon + 3),
-            school("pe", SchoolKind.WEEKLY, "PE", "Rex", mon - 30, mon + 365, weekday = 2),
+            school("pe", SchoolKind.WEEKLY, "PE", "Max", mon - 30, mon + 365, weekday = 2),
         ),
         dateNight = DateNightSetting(weekday = 5, startMin = 19 * 60, anchorDay = mon + 4),
         renewals = listOf(renewal("n", "Netflix", mon + 2, pence = 1099), renewal("g", "Gym", mon + 9, cancelBy = mon + 3)),
@@ -65,7 +76,7 @@ class WeekAheadTest {
         // Monday: the dentist, then lunch, in time order.
         assertEquals(listOf("09:30 Dentist", "12:00 Team lunch"), v.days[0].lines.map { "${it.time} ${it.text}" })
         // Tuesday: PE (no time) before the evening, which starts before he's home from the office (commute slice 3).
-        assertEquals(listOf("Rex: PE", "Parents' evening · Before you're home · about 18:50"), v.days[1].lines.map { it.text })
+        assertEquals(listOf("Max: PE", "Parents' evening · Before you're home · about 18:50"), v.days[1].lines.map { it.text })
         assertTrue(v.days[1].lines[1].lit)
         // Wednesday: Netflix due with its price.
         assertEquals("Netflix due · £10.99", v.days[2].lines.single().text)
@@ -81,7 +92,7 @@ class WeekAheadTest {
         assertEquals(WeekAheadKind.FIXTURE, v.days[5].lines.single().kind)
         assertEquals(WeekAheadKind.FIXTURE, v.days[6].lines.single().kind)
         assertEquals(
-            "3 office days · 1 from home · 2 matches · Rex and Logan off Thu · date night Fri · 4 events · 2 due",
+            "3 office days · 1 from home · 2 matches · Max and Felix off Thu · date night Fri · 4 events · 2 due",
             v.summary,
         )
     }
@@ -91,10 +102,10 @@ class WeekAheadTest {
         val v = view()
         assertEquals(
             listOf(
-                "Thu 15 Oct · Rex and Logan are off and you're in the office — who's covering?",
+                "Thu 15 Oct · Max and Felix are off and you're in the office — who's covering?",
                 "Tue 13 Oct 18:00 · Parents' evening",
                 "Fri 16 Oct · Date night — sitter and plans sorted?",
-                "Sun 18 Oct 10:00 · BUFC U10 v Arlesey — who's taking them?",
+                "Sun 18 Oct 10:00 · OTFC U10 v Hilltop — who's taking them?",
             ),
             v.sync,
         )

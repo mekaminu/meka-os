@@ -7,9 +7,9 @@ internal object HelpIndex {
         HelpEntry(
             id = "about-you",
             title = "About you",
-            keywords = listOf("about you", "my details", "household", "partner", "children", "school website"),
-            what = "your name, partner, children, home, work, the school's website and numbers, kept in your encrypted data, never in Navilife's code.",
-            how = "Type each line there; clearing one has Undo.",
+            keywords = listOf("about you", "my details", "household", "partner", "children", "school website", "clubs", "football club"),
+            what = "your name, partner, children (with their club age group), home, work, the school's website, the children's clubs and numbers, kept in your encrypted data, never in Navilife's code.",
+            how = "Type each line there; clearing one has Undo. Clubs takes each club's short name as your calendar writes it, then its full name (\"OFC Oakfield Town, HRFC\"): those fixtures get kit reminders and the child's name.",
             tips = listOf(),
             fold = HelpPlace.ABOUT_YOU,
             foldWhere = "Ask → Settings → About you",

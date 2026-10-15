@@ -8,6 +8,7 @@ import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.DeviceHealth
 import os.meka.core.domain.HealthState
 import os.meka.core.domain.FootballRules
+import os.meka.core.domain.ClubChildRules
 import os.meka.core.domain.SetupDevice
 import os.meka.core.domain.SetupState
 import os.meka.core.sync.InMemoryReplicaStore
@@ -50,7 +51,9 @@ class AboutYouFacadeTest {
         val v = fold.aboutYouView.value
         assertEquals("Alex", v.rows.first { it.field == AboutField.PARTNER_NAME }.value)
         assertEquals("Hilltown", v.rows.first { it.field == AboutField.HOME }.value)
-        assertEquals(FootballRules.CHILDREN.entries.sortedBy { it.key }.map { it.value }, v.children.map { it.name })
+        // Release 2 slice 1: no child is copied from the code any more; the clubs MEKA knew are.
+        assertTrue(v.children.isEmpty())
+        assertNotNull(v.rows.first { it.field == AboutField.CLUBS }.value)
         assertTrue(v.summary.startsWith("Navilife filled this in today"))
         fold.syncNow(); mac.syncNow()
         assertEquals("Alex", mac.aboutYouView.value.rows.first { it.field == AboutField.PARTNER_NAME }.value)
@@ -59,6 +62,47 @@ class AboutYouFacadeTest {
         assertEquals("Saved", mac.setAboutYou(AboutField.PARTNER_NAME, "Sam").line)
         mac.syncNow(); fold.syncNow(); fold.syncNow()
         assertEquals("Sam", fold.aboutYouView.value.rows.first { it.field == AboutField.PARTNER_NAME }.value)
+    }
+
+    @Test
+    fun clubsAndChildrenTypedOnTheMacAreWhatTheFoldsFixturesName() = runTest(timeout = SLOW_RUNNER) {
+        val mac = core("mac")
+        val fold = core("android")
+        // Rule 13, release 2: nothing in the code names a child or a club.
+        mac.syncNow(); fold.syncNow()
+        val match = os.meka.core.domain.CalendarEvent("fc1", "OTFC U7s v Hilltop", now + 86_400_000L, now + 90_000_000L, false,
+            "Bury Field", "google", "me@example.com", "Personal")
+        assertTrue(FootballRules.CLUBS.isEmpty())
+        assertTrue(!fold.eventDetail(match).canKit)
+        mac.setAboutYou(AboutField.CLUBS, "otfc Oakfield Town")
+        mac.addAboutYouChild("Alex, U7")
+        mac.addAboutYouChild("Sam, U10")
+        mac.syncNow(); fold.syncNow()
+        assertEquals("OTFC Oakfield Town", fold.aboutYouView.value.rows.first { it.field == AboutField.CLUBS }.value)
+        assertEquals(listOf("OTFC"), FootballRules.CLUBS)
+        assertTrue(fold.eventDetail(match).canKit)
+        assertEquals("Alex", FootballRules.child(match))
+        assertEquals("Alex or Sam?", ClubChildRules.ASK)
+        // Cleared on the Fold: its fixtures stop being club fixtures, and the copy never puts it back.
+        assertEquals("Cleared · Undo puts it back", fold.setAboutYou(AboutField.CLUBS, "").line)
+        assertTrue(!fold.eventDetail(match).canKit)
+    }
+
+    @Test
+    fun aFoldWhoseProfilePredatesClubsGetsTheClubsOnceAndNeverAfterAClear() = runTest(timeout = SLOW_RUNNER) {
+        val mac = core("mac")
+        mac.setAboutYou(AboutField.HOME, "Hilltown")
+        mac.syncNow()
+        val fold = core("android").apply { seedsAboutYou = true }
+        fold.syncNow()
+        val copied = assertNotNull(fold.aboutYouView.value.rows.first { it.field == AboutField.CLUBS }.value)
+        assertTrue(FootballRules.CLUBS.isNotEmpty())
+        fold.syncNow(); mac.syncNow()
+        assertEquals(copied, mac.aboutYouView.value.rows.first { it.field == AboutField.CLUBS }.value)
+        mac.setAboutYou(AboutField.CLUBS, "")
+        mac.syncNow(); fold.syncNow(); fold.syncNow()
+        assertNull(fold.aboutYouView.value.rows.first { it.field == AboutField.CLUBS }.value)
+        assertTrue(FootballRules.CLUBS.isEmpty())
     }
 
     @Test

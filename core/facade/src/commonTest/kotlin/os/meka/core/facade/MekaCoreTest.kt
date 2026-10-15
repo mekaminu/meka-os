@@ -839,7 +839,9 @@ class MekaCoreTest {
         fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
         now = at(8, 12) // Thu 8 Oct
         val a = core("android"); val m = core("mac")
-        val match = os.meka.core.domain.CalendarEvent("evfc", "BUFC U9s v Arlesey", at(10, 10), at(10, 11), false, "Bury Field", "google", "meka@gmail.com", "Personal")
+        // Rule 13, release 2: the clubs come from About you (invented here), on both devices after a sync.
+        a.setAboutYou(os.meka.core.domain.AboutField.CLUBS, "OTFC Lindenbrook United, HRFC"); a.syncNow(); m.syncNow()
+        val match = os.meka.core.domain.CalendarEvent("evfc", "OTFC U9s v Hilltop", at(10, 10), at(10, 11), false, "Bury Field", "google", "meka@gmail.com", "Personal")
         assertTrue(a.eventDetail(match).canKit)
         val added = assertNotNull(a.addKitReminder(match))
         assertEquals("Kit reminder tomorrow 19:00", added.line)
@@ -862,6 +864,8 @@ class MekaCoreTest {
         fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
         now = at(8, 12) // Thu 8 Oct
         val a = core("android"); val m = core("mac")
+        // Rule 13, release 2: the clubs come from About you (invented here), on both devices after a sync.
+        a.setAboutYou(os.meka.core.domain.AboutField.CLUBS, "OTFC Lindenbrook United, HRFC"); a.syncNow(); m.syncNow()
         val clock = os.meka.core.sync.HlcClock("server", { now })
         var k = 0
         fun fixture(id: String, title: String, start: Long) = mapOf(
@@ -869,7 +873,7 @@ class MekaCoreTest {
             os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(start),
             os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(start + 3_600_000L),
             os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
-            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Arlesey Town FC, Hitchin Rd"),
+            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Hilltop Town FC, Hitchin Rd"),
             os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
             os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
             os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
@@ -877,11 +881,11 @@ class MekaCoreTest {
         ).forEach { (f, v) ->
             serverOps.append(os.meka.core.sync.Op("srvfc${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, id, f, v, clock.now(), emptyList(), "server"))
         }
-        fixture("fc1", "BUFC U9s v Arlesey", at(10, 10))
-        fixture("fc2", "BUFC U9s v Arlesey (cup)", at(17, 10))
+        fixture("fc1", "OTFC U9s v Hilltop", at(10, 10))
+        fixture("fc2", "OTFC U9s v Hilltop (cup)", at(17, 10))
         assertTrue(a.syncNow()); assertTrue(m.syncNow())
-        val first = os.meka.core.domain.CalendarEvent("fc1", "BUFC U9s v Arlesey", at(10, 10), at(10, 11), false, "Arlesey Town FC, Hitchin Rd", "google", "meka@gmail.com", "Personal")
-        val second = first.copy(id = "fc2", title = "BUFC U9s v Arlesey (cup)", startAtMs = at(17, 10), endAtMs = at(17, 11))
+        val first = os.meka.core.domain.CalendarEvent("fc1", "OTFC U9s v Hilltop", at(10, 10), at(10, 11), false, "Hilltop Town FC, Hitchin Rd", "google", "meka@gmail.com", "Personal")
+        val second = first.copy(id = "fc2", title = "OTFC U9s v Hilltop (cup)", startAtMs = at(17, 10), endAtMs = at(17, 11))
         assertNull(a.eventDetail(second).leaveOfferLabel)
 
         a.setEventLeaveBy("fc1", 40)
@@ -910,11 +914,13 @@ class MekaCoreTest {
         fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
         now = at(8, 12) // Thu 8 Oct
         val a = core("android"); val m = core("mac")
+        // Rule 13, release 2: the clubs come from About you (invented here), on both devices after a sync.
+        a.setAboutYou(os.meka.core.domain.AboutField.CLUBS, "OTFC Lindenbrook United, HRFC"); a.syncNow(); m.syncNow()
         val clock = os.meka.core.sync.HlcClock("server", { now })
         var k = 0
-        val place = "Bury Field, Biggleswade"
+        val place = "Bury Field, Lindenbrook"
         mapOf(
-            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("BUFC U7s v Arlesey"),
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("OTFC U7s v Hilltop"),
             os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(at(10, 10)),
             os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(at(10, 11)),
             os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
@@ -926,10 +932,10 @@ class MekaCoreTest {
         ).forEach { (f, v) ->
             serverOps.append(os.meka.core.sync.Op("srvtt${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "tt1", f, v, clock.now(), emptyList(), "server"))
         }
-        val e = os.meka.core.domain.CalendarEvent("tt1", "BUFC U7s v Arlesey", at(10, 10), at(10, 11), false, place, "google", "meka@gmail.com", "Personal")
+        val e = os.meka.core.domain.CalendarEvent("tt1", "OTFC U7s v Hilltop", at(10, 10), at(10, 11), false, place, "google", "meka@gmail.com", "Personal")
         // What the server's travel feed writes ([os.meka.core.domain.TravelRules.fields]).
         fun serverDrive(drive: Int) {
-            val l = os.meka.core.domain.TravelRules.Lookup("tt1", place, "bury field biggleswade", e.startAtMs - drive * 60_000L, e.startAtMs)
+            val l = os.meka.core.domain.TravelRules.Lookup("tt1", place, "bury field lindenbrook", e.startAtMs - drive * 60_000L, e.startAtMs)
             os.meka.core.domain.TravelRules.fields(l, drive, now).forEach { (f, v) ->
                 serverOps.append(os.meka.core.sync.Op("srvtt${k++}", "hh", os.meka.core.domain.EntityTypes.TRAVEL_TIME, os.meka.core.domain.TravelRules.entityId("tt1"), f, v, clock.now(), emptyList(), "server"))
             }
@@ -940,7 +946,7 @@ class MekaCoreTest {
 
         // Taken on the Fold; the Friday-evening answer says 40 min and both devices move Leave by to 08:55.
         val used = assertNotNull(a.useLastLeaveBy(e))
-        assertEquals("bury field biggleswade", used.driveKey)
+        assertEquals("bury field lindenbrook", used.driveKey)
         assertEquals(50, a.eventMarks.value.travel["tt1"])
         assertTrue(a.syncNow())
         now = at(9, 18, 5)
@@ -965,14 +971,16 @@ class MekaCoreTest {
         fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
         now = at(10, 9) // Sat 10 Oct, before kick-off
         val a = core("android"); val m = core("mac")
+        // Rule 13, release 2: the clubs come from About you (invented here), on both devices after a sync.
+        a.setAboutYou(os.meka.core.domain.AboutField.CLUBS, "OTFC Lindenbrook United, HRFC"); a.syncNow(); m.syncNow()
         val clock = os.meka.core.sync.HlcClock("server", { now })
         var k = 0
         mapOf(
-            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("BUFC U9s v Arlesey"),
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("OTFC U9s v Hilltop"),
             os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(at(10, 10)),
             os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(at(10, 11)),
             os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
-            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Arlesey Town FC"),
+            os.meka.core.domain.EventFields.LOCATION to os.meka.core.sync.FieldValue.Text("Hilltop Town FC"),
             os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
             os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
             os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
@@ -981,7 +989,7 @@ class MekaCoreTest {
             serverOps.append(os.meka.core.sync.Op("srvres${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "fx1", f, v, clock.now(), emptyList(), "server"))
         }
         assertTrue(a.syncNow()); assertTrue(m.syncNow())
-        val match = os.meka.core.domain.CalendarEvent("fx1", "BUFC U9s v Arlesey", at(10, 10), at(10, 11), false, "Arlesey Town FC", "google", "meka@gmail.com", "Personal")
+        val match = os.meka.core.domain.CalendarEvent("fx1", "OTFC U9s v Hilltop", at(10, 10), at(10, 11), false, "Hilltop Town FC", "google", "meka@gmail.com", "Personal")
         // Not yet over: nothing to keep.
         assertFalse(a.eventDetail(match).canResult)
         assertNull(a.saveMatchResult(match, 3, 1, "Leo 2, Sam", ""))

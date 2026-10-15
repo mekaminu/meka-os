@@ -14,7 +14,7 @@ import os.meka.core.sync.fv
  *   "Half term 26–30 Oct", "Christmas holidays 18 Dec – 4 Jan", "Rex off 3 Nov".
  * - [SchoolKind.DAY]: a one-off date to remember (non-uniform day, a trip, a payment due): "Non-uniform day Fri 13 Nov",
  *   "Logan's trip to the zoo 20 Nov".
- * - [SchoolKind.WEEKLY]: something every school week on one weekday (PE): "Rex PE Tue", "Logan swimming Thursdays".
+ * - [SchoolKind.WEEKLY]: something every school week on one weekday (PE): "Alex PE Tue", "Logan swimming Thursdays".
  *
  * A child named in the line ("Rex", "Logan's") makes it theirs; otherwise it is both boys'. School days are Monday to
  * Friday, not a UK bank holiday and not inside a day off for that child.
@@ -153,8 +153,8 @@ data class SchoolView(
 }
 
 object SchoolRules {
-    /** Rex's and Logan's names, as Meka types them (the same boys as the football fixtures' age groups). */
-    val CHILDREN: List<String> = FootballRules.CHILDREN.values.toList()
+    /** The children's names in age order, from About you (the same children as the football fixtures' age groups). */
+    val CHILDREN: List<String> get() = FootballRules.CHILDREN.entries.sortedBy { it.key }.map { it.value }
 
     const val MAX_TITLE = 60
     /** A day off longer than this is a typing slip, not a holiday (the summer holidays are about six and a half weeks). */
@@ -170,10 +170,10 @@ object SchoolRules {
     const val COVERED_LABEL = "Covered"
     const val NO_SCHOOL = "No school"
 
-    const val ADD_HINT = "Add… (INSET 27 Oct, Half term 26–30 Oct, Rex PE Tue)"
+    const val ADD_HINT = "Add… (INSET 27 Oct, Half term 26–30 Oct, Alex PE Tue)"
     const val EMPTY_LINE = "Nothing entered yet. Type the school's days off once, one line each, and PE days with the weekday."
     const val NOTHING_OFF = "Nothing off coming up"
-    const val NOT_READ = "Navilife couldn't read a date in that. Try \"INSET 27 Oct\", \"Half term 26–30 Oct\" or \"Rex PE Tue\"."
+    const val NOT_READ = "Navilife couldn't read a date in that. Try \"INSET 27 Oct\", \"Half term 26–30 Oct\" or \"Alex PE Tue\"."
     const val SHARED = "Only you see this for now; Jeanette's family page will show it once the family calendar is settled."
 
     private val I = setOf(RegexOption.IGNORE_CASE)

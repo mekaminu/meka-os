@@ -579,13 +579,15 @@ class MekaCore(
     /**
      * About you, release 1: what MEKA held before the profile existed — the Family/Leaving now name, the children by
      * club age group, the weather's home and work places and the call assistant's number. Read from his synced
-     * settings where he set them, else from the values the code still holds until release 2 removes them.
+     * settings where he set them, else from the values the code still holds until release 2 removes them. Release 2
+     * slice 1 (2026-10-15): the features now read the children and clubs from the profile only; these are the last
+     * copies, for a profile that predates them, and go with the final release-2 slice.
      */
     private fun aboutYouBefore(): os.meka.core.domain.AboutYou = os.meka.core.domain.AboutYou(
         partnerName = leavingNow.setting().to,
         partnerWatch = true,
-        children = os.meka.core.domain.FootballRules.CHILDREN.entries.sortedBy { it.key }
-            .map { os.meka.core.domain.AboutChild(it.value, it.key) },
+        // The children were copied on 13 Oct and live only in his profile now (both apps hold it).
+        clubs = RELEASE_ONE_CLUBS,
         home = weatherPlace.wanted() ?: os.meka.core.domain.WeatherPlaceRules.HOME,
         work = workPlace.wanted() ?: os.meka.core.domain.PlacesRules.WORK,
         assistantNumber = os.meka.core.domain.CallScreeningRules.ASSISTANT_NUMBER,
@@ -4163,6 +4165,8 @@ class MekaCore(
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
         const val DIGEST_KEY = "meka.digest"
+        /** Release 2 slice 1's one-off copy into About you's new Clubs line ([AboutYouStore.seedClubsOnce]); removed with the final slice. */
+        private const val RELEASE_ONE_CLUBS = "BUFC Biggleswade United, SJFC"
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
@@ -6891,6 +6895,8 @@ class MekaCore(
             lastSyncedMs = nowMs()
             // About you, release 1: the Fold copies what MEKA held into the profile once, after a clean round.
             if (seedsAboutYou && report.rejected.isEmpty()) aboutYou.seedOnce(aboutYouBefore())
+            // Release 2 slice 1: a profile from before About you had Clubs gets the clubs MEKA knew, once.
+            if (seedsAboutYou && report.rejected.isEmpty()) aboutYouBefore().clubs?.let { aboutYou.seedClubsOnce(it) }
             // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
             if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
@@ -6915,6 +6921,8 @@ class MekaCore(
     private suspend fun <T> onCore(block: () -> T): T = withContext(confined) { block() }
 
     private fun refresh() {
+        // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
+        os.meka.core.domain.Household.use(aboutYou.profile())
         // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.
         autoAddMailFinds()
         // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.

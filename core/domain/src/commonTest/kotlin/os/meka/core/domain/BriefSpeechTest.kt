@@ -1,11 +1,22 @@
 package os.meka.core.domain
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class BriefSpeechTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private fun brief(
         day: List<TomorrowRow> = emptyList(),
         events: Int = 0,
@@ -66,21 +77,21 @@ class BriefSpeechTest {
     fun theKidsMatchesAreSaidTheWayPeopleSayThemWithTheChildsName() {
         val v = brief(
             day = listOf(
-                TomorrowRow("e-1", "10:00", "BUFC U7s v Arlesey", true, "Bury Field"),
-                TomorrowRow("e-2", "11:30", "BUFC U10s v Potton Town", true, null),
-                TomorrowRow("e-3", "14:15", "BUFC U9s vs Sandy", true, null),
-                TomorrowRow("e-4", "Until 12:00", "SJFC U7s training", true, null),
+                TomorrowRow("e-1", "10:00", "OTFC U7s v Hilltop", true, "Bury Field"),
+                TomorrowRow("e-2", "11:30", "OTFC U10s v Wexley Town", true, null),
+                TomorrowRow("e-3", "14:15", "OTFC U9s vs Sandy", true, null),
+                TomorrowRow("e-4", "Until 12:00", "HRFC U7s training", true, null),
             ),
             events = 4, summary = "4 events · first at 10:00",
             headlines = listOf(BriefHeadline("n1", "Barça v Getafe: line-ups", null, "BBC Sport · Barça · 1 h ago")),
         )
         val s = BriefSpeech.script(v)
-        assertTrue("Rex's under-sevens play Arlesey at ten o'clock" in s, s)
-        assertTrue("Logan's under-tens play Potton Town at half past eleven" in s, s)
-        assertTrue("Biggleswade United under-nines play Sandy at quarter past two" in s, s)
-        assertTrue("Rex's under-sevens training until 12:00" in s, s)
+        assertTrue("Max's under-sevens play Hilltop at ten o'clock" in s, s)
+        assertTrue("Felix's under-tens play Wexley Town at half past eleven" in s, s)
+        assertTrue("Lindenbrook United under-nines play Sandy at quarter past two" in s, s)
+        assertTrue("Max's under-sevens training until 12:00" in s, s)
         assertTrue("From BBC Sport: Barça versus Getafe: line-ups." in s, s)
-        assertFalse("U7" in s || "BUFC" in s || " v " in s, s)
+        assertFalse("U7" in s || "OTFC" in s || " v " in s, s)
     }
 
     @Test

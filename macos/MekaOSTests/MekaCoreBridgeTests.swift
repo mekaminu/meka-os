@@ -904,11 +904,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.pieces(text: "  "), [])
         XCTAssertEqual(SpeechRules.shared.FIRST_AUDIO_MS, 4000)
         // The spoken brief: short pieces, three asked for at once, a late one waited for in MEKA's voice.
-        let read = SpeechRules.shared.pieces(text: "Good morning, Meka. Rex's under-sevens play Arlesey at ten o'clock.", reading: true)
-        XCTAssertEqual(read, ["Good morning, Meka.", "Rex's under-sevens play Arlesey at ten o'clock."])
+        let read = SpeechRules.shared.pieces(text: "Good morning, Meka. Max's under-sevens play Hilltop at ten o'clock.", reading: true)
+        XCTAssertEqual(read, ["Good morning, Meka.", "Max's under-sevens play Hilltop at ten o'clock."])
         XCTAssertEqual(SpeechRules.shared.ahead(reading: true), 3)
         XCTAssertEqual(SpeechRules.shared.waitMs(first: false, reading: true), 15000)
-        XCTAssertEqual(FootballRules.shared.spokenFixture(title: "BUFC U10s v Potton"), "Logan's under-tens play Potton")
+        // Rule 13, release 2: the children and clubs come from About you (invented here).
+        _ = Household.shared.useTyped(children: "Max, U7\nFelix, U10", clubs: "OTFC Lindenbrook United, HRFC")
+        defer { _ = Household.shared.useTyped(children: "", clubs: "") }
+        XCTAssertEqual(FootballRules.shared.spokenFixture(title: "OTFC U10s v Wexley"), "Felix's under-tens play Wexley")
         XCTAssertEqual(MekaVoiceRules.shared.normalize(name: " device "), MekaVoiceRules.shared.DEVICE)
         XCTAssertEqual(SpeechRules.shared.usageLine(state: "on", month: "2026-10", usedChars: 12400, capChars: 1000000,
                                                     voice: "Amy", deviceChosen: false),
@@ -1855,9 +1858,12 @@ final class MekaCoreBridgeTests: XCTestCase {
 
     func testKitReminderReachesSwift() {
         // Weekend football, slice 1: club fixtures, the chip and the kit list reach the Mac.
-        XCTAssertEqual(FootballRules.shared.clubIn(text: "BUFC U9s v Arlesey"), "BUFC")
-        XCTAssertEqual(FootballRules.shared.clubIn(text: "sjfc training"), "SJFC")
-        XCTAssertNil(FootballRules.shared.clubIn(text: "BUFCX"))
+        // Rule 13, release 2: the children and clubs come from About you (invented here).
+        _ = Household.shared.useTyped(children: "Max, U7\nFelix, U10", clubs: "OTFC Lindenbrook United, HRFC")
+        defer { _ = Household.shared.useTyped(children: "", clubs: "") }
+        XCTAssertEqual(FootballRules.shared.clubIn(text: "OTFC U9s v Hilltop", clubs: FootballRules.shared.CLUBS), "OTFC")
+        XCTAssertEqual(FootballRules.shared.clubIn(text: "hrfc training", clubs: FootballRules.shared.CLUBS), "HRFC")
+        XCTAssertNil(FootballRules.shared.clubIn(text: "OTFCX", clubs: FootballRules.shared.CLUBS))
         XCTAssertEqual(FootballRules.shared.CHIP, "Kit reminder")
         XCTAssertEqual(FootballRules.shared.kitTaskId(eventId: "ev1"), "kev1")
         XCTAssertEqual(FootballRules.shared.kitList(tasks: []).first, "Boots")
@@ -1902,8 +1908,11 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testClubChildReachesSwift() {
         // Fold review 17:56, slice 3: the children offered on a club session and the agenda's ask reach the Mac;
         // nothing is set until Meka picks one.
-        XCTAssertEqual(ClubChildRules.shared.NAMES, ["Rex", "Logan"])
-        XCTAssertEqual(ClubChildRules.shared.ASK, "Rex or Logan?")
+        // Rule 13, release 2: the children and clubs come from About you (invented here).
+        _ = Household.shared.useTyped(children: "Max, U7\nFelix, U10", clubs: "OTFC Lindenbrook United, HRFC")
+        defer { _ = Household.shared.useTyped(children: "", clubs: "") }
+        XCTAssertEqual(ClubChildRules.shared.NAMES, ["Max", "Felix"])
+        XCTAssertEqual(ClubChildRules.shared.ASK, "Max or Felix?")
         XCTAssertEqual(EntityTypes.shared.CLUB_SERIES, "club_series")
         XCTAssertTrue(EventMarks.companion.NONE.clubChildren.isEmpty)
     }
@@ -2745,9 +2754,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.isDue(title: "Trip payment"))
         XCTAssertEqual(inset?.title, "INSET day")
         XCTAssertEqual(inset?.startDay, CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 27))
-        let pe = rules.read(text: "Rex PE Tue", today: sat)
+        // Rule 13, release 2: the children and clubs come from About you (invented here).
+        _ = Household.shared.useTyped(children: "Max, U7\nFelix, U10", clubs: "OTFC Lindenbrook United, HRFC")
+        defer { _ = Household.shared.useTyped(children: "", clubs: "") }
+        let pe = rules.read(text: "Max PE Tue", today: sat)
         XCTAssertEqual(pe?.kind, .weekly)
-        XCTAssertEqual(pe.map { rules.addedLine(e: $0) }, "Added PE · every Tuesday · Rex")
+        XCTAssertEqual(pe.map { rules.addedLine(e: $0) }, "Added PE · every Tuesday · Max")
         XCTAssertNil(rules.read(text: "Half term", today: sat))
         XCTAssertFalse(rules.NOT_READ.isEmpty)
         XCTAssertEqual(rules.HOME_LABEL, "I'll work from home")

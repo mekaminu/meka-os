@@ -2,6 +2,8 @@ package os.meka.core.domain
 
 import os.meka.core.testing.Device
 import os.meka.core.testing.SyncWorld
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -10,6 +12,15 @@ import kotlin.test.assertTrue
 
 /** School dates filled in, slice 1: a council's holidays on his pick, marked with their source, and pasted INSET days. */
 class SchoolTermsTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val hour = 3_600_000L
     private val world = SyncWorld()
     private val cal = LocalCalendar.fixedOffset(hour)
@@ -53,7 +64,7 @@ class SchoolTermsTest {
         assertEquals("Filled in 14 holidays from Central Bedfordshire · add the school's INSET days below", line)
         val v = school(fold).view(work)
         assertEquals("October half term", v.off.first().title)
-        assertEquals("Mon 26 – Fri 30 Oct · Rex and Logan", v.off.first().line)
+        assertEquals("Mon 26 – Fri 30 Oct · Max and Felix", v.off.first().line)
         assertEquals("Council dates · checked 14 Oct 2026 · check with the school", v.off.first().source)
         assertEquals("Central Bedfordshire", v.terms?.filled?.name)
         assertTrue(v.terms!!.line.startsWith("Central Bedfordshire · 14 holidays to come"), v.terms!!.line)
@@ -92,7 +103,7 @@ class SchoolTermsTest {
         val s = School(fresh.replica, { "f${n++}" }, { world.clock.nowMs }, cal)
         SchoolTermsStore(fresh.replica, { "f${n++}" }, { world.clock.nowMs }, cal).fill(council)
         val cover = s.view(work).covers.single()
-        assertEquals("Rex and Logan are off Mon 26 – Fri 30 Oct", cover.title)
+        assertEquals("Max and Felix are off Mon 26 – Fri 30 Oct", cover.title)
         assertEquals("October half term · in 7 days", cover.line)
         assertTrue(SchoolRules.askLines(s.items(), d(10, 19), HolidayCalendar.NONE).first().endsWith("council's date, the school may differ"))
     }

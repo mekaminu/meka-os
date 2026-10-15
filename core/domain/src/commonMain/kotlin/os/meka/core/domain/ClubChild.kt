@@ -2,14 +2,14 @@ package os.meka.core.domain
 
 /** Fields of a `club_series` (one per repeating club session, id = [ClubChildRules.seriesId]). */
 object ClubSeriesFields {
-    /** Whose session it is, one of [FootballRules.CHILDREN]'s names ("Rex"); null clears it. */
+    /** Whose session it is, one of [FootballRules.CHILDREN]'s names ("Alex", from About you); null clears it. */
     const val CHILD = "child"
     const val SET_AT = "setAtMs"
 }
 
 /**
  * Whose club training or match it is (Fold review 2026-10-12 17:56, item 4: "name the child on club training"), non-AI
- * and pure. The age group in the title or the calendar's name says it first ("BUFC U7s" → Rex, [FootballRules.CHILDREN]);
+ * and pure. The age group in the title or the calendar's name says it first ("OFC U7s" → the U7 child in About you, [FootballRules.CHILDREN]);
  * when neither does, Meka sets it once for the series and every session of it carries the name.
  *
  * A **series** is what Google repeats: the same calendar, the same title, the same weekday and the same start time
@@ -17,10 +17,10 @@ object ClubSeriesFields {
  * name and when it was set). A one-off with the same shape as a series reads as part of it, which is what Meka wants.
  */
 object ClubChildRules {
-    /** The children in age order, "Rex", "Logan": the choices on an event whose child isn't known. */
+    /** The children in age order ("Alex", "Sam", from About you): the choices on an event whose child isn't known. */
     val NAMES: List<String> get() = FootballRules.CHILDREN.entries.sortedBy { it.key }.map { it.value }
 
-    /** "Rex or Logan?": the agenda row's line while nobody is set. */
+    /** "Alex or Sam?": the agenda row's line while nobody is set. */
     val ASK: String get() = NAMES.joinToString(" or ") + "?"
 
     /** The Mac timeline's small chip in place of [ASK] (Mac presentation pass, item 7): it opens the choice. */
@@ -68,15 +68,15 @@ object ClubChildRules {
 
     /**
      * The agenda row's line for [e]: the child's name, or [ASK] while nobody is set; null when [e] isn't a child's
-     * club session.
+     * club session, or when About you names no child (nothing to choose from).
      */
     fun line(e: CalendarEvent, set: Map<String, String>, calendar: LocalCalendar): String? =
-        if (!asks(e)) null else child(e, set, calendar) ?: ASK
+        if (!asks(e)) null else child(e, set, calendar) ?: ASK.takeIf { NAMES.isNotEmpty() }
 
     /** Whether the event's pane offers the choice (a club session whose title and calendar don't say). */
-    fun canSet(e: CalendarEvent): Boolean = asks(e) && !e.isProvisional && fromEvent(e) == null
+    fun canSet(e: CalendarEvent): Boolean = asks(e) && !e.isProvisional && fromEvent(e) == null && NAMES.isNotEmpty()
 
-    /** "For Rex · every Wed 16:55" — the pane's line once a child is set for the series; null otherwise. */
+    /** "For Alex · every Wed 16:55" — the pane's line once a child is set for the series; null otherwise. */
     fun setLine(e: CalendarEvent, set: Map<String, String>, calendar: LocalCalendar): String? {
         if (!canSet(e)) return null
         val who = set[seriesId(e, calendar)]?.takeIf { it in NAMES } ?: return null
@@ -84,7 +84,7 @@ object ClubChildRules {
         return "For $who · every $weekday ${LocalClock.formatMinute(calendar.minuteOfDay(e.startAtMs))}"
     }
 
-    /** "Rex · “Training” every Wed" — the undo bar's line after setting. */
+    /** "Alex · “Training” every Wed" — the undo bar's line after setting. */
     fun savedLine(e: CalendarEvent, child: String?, calendar: LocalCalendar): String {
         val weekday = weekday(e, calendar)
         val what = e.title.trim().ifEmpty { "Training" }.take(40)

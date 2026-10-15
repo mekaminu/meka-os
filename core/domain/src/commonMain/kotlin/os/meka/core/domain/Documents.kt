@@ -6,7 +6,7 @@ import os.meka.core.sync.fv
 
 /**
  * The Vault (V2), slice 1: the household's documents and when they run out, typed once — "Passport expires 3 Mar
- * 2029", "Rex passport 20 May 2027", "Driving licence 12 Jun 2031", "Railcard 05/2027", "Birth certificate Rex" — a row
+ * 2029", "Alex passport 20 May 2027", "Driving licence 12 Jun 2031", "Railcard 05/2027", "Birth certificate Rex" — a row
  * each with how long is left ("Renew now · expires in 4 months", lit), and the expiry put onto the plan: a heads-up at
  * 09:00 when the renewal window opens (six months before a passport, two before a licence…), a month and a week
  * before, and on the day. Plain, non-AI rules; nothing leaves Meka's synced data.
@@ -87,7 +87,7 @@ object DocumentRules {
     /** Besides the kind's own window: a month, a week and the day itself. */
     val STAGES = listOf(30, 7, 0)
 
-    const val ADD_HINT = "Add… (Passport expires 3 Mar 2029, Rex passport 20 May 2027, Railcard 05/2027)"
+    const val ADD_HINT = "Add… (Passport expires 3 Mar 2029, Alex passport 20 May 2027, Railcard 05/2027)"
     const val EMPTY_LINE = "No documents yet. Type each one with the date it runs out; Navilife reminds you in time to renew."
     const val NOT_READ = "Navilife couldn't read that. Try \"Passport expires 3 Mar 2029\" or \"Railcard 05/2027\"."
     const val BAD_DATE = "Navilife couldn't read that date. Try \"3 Mar 2029\" or \"05/2029\"."

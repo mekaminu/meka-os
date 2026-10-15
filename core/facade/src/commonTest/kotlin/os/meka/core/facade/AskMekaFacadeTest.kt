@@ -161,12 +161,14 @@ class AskMekaFacadeTest {
         val c = core()
         c.askMeka("When's half term?")
         assertTrue(server.asked.last().second.items.none { it.kind == AskItemKind.SCHOOL })
+        // Rule 13, release 2: the children come from About you (invented here).
+        c.addAboutYouChild("Max, U7"); c.addAboutYouChild("Felix, U10")
         c.addSchool("Half term 26–30 Oct")
-        c.addSchool("Rex PE Tue")
+        c.addSchool("Max PE Tue")
         c.askMeka("When's half term?")
         val ctx = server.asked.last().second
         assertEquals(
-            listOf("Day off · Half term · Mon 26 – Fri 30 Oct · Rex and Logan", "Every Tuesday · PE · Rex · next Tue 13 Oct"),
+            listOf("Day off · Half term · Mon 26 – Fri 30 Oct · Max and Felix", "Every Tuesday · PE · Max · next Tue 13 Oct"),
             ctx.items.filter { it.kind == AskItemKind.SCHOOL }.map { it.line },
         )
         assertFalse(ctx.untrusted)

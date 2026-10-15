@@ -1,5 +1,7 @@
 package os.meka.core.domain
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -7,6 +9,15 @@ import kotlin.test.assertTrue
 
 /** Fold review 2026-10-12, bug 4: an event during work hours is flagged on Today, the Calendar and in the brief. */
 class WorkClashTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     // Wednesday 14 October 2026, British Summer Time (UTC+1); work 09:00–17:30.
     private val cal = LocalCalendar.fixedOffset(3_600_000L)
     private val wed = CivilDate.toEpochDay(2026, 10, 14)
@@ -32,12 +43,12 @@ class WorkClashTest {
 
     @Test
     fun theChildIsNamedFromTheTitleOrTheCalendar() {
-        val u7 = WorkClashRules.clash(ev("a", "BUFC U7s training", at(wed, 16, 55), at(wed, 17, 55)), blocks, cal)!!
-        assertEquals("Rex", u7.child)
-        assertEquals("Clashes with work · who's taking Rex?", u7.mark)
-        val byCalendar = WorkClashRules.clash(training.copy(calendarTitle = "SJFC U10s"), blocks, cal)!!
-        assertEquals("Logan", byCalendar.child)
-        assertEquals("Training at 16:55 while you're at work — who's taking Logan?", byCalendar.line)
+        val u7 = WorkClashRules.clash(ev("a", "OTFC U7s training", at(wed, 16, 55), at(wed, 17, 55)), blocks, cal)!!
+        assertEquals("Max", u7.child)
+        assertEquals("Clashes with work · who's taking Max?", u7.mark)
+        val byCalendar = WorkClashRules.clash(training.copy(calendarTitle = "HRFC U10s"), blocks, cal)!!
+        assertEquals("Felix", byCalendar.child)
+        assertEquals("Training at 16:55 while you're at work — who's taking Felix?", byCalendar.line)
     }
 
     @Test
@@ -90,9 +101,9 @@ class WorkClashTest {
 
     @Test
     fun theBriefSaysItAfterTheCalendar() {
-        val c = WorkClashRules.clash(ev("a", "BUFC U7s training", at(wed, 16, 55), at(wed, 17, 55)), blocks, cal)!!
+        val c = WorkClashRules.clash(ev("a", "OTFC U7s training", at(wed, 16, 55), at(wed, 17, 55)), blocks, cal)!!
         val said = c.spoken(FootballRules.spokenFixture(c.title) ?: c.title) { BriefScriptRules.clock(it) }
-        assertEquals("Heads up: Rex's under-sevens training at 4:55, while you're at work. Who's taking Rex?", said)
+        assertEquals("Heads up: Max's under-sevens training at 4:55, while you're at work. Who's taking Max?", said)
         val story = BriefStory(events = listOf(BriefEvent(c.title, 16 * 60 + 55, 17 * 60 + 55)), workEndMin = 17 * 60 + 30, workClashes = listOf(said))
         val lines = BriefScriptRules.calendar(MorningBriefView.EMPTY.copy(story = story), story)
         assertEquals(said, lines.last())

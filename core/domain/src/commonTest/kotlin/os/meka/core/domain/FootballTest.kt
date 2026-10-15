@@ -2,6 +2,8 @@ package os.meka.core.domain
 
 import os.meka.core.testing.Device
 import os.meka.core.testing.SyncWorld
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -11,6 +13,15 @@ import kotlin.test.assertTrue
 
 /** Weekend football logistics, slice 1: the kit reminder the evening before a club fixture. */
 class FootballTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val hour = 3_600_000L
     private val world = SyncWorld()
     // Fixed +1 h (London in October before the clocks go back).
@@ -28,7 +39,7 @@ class FootballTest {
 
     private fun event(
         id: String = "ev1",
-        title: String = "BUFC U9s v Arlesey",
+        title: String = "OTFC U9s v Hilltop",
         start: Long = at(thu + 2, 10),
         calendarName: String? = "Personal",
         provider: String = "google",
@@ -39,13 +50,13 @@ class FootballTest {
 
     @Test
     fun clubFixturesAreTheClubsNamedAsWholeWordsNeverBarcaOrLookAlikes() {
-        assertEquals("BUFC", FootballRules.club(event()))
-        assertEquals("SJFC", FootballRules.club(event(title = "Match", calendarName = "sjfc u11s")))
-        assertEquals("SJFC", FootballRules.club(event(title = "SJFC: away at Potton")))
+        assertEquals("OTFC", FootballRules.club(event()))
+        assertEquals("HRFC", FootballRules.club(event(title = "Match", calendarName = "hrfc u11s")))
+        assertEquals("HRFC", FootballRules.club(event(title = "HRFC: away at Wexley")))
         assertNull(FootballRules.club(event(title = "BUFCX training")))
         assertNull(FootballRules.club(event(title = "Training", calendarName = "Club")))
         // The fixtures feed (Barça) never counts.
-        assertNull(FootballRules.club(event(title = "BUFC v Barça", provider = "fixtures")))
+        assertNull(FootballRules.club(event(title = "OTFC v Barça", provider = "fixtures")))
     }
 
     @Test
@@ -54,7 +65,7 @@ class FootballTest {
         val id = assertNotNull(eaFold.addKit(e))
         assertEquals(FootballRules.kitTaskId("ev1"), id)
         val t = assertNotNull(fold.tasks.get(id))
-        assertEquals("Pack the kit for BUFC U9s v Arlesey", t.title)
+        assertEquals("Pack the kit for OTFC U9s v Hilltop", t.title)
         assertEquals(at(thu + 1, 19), t.scheduledAtMs)
         assertEquals(at(thu + 1, 19), t.remindAtMs)
         assertEquals(at(thu + 2, 10), t.dueAtMs)
@@ -105,7 +116,7 @@ class FootballTest {
     @Test
     fun anAllDayTournamentIsRemindedTheEveningBeforeItsFirstDay() {
         val sat = thu + 2
-        val e = event(title = "SJFC tournament", start = sat * CivilDate.DAY_MS, allDay = true)
+        val e = event(title = "HRFC tournament", start = sat * CivilDate.DAY_MS, allDay = true)
             .copy(endAtMs = (sat + 1) * CivilDate.DAY_MS)
         val t = assertNotNull(fold.tasks.get(assertNotNull(eaFold.addKit(e))))
         assertEquals(at(thu + 1, 19), t.remindAtMs)
@@ -119,7 +130,7 @@ class FootballTest {
         fold.tasks.addChecklistItem(first.id, "Gloves")
         world.clock.nowMs += 1_000
 
-        val next = event(id = "ev2", title = "BUFC U9s v Potton", start = at(thu + 9, 10))
+        val next = event(id = "ev2", title = "OTFC U9s v Wexley", start = at(thu + 9, 10))
         val t = assertNotNull(fold.tasks.get(assertNotNull(eaFold.addKit(next))))
         assertEquals(listOf("Boots", "Shin pads", "Kit and socks", "Water bottle", "Gloves"), t.checklist.map { it.text })
         assertEquals(listOf("Boots", "Shin pads", "Kit and socks", "Water bottle", "Gloves"), FootballRules.kitList(fold.tasks.all()))
@@ -156,8 +167,8 @@ class FootballTest {
 
     @Test
     fun aGroundsKeyIgnoresCaseAndPunctuationAndALinkIsNoGround() {
-        assertEquals("arlesey town fc hitchin rd", FootballRules.venueKey("  Arlesey Town FC,  Hitchin Rd. "))
-        assertEquals(FootballRules.venueKey("arlesey town fc hitchin rd"), FootballRules.venueKey("Arlesey Town FC, Hitchin Rd"))
+        assertEquals("hilltop town fc hitchin rd", FootballRules.venueKey("  Hilltop Town FC,  Hitchin Rd. "))
+        assertEquals(FootballRules.venueKey("hilltop town fc hitchin rd"), FootballRules.venueKey("Hilltop Town FC, Hitchin Rd"))
         assertEquals("camp nou", FootballRules.venueKey("Camp Nou!"))
         assertNull(FootballRules.venueKey("https://meet.google.com/abc"))
         assertNull(FootballRules.venueKey("  "))
@@ -171,7 +182,7 @@ class FootballTest {
         eaFold.setLeaveBy(first.id, 25)
         assertTrue(eaFold.rememberVenue(first))
         assertFalse(eaFold.rememberVenue(first)) // nothing changed: nothing written
-        val next = event(id = "ev2", title = "BUFC U9s v Potton", start = at(thu + 9, 10))
+        val next = event(id = "ev2", title = "OTFC U9s v Wexley", start = at(thu + 9, 10))
         val offer = assertNotNull(FootballRules.leaveOffer(next, eaFold.marks(), world.clock.nowMs, cal))
         assertEquals(25, offer.travelMin)
         assertFalse(offer.rings)
@@ -200,7 +211,7 @@ class FootballTest {
         val marks = eaFold.marks()
         val now = world.clock.nowMs
         // Another ground.
-        assertNull(FootballRules.leaveOffer(event(id = "a", start = at(thu + 9, 10)).copy(location = "Potton Rec"), marks, now, cal))
+        assertNull(FootballRules.leaveOffer(event(id = "a", start = at(thu + 9, 10)).copy(location = "Wexley Rec"), marks, now, cal))
         // Not a club fixture: the dentist at Bury Field isn't remembered or offered.
         assertNull(FootballRules.leaveOffer(event(id = "b", title = "Dentist", start = at(thu + 9, 10)), marks, now, cal))
         assertFalse(eaFold.rememberVenue(event(id = "b", title = "Dentist")))
@@ -213,21 +224,21 @@ class FootballTest {
     }
 
     @Test
-    fun u7FixturesAreRexsAndU10sLogansInTheKitTheLateDraftAndTheResultPrompt() {
-        assertEquals(7, FootballRules.ageGroup("BUFC U7s v Arlesey"))
-        assertEquals(10, FootballRules.ageGroup("SJFC Under-10s training"))
-        assertEquals(10, FootballRules.ageGroup("u10 v Potton"))
-        assertNull(FootballRules.ageGroup("BUFC v Arlesey"))
-        assertEquals("Rex", FootballRules.child(event(title = "BUFC U7s v Arlesey")))
-        assertEquals("Logan", FootballRules.child(event(title = "BUFC U10s v Potton")))
+    fun u7FixturesAreMaxsAndU10sFelixsInTheKitTheLateDraftAndTheResultPrompt() {
+        assertEquals(7, FootballRules.ageGroup("OTFC U7s v Hilltop"))
+        assertEquals(10, FootballRules.ageGroup("HRFC Under-10s training"))
+        assertEquals(10, FootballRules.ageGroup("u10 v Wexley"))
+        assertNull(FootballRules.ageGroup("OTFC v Hilltop"))
+        assertEquals("Max", FootballRules.child(event(title = "OTFC U7s v Hilltop")))
+        assertEquals("Felix", FootballRules.child(event(title = "OTFC U10s v Wexley")))
         assertNull(FootballRules.child(event()))
         assertNull(FootballRules.child(event(title = "U7s parents' evening", calendarName = "School")))
         assertEquals("under-sevens", FootballRules.spokenAgeGroup(7))
         assertEquals("under-sixes", FootballRules.spokenAgeGroup(6))
         assertEquals("under-twelves", FootballRules.spokenAgeGroup(12))
-        assertEquals("Rex's under-sevens play Arlesey", FootballRules.spokenFixture("BUFC U7s v Arlesey"))
-        assertEquals("Biggleswade United under-nines play Arlesey", FootballRules.spokenFixture("BUFC U9s v Arlesey"))
-        assertEquals("Biggleswade United versus Arlesey", FootballRules.spokenFixture("BUFC v Arlesey"))
+        assertEquals("Max's under-sevens play Hilltop", FootballRules.spokenFixture("OTFC U7s v Hilltop"))
+        assertEquals("Lindenbrook United under-nines play Hilltop", FootballRules.spokenFixture("OTFC U9s v Hilltop"))
+        assertEquals("Lindenbrook United versus Hilltop", FootballRules.spokenFixture("OTFC v Hilltop"))
         assertNull(FootballRules.spokenFixture("Standup"))
         assertEquals("ten o'clock", FootballRules.spokenClock("10:00"))
         assertEquals("half past ten", FootballRules.spokenClock("10:30"))
@@ -238,16 +249,16 @@ class FootballTest {
         assertEquals("ten thirty-five", FootballRules.spokenClock("10:35"))
         assertNull(FootballRules.spokenClock("All day"))
 
-        val rex = event(id = "r", title = "BUFC U7s v Arlesey")
-        assertEquals("Pack Rex's kit for BUFC U7s v Arlesey", FootballRules.title(rex))
-        assertEquals("Pack the kit for BUFC U9s v Arlesey", FootballRules.title(event()))
+        val max = event(id = "r", title = "OTFC U7s v Hilltop")
+        assertEquals("Pack Max's kit for OTFC U7s v Hilltop", FootballRules.title(max))
+        assertEquals("Pack the kit for OTFC U9s v Hilltop", FootballRules.title(event()))
         assertEquals(
-            "Hi, sorry, Rex and I are running about 10 min late for BUFC U7s v Arlesey. Should be there by 10:10.",
-            FootballRules.lateDrafts(rex, at(thu + 2, 8), cal)[1].text,
+            "Hi, sorry, Max and I are running about 10 min late for OTFC U7s v Hilltop. Should be there by 10:10.",
+            FootballRules.lateDrafts(max, at(thu + 2, 8), cal)[1].text,
         )
-        val prompt = FootballRules.notices(listOf(rex), eaFold.marks(), at(thu + 2, 11, 20), cal).single()
-        assertEquals("How did Rex's match go?", prompt.title)
-        assertTrue(prompt.text.startsWith("BUFC U7s v Arlesey · "), prompt.text)
+        val prompt = FootballRules.notices(listOf(max), eaFold.marks(), at(thu + 2, 11, 20), cal).single()
+        assertEquals("How did Max's match go?", prompt.title)
+        assertTrue(prompt.text.startsWith("OTFC U7s v Hilltop · "), prompt.text)
     }
 
     @Test
@@ -260,18 +271,18 @@ class FootballTest {
         val before = FootballRules.lateDrafts(e, at(thu + 2, 8), cal)
         assertEquals(listOf(5, 10, 15, 20), before.map { it.minutes })
         assertEquals("10 min", before[1].label)
-        assertEquals("Hi, sorry, running about 10 min late for BUFC U9s v Arlesey. Should be there by 10:10.", before[1].text)
+        assertEquals("Hi, sorry, running about 10 min late for OTFC U9s v Hilltop. Should be there by 10:10.", before[1].text)
         // After kick-off: now plus the minutes, rounded up to five.
         val after = FootballRules.lateDrafts(e, at(thu + 2, 10, 7), cal)
-        assertEquals("Hi, sorry, running about 5 min late for BUFC U9s v Arlesey. Should be there by 10:15.", after[0].text)
+        assertEquals("Hi, sorry, running about 5 min late for OTFC U9s v Hilltop. Should be there by 10:15.", after[0].text)
         // Half an hour after kick-off it's gone.
         assertTrue(FootballRules.lateDrafts(e, at(thu + 2, 10, 31), cal).isEmpty())
         // The detail carries them.
         assertEquals(4, EventDetails.build(e, at(thu + 2, 9), cal, eaFold.marks()).lateDrafts.size)
         assertTrue(EventDetails.build(e, at(thu, 12), cal, eaFold.marks()).lateDrafts.isEmpty())
         // A long title is cut at a word.
-        val long = FootballRules.lateDrafts(event(title = "BUFC U9s v Arlesey Town Youth in the county cup quarter final replay"), at(thu + 2, 9), cal)
-        assertTrue(long[0].text.contains("for BUFC U9s v Arlesey Town Youth in the county cup quarter…. Should"), long[0].text)
+        val long = FootballRules.lateDrafts(event(title = "OTFC U9s v Hilltop Town Youth in the county cup quarter final replay"), at(thu + 2, 9), cal)
+        assertTrue(long[0].text.contains("for OTFC U9s v Hilltop Town Youth in the county cup quarter…. Should"), long[0].text)
     }
 
     @Test
@@ -331,7 +342,7 @@ class FootballTest {
         assertEquals("Scorers · Leo", FootballRules.resultLine(FootballRules.result(e, -1, -1, "Leo", "", 0)))
         assertNull(FootballRules.result(e, 100, 1, "", "", 0))
         // Training: a note, never a score or scorers.
-        val training = event(title = "SJFC training", start = at(thu, 10))
+        val training = event(title = "HRFC training", start = at(thu, 10))
         assertTrue(FootballRules.isTraining(training))
         assertFalse(EventDetails.build(training, at(thu, 12), cal, eaFold.marks()).resultScore)
         val t = assertNotNull(FootballRules.result(training, 3, 1, "Leo", "Worked on passing", 0))
@@ -340,7 +351,7 @@ class FootballTest {
         assertEquals("Worked on passing", t.note)
         assertFalse(FootballRules.isTraining(e))
         // An all-day tournament is over at 17:00 on its first day.
-        val cup = event(title = "SJFC cup day", allDay = true, start = CivilDate.toEpochDay(2026, 10, 10) * CivilDate.DAY_MS)
+        val cup = event(title = "HRFC cup day", allDay = true, start = CivilDate.toEpochDay(2026, 10, 10) * CivilDate.DAY_MS)
         assertEquals(at(thu + 2, 17), FootballRules.matchEndMs(cup, cal))
     }
 
@@ -348,13 +359,13 @@ class FootballTest {
     fun aPromptAsksHowItWentAfterAMatchUntilSomethingIsKept() {
         val e = event(start = at(thu, 10))
         val n = FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 9), cal).single()
-        assertEquals("How did BUFC U9s v Arlesey go?", n.title)
+        assertEquals("How did OTFC U9s v Hilltop go?", n.title)
         assertEquals(at(thu, 11, 15), n.atMs)
         assertEquals(at(thu, 23), n.expiresAtMs)
         assertEquals(NoticeSource.EVENT_REMINDER, n.source)
         // It goes once stale, once something is kept, for training, a hidden fixture or anything else.
         assertTrue(FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 23), cal).isEmpty())
-        assertTrue(FootballRules.notices(listOf(event(title = "SJFC training", start = at(thu, 10))), eaFold.marks(), at(thu, 12), cal).isEmpty())
+        assertTrue(FootballRules.notices(listOf(event(title = "HRFC training", start = at(thu, 10))), eaFold.marks(), at(thu, 12), cal).isEmpty())
         assertTrue(FootballRules.notices(listOf(event(title = "Dentist", start = at(thu, 10))), eaFold.marks(), at(thu, 12), cal).isEmpty())
         eaFold.hide("ev1")
         assertTrue(FootballRules.notices(listOf(e), eaFold.marks(), at(thu, 12), cal).isEmpty())

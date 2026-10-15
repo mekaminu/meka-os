@@ -35,6 +35,12 @@ object AboutYouFields {
     const val HOME = "home"
     const val WORK = "work"
     /**
+     * The children's clubs (release 2 slice 1, 2026-10-15): "OFC Oakfield Town, HRFC" — each a short name as calendar
+     * titles write it, then optionally the full name said aloud ([AboutYouRules.clubList]). Club fixtures are spotted
+     * by these ([FootballRules.CLUBS], via [Household]).
+     */
+    const val CLUBS = "clubs"
+    /**
      * The children's school's website (School dates filled in, slice 3, 2026-10-14): School's INSET card opens it, as
      * INSET days are the school's own and are published there. A normalised https URL.
      */
@@ -60,6 +66,9 @@ data class AboutYouHeld(val filled: Boolean, val foldAtMs: Long?, val macAtMs: L
     val onBoth: Boolean get() = filled && foldAtMs != null && macAtMs != null
 }
 
+/** A club as About you holds it: the [short] name calendar titles use ("OFC") and its full [name] said aloud. */
+data class AboutClub(val short: String, val name: String? = null)
+
 /** A child as About you holds them: "Alex" · under 7s · "Oakfield School". */
 data class AboutChild(val name: String, val ageGroup: Int? = null, val school: String? = null)
 
@@ -74,13 +83,15 @@ data class AboutYou(
     val home: String? = null,
     val work: String? = null,
     val schoolWebsite: String? = null,
+    /** The clubs as kept: "OFC Oakfield Town, HRFC" ([AboutYouRules.clubList] reads it). */
+    val clubs: String? = null,
     val assistantNumber: String? = null,
     val voicemailNumber: String? = null,
     val seededAtMs: Long? = null,
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, assistantNumber, voicemailNumber).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, clubs, assistantNumber, voicemailNumber).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -97,6 +108,7 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     HOME(AboutYouFields.HOME, "Home", "Your town", "Add home for its weather and the commute"),
     WORK(AboutYouFields.WORK, "Work", "Where the office is", "Add work for office-day weather"),
     SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
+    CLUBS(AboutYouFields.CLUBS, "Clubs", "Short name first: OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
     VOICEMAIL_NUMBER(AboutYouFields.VOICEMAIL_NUMBER, "Voicemail number", "Your network's voicemail", "Not added · only needed for call forwarding"),
 }
@@ -152,6 +164,10 @@ object AboutYouRules {
     const val NOT_EMAIL = "That doesn't look like an email address."
     const val NOT_WEBSITE = "That doesn't look like a web address: “oakfield.sch.uk” or a link from the school's site."
     const val MAX_WEBSITE = 300
+    const val NOT_CLUBS = "Type each club's short name first, as your calendar writes it: “OFC Oakfield Town, HRFC”."
+    const val MAX_CLUBS = 6
+    const val MAX_CLUB_SHORT = 10
+    const val MAX_CLUB_NAME = 40
     const val MAX_EMAIL = 254
     const val NOT_CHILD = "Type a name first: “Alex”, “Alex, U7” or “Alex, U7, Oakfield School”."
     const val TOO_MANY = "That's the most children About you holds."
@@ -222,6 +238,7 @@ object AboutYouRules {
             home = text(AboutYouFields.HOME),
             work = text(AboutYouFields.WORK),
             schoolWebsite = text(AboutYouFields.SCHOOL_WEBSITE)?.let(::website),
+            clubs = text(AboutYouFields.CLUBS)?.let(::clubs),
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
             seededAtMs = fields[AboutYouFields.SEEDED_AT]?.longOrNull,
@@ -236,6 +253,7 @@ object AboutYouRules {
         AboutField.HOME -> a.home
         AboutField.WORK -> a.work
         AboutField.SCHOOL_WEBSITE -> a.schoolWebsite
+        AboutField.CLUBS -> a.clubs
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
     }
@@ -253,6 +271,7 @@ object AboutYouRules {
             AboutField.PARTNER_EMAIL -> email(t)
             AboutField.HOME, AboutField.WORK -> place(t)
             AboutField.SCHOOL_WEBSITE -> website(t)
+            AboutField.CLUBS -> clubs(t)
         }
     }
 
@@ -262,6 +281,7 @@ object AboutYouRules {
         AboutField.PARTNER_EMAIL -> NOT_EMAIL
         AboutField.HOME, AboutField.WORK -> NOT_PLACE
         AboutField.SCHOOL_WEBSITE -> NOT_WEBSITE
+        AboutField.CLUBS -> NOT_CLUBS
     }
 
     /** Spaces collapsed and trimmed; no regex (Kotlin/Native reads some differently). */
@@ -343,6 +363,39 @@ object AboutYouRules {
 
     /** [keepAddresses] straight from the stored profile (the server's autopilot). */
     fun keepAddresses(fields: Map<String, FieldValue>?): Set<String> = keepAddresses(read(fields))
+
+    // ---- Clubs (release 2 slice 1) ----
+
+    /**
+     * The clubs typed as "OFC Oakfield Town, HRFC" (commas or semicolons between clubs; "OFC = Oakfield Town" and
+     * "OFC: Oakfield Town" too): each club's first word is its short name (letters and digits, 2–[MAX_CLUB_SHORT], a
+     * letter at least, upper-cased), the rest its full name ([place]'s characters, up to [MAX_CLUB_NAME]); a repeated
+     * short name is kept once, up to [MAX_CLUBS]. Kept as "OFC Oakfield Town, HRFC"; null when a club can't be read.
+     */
+    internal fun clubs(t: String): String? {
+        val parts = collapse(t).split(',', ';').map { collapse(it) }.filter { it.isNotEmpty() }
+        if (parts.isEmpty() || parts.size > MAX_CLUBS) return null
+        val out = mutableListOf<AboutClub>()
+        for (p in parts) {
+            val c = club(p) ?: return null
+            if (out.none { it.short == c.short }) out += c
+        }
+        return out.joinToString(", ") { c -> listOfNotNull(c.short, c.name).joinToString(" ") }
+    }
+
+    private fun club(p: String): AboutClub? {
+        val sp = p.indexOfFirst { it == ' ' || it == '=' || it == ':' }
+        val short = (if (sp < 0) p else p.substring(0, sp)).trim().uppercase()
+        if (short.length !in 2..MAX_CLUB_SHORT || !short.all(Char::isLetterOrDigit) || short.none(Char::isLetter)) return null
+        val rest = if (sp < 0) "" else collapse(p.substring(sp).trimStart(' ', '=', ':'))
+        if (rest.isEmpty()) return AboutClub(short)
+        val name = place(rest)?.takeIf { it.length <= MAX_CLUB_NAME } ?: return null
+        return AboutClub(short, name)
+    }
+
+    /** The clubs [kept] holds ([AboutYou.clubs]), in order; empty for none. */
+    fun clubList(kept: String?): List<AboutClub> =
+        kept?.let(::clubs).orEmpty().split(", ").mapNotNull { p -> p.trim().takeIf { it.isNotEmpty() }?.let(::club) }
 
     /** A town or area: a letter at least, letters, digits, spaces and . , - ' only, up to [MAX_PLACE]. */
     internal fun place(t: String): String? =
@@ -459,6 +512,7 @@ object AboutYouRules {
             a.home?.let { "home" },
             a.work?.let { "work" },
             a.schoolWebsite?.let { "the school's website" },
+            a.clubs?.let { "clubs" },
             (a.assistantNumber ?: a.voicemailNumber)?.let { "numbers" },
         )
         val s = when (parts.size) {
@@ -568,6 +622,19 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
         if ((if (device == AboutYouDevice.MAC) h.macAtMs else h.foldAtMs) != null) return false
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID,
             mapOf(AboutYouRules.heldField(device) to FieldValue.Int64(nowMs())))
+        return true
+    }
+
+    /**
+     * Release 2 slice 1's one-off copy of the clubs (2026-10-15): the profile existed before About you had a Clubs
+     * line, so the clubs MEKA already knew are written into it once, only while the line has never been written
+     * (typed, cleared or copied) and a profile exists. True when it wrote.
+     */
+    fun seedClubsOnce(clubs: String): Boolean {
+        val f = fields() ?: return false
+        if (AboutYouFields.CLUBS in f) return false
+        val v = AboutYouRules.clean(AboutField.CLUBS, clubs)?.takeIf { it.isNotEmpty() } ?: return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text(v)))
         return true
     }
 

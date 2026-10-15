@@ -29,6 +29,8 @@ class LeaveFacadeTest {
     fun leaveBookedOnTheFoldIsCountedOnTheMacAndIsADayOffForWork() = runTest {
         val fold = core("android")
         val mac = core("mac")
+        // Rule 13, release 2: the children come from About you (invented here).
+        fold.addAboutYouChild("Max, U7"); fold.addAboutYouChild("Felix, U10")
         assertEquals(LeaveRules.EMPTY_LINE, fold.leaveView.value.summary)
         assertNull(fold.addLeave("some time soon"))
         assertEquals("Booked Annual leave · Tue 27 – Fri 30 Oct · 4 days", fold.addLeave("27–30 Oct")?.line)
@@ -37,7 +39,7 @@ class LeaveFacadeTest {
         assertEquals("4 of 27 days booked · 23 days left", fold.leaveView.value.summary)
 
         // The school's half term: four of its five work days are booked; booking it takes the Monday.
-        assertEquals("Added Half term · Mon 26 – Fri 30 Oct · Rex and Logan", fold.addSchool("Half term 26–30 Oct"))
+        assertEquals("Added Half term · Mon 26 – Fri 30 Oct · Max and Felix", fold.addSchool("Half term 26–30 Oct"))
         val half = fold.leaveView.value.holidays.single()
         assertEquals("4 of 5 booked", half.note)
         assertEquals("Book 1 day", half.bookLabel)

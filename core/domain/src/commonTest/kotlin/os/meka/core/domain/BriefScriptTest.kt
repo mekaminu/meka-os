@@ -1,5 +1,7 @@
 package os.meka.core.domain
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -7,6 +9,15 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class BriefScriptTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val day = 20738L // Mon 12 Oct 2026
     private val dayMs = day * CivilDate.DAY_MS
     private val today = DayWindow(dayMs, dayMs + CivilDate.DAY_MS)
@@ -52,7 +63,7 @@ class BriefScriptTest {
         assertEquals(3, smaller)
         val story = BriefStory(
             epochDay = day, officeDay = true, workEndMin = 17 * 60 + 30,
-            placesLine = "Biggleswade 9° now · Canary Wharf 14°, light rain from 15:00 — take a coat",
+            placesLine = "Lindenbrook 9° now · Canary Wharf 14°, light rain from 15:00 — take a coat",
             route = "Thameslink, Elizabeth line, good service",
             events = listOf(BriefEvent("Standup", 9 * 60 + 30, 9 * 60 + 45), BriefEvent("1:1 with Sam", 11 * 60, 11 * 60 + 30)),
             focus = focus, smallerCount = smaller, needsYou = 1,
@@ -70,7 +81,7 @@ class BriefScriptTest {
         )
         val expectedStart = "Good morning, Meka. It's Monday 12 October, an office day, finishing at half past 5. " +
             "On the trains: Thameslink, Elizabeth line, good service. " +
-            "Biggleswade 9 degrees now, Canary Wharf 14 degrees, light rain from 15:00, take a coat. " +
+            "Lindenbrook 9 degrees now, Canary Wharf 14 degrees, light rain from 15:00, take a coat. " +
             "First up, Standup at half past 9. Then 1:1 with Sam at 11 o'clock. Free after half past 11. " +
             "Three things to focus on. First, Renew passport, it's overdue. Then Call the garage, it's due at 3 o'clock. " +
             "And Send the Q4 deck, it moves your goal, Q4 plan. Plus 3 smaller ones. " +
@@ -92,11 +103,11 @@ class BriefScriptTest {
             weekGoals = "This week: 2 of 3 goals moving",
         )
         val v = MorningBriefView.EMPTY.copy(dateLabel = "Sat 17 Oct", weatherLine = "12–16°, dry",
-            day = listOf(TomorrowRow("e-1", "10:00", "BUFC U7s v Arlesey", true, null)),
-            story = story.copy(events = listOf(BriefEvent("BUFC U7s v Arlesey", 600, 660))))
+            day = listOf(TomorrowRow("e-1", "10:00", "OTFC U7s v Hilltop", true, null)),
+            story = story.copy(events = listOf(BriefEvent("OTFC U7s v Hilltop", 600, 660))))
         val s = BriefScriptRules.script(v)
         assertTrue(s.startsWith("Good morning, Meka. It's Saturday 17 October, no work today. Today, 12 to 16 degrees, dry. " +
-            "One thing in the calendar: Rex's under-sevens play Arlesey at 10 o'clock."), s)
+            "One thing in the calendar: Max's under-sevens play Hilltop at 10 o'clock."), s)
         assertTrue("One thing to focus on: Book the boiler service, it's overdue. Plus one smaller one." in s, s)
         assertFalse("trains" in s || "Send the Q4 deck" in s || "goals moving" in s, s)
     }

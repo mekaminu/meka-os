@@ -29,17 +29,19 @@ class SchoolFacadeTest {
     fun anInsetDayInTheOfficeAsksWhosCoveringAndWorkingFromHomeAnswersItOnBothApps() = runTest {
         val fold = core("android")
         val mac = core("mac")
+        // Rule 13, release 2: the children come from About you (invented here).
+        fold.addAboutYouChild("Max, U7"); fold.addAboutYouChild("Felix, U10")
         val monday = CivilDate.toEpochDay(2026, 10, 12)
         assertEquals(SchoolRules.EMPTY_LINE, fold.schoolView.value.summary)
-        assertEquals("Added INSET day · Mon 12 Oct · Rex and Logan", fold.addSchool("INSET 12 Oct"))
-        assertEquals("Added PE · every Tuesday · Rex", fold.addSchool("Rex PE Tue"))
+        assertEquals("Added INSET day · Mon 12 Oct · Max and Felix", fold.addSchool("INSET 12 Oct"))
+        assertEquals("Added PE · every Tuesday · Max", fold.addSchool("Max PE Tue"))
         assertNull(fold.addSchool("Half term"))
         assertEquals("Next day off: INSET day · Mon 12 Oct", fold.schoolView.value.summary)
         assertEquals("Next: Tue 13 Oct", fold.schoolView.value.weekly.single().note)
 
         fold.syncNow(); mac.syncNow()
         val cover = mac.schoolView.value.covers.single()
-        assertEquals("Rex and Logan are off Mon 12 Oct", cover.title)
+        assertEquals("Max and Felix are off Mon 12 Oct", cover.title)
         assertEquals("INSET day · in 2 days", cover.line)
         val done = mac.coverSchool(cover.id, home = true)!!
         assertEquals("Working from home Mon 12 Oct", done.line)
@@ -64,30 +66,34 @@ class SchoolFacadeTest {
     @Test
     fun theSchoolDayShowsOnTodayAndInTheBriefAndThePeKitTheEveningBefore() = runTest {
         val fold = core("android")
+        // Rule 13, release 2: the children come from About you (invented here).
+        fold.addAboutYouChild("Max, U7"); fold.addAboutYouChild("Felix, U10")
         assertNull(fold.today.value.school)
-        fold.addSchool("Logan's football tournament Sat 10 Oct")
-        fold.addSchool("Rex PE Mon")
-        assertEquals("Logan: Football tournament today", fold.today.value.school?.text)
-        assertEquals("Logan: Football tournament today", fold.briefView.value.school?.text)
-        assertTrue(fold.briefView.value.cardLine.contains("Logan: Football tournament today"), fold.briefView.value.cardLine)
-        assertTrue(os.meka.core.domain.BriefSpeech.script(fold.briefView.value).contains("School today: Logan has Football tournament."))
+        fold.addSchool("Felix's football tournament Sat 10 Oct")
+        fold.addSchool("Max PE Mon")
+        assertEquals("Felix: Football tournament today", fold.today.value.school?.text)
+        assertEquals("Felix: Football tournament today", fold.briefView.value.school?.text)
+        assertTrue(fold.briefView.value.cardLine.contains("Felix: Football tournament today"), fold.briefView.value.cardLine)
+        assertTrue(os.meka.core.domain.BriefSpeech.script(fold.briefView.value).contains("School today: Felix has Football tournament."))
         assertNull(fold.shutdownView.value.tomorrow.school) // Sunday tomorrow
 
         now += 33 * 3_600_000L // Sun 11 Oct, 19:00
         fold.tick()
         assertNull(fold.today.value.school)
-        assertEquals("Tomorrow · Rex: PE kit", fold.shutdownView.value.tomorrow.school?.text)
+        assertEquals("Tomorrow · Max: PE kit", fold.shutdownView.value.tomorrow.school?.text)
     }
     @Test
     fun theCoverQuestionIsAHeadsUpOnBothAppsUntilItIsAnswered() = runTest {
         val fold = core("android")
         val mac = core("mac")
+        // Rule 13, release 2: the children come from About you (invented here).
+        fold.addAboutYouChild("Max, U7"); fold.addAboutYouChild("Felix, U10")
         fold.addSchool("INSET 12 Oct")
         fold.addSchool("Trip payment by 14 Oct")
         fold.syncNow(); mac.syncNow()
         fun school(g: os.meka.core.domain.GovernorResult) = g.post.filter { it.source == os.meka.core.domain.NoticeSource.SCHOOL }
         val gov = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
-        assertEquals(listOf("Rex and Logan are off Mon 12 Oct" to "You're in the office that day. Who's covering?"),
+        assertEquals(listOf("Max and Felix are off Mon 12 Oct" to "You're in the office that day. Who's covering?"),
             school(gov).map { it.title to it.text })
         assertEquals(listOf("Reminder Mon 12 Oct, 09:00"), mac.schoolView.value.dates.map { it.note })
         // Posted once; answered on the Fold, the Mac has nothing left to ask.

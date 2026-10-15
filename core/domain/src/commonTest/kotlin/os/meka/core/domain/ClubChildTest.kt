@@ -2,6 +2,8 @@ package os.meka.core.domain
 
 import os.meka.core.testing.Device
 import os.meka.core.testing.SyncWorld
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -10,6 +12,15 @@ import kotlin.test.assertTrue
 
 /** Fold review 2026-10-12 17:56, item 4: club training names the child, set once per repeating series. */
 class ClubChildTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val world = SyncWorld()
     // Wednesday 14 October 2026, British Summer Time (UTC+1).
     private val cal = LocalCalendar.fixedOffset(3_600_000L)
@@ -32,18 +43,18 @@ class ClubChildTest {
     @Test
     fun trainingWithNoAgeGroupAsksWhoseItIs() {
         assertTrue(ClubChildRules.asks(training))
-        assertEquals("Rex or Logan?", ClubChildRules.line(training, emptyMap(), cal))
+        assertEquals("Max or Felix?", ClubChildRules.line(training, emptyMap(), cal))
         assertTrue(ClubChildRules.canSet(training))
         assertNull(ClubChildRules.setLine(training, emptyMap(), cal))
     }
 
     @Test
     fun theAgeGroupOrTheCalendarSaysItWithoutAsking() {
-        val u7 = ev("a", "BUFC U7s training")
-        assertEquals("Rex", ClubChildRules.line(u7, emptyMap(), cal))
+        val u7 = ev("a", "OTFC U7s training")
+        assertEquals("Max", ClubChildRules.line(u7, emptyMap(), cal))
         assertFalse(ClubChildRules.canSet(u7))
-        val byCalendar = ev("b", "Training", calendarName = "SJFC U10s")
-        assertEquals("Logan", ClubChildRules.line(byCalendar, emptyMap(), cal))
+        val byCalendar = ev("b", "Training", calendarName = "HRFC U10s")
+        assertEquals("Felix", ClubChildRules.line(byCalendar, emptyMap(), cal))
         assertFalse(ClubChildRules.canSet(byCalendar))
     }
 
@@ -66,44 +77,44 @@ class ClubChildTest {
 
     @Test
     fun setOnceForTheSeriesSyncsAndEverySessionNamesTheChild() {
-        assertNull(actions(fold).setClubChild(training, "Rex"))
+        assertNull(actions(fold).setClubChild(training, "Max"))
         fold.sync(); mac.sync()
         val marks = actions(mac).marks()
-        assertEquals("Rex", ClubChildRules.line(nextWeek, marks.clubChildren, cal))
-        assertEquals("For Rex · every Wed 16:55", ClubChildRules.setLine(nextWeek, marks.clubChildren, cal))
-        assertEquals("Rex or Logan?", ClubChildRules.line(ev("t9", "Training", day = wed + 1), marks.clubChildren, cal))
-        // The pane offers the choice with Rex picked; the clash asks for him by name.
+        assertEquals("Max", ClubChildRules.line(nextWeek, marks.clubChildren, cal))
+        assertEquals("For Max · every Wed 16:55", ClubChildRules.setLine(nextWeek, marks.clubChildren, cal))
+        assertEquals("Max or Felix?", ClubChildRules.line(ev("t9", "Training", day = wed + 1), marks.clubChildren, cal))
+        // The pane offers the choice with Max picked; the clash asks for him by name.
         val d = EventDetails.build(nextWeek, world.clock.nowMs, cal, marks)
-        assertEquals(listOf("Rex", "Logan"), d.clubChildChoices)
-        assertEquals("Rex", d.clubChild)
+        assertEquals(listOf("Max", "Felix"), d.clubChildChoices)
+        assertEquals("Max", d.clubChild)
         val clash = WorkClashRules.clash(nextWeek, WorkHours(WorkSchedule.DEFAULT).blocks(wed + 7, cal), cal, marks.clubChildren)!!
-        assertEquals("Clashes with work · who's taking Rex?", clash.mark)
+        assertEquals("Clashes with work · who's taking Max?", clash.mark)
     }
 
     @Test
     fun changingClearingAndRefusals() {
         val ea = actions(fold)
-        ea.setClubChild(training, "Rex")
-        assertEquals("Rex", ea.setClubChild(training, "Logan"))
-        assertEquals("Logan", ea.marks().clubChildren.values.single())
-        assertEquals("Logan", ea.setClubChild(training, null)) // Undo back to nobody
+        ea.setClubChild(training, "Max")
+        assertEquals("Max", ea.setClubChild(training, "Felix"))
+        assertEquals("Felix", ea.marks().clubChildren.values.single())
+        assertEquals("Felix", ea.setClubChild(training, null)) // Undo back to nobody
         assertTrue(ea.marks().clubChildren.isEmpty())
         assertNull(ea.setClubChild(training, "Jeanette")) // not a child: nothing written
         assertTrue(ea.marks().clubChildren.isEmpty())
-        ea.setClubChild(ev("a", "BUFC U7s training"), "Logan") // the title says Rex: nothing written
+        ea.setClubChild(ev("a", "OTFC U7s training"), "Felix") // the title says Max: nothing written
         assertTrue(ea.marks().clubChildren.isEmpty())
-        assertEquals("Rex · “Training” every Wed", ClubChildRules.savedLine(training, "Rex", cal))
+        assertEquals("Max · “Training” every Wed", ClubChildRules.savedLine(training, "Max", cal))
         assertEquals("Cleared who “Training” is for", ClubChildRules.savedLine(training, null, cal))
     }
 
     @Test
     fun theCalendarAgendaNamesTheChildFirstOnTheRow() {
         val ea = actions(fold)
-        ea.setClubChild(training, "Logan")
-        val view = CalendarAgenda.build(emptyList(), listOf(training.copy(location = "Biggleswade Park")), world.clock.nowMs, cal, children = ea.marks().clubChildren)
+        ea.setClubChild(training, "Felix")
+        val view = CalendarAgenda.build(emptyList(), listOf(training.copy(location = "Lindenbrook Park")), world.clock.nowMs, cal, children = ea.marks().clubChildren)
         val row = view.sections.flatMap { it.rows }.single { it.event?.id == "t1" }
-        assertEquals("Logan · Biggleswade Park", row.detail)
+        assertEquals("Felix · Lindenbrook Park", row.detail)
         val unset = CalendarAgenda.build(emptyList(), listOf(training), world.clock.nowMs, cal)
-        assertEquals("Rex or Logan?", unset.sections.flatMap { it.rows }.single { it.event?.id == "t1" }.detail)
+        assertEquals("Max or Felix?", unset.sections.flatMap { it.rows }.single { it.event?.id == "t1" }.detail)
     }
 }

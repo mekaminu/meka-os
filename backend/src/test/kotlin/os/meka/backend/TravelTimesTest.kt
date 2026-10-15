@@ -19,6 +19,10 @@ import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.Tasks
 import os.meka.core.domain.TravelRules
+import os.meka.core.domain.AboutYouFields
+import os.meka.core.domain.AboutYouRules
+import os.meka.core.domain.Household
+import os.meka.core.domain.HouseholdNames
 import os.meka.core.domain.WeatherForecast
 import os.meka.core.domain.CalendarEvents
 import os.meka.core.sync.FieldValue
@@ -45,10 +49,10 @@ class TravelTimesTest {
         override fun decrypt(cipher: ByteArray, context: Map<String, String>) = cipher
     }
 
-    private val home = WeatherLocation("Biggleswade", 52.09, -0.26)
+    private val home = WeatherLocation("Lindenbrook", 52.09, -0.26)
     private val weather = object : WeatherProvider {
         override val id = "weather"
-        override val label = "Open-Meteo · Biggleswade"
+        override val label = "Open-Meteo · Lindenbrook"
         override val home = this@TravelTimesTest.home
         override fun forecast(at: WeatherLocation) = WeatherForecast(at.name, emptyList(), emptyList())
         override fun locate(name: String): WeatherLocation? = null
@@ -56,9 +60,9 @@ class TravelTimesTest {
 
     @Test
     fun theRequestCarriesHomesCoordinatesAndThePlaceOnlyAndTheAnswerIsMinutes() {
-        val body = Json.parseToJsonElement(GoogleRoutes.request(52.09, -0.26, "Bury Field, Biggleswade", at(thu + 2, 9, 5))).jsonObject
+        val body = Json.parseToJsonElement(GoogleRoutes.request(52.09, -0.26, "Bury Field, Lindenbrook", at(thu + 2, 9, 5))).jsonObject
         assertEquals(setOf("origin", "destination", "travelMode", "routingPreference", "departureTime", "regionCode"), body.keys)
-        assertEquals("""{"address":"Bury Field, Biggleswade"}""", body["destination"].toString())
+        assertEquals("""{"address":"Bury Field, Lindenbrook"}""", body["destination"].toString())
         assertEquals("""{"location":{"latLng":{"latitude":52.09,"longitude":-0.26}}}""", body["origin"].toString())
         assertEquals("TRAFFIC_AWARE", body["routingPreference"]!!.jsonPrimitive.content)
         assertEquals("2026-10-10T08:05:00Z", body["departureTime"]!!.jsonPrimitive.content)
@@ -119,9 +123,16 @@ class TravelTimesTest {
             place?.let { fields[EventFields.LOCATION] = FieldValue.Text(it) }
             ops.transaction { mirror.commitLocal(EntityTypes.EVENT, id, fields).forEach { ops.append(it) } }
         }
-        event("ev1", "BUFC U7s v Arlesey", at(thu + 2, 10), "Bury Field, Biggleswade")
+        // Rule 13, release 2: the household's clubs are in its About you (invented here), which the server reads; the
+        // Fold's rules read the same through Household.
+        ops.transaction {
+            mirror.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text("OTFC Lindenbrook United, HRFC")))
+                .forEach { ops.append(it) }
+        }
+        Household.useTyped("", "OTFC Lindenbrook United, HRFC")
+        event("ev1", "OTFC U7s v Hilltop", at(thu + 2, 10), "Bury Field, Lindenbrook")
         event("ev2", "Dentist", at(thu + 2, 14), "High St Surgery")
-        event("ev3", "SJFC training", at(thu + 1, 18), null)
+        event("ev3", "HRFC training", at(thu + 1, 18), null)
 
         // No key: the feed is off, nothing is asked.
         integrations.syncAll()
@@ -131,7 +142,7 @@ class TravelTimesTest {
         // Meka pastes the key: the fixture is looked up once, from home's coordinates to its place only.
         key = "AIzaKEY-123456789012345678901"
         integrations.syncAll()
-        assertEquals(listOf(Triple(52.09, "Bury Field, Biggleswade", at(thu + 2, 9, 5))), asked)
+        assertEquals(listOf(Triple(52.09, "Bury Field, Lindenbrook", at(thu + 2, 9, 5))), asked)
         assertEquals("ok", store.accounts("home").single { it.provider == TravelRules.PROVIDER }.status)
         assertEquals(listOf("home"), woken)
 
@@ -168,8 +179,42 @@ class TravelTimesTest {
             travel = mapOf(TravelRules.PROVIDER to GoogleRoutes({ key }, { _, _, _ -> 500 to "{}" })),
         )
         now = at(thu + 2, 8, 30)
-        event("ev4", "BUFC U10s v Potton", at(thu + 3, 11), "Potton Rec")
+        event("ev4", "OTFC U10s v Wexley", at(thu + 3, 11), "Wexley Rec")
         failing.syncAll()
         assertEquals("error", store.accounts("home").single { it.provider == TravelRules.PROVIDER }.status)
+        Household.set(HouseholdNames.EMPTY)
+    }
+
+    @Test
+    fun aHouseholdWithoutClubsInAboutYouHasNoFixturesLookedUp() {
+        val ops = InMemoryServerOpStore()
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val asked = mutableListOf<String>()
+        val routes = GoogleRoutes({ "AIzaKEY-123456789012345678901" }, { _, _, body -> asked += body; 200 to """{"routes":[{"duration":"1500s"}]}""" })
+        val integrations = Integrations(
+            store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now },
+            weather = mapOf(weather.id to weather), travel = mapOf(routes.id to routes), calendar = bst,
+        )
+        // Whatever this process's own household says, the server goes by this household's About you (none here).
+        Household.useTyped("", "OTFC")
+        val mirror = Replica("home", "mirror", HlcClock("mirror", { now }), InMemoryReplicaStore(), MekaSchema) { "m" + System.nanoTime() }
+        ops.transaction {
+            mirror.commitLocal(EntityTypes.EVENT, "ev1", mapOf(
+                EventFields.TITLE to FieldValue.Text("OTFC U7s v Hilltop"), EventFields.START_AT to FieldValue.Int64(at(thu + 2, 10)),
+                EventFields.END_AT to FieldValue.Int64(at(thu + 2, 10) + hour), EventFields.ALL_DAY to FieldValue.Bool(false),
+                EventFields.PROVIDER to FieldValue.Text("google"), EventFields.ACCOUNT to FieldValue.Text("meka@gmail.com"),
+                EventFields.CALENDAR to FieldValue.Text("Personal"), EventFields.LOCATION to FieldValue.Text("Bury Field, Lindenbrook"),
+            )).forEach { ops.append(it) }
+        }
+        integrations.syncAll()
+        Household.set(HouseholdNames.EMPTY)
+        assertEquals(emptyList(), asked)
+        // Its clubs added in About you (on either app): the fixture is looked up.
+        ops.transaction {
+            mirror.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text("OTFC")))
+                .forEach { ops.append(it) }
+        }
+        integrations.syncAll()
+        assertEquals(1, asked.size)
     }
 }

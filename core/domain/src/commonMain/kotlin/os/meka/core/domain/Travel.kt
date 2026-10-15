@@ -113,8 +113,8 @@ object TravelRules {
     data class Lookup(val eventId: String, val place: String, val placeKey: String, val departAtMs: Long, val kickOffMs: Long)
 
     /** A club fixture MEKA works a drive out for: timed, with a place, not hidden, not on its way to Google. */
-    fun eligible(e: CalendarEvent, hidden: Set<String>): Boolean =
-        !e.allDay && FootballRules.isClubFixture(e) && e.id !in hidden && FootballRules.venueKey(LeaveAlarmRules.place(e)) != null
+    fun eligible(e: CalendarEvent, hidden: Set<String>, clubs: List<String> = FootballRules.CLUBS): Boolean =
+        !e.allDay && FootballRules.isClubFixture(e, clubs) && e.id !in hidden && FootballRules.venueKey(LeaveAlarmRules.place(e)) != null
 
     /**
      * Whether the server should ask about [e] now, given what it [known]. Only for an [eligible] fixture starting
@@ -134,9 +134,12 @@ object TravelRules {
     }
 
     /** The lookups due now, soonest kick-off first. */
-    fun due(events: List<CalendarEvent>, hidden: Set<String>, known: Map<String, TravelTime>, nowMs: Long, cal: LocalCalendar): List<Lookup> =
+    fun due(
+        events: List<CalendarEvent>, hidden: Set<String>, known: Map<String, TravelTime>, nowMs: Long, cal: LocalCalendar,
+        clubs: List<String> = FootballRules.CLUBS,
+    ): List<Lookup> =
         events.asSequence()
-            .filter { eligible(it, hidden) && isDue(it, known[it.id], nowMs, cal) }
+            .filter { eligible(it, hidden, clubs) && isDue(it, known[it.id], nowMs, cal) }
             .sortedBy { it.startAtMs }
             .map { e ->
                 val place = LeaveAlarmRules.place(e)!!

@@ -1,5 +1,7 @@
 package os.meka.core.domain
 
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -8,6 +10,15 @@ import kotlin.test.assertTrue
 
 /** Fold review 2026-10-09, item 5: the same event on several calendars is one row with the calendars listed. */
 class DuplicateEventsTest {
+    @BeforeTest
+    fun household() {
+        // Rule 13, release 2: the children and clubs come from About you; these are invented.
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+    }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val hour = 3_600_000L
     private val min = 60_000L
     // Tue 6 Oct 2026 in London (BST, +1 h).
@@ -119,7 +130,7 @@ class DuplicateEventsTest {
         assertEquals(listOf("e-c"), rows.map { it.id })
         assertEquals("Training - 3G", rows.single().title)
         // A club session names the child first (Fold review 17:56, slice 3: nobody set yet).
-        assertEquals("Rex or Logan? · SG18 · Club · Personal · Kids", rows.single().detail)
+        assertEquals("Max or Felix? · SG18 · Club · Personal · Kids", rows.single().detail)
         // A lone event keeps its quiet line.
         assertEquals("Camp Nou · Outlook", TimelineRules.eventDetail(meka.copy(location = "Camp Nou", provider = "microsoft")))
     }
@@ -145,7 +156,7 @@ class DuplicateEventsTest {
         val v = CalendarAgenda.build(emptyList(), listOf(e1, e2), nowMs, cal)
         val rows = v.sections.flatMap { it.rows }.filter { it.kind == TimelineKind.EVENT }
         assertEquals(listOf("e-a"), rows.map { it.id })
-        assertEquals("Rex or Logan? · Personal · Kids", rows.single().detail)
+        assertEquals("Max or Felix? · Personal · Kids", rows.single().detail)
         val hiddenView = CalendarAgenda.build(emptyList(), listOf(e1, e2), nowMs, cal, hidden = setOf("b"))
         assertTrue(hiddenView.sections.flatMap { it.rows }.none { it.kind == TimelineKind.EVENT })
         assertEquals(listOf("a"), hiddenView.sections.flatMap { it.hidden }.map { it.id })

@@ -15,7 +15,7 @@ data class WorkClash(
     val startMs: Long,
     /** The event's local start minute (for "16:55" and the spoken "4:55"). */
     val startMinute: Int,
-    /** Whose club training or fixture it is ("Rex" for U7s, "Logan" for U10s), when the title or calendar says. */
+    /** Whose club training or fixture it is ("Alex" for U7s, "Sam" for U10s), when the title or calendar says. */
     val child: String?,
     /** Someone has to take a child (a club fixture, or training or practice): the line asks "who's taking?". */
     val needsCover: Boolean,
@@ -40,7 +40,7 @@ data class WorkClash(
     private val question: String get() = if (child == null) "who's taking?" else "who's taking $child?"
 
     /**
-     * The event row's mark, lit in the accent on Today and the Calendar: "Clashes with work · who's taking Rex?" for a
+     * The event row's mark, lit in the accent on Today and the Calendar: "Clashes with work · who's taking Alex?" for a
      * child's training or match, "Clashes with work until 17:30" for anything else.
      */
     val mark: String
@@ -54,7 +54,7 @@ data class WorkClash(
         }
 
     /**
-     * Today's line: "Training at 16:55 while you're at work — who's taking Rex?" · "Dentist at 10:00 while you're at
+     * Today's line: "Training at 16:55 while you're at work — who's taking Alex?" · "Dentist at 10:00 while you're at
      * work until 17:30".
      */
     val line: String
@@ -62,8 +62,8 @@ data class WorkClash(
         else if (needsCover) "$title at $time $whileAt — $question" else "$title at $time $whileAt until $workUntil"
 
     /**
-     * As the brief says it, with [clock] saying times aloud and [said] the title ("Rex's under-sevens training"):
-     * "Heads up: Rex's under-sevens training at 4:55, while you're at work. Who's taking Rex?"
+     * As the brief says it, with [clock] saying times aloud and [said] the title ("Alex's under-sevens training"):
+     * "Heads up: Alex's under-sevens training at 4:55, while you're at work. Who's taking Alex?"
      */
     fun spoken(said: String, clock: (Int) -> String): String {
         if (against != ClashWith.WORK) {
@@ -81,7 +81,7 @@ data class WorkClash(
  * Which of a day's events fall inside work hours. An event clashes when it is timed and overlaps a [WorkBlock] of its
  * day; all-day things, the fixtures feed (watching Barça isn't a clash) and Outlook (the work calendar's own
  * meetings) never do. A club fixture or training names the child from its age group in the title or, failing that,
- * the calendar's name ("BUFC U7s" → Rex, "U10s" → Logan, [FootballRules.CHILDREN]).
+ * the calendar's name ("OFC U7s" → Alex, "U10s" → Sam, [FootballRules.CHILDREN]).
  *
  * The commute counts everywhere, slice 3: with the day's [CommuteBand]s (office days only), an event that doesn't
  * overlap work but starts before he's home (overlaps the commute home) or after he's left (the morning commute) clashes
