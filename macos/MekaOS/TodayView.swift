@@ -47,21 +47,33 @@ struct TodayView: View {
         @Bindable var model = model
         // The command centre (Fold modes, slice 2): beside Today, Needs you over Coming up; a wide window gives
         // Coming up its own column. An open task's detail takes Needs you's place.
-        let layout = CommandCentreRules.shared.layout(contentWidthDp: Float(width))
-        let columns = CommandCentreRules.shared.columns(layout: layout, taskOpen: model.selected != nil)
+        // Mac presentation pass, slice 1 (core MacCommandCentreRules): from 1100 pt Today ≈ 32% | Needs you ≈ 42% |
+        // Coming up ≈ 26%; narrower, Today | Needs you with Coming up under Today's day. Plain columns (not a split
+        // view) so each keeps the title bar's safe area and its share as the window resizes.
+        let rules = MacCommandCentreRules.shared
+        let layout = rules.layout(contentWidthPt: Float(width))
+        let columns = rules.columns(layout: layout, taskOpen: model.selected != nil)
+        let widths = rules.widths(contentWidthPt: Float(width), layout: layout).map { max(0, CGFloat($0.floatValue)) }
         let three = columns.contains(CommandColumn.comingUp)
-        HSplitView {
+        HStack(spacing: 0) {
             todayColumn
                 .environment(\.selectionNamespace, selection)
-                .frame(minWidth: 380, idealWidth: 520)
-            CommandSideView(column: columns.count > 1 ? columns[1] : CommandColumn.detail, palette: palette)
-                .frame(minWidth: 280, idealWidth: 360)
-            if three {
+                .frame(width: widths.first ?? 0)
+            if columns.count > 1, widths.count > 1 {
+                CommandSideView(column: columns[1], palette: palette)
+                    .frame(width: widths[1])
+                    .overlay(alignment: .leading) { columnRule }
+                    .transition(.opacity)
+            }
+            if three, widths.count > 2 {
                 ComingUpColumnView(shared: false, palette: palette)
-                    .frame(minWidth: 240, idealWidth: 300)
+                    .frame(width: widths[2])
+                    .overlay(alignment: .leading) { columnRule }
                     .transition(.opacity)
             }
         }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: layout.name)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
         .background(palette.background)
         .sheet(isPresented: $model.showConnect) { ConnectSheet(palette: palette) }
@@ -73,6 +85,11 @@ struct TodayView: View {
                              onClose: { showDayRing = false })
             }
         }
+    }
+
+    /// The hairline between two columns.
+    private var columnRule: some View {
+        Rectangle().fill(palette.textTertiary.opacity(0.18)).frame(width: 1).accessibilityHidden(true)
     }
 
     /// An arc clicked in the Day ring sheet: the sheet goes, then (once it has gone, one sheet at a time) its event's
@@ -462,7 +479,7 @@ struct TodayView: View {
                     if let today = model.today {
                         let tl = today.timeline
                         // The Needs you column beside Today lists them (never shown twice).
-                        if !today.needsYou.isEmpty && CommandCentreRules.shared.todayListsNeedsYou(layout: CommandCentreRules.shared.layout(contentWidthDp: Float(width))) {
+                        if !today.needsYou.isEmpty && MacCommandCentreRules.shared.todayListsNeedsYou(layout: MacCommandCentreRules.shared.layout(contentWidthPt: Float(width))) {
                             SectionLabel("Needs you", palette).staggeredAppear(step(.needsYou), play: play)
                             ForEach(today.needsYou, id: \.task.id) { item in
                                 TaskRow(task: item.task, reason: item.reason, palette: palette).staggeredAppear(step(.needsYou), play: play)
@@ -481,6 +498,13 @@ struct TodayView: View {
                                 .padding(.top, tl.head != nil && tl.anytime.isEmpty ? 0 : MekaSpace.l)
                                 .staggeredAppear(step(.done), play: play)
                         }
+                    }
+
+                    // Mac presentation pass, slice 1: two columns put Coming up and News under Today's own day.
+                    if MacCommandCentreRules.shared.comingUpUnderToday(layout: MacCommandCentreRules.shared.layout(contentWidthPt: Float(width))) {
+                        ComingUpColumnView(shared: true, palette: palette, embedded: true)
+                            .padding(.top, MekaSpace.l)
+                            .transition(.opacity)
                     }
                 }
                 .padding(.horizontal, MekaSpace.gutterWide)
@@ -505,6 +529,7 @@ struct TodayView: View {
             // The foot fades into the ticker and capture field rather than cutting a row in half (Fold review item
             // 4); the xl bottom padding is more than the fade, so the last row still scrolls fully clear.
             .footFade()
+            .scrollIndicators(.never)
             .overlay(alignment: .top) {
                 if let today = model.today, !today.timeline.dateLabel.isEmpty {
                     CollapsingHeaderView(

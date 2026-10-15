@@ -21,6 +21,9 @@ struct MekaOSApp: App {
                 .environment(model)
                 // Appearance → Motion (motion pass 2): MEKA's own motion, not Reduce Motion, once chosen.
                 .mekaMotion()
+                // Mac presentation pass, slice 1 (Meka: "not a fan of scroll-bar pagination"): no scroll bars in any
+                // list, column or sheet, whatever System Settings says; scrolling columns fade at their edges instead.
+                .scrollIndicators(.never)
                 .frame(minWidth: 760, minHeight: 560)
                 .task {
                     // View → Text Size: ⌘= (no Shift) makes the text bigger too.

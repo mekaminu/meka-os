@@ -52,41 +52,46 @@ struct CommandNeedsYouView: View {
     let palette: MekaPalette
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                SectionLabel(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.approvals.count + model.looseRequests.count + model.triageChats.count + model.needsYouAsks)), palette)
-                    .staggeredAppear(0)
-                // The approvals inbox (V1, slice 1) first.
-                ApprovalCardsView(palette: palette, firstIndex: 1)
-                // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches (V1,
-                // requests slice 4), above the stack.
-                TriageCardsView(palette: palette, firstIndex: 1)
-                SchoolCoversView(palette: palette, firstIndex: 1 + model.triage.count)
-                RequestCardsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks)
-                GroupGistsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks + model.requests.count)
-                MailMomentView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                MailNeedsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                MailChaseView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                UnopenedOfferView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
-                    // The breathing check ring and the line, then what's coming instead of a blank column (Fold
-                    // review 2026-10-09 00:10, item 6).
-                    HStack(spacing: MekaSpace.m) {
-                        BreathingRingView(palette: palette, size: 20, check: true)
-                        Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
-                            .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+        // Mac presentation pass, slice 1: the heading stays put under the title bar while the cards scroll under it.
+        VStack(spacing: 0) {
+            StickyColumnHeader(CommandCentreRules.shared.needsYouHeading(count: Int32(model.needsYouCards.count + model.approvals.count + model.looseRequests.count + model.triageChats.count + model.needsYouAsks)), palette: palette)
+                .staggeredAppear(0)
+            ScrollView {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    // The approvals inbox (V1, slice 1) first.
+                    ApprovalCardsView(palette: palette, firstIndex: 1)
+                    // Messages the Fold triaged (V1, messages slice 3), then requests from people Meka watches (V1,
+                    // requests slice 4), above the stack.
+                    TriageCardsView(palette: palette, firstIndex: 1)
+                    SchoolCoversView(palette: palette, firstIndex: 1 + model.triage.count)
+                    RequestCardsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks)
+                    GroupGistsView(palette: palette, firstIndex: 1 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    MailMomentView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    MailNeedsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    MailChaseView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    UnopenedOfferView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
+                        // The breathing check ring and the line, then what's coming instead of a blank column (Fold
+                        // review 2026-10-09 00:10, item 6).
+                        HStack(spacing: MekaSpace.m) {
+                            BreathingRingView(palette: palette, size: 20, check: true)
+                            Text(NeedsYouStackRules.shared.emptyLine(toCatchUp: model.afterWork?.toCatchUp ?? 0))
+                                .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .staggeredAppear(1)
+                        NeedsYouMeanwhileView(palette: palette)
+                    } else if !model.needsYouCards.isEmpty {
+                        NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
                     }
-                    .accessibilityElement(children: .combine)
-                    .staggeredAppear(1)
-                    NeedsYouMeanwhileView(palette: palette)
-                } else if !model.needsYouCards.isEmpty {
-                    NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
                 }
+                .padding(.horizontal, MekaSpace.gutterWide)
+                .padding(.top, MekaSpace.xs)
+                .padding(.bottom, MekaSpace.xl)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, MekaSpace.gutterWide)
-            .padding(.vertical, MekaSpace.xl)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .edgeFades()
         }
     }
 }
@@ -100,41 +105,59 @@ struct ComingUpColumnView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let shared: Bool
     let palette: MekaPalette
+    /// Mac presentation pass, slice 1: in a two-column window Coming up and News follow Today's day inside Today's own
+    /// column (no scroll view or sticky heading of their own).
+    var embedded: Bool = false
 
     var body: some View {
-        ScrollView {
+        if embedded {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 SectionLabel("Coming up", palette).staggeredAppear(0)
-                if let v = model.calendar {
-                    let c = CommandCentreRules.shared.comingUp(
-                        view: v,
-                        maxDays: shared ? CommandCentreRules.shared.DAYS_SHARED : CommandCentreRules.shared.DAYS_ALONE,
-                        maxLines: shared ? CommandCentreRules.shared.LINES_SHARED : CommandCentreRules.shared.LINES_ALONE
-                    )
-                    if let empty = c.emptyLine {
-                        Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(1)
-                    }
-                    ForEach(Array(c.days.enumerated()), id: \.element.id) { i, day in
-                        dayView(day).staggeredAppear(1 + i)
-                    }
-                    Button("Open Calendar ›") { model.go(to: .calendar, reduced: reduceMotion) }
-                        .buttonStyle(MekaPressStyle())
-                        .font(MekaType.itemMeta)
-                        .foregroundStyle(palette.accent)
-                        .padding(.top, MekaSpace.xs)
-                        .staggeredAppear(1 + c.days.count)
-                }
-                if let place = model.newsPlace,
-                   let g = CommandCentreRules.shared.newsGlance(
-                       place: place,
-                       maxItems: shared ? CommandCentreRules.shared.NEWS_SHARED : CommandCentreRules.shared.NEWS_ALONE
-                   ) {
-                    newsView(g).padding(.top, MekaSpace.xl).staggeredAppear(2)
-                }
+                content
             }
-            .padding(.horizontal, MekaSpace.gutterWide)
-            .padding(.vertical, MekaSpace.xl)
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            VStack(spacing: 0) {
+                StickyColumnHeader("Coming up", palette: palette).staggeredAppear(0)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) { content }
+                        .padding(.horizontal, MekaSpace.gutterWide)
+                        .padding(.top, MekaSpace.xs)
+                        .padding(.bottom, MekaSpace.xl)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .edgeFades()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let v = model.calendar {
+            let c = CommandCentreRules.shared.comingUp(
+                view: v,
+                maxDays: shared ? CommandCentreRules.shared.DAYS_SHARED : CommandCentreRules.shared.DAYS_ALONE,
+                maxLines: shared ? CommandCentreRules.shared.LINES_SHARED : CommandCentreRules.shared.LINES_ALONE
+            )
+            if let empty = c.emptyLine {
+                Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(1)
+            }
+            ForEach(Array(c.days.enumerated()), id: \.element.id) { i, day in
+                dayView(day).staggeredAppear(1 + i)
+            }
+            Button("Open Calendar ›") { model.go(to: .calendar, reduced: reduceMotion) }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.top, MekaSpace.xs)
+                .staggeredAppear(1 + c.days.count)
+        }
+        if let place = model.newsPlace,
+           let g = CommandCentreRules.shared.newsGlance(
+               place: place,
+               maxItems: shared ? CommandCentreRules.shared.NEWS_SHARED : CommandCentreRules.shared.NEWS_ALONE
+           ) {
+            newsView(g).padding(.top, MekaSpace.xl).staggeredAppear(2)
         }
     }
 
