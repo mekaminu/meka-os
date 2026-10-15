@@ -12,6 +12,7 @@ import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailPromiseRules
+import os.meka.core.domain.SchoolMailRules
 import os.meka.core.domain.MailFollowUpRules
 import os.meka.core.domain.MailSentFacts
 import os.meka.core.domain.MailFindFields
@@ -511,6 +512,8 @@ class Integrations(
         runCatching { renewals(a, ms) }
         // Slice 2: promises made to him, to add to Waiting for (on his tap in the apps).
         runCatching { promises(a, ms) }
+        // School and family logistics, slice 1: the school's dates, payments, forms and trips (on his tap in the apps).
+        runCatching { schoolMail(a, ms) }
     }
 
     /** Follow-up radar: when each account's sent mail was last read (in memory; a restart just reads it again). */
@@ -645,6 +648,51 @@ class Integrations(
         }
     }
 
+    /** The senders he marked as the school in About you ([SchoolMailRules.senders]); empty when none or unreadable. */
+    private fun schoolSenders(householdId: String): Set<String> = runCatching {
+        SchoolMailRules.senders(AboutYouRules.read(reader.entity(householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)))
+    }.getOrDefault(emptySet())
+
+    /**
+     * School and family logistics from email, slice 1: the emails of the last [SchoolMailRules.WINDOW_DAYS] days from a
+     * sender he marked as the school in About you ([SchoolMailRules.senders]: the school's website's domain and the
+     * School's email line; none marked = nothing read) are read by [SchoolMailRules.read] from the subject and kept
+     * preview, with About you's children's names; each day off, payment, form, trip or event still to come becomes one
+     * `mail_find` (kind SCHOOL) under an id from the account, the thing and its day, written once (an id already in the
+     * mirror is never written again, so his Add or Not needed stands). Nothing goes into School here: the apps' Add
+     * does that. Newsletter-style sorting doesn't apply: the school's messaging services send as lists.
+     */
+    internal fun schoolMail(a: AccountRow, ms: MailStore) {
+        val profile = AboutYouRules.read(reader.entity(a.householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID))
+        val senders = SchoolMailRules.senders(profile)
+        if (senders.isEmpty()) return
+        val nowMs = now()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= SchoolMailRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                SchoolMailRules.fromSchool(h.fromAddress, senders)
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val today = LONDON.epochDayOf(nowMs)
+        val children = profile.children.map { it.name }
+        val reads = candidates.mapNotNull { h ->
+            val day = LONDON.epochDayOf(h.receivedAtMs)
+            SchoolMailRules.read(h.subject, previews[h.id] ?: h.preview, day, children)
+                ?.takeIf { it.endDay >= today }?.let { Triple(h, day, it) }
+        }
+        if (reads.isEmpty()) return
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        val written = mutableSetOf<String>()
+        for ((h, day, sf) in reads.sortedBy { it.first.receivedAtMs }) {
+            val id = SchoolMailRules.findId(a.id, sf)
+            if (id in written || mirror.containsKey(id)) continue
+            val school = os.meka.core.domain.MailReceiptRules.merchant(h.fromName, h.fromAddress)
+            writeMail(a, id, SchoolMailRules.serverFields(sf, school, account, h.subject, day), EntityTypes.MAIL_FIND)
+            written += id
+        }
+    }
+
     /**
      * Promises, receipts and renewals from email, slice 1: the emails of the last [MailRenewalRules.WINDOW_DAYS] days
      * that the rules didn't sort as newsletters, promos or junk are read by [MailRenewalRules.read] from the sender,
@@ -690,8 +738,11 @@ class Integrations(
      */
     internal fun bills(a: AccountRow, ms: MailStore) {
         val nowMs = now()
+        // School logistics: the school's payments are School's dates (with School's own reminder), never a second bill.
+        val school = schoolSenders(a.householdId)
         val candidates = ms.messages(a.id).filter { h ->
             nowMs - h.receivedAtMs <= MailBillRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                !SchoolMailRules.fromSchool(h.fromAddress, school) &&
                 MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
                     .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
         }

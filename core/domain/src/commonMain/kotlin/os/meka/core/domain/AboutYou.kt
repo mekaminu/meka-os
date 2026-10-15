@@ -45,6 +45,12 @@ object AboutYouFields {
      * INSET days are the school's own and are published there. A normalised https URL.
      */
     const val SCHOOL_WEBSITE = "schoolWebsite"
+    /**
+     * The school's email senders (School and family logistics from email, slice 1, 2026-10-15): addresses or domains,
+     * "office@oakfield.sch.uk, parentmail.co.uk" ([SchoolMailRules.cleanSenders]). Mail from these (or from the
+     * website's own domain) is read for school dates; nothing else is.
+     */
+    const val SCHOOL_MAIL = "schoolMail"
     const val ASSISTANT_NUMBER = "assistantNumber"
     /**
      * The school's council's holidays (release 2 slice 5, 2026-10-15): the table the School pane fills in from, as
@@ -107,6 +113,8 @@ data class AboutYou(
     val home: String? = null,
     val work: String? = null,
     val schoolWebsite: String? = null,
+    /** The school's email senders as kept ([SchoolMailRules.senders] reads them). */
+    val schoolMail: String? = null,
     /** The clubs as kept: "OFC Oakfield Town, HRFC" ([AboutYouRules.clubList] reads it). */
     val clubs: String? = null,
     val assistantNumber: String? = null,
@@ -119,7 +127,7 @@ data class AboutYou(
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, clubs, assistantNumber, voicemailNumber, route).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, assistantNumber, voicemailNumber, route).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -138,6 +146,8 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     ROUTE(AboutYouFields.ROUTE, "Train route", "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside",
         "Add your train route so Today, the brief and Leaving now say how its lines are running"),
     SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
+    SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk, parentmail.co.uk",
+        "Add the addresses the school writes from so its trips, payments and days off are offered for School"),
     CLUBS(AboutYouFields.CLUBS, "Clubs", "Short name first: OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
     VOICEMAIL_NUMBER(AboutYouFields.VOICEMAIL_NUMBER, "Voicemail number", "Your network's voicemail", "Not added · only needed for call forwarding"),
@@ -194,6 +204,7 @@ object AboutYouRules {
     const val NOT_EMAIL = "That doesn't look like an email address."
     const val NOT_WEBSITE = "That doesn't look like a web address: “oakfield.sch.uk” or a link from the school's site."
     const val MAX_WEBSITE = 300
+    const val NOT_SCHOOL_MAIL = "Type the school's email addresses or their domain, up to 6, with commas: “office@oakfield.sch.uk, parentmail.co.uk”."
     const val NOT_CLUBS = "Type each club's short name first, as your calendar writes it: “OFC Oakfield Town, HRFC”."
     const val NOT_ROUTE = "Type the line from home, where you change and the next line: “South Rail to Oakfield Junction, then Metro”, and after a semicolon the line you take instead: “; or North Rail to Riverside”."
     const val MAX_CLUBS = 6
@@ -275,6 +286,7 @@ object AboutYouRules {
             home = text(AboutYouFields.HOME),
             work = text(AboutYouFields.WORK),
             schoolWebsite = text(AboutYouFields.SCHOOL_WEBSITE)?.let(::website),
+            schoolMail = text(AboutYouFields.SCHOOL_MAIL)?.let(SchoolMailRules::cleanSenders),
             clubs = text(AboutYouFields.CLUBS)?.let(::clubs),
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
@@ -292,6 +304,7 @@ object AboutYouRules {
         AboutField.HOME -> a.home
         AboutField.WORK -> a.work
         AboutField.SCHOOL_WEBSITE -> a.schoolWebsite
+        AboutField.SCHOOL_MAIL -> a.schoolMail
         AboutField.CLUBS -> a.clubs
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
@@ -311,6 +324,7 @@ object AboutYouRules {
             AboutField.PARTNER_EMAIL -> email(t)
             AboutField.HOME, AboutField.WORK -> place(t)
             AboutField.SCHOOL_WEBSITE -> website(t)
+            AboutField.SCHOOL_MAIL -> SchoolMailRules.cleanSenders(t)
             AboutField.CLUBS -> clubs(t)
             AboutField.ROUTE -> RouteRules.parse(t)?.text
         }
@@ -322,6 +336,7 @@ object AboutYouRules {
         AboutField.PARTNER_EMAIL -> NOT_EMAIL
         AboutField.HOME, AboutField.WORK -> NOT_PLACE
         AboutField.SCHOOL_WEBSITE -> NOT_WEBSITE
+        AboutField.SCHOOL_MAIL -> NOT_SCHOOL_MAIL
         AboutField.CLUBS -> NOT_CLUBS
         AboutField.ROUTE -> NOT_ROUTE
     }
@@ -555,6 +570,7 @@ object AboutYouRules {
             a.work?.let { "work" },
             a.route?.let { "train route" },
             a.schoolWebsite?.let { "the school's website" },
+            a.schoolMail?.let { "the school's email" },
             a.clubs?.let { "clubs" },
             (a.assistantNumber ?: a.voicemailNumber)?.let { "numbers" },
         )

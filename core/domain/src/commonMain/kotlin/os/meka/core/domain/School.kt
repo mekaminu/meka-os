@@ -465,7 +465,8 @@ object SchoolRules {
         val dateRows = dates.map { d ->
             val line = "${dayWord(d.startDay, today)} · ${whoLabel(d.who)}"
             val note = reminderNote(d, today)
-            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note).joinToString(". "))
+            val source = SchoolTerms.sourceLine(d)
+            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note, source).joinToString(". "), source)
         }
         val weeklyRows = weekly.map { w ->
             val line = "Every ${CivilDate.DAY_LONG[w.weekday - 1]} · ${whoLabel(w.who)}"

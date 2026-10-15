@@ -98,6 +98,7 @@ object SchoolTerms {
 
     /** The row's source line: "Council dates · checked 14 Oct 2026 · check with the school". */
     fun sourceLine(item: SchoolItem): String? {
+        if (item.source == SchoolMailRules.SOURCE) return SchoolMailRules.SOURCE_LINE
         councilOf(item.source) ?: return null
         val checked = item.checkedDay?.let { " · checked ${checkedLabel(it)}" }.orEmpty()
         return "Council dates$checked · check with the school"

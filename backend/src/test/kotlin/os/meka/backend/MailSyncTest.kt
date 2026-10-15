@@ -774,6 +774,39 @@ class MailSyncTest {
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
     }
 
+    @Test
+    fun onlyTheSchoolsEmailsBecomeSchoolFinds() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        val day = java.time.Instant.ofEpochMilli(now).atZone(java.time.ZoneId.of("Europe/London")).toLocalDate().plusDays(10)
+        val dayText = day.format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        gmail.mailbox["s1"] = msg("s1", 0, "office@oakfield.sch.uk").copy(subject = "Trip payment", preview = "Please pay £12 for Alex's trip to the farm by $dayText.")
+        gmail.mailbox["s2"] = msg("s2", 0, "office@oakfield.sch.uk").copy(subject = "Reminder: trip payment", preview = "Please pay £12 for Alex's trip by $dayText.")
+        gmail.mailbox["s3"] = msg("s3", 0, "office@otherschool.example").copy(subject = "Trip payment", preview = "Please pay £15 by $dayText.")
+        gmail.nextRound = { MailChanges(fetch = listOf("s1", "s2", "s3"), cursor = "h2") }
+        // Nobody marked as the school yet: nothing read.
+        i.syncAccount(id)
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.SCHOOL_WEBSITE, FieldValue.Text("https://www.oakfield.sch.uk"))
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.CHILDREN, FieldValue.Text("Alex|7|Oakfield School\nSam|10|Oakfield School"))
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
+        val (_, f) = finds.entries.single()
+        assertEquals(FieldValue.Text(os.meka.core.domain.SchoolMailRules.KIND_SCHOOL), f[os.meka.core.domain.MailFindFields.KIND])
+        assertEquals(FieldValue.Text("Trip payment"), f[os.meka.core.domain.MailFindFields.WHAT])
+        assertEquals(FieldValue.Int64(1200), f[os.meka.core.domain.MailFindFields.PENCE])
+        assertEquals(FieldValue.Text("Alex"), f[os.meka.core.domain.MailFindFields.WHO])
+        // Nothing reaches School without his Add, and the next check adds nothing.
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.SCHOOL_ITEM).size)
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+    }
+
     // ---- Follow-up radar, slice 1 ----
 
     private fun sentMsg(id: String, ageDays: Long, preview: String, to: String = "sam@example.com", thread: String = "t-$id") =

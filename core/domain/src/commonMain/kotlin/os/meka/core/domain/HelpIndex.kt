@@ -515,10 +515,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "school",
             title = "School",
-            keywords = listOf("school", "school holidays", "half term", "inset", "inset days", "inset day", "term dates", "pe kit", "pe day"),
+            keywords = listOf("school", "school holidays", "half term", "inset", "inset days", "inset day", "term dates", "pe kit", "pe day", "school emails"),
             what = "the children's days off, PE and non-uniform days, trips and payments, with \"who's covering?\" a week ahead on office days.",
             how = "Tap Fill in under Holidays from the council for the council's term dates, then paste the school's INSET days or type them, e.g. \"INSET 4 Jan\".",
-            tips = listOf("The council's dates say \"check with the school\"; days you type always win.", "Add the school's website in About you and School links to it."),
+            tips = listOf("The council's dates say \"check with the school\"; days you type always win.", "Add the school's website in About you and School links to it.", "Add the addresses the school writes from under School's email in About you: its trips, payments, forms and days off then show in Needs you with Add, and Add puts them in School."),
             fold = HelpPlace.SCHOOL,
             foldWhere = "Ask → Life → School",
             mac = HelpPlace.SCHOOL,

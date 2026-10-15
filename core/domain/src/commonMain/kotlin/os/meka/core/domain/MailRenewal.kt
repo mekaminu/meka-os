@@ -61,6 +61,12 @@ data class MailFind(
     val chase: ChaseMarks = ChaseMarks(),
     /** Slice 3: when Navilife added it on its own ([MailFindAutoRules]); kept through Undo; null = never. */
     val autoAtMs: Long? = null,
+    /** School logistics ([SchoolMailRules]): a day off's last day (else null: [renewDay] alone). */
+    val endDay: Long? = null,
+    /** School logistics: [SchoolKind.wire] of the School line Add writes ("off" or "day"). */
+    val schoolKind: String? = null,
+    /** School logistics: the one child it names, else "" / null for all of them. */
+    val who: String? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -96,6 +102,10 @@ object MailFindFields {
     const val DECIDED_AT = "decidedAtMs"
     /** Slice 3: when a device added it on its own ([MailFindAutoRules]); never cleared, so an undone one stays a card. */
     const val AUTO_AT = "autoAtMs"
+    /** School logistics from email, slice 1 (server-written, once): a day off's last day, the School kind, the child. */
+    const val END_DAY = "endDay"
+    const val SCHOOL_KIND = "schoolKind"
+    const val WHO = "who"
 }
 
 data class MailFindRow(
@@ -311,6 +321,9 @@ object MailRenewalRules {
                 failedWhy = f[MailFindFields.CHASE_FAILED_WHY]?.textOrNull,
             ),
             autoAtMs = f[MailFindFields.AUTO_AT]?.longOrNull?.takeIf { it > 0 },
+            endDay = f[MailFindFields.END_DAY]?.longOrNull,
+            schoolKind = f[MailFindFields.SCHOOL_KIND]?.textOrNull,
+            who = f[MailFindFields.WHO]?.textOrNull,
         )
     }
 
@@ -365,6 +378,19 @@ object MailRenewalRules {
         else -> "To add from your mail"
     }
 
+    /** School logistics: the school's finds join the card ("2 to add to School…" alone, "To add from your mail" mixed). */
+    fun headline(renewals: Int, promises: Int, followUps: Int, school: Int): String = when {
+        school == 0 -> headline(renewals, promises, followUps)
+        renewals == 0 && promises == 0 && followUps == 0 -> "$school to add to School · nothing goes in until you tap Add"
+        else -> "${renewals + promises + followUps + school} to add · nothing goes on until you tap Add"
+    }
+
+    fun title(renewals: Int, promises: Int, followUps: Int, school: Int): String = when {
+        school == 0 -> title(renewals, promises, followUps)
+        renewals == 0 && promises == 0 && followUps == 0 -> SchoolMailRules.TITLE
+        else -> "To add from your mail"
+    }
+
     /** The bar's line after Add: "On Renewals: Netflix · renews Tue 3 Nov". */
     fun addedLine(f: MailFind, today: Long): String = "On Renewals: ${title(f)} · renews ${RenewalRules.dayWord(f.renewDay, today)}"
 
@@ -377,6 +403,7 @@ object MailRenewalRules {
     fun card(
         finds: List<MailFind>, obligations: Collection<Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar,
         waiting: List<WaitingItem> = emptyList(), waits: List<FollowUpWait> = emptyList(),
+        schoolItems: List<SchoolItem> = emptyList(),
     ): MailFindCard? {
         val today = cal.epochDayOf(nowMs)
         val renewals = finds.filter { f ->
@@ -385,11 +412,13 @@ object MailRenewalRules {
         }
         val promises = finds.filter { MailPromiseRules.showable(it, waiting, today) }
         val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today, waits) }
-        val open = (renewals + promises + followUps).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
+        val school = finds.filter { SchoolMailRules.showable(it, schoolItems, today) }
+        val open = (renewals + promises + followUps + school).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
         if (open.isEmpty()) return null
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
             if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today, waits)
+            if (f.kind == SchoolMailRules.KIND_SCHOOL) return@map SchoolMailRules.row(f, today)
             val title = title(f)
             val line = line(f, today)
             MailFindRow(
@@ -400,7 +429,7 @@ object MailRenewalRules {
         }
         val more = open.size - rows.size
         return MailFindCard(
-            title(renewals.size, promises.size, followUps.size), headline(renewals.size, promises.size, followUps.size), rows,
+            title(renewals.size, promises.size, followUps.size, school.size), headline(renewals.size, promises.size, followUps.size, school.size), rows,
             if (more > 0) "+ $more more · answer these first" else null,
         )
     }
