@@ -26,7 +26,7 @@ fi
 xcodegen generate --spec macos/project.yml --quiet
 xcodebuild -project macos/MekaOS.xcodeproj -scheme MekaOS -configuration Debug \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath build/mac \
-  CODE_SIGNING_ALLOWED=NO -quiet build
+  CODE_SIGNING_ALLOWED=NO ENABLE_DEBUG_DYLIB=NO -quiet build
 
 # Signing decides whether the app keeps its Keychain access across rebuilds (only for keys not yet moved to the
 # Secure Enclave-sealed files, see macos/MekaOS/SealedKeyFiles.swift). macOS ties Keychain items to the
