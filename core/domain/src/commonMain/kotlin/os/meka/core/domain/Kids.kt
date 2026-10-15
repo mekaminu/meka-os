@@ -21,6 +21,12 @@ object KidFields {
     const val NAME = "name"
     /** Int64: when the sizes were last typed or confirmed ("All still fit"). */
     const val CHECKED_AT = "checkedAtMs"
+    /** Slice 5, Int64: pocket money a week in pence; Null when none is set. */
+    const val POCKET = "pocketPence"
+    /** Slice 5, Int64: the Monday (epoch day) of the week [PAID_PENCE] was noted for. */
+    const val PAID_WEEK = "paidWeek"
+    /** Slice 5, Int64: how much was marked paid for [PAID_WEEK], in pence. */
+    const val PAID_PENCE = "paidPence"
 }
 
 /** The sizes Kids keeps per child, in the pane's order; [key] is the entity's field. */
@@ -39,7 +45,11 @@ enum class KidSize(val key: String, val label: String, val hint: String) {
 }
 
 /** What Kids holds for one child, as stored. */
-data class KidRecord(val id: String, val sizes: Map<KidSize, String>, val checkedAtMs: Long?)
+data class KidRecord(
+    val id: String, val sizes: Map<KidSize, String>, val checkedAtMs: Long?,
+    /** Slice 5: pocket money a week (pence), and what was marked paid for which week (its Monday). */
+    val pocketPence: Long? = null, val paidWeek: Long? = null, val paidPence: Long? = null,
+)
 
 /** One size row of a child's card: the label, what's kept (null when empty) and the field's hint. */
 data class KidSizeRow(val size: String, val label: String, val value: String?, val hint: String)
@@ -59,6 +69,8 @@ data class KidCard(
     val spoken: String,
     /** Slice 2: the child's club fees (on the radar as bills), soonest first. */
     val fees: List<KidFeeRow> = emptyList(),
+    /** Slice 5: the child's chores and pocket money this week ([KidMoney.NONE] until he sets any). */
+    val money: KidMoney = KidMoney.NONE,
 )
 
 /**
@@ -87,12 +99,16 @@ data class KidsView(
  * What a size save said: [line] under the field, [refused] when nothing was written, [undo] the value before a clear.
  * Slice 2, for a club fee: [feeUndo] the fee id Undo puts back (Paid or Remove, kept by the facade).
  */
-data class KidSaved(val line: String, val refused: Boolean = false, val undo: String? = null, val feeUndo: String? = null)
+data class KidSaved(
+    val line: String, val refused: Boolean = false, val undo: String? = null, val feeUndo: String? = null,
+    /** Slice 5: the token Undo hands back for a removed chore, a pocket money change or a Paid (the facade keeps what it undoes). */
+    val moneyUndo: String? = null,
+)
 
 /** Non-AI, pure. */
 object KidsRules {
     const val TITLE = "Kids"
-    const val ROW_LINE = "Each child's sizes and club fees · a nudge to check sizes every 3 months"
+    const val ROW_LINE = "Each child's sizes, club fees, chores and pocket money · a nudge to check sizes every 3 months"
     /** Three months, near enough: a size typed or confirmed more than this long ago asks for a check. */
     const val CHECK_DAYS = 91
     const val MAX_SIZE = 16
@@ -130,6 +146,9 @@ object KidsRules {
         id = id,
         sizes = KidSize.entries.mapNotNull { s -> fields[s.key]?.textOrNull?.trim()?.takeIf { it.isNotEmpty() }?.let { s to it } }.toMap(),
         checkedAtMs = fields[KidFields.CHECKED_AT]?.longOrNull,
+        pocketPence = fields[KidFields.POCKET]?.longOrNull,
+        paidWeek = fields[KidFields.PAID_WEEK]?.longOrNull,
+        paidPence = fields[KidFields.PAID_PENCE]?.longOrNull,
     )
 
     /** "Shoes 13 · Tops 7–8"; null with nothing kept. */
@@ -162,7 +181,10 @@ object KidsRules {
     /** "Alex's", or "Alex's and Sam's" for the tile and summary. */
     private fun possessive(ns: List<String>): String = names(ns.map { "$it's" })
 
-    fun card(c: AboutChild, r: KidRecord?, todayDay: Long, cal: LocalCalendar, fees: List<KidFeeRow> = emptyList()): KidCard {
+    fun card(
+        c: AboutChild, r: KidRecord?, todayDay: Long, cal: LocalCalendar, fees: List<KidFeeRow> = emptyList(),
+        money: KidMoney = KidMoney.NONE,
+    ): KidCard {
         val sizes = r?.sizes.orEmpty()
         val line = sizesLine(sizes)
         val checked = checkedLine(r, todayDay, cal)
@@ -175,6 +197,7 @@ object KidsRules {
             due = due(r, todayDay, cal),
             spoken = listOfNotNull(c.name, line, checked).joinToString(". "),
             fees = fees,
+            money = money,
         )
     }
 
@@ -186,11 +209,13 @@ object KidsRules {
         children: List<AboutChild>, records: Map<String, KidRecord>, todayDay: Long, cal: LocalCalendar,
         /** Slice 2: the radar's items; the club fees are those with [RenewalItem.forChild]. */
         radar: List<RenewalItem> = emptyList(),
+        /** Slice 5: each child's chores and pocket money this week, by their kid_admin id. */
+        money: Map<String, KidMoney> = emptyMap(),
     ): KidsView {
         if (children.isEmpty()) return KidsView.EMPTY
         val cards = children.map { c ->
             val id = idFor(c.name)
-            card(c, id?.let { records[it] }, todayDay, cal, feesFor(id, radar, todayDay))
+            card(c, id?.let { records[it] }, todayDay, cal, feesFor(id, radar, todayDay), id?.let { money[it] } ?: KidMoney.NONE)
         }
         val dueNames = cards.filter { it.due }.map { it.name }
         val withSizes = cards.filter { it.sizesLine != null }
@@ -212,6 +237,12 @@ object KidsRules {
             } + if (more > 0) " · +$more" else "", true)
         }
         if (dueNames.isNotEmpty()) return LifeTileLine("Check ${possessive(dueNames)} sizes", true)
+        // Slice 5: on Sunday, pocket money still to pay: "Alex's pocket money · £8 to pay".
+        cards.filter { it.money.lit }.let { owed ->
+            if (owed.isNotEmpty()) return LifeTileLine(
+                "${owed[0].name}'s pocket money · ${KidChoreRules.fmt(owed[0].money.toPayPence)} to pay" + if (owed.size > 1) " · +${owed.size - 1}" else "", true,
+            )
+        }
         val first = cards.firstOrNull { it.sizesLine != null } ?: return cards.flatMap { c -> c.fees.map { c.name to it } }
             .minByOrNull { it.second.dueDay }?.let { (name, f) -> LifeTileLine("$name's ${f.title} · ${f.line.substringAfterLast(" · ")}", false) }
         val shoes = first.sizes.firstOrNull { it.size == KidSize.SHOES.key }?.value
@@ -463,14 +494,14 @@ object KidsWeekRules {
  * the AI can't be reached ([localAnswer]). Non-AI, pure; nothing is stored.
  */
 object KidAskRules {
-    /** At most this many lines go with a question (the head, up to 4 children, 6 fees, the week's head and 10 things). */
-    const val ASK_LINES = 22
+    /** At most this many lines go with a question (the head, up to 4 children, 6 fees, 4 chore lines, the week's head and 10 things). */
+    const val ASK_LINES = 26
     private const val ASK_CHILDREN = 4
     private const val ASK_FEES = 6
     private const val ASK_WEEK = 10
 
     private val WORDS = Regex(
-        """\b(kids?|child(ren)?|boys?|sons?|daughters?|girls?|sizes?|shoes?|trainers|boots?|tops?|trousers|coats?|jumpers?|uniform|pe|kit|club fees?|fees?|subs|training|matches|need(s)? this week)\b""",
+        """\b(kids?|child(ren)?|boys?|sons?|daughters?|girls?|sizes?|shoes?|trainers|boots?|tops?|trousers|coats?|jumpers?|uniform|pe|kit|club fees?|fees?|subs|training|matches|need(s)? this week|chores?|pocket money)\b""",
         RegexOption.IGNORE_CASE,
     )
 
@@ -498,6 +529,18 @@ object KidAskRules {
         }
         v.kids.flatMap { c -> c.fees.map { c.name to it } }.sortedBy { it.second.dueDay }.take(ASK_FEES).forEach { (name, f) ->
             out += "$name's club fee · ${f.title} · ${f.line}"
+        }
+        // Slice 5: chores and pocket money this week, one line per child who has any.
+        v.kids.filter { it.money.shown }.take(ASK_CHILDREN).forEach { c ->
+            val m = c.money
+            out += listOfNotNull(
+                "${c.name}'s chores and pocket money",
+                m.pocketValue?.let { "pocket money $it a week" },
+                m.chores.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} ${it.line.substringAfterLast(" · ").lowercase()}" },
+                m.weekLine?.removePrefix("This week · ")?.let { "this week $it" },
+                m.paidLine,
+                m.payLabel?.let { "${KidChoreRules.fmt(m.toPayPence)} still to pay" },
+            ).joinToString(" · ")
         }
         val week = v.week
         if (week != null) {

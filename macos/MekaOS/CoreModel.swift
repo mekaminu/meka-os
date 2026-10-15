@@ -3153,6 +3153,78 @@ final class CoreModel {
         let undo: String?
         /// Slice 2: the club fee Undo takes back (after Paid or Remove).
         var feeUndo: String? = nil
+        /// Slice 5: the token Undo hands back for a removed chore, a pocket money change or a Paid.
+        var moneyUndo: String? = nil
+    }
+
+    /// Kids' admin, slice 5: chores and pocket money. Each call sends only Strings and a day number to the core; the
+    /// answer becomes a `KidSaid` (a light haptic, or a tick when turned away).
+    private func kidSaid(_ r: KidSaved) -> KidSaid {
+        if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+        return KidSaid(line: r.line, refused: r.refused, undo: nil, moneyUndo: r.moneyUndo)
+    }
+
+    /// Adds a chore from one typed line ("Tidy room £1", "Feed the cat").
+    func addKidChore(child: String, text: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            return kidSaid(try await core.addKidChore(child: child, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Takes a chore off the card; Undo with `undoKidMoney`.
+    func removeKidChore(id: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            return kidSaid(try await core.removeKidChore(choreId: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Ticks (or unticks) a chore on a day of this week up to today.
+    func tickKidChore(id: String, day: Int64) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            return kidSaid(try await core.tickKidChore(choreId: id, day: day))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// A child's pocket money a week ("£5"); empty stops it. Undo with `undoKidMoney`.
+    func setKidPocketMoney(child: String, text: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            return kidSaid(try await core.setKidPocketMoney(child: child, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Notes this week's pocket money and chore money as given (Navilife never pays); Undo with `undoKidMoney`.
+    func kidPocketMoneyPaid(child: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            return kidSaid(try await core.kidPocketMoneyPaid(child: child))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Undo for a removed chore, a pocket money change or a Paid; false when there's nothing to take back.
+    func undoKidMoney(token: String) async -> Bool {
+        guard let core else { return false }
+        let ok = (try? await core.undoKidMoney(token: token))?.boolValue ?? false
+        MekaHaptics.light()
+        return ok
     }
 
     /// Kids' admin, slice 2: adds a club fee for a child from one typed line ("Football £35 monthly from 1 Nov"); it goes

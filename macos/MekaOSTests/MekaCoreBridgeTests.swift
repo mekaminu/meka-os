@@ -1735,6 +1735,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 3: THIS WEEK's words for a school thing ("Alex: PE kit").
         let pe = SchoolThing(id: "pe", kind: SchoolKind.weekly, title: "PE", who: "Alex")
         XCTAssertEqual(KidsWeekRules.shared.schoolText(t: pe, who: "Alex"), "Alex: PE kit")
+        // Slice 5: a chore line and a weekly amount are read; nothing set shows nothing.
+        let chores = KidChoreRules.shared
+        XCTAssertEqual(chores.readChore(typed: "Tidy room £1").first?.title, "Tidy room")
+        XCTAssertEqual(chores.readChore(typed: "Tidy room £1").first?.rewardPence?.int64Value, 100)
+        XCTAssertEqual(chores.readPocket(typed: "lots").second as? String, chores.BAD_POCKET)
+        XCTAssertFalse(KidMoney.companion.NONE.shown)
     }
 
     func testReflectionRulesReachSwift() {

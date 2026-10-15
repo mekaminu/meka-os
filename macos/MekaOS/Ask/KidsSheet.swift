@@ -6,7 +6,9 @@ import SwiftUI
 /// three months on) and All still fit. Type a size and press Return to keep it; clear it to remove it, with Undo.
 /// Slice 2: CLUB FEES under the sizes (each a bill on the radar, the line in the accent within 3 days of due) with Paid
 /// and Remove (Undo), and a field that reads "Football £35 monthly from 1 Nov". Slice 3: THIS WEEK over the cards — what
-/// they need in the next 7 days from School, club sessions and fees. Only Strings cross to the core.
+/// they need in the next 7 days from School, club sessions and fees. Slice 5: CHORES AND POCKET MONEY under the fees —
+/// the weekly amount, each chore with a dot per day of this week (click today's, or an earlier day, to tick it), the
+/// week's sum, Paid £8 and Remove with Undo. Only Strings and day numbers cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and each card's lines cross-fade; cards stagger in; the checked
 /// line blends to the accent when due; a save gives a light haptic, a refusal a tick. Reduce Motion: cross-fades.
@@ -22,6 +24,10 @@ struct KidsSheet: View {
     /// Slice 2, per child: the fee field's text and what the last fee action said.
     @State private var feeTexts: [String: String] = [:]
     @State private var feeSaid: [String: CoreModel.KidSaid] = [:]
+    /// Slice 5, per child: the chore and pocket money fields and what the last chore/money action said.
+    @State private var choreTexts: [String: String] = [:]
+    @State private var pocketTexts: [String: String] = [:]
+    @State private var moneySaid: [String: CoreModel.KidSaid] = [:]
 
     var body: some View {
         let v = model.kids ?? KidsView.companion.EMPTY
@@ -138,6 +144,7 @@ struct KidsSheet: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
             }
             fees(kid)
+            money(kid)
         }
         .padding(MekaSpace.m)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
@@ -222,6 +229,127 @@ struct KidsSheet: View {
             }
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+        }
+    }
+
+    /// Slice 5: CHORES AND POCKET MONEY — the weekly amount, each chore with its dots, the field that adds one, the
+    /// week's sum, Paid and the last action's line with Undo.
+    @ViewBuilder
+    private func money(_ kid: KidCard) -> some View {
+        let name = kid.name
+        let m = kid.money
+        Text(KidChoreRules.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            .padding(.top, MekaSpace.xs)
+        HStack(spacing: MekaSpace.xs) {
+            Text(KidChoreRules.shared.POCKET_LABEL).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                .frame(width: 130, alignment: .leading)
+            TextField(KidChoreRules.shared.POCKET_HINT,
+                      text: Binding(get: { pocketTexts[name] ?? m.pocketValue ?? "" }, set: { pocketTexts[name] = $0 }))
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let typed = pocketTexts[name] ?? m.pocketValue ?? ""
+                    Task {
+                        guard let r = await model.setKidPocketMoney(child: name, text: typed) else { return }
+                        moneySaid[name] = r
+                        if !r.refused { pocketTexts[name] = nil }
+                    }
+                }
+        }
+        ForEach(m.chores, id: \.id) { chore in
+            choreRow(name: name, chore: chore)
+        }
+        TextField(KidChoreRules.shared.CHORE_HINT, text: Binding(get: { choreTexts[name] ?? "" }, set: { choreTexts[name] = $0 }))
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                let typed = choreTexts[name] ?? ""
+                Task {
+                    guard let r = await model.addKidChore(child: name, text: typed) else { return }
+                    moneySaid[name] = r
+                    if !r.refused { choreTexts[name] = nil }
+                }
+            }
+        if let week = m.weekLine {
+            Text(week).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: week)
+        }
+        if m.paidLine != nil || m.payLabel != nil {
+            HStack(spacing: MekaSpace.xs) {
+                Text(m.paidLine ?? "").font(MekaType.caption)
+                    .foregroundStyle(m.lit ? palette.accent : palette.textTertiary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: m.paidLine)
+                Spacer()
+                if let label = m.payLabel {
+                    Button(label) {
+                        Task { if let r = await model.kidPocketMoneyPaid(child: name) { moneySaid[name] = r } }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .accessibilityLabel("\(label) to \(name) for this week")
+                }
+            }
+        }
+        if let line = moneySaid[name] {
+            HStack(spacing: MekaSpace.xs) {
+                Text(line.line).font(MekaType.caption)
+                    .foregroundStyle(line.refused ? palette.accent : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let token = line.moneyUndo {
+                    Button("Undo") {
+                        Task {
+                            if await model.undoKidMoney(token: token) { moneySaid[name] = nil }
+                            else { moneySaid[name] = CoreModel.KidSaid(line: KidChoreRules.shared.NOTHING_TO_UNDO, refused: true, undo: nil) }
+                        }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+            }
+            .contentTransition(.opacity)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+        }
+        if m.shown {
+            Text(KidChoreRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// One chore: title and line, Remove, and seven day dots (accent when ticked, ringed today, dimmed days to come).
+    private func choreRow(name: String, chore: KidChoreRow) -> some View {
+        let id = chore.id
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(chore.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(chore.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: chore.line)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(chore.spoken)
+                Spacer()
+                Button("Remove") {
+                    Task { if let r = await model.removeKidChore(id: id) { moneySaid[name] = r } }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(chore.days, id: \.day) { d in
+                    let day = d.day
+                    Button {
+                        Task { if let r = await model.tickKidChore(id: id, day: day) { moneySaid[name] = r } }
+                    } label: {
+                        Text(d.letter).font(MekaType.caption)
+                            .foregroundStyle(d.done ? palette.onAccent : (d.canTick ? palette.textSecondary : palette.textTertiary))
+                            .frame(width: 26, height: 26)
+                            .background(Circle().fill(d.done ? palette.accent : palette.surfaceRaised))
+                            .overlay(Circle().stroke(d.today ? palette.accent : Color.clear, lineWidth: 1))
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: d.done)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(!d.canTick)
+                    .accessibilityLabel("\(chore.title), \(d.spoken)")
+                }
+            }
         }
     }
 }

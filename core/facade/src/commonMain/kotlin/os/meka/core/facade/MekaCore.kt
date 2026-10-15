@@ -167,6 +167,7 @@ class MekaCore(
     // About you (rule 13, slice 1): the household profile, synced.
     private val aboutYou = os.meka.core.domain.AboutYouStore(replica, nowMs)
     private val kids = os.meka.core.domain.Kids(replica, nowMs)
+    private val kidChores = os.meka.core.domain.KidChores(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -660,6 +661,56 @@ class MekaCore(
         if (!kidFeeUndo.containsKey(feeId)) return@onCore false
         val before = kidFeeUndo.remove(feeId)
         if (before == null) renewals.restore(feeId) else renewals.undoDone(before)
+    }
+
+    // Kids' admin, slice 5: what Undo puts back per token — a removed chore, a pocket money change or a Paid. In memory only.
+    private val kidMoneyUndo = mutableMapOf<String, os.meka.core.domain.KidMoneyUndo>()
+
+    private fun kidMissing(child: String): Boolean =
+        os.meka.core.domain.KidsRules.idFor(child) == null || aboutYou.profile().children.none { it.name == child }
+
+    private fun keepKidUndo(r: Pair<os.meka.core.domain.KidSaved, os.meka.core.domain.KidMoneyUndo?>, token: String): os.meka.core.domain.KidSaved {
+        val u = r.second ?: return r.first
+        kidMoneyUndo[token] = u
+        return r.first.copy(moneyUndo = token)
+    }
+
+    /**
+     * Kids' admin, slice 5: adds a chore for [child] from one typed line ("Tidy room £1", "Feed the cat", "Bins 50p");
+     * the money, if said, is earned each time it's ticked. Refused, nothing written, with no title, bad money, 12 chores
+     * already, or a child not in About you.
+     */
+    suspend fun addKidChore(child: String, text: String): os.meka.core.domain.KidSaved = onCore {
+        if (kidMissing(child)) os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.NOT_CHILD, refused = true)
+        else kidChores.addChore(child, text)
+    }
+
+    /** Slice 5: takes chore [choreId] off the card (its ticks stay in his data); Undo by [undoKidMoney]. */
+    suspend fun removeKidChore(choreId: String): os.meka.core.domain.KidSaved = onCore {
+        keepKidUndo(kidChores.removeChore(choreId), "chore:$choreId")
+    }
+
+    /** Slice 5: ticks (or unticks) [choreId] on [day] (epoch day; this week up to today only). */
+    suspend fun tickKidChore(choreId: String, day: Long): os.meka.core.domain.KidSaved = onCore {
+        kidChores.tick(choreId, day, todayEpochDay())
+    }
+
+    /** Slice 5: [child]'s pocket money a week ("£5"); blank stops it. Undo by [undoKidMoney]. */
+    suspend fun setKidPocketMoney(child: String, text: String): os.meka.core.domain.KidSaved = onCore {
+        if (kidMissing(child)) os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.NOT_CHILD, refused = true)
+        else keepKidUndo(kidChores.setPocket(child, text), "pocket:${os.meka.core.domain.KidsRules.idFor(child)}")
+    }
+
+    /** Slice 5: notes this week's pocket money and chore money for [child] as given (Navilife never pays); Undo by [undoKidMoney]. */
+    suspend fun kidPocketMoneyPaid(child: String): os.meka.core.domain.KidSaved = onCore {
+        if (kidMissing(child)) os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.NOT_CHILD, refused = true)
+        else keepKidUndo(kidChores.markPaid(child, todayEpochDay()), "pay:${os.meka.core.domain.KidsRules.idFor(child)}")
+    }
+
+    /** Undo for [removeKidChore], [setKidPocketMoney] or [kidPocketMoneyPaid] by its token; false when there's nothing to take back. */
+    suspend fun undoKidMoney(token: String): Boolean = onCore {
+        val u = kidMoneyUndo.remove(token) ?: return@onCore false
+        kidChores.undo(u)
     }
 
     private val _emergency = MutableStateFlow(os.meka.core.domain.EmergencyView.EMPTY)
@@ -6530,7 +6581,12 @@ class MekaCore(
         _emergency.value = emergency.view()
         _aboutYou.value = aboutYou.view(cal)
         val kidsChildren = aboutYou.profile().children
-        _kids.value = os.meka.core.domain.KidsRules.view(kidsChildren, kids.records(), todayDay, cal, listsNow.renewals.all).let { v ->
+        val kidRecords = kids.records()
+        // Kids' admin, slice 5: each child's chores and pocket money this week.
+        val kidMoney = kidsChildren.mapNotNull { c ->
+            os.meka.core.domain.KidsRules.idFor(c.name)?.let { id -> id to kidChores.money(id, kidRecords[id], todayDay) }
+        }.toMap()
+        _kids.value = os.meka.core.domain.KidsRules.view(kidsChildren, kidRecords, todayDay, cal, listsNow.renewals.all, kidMoney).let { v ->
             // Kids' admin, slice 3: what they need in the next 7 days, from School, club sessions and their fees.
             if (kidsChildren.isEmpty()) v else v.copy(week = os.meka.core.domain.KidsWeekRules.week(
                 kidsChildren, schoolItems, dayEvents, marks.clubChildren, listsNow.renewals.all, nowMs(), cal, holidays,

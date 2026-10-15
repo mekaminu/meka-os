@@ -124,4 +124,54 @@ class KidsFacadeTest {
         assertEquals("PE kit", week.days[1].items.single().text)
         assertEquals("2 things in the next 7 days", week.line)
     }
+
+    @Test
+    fun choresAndPocketMoneySyncTickAndPayWithUndo() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addAboutYouChild("Alex, U7, Oakfield School")
+        assertTrue(fold.addKidChore("Sam", "Tidy room £1").refused) // not in About you
+        assertFalse(fold.kidsView.value.kids.single().money.shown)
+        assertEquals("Added Tidy room · £1 each time", fold.addKidChore("Alex", "Tidy room £1").line)
+        assertEquals("Alex's pocket money · £5 a week", fold.setKidPocketMoney("Alex", "£5").line)
+        assertTrue(fold.setKidPocketMoney("Alex", "loads").refused)
+        val chore = fold.kidsView.value.kids.single().money.chores.single()
+        // Mon 12 Oct: Monday ticks; Tuesday can't be ticked yet.
+        val monday = chore.days[0].day
+        assertEquals("Tidy room · done today", fold.tickKidChore(chore.id, monday).line)
+        assertTrue(fold.tickKidChore(chore.id, monday + 1).refused)
+        fold.syncNow(); mac.syncNow()
+        val m = mac.kidsView.value.kids.single().money
+        assertEquals("This week · £5 pocket money + £1 for chores = £6 · 1 chore done", m.weekLine)
+        assertEquals("Paid £6", m.payLabel)
+
+        // Paid on the Mac, with Undo.
+        val paid = mac.kidPocketMoneyPaid("Alex")
+        assertEquals("Marked £6 paid to Alex for this week", paid.line)
+        assertEquals("Paid £6 this week", mac.kidsView.value.kids.single().money.paidLine)
+        assertTrue(mac.kidPocketMoneyPaid("Alex").refused) // nothing more to pay
+        assertTrue(mac.undoKidMoney(paid.moneyUndo!!))
+        assertEquals("Paid £6", mac.kidsView.value.kids.single().money.payLabel)
+        assertFalse(mac.undoKidMoney(paid.moneyUndo!!))
+
+        // Removing a chore, and Undo.
+        val removed = mac.removeKidChore(chore.id)
+        assertEquals("Removed Tidy room · Undo puts it back", removed.line)
+        assertTrue(mac.kidsView.value.kids.single().money.chores.isEmpty())
+        assertTrue(mac.undoKidMoney(removed.moneyUndo!!))
+        assertEquals("£1 each · 1 this week", mac.kidsView.value.kids.single().money.chores.single().line)
+
+        // Sunday, still owed: the tile asks.
+        now += 6L * 86_400_000L
+        mac.tick()
+        val tile = mac.lifeLines.value.of(LifeTile.KIDS)!!
+        assertEquals("Alex's pocket money · £6 to pay", tile.text)
+        assertTrue(tile.lit)
+        // Stopping pocket money, and Undo.
+        val stopped = mac.setKidPocketMoney("Alex", "")
+        assertEquals("Stopped Alex's pocket money · Undo puts it back", stopped.line)
+        assertNull(mac.kidsView.value.kids.single().money.pocketValue)
+        assertTrue(mac.undoKidMoney(stopped.moneyUndo!!))
+        assertEquals("£5", mac.kidsView.value.kids.single().money.pocketValue)
+    }
 }

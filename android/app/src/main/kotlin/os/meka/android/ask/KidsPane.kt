@@ -3,6 +3,10 @@ package os.meka.android.ask
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -43,6 +47,10 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.KidCard
+import os.meka.core.domain.KidChoreDay
+import os.meka.core.domain.KidChoreRules
+import os.meka.core.domain.KidChoreRow
+import os.meka.core.domain.KidMoney
 import os.meka.core.domain.KidFeeRow
 import os.meka.core.domain.KidSaved
 import os.meka.core.domain.KidWeekDay
@@ -56,6 +64,10 @@ import os.meka.core.facade.MekaCore
  * back), when they were last checked (lit three months on) and **All still fit**. No children yet: a line and About you.
  * Slice 2: CLUB FEES under the sizes — each fee with its line (brass within 3 days of due), Paid and Remove (Undo), and
  * one field that reads "Football £35 monthly from 1 Nov"; each fee is a bill on the radar, so Bills due reminds once.
+ *
+ * Slice 5: CHORES AND POCKET MONEY under the fees — the weekly amount, each chore with a dot per day Mon–Sun (tap today's,
+ * or an earlier day this week, to tick it), "This week · £5 pocket money + £3 for chores = £8", **Paid £8** and Remove
+ * with Undo; one field adds a chore ("Tidy room £1").
  *
  * Slice 3: THIS WEEK over the cards — what they need in the next 7 days, one block per day ("Tomorrow" · "Alex: PE kit"),
  * fees and today's/tomorrow's school things in brass.
@@ -78,6 +90,10 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
     // Slice 2: per child, what the fee field holds and what the last fee action said (with the fee id Undo takes back).
     val feeTexts = remember { mutableStateMapOf<String, String>() }
     val feeSaid = remember { mutableStateMapOf<String, KidSaved>() }
+    // Slice 5: per child, the chore and pocket money fields and what the last chore/money action said.
+    val choreTexts = remember { mutableStateMapOf<String, String>() }
+    val pocketTexts = remember { mutableStateMapOf<String, String>() }
+    val moneySaid = remember { mutableStateMapOf<String, KidSaved>() }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -187,7 +203,49 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
                             if (ok) feeSaid.remove(kid.name) else feeSaid[kid.name] = KidSaved(KidsRules.FEE_NOTHING_TO_UNDO, refused = true)
                         }
                     },
-                )
+                ) {
+                    // Slice 5: chores and pocket money.
+                    val say: (KidSaved) -> Unit = { r -> if (r.refused) haptics.tick() else haptics.light(); moneySaid[kid.name] = r }
+                    KidMoneyView(
+                        name = kid.name,
+                        money = kid.money,
+                        pocketText = pocketTexts[kid.name] ?: kid.money.pocketValue ?: "",
+                        onPocketText = { pocketTexts[kid.name] = it },
+                        onPocket = { typed ->
+                            scope.launch {
+                                val r = runCatching { core.setKidPocketMoney(kid.name, typed) }.getOrNull() ?: return@launch
+                                say(r)
+                                if (r.refused) pocketTexts[kid.name] = typed else pocketTexts.remove(kid.name)
+                            }
+                        },
+                        choreText = choreTexts[kid.name] ?: "",
+                        onChoreText = { choreTexts[kid.name] = it },
+                        onAddChore = { typed ->
+                            scope.launch {
+                                val r = runCatching { core.addKidChore(kid.name, typed) }.getOrNull() ?: return@launch
+                                say(r)
+                                if (r.refused) choreTexts[kid.name] = typed else choreTexts.remove(kid.name)
+                            }
+                        },
+                        onTick = { id, day ->
+                            scope.launch { runCatching { core.tickKidChore(id, day) }.getOrNull()?.let(say) }
+                        },
+                        onRemove = { id ->
+                            scope.launch { runCatching { core.removeKidChore(id) }.getOrNull()?.let(say) }
+                        },
+                        onPaid = {
+                            scope.launch { runCatching { core.kidPocketMoneyPaid(kid.name) }.getOrNull()?.let(say) }
+                        },
+                        said = moneySaid[kid.name],
+                        onUndo = { token ->
+                            scope.launch {
+                                val ok = runCatching { core.undoKidMoney(token) }.getOrDefault(false)
+                                haptics.light()
+                                if (ok) moneySaid.remove(kid.name) else moneySaid[kid.name] = KidSaved(KidChoreRules.NOTHING_TO_UNDO, refused = true)
+                            }
+                        },
+                    )
+                }
             }
         }
         item(key = "foot") {
@@ -213,6 +271,7 @@ private fun KidCardView(
     onFeePaid: (String) -> Unit,
     onFeeRemove: (String) -> Unit,
     onFeeUndo: (String) -> Unit,
+    extra: @Composable () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     val checkedColor by animateColorAsState(
@@ -292,6 +351,119 @@ private fun KidCardView(
                     }
                 }
             }
+        }
+        extra()
+    }
+}
+
+/**
+ * Slice 5: CHORES AND POCKET MONEY on a child's card: the weekly amount, each chore with its line and seven day dots
+ * (brass when ticked; today ringed; days still to come dimmed and not tappable), Remove, the field that adds a chore,
+ * the week's sum, what was marked paid and **Paid £8**, and the last action's line with Undo.
+ * Motion: a dot's fill blends (MekaMotion.appear) with a light haptic; the lines cross-fade; reduced motion: cross-fades.
+ */
+@Composable
+private fun KidMoneyView(
+    name: String,
+    money: KidMoney,
+    pocketText: String,
+    onPocketText: (String) -> Unit,
+    onPocket: (String) -> Unit,
+    choreText: String,
+    onChoreText: (String) -> Unit,
+    onAddChore: (String) -> Unit,
+    onTick: (String, Long) -> Unit,
+    onRemove: (String) -> Unit,
+    onPaid: () -> Unit,
+    said: KidSaved?,
+    onUndo: (String) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Text(KidChoreRules.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(KidChoreRules.POCKET_LABEL, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.width(112.dp))
+        Field(KidChoreRules.POCKET_HINT, modifier = Modifier.weight(1f), value = pocketText, onValue = onPocketText) { typed -> onPocket(typed) }
+    }
+    money.chores.forEach { chore -> KidChoreRowView(chore, onTick = { day -> onTick(chore.id, day) }, onRemove = { onRemove(chore.id) }) }
+    Field(KidChoreRules.CHORE_HINT, modifier = Modifier.fillMaxWidth(), value = choreText, onValue = onChoreText) { typed -> onAddChore(typed) }
+    money.weekLine?.let { w ->
+        Crossfade(w, animationSpec = MekaMotion.appear(reduced), label = "kid-money-week-$name") { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+    }
+    if (money.paidLine != null || money.payLabel != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Crossfade(money.paidLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "kid-money-paid-$name", modifier = Modifier.weight(1f)) { l ->
+                Text(l, style = MekaType.caption, color = if (money.lit) Meka.colors.accent else Meka.colors.textTertiary)
+            }
+            money.payLabel?.let { label ->
+                Text(label, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPaid)
+                        .semantics { contentDescription = "$label to $name for this week" }.minTouch().padding(MekaSpace.xs))
+            }
+        }
+    }
+    val saidColor by animateColorAsState(
+        if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "kid-money-said-$name",
+    )
+    Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "kid-money-line-$name") { s ->
+        if (s != null) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(s.line, style = MekaType.caption, color = saidColor, modifier = Modifier.weight(1f))
+                s.moneyUndo?.let { token ->
+                    Text("Undo", style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onUndo(token) }
+                            .minTouch().padding(MekaSpace.xs))
+                }
+            }
+        }
+    }
+    if (money.shown) Text(KidChoreRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
+}
+
+/** Slice 5: one chore — title and line ("£1 each · 3 this week"), Remove, and a dot per day of this week to tick. */
+@Composable
+private fun KidChoreRowView(chore: KidChoreRow, onTick: (Long) -> Unit, onRemove: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = chore.spoken },
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(chore.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Crossfade(chore.line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "kid-chore-${chore.id}") { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+            Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
+                    .semantics { contentDescription = "Remove ${chore.title}" }.minTouch().padding(MekaSpace.xs))
+        }
+        Row(Modifier.fillMaxWidth()) {
+            chore.days.forEach { d -> KidChoreDot(chore.title, d, Modifier.weight(1f)) { onTick(d.day) } }
+        }
+    }
+}
+
+/** One day's dot: brass when ticked, ringed today, dimmed (and not tappable) for days still to come. */
+@Composable
+private fun KidChoreDot(title: String, d: KidChoreDay, modifier: Modifier, onTick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val fill by animateColorAsState(if (d.done) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "kid-dot-${d.day}")
+    val ink by animateColorAsState(
+        when { d.done -> Meka.colors.onAccent; d.canTick -> Meka.colors.textSecondary; else -> Meka.colors.textTertiary },
+        MekaMotion.appear(reduced), label = "kid-dot-ink-${d.day}",
+    )
+    Box(
+        modifier.minTouch()
+            .then(if (d.canTick) Modifier.clickable(role = Role.Checkbox, onClick = onTick) else Modifier)
+            .semantics { contentDescription = "$title, ${d.spoken}" },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier.width(32.dp).height(32.dp).clip(CircleShape).background(fill)
+                .then(if (d.today) Modifier.border(1.dp, Meka.colors.accent, CircleShape) else Modifier),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(d.letter, style = MekaType.caption, color = ink)
         }
     }
 }
