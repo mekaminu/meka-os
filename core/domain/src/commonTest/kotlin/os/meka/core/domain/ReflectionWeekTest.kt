@@ -84,4 +84,25 @@ class ReflectionWeekTest {
         assertFalse(ReflectionRules.view(v, listOf(r(mon12, "Run 5k")), emptyList(), emptyList(), wed, 600, cal, requestedWeek = mon12).asking)
         assertFalse(ReflectionRules.view(v, emptyList(), emptyList(), emptyList(), wed, 600, cal, requestedWeek = mon19).asking)
     }
+
+    @Test
+    fun theSundayTimeIsASettingSharedByTheCardAndTheOneThing() {
+        assertEquals(ReviewRules.CARD_START_MIN, ReviewRules.readStart(null))
+        assertEquals(19 * 60 + 30, ReviewRules.readStart(mapOf(ReviewFields.START_MIN to os.meka.core.sync.FieldValue.Int64(19L * 60 + 30))))
+        assertEquals(ReviewRules.CARD_START_MIN, ReviewRules.readStart(mapOf(ReviewFields.START_MIN to os.meka.core.sync.FieldValue.Int64(3L * 60))))
+        assertTrue(ReviewRules.validStart(12 * 60))
+        assertTrue(ReviewRules.validStart(22 * 60))
+        assertFalse(ReviewRules.validStart(22 * 60 + 15))
+        assertFalse(ReviewRules.validStart(19 * 60 + 5))
+        val sun = d(10, 18)
+        assertFalse(ReviewRules.cardWindow(sun, 19 * 60, 20 * 60))
+        assertTrue(ReviewRules.cardWindow(sun, 20 * 60, 20 * 60))
+        assertTrue(ReviewRules.cardWindow(mon19, 0, 21 * 60))
+        assertEquals(listOf(16 * 60, 17 * 60, 18 * 60, 18 * 60 + 30, 19 * 60, 20 * 60, 21 * 60), ReviewRules.timeChoices(18 * 60 + 30))
+        assertEquals("Comes on Sundays at 19:30 · through Monday", ReviewRules.whenLine(19 * 60 + 30))
+        // The week's one thing stays on Today until the set time on Sunday.
+        val all = listOf(r(mon12, "Run 5k"))
+        assertTrue(ReflectionRules.weekLine(all, d(10, 25), 19 * 60, 20 * 60) != null)
+        assertNull(ReflectionRules.weekLine(all, d(10, 25), 20 * 60, 20 * 60))
+    }
 }

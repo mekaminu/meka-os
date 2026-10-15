@@ -1,6 +1,7 @@
 package os.meka.core.domain
 
 import os.meka.core.sync.EntitySnapshot
+import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
@@ -19,6 +20,8 @@ object ReviewFields {
     /** The Monday (local epoch day) of the last week marked "Done reviewing". */
     const val REVIEWED_WEEK = "reviewedWeek"
     const val REVIEWED_AT = "reviewedAtMs"
+    /** Weekly reflection, slice 3: the card's Sunday start, minutes after midnight (on [ReviewRules.TIME_ENTITY_ID]). */
+    const val START_MIN = "startMinute"
 }
 
 /** A number at the top of the review; it counts up on appear. */
@@ -114,6 +117,8 @@ data class ReviewCard(
     val title: String,
     /** "12 done · 3 of 4 habits met · 2 still open"; empty while not offered. */
     val line: String,
+    /** Weekly reflection, slice 3: when on Sunday the card (and its heads-up) starts, minutes after midnight. */
+    val startMinute: Int = ReviewRules.CARD_START_MIN,
 ) {
     companion object {
         val NONE = ReviewCard(offered = false, weekStart = 0, offset = 0, reviewed = false, title = "", line = "")
@@ -122,15 +127,38 @@ data class ReviewCard(
 
 /** Pure rules, unit-tested without a replica. */
 object ReviewRules {
-    /** The card (and its heads-up) starts at 18:00 on Sunday and stays through Monday. */
+    /** The card (and its heads-up) starts at 18:00 on Sunday by default and stays through Monday. */
     const val CARD_START_MIN = 18 * 60
+
+    /**
+     * Weekly reflection, slice 3: the Sunday time the review card, its heads-up and the reflection open, shared by both
+     * (one `context_mode` entity [TIME_ENTITY_ID], field [ReviewFields.START_MIN], last writer wins). Absent = 18:00.
+     */
+    const val TIME_ENTITY_ID = "review_time"
+    /** The times offered on both apps (any quarter hour from 12:00 to 22:00 is accepted). */
+    val TIME_CHOICES: List<Int> = listOf(16 * 60, 17 * 60, 18 * 60, 19 * 60, 20 * 60, 21 * 60)
+    private val TIME_RANGE = 12 * 60..22 * 60
+
+    fun validStart(minute: Int): Boolean = minute in TIME_RANGE && minute % 15 == 0
+
+    fun readStart(fields: Map<String, FieldValue>?): Int =
+        fields?.get(ReviewFields.START_MIN)?.longOrNull?.toInt()?.takeIf { validStart(it) } ?: CARD_START_MIN
+
+    /** "Comes on Sundays at 18:00 · through Monday" — the line under the reflection card, with Change. */
+    fun whenLine(start: Int): String = "Comes on Sundays at ${LocalClock.formatMinute(start)} · through Monday"
+
+    /** What choosing a time says: "Your review and reflection now come on Sundays at 19:00". */
+    fun startSaid(start: Int): String = "Your review and reflection now come on Sundays at ${LocalClock.formatMinute(start)}"
+
+    /** The choices shown, with the set time among them even when it was typed elsewhere (e.g. 18:30). */
+    fun timeChoices(start: Int): List<Int> = (TIME_CHOICES + start).distinct().sorted()
 
     /** The week the card is about on [today]: last week on a Monday, otherwise this week (the offset, 0 or -1). */
     fun cardOffset(today: Long): Int = if (CivilDate.isoDayOfWeek(today) == 1) -1 else 0
 
-    /** Whether the card's window is open: Sunday from [CARD_START_MIN], or any time on Monday. */
-    fun cardWindow(today: Long, minute: Int): Boolean = when (CivilDate.isoDayOfWeek(today)) {
-        7 -> minute >= CARD_START_MIN
+    /** Whether the card's window is open: Sunday from [start] ([CARD_START_MIN] unless set), or any time on Monday. */
+    fun cardWindow(today: Long, minute: Int, start: Int = CARD_START_MIN): Boolean = when (CivilDate.isoDayOfWeek(today)) {
+        7 -> minute >= start
         1 -> true
         else -> false
     }
@@ -216,6 +244,16 @@ class WeeklyReview(
     private val interruptions = Interruptions(replica, calendar)
     private val prevented = PreventedMisses(replica, calendar)
 
+    /** The Sunday time the card starts (slice 3 of the weekly reflection; 18:00 until set). */
+    fun startMinute(): Int = ReviewRules.readStart(replica.entity(EntityTypes.CONTEXT_MODE, ReviewRules.TIME_ENTITY_ID)?.fields)
+
+    /** Sets it; false (nothing written) when not a quarter hour from 12:00 to 22:00, or already that. */
+    fun setStartMinute(minute: Int): Boolean {
+        if (!ReviewRules.validStart(minute) || minute == startMinute()) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ReviewRules.TIME_ENTITY_ID, mapOf(ReviewFields.START_MIN to minute.toLong().fv()))
+        return true
+    }
+
     fun reviewedWeek(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(ReviewFields.REVIEWED_WEEK)?.longOrNull
 
     /** "Done reviewing" for the week starting [weekStart] (a Monday); synced. */
@@ -246,11 +284,12 @@ class WeeklyReview(
         val cardOff = ReviewRules.cardOffset(today)
         val cardWs = GoalRules.weekStart(today) + 7L * cardOff
         val reviewed = reviewedWeek() == cardWs
-        val offered = !reviewed && ReviewRules.cardWindow(today, calendar.minuteOfDay(now))
+        val start = startMinute()
+        val offered = !reviewed && ReviewRules.cardWindow(today, calendar.minuteOfDay(now), start)
         val line = if (!offered) "" else (if (cardOff == off) main else build(cardOff, all, events, goals, fasts, window)).let { v ->
             ReviewRules.cardLine(v.done.size + v.doneMore, v.habits.count { it.met }, v.habits.size, v.stillOpen.size + v.stillOpenMore)
         }
-        return main.copy(card = ReviewCard(offered, cardWs, cardOff, reviewed, ReviewRules.cardTitle(cardOff), line))
+        return main.copy(card = ReviewCard(offered, cardWs, cardOff, reviewed, ReviewRules.cardTitle(cardOff), line, start))
     }
 
     private fun build(

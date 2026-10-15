@@ -81,6 +81,13 @@ data class ReflectionView(
     /** "Your reflections · 4 weeks"; the journal, newest first (the week on screen left out). */
     val journalTitle: String,
     val journal: List<ReflectionEntry>,
+    /** Slice 3: "Comes on Sundays at 18:00 · through Monday", with Change offering [timeChoices]. */
+    val whenLine: String = ReviewRules.whenLine(ReviewRules.CARD_START_MIN),
+    /** The Sunday start (minutes after midnight) shared with the review card. */
+    val startMinute: Int = ReviewRules.CARD_START_MIN,
+    val timeChoices: List<Int> = ReviewRules.timeChoices(ReviewRules.CARD_START_MIN),
+    /** "16:00", "17:00", … for [timeChoices], in order. */
+    val timeLabels: List<String> = timeChoices.map { LocalClock.formatMinute(it) },
 ) {
     companion object {
         val EMPTY = ReflectionView(
@@ -168,7 +175,7 @@ object ReflectionRules {
 
     /** Sunday evening through Monday for the card's week, with nothing saved or skipped for it. */
     fun asking(card: ReviewCard, weekStart: Long, r: Reflection?, today: Long, minute: Int): Boolean =
-        ReviewRules.cardWindow(today, minute) && card.weekStart == weekStart && (r == null || !(r.written || r.skipped))
+        ReviewRules.cardWindow(today, minute, card.startMinute) && card.weekStart == weekStart && (r == null || !(r.written || r.skipped))
 
     fun savedLine(savedAtMs: Long, cal: LocalCalendar): String =
         "Saved ${CivilDate.shortLabel(cal.epochDayOf(savedAtMs))} at ${LocalClock.formatMinute(cal.minuteOfDay(savedAtMs))}"
@@ -245,6 +252,9 @@ object ReflectionRules {
             asking = asking(v.card, ws, r, today, minute) || (requestedWeek == ws && !saved && !skipped),
             journalTitle = journalTitle(journal.size),
             journal = journal,
+            whenLine = ReviewRules.whenLine(v.card.startMinute),
+            startMinute = v.card.startMinute,
+            timeChoices = ReviewRules.timeChoices(v.card.startMinute),
         )
     }
 
@@ -288,11 +298,12 @@ object ReflectionRules {
     /**
      * The week's one thing for Today's header: the first line of what last week's reflection said matters (the
      * reflection for the week before [today]'s, saved on its Sunday evening or the Monday), from Monday until Sunday's
-     * reflection opens (18:00), when next week's is asked instead. Lit on the Monday. Null when last week had none.
+     * reflection opens ([start], 18:00 unless set), when next week's is asked instead. Lit on the Monday. Null when
+     * last week had none.
      */
-    fun weekLine(all: List<Reflection>, today: Long, minute: Int): ReflectionWeekLine? {
+    fun weekLine(all: List<Reflection>, today: Long, minute: Int, start: Int = ReviewRules.CARD_START_MIN): ReflectionWeekLine? {
         val dow = CivilDate.isoDayOfWeek(today)
-        if (dow == 7 && minute >= ReviewRules.CARD_START_MIN) return null
+        if (dow == 7 && minute >= start) return null
         val monday = today - (dow - 1)
         val r = all.firstOrNull { it.weekStart == monday - 7 && it.written } ?: return null
         val thing = r.matters.split('\n').map { it.trim().trimEnd('.', '!', ';', ',') }.firstOrNull { it.isNotEmpty() } ?: return null

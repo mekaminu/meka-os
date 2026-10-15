@@ -68,6 +68,7 @@ struct ReflectionSection: View {
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: s.said)
                 }
+                whenRow
             }
             .padding(MekaSpace.m)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.l))
@@ -77,6 +78,36 @@ struct ReflectionSection: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: formShown)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: r.saved)
         .onChange(of: r.weekStart) { reset() }
+    }
+
+    /// Slice 3: "Comes on Sundays at 18:00 · through Monday" with a time picker; choosing one moves the review card,
+    /// its heads-up and the reflection on both apps, and says so under the card.
+    private var whenRow: some View {
+        let start = Int(r.startMinute)
+        let choices = r.timeChoices.map { Int($0.int32Value) }
+        return HStack(spacing: MekaSpace.m) {
+            Text(r.whenLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: r.whenLine)
+            Spacer()
+            Picker("Comes at", selection: Binding(get: { start }, set: { m in setTime(m) })) {
+                ForEach(Array(choices.enumerated()), id: \.element) { i, m in
+                    Text(i < r.timeLabels.count ? r.timeLabels[i] : "").tag(m)
+                }
+            }
+            .labelsHidden().frame(width: 90)
+            .accessibilityLabel("When the weekly review and reflection come on Sunday")
+        }
+        .padding(.top, MekaSpace.xs)
+    }
+
+    private func setTime(_ minute: Int) {
+        let week = r.weekStart
+        Task {
+            if let line = await model.setReviewTime(minute) {
+                said = (week, CoreModel.ReflectionSaid(line: line, refused: false))
+            }
+        }
     }
 
     private func reset() {

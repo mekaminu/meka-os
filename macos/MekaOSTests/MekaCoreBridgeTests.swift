@@ -1735,6 +1735,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual((said.effects.first as? TalkEffectSpeak)?.text, rules.OPENING)
         let done = TalkFlow.shared.spoke(s: said.session)
         XCTAssertEqual((done.effects.last as? TalkEffectOpen)?.place, TalkPlace.reflect)
+        // Slice 3: the Sunday time, as the picker shows it.
+        let review = ReviewRules.shared
+        XCTAssertEqual(review.whenLine(start: 19 * 60 + 30), "Comes on Sundays at 19:30 · through Monday")
+        XCTAssertEqual(review.timeChoices(start: 18 * 60).map { Int($0.int32Value) }, [960, 1020, 1080, 1140, 1200, 1260])
+        XCTAssertFalse(review.validStart(minute: 23 * 60))
     }
 
     func testScreenshotRulesReachSwift() {

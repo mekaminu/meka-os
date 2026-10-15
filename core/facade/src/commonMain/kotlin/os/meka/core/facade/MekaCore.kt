@@ -365,7 +365,7 @@ class MekaCore(
     /**
      * Weekly reflection (V1, slice 1): the two-minute look back for the week Review shows (it follows [showReviewWeek]) —
      * what went well, what to drop, one thing that matters next week, each with suggestions from the week's facts —
-     * and the journal of earlier weeks. Shown in Review on both apps; open and lit from Sunday 18:00 through Monday. Synced.
+     * and the journal of earlier weeks. Shown in Review on both apps; open and lit from Sunday 18:00 (or the time set) through Monday. Synced.
      */
     val reflectionView: StateFlow<os.meka.core.domain.ReflectionView> = _reflection.asStateFlow()
 
@@ -2591,6 +2591,16 @@ class MekaCore(
         if (reflections.all().firstOrNull { it.weekStart == ws }?.skipped == true) reflections.skip(ws, false)
         reflectRequestedWeek = ws
         refresh()
+    }
+
+    /**
+     * Weekly reflection, slice 3: when on Sunday the review card, its heads-up and the reflection come ([minute], a
+     * quarter hour from 12:00 to 22:00; synced, shared by both). Returns what to say, or null when nothing changed.
+     */
+    suspend fun setReviewTime(minute: Int): String? = onCore {
+        if (!review.setStartMinute(minute)) return@onCore null
+        refresh()
+        os.meka.core.domain.ReviewRules.startSaid(minute)
     }
 
     /** "Skip this week" ([on]) or, after a skip, "Reflect now" for the week Review shows. */
@@ -6399,7 +6409,7 @@ class MekaCore(
             // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
             parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
             // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
-            reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs())),
+            reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs()), review.startMinute()),
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))

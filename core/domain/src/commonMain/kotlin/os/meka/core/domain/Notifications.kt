@@ -801,12 +801,12 @@ object NoticeSources {
                 expiresAtMs = cal.toEpochMs(day, BriefRules.END_MIN),
             )
         }
-        // The weekly review: a heads-up at 18:00 on the week's Sunday, standing until it's reviewed or Monday ends.
+        // The weekly review: a heads-up at its time (18:00 unless set) on the week's Sunday, standing until it's reviewed or Monday ends.
         if (review.weekStart > 0 && !review.reviewed) {
             out += Notice(
                 key = "weekly-review:${review.weekStart}", source = NoticeSource.WEEKLY_REVIEW, tier = NoticeTier.HEADS_UP,
                 title = review.title.ifEmpty { "Review your week" }, text = review.line,
-                atMs = cal.toEpochMs(review.weekStart + 6, ReviewRules.CARD_START_MIN), target = NoticeTarget.REVIEW,
+                atMs = cal.toEpochMs(review.weekStart + 6, review.startMinute), target = NoticeTarget.REVIEW,
                 expiresAtMs = cal.toEpochMs(review.weekStart + 8, 0),
             )
         }

@@ -125,4 +125,32 @@ class ReflectionFacadeTest {
         fold.saveReflection("A calm week", "", "", null, keepWins = false)
         assertFalse(fold.reflectionView.value.asking)
     }
+
+    @Test
+    fun aLaterSundayTimeMovesTheCardTheReflectionAndTheHeadsUpOnBothApps() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.tick()
+        assertTrue(fold.reflectionView.value.asking) // 19:00, after the default 18:00
+        assertEquals("Comes on Sundays at 18:00 · through Monday", fold.reflectionView.value.whenLine)
+        assertEquals("Your review and reflection now come on Sundays at 20:00", fold.setReviewTime(20 * 60))
+        assertEquals(null, fold.setReviewTime(20 * 60)) // no change
+        assertEquals(null, fold.setReviewTime(23 * 60)) // out of range
+        assertEquals(null, fold.setReviewTime(20 * 60 + 10)) // not a quarter hour
+        val v = fold.reflectionView.value
+        assertFalse(v.asking)
+        assertFalse(fold.reviewView.value.card.offered)
+        assertEquals("Comes on Sundays at 20:00 · through Monday", v.whenLine)
+        assertEquals(20 * 60, v.startMinute)
+        assertTrue(20 * 60 in v.timeChoices)
+        now += 3_600_000L // 20:00
+        fold.tick()
+        assertTrue(fold.reflectionView.value.asking)
+        assertTrue(fold.reviewView.value.card.offered)
+        assertEquals(20 * 60, fold.reviewView.value.card.startMinute)
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertEquals(20 * 60, mac.reflectionView.value.startMinute)
+        assertTrue(mac.reflectionView.value.asking)
+    }
 }

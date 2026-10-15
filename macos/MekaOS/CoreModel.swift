@@ -3326,6 +3326,19 @@ final class CoreModel {
     /// "Skip this week" (true) or, after a skip, "Reflect now" (false).
     func skipReflection(_ on: Bool) { MekaHaptics.tick(); run { try await $0.skipReflection(on: on) } }
 
+    /// Slice 3: when on Sunday the review and reflection come (minutes after midnight); only an Int32 crosses. Returns
+    /// what to say ("Your review and reflection now come on Sundays at 19:00"), or nil when nothing changed.
+    func setReviewTime(_ minute: Int) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            return try await core.setReviewTime(minute: Int32(minute))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Takes one week's reflection out of the journal (true), or puts it back (Undo, false).
     func removeReflection(_ weekStart: Int64, removed: Bool) {
         if removed { MekaHaptics.tick() } else { MekaHaptics.light() }

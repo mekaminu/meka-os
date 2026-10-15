@@ -132,6 +132,13 @@ fun ReviewRoute(core: MekaCore) {
                 scope.launch { runCatching { core.removeReflection(e.weekStart, false) } }
             },
             tick = { haptics.tick() },
+            setTime = { minute ->
+                haptics.tick()
+                scope.launch {
+                    val line = runCatching { core.setReviewTime(minute) }.getOrNull() ?: return@launch
+                    reflectSaid = week.weekStart to ReflectionSaved(line, false)
+                }
+            },
         )
         Week(
             week, wins, said?.takeIf { it.first == week.weekStart }?.second, step,

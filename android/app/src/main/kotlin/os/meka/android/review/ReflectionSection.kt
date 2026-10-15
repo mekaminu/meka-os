@@ -60,6 +60,8 @@ internal class ReflectionActions(
     val remove: (ReflectionEntry) -> Unit,
     val undoRemove: (ReflectionEntry) -> Unit,
     val tick: () -> Unit,
+    /** Slice 3: when on Sunday the review and reflection come (minutes after midnight). */
+    val setTime: (Int) -> Unit = {},
 )
 
 /**
@@ -137,6 +139,38 @@ private fun ReflectionCard(r: ReflectionView, said: ReflectionSaved?, modifier: 
         }
         Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "reflect-said") { l ->
             l?.let { Text(it, style = MekaType.caption, color = if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary) }
+        }
+        WhenRow(r, act)
+    }
+}
+
+/**
+ * Slice 3: "Comes on Sundays at 18:00 · through Monday" with Change, which unfolds the times as chips (the set one lit);
+ * a tap sets it for the review card, its heads-up and the reflection on both apps, and the chips fold away.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WhenRow(r: ReflectionView, act: ReflectionActions) {
+    var open by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(r.whenLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflect-when", modifier = Modifier.weight(1f)) { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+            Text(
+                if (open) "Done" else "Change", style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClickLabel = if (open) "Close the times" else "Change when it comes") { act.tick(); open = !open }
+                    .minTouch().padding(horizontal = MekaSpace.xs),
+            )
+        }
+        AnimatedVisibility(open, enter = unfold(), exit = fold()) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                r.timeChoices.forEachIndexed { i, m ->
+                    val on = m == r.startMinute
+                    Chip(r.timeLabels.getOrElse(i) { "" }, on) { if (!on) { act.setTime(m); open = false } }
+                }
+            }
         }
     }
 }
