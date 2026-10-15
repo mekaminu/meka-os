@@ -487,10 +487,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "review",
             title = "Review",
-            keywords = listOf("review", "weekly review", "my week", "prevented misses"),
-            what = "your week looked back on: what got done, habits, and the misses Navilife helped prevent.",
+            keywords = listOf("review", "weekly review", "my week", "prevented misses", "reflection", "weekly reflection", "reflect", "reflect on my week", "look back", "journal", "what went well", "what to drop", "one thing that matters"),
+            what = "your week looked back on: what got done, habits, and the misses Navilife helped prevent, with a two-minute reflection kept as a dated journal.",
             how = "Open it any time; the arrows step back through earlier weeks.",
-            tips = listOf(),
+            tips = listOf("Reflect (near the top) is a two-minute look back: what went well, what to drop, and one thing that matters next week. It opens by itself from Sunday 18:00 through Monday; any other time tap \"Reflect on your week\".", "The chips under each question come from your week (wins, things you ticked off, habits met, what's still open, your goals): tap one to add it. Type or use the keyboard's mic, then Save. One line in any of the three is enough.", "Saving keeps it in \"Your reflections\" (open it from an earlier week), adds what went well to Wins (untick \"Also keep in Wins\" to stop that) and, if you tapped a goal's chip for the one thing, makes it one of next week's goals. \"Skip this week\" puts it away until next Sunday."),
             fold = HelpPlace.REVIEW,
             foldWhere = "Ask → Daily → Review",
             mac = HelpPlace.REVIEW,

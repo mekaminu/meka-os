@@ -154,6 +154,8 @@ final class CoreModel {
     var showLeave = false
     /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
     private(set) var wins: WinsView?
+    /// Weekly reflection (V1, slice 1): the review week's look back and the journal, shown in Review. Synced with the Fold.
+    private(set) var reflection: ReflectionView?
     /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
     private(set) var dateNightSaid: String?
     /// What the last "Add to shopping" did, kept here so only its line and whether it can be undone reach the sheet.
@@ -540,6 +542,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.winsView { self?.wins = w }
+        })
+        observers.append(Task { [weak self] in
+            for await r in core.reflectionView { self?.reflection = r }
         })
         observers.append(Task { [weak self] in
             for await t in core.triage { self?.triage = t }
@@ -3289,6 +3294,36 @@ final class CoreModel {
     }
 
     func removeWin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeWin(id: id) } }
+
+    // MARK: Weekly reflection (slice 1)
+
+    /// What Save said: the line under the fields and whether it was turned away.
+    struct ReflectionSaid: Equatable {
+        let line: String
+        let refused: Bool
+    }
+
+    /// Saves the review week's reflection; only Strings and a Bool cross to the core.
+    func saveReflection(wentWell: String, drop: String, matters: String, goalId: String?, keepWins: Bool) async -> ReflectionSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.saveReflection(wentWell: wentWell, drop: drop, matters: matters, goalId: goalId, keepWins: keepWins)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return ReflectionSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// "Skip this week" (true) or, after a skip, "Reflect now" (false).
+    func skipReflection(_ on: Bool) { MekaHaptics.tick(); run { try await $0.skipReflection(on: on) } }
+
+    /// Takes one week's reflection out of the journal (true), or puts it back (Undo, false).
+    func removeReflection(_ weekStart: Int64, removed: Bool) {
+        if removed { MekaHaptics.tick() } else { MekaHaptics.light() }
+        run { _ = try await $0.removeReflection(weekStart: weekStart, removed: removed) }
+    }
 
     // MARK: Meal plan → shopping (slice 1)
 

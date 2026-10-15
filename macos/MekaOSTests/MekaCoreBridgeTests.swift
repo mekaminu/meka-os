@@ -1722,6 +1722,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallLogRules.shared.dayLabel(day: 10, today: 11), "Yesterday")
     }
 
+    func testReflectionRulesReachSwift() {
+        // Weekly reflection, slice 1: a suggestion adds once on its own line; the week's facts in one line.
+        let rules = ReflectionRules.shared
+        XCTAssertEqual(rules.withHint(field: "Shipped it", hint: "Gym"), "Shipped it\nGym")
+        XCTAssertEqual(rules.withHint(field: "Shipped it\ngym", hint: "Gym"), "Shipped it\ngym")
+        XCTAssertEqual(rules.facts(done: 5, habitsMet: 1, habits: 2, wins: 1, stillOpen: 0), "5 done · 1 of 2 habits met · 1 win")
+        XCTAssertEqual(rules.facts(done: 0, habitsMet: 0, habits: 0, wins: 0, stillOpen: 0), rules.QUIET_WEEK)
+    }
+
     func testScreenshotRulesReachSwift() {
         // Screenshots and photos, slice 2: what a new screenshot looks like, and which ones are read.
         let rules = ScreenshotRules.shared

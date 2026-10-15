@@ -115,6 +115,8 @@ object EntityTypes {
     const val MAIL_BACKLOG = "mail_backlog"
     /** Inbox autopilot, slice 3g (2026-10-14): one parcel read from a mail account's shipping emails, from the server (see [ParcelRules]). */
     const val PARCEL = "parcel"
+    /** Weekly reflection, slice 1 (2026-10-15): one week's look back, id `w<the week's Monday>` (see [Reflections]). */
+    const val REFLECTION = "reflection"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -124,7 +126,7 @@ object EntityTypes {
         EMERGENCY_ENTRY, WIN, QUEUE_ITEM, LEAVE, LIFE_FACT, APPROVAL, ERRAND, APPOINTMENT,
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
-        MAIL_BACKLOG, PARCEL,
+        MAIL_BACKLOG, PARCEL, REFLECTION,
     )
 }
 
@@ -432,6 +434,8 @@ object MekaSchema : SchemaRegistry {
         // Work wins: a win removed on any device is gone for good; its text, the latest edit wins.
         entityType == EntityTypes.WIN && field == WinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.WIN -> MergePolicy.Lww
+        // Reflections: one per week; the latest save, skip or removal (and its Undo) on any device wins.
+        entityType == EntityTypes.REFLECTION -> MergePolicy.Lww
         // Annual leave: a stretch removed on any device is gone for good; its days and name, the latest edit wins.
         entityType == EntityTypes.LEAVE && field == LeaveFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.LEAVE -> MergePolicy.Lww

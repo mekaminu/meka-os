@@ -153,6 +153,7 @@ class MekaCore(
     private val templateStore = os.meka.core.domain.ChecklistTemplates(replica, ids::next, nowMs)
     private val appointments = os.meka.core.domain.Appointments(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    private val reflections = os.meka.core.domain.Reflections(replica, nowMs)
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val lifeAdmin = os.meka.core.domain.LifeAdmin(replica, nowMs, ZoneCalendar(timeZone))
     /** This week's life admin hour as last booked ([refresh]), for the planner and Move to later. */
@@ -359,6 +360,14 @@ class MekaCore(
      * Shown in the Review tab on both apps; Friday at 16:00 MEKA asks "What went well this week?". Synced.
      */
     val winsView: StateFlow<os.meka.core.domain.WinsView> = _wins.asStateFlow()
+
+    private val _reflection = MutableStateFlow(os.meka.core.domain.ReflectionView.EMPTY)
+    /**
+     * Weekly reflection (V1, slice 1): the two-minute look back for the week Review shows (it follows [showReviewWeek]) —
+     * what went well, what to drop, one thing that matters next week, each with suggestions from the week's facts —
+     * and the journal of earlier weeks. Shown in Review on both apps; open and lit from Sunday 18:00 through Monday. Synced.
+     */
+    val reflectionView: StateFlow<os.meka.core.domain.ReflectionView> = _reflection.asStateFlow()
 
     private val _calendar = MutableStateFlow(CalendarView.EMPTY)
     /**
@@ -2540,6 +2549,40 @@ class MekaCore(
 
     /** Takes a win off the list (both apps). */
     suspend fun removeWin(id: String): Boolean = onCore { wins.remove(id) }
+
+    // ---- Weekly reflection (V1, slice 1; the Review tab) ----
+
+    /**
+     * Saves the reflection for the week Review shows. With [keepWins] each line of what went well is also kept in the
+     * work wins log (the same line once); a [goalId] from the one thing's suggestion, while its title is still in
+     * [matters], makes that goal one of the following week's goals (up to three). The week is marked reviewed too.
+     * Refused (nothing written) when all three are empty.
+     */
+    suspend fun saveReflection(wentWell: String, drop: String, matters: String, goalId: String?, keepWins: Boolean): os.meka.core.domain.ReflectionSaved = onCore {
+        val ws = _review.value.weekStart
+        if (!reflections.save(ws, wentWell, drop, matters)) {
+            return@onCore os.meka.core.domain.ReflectionSaved(os.meka.core.domain.ReflectionRules.EMPTY_REFUSED, true)
+        }
+        val winsAdded = if (!keepWins) 0 else os.meka.core.domain.ReflectionRules.winLines(wentWell).count { line ->
+            wins.add(line, ws).let { !it.refused && it.id != null }
+        }
+        val today = todayEpochDay()
+        val goal = os.meka.core.domain.ReflectionRules.goalToPick(matters, goalId, _goals.value.goals)
+            ?.takeIf { g -> g.weekOf == ws + 7 || runCatching { goals.pickForWeek(g.id, ws + 7, true) }.getOrDefault(false) }
+        if (!_review.value.reviewed) review.markReviewed(ws)
+        refresh()
+        os.meka.core.domain.ReflectionSaved(
+            os.meka.core.domain.ReflectionRules.savedSay(winsAdded, goal?.title, ws + 7 > today), false,
+        )
+    }
+
+    /** "Skip this week" ([on]) or, after a skip, "Reflect now" for the week Review shows. */
+    suspend fun skipReflection(on: Boolean) = onCore { reflections.skip(_review.value.weekStart, on); refresh() }
+
+    /** Takes one week's reflection out of the journal ([removed]), or puts it back (Undo). */
+    suspend fun removeReflection(weekStart: Long, removed: Boolean): Boolean = onCore {
+        reflections.remove(weekStart, removed).also { refresh() }
+    }
 
     // ---- What MEKA knows (V1, slice 1; Ask → More → What MEKA knows) ----
 
@@ -6406,6 +6449,12 @@ class MekaCore(
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
         _wins.value = wins.view(_review.value.weekStart)
+        _reflection.value = ZoneCalendar(timeZone).let { cal ->
+            os.meka.core.domain.ReflectionRules.view(
+                _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,
+                cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs()), cal,
+            )
+        }
         _search.value = runSearch(all)
         _activity.value = activity.view()
         _calendar.value = CalendarAgenda.build(

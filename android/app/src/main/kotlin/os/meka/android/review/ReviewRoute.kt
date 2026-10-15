@@ -61,6 +61,9 @@ import os.meka.core.domain.ReviewCard
 import os.meka.core.domain.ReviewGoal
 import os.meka.core.domain.ReviewHabit
 import os.meka.core.domain.ReviewTile
+import os.meka.core.domain.ReflectionEntry
+import os.meka.core.domain.ReflectionSaved
+import os.meka.core.domain.ReflectionView
 import os.meka.core.domain.WeeklyReviewView
 import os.meka.core.domain.WinAdded
 import os.meka.core.domain.WinRow
@@ -83,6 +86,10 @@ import os.meka.android.designsystem.sharedPlace
 fun ReviewRoute(core: MekaCore) {
     val v by core.reviewView.collectAsState()
     val wins by core.winsView.collectAsState()
+    val reflection by core.reflectionView.collectAsState()
+    // What the last Save said, for the week it was said in; the journal entry just removed (for Undo).
+    var reflectSaid by remember { mutableStateOf<Pair<Long, ReflectionSaved>?>(null) }
+    var removedEntry by remember { mutableStateOf<ReflectionEntry?>(null) }
     // What the last Add said, for the week it was said in.
     var said by remember { mutableStateOf<Pair<Long, WinAdded>?>(null) }
     val scope = rememberCoroutineScope()
@@ -105,8 +112,33 @@ fun ReviewRoute(core: MekaCore) {
         label = "review-week",
         modifier = Modifier.fillMaxSize().background(Meka.colors.background),
     ) { week ->
+        val act = ReflectionActions(
+            save = { w, d, m, g, keep ->
+                scope.launch {
+                    val r = runCatching { core.saveReflection(w, d, m, g, keep) }.getOrNull() ?: return@launch
+                    reflectSaid = week.weekStart to r
+                    if (r.refused) haptics.tick() else haptics.light()
+                }
+            },
+            skip = { on -> scope.launch { runCatching { core.skipReflection(on) } } },
+            remove = { e ->
+                haptics.tick()
+                removedEntry = e
+                scope.launch { runCatching { core.removeReflection(e.weekStart, true) } }
+            },
+            undoRemove = { e ->
+                haptics.light()
+                removedEntry = null
+                scope.launch { runCatching { core.removeReflection(e.weekStart, false) } }
+            },
+            tick = { haptics.tick() },
+        )
         Week(
             week, wins, said?.takeIf { it.first == week.weekStart }?.second, step,
+            reflection = reflection.takeIf { it.weekStart == week.weekStart },
+            reflectSaid = reflectSaid?.takeIf { it.first == week.weekStart }?.second,
+            removedEntry = removedEntry,
+            act = act,
             reviewDone = {
                 haptics.light()
                 scope.launch { runCatching { core.reviewDone() } }
@@ -133,6 +165,10 @@ private fun Week(
     wins: WinsView,
     said: WinAdded?,
     step: (Int) -> Unit,
+    reflection: ReflectionView?,
+    reflectSaid: ReflectionSaved?,
+    removedEntry: ReflectionEntry?,
+    act: ReflectionActions,
     reviewDone: () -> Unit,
     addWin: (String) -> Unit,
     removeWin: (WinRow) -> Unit,
@@ -171,6 +207,9 @@ private fun Week(
                 }
             }
         }
+
+        // Reflect (weekly reflection): what went well, what to drop, the one thing; the journal under it.
+        reflection?.let { reflectionItems(it, reflectSaid, removedEntry, 4, act) }
 
         // Wins (work wins log): the week's, a field, and this quarter's.
         winsItems(wins, said, 4, addWin, removeWin, toggleQuarter)

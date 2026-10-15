@@ -3,7 +3,8 @@ import SwiftUI
 
 /// REVIEW on the Mac (build plan M1, ADR-013): the weekly review, synced with the Fold. One Monday–Sunday week looked
 /// back on (numbers, done, habits, goals, fasts, lists, still open), the week ahead and the north-star numbers.
-/// ‹ › (⌘[ and ⌘]) step between weeks. "Done reviewing" syncs. Work wins (V1) sit under the numbers: the week's wins,
+/// ‹ › (⌘[ and ⌘]) step between weeks. "Done reviewing" syncs. The weekly reflection (V1, ReflectionSection) and work
+/// wins (V1) sit under the numbers: the week's wins,
 /// a field to keep one, and this quarter's (WinsSection).
 ///
 /// Motion: numbers count up, tiles and sections stagger in, goal bars fill on appear; stepping weeks pushes the week
@@ -71,6 +72,10 @@ struct ReviewScreen: View {
             }
             if let compared = v.comparedLine {
                 Text(compared).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(3)
+            }
+
+            if let r = model.reflection, r.weekStart == v.weekStart {
+                ReflectionSection(reflection: r, palette: palette).staggeredAppear(4)
             }
 
             if let wins = model.wins {
