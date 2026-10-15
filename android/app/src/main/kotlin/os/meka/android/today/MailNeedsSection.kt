@@ -501,7 +501,8 @@ private fun MailChaseRowView(row: MailChaseRow, onGot: () -> Unit, onNotYet: () 
  * Promises, receipts and renewals from email, slice 1: "Renewals from your mail" in Needs you — each renewal the server
  * read from a renewal email (who, when it renews, the price and how often, the kind, the account and the email's
  * subject), with **Add** (onto Lists → Renewals; Undo on the bar takes it off) and **Not needed** (gone on both apps;
- * Undo brings it back). Nothing reaches the radar without Add. Tapping the header folds the rows in and out (expand
+ * Undo brings it back). Nothing reaches the radar without Add. Slice 2: promises made to him share the card ("Waiting
+ * for: Signed contract · by Fri 16 Oct"); their Add puts a Waiting for item on, chased the day after. Tapping the header folds the rows in and out (expand
  * spring; reduced motion: cross-fade); an answered row leaves on the same fold.
  */
 @Composable
@@ -575,8 +576,8 @@ private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: ()
             Modifier.padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            MailNeedsPill(MailRenewalRules.ADD, spoken = "Add ${row.title} to Renewals", onClick = onAdd)
-            MailNeedsPill(MailRenewalRules.NOT_NEEDED, spoken = "${row.title} isn't needed on Renewals", quiet = true, onClick = onNotNeeded)
+            MailNeedsPill(MailRenewalRules.ADD, spoken = row.addSpoken, onClick = onAdd)
+            MailNeedsPill(MailRenewalRules.NOT_NEEDED, spoken = row.notNeededSpoken, quiet = true, onClick = onNotNeeded)
         }
     }
 }

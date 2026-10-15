@@ -506,7 +506,8 @@ private struct MailChaseRowView: View {
 /// to chase": each renewal the server read from a renewal email — who, when it renews, the price and how often, the
 /// kind, the account and the email's subject — with Add (onto Lists → Renewals; Undo on the bar takes it off) and Not
 /// needed (gone on both apps; Undo brings it back). Nothing reaches the radar without Add. Clicking the header folds the
-/// rows on the expand spring; reduced motion: cross-fades.
+/// rows on the expand spring; reduced motion: cross-fades. Slice 2: promises made to him share the card ("Waiting for:
+/// Signed contract · by Fri 16 Oct"); their Add puts a Waiting for item on, chased the day after.
 struct MailFindView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -585,9 +586,9 @@ private struct MailFindRowView: View {
             .accessibilityLabel(row.spoken)
             HStack(spacing: MekaSpace.xs) {
                 MailNeedsPill(label: MailRenewalRules.shared.ADD, palette: palette,
-                              spoken: "Add \(row.title) to Renewals", action: add)
+                              spoken: row.addSpoken, action: add)
                 MailNeedsPill(label: MailRenewalRules.shared.NOT_NEEDED, palette: palette, quiet: true,
-                              spoken: "\(row.title) isn't needed on Renewals", action: notNeeded)
+                              spoken: row.notNeededSpoken, action: notNeeded)
             }
             .padding(.top, MekaSpace.xxs)
         }

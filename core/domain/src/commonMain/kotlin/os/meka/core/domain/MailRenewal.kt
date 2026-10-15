@@ -34,7 +34,7 @@ enum class MailFindState { OPEN, ADDED, DISMISSED }
 /** One find as the apps read it from the synced `mail_find` entity. */
 data class MailFind(
     val id: String,
-    /** "RENEWAL" (later slices add promises). */
+    /** "RENEWAL", or "PROMISE" (slice 2: [MailPromiseRules]). */
     val kind: String,
     /** The account's label: "Personal", "Business", "Outlook". */
     val account: String,
@@ -49,6 +49,10 @@ data class MailFind(
     val state: MailFindState,
     /** When Add or Not needed was tapped (0 = never). */
     val decidedAtMs: Long,
+    /** Slice 2, a promise: what they said they'd do, as Waiting for's title ("Signed contract", "A reply"); else null. */
+    val what: String? = null,
+    /** Slice 2, a promise: the email named the day ([renewDay] is then that day; else it is the default chase day). */
+    val byStated: Boolean = false,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -64,6 +68,10 @@ object MailFindFields {
     const val RECEIVED_DAY = "receivedDay"
     const val SUBJECT = "subject"
     const val TRUST = "trust"
+    /** Slice 2 (promises): Waiting for's title. */
+    const val WHAT = "what"
+    /** Slice 2 (promises): whether the email named the day. */
+    const val BY_STATED = "byStated"
     // Written by the apps.
     const val STATE = "state"
     const val DECIDED_AT = "decidedAtMs"
@@ -79,6 +87,10 @@ data class MailFindRow(
     val from: String,
     val business: Boolean,
     val spoken: String,
+    /** What Add says to a screen reader: "Add Netflix to Renewals", "Add Sam Taylor's promise to Waiting for". */
+    val addSpoken: String = "Add $title to Renewals",
+    /** What Not needed says: "Netflix isn't needed on Renewals". */
+    val notNeededSpoken: String = "$title isn't needed on Renewals",
 )
 
 data class MailFindCard(
@@ -259,6 +271,8 @@ object MailRenewalRules {
             subject = f[MailFindFields.SUBJECT]?.textOrNull,
             state = f[MailFindFields.STATE]?.textOrNull?.let { enumOrNull<MailFindState>(it) } ?: MailFindState.OPEN,
             decidedAtMs = f[MailFindFields.DECIDED_AT]?.longOrNull ?: 0L,
+            what = f[MailFindFields.WHAT]?.textOrNull?.takeIf { it.isNotBlank() },
+            byStated = f[MailFindFields.BY_STATED]?.boolOrNull ?: false,
         )
     }
 
@@ -284,21 +298,42 @@ object MailRenewalRules {
 
     fun headline(n: Int): String = (if (n == 1) "1 to add to Renewals" else "$n to add to Renewals") + " · nothing goes on until you tap Add"
 
+    /** Slice 2: "2 to add to Renewals · 1 to Waiting for · nothing goes on until you tap Add" (either part alone too). */
+    fun headline(renewals: Int, promises: Int): String = when {
+        promises == 0 -> headline(renewals)
+        renewals == 0 -> "$promises to add to Waiting for · nothing goes on until you tap Add"
+        else -> "$renewals to add to Renewals · $promises to Waiting for · nothing goes on until you tap Add"
+    }
+
+    /** Slice 2: the card's title for what it holds. */
+    fun title(renewals: Int, promises: Int): String = when {
+        promises == 0 -> TITLE
+        renewals == 0 -> MailPromiseRules.TITLE
+        else -> "Renewals and promises from your mail"
+    }
+
     /** The bar's line after Add: "On Renewals: Netflix · renews Tue 3 Nov". */
     fun addedLine(f: MailFind, today: Long): String = "On Renewals: ${title(f)} · renews ${RenewalRules.dayWord(f.renewDay, today)}"
 
     /**
      * The card: open renewal finds still to come (renewing today or later), not already on the radar (his own entry or
-     * an earlier Add), soonest first; null when there are none.
+     * an earlier Add), and (slice 2) open promises still worth waiting for and not already on Waiting for
+     * ([MailPromiseRules.showable]), soonest first; null when there are none.
      */
-    fun card(finds: List<MailFind>, obligations: Collection<Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar): MailFindCard? {
+    fun card(
+        finds: List<MailFind>, obligations: Collection<Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar,
+        waiting: List<WaitingItem> = emptyList(),
+    ): MailFindCard? {
         val today = cal.epochDayOf(nowMs)
-        val open = finds.filter { f ->
+        val renewals = finds.filter { f ->
             f.kind == KIND_RENEWAL && f.state == MailFindState.OPEN && f.renewDay >= today &&
                 !alreadyOnRadar(f.merchant, f.renewDay, obligations, cal)
-        }.sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
+        }
+        val promises = finds.filter { MailPromiseRules.showable(it, waiting, today) }
+        val open = (renewals + promises).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
         if (open.isEmpty()) return null
         val rows = open.take(SHOWN).map { f ->
+            if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
             val title = title(f)
             val line = line(f, today)
             MailFindRow(
@@ -308,7 +343,10 @@ object MailRenewalRules {
             )
         }
         val more = open.size - rows.size
-        return MailFindCard(TITLE, headline(open.size), rows, if (more > 0) "+ $more more · answer these first" else null)
+        return MailFindCard(
+            title(renewals.size, promises.size), headline(renewals.size, promises.size), rows,
+            if (more > 0) "+ $more more · answer these first" else null,
+        )
     }
 
     /**

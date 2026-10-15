@@ -4320,7 +4320,7 @@ class MekaCore(
         replica.entities(os.meka.core.domain.EntityTypes.OBLIGATION).map { it.fields }
 
     private fun mailFindsChanged() {
-        _mailFinds.value = os.meka.core.domain.MailRenewalRules.card(activity.mailFinds(), radarFields(), nowMs(), ZoneCalendar(timeZone))
+        _mailFinds.value = os.meka.core.domain.MailRenewalRules.card(activity.mailFinds(), radarFields(), nowMs(), ZoneCalendar(timeZone), lists.waitingItems())
     }
 
     /**
@@ -4333,6 +4333,7 @@ class MekaCore(
         val R = os.meka.core.domain.MailRenewalRules
         val f = activity.mailFinds().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
         val cal = ZoneCalendar(timeZone)
+        if (f.kind == os.meka.core.domain.MailPromiseRules.KIND_PROMISE) return@onCore addMailPromise(f, cal)
         val oid = R.obligationId(id)
         val before = replica.entity(os.meka.core.domain.EntityTypes.OBLIGATION, oid)
         replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, R.obligationFields(f, nowMs(), cal))
@@ -4350,6 +4351,28 @@ class MekaCore(
         }
         refresh()
         R.addedLine(f, cal.epochDayOf(nowMs()))
+    }
+
+    /**
+     * Promises, receipts and renewals from email, slice 2: **Add** on a promise — a Waiting for item from them (one per
+     * find, so Add on both apps lands on the same item), chased the day after the day they gave (else on the find's
+     * default day), with a note saying which email it came from; the find is answered on both apps. Undo removes the
+     * item and brings the find back. Nothing is sent to anyone.
+     */
+    private fun addMailPromise(f: os.meka.core.domain.MailFind, cal: ZoneCalendar): String {
+        val P = os.meka.core.domain.MailPromiseRules
+        val today = cal.epochDayOf(nowMs())
+        val wid = lists.addWaiting(
+            f.what ?: "What ${P.title(f)} promised", f.merchant, P.chaseInDays(f, today), withId = P.waitingId(f.id),
+        )
+        lists.editWaiting(wid, notes = P.note(f))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
+        mailFindUndo = {
+            runCatching { lists.deleteWaiting(wid) }
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs()))
+        }
+        refresh()
+        return P.addedLine(f, today)
     }
 
     /** **Not needed** on a renewal in "Renewals from your mail": gone on both apps, never offered again (with Undo). */

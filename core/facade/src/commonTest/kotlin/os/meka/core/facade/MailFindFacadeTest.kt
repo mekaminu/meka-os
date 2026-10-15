@@ -4,6 +4,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MailPromiseRules
 import os.meka.core.domain.MailRenewalRules
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
@@ -77,5 +78,38 @@ class MailFindFacadeTest {
         fold.addMailFind(ida)
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertNull(mac.mailFinds.value)
+    }
+
+    @Test
+    fun aPromiseAddsToWaitingForOnBothAppsAndUndoTakesItOff() = runTest {
+        val p = MailPromiseRules.read("Sam Taylor", "sam@example.com", "Re: contract", "I'll send you the signed contract by Tuesday", received)!!
+        val id = MailPromiseRules.findId("acc1", "m9")
+        serverWrite(id, MailPromiseRules.serverFields(p, "Personal", "Re: contract", received))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals("Promises from your mail", fold.mailFinds.value!!.title)
+        assertEquals("Waiting for: Signed contract · by Tue 20 Oct", fold.mailFinds.value!!.rows.single().line)
+
+        assertEquals("On Waiting for: Signed contract from Sam Taylor · chase Wed 21 Oct", fold.addMailFind(id))
+        assertNull(fold.mailFinds.value)
+        val w = fold.listsView.value.waiting.single()
+        assertEquals("Signed contract", w.title)
+        assertEquals("Sam Taylor", w.who)
+        assertTrue(w.notes!!.startsWith("From an email in your Personal mail"))
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertNull(mac.mailFinds.value)
+        assertEquals(1, mac.listsView.value.waiting.size)
+
+        // Undo: off Waiting for, back in the card.
+        fold.undoMailFind()
+        assertEquals(0, fold.listsView.value.waiting.size)
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+        // Added again on the Mac once synced: one item, the same id.
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf(id), mac.mailFinds.value!!.rows.map { it.id })
+        mac.addMailFind(id)
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertEquals(listOf(MailPromiseRules.waitingId(id)), fold.listsView.value.waiting.map { it.id })
     }
 }

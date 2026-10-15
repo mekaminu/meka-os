@@ -10,6 +10,7 @@ import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.MailRenewalRules
+import os.meka.core.domain.MailPromiseRules
 import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
@@ -499,6 +500,42 @@ class Integrations(
         runCatching { bills(a, ms) }
         // Promises, receipts and renewals, slice 1: renewals to add, from the renewal emails (on his tap in the apps).
         runCatching { renewals(a, ms) }
+        // Slice 2: promises made to him, to add to Waiting for (on his tap in the apps).
+        runCatching { promises(a, ms) }
+    }
+
+    /**
+     * Promises, receipts and renewals from email, slice 2: the emails of the last [MailPromiseRules.WINDOW_DAYS] days
+     * that the rules didn't sort as newsletters, promos or junk, and not from one of his own connected addresses, are
+     * read by [MailPromiseRules.read] from the sender, subject and kept preview (a no-reply sender only for a refund);
+     * each promise becomes one `mail_find` (kind PROMISE) under an id from the account and the email, written once (an
+     * id already in the mirror is never written again, so his Add or Not needed stands). Nothing goes on Waiting for
+     * here: the apps' Add does that.
+     */
+    internal fun promises(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val own = store.accounts(a.householdId).map { it.email.lowercase() }.toSet() + a.email.lowercase()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= MailPromiseRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                (h.fromAddress?.lowercase() ?: "") !in own &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val reads = candidates.mapNotNull { h ->
+            val day = LONDON.epochDayOf(h.receivedAtMs)
+            MailPromiseRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, day, MailSortRules.isAutomated(h.fromAddress))
+                ?.let { Triple(h, day, it) }
+        }
+        if (reads.isEmpty()) return
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        for ((h, day, p) in reads.sortedBy { it.first.receivedAtMs }) {
+            val id = MailPromiseRules.findId(a.id, h.id)
+            if (mirror.containsKey(id)) continue
+            writeMail(a, id, MailPromiseRules.serverFields(p, account, h.subject, day), EntityTypes.MAIL_FIND)
+        }
     }
 
     /**

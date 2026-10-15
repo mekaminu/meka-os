@@ -707,6 +707,30 @@ class MailSyncTest {
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
     }
 
+    @Test
+    fun aPromiseEmailPublishesOneFindAndNothingOnWaitingFor() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        gmail.mailbox["p1"] = msg("p1", 0, "sam@example.com").copy(subject = "Re: contract", preview = "Thanks. I'll send you the signed contract by Friday.")
+        gmail.mailbox["p2"] = msg("p2", 0, "noreply@shop.example").copy(subject = "Order update", preview = "We'll send the parcel tomorrow")
+        gmail.mailbox["p3"] = msg("p3", 0, "ann@example.com").copy(subject = "Lunch?", preview = "Can you send me the menu by Friday?")
+        gmail.nextRound = { MailChanges(fetch = listOf("p1", "p2", "p3"), cursor = "h2") }
+        i.syncAccount(id)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
+        val (_, f) = finds.entries.single()
+        assertEquals(FieldValue.Text(os.meka.core.domain.MailPromiseRules.KIND_PROMISE), f[os.meka.core.domain.MailFindFields.KIND])
+        assertEquals(FieldValue.Text("Signed contract"), f[os.meka.core.domain.MailFindFields.WHAT])
+        assertEquals(FieldValue.Bool(true), f[os.meka.core.domain.MailFindFields.BY_STATED])
+        // Nothing reaches Waiting for without his Add.
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.COMMITMENT).size)
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+    }
+
     // ---- Slice 3c: the daily Junk review ----
 
     private fun junkMsg(id: String, from: String, subject: String, thread: String = "t-$id") =
