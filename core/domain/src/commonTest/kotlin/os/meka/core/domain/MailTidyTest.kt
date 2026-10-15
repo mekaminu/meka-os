@@ -263,4 +263,16 @@ class MailTidyTest {
         assertEquals(AutonomyRules.MAIL_OFF_LINE, off.line)
         assertEquals("Turn on", off.action)
     }
+
+    @Test
+    fun tidiedMailIsMarkedReadUnlessHeTurnedItOffAndARescueNeverIs() {
+        assertTrue(MailAutopilotRules.read(null).markRead)
+        assertTrue(MailAutopilotRules.read(MailAutopilotRules.fields(true, 5L)).markRead)
+        val off = MailAutopilotRules.read(MailAutopilotRules.fields(true, 5L) + MailAutopilotRules.markReadFields(false))
+        assertEquals(false, off.markRead)
+        assertTrue(off.on)
+        for (t in listOf(MailTidy.NEWSLETTER, MailTidy.RECEIPT, MailTidy.ARCHIVE, MailTidy.TRASH, MailTidy.JUNK_TRASH)) assertTrue(t.marksRead, t.name)
+        assertEquals(false, MailTidy.RESCUE.marksRead)
+        assertEquals(false, MailTidy.KEEP.marksRead)
+    }
 }

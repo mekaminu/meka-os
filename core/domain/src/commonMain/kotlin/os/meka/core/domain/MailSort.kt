@@ -38,6 +38,8 @@ enum class MailSortReason(val line: String) {
     GMAIL_SOCIAL("Gmail filed it under Social"),
     GMAIL_UPDATES("Gmail filed it under Updates"),
     NO_REPLY("Sent by a no-reply address"),
+    /** Inbox fixes, slice 1: its own headers say it was sent in bulk (Precedence: bulk/list, Auto-Submitted). */
+    BULK("Sent in bulk (its headers say so)"),
     PERSON("A person writing to you"),
     NO_SENDER("No sender to go by"),
     /** Slice 2b: MEKA's AI read the sender and subject of an unsure one. */
@@ -92,6 +94,28 @@ object MailSortRules {
     val NO_REPLY = listOf("noreply", "no-reply", "no_reply", "donotreply", "do-not-reply", "do_not_reply", "notifications",
         "notification", "notify", "alerts", "alert", "mailer-daemon", "postmaster", "automated", "auto-confirm", "bounce")
 
+    /**
+     * Inbox fixes, slice 1: the label the server adds to an email whose own headers say it was sent in bulk ([bulk]), so
+     * the rules (which see labels) can tell. Never written to the mailbox.
+     */
+    const val BULK_LABEL = "NAVILIFE_BULK"
+
+    /**
+     * True when an email's `Precedence` is bulk, list or junk, or its `Auto-Submitted` is anything but "no" (RFC 3834:
+     * a machine sent it). Header values are untrusted text: only these words count.
+     */
+    fun bulk(precedence: String?, autoSubmitted: String?): Boolean {
+        val p = precedence?.trim()?.lowercase()
+        val a = autoSubmitted?.trim()?.lowercase()?.substringBefore(';')?.trim()
+        return p == "bulk" || p == "list" || p == "junk" || (!a.isNullOrEmpty() && a != "no")
+    }
+
+    /**
+     * Inbox fixes, slice 1: Outlook's change feed carries no list headers, so an email the rules could only call a
+     * person's (unsure) has its own headers read once ([bulk], List-Unsubscribe, List-Id) before it counts as "needs you".
+     */
+    fun wantsHeaderLook(f: MailSortFacts, inInbox: Boolean): Boolean = inInbox && wantsAi(sort(f))
+
     fun domain(address: String?): String? = address?.substringAfterLast('@', "")?.trim()?.trimEnd('>')?.lowercase()?.ifEmpty { null }
 
     private fun endsWithDomain(domain: String, suffix: String) = domain == suffix || domain.endsWith(".$suffix")
@@ -134,6 +158,7 @@ object MailSortRules {
             "CATEGORY_FORUMS" in labels -> sure(MailSort.NEWSLETTER, MailSortReason.GMAIL_FORUMS)
             "CATEGORY_SOCIAL" in labels -> sure(MailSort.NOTIFICATION, MailSortReason.GMAIL_SOCIAL)
             list -> sure(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST)
+            BULK_LABEL in labels -> sure(MailSort.NOTIFICATION, MailSortReason.BULK)
             "CATEGORY_UPDATES" in labels -> sure(MailSort.NOTIFICATION, MailSortReason.GMAIL_UPDATES)
             isAutomated(f.fromAddress) -> sure(MailSort.NOTIFICATION, MailSortReason.NO_REPLY)
             domain == null -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.NO_SENDER, false)

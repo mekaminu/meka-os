@@ -96,7 +96,7 @@ class MailSortTest {
         val now = 1_790_985_600_000L
         val a = MailAccountFacts(MailProviders.GMAIL, "alex@example.com", "ok", now - 4 * 60_000L, "PERSONAL", mapOf("NEEDS_YOU" to 3))
         val row = MailAccountRules.row(a, emptyList(), now)
-        assertEquals("Connected · checked 4 min ago · sorted, nothing moved yet", row.line)
+        assertEquals("Connected · checked 4 min ago", row.line)
         assertEquals("In the inbox · 3 need you", row.sortedLine)
         val old = MailAccountRules.row(a.copy(sorted = null), emptyList(), now)
         assertEquals("Connected · checked 4 min ago · sorting comes in the next update", old.line)
@@ -118,5 +118,33 @@ class MailSortTest {
         assertFalse(MailSortRules.wantsAi(MailSortRules.afterAi(null)))
         assertFalse(MailSortRules.wantsAi(MailSortRules.sort(MailSortFacts("x@service.gov.uk", null, null, emptyList(), null, null))))
         assertFalse(MailSortRules.wantsAi(MailSortRules.sort(MailSortFacts("noreply@x.com", null, null, emptyList(), null, null))))
+    }
+
+    @Test
+    fun bulkHeadersMakeMailTidyKindButNeverAPublicBodysOrABanksSort() {
+        assertTrue(MailSortRules.bulk("bulk", null))
+        assertTrue(MailSortRules.bulk(" List ", null))
+        assertTrue(MailSortRules.bulk("junk", null))
+        assertTrue(MailSortRules.bulk(null, "auto-generated"))
+        assertTrue(MailSortRules.bulk(null, "auto-replied; owner-email=\"x@example.com\""))
+        assertFalse(MailSortRules.bulk(null, "no"))
+        assertFalse(MailSortRules.bulk("first-class", null))
+        assertFalse(MailSortRules.bulk(null, null))
+        val bulk = listOf("INBOX", MailSortRules.BULK_LABEL)
+        assertEquals(MailSorted(MailSort.NOTIFICATION, MailSortReason.BULK, true),
+            MailSortRules.sort(MailSortFacts("updates@shop.example", "Shop", "Your weekly picks", bulk, null, null)))
+        // A list still reads as a newsletter; a public body is still his, sure.
+        assertEquals(MailSort.NEWSLETTER, MailSortRules.sort(MailSortFacts("news@shop.example", null, "Hello", bulk, "<mailto:u@shop.example>", null)).sort)
+        assertEquals(MailSortReason.PUBLIC_BODY, MailSortRules.sort(MailSortFacts("x@council.gov.uk", null, "Bins", bulk, null, null)).reason)
+    }
+
+    @Test
+    fun onlyAnInboxEmailThatLooksLikeAPersonsGetsItsHeadersRead() {
+        val person = MailSortFacts("sam@example.com", "Sam", "Saturday?", listOf("INBOX"), null, null)
+        assertTrue(MailSortRules.wantsHeaderLook(person, inInbox = true))
+        assertFalse(MailSortRules.wantsHeaderLook(person, inInbox = false))
+        assertFalse(MailSortRules.wantsHeaderLook(person.copy(listUnsubscribe = "<https://x.example/u>"), inInbox = true))
+        assertFalse(MailSortRules.wantsHeaderLook(person.copy(fromAddress = "noreply@x.example"), inInbox = true))
+        assertFalse(MailSortRules.wantsHeaderLook(person.copy(labels = listOf("INBOX", MailSortRules.BULK_LABEL)), inInbox = true))
     }
 }

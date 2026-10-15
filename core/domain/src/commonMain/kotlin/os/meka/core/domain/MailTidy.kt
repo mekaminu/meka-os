@@ -36,6 +36,13 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
     /** Slice 3c: an email that looks real rescued from Junk to the inbox and flagged (Gmail: starred, labelled); Undo returns it to Junk. */
     RESCUE("email rescued from Junk", "emails rescued from Junk", "Navilife/Rescued");
 
+    /**
+     * Inbox fixes, slice 1 (Meka, 2026-10-15: "I thought it would mark emails as read"): a tidy that takes mail away from
+     * him also marks it read, so his unread counts fall (unless he turned [MailAutopilotSetting.markRead] off); Undo
+     * marks it unread again. A rescued email is his to read: never.
+     */
+    val marksRead: Boolean get() = this != KEEP && this != RESCUE
+
     /** How a batch line names where it went: "→ Navilife/Newsletters", "archived", "→ Trash", "→ inbox, flagged". */
     val destination: String get() = when {
         this == RESCUE -> "→ inbox, flagged"
@@ -134,9 +141,11 @@ object MailTidyRules {
 object MailAutopilotFields {
     const val ON = "on"
     const val CHANGED_AT = "changedAtMs"
+    /** Inbox fixes, slice 1: "Mark tidied mail as read" (Bool); absent = on. */
+    const val MARK_READ = "markRead"
 }
 
-data class MailAutopilotSetting(val on: Boolean, val changedAtMs: Long?)
+data class MailAutopilotSetting(val on: Boolean, val changedAtMs: Long?, val markRead: Boolean = true)
 
 /**
  * One tidy the server did in one account (slice 3b): a `mail_tidy` entity (ADR-008 addendum 2026-10-13), id
@@ -233,7 +242,11 @@ object MailAutopilotRules {
     fun read(fields: Map<String, FieldValue>?): MailAutopilotSetting = MailAutopilotSetting(
         on = fields?.get(MailAutopilotFields.ON)?.boolOrNull ?: DEFAULT_ON,
         changedAtMs = (fields?.get(MailAutopilotFields.CHANGED_AT) as? FieldValue.Int64)?.value?.takeIf { it > 0 },
+        markRead = fields?.get(MailAutopilotFields.MARK_READ)?.boolOrNull ?: true,
     )
+
+    /** Inbox fixes, slice 1: the "Mark tidied mail as read" switch's write (the Autopilot switch's own fields untouched). */
+    fun markReadFields(on: Boolean): Map<String, FieldValue> = mapOf(MailAutopilotFields.MARK_READ to on.fv())
 
     fun fields(on: Boolean, nowMs: Long): Map<String, FieldValue> =
         mapOf(MailAutopilotFields.ON to on.fv(), MailAutopilotFields.CHANGED_AT to nowMs.fv())

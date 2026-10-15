@@ -144,7 +144,8 @@ object MailAccountRules {
         status == "needs_reconnect" -> "Sign-in ended · Reconnect to keep Navilife reading it"
         status == "error" -> "Couldn't reach it last time · Navilife tries again every few minutes"
         lastSyncAtMs == null -> "Connected · checking the sign-in…"
-        sorting -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorted, nothing moved yet"
+        // Inbox fixes: the Autopilot line under it says what moved; this one no longer claims nothing did.
+        sorting -> "Connected · checked ${ago(lastSyncAtMs, nowMs)}"
         else -> "Connected · checked ${ago(lastSyncAtMs, nowMs)} · sorting comes in the next update"
     }
 

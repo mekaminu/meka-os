@@ -482,8 +482,17 @@ class Integrations(
             m.changes(token, null, since)
         }
         ms.apply(a.householdId, a.id, changes)
+        // Inbox fixes, slice 1: newest first (so new mail is sorted and tidied while an old listing is still being read),
+        // and a refusal part-way (Gmail's 403/429 rate limits, a 5xx) only ends this check's reading: the rest of the
+        // check (sorting, Autopilot, the cards) still runs and the account isn't shown as unreachable.
         for (id in ms.pending(a.id, HEADERS_PER_CHECK)) {
-            val h = m.header(token, id)
+            val h = try {
+                m.header(token, id)
+            } catch (e: ReconnectRequired) {
+                throw e
+            } catch (e: Exception) {
+                break
+            }
             if (h == null) ms.remove(a.id, id) else ms.put(a.householdId, a.id, h)
         }
         ms.prune(a.id, since)
@@ -491,6 +500,8 @@ class Integrations(
         runCatching { mailNeedsAsks(a, m, token, ms) }
         // Follow-up radar, slice 2: chases of his own unanswered emails, sent only after his Send.
         runCatching { followUpChases(a, m, token) }
+        // Inbox fixes, slice 1: Outlook's emails that only look like a person's have their own list and bulk headers read.
+        runCatching { bulkLook(a, m, token, ms) }
         sortHeaders(a, ms)
         // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
         runCatching { mailSenders(a, m, token, ms) }
@@ -822,7 +833,9 @@ class Integrations(
                 ms.putBacklog(a.id, page.headers.map(::planned))
                 s = s.copy(nextPage = page.next, listed = page.next == null)
             }
-            val read = ms.backlogPending(a.id, BACKLOG_HEADERS_PER_CHECK).mapNotNull { id ->
+            // Inbox fixes, slice 1: new mail's headers come first; the backlog reads only once they're all in.
+            val budget = if (ms.pendingCount(a.id) == 0) BACKLOG_HEADERS_PER_CHECK else 0
+            val read = ms.backlogPending(a.id, budget).mapNotNull { id ->
                 val h = m.header(token, id)
                 // Gone, or out of the inbox since it was listed: not the backlog's any more.
                 if (h == null || !h.inInbox) { ms.removeBacklog(a.id, id); null } else planned(h)
@@ -874,6 +887,7 @@ class Integrations(
             if (chunk.isNotEmpty()) {
                 val (back, cut) = m.untidyKept(token, chunk.associate { it.movedId to it.tidy })
                 interrupted = cut
+                if (markingRead(a.householdId)) markRead(m, token, chunk.filter { it.tidy.marksRead }.mapNotNull { back[it.movedId] }, false)
                 // Interrupted: only what came back is done; the rest of the chunk is put back next check.
                 val handled = if (cut) chunk.filter { it.movedId in back } else chunk
                 ms.neverTidy(a.id, handled.map { it.id } + handled.map { it.movedId } + back.values)
@@ -903,6 +917,8 @@ class Integrations(
             val (got, interrupted) = m.tidyKept(token, chunk.associate { it.id to it.kind.tidy })
             val newly = chunk.mapNotNull { item -> got[item.id]?.let { movedId -> MailMoved(item.id, movedId, item.kind.tidy) } }
             ms.recordTidy(a.id, batchId, newly)
+            // Inbox fixes, slice 1: the clean-up marks what it moved read too (his switch).
+            if (markingRead(hh)) markRead(m, token, newly.filter { it.tidy.marksRead }.map { it.movedId }, true)
             all = moved + newly
             // Not moved: gone or out of the inbox since the plan → not the backlog's any more; otherwise tried next check.
             // Interrupted by a provider failure: the rest are simply tried next check (no header reads now).
@@ -1118,6 +1134,8 @@ class Integrations(
         val done = plan.filter { (h, _) -> h.id in moved }
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
+        // Inbox fixes, slice 1: what was tidied is marked read too (his switch), best effort.
+        if (setting.markRead) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
         // Out of the inbox now, so the next check doesn't plan them again before the provider's feed says so.
         done.forEach { (h, _) -> ms.put(hh, a.id, h.copy(inInbox = false)) }
         val account = MailLabel.of(a.label)?.label ?: "Mail"
@@ -1213,11 +1231,67 @@ class Integrations(
         val done = plan.filter { (h, _) -> h.id in moved }
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
+        if (setting.markRead) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
         // A rescued email is Meka's to deal with: Autopilot never archives it.
         val rescued = done.filter { it.second == MailTidy.RESCUE }
         if (rescued.isNotEmpty()) ms.neverTidy(a.id, rescued.map { it.first.id } + rescued.map { moved.getValue(it.first.id) })
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()))
+    }
+
+    /** Inbox fixes, slice 1: his "Mark tidied mail as read" (on unless he turned it off). */
+    private fun markingRead(householdId: String): Boolean =
+        MailAutopilotRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID)).markRead
+
+    /** Marks [ids] read (or unread for an Undo); best effort, a failure never undoes the move it follows. */
+    private fun markRead(m: MailProvider, token: String, ids: List<String>, read: Boolean) {
+        if (ids.isEmpty()) return
+        runCatching { m.markRead(token, ids, read) }
+    }
+
+    /**
+     * Inbox fixes, slice 1: what each Outlook email's own headers said (this process; a restart reads them once more),
+     * by account and message id; null for one with none that matter. Kept so a later change feed (it was read, moved
+     * back) that brings the bare headers again doesn't make a newsletter look like a person's email.
+     */
+    private val bulkLooked = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<String, java.util.Optional<MailBulkHeaders>>>()
+
+    /**
+     * Inbox fixes, slice 1 (Meka, 2026-10-15: Outlook showed "1,571 need you"): Outlook's change feed has no list
+     * headers, so the rules called every unknown sender a person. Each check, up to [BULK_LOOKS_PER_CHECK] of the newest
+     * inbox emails the rules can only call a person's have their internet headers read once ([MailProvider.bulkHeaders]);
+     * one with List-Unsubscribe, List-Id or a bulk Precedence/Auto-Submitted is kept with them and sorted again (a
+     * newsletter, a notification), the rest stay for the AI's look. Headers only; nothing in the mailbox changes. A
+     * refusal part-way ends this check's reads.
+     */
+    internal fun bulkLook(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        if (m.id != MailProviders.OUTLOOK) return
+        val looked = bulkLooked.computeIfAbsent(a.id) { java.util.concurrent.ConcurrentHashMap() }
+        fun keep(h: MailHeader, got: MailBulkHeaders) {
+            if (got.listUnsubscribe.isNullOrBlank() && got.listId.isNullOrBlank() && !got.bulk) return
+            ms.put(a.householdId, a.id, h.copy(
+                listUnsubscribe = got.listUnsubscribe, oneClickUnsubscribe = got.oneClick, listId = got.listId,
+                labels = if (got.bulk && MailSortRules.BULK_LABEL !in h.labels) h.labels + MailSortRules.BULK_LABEL else h.labels,
+            ))
+        }
+        var reads = 0
+        for (h in ms.messages(a.id)) {
+            if (!h.listUnsubscribe.isNullOrBlank() || !h.listId.isNullOrBlank() || MailSortRules.BULK_LABEL in h.labels) continue
+            if (!MailSortRules.wantsHeaderLook(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId), h.inInbox)) continue
+            val known = looked[h.id]
+            if (known != null) { if (known.isPresent) keep(h, known.get()); continue }
+            if (reads >= BULK_LOOKS_PER_CHECK) continue
+            reads++
+            val got = try {
+                m.bulkHeaders(token, h.id)
+            } catch (e: ReconnectRequired) {
+                throw e
+            } catch (e: Exception) {
+                break
+            }
+            looked[h.id] = java.util.Optional.ofNullable(got)
+            got?.let { keep(h, it) }
+        }
     }
 
     /** Puts back every tidy of this account an app asked to undo (within its 30 days), once. */
@@ -1235,6 +1309,8 @@ class Integrations(
             val (back, interrupted) = m.untidyKept(token, items.associate { it.movedId to it.tidy })
             val handled = if (interrupted) items.filter { it.movedId in back } else items
             ms.neverTidy(a.id, handled.map { it.id } + handled.map { it.movedId } + back.values)
+            // Inbox fixes, slice 1: put back unread, as it came.
+            if (markingRead(a.householdId)) markRead(m, token, items.filter { it.tidy.marksRead }.mapNotNull { back[it.movedId] }, false)
             if (interrupted) continue
             writeTidy(a, b.id, mapOf(
                 MailTidyBatchFields.UNDONE_AT to FieldValue.Int64(now()),
@@ -2034,6 +2110,8 @@ class Integrations(
         const val AI_BATCH = 25
         /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */
         const val HEADERS_PER_CHECK = 300
+        /** Inbox fixes, slice 1: Outlook emails whose own headers are read a check ([bulkLook]). */
+        const val BULK_LOOKS_PER_CHECK = 40
         /** Slice 8a: backlog headers read per check (Gmail), and the next page is listed only while fewer than this wait. */
         const val BACKLOG_HEADERS_PER_CHECK = 300
         const val BACKLOG_LIST_BELOW = 500

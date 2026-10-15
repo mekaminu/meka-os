@@ -4,6 +4,9 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
+import os.meka.backend.integrations.MailBulkHeaders
+import os.meka.backend.integrations.WriteRefused
+import os.meka.core.domain.MailSortRules
 import os.meka.backend.integrations.GmailHistory
 import os.meka.backend.integrations.GmailMail
 import os.meka.backend.integrations.GraphDelta
@@ -219,7 +222,10 @@ class MailSyncTest {
             cursorsAsked += cursor; sinceAsked = sinceMs
             return nextRound(cursor)
         }
-        override fun header(accessToken: String, id: String): MailHeader? { headersRead += id; return mailbox[id] }
+        override fun header(accessToken: String, id: String): MailHeader? {
+            headerFailsAfter?.let { if (headersRead.size >= it) throw WriteRefused("provider refused the change") }
+            headersRead += id; return mailbox[id]
+        }
         // Follow-up radar: what he sent.
         val sentMail = mutableListOf<MailSent>()
         var sentReads = 0
@@ -286,6 +292,18 @@ class MailSyncTest {
             sent += mail; return true
         }
         override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? { headerReads += id; return outlookHeaders[id] }
+
+        // Inbox fixes, slice 1: Outlook's bulk headers read on demand, header reads that fail, and read marks.
+        val bulk = mutableMapOf<String, MailBulkHeaders>()
+        val bulkReads = mutableListOf<String>()
+        var bulkFailsAfter: Int? = null
+        override fun bulkHeaders(accessToken: String, id: String): MailBulkHeaders? {
+            bulkFailsAfter?.let { if (bulkReads.size >= it) throw IllegalStateException("provider HTTP 429") }
+            bulkReads += id; return bulk[id]
+        }
+        var headerFailsAfter: Int? = null
+        val marked = mutableListOf<Pair<Set<String>, Boolean>>()
+        override fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) { marked += ids.toSet() to read }
 
         // Slice 8a: the backlog's pages (by page token; null: can't list), and what was asked.
         var backlogPages: Map<String?, MailBacklogPage>? = null
@@ -1980,5 +1998,135 @@ class MailSyncTest {
             assertTrue(ms.tidied(acc, "mt1").isEmpty() && ms.neverTidied(acc).isEmpty() && ms.senders(acc, 10).isEmpty())
             assertEquals(0, ms.pendingCount(acc))
         }
+    }
+
+    // ---- Inbox fixes, slice 1 ----
+
+    @Test
+    fun aRefusedHeaderReadEndsTheReadingNotTheCheckAndNewMailIsReadFirst() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, store, i) = world(ms, ops = ops)
+        repeat(5) { n -> gmail.mailbox["old$n"] = msg("old$n", 3) }
+        gmail.headerFailsAfter = 2 // Gmail's rate limit after two reads
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals("ok", store.account(id)!!.status)
+        assertEquals(2, ms.messages(id).size)
+        assertEquals(3, ms.pendingCount(id))
+        // After the dry-run day a promo arrives while three old ones still wait: it's read, sorted and tidied first.
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["promo"] = msg("promo", 0, "deals@shop.example").copy(labels = listOf("INBOX", "UNREAD", "CATEGORY_PROMOTIONS"))
+        gmail.headersRead.clear()
+        gmail.headerFailsAfter = 1
+        gmail.nextRound = { MailChanges(fetch = listOf("promo"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(listOf("promo"), gmail.headersRead)
+        assertEquals(mapOf("promo" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        assertEquals("ok", store.account(id)!!.status)
+    }
+
+    @Test
+    fun gmailsBulkHeadersMakeItANotification() {
+        val h = GmailHistory.header(json("""
+            {"id":"m1","threadId":"t1","labelIds":["INBOX","UNREAD"],"internalDate":"1790985600000",
+             "payload":{"headers":[{"name":"From","value":"Shop <hello@shop.example>"},{"name":"Subject","value":"Picked for you"},
+               {"name":"Precedence","value":"bulk"}]}}
+        """))!!
+        assertTrue(MailSortRules.BULK_LABEL in h.labels)
+        val plain = GmailHistory.header(json("""
+            {"id":"m2","threadId":"t2","labelIds":["INBOX"],"internalDate":"1790985600000",
+             "payload":{"headers":[{"name":"From","value":"Sam <sam@example.com>"},{"name":"Auto-Submitted","value":"no"}]}}
+        """))!!
+        assertFalse(MailSortRules.BULK_LABEL in plain.labels)
+    }
+
+    @Test
+    fun tidiedMailIsMarkedReadAndUndoMarksItUnreadUnlessHeTurnedItOff() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["n"] = msg("n", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["r"] = msg("r", 0, "editor@weekly.example").copy(listId = "<weekly.example>", unread = false)
+        gmail.nextRound = { MailChanges(fetch = listOf("n", "r"), cursor = "h2") }
+        i.syncAccount(id)
+        // Only the unread one needs marking.
+        assertEquals(listOf(setOf("n") to true), gmail.marked)
+        val batchId = tidies(ops).keys.single()
+        now += 60_000
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(setOf("n", "r") to false, gmail.marked.last())
+        // Switched off: the next tidy leaves it unread.
+        device(ops, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID, MailAutopilotFields.MARK_READ, FieldValue.Bool(false))
+        gmail.marked.clear()
+        gmail.mailbox["n2"] = msg("n2", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.nextRound = { MailChanges(fetch = listOf("n2"), cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(2, gmail.tidyCalls.size)
+        assertTrue(gmail.marked.isEmpty())
+    }
+
+    @Test
+    fun outlooksPersonLookingEmailsHaveTheirHeadersReadOnceAndBulkOnesAreTidied() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val outlook = FakeGmail(id = MailProviders.OUTLOOK)
+        val i = Integrations(
+            InMemoryIntegrationStore(), ops, emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
+            Cipher(), "https://meka.example", { now }, mail = mapOf(MailProviders.OUTLOOK to outlook), mailStore = ms,
+        )
+        val url = assertIs<Integrations.StartResult.Url>(i.start("home", MailProviders.OUTLOOK)).url
+        val state = URI(url).query.split("&").first { it.startsWith("state=") }.removePrefix("state=")
+        val id = assertIs<Integrations.CallbackResult.Connected>(i.callback("google", state, "code", null)).accountId
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        outlook.mailbox["news"] = msg("news", 0, "hello@shop.example")
+        outlook.mailbox["bulk"] = msg("bulk", 0, "team@app.example")
+        outlook.mailbox["sam"] = msg("sam", 0)
+        outlook.bulk["news"] = MailBulkHeaders("<mailto:leave@shop.example>", false, null, false)
+        outlook.bulk["bulk"] = MailBulkHeaders(null, false, null, true)
+        outlook.nextRound = { MailChanges(fetch = listOf("news", "bulk", "sam"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(setOf("news", "bulk", "sam"), outlook.bulkReads.toSet())
+        assertEquals(mapOf("news" to MailTidy.NEWSLETTER, "bulk" to MailTidy.ARCHIVE), outlook.tidyCalls.single())
+        assertTrue(outlook.mailbox.getValue("sam").inInbox)
+        // Each is read once.
+        outlook.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(3, outlook.bulkReads.size)
+    }
+
+    @Test
+    fun outlooksHeaderReadsStopAtARefusalAndCarryOnNextCheck() {
+        val ms = InMemoryMailStore()
+        val outlook = FakeGmail(id = MailProviders.OUTLOOK)
+        val store = InMemoryIntegrationStore()
+        val i = Integrations(
+            store, InMemoryServerOpStore(), emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
+            Cipher(), "https://meka.example", { now }, mail = mapOf(MailProviders.OUTLOOK to outlook), mailStore = ms,
+        )
+        repeat(4) { n -> outlook.mailbox["p$n"] = msg("p$n", 1, "person$n@example.com") }
+        outlook.bulkFailsAfter = 1
+        val url = assertIs<Integrations.StartResult.Url>(i.start("home", MailProviders.OUTLOOK)).url
+        val state = URI(url).query.split("&").first { it.startsWith("state=") }.removePrefix("state=")
+        val id = assertIs<Integrations.CallbackResult.Connected>(i.callback("google", state, "code", null)).accountId
+        i.syncAccount(id)
+        assertEquals(1, outlook.bulkReads.size)
+        assertEquals("ok", store.account(id)!!.status)
+        outlook.bulkFailsAfter = null
+        outlook.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(4, outlook.bulkReads.toSet().size)
     }
 }

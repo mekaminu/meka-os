@@ -11,6 +11,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import os.meka.core.domain.MailProviders
+import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.UnsubscribeMailto
 
@@ -77,6 +78,18 @@ interface MailProvider {
     fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? = null
 
     /**
+     * Inbox fixes, slice 1: one email's list and bulk headers (Outlook, whose change feed carries none), so an email that
+     * only looked like a person's can be told apart from bulk mail; null when it has gone or this provider has no such read.
+     */
+    fun bulkHeaders(accessToken: String, id: String): MailBulkHeaders? = null
+
+    /**
+     * Inbox fixes, slice 1: marks these emails (by the id they have now) read, or unread again for an Undo. Best effort:
+     * a failure never undoes the move it follows. Default: does nothing.
+     */
+    fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) {}
+
+    /**
      * Slice 5a: the list's unsubscribe email, sent from this account only because Meka tapped Unsubscribe. True when
      * the provider accepted it.
      */
@@ -115,6 +128,9 @@ interface MailProvider {
      */
     fun chaseSent(accessToken: String, id: String, text: String): MailReplyResult = MailReplyResult.FAILED
 }
+
+/** Inbox fixes, slice 1: what an email's own headers say about how it was sent (never its body). */
+data class MailBulkHeaders(val listUnsubscribe: String?, val oneClick: Boolean, val listId: String?, val bulk: Boolean)
 
 /** Follow-up radar: one email Meka sent, as [MailProvider.sent] reads it. */
 data class MailSent(
@@ -339,7 +355,7 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
     }
 
     override fun header(accessToken: String, id: String): MailHeader? {
-        val headers = listOf("From", "Subject", "List-Unsubscribe", "List-Unsubscribe-Post", "List-Id")
+        val headers = listOf("From", "Subject", "List-Unsubscribe", "List-Unsubscribe-Post", "List-Id", "Precedence", "Auto-Submitted")
         val url = "$API/messages/${Http.enc(id)}?format=metadata&" + headers.joinToString("&") { "metadataHeaders=" + Http.enc(it) }
         val a = http.call("GET", url, accessToken)
         if (a.status == 404) return null
@@ -416,6 +432,16 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
                 putJsonArray("removeLabelIds") { label?.let { add(it) }; if (rescue) { add("INBOX"); add("STARRED") } }
             })
             if (a.status in 200..299) done[id] = id
+        }
+    }
+
+    /** Inbox fixes, slice 1: UNREAD off (or back on for an Undo), a thousand ids a batchModify. */
+    override fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) {
+        for (chunk in ids.distinct().chunked(1000)) {
+            http.call("POST", "$API/messages/batchModify", accessToken, buildJsonObject {
+                putJsonArray("ids") { chunk.forEach { add(it) } }
+                putJsonArray(if (read) "removeLabelIds" else "addLabelIds") { add("UNREAD") }
+            })
         }
     }
 
@@ -637,14 +663,25 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     }
 
     /** Slice 5a: the message's internet headers (on demand, one message per sender). */
-    override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? {
+    override fun listHeaders(accessToken: String, id: String): Pair<String?, Boolean>? =
+        bulkHeaders(accessToken, id)?.let { it.listUnsubscribe to it.oneClick }
+
+    /** Inbox fixes, slice 1: the message's internet headers read once (list and bulk headers only kept). */
+    override fun bulkHeaders(accessToken: String, id: String): MailBulkHeaders? {
         val a = http.call("GET", "$GRAPH/me/messages/${Http.enc(id)}?\$select=internetMessageHeaders", accessToken)
         if (a.status == 404) return null
         val hs = (a.body?.get("internetMessageHeaders") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
             .mapNotNull { h -> h["name"].str()?.let { n -> n.lowercase() to (h["value"].str() ?: "") } }.toMap()
         val unsub = hs["list-unsubscribe"]?.take(MailAddress.MAX_HEADER)
         val oneClick = hs["list-unsubscribe-post"]?.replace(" ", "")?.equals("List-Unsubscribe=One-Click", ignoreCase = true) == true
-        return unsub to oneClick
+        return MailBulkHeaders(unsub, oneClick, hs["list-id"]?.take(MailAddress.MAX_HEADER), MailSortRules.bulk(hs["precedence"], hs["auto-submitted"]))
+    }
+
+    /** Inbox fixes, slice 1: isRead on each email (Outlook has no batch for it here: one PATCH each). */
+    override fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) {
+        for (id in ids.distinct()) {
+            http.call("PATCH", "$GRAPH/me/messages/${Http.enc(id)}", accessToken, buildJsonObject { put("isRead", read) })
+        }
     }
 
     /** Slice 5a: sendMail from this account (kept in Sent Items, so he can see it went). */
@@ -773,7 +810,8 @@ internal object GmailHistory {
             receivedAtMs = m["internalDate"].str()?.toLongOrNull() ?: 0L,
             unread = "UNREAD" in labels,
             inInbox = "INBOX" in labels,
-            labels = labels,
+            // Inbox fixes, slice 1: bulk mail by its own headers gets the server's label, so the rules can tell.
+            labels = if (MailSortRules.bulk(hs["precedence"], hs["auto-submitted"])) labels + MailSortRules.BULK_LABEL else labels,
             listUnsubscribe = hs["list-unsubscribe"]?.take(MailAddress.MAX_HEADER),
             oneClickUnsubscribe = hs["list-unsubscribe-post"]?.replace(" ", "")?.equals("List-Unsubscribe=One-Click", ignoreCase = true) == true,
             listId = hs["list-id"]?.take(MailAddress.MAX_HEADER),

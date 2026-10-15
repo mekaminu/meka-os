@@ -18,7 +18,7 @@ interface MailStore {
     fun cursor(accountId: String): String?
     /** One round of changes: whole headers stored, [fetch] ids stored as pending, [removed] gone, the cursor moved on. */
     fun apply(householdId: String, accountId: String, changes: MailChanges)
-    /** Ids still waiting for their headers, oldest first. */
+    /** Ids still waiting for their headers, the most recently listed first (inbox fixes, slice 1). */
     fun pending(accountId: String, limit: Int): List<String>
     fun put(householdId: String, accountId: String, header: MailHeader)
     fun remove(accountId: String, id: String)
@@ -136,7 +136,8 @@ class InMemoryMailStore : MailStore {
         changes.removed.forEach { r.remove(it); sorts[accountId]?.remove(it) }
         cursors[accountId] = changes.cursor
     }
-    @Synchronized override fun pending(accountId: String, limit: Int) = of(accountId).filterValues { it == null }.keys.take(limit)
+    // Inbox fixes, slice 1: the newest listed first, so new mail isn't stuck behind a first listing still being read.
+    @Synchronized override fun pending(accountId: String, limit: Int) = of(accountId).filterValues { it == null }.keys.reversed().take(limit)
     @Synchronized override fun put(householdId: String, accountId: String, header: MailHeader) { of(accountId)[header.id] = header; sorts[accountId]?.remove(header.id) }
     @Synchronized override fun remove(accountId: String, id: String) { of(accountId).remove(id); sorts[accountId]?.remove(id) }
     @Synchronized override fun prune(accountId: String, beforeMs: Long) {
@@ -251,7 +252,7 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
     }
 
     override fun pending(accountId: String, limit: Int): List<String> = c { c ->
-        c.prepareStatement("SELECT message_id FROM mail_message WHERE account_id = ? AND headers_at IS NULL ORDER BY created_at, message_id LIMIT ?").use { st ->
+        c.prepareStatement("SELECT message_id FROM mail_message WHERE account_id = ? AND headers_at IS NULL ORDER BY created_at DESC, message_id LIMIT ?").use { st ->
             st.setString(1, accountId); st.setInt(2, limit)
             st.executeQuery().use { rs -> buildList { while (rs.next()) add(rs.getString(1)) } }
         }

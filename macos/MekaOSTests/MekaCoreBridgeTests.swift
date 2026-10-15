@@ -2951,7 +2951,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(rules.disconnectAsk(row: v.rows[1]).hasPrefix("Disconnect Business · Gmail"))
         XCTAssertTrue(MailProviders.shared.isMail(provider: "outlook_mail"))
         // Slice 3b-2: Autopilot's switch (its panel from the core) and the switch and Undo offline.
-        let panel = MailAutopilotPanelRules.shared.panel(setting: MailAutopilotSetting(on: true, changedAtMs: nil), paused: false)
+        let panel = MailAutopilotPanelRules.shared.panel(setting: MailAutopilotSetting(on: true, changedAtMs: nil, markRead: true), paused: false)
         XCTAssertEqual(panel.action, MailAutopilotPanelRules.shared.TURN_OFF)
         XCTAssertTrue(v.rows.allSatisfy { $0.tidies.isEmpty })
         let switched = try await core.setMailAutopilot(on: false)
