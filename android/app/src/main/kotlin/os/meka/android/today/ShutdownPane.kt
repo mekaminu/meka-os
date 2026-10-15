@@ -152,6 +152,12 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
             WakeSection(core, Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(3)))
         }
 
+        // On this day (Screenshots and photos, slice 4): a photo from this date in past years, picked on the phone.
+        // Never in work hours: only once the evening has started (work's end, else 20:00).
+        if (v.evening) item(key = "on-this-day") {
+            OnThisDaySection(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(3)))
+        }
+
         item(key = "shut") {
             Column(Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(4)), horizontalAlignment = Alignment.CenterHorizontally) {
                 ShutDownCheck(visible = closing || v.doneToday, line = v.doneLine ?: "Day shut down")

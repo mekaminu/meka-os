@@ -1,7 +1,7 @@
 ---
 id: pictures
 title: Screenshots and photos
-keywords: screenshot, screenshots, notice new screenshots, new screenshots, screenshot notification, share a screenshot, share a photo, photo of a letter, read a picture, read a photo, picture of a letter, scan a letter, letter to task, read the copied picture, text in a picture
+keywords: screenshot, screenshots, notice new screenshots, new screenshots, screenshot notification, share a screenshot, share a photo, photo of a letter, read a picture, read a photo, picture of a letter, scan a letter, letter to task, read the copied picture, text in a picture, on this day, photo from this day
 data: no
 fold: none
 fold_where: Share → Navilife, or Capture → 📷 Photo of a letter
@@ -18,3 +18,4 @@ tip: To have new screenshots noticed by themselves, open Capture and tap "Notice
 tip: With Notice new screenshots on, each new one is read on the phone; one that looks like a booking, ticket, appointment, order, receipt, letter or parking confirmation gets a quiet "Screenshot · looks like …" notification with Handle this. A chat or a meme says nothing.
 tip: On the Mac, turn on Notice new screenshots in the menu bar's capture: a new screen capture that looks like something to act on gets the same notification, read on the Mac.
 tip: A photo or screenshot of a passport, driving licence, GHIC, railcard, insurance certificate or warranty offers 🗂 Add to the Vault with its name and the day it runs out (a passport takes the holder's first name, e.g. "Alex passport"). Only the name and date are kept, never its number or the picture. On the Mac the bar offers the same after the cards.
+tip: On the Fold, Shut down the day can show a photo you took on this date in an earlier year ("On this day"): tap Turn on there and allow Navilife to see your photos. It's picked on the phone from your own camera photos (never screenshots or downloads) and never uploaded; tap it to open it in Gallery, Another for a different one, Not this one to never see it again.
