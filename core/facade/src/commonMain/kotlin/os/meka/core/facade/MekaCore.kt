@@ -4334,6 +4334,7 @@ class MekaCore(
         val f = activity.mailFinds().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
         val cal = ZoneCalendar(timeZone)
         if (f.kind == os.meka.core.domain.MailPromiseRules.KIND_PROMISE) return@onCore addMailPromise(f, cal)
+        if (f.kind == os.meka.core.domain.MailFollowUpRules.KIND_FOLLOW_UP) return@onCore addMailFollowUp(f)
         val oid = R.obligationId(id)
         val before = replica.entity(os.meka.core.domain.EntityTypes.OBLIGATION, oid)
         replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, R.obligationFields(f, nowMs(), cal))
@@ -4373,6 +4374,26 @@ class MekaCore(
         }
         refresh()
         return P.addedLine(f, today)
+    }
+
+    /**
+     * Follow-up radar, slice 1: **Add** on an email of his with no reply — a Waiting for item from them (one per find,
+     * so Add on both apps lands on the same item), to chase today, with a note saying which email; the find is answered
+     * on both apps. Undo removes the item and brings the find back. Nothing is sent to anyone.
+     */
+    private fun addMailFollowUp(f: os.meka.core.domain.MailFind): String {
+        val U = os.meka.core.domain.MailFollowUpRules
+        val wid = lists.addWaiting(
+            f.what ?: "A reply", f.merchant, 0, withId = os.meka.core.domain.MailPromiseRules.waitingId(f.id),
+        )
+        lists.editWaiting(wid, notes = U.note(f))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
+        mailFindUndo = {
+            runCatching { lists.deleteWaiting(wid) }
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs()))
+        }
+        refresh()
+        return U.addedLine(f)
     }
 
     /** **Not needed** on a renewal in "Renewals from your mail": gone on both apps, never offered again (with Undo). */

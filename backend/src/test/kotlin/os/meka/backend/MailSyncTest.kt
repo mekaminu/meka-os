@@ -18,6 +18,8 @@ import os.meka.backend.integrations.MailHeader
 import os.meka.backend.integrations.MailProvider
 import os.meka.backend.integrations.MailReplyMessage
 import os.meka.backend.integrations.MailReplyResult
+import os.meka.backend.integrations.MailSent
+import os.meka.backend.integrations.sent
 import os.meka.backend.integrations.MailStore
 import os.meka.backend.integrations.MailboxCheck
 import os.meka.backend.integrations.OAuthClient
@@ -161,6 +163,31 @@ class MailSyncTest {
     }
 
     @Test
+    fun sentMailReadsItsFirstRecipientAndHowMany() {
+        val g = GmailHistory.sent(json("""
+            {"id":"s1","threadId":"t1","labelIds":["SENT"],"internalDate":"1790985600000","snippet":"Could you send the quote?",
+             "payload":{"headers":[{"name":"To","value":"\"Taylor, Sam\" <Sam@Example.com>, ann@example.com"},
+               {"name":"Cc","value":"Bo <bo@example.com>"},{"name":"Subject","value":"Quote"}]}}
+        """))!!
+        assertEquals("sam@example.com", g.toAddress)
+        assertEquals("Taylor, Sam", g.toName)
+        assertEquals(3, g.recipients)
+        assertEquals("t1", g.threadId)
+        assertEquals(1_790_985_600_000L, g.sentAtMs)
+        assertNull(GmailHistory.sent(json("""{"id":"d1","labelIds":["SENT","DRAFT"],"internalDate":"1","payload":{"headers":[]}}""")))
+        assertNull(GmailHistory.sent(json("""{"id":"i1","labelIds":["INBOX"],"internalDate":"1","payload":{"headers":[]}}""")))
+        val o = GraphDelta.sent(json("""
+            {"value":[{"id":"o1","conversationId":"c1","subject":"Dates","sentDateTime":"2026-10-03T08:00:00Z","bodyPreview":"Does Friday work?",
+              "toRecipients":[{"emailAddress":{"name":"Ann Lee","address":"Ann@Example.com"}}],"ccRecipients":[]}]}
+        """)).single()
+        assertEquals("ann@example.com", o.toAddress)
+        assertEquals("Ann Lee", o.toName)
+        assertEquals(1, o.recipients)
+        assertEquals("c1", o.threadId)
+        assertEquals(listOf(null to "a@example.com", "B" to "b@example.com"), MailAddress.parseList("a@example.com, B <b@example.com>, nobody"))
+    }
+
+    @Test
     fun fromHeadersParse() {
         assertEquals("Alex Smith" to "alex@example.com", MailAddress.parse("Alex Smith <Alex@Example.com>"))
         assertEquals("Smith, Alex" to "alex@example.com", MailAddress.parse("\"Smith, Alex\" <alex@example.com>"))
@@ -193,6 +220,13 @@ class MailSyncTest {
             return nextRound(cursor)
         }
         override fun header(accessToken: String, id: String): MailHeader? { headersRead += id; return mailbox[id] }
+        // Follow-up radar: what he sent.
+        val sentMail = mutableListOf<MailSent>()
+        var sentReads = 0
+        override fun sent(accessToken: String, sinceMs: Long, limit: Int): List<MailSent> {
+            sentReads++
+            return sentMail.filter { it.sentAtMs >= sinceMs }.sortedByDescending { it.sentAtMs }.take(limit)
+        }
 
         // Slice 3b: Autopilot's moves on the fake mailbox.
         val sentThreads = mutableSetOf<String>()
@@ -728,6 +762,44 @@ class MailSyncTest {
         assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.COMMITMENT).size)
         gmail.nextRound = { MailChanges(cursor = "h3") }
         i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+    }
+
+    // ---- Follow-up radar, slice 1 ----
+
+    private fun sentMsg(id: String, ageDays: Long, preview: String, to: String = "sam@example.com", thread: String = "t-$id") =
+        MailSent(id, thread, to, "Sam Taylor", 1, "Quote $id", now - ageDays * day, preview)
+
+    @Test
+    fun anUnansweredAskBecomesAFollowUpAndAReplyClearsIt() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        gmail.sentMail += sentMsg("s1", 4, "Could you send the quote?")
+        gmail.sentMail += sentMsg("s2", 1, "Can you make Friday?") // too soon
+        gmail.sentMail += sentMsg("s3", 5, "Thanks, all good.") // asks nothing
+        gmail.sentMail += sentMsg("s4", 5, "Any update?", thread = "t-r4") // answered already
+        gmail.sentMail += sentMsg("s5", 6, "Can you check?", to = "noreply@shop.example")
+        gmail.mailbox["r4"] = msg("r4", 2, "sam@example.com").copy(threadId = "t-r4")
+        i.syncAccount(id)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
+        val (_, f) = finds.entries.single()
+        assertEquals(FieldValue.Text(os.meka.core.domain.MailFollowUpRules.KIND_FOLLOW_UP), f[os.meka.core.domain.MailFindFields.KIND])
+        assertEquals(FieldValue.Text("Reply about Quote s1"), f[os.meka.core.domain.MailFindFields.WHAT])
+        assertEquals(FieldValue.Text("Sam Taylor"), f[os.meka.core.domain.MailFindFields.MERCHANT])
+        // Nothing reaches Waiting for without his Add.
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.COMMITMENT).size)
+        // The next check within six hours doesn't read Sent again.
+        i.syncAccount(id)
+        assertEquals(1, gmail.sentReads)
+        // Sam replies in the conversation; at the next read the find is marked answered.
+        gmail.mailbox["r1"] = msg("r1", 0, "sam@example.com").copy(threadId = "t-s1")
+        gmail.nextRound = { MailChanges(fetch = listOf("r1"), cursor = "h2") }
+        now += Integrations.FOLLOW_UPS_EVERY_MS
+        i.syncAccount(id)
+        val after = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values.single()
+        assertEquals(FieldValue.Text(os.meka.core.domain.MailFollowUpRules.ANSWERED_REPLIED), after[os.meka.core.domain.MailFindFields.ANSWERED_WHY])
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
     }
 

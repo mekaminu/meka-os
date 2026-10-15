@@ -11,6 +11,9 @@ import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailPromiseRules
+import os.meka.core.domain.MailFollowUpRules
+import os.meka.core.domain.MailSentFacts
+import os.meka.core.domain.MailFindFields
 import os.meka.core.domain.ParcelRules
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
@@ -494,6 +497,8 @@ class Integrations(
         runCatching { backlog(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         runCatching { publishMailNeeds(a, ms) }
+        // Follow-up radar, slice 1: his own emails with no reply, a few times a day (on his tap in the apps).
+        runCatching { followUps(a, m, token, ms) }
         // Slice 3g: parcels arriving, from the shipping emails (whether or not Autopilot has tidied them).
         runCatching { parcels(a, ms) }
         // Slice 3h: bills due, from the bill emails (whether or not Autopilot has tidied them).
@@ -502,6 +507,67 @@ class Integrations(
         runCatching { renewals(a, ms) }
         // Slice 2: promises made to him, to add to Waiting for (on his tap in the apps).
         runCatching { promises(a, ms) }
+    }
+
+    /** Follow-up radar: when each account's sent mail was last read (in memory; a restart just reads it again). */
+    private val followUpsReadAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /**
+     * Follow-up radar, slice 1: at most every [FOLLOW_UPS_EVERY_MS], the account's sent mail of the last
+     * [MailFollowUpRules.WINDOW_DAYS] days ([MailProvider.sent]: recipients, subject, preview, time; never a body). The
+     * newest email he sent in each conversation that [MailFollowUpRules.read] says asks someone something, sent at
+     * least [MailFollowUpRules.DAYS] days ago, with no email in that conversation from anyone else since, becomes one
+     * `mail_find` (kind FOLLOW_UP), written once; its mirror row keeps when it was sent and the conversation (server
+     * only). Each later check marks an open one answered when someone replies in the conversation or he writes in it
+     * again, and the apps drop it. Nothing goes on Waiting for and nothing is sent here: the apps' Add does the first.
+     */
+    internal fun followUps(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val nowMs = now()
+        followUpsReadAt[a.id]?.let { if (nowMs - it < FOLLOW_UPS_EVERY_MS) return }
+        val sent = m.sent(token, nowMs - MailFollowUpRules.WINDOW_MS, FOLLOW_UPS_LIMIT) ?: return
+        followUpsReadAt[a.id] = nowMs
+        val own = store.accounts(a.householdId).map { it.email.lowercase() }.toSet() + a.email.lowercase()
+        val inbound = ms.messages(a.id).filter { it.threadId != null }.groupBy({ it.threadId!! }, { it.fromAddress to it.receivedAtMs })
+        fun thread(s: MailSent) = s.threadId ?: s.id
+        val latest = sent.groupBy(::thread).mapValues { (_, v) -> v.maxBy { it.sentAtMs } }
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        // Open ones answered since: they replied, or he wrote again in the conversation.
+        for ((id, row) in mirror) {
+            val t = row.remoteId?.takeIf { it.startsWith(FOLLOW_UP_THREAD) }?.removePrefix(FOLLOW_UP_THREAD) ?: continue
+            if (row.removed || MailFindFields.ANSWERED_AT in row.fieldOps) continue
+            // Deleted with Delete mail data: left deleted (a write would bring it back).
+            if (row.fieldOps[DELETED_FIELD]?.second == valueKey(FieldValue.Bool(true))) continue
+            val why = when {
+                MailFollowUpRules.replied(row.startMs, inbound[t].orEmpty(), own) -> MailFollowUpRules.ANSWERED_REPLIED
+                (latest[t]?.sentAtMs ?: 0L) > row.startMs + 1_000L -> MailFollowUpRules.ANSWERED_WROTE_AGAIN
+                else -> continue
+            }
+            writeFollowUp(a, id, MailFollowUpRules.answeredFields(nowMs, why), row.startMs, row.remoteId)
+        }
+        val today = LONDON.epochDayOf(nowMs)
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        for (s in latest.values.sortedBy { it.sentAtMs }) {
+            val id = MailFollowUpRules.findId(a.id, s.id)
+            if (mirror.containsKey(id)) continue
+            val day = LONDON.epochDayOf(s.sentAtMs)
+            if (!MailFollowUpRules.due(day, today)) continue
+            if (MailFollowUpRules.replied(s.sentAtMs, inbound[thread(s)].orEmpty(), own)) continue
+            val facts = MailSentFacts(s.toName, s.toAddress, s.recipients, s.subject, s.preview, s.sentAtMs)
+            val fu = MailFollowUpRules.read(facts, own, MailSortRules.isAutomated(s.toAddress)) ?: continue
+            writeFollowUp(a, id, MailFollowUpRules.serverFields(fu, account, s.subject, day), s.sentAtMs, FOLLOW_UP_THREAD + thread(s))
+        }
+    }
+
+    /** As [writeMail], keeping when the email was sent and its conversation on the mirror row (never synced). */
+    private fun writeFollowUp(a: AccountRow, id: String, fields: Map<String, FieldValue>, sentAtMs: Long, thread: String?) {
+        val wrote = store.transaction {
+            ops.transaction {
+                store.lockAccount(a.id)
+                val prev = store.mirror(a.householdId, a.id)[id]
+                write(a, id, sentAtMs, sentAtMs, false, prev, fields, EntityTypes.MAIL_FIND, remoteId = thread)
+            }
+        }
+        if (wrote) runCatching { onChanged(a.householdId) }
     }
 
     /**
@@ -1773,6 +1839,12 @@ class Integrations(
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         /** Inbox autopilot, slice 1c: the mail MEKA keeps headers for (Meka: the last 60 days). */
         const val MAIL_WINDOW_MS = 60 * 24 * 3_600_000L
+        /** Follow-up radar: sent mail is read at most this often per account (four times a day). */
+        const val FOLLOW_UPS_EVERY_MS = 6 * 3_600_000L
+        /** Follow-up radar: the newest this many sent emails are read each time. */
+        const val FOLLOW_UPS_LIMIT = 60
+        /** Follow-up radar: the mirror row's remoteId prefix holding the conversation. */
+        const val FOLLOW_UP_THREAD = "followup:"
         /** Slice 2a: headers sorted per round (rules only, cheap; a big first listing takes a few rounds of one check). */
         const val SORT_BATCH = 500
         const val SORT_ROUNDS = 20

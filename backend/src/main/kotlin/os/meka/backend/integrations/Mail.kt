@@ -100,7 +100,27 @@ interface MailProvider {
      * [sinceMs], at most [limit]; never a body. Null when this provider can't list it (nothing is reviewed).
      */
     fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader>? = null
+
+    /**
+     * Follow-up radar, slice 1: what Meka sent since [sinceMs], newest first, at most [limit] — the first recipient,
+     * how many, the subject, the provider's preview and the time; never a body. Null when this provider can't list it
+     * (nothing is offered).
+     */
+    fun sent(accessToken: String, sinceMs: Long, limit: Int): List<MailSent>? = null
 }
+
+/** Follow-up radar: one email Meka sent, as [MailProvider.sent] reads it. */
+data class MailSent(
+    val id: String,
+    val threadId: String?,
+    val toAddress: String?,
+    val toName: String?,
+    /** To and Cc together. */
+    val recipients: Int,
+    val subject: String?,
+    val sentAtMs: Long,
+    val preview: String?,
+)
 
 /** Slice 8a: one page of the inbox's older mail; [next] null once the listing is done. */
 data class MailBacklogPage(val ids: List<String> = emptyList(), val headers: List<MailHeader> = emptyList(), val next: String?)
@@ -422,6 +442,19 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return ids.mapNotNull { header(accessToken, it) }.filter { "SPAM" in it.labels }
     }
 
+    /** Follow-up radar: one listing of Sent, then each message's To, Cc and Subject (metadata only, with its snippet). */
+    override fun sent(accessToken: String, sinceMs: Long, limit: Int): List<MailSent> {
+        val q = mapOf("q" to "in:sent after:${sinceMs / 1000}", "maxResults" to limit.coerceIn(1, 500).toString())
+        val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
+        val ids = (body["messages"] as? JsonArray)?.mapNotNull { m -> (m as? JsonObject)?.get("id").str() }.orEmpty()
+        val headers = listOf("To", "Cc", "Subject")
+        return ids.mapNotNull { id ->
+            val url = "$API/messages/${Http.enc(id)}?format=metadata&" + headers.joinToString("&") { "metadataHeaders=" + Http.enc(it) }
+            val a = http.call("GET", url, accessToken)
+            if (a.status == 404) null else GmailHistory.sent(a.body ?: error("Gmail answered without a body"))
+        }
+    }
+
     companion object {
         private const val DAY_MS = 86_400_000L
         /** 500 ids a page: up to 10,000 messages in the first listing. */
@@ -623,6 +656,16 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
         return GraphDelta.read(body).headers.map { it.copy(inInbox = false) }
     }
 
+    /** Follow-up radar: Sent Items since [sinceMs], newest first, recipients, subject and preview only (one listing). */
+    override fun sent(accessToken: String, sinceMs: Long, limit: Int): List<MailSent> {
+        val url = "$GRAPH/me/mailFolders/sentitems/messages?\$top=${limit.coerceIn(1, 100)}" +
+            "&\$select=" + Http.enc("toRecipients,ccRecipients,subject,sentDateTime,conversationId,bodyPreview") +
+            "&\$filter=" + Http.enc("sentDateTime ge " + graphTime(sinceMs)) +
+            "&\$orderby=" + Http.enc("sentDateTime desc")
+        val body = http.call("GET", url, accessToken).body ?: error("Outlook answered without a body")
+        return GraphDelta.sent(body)
+    }
+
     private companion object {
         const val GRAPH = "https://graph.microsoft.com/v1.0"
         const val MAX_PAGES = 20
@@ -672,6 +715,50 @@ internal object GmailHistory {
     }
 }
 
+/** Follow-up radar: Gmail's `format=metadata` sent message read (pure, for tests). Null for one that isn't in Sent. */
+internal fun GmailHistory.sent(m: JsonObject): MailSent? {
+    val labels = (m["labelIds"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { it.str() }
+    if ("SENT" !in labels || "DRAFT" in labels) return null
+    val hs = ((m["payload"] as? JsonObject)?.get("headers") as? kotlinx.serialization.json.JsonArray).orEmpty()
+        .mapNotNull { it as? JsonObject }
+        .mapNotNull { h -> h["name"].str()?.let { n -> n.lowercase() to (h["value"].str() ?: "") } }
+        .toMap()
+    val to = MailAddress.parseList(hs["to"])
+    val cc = MailAddress.parseList(hs["cc"])
+    val first = to.firstOrNull()
+    return MailSent(
+        id = m["id"].str() ?: return null,
+        threadId = m["threadId"].str(),
+        toAddress = first?.second, toName = first?.first,
+        recipients = to.size + cc.size,
+        subject = hs["subject"]?.take(MailAddress.MAX_SUBJECT),
+        sentAtMs = m["internalDate"].str()?.toLongOrNull() ?: return null,
+        preview = m["snippet"].str()?.take(MailAddress.MAX_PREVIEW)?.takeIf { it.isNotBlank() },
+    )
+}
+
+/** Follow-up radar: Graph's Sent Items page read (pure, for tests). */
+internal fun GraphDelta.sent(body: JsonObject): List<MailSent> =
+    (body["value"] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { v ->
+        val m = v as? JsonObject ?: return@mapNotNull null
+        fun people(key: String) = (m[key] as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { r ->
+            val e = (r as? JsonObject)?.get("emailAddress") as? JsonObject ?: return@mapNotNull null
+            val address = e["address"].str()?.lowercase()?.takeIf { '@' in it } ?: return@mapNotNull null
+            e["name"].str()?.takeIf { it.isNotBlank() } to address
+        }
+        val to = people("toRecipients")
+        val first = to.firstOrNull()
+        MailSent(
+            id = m["id"].str() ?: return@mapNotNull null,
+            threadId = m["conversationId"].str(),
+            toAddress = first?.second, toName = first?.first,
+            recipients = to.size + people("ccRecipients").size,
+            subject = m["subject"].str()?.take(MailAddress.MAX_SUBJECT),
+            sentAtMs = m["sentDateTime"].str()?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: return@mapNotNull null,
+            preview = m["bodyPreview"].str()?.take(MailAddress.MAX_PREVIEW)?.takeIf { it.isNotBlank() },
+        )
+    }
+
 /** Graph's delta page read into headers and removals (pure, for tests). */
 internal object GraphDelta {
     data class Page(val headers: List<MailHeader>, val removed: List<String>)
@@ -706,6 +793,29 @@ internal object MailAddress {
     const val MAX_HEADER = 1000
     /** Slice 6a: the provider's preview as kept (Gmail's snippet and Outlook's bodyPreview are ~200 characters already). */
     const val MAX_PREVIEW = 300
+
+    /**
+     * Follow-up radar: a `To:`/`Cc:` header's addresses, in order (commas inside quotes or angle brackets don't split).
+     * Entries without an address are dropped.
+     */
+    fun parseList(raw: String?): List<Pair<String?, String>> {
+        val s = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return emptyList()
+        val parts = mutableListOf<String>()
+        val cur = StringBuilder()
+        var quoted = false
+        var angled = false
+        for (c in s) {
+            when {
+                c == '"' -> { quoted = !quoted; cur.append(c) }
+                c == '<' && !quoted -> { angled = true; cur.append(c) }
+                c == '>' && !quoted -> { angled = false; cur.append(c) }
+                c == ',' && !quoted && !angled -> { parts += cur.toString(); cur.clear() }
+                else -> cur.append(c)
+            }
+        }
+        parts += cur.toString()
+        return parts.mapNotNull { p -> parse(p).let { (n, a) -> a?.let { n to it } } }
+    }
 
     fun parse(raw: String?): Pair<String?, String?> {
         val s = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null to null

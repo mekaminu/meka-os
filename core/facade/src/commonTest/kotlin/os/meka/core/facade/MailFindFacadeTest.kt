@@ -4,7 +4,9 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MailFollowUpRules
 import os.meka.core.domain.MailPromiseRules
+import os.meka.core.domain.MailSentFacts
 import os.meka.core.domain.MailRenewalRules
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
@@ -111,5 +113,41 @@ class MailFindFacadeTest {
         mac.addMailFind(id)
         assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
         assertEquals(listOf(MailPromiseRules.waitingId(id)), fold.listsView.value.waiting.map { it.id })
+    }
+
+    @Test
+    fun aFollowUpGoesOnWaitingForToChaseTodayAndAnAnswerClearsTheOther() = runTest {
+        val sentDay = CivilDate.toEpochDay(2026, 10, 12)
+        val own = setOf("alex@example.com")
+        val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 5 * 86_400_000L), own, false)!!
+        val other = MailFollowUpRules.read(MailSentFacts("Ann Lee", "ann@example.com", 1, "Dates", "Does Friday work?", now - 5 * 86_400_000L), own, false)!!
+        val id = MailFollowUpRules.findId("acc1", "s1")
+        val id2 = MailFollowUpRules.findId("acc1", "s2")
+        serverWrite(id, MailFollowUpRules.serverFields(fu, "Personal", "Quote", sentDay))
+        serverWrite(id2, MailFollowUpRules.serverFields(other, "Personal", "Dates", sentDay))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals("No reply yet", fold.mailFinds.value!!.title)
+        assertEquals(2, mac.mailFinds.value!!.rows.size)
+
+        assertEquals("On Waiting for: Reply about Quote from Sam Taylor · chase today", fold.addMailFind(id))
+        val w = fold.listsView.value.waiting.single()
+        assertEquals("Reply about Quote", w.title)
+        assertEquals("Sam Taylor", w.who)
+        assertEquals(CivilDate.toEpochDay(2026, 10, 17), w.chaseDay)
+        assertEquals(listOf(id2), fold.mailFinds.value!!.rows.map { it.id })
+
+        // Ann answers: the server marks it and it leaves both apps.
+        serverWrite(id2, MailFollowUpRules.answeredFields(now, MailFollowUpRules.ANSWERED_REPLIED))
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertNull(fold.mailFinds.value)
+        assertNull(mac.mailFinds.value)
+        assertEquals(1, mac.listsView.value.waiting.size)
+
+        // Undo: off Waiting for, back in the card.
+        fold.undoMailFind()
+        assertEquals(0, fold.listsView.value.waiting.size)
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
     }
 }

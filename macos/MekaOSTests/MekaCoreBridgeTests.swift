@@ -3013,6 +3013,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 2: promises share the card.
         XCTAssertEqual(MailRenewalRules.shared.headline(renewals: 0, promises: 2), "2 to add to Waiting for · nothing goes on until you tap Add")
         XCTAssertEqual(MailPromiseRules.shared.TITLE, "Promises from your mail")
+        // Follow-up radar: his emails with no reply share the card.
+        XCTAssertEqual(MailFollowUpRules.shared.TITLE, "No reply yet")
+        XCTAssertEqual(MailRenewalRules.shared.headline(renewals: 0, promises: 0, followUps: 1), "1 email with no reply · nothing goes on Waiting for until you tap Add")
         // Slice 7: the ten-minute inbox — no email, no card; a session over nothing ends "Inbox clear"; the time's key.
         XCTAssertNil(core.mailMoment.value)
         try await core.startMailMoment()

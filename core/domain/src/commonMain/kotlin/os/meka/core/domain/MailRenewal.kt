@@ -34,7 +34,7 @@ enum class MailFindState { OPEN, ADDED, DISMISSED }
 /** One find as the apps read it from the synced `mail_find` entity. */
 data class MailFind(
     val id: String,
-    /** "RENEWAL", or "PROMISE" (slice 2: [MailPromiseRules]). */
+    /** "RENEWAL", "PROMISE" (slice 2: [MailPromiseRules]) or "FOLLOW_UP" (Follow-up radar: [MailFollowUpRules]). */
     val kind: String,
     /** The account's label: "Personal", "Business", "Outlook". */
     val account: String,
@@ -53,6 +53,8 @@ data class MailFind(
     val what: String? = null,
     /** Slice 2, a promise: the email named the day ([renewDay] is then that day; else it is the default chase day). */
     val byStated: Boolean = false,
+    /** Follow-up radar: when the server saw them answer (or him write again); null while unanswered. */
+    val answeredAtMs: Long? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -72,6 +74,9 @@ object MailFindFields {
     const val WHAT = "what"
     /** Slice 2 (promises): whether the email named the day. */
     const val BY_STATED = "byStated"
+    /** Follow-up radar (server-written later): when they answered or he wrote again, and which ([MailFollowUpRules]). */
+    const val ANSWERED_AT = "answeredAtMs"
+    const val ANSWERED_WHY = "answeredWhy"
     // Written by the apps.
     const val STATE = "state"
     const val DECIDED_AT = "decidedAtMs"
@@ -273,6 +278,7 @@ object MailRenewalRules {
             decidedAtMs = f[MailFindFields.DECIDED_AT]?.longOrNull ?: 0L,
             what = f[MailFindFields.WHAT]?.textOrNull?.takeIf { it.isNotBlank() },
             byStated = f[MailFindFields.BY_STATED]?.boolOrNull ?: false,
+            answeredAtMs = f[MailFindFields.ANSWERED_AT]?.longOrNull,
         )
     }
 
@@ -305,11 +311,26 @@ object MailRenewalRules {
         else -> "$renewals to add to Renewals · $promises to Waiting for · nothing goes on until you tap Add"
     }
 
+    /** Follow-up radar: emails with no reply go to Waiting for too ("1 with no reply · nothing goes on until you tap Add"). */
+    fun headline(renewals: Int, promises: Int, followUps: Int): String = when {
+        followUps == 0 -> headline(renewals, promises)
+        renewals == 0 && promises == 0 ->
+            (if (followUps == 1) "1 email with no reply" else "$followUps emails with no reply") + " · nothing goes on Waiting for until you tap Add"
+        else -> "${renewals + promises + followUps} to add · nothing goes on until you tap Add"
+    }
+
     /** Slice 2: the card's title for what it holds. */
     fun title(renewals: Int, promises: Int): String = when {
         promises == 0 -> TITLE
         renewals == 0 -> MailPromiseRules.TITLE
         else -> "Renewals and promises from your mail"
+    }
+
+    /** Follow-up radar: "No reply yet" alone; mixed with the others, "To add from your mail". */
+    fun title(renewals: Int, promises: Int, followUps: Int): String = when {
+        followUps == 0 -> title(renewals, promises)
+        renewals == 0 && promises == 0 -> MailFollowUpRules.TITLE
+        else -> "To add from your mail"
     }
 
     /** The bar's line after Add: "On Renewals: Netflix · renews Tue 3 Nov". */
@@ -318,7 +339,8 @@ object MailRenewalRules {
     /**
      * The card: open renewal finds still to come (renewing today or later), not already on the radar (his own entry or
      * an earlier Add), and (slice 2) open promises still worth waiting for and not already on Waiting for
-     * ([MailPromiseRules.showable]), soonest first; null when there are none.
+     * ([MailPromiseRules.showable]), and (Follow-up radar) his emails with no reply yet ([MailFollowUpRules.showable]),
+     * soonest first; null when there are none.
      */
     fun card(
         finds: List<MailFind>, obligations: Collection<Map<String, FieldValue>>, nowMs: Long, cal: LocalCalendar,
@@ -330,10 +352,12 @@ object MailRenewalRules {
                 !alreadyOnRadar(f.merchant, f.renewDay, obligations, cal)
         }
         val promises = finds.filter { MailPromiseRules.showable(it, waiting, today) }
-        val open = (renewals + promises).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
+        val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today) }
+        val open = (renewals + promises + followUps).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
         if (open.isEmpty()) return null
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
+            if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today)
             val title = title(f)
             val line = line(f, today)
             MailFindRow(
@@ -344,7 +368,7 @@ object MailRenewalRules {
         }
         val more = open.size - rows.size
         return MailFindCard(
-            title(renewals.size, promises.size), headline(renewals.size, promises.size), rows,
+            title(renewals.size, promises.size, followUps.size), headline(renewals.size, promises.size, followUps.size), rows,
             if (more > 0) "+ $more more · answer these first" else null,
         )
     }
