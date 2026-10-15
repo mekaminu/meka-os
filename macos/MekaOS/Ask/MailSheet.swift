@@ -55,6 +55,13 @@ struct MailSheet: View {
                         }
                         .staggeredAppear(2)
                     }
+                    // Follow-up radar, slice 4: everyone he set his own chase wait for (synced with the Fold).
+                    if let waits = model.followUpWaits {
+                        WaitsPanelView(panel: waits, palette: palette) { id, days in
+                            Task { await model.changeFollowUpWait(id, days: days) }
+                        }
+                        .staggeredAppear(2)
+                    }
                 }
                 ForEach(Array(view.rows.enumerated()), id: \.element.email) { i, row in
                     MailAccountRowView(row: row, palette: palette, onReconnect: {
@@ -106,6 +113,14 @@ struct MailSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
+            if model.followUpWaitUndo {
+                Button("Undo") { Task { await model.undoFollowUpWaitChange() } }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Undo the last chase wait change")
+                    .transition(.opacity)
+            }
             if let message = model.mailMessage {
                 Text(message).font(MekaType.caption).foregroundStyle(palette.critical)
                     .fixedSize(horizontal: false, vertical: true)
@@ -129,7 +144,9 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.ruleLine ?? "" } } ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mail?.rows.map { $0.rules.map(\.id) } ?? [])
-        .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey() }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.followUpWaits?.rows.map(\.id) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.followUpWaitUndo)
+        .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey(); await model.loadFollowUpWaits() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
         }
@@ -216,6 +233,65 @@ private struct WarrantyPanelView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
+    }
+}
+
+/// Follow-up radar, slice 4: Chase waits — the usual wait, then one row per person he set his own for, with the
+/// 1 day … 2 weeks chips (the lit one in the accent, tick haptic) and Back to usual. Rows enter and leave on the expand
+/// spring; lines cross-fade. Only the id (a String) and the number go back to the model.
+private struct WaitsPanelView: View {
+    let panel: FollowUpWaitsPanel
+    let palette: MekaPalette
+    let onPick: (String, Int32) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(panel.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(panel.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            ForEach(panel.rows, id: \.id) { r in
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.who).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .contentTransition(.opacity)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(r.spoken)
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(r.choices, id: \.days) { c in
+                            let id = r.id, days = c.days
+                            Button(c.label) { if !c.chosen { onPick(id, days) } }
+                                .buttonStyle(MekaPressStyle())
+                                .font(MekaType.itemMeta)
+                                .foregroundStyle(c.chosen ? palette.onAccent : palette.textPrimary)
+                                .padding(.horizontal, MekaSpace.xs)
+                                .padding(.vertical, MekaSpace.xxs)
+                                .background(Capsule().fill(c.chosen ? palette.accent : palette.hairline))
+                                .accessibilityLabel(c.spoken)
+                                .accessibilityAddTraits(c.chosen ? .isSelected : [])
+                        }
+                        let id = r.id
+                        Button(r.resetLabel) { onPick(id, 0) }
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.itemMeta)
+                            .foregroundStyle(palette.accent)
+                            .accessibilityLabel(r.resetSpoken)
+                    }
+                }
+                .padding(.top, MekaSpace.xs)
+                .transition(.opacity)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.rows.map { $0.line })
     }
 }
 

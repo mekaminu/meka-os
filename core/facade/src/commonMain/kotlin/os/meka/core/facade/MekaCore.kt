@@ -4355,6 +4355,42 @@ class MekaCore(
         U.waitSetLine(f, days, ZoneCalendar(timeZone).epochDayOf(nowMs()))
     }
 
+    // ---- Follow-up radar, slice 4: his per-person waits in Mail settings ----
+
+    private var followUpWaitUndo: (() -> Unit)? = null
+
+    /** Mail → Chase waits on both apps: everyone he set his own wait for, by name, and the usual for everyone else. */
+    suspend fun followUpWaitsPanel(): os.meka.core.domain.FollowUpWaitsPanel = onCore {
+        os.meka.core.domain.FollowUpWaitsRules.panel(followUpWaits(), ZoneCalendar(timeZone))
+    }
+
+    /**
+     * Mail → Chase waits: a chip on one person's row ([days] one of [os.meka.core.domain.MailFollowUpRules.WAIT_CHOICES])
+     * or **Back to usual** ([days] 0). Synced, so both apps' rows and Needs you follow; [undoFollowUpWaitChange] puts it
+     * back. Nothing is sent. Returns the line to show.
+     */
+    suspend fun changeFollowUpWait(waitId: String, days: Int): String = onCore {
+        val U = os.meka.core.domain.MailFollowUpRules
+        val R = os.meka.core.domain.FollowUpWaitsRules
+        val w = followUpWaits().firstOrNull { it.id == waitId } ?: return@onCore os.meka.core.domain.MailRenewalRules.UNKNOWN
+        if (days != 0 && days !in U.WAIT_CHOICES) return@onCore os.meka.core.domain.MailRenewalRules.UNKNOWN
+        // Undo writes the person's wait back as it was, with the day he first set it.
+        val before = U.waitFields(w.who, w.days, w.atMs)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.FOLLOW_UP_WAIT, waitId, U.waitFields(w.who, days, nowMs()))
+        followUpWaitUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.FOLLOW_UP_WAIT, waitId, before) }
+        mailFindsChanged()
+        if (days == 0) R.resetLine(w.who) else R.changedLine(w.who, days)
+    }
+
+    /** Undo on Mail → Chase waits' last change on this device. Returns the line to show, or null with nothing to undo. */
+    suspend fun undoFollowUpWaitChange(): String? = onCore {
+        val undo = followUpWaitUndo ?: return@onCore null
+        followUpWaitUndo = null
+        undo()
+        mailFindsChanged()
+        os.meka.core.domain.FollowUpWaitsRules.UNDONE
+    }
+
     /**
      * Promises, receipts and renewals from email, slice 1: **Add** on a renewal in "Renewals from your mail": it goes on
      * Lists → Renewals (one reminder per find, so Add on both apps lands on the same one) with the day, price, kind and

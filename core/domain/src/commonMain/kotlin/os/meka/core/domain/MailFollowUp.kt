@@ -285,3 +285,75 @@ object MailFollowUpRules {
     fun addedLine(f: MailFind): String =
         "On Waiting for: ${f.what ?: "A reply"}" + (f.merchant?.let { " from $it" } ?: "") + " · chase today"
 }
+
+/** Follow-up radar, slice 4: one person in Mail → Chase waits, with the chips to change it and Back to usual. */
+data class FollowUpWaitRow(
+    val id: String,
+    val who: String,
+    val days: Int,
+    /** "Waits 1 week before a chase is offered · set Mon 12 Oct". */
+    val line: String,
+    val spoken: String,
+    val choices: List<WaitChoice>,
+    val resetLabel: String,
+    val resetSpoken: String,
+)
+
+/** Mail → Chase waits: the people he set his own wait for (the default for everyone else), on both apps. */
+data class FollowUpWaitsPanel(val title: String, val line: String, val rows: List<FollowUpWaitRow>)
+
+/*
+ * Follow-up radar, slice 4 (pure): **his per-person waits in one place**. Mail settings (Ask → Settings → Mail on both
+ * apps) lists everyone he set a wait for under "Wait 3 days ▾" on a No reply yet row, newest choice per person, by
+ * name: "Sam Taylor · Waits 1 week before a chase is offered · set Mon 12 Oct", with the same chips to change it and
+ * **Back to usual** (the default [MailFollowUpRules.DAYS]); each with Undo. Nothing is sent.
+ */
+object FollowUpWaitsRules {
+    const val TITLE = "Chase waits"
+    const val RESET = "Back to usual"
+
+    /** "3 days" — the wait for anyone he hasn't set. */
+    val usual: String get() = MailFollowUpRules.waitLabel(MailFollowUpRules.DAYS)
+
+    val EMPTY_LINE: String
+        get() = "Navilife offers a chase after $usual without a reply. To wait longer or shorter for someone, use " +
+            "${MailFollowUpRules.waitPill(MailFollowUpRules.DAYS)} on their No reply yet row in Needs you."
+
+    /** The newest wait per person (a 0 "back to usual" hides them), sorted by name. */
+    fun current(waits: List<FollowUpWait>): List<FollowUpWait> =
+        waits.groupBy { MailFollowUpRules.waitKey(it.who) }
+            .filterKeys { it.isNotEmpty() }
+            .mapNotNull { (_, ws) -> ws.maxByOrNull { it.atMs } }
+            .sortedBy { MailFollowUpRules.waitKey(it.who) }
+
+    fun panel(waits: List<FollowUpWait>, zone: LocalCalendar): FollowUpWaitsPanel {
+        val rows = current(waits).map { row(it, zone) }
+        val line = when (rows.size) {
+            0 -> EMPTY_LINE
+            1 -> "$usual for everyone else · your own wait for 1 person"
+            else -> "$usual for everyone else · your own wait for ${rows.size} people"
+        }
+        return FollowUpWaitsPanel(TITLE, line, rows)
+    }
+
+    fun row(w: FollowUpWait, zone: LocalCalendar): FollowUpWaitRow {
+        val label = MailFollowUpRules.waitLabel(w.days)
+        val set = if (w.atMs > 0) " · set ${CivilDate.shortLabel(zone.epochDayOf(w.atMs))}" else ""
+        return FollowUpWaitRow(
+            id = w.id, who = w.who, days = w.days,
+            line = "Waits $label before a chase is offered$set",
+            spoken = "${w.who}: waits $label before a chase is offered",
+            choices = MailFollowUpRules.waitChoices(w.who, w.days),
+            resetLabel = RESET,
+            resetSpoken = "Put ${w.who} back on the usual $usual",
+        )
+    }
+
+    /** After a chip: "Waiting 1 week for Sam Taylor's replies from now on". */
+    fun changedLine(who: String, days: Int): String = "Waiting ${MailFollowUpRules.waitLabel(days)} for $who's replies from now on"
+
+    /** After Back to usual: "Sam Taylor back to the usual 3 days". */
+    fun resetLine(who: String): String = "$who back to the usual $usual"
+
+    const val UNDONE = "Put back as it was"
+}

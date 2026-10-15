@@ -30,6 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +64,8 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.FollowUpWaitRow
+import os.meka.core.domain.FollowUpWaitsPanel
 import os.meka.core.domain.MailAccountRow
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailAccountRules
@@ -113,6 +116,10 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     // Slice 3f: the lowest order price that puts a warranty's end on Renewals (synced).
     var warranty by remember { mutableStateOf<MailWarrantyLevel?>(null) }
     LaunchedEffect(Unit) { warranty = runCatching { core.mailWarranty() }.getOrNull() }
+    // Follow-up radar, slice 4: the people he set his own chase wait for (synced).
+    var waits by remember { mutableStateOf<FollowUpWaitsPanel?>(null) }
+    var waitUndo by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { waits = runCatching { core.followUpWaitsPanel() }.getOrNull() }
 
     LaunchedEffect(reload) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
@@ -171,6 +178,21 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         message = null
         note = core.setMailWarranty(level)
         warranty = level
+    }
+
+    fun changeWait(id: String, days: Int) = scope.launch {
+        haptics.tick()
+        message = null
+        note = core.changeFollowUpWait(id, days)
+        waitUndo = true
+        waits = runCatching { core.followUpWaitsPanel() }.getOrNull()
+    }
+
+    fun undoWait() = scope.launch {
+        haptics.light()
+        waitUndo = false
+        core.undoFollowUpWaitChange()?.let { note = it }
+        waits = runCatching { core.followUpWaitsPanel() }.getOrNull()
     }
 
     fun unsubscribe(id: String) = scope.launch {
@@ -232,6 +254,9 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
                 if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }
                 if (v.autopilot != null) warranty?.let { w -> WarrantyCard(w, Modifier.appear(rememberAppearance(0))) { setWarranty(it) } }
+                if (v.autopilot != null) waits?.let { p ->
+                    WaitsCard(p, Modifier.appear(rememberAppearance(0)), onPick = { id, d -> changeWait(id, d) })
+                }
                 v.rows.forEachIndexed { i, row ->
                     MailAccountCard(
                         row, Modifier.appear(rememberAppearance(i + 1)),
@@ -252,6 +277,11 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         }
         Crossfade(note, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-note") { n ->
             n?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+        }
+        // Slice 4: Undo on the last Chase waits change (light haptic).
+        AnimatedVisibility(waitUndo, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+            Text("Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { undoWait() }.semantics { contentDescription = "Undo the last chase wait change" }.minTouch())
         }
         message?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) }
         Text("Refresh", style = MekaType.caption, color = Meka.colors.accent,
@@ -468,6 +498,63 @@ private fun WarrantyCard(level: MailWarrantyLevel, modifier: Modifier, onPick: (
                         .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
             }
+        }
+    }
+}
+
+/**
+ * Follow-up radar, slice 4: **Chase waits** — the usual wait, then one row per person he set his own for: who, "Waits 1
+ * week before a chase is offered · set Mon 12 Oct", the 1 day … 2 weeks chips (the lit one blends to the accent, tick
+ * haptic) and Back to usual. Rows enter and leave with the expand spring; the line cross-fades. Reduced motion: fades.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaitsCard(panel: FollowUpWaitsPanel, modifier: Modifier, onPick: (String, Int) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
+            .animateContentSize(MekaMotion.expand(reduced)),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = panel.title + ". " + panel.line }) {
+            Text(panel.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(panel.line, animationSpec = MekaMotion.appear(reduced), label = "waits-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        panel.rows.forEach { r -> key(r.id) { WaitRow(r, onPick) } }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WaitRow(r: FollowUpWaitRow, onPick: (String, Int) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+            Text(r.who, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "wait-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            r.choices.forEach { c ->
+                val fill by animateColorAsState(if (c.chosen) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "wait-chip")
+                val ink by animateColorAsState(if (c.chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "wait-ink")
+                Text(
+                    c.label, style = MekaType.itemMeta, color = ink,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                        .clickable(role = Role.Button) { if (!c.chosen) onPick(r.id, c.days) }
+                        .semantics { selected = c.chosen; contentDescription = c.spoken }
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
+            }
+            Text(
+                r.resetLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) { onPick(r.id, 0) }
+                    .semantics { contentDescription = r.resetSpoken }
+                    .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
         }
     }
 }

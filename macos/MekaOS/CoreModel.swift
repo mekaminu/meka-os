@@ -206,6 +206,10 @@ final class CoreModel {
     private(set) var mailMomentKey: String?
     /// Slice 3f: Warranty reminders' threshold as its key ("off", "50", "100", "250", "500"); nil until read.
     private(set) var mailWarrantyKey: String?
+    /// Follow-up radar, slice 4: Mail → Chase waits (the people he set his own chase wait for); nil until read.
+    private(set) var followUpWaits: FollowUpWaitsPanel?
+    /// Slice 4: whether the Mail sheet offers Undo on the last Chase waits change.
+    private(set) var followUpWaitUndo = false
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
     private(set) var lists: ListsView?
     /// Needs you as a stack of decisions (four tabs, slice 2); see `needsYouCards`.
@@ -4441,6 +4445,32 @@ final class CoreModel {
     func loadMailWarrantyKey() async {
         guard let core else { return }
         mailWarrantyKey = try? await core.mailWarrantyKey()
+    }
+
+    /// Follow-up radar, slice 4: the Mail sheet reads Chase waits.
+    func loadFollowUpWaits() async {
+        guard let core else { return }
+        followUpWaits = try? await core.followUpWaitsPanel()
+    }
+
+    /// A chip or Back to usual (days 0) on one person in Chase waits (synced). Only the id and the number cross.
+    func changeFollowUpWait(_ id: String, days: Int32) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let line = try? await core.changeFollowUpWait(waitId: id, days: days) else { return }
+        mailNote = line
+        followUpWaitUndo = true
+        await loadFollowUpWaits()
+    }
+
+    /// Undo on the last Chase waits change on this Mac.
+    func undoFollowUpWaitChange() async {
+        guard let core else { return }
+        MekaHaptics.light()
+        followUpWaitUndo = false
+        if let line = try? await core.undoFollowUpWaitChange() { mailNote = line }
+        await loadFollowUpWaits()
     }
 
     /// Off · £50 · £100 · £250 · £500 in the Mail sheet (synced). Only the key (a String) crosses; the line comes back.

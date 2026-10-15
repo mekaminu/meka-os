@@ -162,5 +162,32 @@ class MailFollowUpTest {
             MailChaseRules.sendFields("Any news?", 10_000L) + MailChaseRules.sentFields(40_000L))!!
         assertFalse(MailChaseRules.due(sent.chase, 90_000L))
     }
-}
 
+    @Test
+    fun chaseWaitsListsEachPersonsNewestWaitByNameWithTheUsualForEveryoneElse() {
+        val empty = FollowUpWaitsRules.panel(emptyList(), cal)
+        assertEquals("Chase waits", empty.title)
+        assertTrue(empty.rows.isEmpty())
+        assertTrue(empty.line.startsWith("Navilife offers a chase after 3 days without a reply."), empty.line)
+        assertTrue("Wait 3 days ▾" in empty.line)
+
+        val setAt = cal.toEpochMs(sentDay, 600)
+        val waits = listOf(
+            FollowUpWait(MailFollowUpRules.waitId("Sam Taylor"), "Sam Taylor", 7, setAt),
+            FollowUpWait(MailFollowUpRules.waitId("alex brown"), "Alex Brown", 1, setAt + 86_400_000L),
+            FollowUpWait("fwold", "alex  BROWN", 14, setAt),
+        )
+        val p = FollowUpWaitsRules.panel(waits, cal)
+        assertEquals("3 days for everyone else · your own wait for 2 people", p.line)
+        assertEquals(listOf("Alex Brown", "Sam Taylor"), p.rows.map { it.who })
+        val sam = p.rows[1]
+        assertEquals("Waits 1 week before a chase is offered · set Mon 12 Oct", sam.line)
+        assertEquals(listOf(7), sam.choices.filter { it.chosen }.map { it.days })
+        assertEquals("Back to usual", sam.resetLabel)
+        assertEquals("Put Sam Taylor back on the usual 3 days", sam.resetSpoken)
+        assertEquals("Waits 1 day before a chase is offered · set Tue 13 Oct", p.rows[0].line)
+        assertEquals("3 days for everyone else · your own wait for 1 person", FollowUpWaitsRules.panel(waits.take(1), cal).line)
+        assertEquals("Waiting 2 weeks for Sam Taylor's replies from now on", FollowUpWaitsRules.changedLine("Sam Taylor", 14))
+        assertEquals("Sam Taylor back to the usual 3 days", FollowUpWaitsRules.resetLine("Sam Taylor"))
+    }
+}

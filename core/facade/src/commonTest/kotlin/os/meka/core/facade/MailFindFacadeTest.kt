@@ -187,6 +187,46 @@ class MailFindFacadeTest {
     }
 
     @Test
+    fun chaseWaitsInMailSettingsChangeAndResetAPersonsWaitOnBothAppsWithUndo() = runTest {
+        val sentDay = CivilDate.toEpochDay(2026, 10, 14)
+        val own = setOf("alex@example.com")
+        val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 3 * 86_400_000L), own, false)!!
+        val id = MailFollowUpRules.findId("acc1", "cw1")
+        serverWrite(id, MailFollowUpRules.serverFields(fu, "Personal", "Quote", sentDay))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        // Nobody set yet: the usual, and how to set one.
+        assertTrue(mac.followUpWaitsPanel().rows.isEmpty())
+
+        // A week for Sam from Needs you: Chase waits lists him on both apps.
+        fold.setFollowUpWait(id, 7)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val row = mac.followUpWaitsPanel().rows.single()
+        assertEquals("Sam Taylor", row.who)
+        assertEquals("Waits 1 week before a chase is offered · set Sat 17 Oct", row.line)
+        assertNull(mac.mailFinds.value)
+
+        // Back to usual on the Mac: off the list, and the row is offered again on both apps; Undo puts the week back.
+        assertEquals("Sam Taylor back to the usual 3 days", mac.changeFollowUpWait(row.id, 0))
+        assertTrue(mac.followUpWaitsPanel().rows.isEmpty())
+        assertEquals(listOf(id), mac.mailFinds.value!!.rows.map { it.id })
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+        assertEquals("Put back as it was", mac.undoFollowUpWaitChange())
+        assertNull(mac.undoFollowUpWaitChange())
+        assertEquals("Waits 1 week before a chase is offered · set Sat 17 Oct", mac.followUpWaitsPanel().rows.single().line)
+        assertNull(mac.mailFinds.value)
+
+        // A chip on the Fold: 1 day; a wait off the list or an unknown person changes nothing.
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertEquals("Waiting 1 day for Sam Taylor's replies from now on", fold.changeFollowUpWait(row.id, 1))
+        assertEquals("Wait 1 day ▾", fold.mailFinds.value!!.rows.single().waitPill)
+        assertEquals(MailRenewalRules.UNKNOWN, fold.changeFollowUpWait(row.id, 4))
+        assertEquals(MailRenewalRules.UNKNOWN, fold.changeFollowUpWait("fwnobody", 7))
+    }
+
+    @Test
     fun aFollowUpOnWaitingForIsChasedFromTimeToChaseAndTheirReplyComesBackToGotIt() = runTest {
         val sentDay = CivilDate.toEpochDay(2026, 10, 12)
         val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 5 * 86_400_000L), setOf("alex@example.com"), false)!!

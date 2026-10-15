@@ -16,4 +16,5 @@ tip: A renewal email (a subscription or policy about to renew) shows in Needs yo
 tip: A promise in an email (“I'll send it by Friday”) shows there too; Add puts it on Waiting for, chased the day after the day they gave.
 tip: An email you sent asking something that's had no reply for 3 days shows there as No reply yet; Add puts it on Waiting for to chase, and it goes by itself once they answer.
 tip: Some people take longer to answer: tap Wait 3 days on a No reply yet row and pick 1 day to 2 weeks for that person; their emails wait that long before Navilife offers a chase, on both apps.
+tip: To see or change everyone you've set a wait for, open Mail settings: Chase waits lists each person with the same chips and Back to usual (3 days), with Undo.
 tip: Once it's on Waiting for, Time to chase offers a short follow-up to send in the same conversation, to the people you wrote to, from the same account; nothing goes until you tap Send, and Undo stops it.

@@ -3019,6 +3019,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MailFollowUpRules.shared.waitPill(days: 7), "Wait 1 week ▾")
         XCTAssertEqual(MailFollowUpRules.shared.waitChoices(who: "Sam", current: 3).filter { $0.chosen }.map { $0.days }, [3])
         XCTAssertEqual(MailRenewalRules.shared.headline(renewals: 0, promises: 0, followUps: 1), "1 email with no reply · nothing goes on Waiting for until you tap Add")
+        // Slice 4: Mail → Chase waits — nobody set yet, and an unknown person changes nothing.
+        let waits = try await core.followUpWaitsPanel()
+        XCTAssertEqual(waits.title, FollowUpWaitsRules.shared.TITLE)
+        XCTAssertTrue(waits.rows.isEmpty)
+        let unknownWait = try await core.changeFollowUpWait(waitId: "fwnobody", days: 7)
+        XCTAssertEqual(unknownWait, MailRenewalRules.shared.UNKNOWN)
+        let noWaitUndo = try await core.undoFollowUpWaitChange()
+        XCTAssertNil(noWaitUndo)
         // Slice 7: the ten-minute inbox — no email, no card; a session over nothing ends "Inbox clear"; the time's key.
         XCTAssertNil(core.mailMoment.value)
         try await core.startMailMoment()
