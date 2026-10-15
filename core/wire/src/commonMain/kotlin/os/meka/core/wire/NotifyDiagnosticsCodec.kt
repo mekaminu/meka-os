@@ -81,6 +81,8 @@ object NotifyDiagnosticsCodec {
         val aboutFilled: Boolean? = null, val aboutFoldAtMs: Long? = null, val aboutMacAtMs: Long? = null,
         /** Release 2 slice 5: whether the profile holds the clubs and the council's holidays (never their values). */
         val aboutClubs: Boolean? = null, val aboutCouncil: Boolean? = null,
+        /** Release 2 slice 6: whether the profile holds the train route (never the route). */
+        val aboutRoute: Boolean? = null,
         /**
          * Call notifications, slice 1: the call assistant's last messages, newest first (kind "voice" or "automated",
          * detail = length, characters, urgency and how it was answered, the recording; never the number or the words).
@@ -117,6 +119,7 @@ object NotifyDiagnosticsCodec {
             l.aboutMacAtMs?.let { put("aboutMac", it) }
             l.aboutClubs?.let { put("aboutClubs", it) }
             l.aboutCouncil?.let { put("aboutCouncil", it) }
+            l.aboutRoute?.let { put("aboutRoute", it) }
         }
         l.assistant?.let { list ->
             put("assistant", buildJsonArray {
@@ -142,6 +145,7 @@ object NotifyDiagnosticsCodec {
             aboutMacAtMs = o.long("aboutMac")?.takeIf { it > 0 },
             aboutClubs = (o["aboutClubs"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
             aboutCouncil = (o["aboutCouncil"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
+            aboutRoute = (o["aboutRoute"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
             assistant = (o["assistant"] as? JsonArray)?.let { a -> entries(a, ASSISTANT_MAX, ASSISTANT_DETAIL_MAX) },
         )
     }

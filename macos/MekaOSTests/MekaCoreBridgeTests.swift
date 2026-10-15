@@ -1665,9 +1665,13 @@ final class MekaCoreBridgeTests: XCTestCase {
     /** Places item 4: the commute's train line reaches Today on the Mac through the weather view. */
     func testRouteReachesSwift() {
         XCTAssertNil(WeatherView.companion.EMPTY.route)
-        let line = RouteLine(text: "Thameslink · Elizabeth line · good service", lit: false, spoken: "Trains: Thameslink, Elizabeth line, good service")
+        let line = RouteLine(text: "South Rail · Metro line · good service", lit: false, spoken: "Trains: South Rail, Metro line, good service")
         XCTAssertFalse(line.lit)
-        XCTAssertEqual(RouteRules.shared.name(id: "elizabeth"), "Elizabeth line")
+        // Rule 13, release 2 slice 6: the route is About you's Train route (an invented one here).
+        _ = Household.shared.useRoute(typed: "South Rail to Oakfield Junction, then Metro line; or North Rail to Riverside")
+        defer { _ = Household.shared.set(n: HouseholdNames.companion.EMPTY) }
+        XCTAssertEqual(RouteRules.shared.name(id: "metro", r: RouteRules.shared.route()), "Metro line")
+        XCTAssertEqual(RouteRules.shared.route()?.text, "South Rail to Oakfield Junction, then Metro line; or North Rail to Riverside")
         XCTAssertEqual(RouteRules.shared.words(severity: 9), "minor delays")
         XCTAssertEqual(CalendarAccountRules.shared.providerLabel(provider: "lines"), "Train lines")
     }

@@ -87,7 +87,7 @@ data class BriefStory(
     val homeMin: Int? = null,
     /** Both places on an office day: "Home 9° now · work 14°, rain from 15:00 — take a coat". */
     val placesLine: String? = null,
-    /** The trains on the route, as TfL says (already spoken): "Thameslink, Elizabeth line, good service". */
+    /** The trains on the route, as TfL says (already spoken): "South Rail, Metro, good service". */
     val route: String? = null,
     /** Today's timed events, by start. */
     val events: List<BriefEvent> = emptyList(),

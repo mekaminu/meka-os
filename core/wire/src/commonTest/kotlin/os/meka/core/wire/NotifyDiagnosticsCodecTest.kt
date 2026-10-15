@@ -43,7 +43,7 @@ class NotifyDiagnosticsCodecTest {
         val l = NotifyDiagnosticsCodec.Latest(null, aboutFilled = true, aboutFoldAtMs = 5, aboutMacAtMs = null)
         assertEquals(l, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(l)))
         // Release 2 slice 5: whether the clubs and the council's holidays are copied travel too (never their values).
-        val copies = l.copy(aboutClubs = true, aboutCouncil = false)
+        val copies = l.copy(aboutClubs = true, aboutCouncil = false, aboutRoute = true)
         assertEquals(copies, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(copies)))
         // No profile: nothing sent, and the times are dropped with it.
         val none = NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, aboutFoldAtMs = 5)))

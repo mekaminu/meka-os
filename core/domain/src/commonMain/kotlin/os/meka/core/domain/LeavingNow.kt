@@ -19,7 +19,7 @@ import os.meka.core.sync.fv
  * The ETA: leaving at the end of work (or now, if later), plus the journey home (since the commute slice 4, Work mode's
  * door-to-door commute home, [withCommute]), plus a rough allowance for what TfL says about
  * the route; rounded up to 5 minutes and always "about". A line going bad during the journey-home window offers an
- * updated draft once ("Leaving now, home about 19:00 — Thameslink has severe delays, so I'm coming via King's Cross").
+ * updated draft once ("Leaving now, home about 19:00 — South Rail has severe delays, so I'm coming via Riverside").
  *
  * Stored as one `context_mode` entity, id [LeavingRules.ENTITY_ID] (ADR-008 addendum 2026-10-11): `on` (Bool), `to`
  * (the family entry's name), `journeyMin` (Int64). All LWW. On by default. Rule 13 release 2 slice 2 (2026-10-15): with
@@ -114,12 +114,16 @@ object LeavingRules {
 
     fun journeyLabel(min: Int): String = if (min % 60 == 0) "${min / 60} h" else if (min > 60) "${min / 60} h ${min % 60}" else "$min min"
 
-    /** The extra minutes and the words for what TfL says now (nothing without a fresh status). */
+    /**
+     * The extra minutes and the words for what TfL says now (nothing without a fresh status or a route in About you):
+     * the first line's trouble (less when its fallback runs), then the onward line's.
+     */
     fun allowance(lines: LineStatusSnapshot, nowMs: Long): Triple<Int, LineLevel, String?> {
+        val r = RouteRules.route() ?: return Triple(0, LineLevel.GOOD, null)
         if (!RouteRules.fresh(lines, nowMs)) return Triple(0, LineLevel.GOOD, null)
-        val tl = lines.severityOf(RouteRules.THAMESLINK)
-        val gn = lines.severityOf(RouteRules.GREAT_NORTHERN)
-        val el = lines.severityOf(RouteRules.ELIZABETH)
+        val tl = lines.severityOf(r.firstId)
+        val gn = r.fallbackId?.let { lines.severityOf(it) }
+        val el = r.onwardId?.let { lines.severityOf(it) }
         val tlLevel = tl?.let(RouteRules::level) ?: LineLevel.GOOD
         val elLevel = el?.let(RouteRules::level) ?: LineLevel.GOOD
         val tlMin = when (tlLevel) {
@@ -130,16 +134,17 @@ object LeavingRules {
         val elMin = when (elLevel) { LineLevel.GOOD -> 0; LineLevel.MINOR -> 5; LineLevel.MAJOR -> 15 }
         val level = if (tlLevel.ordinal >= elLevel.ordinal) tlLevel else elLevel
         if (level == LineLevel.GOOD) return Triple(0, level, null)
+        val first = RouteRules.spoken(r.firstId, r)
         val reason = when {
             tlLevel == LineLevel.MAJOR && gn != null && RouteRules.level(gn) == LineLevel.GOOD ->
-                "${phrase("Thameslink", tl!!)}, so I'm coming via King's Cross"
-            tlLevel != LineLevel.GOOD && tlLevel.ordinal >= elLevel.ordinal -> phrase("Thameslink", tl!!)
-            else -> phrase("the Elizabeth line", el!!)
+                "${phrase(first, tl!!)}, so I'm coming via ${r.fallbackTo ?: RouteRules.spoken(r.fallbackId!!, r)}"
+            tlLevel != LineLevel.GOOD && tlLevel.ordinal >= elLevel.ordinal -> phrase(first, tl!!)
+            else -> phrase(RouteRules.spoken(r.onwardId!!, r), el!!)
         }
         return Triple(tlMin + elMin, level, reason)
     }
 
-    /** "Thameslink has severe delays", "Thameslink is suspended", "the Elizabeth line has a part closure". */
+    /** "South Rail has severe delays", "South Rail is suspended", "the Metro line has a part closure". */
     fun phrase(line: String, severity: Int): String {
         val w = RouteRules.words(severity)
         return when (severity) {
@@ -157,7 +162,7 @@ object LeavingRules {
 
     /**
      * The draft for leaving at [leaveMs]: "Leaving now, home about 18:40", or with the trains' trouble after a dash:
-     * "Leaving now, home about 19:10 — Thameslink has severe delays".
+     * "Leaving now, home about 19:10 — South Rail has severe delays".
      */
     fun draft(s: LeavingSetting, leaveMs: Long, lines: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar): LeavingDraft {
         val (extra, level, reason) = allowance(lines, nowMs)

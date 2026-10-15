@@ -8,7 +8,7 @@ import kotlin.test.assertTrue
 
 /** Train-time queue, slice 2: a saved article's readable words, kept on the phone for the train. */
 class QueueReaderTest {
-    private val para1 = "Trains on the line into Farringdon ran late again this week, and the operator says the signals between Kentish Town and West Hampstead are to blame for most of the hold-ups."
+    private val para1 = "Trains on the line into Oakfield Junction ran late again this week, and the operator says the signals between Northgate and Westhill are to blame for most of the hold-ups."
     private val para2 = "Engineers will work through the weekend &amp; replace the cables between Bedford and St Pancras, it said, with buses running between Luton and Bedford on Saturday."
     private val para3 = "Passengers were told to expect &ldquo;minor delays&rdquo; until the work is done &#8212; probably by Monday."
     private val page = """

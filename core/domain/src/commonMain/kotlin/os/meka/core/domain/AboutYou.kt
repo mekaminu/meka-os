@@ -53,6 +53,12 @@ object AboutYouFields {
      */
     const val COUNCIL_DATES = "councilDates"
     const val VOICEMAIL_NUMBER = "voicemailNumber"
+    /**
+     * The commute's train route (release 2 slice 6, 2026-10-15): "South Rail to Oakfield Junction, then Metro; or North
+     * Rail to Riverside" ([RouteRules.parse]). Today's train line, the heads-ups, Leaving now's allowance, Ask and the
+     * server's TfL questions read it; the Fold copies the route the code knew into it once.
+     */
+    const val ROUTE = "commuteRoute"
     /** Int64: when the Fold copied MEKA's earlier values in (release 1); absent when he typed it all. */
     const val SEEDED_AT = "seededAtMs"
     /** Int64: when the Fold first held a filled-in profile after a clean sync (slice 2, release 2's gate). */
@@ -78,6 +84,8 @@ data class AboutYouHeld(
      */
     val clubs: Boolean? = null,
     val council: Boolean? = null,
+    /** Release 2 slice 6: whether the profile holds the train route. Null when not known (an older server). */
+    val route: Boolean? = null,
 ) {
     val onBoth: Boolean get() = filled && foldAtMs != null && macAtMs != null
 }
@@ -103,13 +111,15 @@ data class AboutYou(
     val clubs: String? = null,
     val assistantNumber: String? = null,
     val voicemailNumber: String? = null,
+    /** The train route as kept ([RouteRules.parse] reads it). */
+    val route: String? = null,
     val seededAtMs: Long? = null,
     /** The school's council's holidays ([AboutYouFields.COUNCIL_DATES]); not a typed line, so not part of [isEmpty]. */
     val councilDates: TermCalendar? = null,
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, clubs, assistantNumber, voicemailNumber).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, clubs, assistantNumber, voicemailNumber, route).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -125,6 +135,8 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     PARTNER_EMAIL(AboutYouFields.PARTNER_EMAIL, "Partner's email", "Their email address", "Add it so Inbox autopilot never tidies their emails away"),
     HOME(AboutYouFields.HOME, "Home", "Your town", "Add home for its weather and the commute"),
     WORK(AboutYouFields.WORK, "Work", "Where the office is", "Add work for office-day weather"),
+    ROUTE(AboutYouFields.ROUTE, "Train route", "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside",
+        "Add your train route so Today, the brief and Leaving now say how its lines are running"),
     SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
     CLUBS(AboutYouFields.CLUBS, "Clubs", "Short name first: OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
@@ -183,6 +195,7 @@ object AboutYouRules {
     const val NOT_WEBSITE = "That doesn't look like a web address: “oakfield.sch.uk” or a link from the school's site."
     const val MAX_WEBSITE = 300
     const val NOT_CLUBS = "Type each club's short name first, as your calendar writes it: “OFC Oakfield Town, HRFC”."
+    const val NOT_ROUTE = "Type the line from home, where you change and the next line: “South Rail to Oakfield Junction, then Metro”, and after a semicolon the line you take instead: “; or North Rail to Riverside”."
     const val MAX_CLUBS = 6
     const val MAX_CLUB_SHORT = 10
     const val MAX_CLUB_NAME = 40
@@ -203,6 +216,7 @@ object AboutYouRules {
             macAtMs = fields[AboutYouFields.HELD_MAC]?.longOrNull,
             clubs = AboutYouFields.CLUBS in fields,
             council = read(fields).councilDates != null,
+            route = AboutYouFields.ROUTE in fields,
         )
     }
 
@@ -240,6 +254,7 @@ object AboutYouRules {
             if (h.onBoth) "release 2 can start" else "release 2 waits",
             h.clubs?.let { if (it) "clubs copied" else "clubs NOT copied yet" },
             h.council?.let { if (it) "council dates copied" else "council dates NOT copied yet" },
+            h.route?.let { if (it) "route copied" else "route NOT copied yet" },
         ).filterNotNull().joinToString(" · ")
     }
 
@@ -263,6 +278,7 @@ object AboutYouRules {
             clubs = text(AboutYouFields.CLUBS)?.let(::clubs),
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
+            route = text(AboutYouFields.ROUTE)?.let { RouteRules.parse(it)?.text },
             seededAtMs = fields[AboutYouFields.SEEDED_AT]?.longOrNull,
             councilDates = SchoolTerms.decode(fields[AboutYouFields.COUNCIL_DATES]?.textOrNull),
         )
@@ -279,6 +295,7 @@ object AboutYouRules {
         AboutField.CLUBS -> a.clubs
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
+        AboutField.ROUTE -> a.route
     }
 
     /**
@@ -295,6 +312,7 @@ object AboutYouRules {
             AboutField.HOME, AboutField.WORK -> place(t)
             AboutField.SCHOOL_WEBSITE -> website(t)
             AboutField.CLUBS -> clubs(t)
+            AboutField.ROUTE -> RouteRules.parse(t)?.text
         }
     }
 
@@ -305,6 +323,7 @@ object AboutYouRules {
         AboutField.HOME, AboutField.WORK -> NOT_PLACE
         AboutField.SCHOOL_WEBSITE -> NOT_WEBSITE
         AboutField.CLUBS -> NOT_CLUBS
+        AboutField.ROUTE -> NOT_ROUTE
     }
 
     /** Spaces collapsed and trimmed; no regex (Kotlin/Native reads some differently). */
@@ -534,6 +553,7 @@ object AboutYouRules {
             a.children.size.takeIf { it > 0 }?.let { if (it == 1) "1 child" else "$it children" },
             a.home?.let { "home" },
             a.work?.let { "work" },
+            a.route?.let { "train route" },
             a.schoolWebsite?.let { "the school's website" },
             a.clubs?.let { "clubs" },
             (a.assistantNumber ?: a.voicemailNumber)?.let { "numbers" },
@@ -658,6 +678,19 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
         if (AboutYouFields.CLUBS in f) return false
         val v = AboutYouRules.clean(AboutField.CLUBS, clubs)?.takeIf { it.isNotEmpty() } ?: return false
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.CLUBS to FieldValue.Text(v)))
+        return true
+    }
+
+    /**
+     * Release 2 slice 6's one-off copy of the train route (2026-10-15): the lines and stations Today and the heads-ups
+     * named were in the code; they are written into the profile once, only while the line has never been written and
+     * a profile exists, so a cleared route stays cleared. True when it wrote.
+     */
+    fun seedRouteOnce(route: String): Boolean {
+        val f = fields() ?: return false
+        if (AboutYouFields.ROUTE in f) return false
+        val v = RouteRules.parse(route)?.text ?: return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.ROUTE to FieldValue.Text(v)))
         return true
     }
 

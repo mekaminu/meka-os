@@ -164,10 +164,10 @@ class NotifyReportsTest {
         profile = mapOf(AboutYouFields.HOME to FieldValue.Text("Hilltown"), AboutYouFields.HELD_FOLD to FieldValue.Int64(at))
         val one = publisherClient().notifications()
         assertEquals(true, one.aboutFilled)
-        assertEquals("::notice title=About you::on the Fold since 2026-10-13 20:41 UTC · NOT on the Mac yet · release 2 waits · clubs NOT copied yet · council dates NOT copied yet", ReleasePublisherCli.aboutYouLine(one))
+        assertEquals("::notice title=About you::on the Fold since 2026-10-13 20:41 UTC · NOT on the Mac yet · release 2 waits · clubs NOT copied yet · council dates NOT copied yet · route NOT copied yet", ReleasePublisherCli.aboutYouLine(one))
         profile = profile!! + (AboutYouFields.HELD_MAC to FieldValue.Int64(at + 60_000))
         val line = ReleasePublisherCli.aboutYouLine(publisherClient().notifications())
-        assertEquals("::notice title=About you::on the Fold since 2026-10-13 20:41 UTC · on the Mac since 2026-10-13 20:42 UTC · release 2 can start · clubs NOT copied yet · council dates NOT copied yet", line)
+        assertEquals("::notice title=About you::on the Fold since 2026-10-13 20:41 UTC · on the Mac since 2026-10-13 20:42 UTC · release 2 can start · clubs NOT copied yet · council dates NOT copied yet · route NOT copied yet", line)
         assertTrue("Hilltown" !in line)
     }
 

@@ -1,5 +1,8 @@
 package os.meka.core.domain
 
+import os.meka.core.testing.InventedRoute
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -7,6 +10,13 @@ import kotlin.test.assertTrue
 
 /** The commute counts everywhere, slice 7: tomorrow's trains in trouble offer "wake 10 min earlier?", never moving it. */
 class CommuteDisruptionTest {
+    // Rule 13: the route comes from About you (an invented one here), never the code.
+    @BeforeTest
+    fun route() { Household.useRoute(InventedRoute.TYPED) }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
     private val day = CivilDate.DAY_MS
     private val min = 60_000L
     private val cal = LocalCalendar.UTC
@@ -27,44 +37,44 @@ class CommuteDisruptionTest {
     @Test
     fun anOfficeMorningWithTroubleOffersTenMinutesEarlier() {
         val now = ms(thu, 19 * 60)
-        val s = planned("elizabeth=10;great-northern=10;thameslink=4", fri, ms(thu, 18 * 60 + 30))
+        val s = planned("metro=10;north-rail=10;south-rail=4", fri, ms(thu, 18 * 60 + 30))
         // No alarm set yet: the suggestion is 06:40, so the offer is 06:30.
         val t = CommuteDisruptionRules.offer(s, wakeFor(fri, now), now, cal)!!
-        assertEquals("Thameslink planned closure tomorrow morning", t.title)
-        assertEquals("Great Northern to King's Cross is running", t.advice)
+        assertEquals("South Rail planned closure tomorrow morning", t.title)
+        assertEquals("North Rail to Riverside is running", t.advice)
         assertEquals(6 * 60 + 30, t.earlierMinute)
         assertEquals("Wake 10 min earlier · 06:30", t.actionLabel)
-        assertEquals("Trains · Thameslink planned closure tomorrow morning · Great Northern to King's Cross is running", t.line)
+        assertEquals("Trains · South Rail planned closure tomorrow morning · North Rail to Riverside is running", t.line)
         // With an alarm set at 06:45, ten minutes before that.
         assertEquals(6 * 60 + 35, CommuteDisruptionRules.offer(s, wakeFor(fri, now, set = 6 * 60 + 45), now, cal)!!.earlierMinute)
-        // Both legs, in the order travelled; Great Northern down too.
-        val both = planned("elizabeth=6;great-northern=2;thameslink=2", fri, ms(thu, 18 * 60))
+        // Both legs, in the order travelled; North Rail down too.
+        val both = planned("metro=6;north-rail=2;south-rail=2", fri, ms(thu, 18 * 60))
         val b = CommuteDisruptionRules.offer(both, wakeFor(fri, now), now, cal)!!
-        assertEquals("Thameslink suspended · Elizabeth line severe delays tomorrow morning", b.title)
-        assertEquals("Great Northern suspended too", b.advice)
-        // Only the Elizabeth line: no fallback to name.
-        assertEquals("Check before you leave", CommuteDisruptionRules.offer(planned("elizabeth=1;thameslink=10", fri, now), wakeFor(fri, now), now, cal)!!.advice)
+        assertEquals("South Rail suspended · Metro line severe delays tomorrow morning", b.title)
+        assertEquals("North Rail suspended too", b.advice)
+        // Only the Metro line: no fallback to name.
+        assertEquals("Check before you leave", CommuteDisruptionRules.offer(planned("metro=1;south-rail=10", fri, now), wakeFor(fri, now), now, cal)!!.advice)
     }
 
     @Test
     fun onceMovedItSaysSoAndOffersNothingMore() {
         val now = ms(thu, 20 * 60)
-        val s = planned("thameslink=6", fri, now)
+        val s = planned("south-rail=6", fri, now)
         val t = CommuteDisruptionRules.offer(s, wakeFor(fri, now, set = 6 * 60 + 30), now, cal)!!
         assertNull(t.earlierMinute)
         assertNull(t.actionLabel)
-        assertEquals("Trains · Thameslink severe delays tomorrow morning · alarm already 10 min early", t.line)
+        assertEquals("Trains · South Rail severe delays tomorrow morning · alarm already 10 min early", t.line)
         assertTrue(CommuteDisruptionRules.notices(s, wakeFor(fri, now, set = 6 * 60 + 30), quiet, now, cal).isEmpty())
     }
 
     @Test
     fun nothingIsOfferedWhenItDoesntApply() {
         val now = ms(thu, 19 * 60)
-        val bad = "thameslink=2"
+        val bad = "south-rail=2"
         // Good or minor trouble only.
-        assertNull(CommuteDisruptionRules.offer(planned("thameslink=9;elizabeth=10", fri, now), wakeFor(fri, now), now, cal))
-        // Only Great Northern (not on the usual route).
-        assertNull(CommuteDisruptionRules.offer(planned("great-northern=2;thameslink=10", fri, now), wakeFor(fri, now), now, cal))
+        assertNull(CommuteDisruptionRules.offer(planned("south-rail=9;metro=10", fri, now), wakeFor(fri, now), now, cal))
+        // Only North Rail (not on the usual route).
+        assertNull(CommuteDisruptionRules.offer(planned("north-rail=2;south-rail=10", fri, now), wakeFor(fri, now), now, cal))
         // Plans for another day, or read too long ago.
         assertNull(CommuteDisruptionRules.offer(planned(bad, sat, now), wakeFor(fri, now), now, cal))
         assertNull(CommuteDisruptionRules.offer(planned(bad, fri, now - 7 * 60 * min), wakeFor(fri, now), now, cal))
@@ -86,14 +96,14 @@ class CommuteDisruptionTest {
     @Test
     fun theHeadsUpComesOnceOutsideQuietHoursWithTheButton() {
         val read = ms(thu, 18 * 60 + 30)
-        val s = planned("thameslink=4;great-northern=10", fri, read)
+        val s = planned("south-rail=4;north-rail=10", fri, read)
         val now = ms(thu, 18 * 60 + 35)
         val n = CommuteDisruptionRules.notices(s, wakeFor(fri, now), quiet, now, cal).single()
         assertEquals("wake-trains:$fri", n.key)
         assertEquals(NoticeSource.TRAINS, n.source)
         assertEquals(NoticeTier.HEADS_UP, n.tier)
-        assertEquals("Thameslink planned closure tomorrow morning", n.title)
-        assertEquals("Wake at 06:30 instead of 06:40? · Great Northern to King's Cross is running", n.text)
+        assertEquals("South Rail planned closure tomorrow morning", n.title)
+        assertEquals("Wake at 06:30 instead of 06:40? · North Rail to Riverside is running", n.text)
         assertEquals(read, n.atMs)
         assertEquals(ms(fri, 6 * 60 + 30), n.expiresAtMs)
         assertEquals(listOf(NoticeAction.WAKE_EARLIER), n.actions)
@@ -102,7 +112,7 @@ class CommuteDisruptionTest {
         assertTrue(CommuteDisruptionRules.isKey(n.key))
         // First read inside quiet hours: held to 07:00, which is after the alarm, so nothing wakes him.
         val late = ms(thu, 22 * 60 + 30)
-        assertTrue(CommuteDisruptionRules.notices(planned("thameslink=4", fri, late), wakeFor(fri, late), quiet, late, cal).isEmpty())
+        assertTrue(CommuteDisruptionRules.notices(planned("south-rail=4", fri, late), wakeFor(fri, late), quiet, late, cal).isEmpty())
         // Through the notice sources, with the wake view.
         val all = NoticeSources.collect(
             ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), now, cal, lines = s, wake = wakeFor(fri, now),
@@ -116,13 +126,13 @@ class CommuteDisruptionTest {
         val a = world.device("android")
         val m = world.device("mac")
         a.replica.commitLocal(EntityTypes.CONTEXT_MODE, LineStatusStore.ENTITY_ID, mapOf(
-            LineStatusFields.PLANNED to os.meka.core.sync.FieldValue.Text("elizabeth=10;thameslink=4"),
+            LineStatusFields.PLANNED to os.meka.core.sync.FieldValue.Text("metro=10;south-rail=4"),
             LineStatusFields.PLANNED_DAY to os.meka.core.sync.FieldValue.Int64(fri),
             LineStatusFields.PLANNED_CHECKED to os.meka.core.sync.FieldValue.Int64(ms(thu, 18 * 60)),
         ))
         a.syncWithRetry(); m.syncWithRetry()
         val s = LineStatusStore(m.replica).snapshot()
-        assertEquals(4, s.plannedSeverityOf(RouteRules.THAMESLINK))
+        assertEquals(4, s.plannedSeverityOf(InventedRoute.FIRST))
         assertEquals(fri, s.plannedDay)
         assertEquals(ms(thu, 18 * 60), s.plannedCheckedMs)
         assertTrue(s.lines.isEmpty())

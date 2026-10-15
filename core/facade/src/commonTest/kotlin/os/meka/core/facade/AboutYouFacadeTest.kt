@@ -106,6 +106,28 @@ class AboutYouFacadeTest {
     }
 
     @Test
+    fun theTrainRouteMovesIntoTheProfileOnceAndStaysClearedWhenCleared() = runTest(timeout = SLOW_RUNNER) {
+        // Rule 13, release 2 slice 6: no line or station in the rules; the Fold copies the route it carried (invented here).
+        val typed = os.meka.core.testing.InventedRoute.TYPED
+        val mac = core("mac")
+        mac.setAboutYou(AboutField.HOME, "Hilltown")
+        mac.syncNow()
+        assertNull(os.meka.core.domain.RouteRules.route())
+        val fold = core("android").apply { seedsAboutYou = true; releaseOneRoute = typed }
+        fold.syncNow(); fold.syncNow(); mac.syncNow()
+        assertEquals(typed, mac.aboutYouView.value.rows.first { it.field == AboutField.ROUTE }.value)
+        assertEquals(listOf("south-rail", "north-rail", "metro"), os.meka.core.domain.RouteRules.lines())
+        // Typed loosely on the Mac: kept the one way; something unreadable is refused and changes nothing.
+        assertTrue(mac.setAboutYou(AboutField.ROUTE, "<script>").refused)
+        assertEquals(typed, mac.aboutYouView.value.rows.first { it.field == AboutField.ROUTE }.value)
+        // Cleared: the Fold's copy never comes back.
+        mac.setAboutYou(AboutField.ROUTE, "")
+        mac.syncNow(); fold.syncNow(); fold.syncNow()
+        assertNull(fold.aboutYouView.value.rows.first { it.field == AboutField.ROUTE }.value)
+        assertNull(os.meka.core.domain.RouteRules.route())
+    }
+
+    @Test
     fun theCouncilsHolidaysMoveIntoTheProfileOnceAndTheMacsSchoolOffersThem() = runTest(timeout = SLOW_RUNNER) {
         // Rule 13, release 2 slice 5: no council in the code; the Fold copies the table it carried (invented here).
         val mac = core("mac")

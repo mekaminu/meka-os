@@ -258,28 +258,30 @@ class AskMekaFacadeTest {
     fun theRoutesTrainLinesShowOnTheCommuteAndAskHearsThem() = runTest {
         now = 1_791_526_200_000L // Fri 9 Oct 2026, 07:10 in London: an office day, before work
         val c = core()
+        // Rule 13: the route is About you's Train route (an invented one).
+        c.setAboutYouField(os.meka.core.domain.AboutYouFields.ROUTE, os.meka.core.testing.InventedRoute.TYPED)
         val clock = os.meka.core.sync.HlcClock("server", { now })
-        // What the server's TfL mirror writes (Places item 4): Thameslink in trouble, Great Northern running.
+        // What the server's TfL mirror writes (Places item 4): South Rail in trouble, North Rail running.
         serverOps.append(os.meka.core.sync.Op("srvln0", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
             os.meka.core.domain.LineStatusStore.ENTITY_ID, os.meka.core.domain.LineStatusFields.LINES,
-            os.meka.core.sync.FieldValue.Text("elizabeth=10;great-northern=10;thameslink=6"), clock.now(), emptyList(), "server"))
+            os.meka.core.sync.FieldValue.Text("metro=10;north-rail=10;south-rail=6"), clock.now(), emptyList(), "server"))
         serverOps.append(os.meka.core.sync.Op("srvln1", "hh", os.meka.core.domain.EntityTypes.CONTEXT_MODE,
             os.meka.core.domain.LineStatusStore.ENTITY_ID, os.meka.core.domain.LineStatusFields.CHECKED,
             os.meka.core.sync.FieldValue.Int64(1_791_525_600_000L), clock.now(), emptyList(), "server"))
         c.syncNow()
         val route = c.weatherView.value.route!!
-        assertEquals("Thameslink severe delays · Elizabeth line good service — Great Northern to King's Cross is running", route.text)
+        assertEquals("South Rail severe delays · Metro line good service — North Rail to Riverside is running", route.text)
         assertTrue(route.lit)
         // The same status is a heads-up once on this commute (Places item 4, before live departures).
         val gov = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
-        assertEquals(listOf("Thameslink severe delays" to "Great Northern to King's Cross is running · TfL 07:00"),
+        assertEquals(listOf("South Rail severe delays" to "North Rail to Riverside is running · TfL 07:00"),
             gov.post.filter { it.source == os.meka.core.domain.NoticeSource.TRAINS }.map { it.title to it.text })
         assertTrue(c.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL).post
             .none { it.source == os.meka.core.domain.NoticeSource.TRAINS })
 
         c.askMeka("are the trains ok?")
         val lines = server.asked.single().second.items.filter { it.kind == os.meka.core.domain.AskItemKind.WEATHER }.map { it.line }
-        assertTrue("train lines on Meka's route (TfL status, checked 07:00): Thameslink severe delays; Great Northern good service; Elizabeth line good service" in lines,
+        assertTrue("train lines on Meka's route (TfL status, checked 07:00): South Rail severe delays; North Rail good service; Metro line good service" in lines,
             lines.toString())
     }
 
@@ -290,22 +292,23 @@ class AskMekaFacadeTest {
         val fri = 20_735L
         // The evening digest has gone already (otherwise a heads-up rides in it).
         val before = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        c.setAboutYouField(os.meka.core.domain.AboutYouFields.ROUTE, os.meka.core.testing.InventedRoute.TYPED)
         val clock = os.meka.core.sync.HlcClock("server", { now })
         fun server(id: String, field: String, v: os.meka.core.sync.FieldValue) = serverOps.append(os.meka.core.sync.Op(id, "hh",
             os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.LineStatusStore.ENTITY_ID, field, v, clock.now(), emptyList(), "server"))
-        // What the server's evening read of tomorrow's plans writes (slice 7): a Thameslink closure, Great Northern running.
-        server("srvpl0", os.meka.core.domain.LineStatusFields.PLANNED, os.meka.core.sync.FieldValue.Text("elizabeth=10;great-northern=10;thameslink=4"))
+        // What the server's evening read of tomorrow's plans writes (slice 7): a South Rail closure, North Rail running.
+        server("srvpl0", os.meka.core.domain.LineStatusFields.PLANNED, os.meka.core.sync.FieldValue.Text("metro=10;north-rail=10;south-rail=4"))
         server("srvpl1", os.meka.core.domain.LineStatusFields.PLANNED_DAY, os.meka.core.sync.FieldValue.Int64(fri))
         server("srvpl2", os.meka.core.domain.LineStatusFields.PLANNED_CHECKED, os.meka.core.sync.FieldValue.Int64(1_791_480_600_000L))
         c.syncNow()
         val w = c.wakeView.value
         assertEquals(null, w.setMinute) // nothing moved by itself
         assertEquals("Wake 10 min earlier · 06:30", w.trains!!.actionLabel)
-        assertEquals("Trains · Thameslink planned closure tomorrow morning · Great Northern to King's Cross is running", w.trains!!.line)
+        assertEquals("Trains · South Rail planned closure tomorrow morning · North Rail to Riverside is running", w.trains!!.line)
 
         val gov = c.governNotifications(before.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
         val n = gov.post.single { it.key == "wake-trains:$fri" }
-        assertEquals("Wake at 06:30 instead of 06:40? · Great Northern to King's Cross is running", n.text)
+        assertEquals("Wake at 06:30 instead of 06:40? · North Rail to Riverside is running", n.text)
         assertEquals(listOf(os.meka.core.domain.NoticeAction.WAKE_EARLIER), n.actions)
 
         // Another day's key changes nothing; the right one sets the alarm 10 minutes before the suggestion.
@@ -314,7 +317,7 @@ class AskMekaFacadeTest {
         assertEquals("Wake alarm 06:30 · 10 min early for the trains", c.wakeEarlierForTrains(n.key))
         assertEquals(6 * 60 + 30, c.wakeView.value.setMinute)
         assertEquals("Work at 09:00 · 10 min early for the trains", c.nextAlarm.value?.line)
-        assertEquals("Trains · Thameslink planned closure tomorrow morning · alarm already 10 min early", c.wakeView.value.trains!!.line)
+        assertEquals("Trains · South Rail planned closure tomorrow morning · alarm already 10 min early", c.wakeView.value.trains!!.line)
         // Once moved: no button, no second heads-up, and a second tap does nothing.
         assertEquals(null, c.wakeView.value.trains!!.actionLabel)
         assertEquals(null, c.wakeEarlierForTrains(null))

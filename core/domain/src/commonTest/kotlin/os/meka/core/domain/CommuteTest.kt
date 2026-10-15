@@ -323,7 +323,7 @@ class CommuteTest {
         assertEquals("Leave about 7:40.", CommuteRules.briefLine(7 * 60 + 40, null, BriefScriptRules::clock))
         assertNull(CommuteRules.briefLine(null, null, BriefScriptRules::clock))
         val story = BriefStory(epochDay = fri, officeDay = true, workEndMin = 17 * 60 + 30, leaveMin = 7 * 60 + 40, homeMin = 18 * 60 + 50,
-            route = "Thameslink, Elizabeth line, good service")
+            route = "South Rail, Metro line, good service")
         val script = BriefScriptRules.script(MorningBriefView.EMPTY.copy(dateLabel = "Fri 9 Oct", workLine = "Work 09:00–17:30", story = story))
         assertTrue("an office day, finishing at half past 5. Leave about 7:40, home about 6:50. On the trains:" in script, script)
         // Working from home: not said.

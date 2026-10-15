@@ -224,7 +224,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     WEATHER("Weather for your plans", NoticeTier.DIGEST),
     /**
      * A line on Meka's route to or from work not running well during the commute (Places item 4, from TfL's status
-     * until live departures land): "Thameslink severe delays" · "Great Northern to King's Cross is running".
+     * until live departures land): "South Rail severe delays" · "North Rail to Riverside is running".
      */
     TRAINS("Trains on your route", NoticeTier.HEADS_UP),
     /**

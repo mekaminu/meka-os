@@ -137,7 +137,7 @@ data class WeatherView(
     /** The work place setting (Calendars → Weather → Work, Places item 2): About you's work unless Meka types another. */
     val workChoice: WeatherPlaceView = WeatherPlaceView.NO_WORK,
     /**
-     * The trains on an office day's commute (Places item 4, TfL line status): "Thameslink · Elizabeth line · good
+     * The trains on an office day's commute (Places item 4, TfL line status): "South Rail · Metro · good
      * service", lit when a line isn't running well; null outside the commute. Shown under the weather line.
      */
     val route: RouteLine? = null,

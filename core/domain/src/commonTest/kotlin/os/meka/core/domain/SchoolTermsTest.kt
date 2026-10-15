@@ -263,6 +263,6 @@ class SchoolTermsTest {
         assertEquals(true, h.council)
         assertEquals(false, h.clubs)
         assertEquals("the profile is empty", AboutYouRules.gateLine(h.copy(filled = false), { "t" }))
-        assertTrue(AboutYouRules.gateLine(h, { "t" }).endsWith("release 2 waits · clubs NOT copied yet · council dates copied"))
+        assertTrue(AboutYouRules.gateLine(h, { "t" }).endsWith("release 2 waits · clubs NOT copied yet · council dates copied · route NOT copied yet"))
     }
 }

@@ -539,6 +539,9 @@ class MekaCore(
     /** Release 2 slice 5's one-off council table (tests swap in an invented one, or null for none). */
     internal var releaseOneCouncil: os.meka.core.domain.TermCalendar? = RELEASE_ONE_COUNCIL
 
+    /** Release 2 slice 6's one-off train route (tests swap in an invented one, or null for none). */
+    internal var releaseOneRoute: String? = RELEASE_ONE_ROUTE
+
     /**
      * Which app this is (About you, slice 2): after a clean sync with a filled-in profile, it writes once that it holds
      * it, so Health and the publish job can say whether the Fold and the Mac both have it (release 2's gate). The Fold
@@ -4176,6 +4179,11 @@ class MekaCore(
         const val DIGEST_KEY = "meka.digest"
         /** Release 2 slice 1's one-off copy into About you's new Clubs line ([AboutYouStore.seedClubsOnce]); removed with the final slice. */
         private const val RELEASE_ONE_CLUBS = "BUFC Biggleswade United, SJFC"
+        /**
+         * Release 2 slice 6's one-off copy into About you's Train route ([AboutYouStore.seedRouteOnce]): the lines and
+         * stations the route rules named before. Removed with the final slice, once a report shows the Fold holds it.
+         */
+        private const val RELEASE_ONE_ROUTE = "Thameslink to Farringdon, then Elizabeth line; or Great Northern to King's Cross"
 
         private fun day(y: Int, m: Int, d: Int) = os.meka.core.domain.CivilDate.toEpochDay(y, m, d)
 
@@ -6942,6 +6950,8 @@ class MekaCore(
             if (seedsAboutYou && report.rejected.isEmpty()) aboutYouBefore().clubs?.let { aboutYou.seedClubsOnce(it) }
             // Release 2 slice 5: the council's holidays the code carried go into the profile once.
             if (seedsAboutYou && report.rejected.isEmpty()) releaseOneCouncil?.let { aboutYou.seedCouncilOnce(it) }
+            // Release 2 slice 6: the train route the code carried goes into the profile once.
+            if (seedsAboutYou && report.rejected.isEmpty()) releaseOneRoute?.let { aboutYou.seedRouteOnce(it) }
             // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
             if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())

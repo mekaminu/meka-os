@@ -828,7 +828,7 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = spoken })
                         }
                     }
-                    // The trains on an office day's commute (Places item 4, TfL line status): "Thameslink · Elizabeth
+                    // The trains on an office day's commute (Places item 4, TfL line status): "South Rail · Metro
                     // line · good service", lit in the accent when a line isn't running well; cross-fades as it changes.
                     weather.route?.let { route ->
                         Crossfade(route, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "route-line") { r ->

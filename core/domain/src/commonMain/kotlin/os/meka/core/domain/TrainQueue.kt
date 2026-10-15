@@ -10,7 +10,7 @@ import os.meka.core.sync.fv
  * (ADR-008 addendum 2026-10-10): `queue_item`, one saved link, a random id.
  *
  * Slice 1 keeps the link, its title and its site. Slice 2 ([ReaderRules]) keeps an article's words on the Fold for
- * reading offline; the train's minutes ("15 min to Farringdon", which waits on the trains item) come later.
+ * reading offline; the train's minutes ("15 min to the change", which waits on the trains item) come later.
  * Plain, non-AI rules; nothing is fetched and nothing leaves Meka's own synced data.
  */
 object QueueFields {

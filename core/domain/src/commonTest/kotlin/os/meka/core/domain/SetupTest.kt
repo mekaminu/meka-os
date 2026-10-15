@@ -1,5 +1,8 @@
 package os.meka.core.domain
 
+import os.meka.core.testing.InventedRoute
+import kotlin.test.AfterTest
+import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -8,6 +11,23 @@ import kotlin.test.assertTrue
 
 /** The Setup checklist's rules (Meka approved 2026-10-09). */
 class SetupTest {
+    // Rule 13, release 2 slice 6: the Train lines step names About you's route (an invented one here).
+    @BeforeTest
+    fun route() { Household.useRoute(InventedRoute.TYPED) }
+
+    @AfterTest
+    fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
+
+    @Test
+    fun trainLinesNameTheRouteOrAskForIt() {
+        assertEquals("South Rail, North Rail and Metro line from TfL",
+            SetupRules.view(facts()).steps.first { it.key == "trains.status" }.line)
+        Household.set(HouseholdNames.EMPTY)
+        val none = SetupRules.view(facts()).steps.first { it.key == "trains.status" }
+        assertEquals(RouteRules.NO_ROUTE, none.line)
+        assertEquals(SetupState.LATER, none.state)
+    }
+
     private val now = 1_791_552_300_000L
     private val day = 20_735L
     private val ai = AiStatusView("On · $1.20 of $20 this month", lit = false, canAsk = true)

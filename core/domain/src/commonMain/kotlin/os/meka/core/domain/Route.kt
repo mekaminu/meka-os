@@ -4,17 +4,18 @@ import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Replica
 
 /**
- * Meka's route to work (build plan "Places, location weather, per-day work hours and trains", item 4; Meka 2026-10-09
- * 12:54): Thameslink home → Farringdon, then the Elizabeth line to work; when Thameslink has problems,
- * Great Northern to King's Cross instead. Until the National Rail live departures key arrives (Needs Meka #16), the
- * lines' status comes from TfL's public line status (free, no key, nothing about Meka sent: the server asks for three
- * line names). The server mirrors it into one server-written `context_mode` entity, [LineStatusStore.ENTITY_ID]
- * (ADR-008 addendum), only when it changed.
+ * The commute's train lines (build plan "Places, location weather, per-day work hours and trains", item 4; Meka
+ * 2026-10-09 12:54): the line from home, the station where he changes, the onward line, and the line to take instead
+ * when the first one has problems. Rule 13, release 2 slice 6 (2026-10-15): the route is About you's **Train route**
+ * ([CommuteRoute], read through [Household.names]), never the code; with none typed no line is asked about or shown.
+ * Until the National Rail live departures key arrives (Needs Meka #16), the lines' status comes from TfL's public line
+ * status (free, no key, nothing about Meka sent: the server asks for the route's line names). The server mirrors it
+ * into one server-written `context_mode` entity, [LineStatusStore.ENTITY_ID] (ADR-008 addendum), only when it changed.
  *
  * Numbers only: TfL's status codes, never its words, so every line the apps show or Ask hears is written here.
  */
 object LineStatusFields {
-    /** "elizabeth=10;great-northern=10;thameslink=9": each line's TfL status severity (the worst one in force now). */
+    /** "metro=10;north-rail=10;south-rail=9": each line's TfL status severity (the worst one in force now). */
     const val LINES = "lines"
     /** When the server last read TfL, rounded down to [RouteRules.CHECKED_STEP_MS] (so it writes at most twice an hour). */
     const val CHECKED = "checked"
@@ -71,6 +72,52 @@ object LineStatusCodec {
     }
 }
 
+/**
+ * The commute's train route as About you keeps it (release 2 slice 6): "South Rail to Oakfield Junction, then Metro;
+ * or North Rail to Riverside". Line names as he typed them (said and shown as typed); TfL's line ids come from them
+ * ([RouteRules.lineId]: "Metro line" → "metro", "Hammersmith & City" → "hammersmith-city").
+ */
+data class CommuteRoute(
+    /** The line from home ("South Rail"). */
+    val first: String,
+    /** Where he changes to [onward] ("Oakfield Junction"); null for none. */
+    val change: String? = null,
+    /** The onward line ("Metro"); null for a one-train journey. */
+    val onward: String? = null,
+    /** The line to take when [first] has problems ("North Rail"); null for none. */
+    val fallback: String? = null,
+    /** Where [fallback] goes ("Riverside"); null when not said. */
+    val fallbackTo: String? = null,
+) {
+    val firstId: String get() = RouteRules.lineId(first)
+    val onwardId: String? get() = onward?.let(RouteRules::lineId)
+    val fallbackId: String? get() = fallback?.let(RouteRules::lineId)
+
+    /** The lines the server asks TfL about: the first line, its fallback, the onward leg (distinct). */
+    val ids: List<String> get() = listOfNotNull(firstId, fallbackId, onwardId).distinct()
+
+    /** The legs in the order travelled: to work [first] then [onward]; home the other way round. */
+    fun legs(morning: Boolean): List<String> =
+        listOfNotNull(firstId, onwardId).distinct().let { if (morning) it else it.reversed() }
+
+    /** The name as typed for [id], or null when it isn't on this route. */
+    fun nameOf(id: String): String? = when (id) {
+        firstId -> first
+        onwardId -> onward
+        fallbackId -> fallback
+        else -> null
+    }
+
+    /** As kept and shown: "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside". */
+    val text: String
+        get() = buildString {
+            append(first)
+            change?.let { append(" to ").append(it) }
+            onward?.let { append(if (change != null) ", then " else " then ").append(it) }
+            fallback?.let { f -> append("; or ").append(f); fallbackTo?.let { append(" to ").append(it) } }
+        }
+}
+
 /** How bad a status is. */
 enum class LineLevel { GOOD, MINOR, MAJOR }
 
@@ -79,11 +126,94 @@ data class RouteLine(val text: String, val lit: Boolean, val spoken: String)
 
 /** Non-AI, pure. */
 object RouteRules {
-    const val THAMESLINK = "thameslink"
-    const val GREAT_NORTHERN = "great-northern"
-    const val ELIZABETH = "elizabeth"
-    /** The lines the server asks TfL about: the direct route, its fallback, and the onward leg. */
-    val LINES = listOf(THAMESLINK, GREAT_NORTHERN, ELIZABETH)
+    /** The route the rules read: About you's Train route ([Household.names]); null with none typed. */
+    fun route(): CommuteRoute? = Household.names.route
+
+    /** The lines the server asks TfL about for [r] (none without a route). */
+    fun lines(r: CommuteRoute? = route()): List<String> = r?.ids.orEmpty()
+
+    /** Setup's Train lines step, and Ask, with no route in About you. */
+    const val NO_ROUTE = "Add your train route in About you and Navilife follows its lines' status from TfL"
+
+    /** Setup's step with a route: "South Rail, North Rail and Metro from TfL". */
+    fun setupLine(r: CommuteRoute): String {
+        val names = r.ids.map { name(it, r) }
+        val joined = if (names.size <= 1) names.joinToString() else names.dropLast(1).joinToString(", ") + " and " + names.last()
+        return "$joined from TfL"
+    }
+
+    const val MAX_LINE = 30
+    const val MAX_STATION = 40
+
+    /**
+     * TfL's id for a line name as typed: lower case, a trailing " line" dropped, "&" and every other run of
+     * non-letters a single hyphen ("Metro line" → "metro", "Hammersmith & City" → "hammersmith-city",
+     * "North Rail" → "north-rail"). Empty for a name with no letters or digits.
+     */
+    fun lineId(name: String): String {
+        var t = name.trim().lowercase()
+        if (t.endsWith(" line")) t = t.dropLast(5)
+        val out = StringBuilder()
+        for (c in t) {
+            if (c in 'a'..'z' || c in '0'..'9') out.append(c)
+            else if (out.isNotEmpty() && out.last() != '-') out.append('-')
+        }
+        return out.toString().trimEnd('-')
+    }
+
+    private fun lineName(t: String): String? {
+        val n = t.trim()
+        if (n.isEmpty() || n.length > MAX_LINE || !n[0].isLetter()) return null
+        if (n.any { !(it.isLetterOrDigit() || it == ' ' || it == '&' || it == '-' || it == '\'' || it == '.') }) return null
+        return n.takeIf { lineId(it).isNotEmpty() }
+    }
+
+    private fun station(t: String): String? {
+        val n = t.trim()
+        if (n.isEmpty() || n.length > MAX_STATION) return null
+        if (n.any { !(it.isLetter() || it == ' ' || it == '&' || it == '-' || it == '\'' || it == '’' || it == '.' || it == '(' || it == ')') }) return null
+        return n.replace('’', '\'')
+    }
+
+    /** "A to B" → (A, B); "A" → (A, null). Null when either part can't be read. */
+    private fun leg(t: String, stationOk: (String) -> String?): Pair<String, String?>? {
+        val i = t.lowercase().indexOf(" to ")
+        if (i < 0) return lineName(t)?.let { it to null }
+        val line = lineName(t.substring(0, i)) ?: return null
+        val to = stationOk(t.substring(i + 4)) ?: return null
+        return line to to
+    }
+
+    /**
+     * Reads the Train route as typed: "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside" (the
+     * change station and the onward line optional; "or …" after a semicolon optional; "instead" or "else" also start
+     * the fallback). Null when it can't be read. Spaces collapsed; ", then" and " then " both work.
+     */
+    fun parse(typed: String?): CommuteRoute? {
+        val t = typed?.trim()?.split(' ', '\t', '\n')?.filter { it.isNotEmpty() }?.joinToString(" ") ?: return null
+        if (t.isEmpty() || t.length > 160) return null
+        val parts = t.split(';')
+        if (parts.size > 2) return null
+        val main = parts[0].trim()
+        val lower = main.lowercase()
+        val thenAt = listOf(", then ", " then ").map { lower.indexOf(it) to it.length }.filter { it.first >= 0 }.minByOrNull { it.first }
+        val firstPart = if (thenAt != null) main.substring(0, thenAt.first) else main
+        val onward = thenAt?.let { lineName(main.substring(it.first + it.second)) ?: return null }
+        val (first, change) = leg(firstPart.trim(), ::station) ?: return null
+        var fallback: String? = null
+        var fallbackTo: String? = null
+        if (parts.size == 2) {
+            var f = parts[1].trim()
+            for (w in listOf("or ", "else ", "instead ", "otherwise ")) if (f.lowercase().startsWith(w)) { f = f.substring(w.length).trim(); break }
+            if (f.isNotEmpty()) {
+                val l = leg(f, ::station) ?: return null
+                fallback = l.first; fallbackTo = l.second
+            }
+        }
+        val r = CommuteRoute(first, change, onward, fallback, fallbackTo)
+        if (r.onwardId == r.firstId) return CommuteRoute(first, change, null, fallback, fallbackTo)
+        return r
+    }
 
     /** The morning's line shows from 06:00 until work starts. */
     const val MORNING_FROM_MIN = 6 * 60
@@ -94,11 +224,25 @@ object RouteRules {
     const val FRESH_MS = 60 * 60_000L
     const val CHECKED_STEP_MS = 30 * 60_000L
 
-    fun name(id: String): String = when (id) {
-        THAMESLINK -> "Thameslink"
-        GREAT_NORTHERN -> "Great Northern"
-        ELIZABETH -> "Elizabeth line"
-        else -> id.split('-').joinToString(" ") { w -> w.replaceFirstChar { it.uppercaseChar() } }
+    /** The line's name as About you has it, else the id in words ("north-rail" → "North Rail"). */
+    fun name(id: String, r: CommuteRoute? = route()): String =
+        r?.nameOf(id) ?: id.split('-').joinToString(" ") { w -> w.replaceFirstChar { it.uppercaseChar() } }
+
+    /** The name inside a sentence: "the Metro line" for a name ending "line", else as typed ("North Rail"). */
+    fun spoken(id: String, r: CommuteRoute? = route()): String =
+        name(id, r).let { n -> if (n.lowercase().endsWith(" line") && !n.lowercase().startsWith("the ")) "the $n" else n }
+
+    /**
+     * What to do when the first line isn't running well, from the fallback's [fallbackSeverity]: "North Rail to
+     * Riverside is running" (from Riverside on the way home), "North Rail severe delays too", or null when the route
+     * has no fallback or TfL said nothing about it.
+     */
+    fun fallbackAdvice(r: CommuteRoute, fallbackSeverity: Int?, morning: Boolean): String? {
+        val f = r.fallback ?: return null
+        val sev = fallbackSeverity ?: return null
+        return if (level(sev) == LineLevel.GOOD) {
+            f + (r.fallbackTo?.let { if (morning) " to $it" else " from $it" } ?: "") + " is running"
+        } else "$f ${words(sev)} too"
     }
 
     /** TfL's status severities (Line/Meta/Severity) in plain words. */
@@ -157,41 +301,42 @@ object RouteRules {
         }
     }
 
-    private fun part(id: String, sev: Int) = "${name(id)} ${words(sev)}"
+    private fun part(id: String, sev: Int, r: CommuteRoute? = route()) = "${name(id, r)} ${words(sev)}"
 
     /**
-     * Today's line on an office day's commute. All running: "Thameslink · Elizabeth line · good service". Otherwise
-     * each leg in the order travelled, lit: "Thameslink severe delays · Elizabeth line good service — Great Northern
-     * to King's Cross is running" (the fallback named only when it is running and Thameslink isn't). Null outside the
-     * commute, without a fresh status, or when TfL said nothing about the route.
+     * Today's line on an office day's commute. All running: "South Rail · Metro · good service". Otherwise each leg in
+     * the order travelled, lit: "South Rail severe delays · Metro good service — North Rail to Riverside is running"
+     * (the fallback named only when it is running and the first line isn't). Null outside the commute, without a fresh
+     * status, without a route in About you, or when TfL said nothing about the route.
      */
     fun todayLine(s: LineStatusSnapshot, office: OfficeWindow?, nowMs: Long, cal: LocalCalendar): RouteLine? {
+        val r = route() ?: return null
         val commute = commute(office, nowMs, cal) ?: return null
         if (!fresh(s, nowMs)) return null
-        val legs = (if (commute == Commute.MORNING) listOf(THAMESLINK, ELIZABETH) else listOf(ELIZABETH, THAMESLINK))
-            .mapNotNull { id -> s.severityOf(id)?.let { id to it } }
+        val legs = r.legs(commute == Commute.MORNING).mapNotNull { id -> s.severityOf(id)?.let { id to it } }
         if (legs.isEmpty()) return null
         if (legs.all { level(it.second) == LineLevel.GOOD }) {
-            val text = legs.joinToString(" · ") { name(it.first) } + " · good service"
+            val text = legs.joinToString(" · ") { name(it.first, r) } + " · good service"
             return RouteLine(text, lit = false, spoken = "Trains: " + text.replace(" · ", ", "))
         }
-        val tl = s.severityOf(THAMESLINK)
-        val gn = s.severityOf(GREAT_NORTHERN)
-        val fallback = if (tl != null && level(tl) != LineLevel.GOOD && gn != null && level(gn) == LineLevel.GOOD) {
-            if (commute == Commute.MORNING) " — Great Northern to King's Cross is running" else " — Great Northern from King's Cross is running"
+        val first = s.severityOf(r.firstId)
+        val fb = r.fallbackId?.let { s.severityOf(it) }
+        val fallback = if (first != null && level(first) != LineLevel.GOOD && fb != null && level(fb) == LineLevel.GOOD) {
+            fallbackAdvice(r, fb, commute == Commute.MORNING)?.let { " — $it" }.orEmpty()
         } else ""
-        val text = legs.joinToString(" · ") { (id, sev) -> part(id, sev) } + fallback
+        val text = legs.joinToString(" · ") { (id, sev) -> part(id, sev, r) } + fallback
         return RouteLine(text, lit = true, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — ", ". "))
     }
 
     /**
      * The status as Ask MEKA hears it ("are the trains OK?"): one line, any time it is fresh. "train lines on Meka's
-     * route (TfL status, checked 08:30): Thameslink good service; Great Northern good service; Elizabeth line minor
-     * delays". Empty when stale or unknown.
+     * route (TfL status, checked 08:30): South Rail good service; North Rail good service; Metro minor delays". Empty
+     * when stale, unknown or without a route.
      */
     fun askLines(s: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar): List<String> {
+        val r = route() ?: return emptyList()
         if (!fresh(s, nowMs)) return emptyList()
-        val known = LINES.mapNotNull { id -> s.severityOf(id)?.let { part(id, it) } }
+        val known = r.ids.mapNotNull { id -> s.severityOf(id)?.let { part(id, it, r) } }
         if (known.isEmpty()) return emptyList()
         val at = LocalClock.formatMinute(cal.minuteOfDay(s.checkedMs!!))
         return listOf("train lines on Meka's route (TfL status, checked $at): " + known.joinToString("; "))
@@ -199,15 +344,16 @@ object RouteRules {
 
     /**
      * The commute's heads-ups (Places item 4, before live departures): on an office day's commute, with a fresh status,
-     * one [NoticeSource.TRAINS] heads-up for each leg of the route ([THAMESLINK], the [ELIZABETH] line) that isn't
+     * one [NoticeSource.TRAINS] heads-up for each leg of the route (the first line, then the onward one) that isn't
      * running well ([LineLevel.MAJOR]: severe delays, suspended, closed…; minor delays are left to Today's line).
-     * "Thameslink severe delays" · "Great Northern to King's Cross is running · TfL 07:30". Once per leg per commute
+     * "South Rail severe delays" · "North Rail to Riverside is running · TfL 07:30". Once per leg per commute
      * (the key holds the day and the commute, not the status, so a line going from severe delays to suspended doesn't
      * buzz again); due when the status was read, or when quiet hours end if that was in them (so a 06:30 problem
      * reaches Meka at 07:00 rather than being lost to a digest after he has left); stale once the commute is over
      * (work starts, or 90 minutes after it ends).
      */
     fun notices(s: LineStatusSnapshot, office: OfficeWindow?, quiet: QuietHours, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val r = route() ?: return emptyList()
         val commute = commute(office, nowMs, cal) ?: return emptyList()
         if (!fresh(s, nowMs)) return emptyList()
         office!!
@@ -219,25 +365,18 @@ object RouteRules {
         if (atMs >= until) return emptyList()
         val checked = LocalClock.formatMinute(cal.minuteOfDay(s.checkedMs))
         val day = cal.epochDayOf(office.startMs)
-        val legs = if (morning) listOf(THAMESLINK, ELIZABETH) else listOf(ELIZABETH, THAMESLINK)
-        return legs.mapNotNull { id ->
+        return r.legs(morning).mapNotNull { id ->
             val sev = s.severityOf(id) ?: return@mapNotNull null
             if (level(sev) != LineLevel.MAJOR) return@mapNotNull null
-            val advice = when (id) {
-                THAMESLINK -> {
-                    val gn = s.severityOf(GREAT_NORTHERN)
-                    when {
-                        gn != null && level(gn) == LineLevel.GOOD ->
-                            if (morning) "Great Northern to King's Cross is running" else "Great Northern from King's Cross is running"
-                        gn != null -> "Great Northern ${words(gn)} too"
-                        else -> "Check before you leave"
-                    }
-                }
-                else -> if (morning) "Your onward leg from Farringdon" else "Your first leg, to Farringdon"
+            val advice = if (id == r.firstId) {
+                fallbackAdvice(r, r.fallbackId?.let { s.severityOf(it) }, morning) ?: "Check before you leave"
+            } else {
+                val at = r.change
+                if (morning) "Your onward leg" + (at?.let { " from $it" } ?: "") else "Your first leg" + (at?.let { ", to $it" } ?: "")
             }
             Notice(
                 key = "trains:$day:${commute.name.lowercase()}:$id", source = NoticeSource.TRAINS, tier = NoticeTier.HEADS_UP,
-                title = part(id, sev).replaceFirstChar { it.uppercaseChar() }, text = "$advice · TfL $checked",
+                title = part(id, sev, r).replaceFirstChar { it.uppercaseChar() }, text = "$advice · TfL $checked",
                 atMs = atMs, target = NoticeTarget.TODAY, expiresAtMs = until,
             )
         }

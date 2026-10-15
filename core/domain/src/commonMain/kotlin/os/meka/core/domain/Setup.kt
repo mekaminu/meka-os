@@ -281,9 +281,12 @@ object SetupRules {
             accounts.any { it.provider == "weather" } -> SetupStep("weather", "Weather", weatherLine(f.homePlace, f.workPlace), SetupState.DONE)
             else -> SetupStep("weather", "Weather", "Not fetched yet · it starts with Navilife's server", SetupState.LATER)
         }
+        val route = RouteRules.route()
         val lines = when {
             accounts == null -> SetupStep("trains.status", "Train lines", COULDNT, SetupState.UNKNOWN)
-            accounts.any { it.provider == "lines" } -> SetupStep("trains.status", "Train lines", "Thameslink, Great Northern and the Elizabeth line from TfL", SetupState.DONE)
+            // Rule 13, release 2 slice 6: the lines are About you's Train route, never the code's.
+            route == null -> SetupStep("trains.status", "Train lines", RouteRules.NO_ROUTE, SetupState.LATER)
+            accounts.any { it.provider == "lines" } -> SetupStep("trains.status", "Train lines", RouteRules.setupLine(route), SetupState.DONE)
             else -> SetupStep("trains.status", "Train lines", "Not fetched yet · it starts with Navilife's server", SetupState.LATER)
         }
         val live = SetupStep("trains.live", "Live departures", "Need a free National Rail data key (on the build board for you)", SetupState.LATER)

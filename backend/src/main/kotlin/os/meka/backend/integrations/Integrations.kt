@@ -1427,19 +1427,22 @@ class Integrations(
     /**
      * The route's line status (Places item 4): every [LINES_PERIOD_MS] from [LINES_FROM_HOUR] until [LINES_TO_HOUR]
      * London time (overnight nobody commutes; the first poll of the morning catches up). A changed status wakes the
-     * devices, so Today's line and Ask follow within seconds; the checked time alone wakes nobody.
+     * devices, so Today's line and Ask follow within seconds; the checked time alone wakes nobody. Rule 13, release 2
+     * slice 6: the lines are the household's own Train route from About you; with none, TfL isn't asked.
      */
     private fun syncLines(a: AccountRow, source: LineStatusProvider) {
         val hour = java.time.Instant.ofEpochMilli(now()).atZone(zone).hour
         if (hour < LINES_FROM_HOUR || hour >= LINES_TO_HOUR) return
         val last = a.lastSyncAtMs
         if (a.status == "ok" && last != null && now() - last < LINES_PERIOD_MS) return
+        val lines = routeLines(a.householdId)
+        if (lines.isEmpty()) return
         try {
-            val changed = applyLines(a, source.statuses())
+            val changed = applyLines(a, source.statuses(lines))
             store.transaction { store.markSynced(a.id, now()) }
             // In the evening, tomorrow morning's plans too (the commute counts everywhere, slice 7); a failure there
             // leaves the last plans and the feed's status alone.
-            val planned = hour >= PLANNED_FROM_HOUR && runCatching { syncPlanned(a, source) }.getOrDefault(false)
+            val planned = hour >= PLANNED_FROM_HOUR && runCatching { syncPlanned(a, source, lines) }.getOrDefault(false)
             if (changed || planned) runCatching { onChanged(a.householdId) }
         } catch (e: Exception) {
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
@@ -1467,6 +1470,11 @@ class Integrations(
         }
     }
 
+    /** The TfL ids of the household's Train route (About you); empty without one. */
+    internal fun routeLines(hh: String): List<String> = runCatching {
+        RouteRules.lines(RouteRules.parse(AboutYouRules.read(reader.entity(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)).route))
+    }.getOrDefault(emptyList())
+
     /** When each line-status feed last read tomorrow's plans (in memory: a restart just reads them again). */
     private val plannedAt = HashMap<String, Long>()
 
@@ -1475,14 +1483,14 @@ class Integrations(
      * then, at most every [PLANNED_PERIOD_MS], into the same entity's [LineStatusFields.PLANNED] with its day and the
      * rounded read time. Returns whether the plans changed (so the devices are woken for the wake alarm's offer).
      */
-    private fun syncPlanned(a: AccountRow, source: LineStatusProvider): Boolean {
+    private fun syncPlanned(a: AccountRow, source: LineStatusProvider, lines: List<String>): Boolean {
         val last = synchronized(plannedAt) { plannedAt[a.id] }
         if (last != null && now() - last < PLANNED_PERIOD_MS) return false
         synchronized(plannedAt) { plannedAt[a.id] = now() }
         val tomorrow = java.time.Instant.ofEpochMilli(now()).atZone(zone).toLocalDate().plusDays(1)
         val from = tomorrow.atStartOfDay(zone).plusMinutes(PLANNED_FROM_MIN.toLong()).toInstant().toEpochMilli()
         val to = tomorrow.atStartOfDay(zone).plusMinutes(PLANNED_TO_MIN.toLong()).toInstant().toEpochMilli()
-        val states = source.planned(from, to)
+        val states = source.planned(lines, from, to)
         if (states.isEmpty()) return false
         return applyPlanned(a, tomorrow.toEpochDay(), states)
     }

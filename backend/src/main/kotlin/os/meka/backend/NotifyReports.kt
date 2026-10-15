@@ -45,7 +45,7 @@ class NotifyReports(
         }
         val about = NotifyDiagnosticsCodec.Latest(
             null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs,
-            aboutClubs = held?.clubs, aboutCouncil = held?.council, assistant = calls,
+            aboutClubs = held?.clubs, aboutCouncil = held?.council, aboutRoute = held?.route, assistant = calls,
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)

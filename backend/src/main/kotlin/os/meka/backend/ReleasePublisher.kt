@@ -397,7 +397,7 @@ object ReleasePublisherCli {
 
     /** About you, slice 2: whether the Fold and the Mac both hold the profile (release 2's gate), for a build run. */
     fun aboutYouLine(l: NotifyDiagnosticsCodec.Latest): String {
-        val held = l.aboutFilled?.let { AboutYouHeld(it, l.aboutFoldAtMs, l.aboutMacAtMs, l.aboutClubs, l.aboutCouncil) }
+        val held = l.aboutFilled?.let { AboutYouHeld(it, l.aboutFoldAtMs, l.aboutMacAtMs, l.aboutClubs, l.aboutCouncil, l.aboutRoute) }
         return "::notice title=About you::${AboutYouRules.gateLine(held, ::utc)}".replace("%", "%25")
     }
 

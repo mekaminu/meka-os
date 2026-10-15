@@ -1,5 +1,6 @@
 package os.meka.core.domain
 
+import os.meka.core.testing.InventedRoute
 import os.meka.core.testing.SyncWorld
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -20,14 +21,14 @@ class LeavingNowTest {
 
     // Rule 13: the partner's name comes from About you (an invented one here), never the code.
     @BeforeTest
-    fun partner() { Household.useTyped("", "", "Jordan Lane") }
+    fun partner() { Household.useTyped("", "", "Jordan Lane"); Household.useRoute(InventedRoute.TYPED) }
 
     @AfterTest
     fun noHousehold() { Household.set(HouseholdNames.EMPTY) }
 
     private fun snap(tl: Int?, gn: Int?, el: Int?, checked: Long = at(fri, 17)) = LineStatusSnapshot(
-        listOfNotNull(tl?.let { LineState(RouteRules.THAMESLINK, it) }, gn?.let { LineState(RouteRules.GREAT_NORTHERN, it) },
-            el?.let { LineState(RouteRules.ELIZABETH, it) }), checked,
+        listOfNotNull(tl?.let { LineState(InventedRoute.FIRST, it) }, gn?.let { LineState(InventedRoute.FALLBACK, it) },
+            el?.let { LineState(InventedRoute.ONWARD, it) }), checked,
     )
     private val good = snap(10, 10, 10)
 
@@ -58,14 +59,14 @@ class LeavingNowTest {
     @Test
     fun aDelayOnTheRouteGivesALaterHonestEta() {
         val minor = LeavingRules.notices(on, office, snap(9, 10, 10), at(fri, 17, 30), cal).single()
-        assertEquals("Leaving now, home about 18:50 — Thameslink has minor delays", minor.text)
+        assertEquals("Leaving now, home about 18:50 — South Rail has minor delays", minor.text)
         assertEquals("Trains delayed · tell Jordan?", minor.title)
         val viaKx = LeavingRules.draft(on, office.endMs, snap(6, 10, 10), at(fri, 17, 30), cal)
-        assertEquals("Leaving now, home about 19:00 — Thameslink has severe delays, so I'm coming via King's Cross", viaKx.text)
+        assertEquals("Leaving now, home about 19:00 — South Rail has severe delays, so I'm coming via Riverside", viaKx.text)
         val both = LeavingRules.draft(on, office.endMs, snap(2, 6, 9), at(fri, 17, 30), cal)
-        assertEquals("Leaving now, home about 19:15 — Thameslink is suspended", both.text)
+        assertEquals("Leaving now, home about 19:15 — South Rail is suspended", both.text)
         val el = LeavingRules.draft(on, office.endMs, snap(10, 10, 6), at(fri, 17, 30), cal)
-        assertEquals("Leaving now, home about 18:55 — the Elizabeth line has severe delays", el.text)
+        assertEquals("Leaving now, home about 18:55 — the Metro line has severe delays", el.text)
         // A stale status (the server stopped reading TfL) is left out rather than guessed.
         assertEquals("Leaving now, home about 18:40", LeavingRules.draft(on, office.endMs, snap(6, 10, 10, checked = at(fri, 9)), at(fri, 17, 30), cal).text)
         // Each line level posts once, in the same place: good at 17:30, then the delay once more.
@@ -84,7 +85,7 @@ class LeavingNowTest {
         assertEquals(LeavingTap.Send("Jordan", n.text), LeavingRules.tap(n.key, n.text, on, office, good, at(fri, 17, 39), cal))
         // The trains went bad meanwhile: the new draft is shown instead.
         val worse = LeavingRules.tap(n.key, n.text, on, office, snap(6, 10, 10, at(fri, 17, 35)), at(fri, 17, 36), cal) as LeavingTap.Changed
-        assertTrue(worse.notice.text.endsWith("so I'm coming via King's Cross"))
+        assertTrue(worse.notice.text.endsWith("so I'm coming via Riverside"))
         // Tapped at 17:50: the draft moved on, so the notification is updated and nothing is sent.
         val late = LeavingRules.tap(n.key, n.text, on, office, good, at(fri, 17, 50), cal) as LeavingTap.Changed
         assertEquals("Leaving now, home about 19:00", late.notice.text)

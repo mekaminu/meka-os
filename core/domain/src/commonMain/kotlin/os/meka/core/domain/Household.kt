@@ -15,6 +15,7 @@ import kotlin.concurrent.Volatile
  * Release 2 slice 4 (2026-10-15): his own name as About you has it ([shown]), so a group message naming him counts as
  * a mention without his full name in the code.
  * Release 2 slice 5 (2026-10-15): the school's council's holidays ([council]), kept in his profile, not in the code.
+ * Release 2 slice 6 (2026-10-15): the commute's train route ([route]), so no line or station is named in the code.
  */
 data class HouseholdNames(
     /** Age group → the child's first name ("7" → "Alex"); a child without an age group isn't here. */
@@ -43,6 +44,8 @@ data class HouseholdNames(
      * none. The School pane's council card offers only this ([SchoolTerms.councils]).
      */
     val council: TermCalendar? = null,
+    /** About you's Train route ([RouteRules.route] reads it); null with none typed. */
+    val route: CommuteRoute? = null,
 ) {
     /** The partner's first name ("Sam" for "Sam Lane"); null with none. */
     val partnerFirst: String? get() = partner?.trim()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
@@ -71,6 +74,7 @@ data class HouseholdNames(
                 assistantNumber = a.assistantNumber?.trim()?.takeIf { it.isNotEmpty() },
                 shown = a.shownName?.trim()?.takeIf { it.isNotEmpty() },
                 council = a.councilDates,
+                route = RouteRules.parse(a.route),
             )
         }
     }
@@ -110,6 +114,9 @@ object Household {
 
     /** About you's "Your name" as typed (tests and the Mac's bridge tests; blank for none), keeping the rest. */
     fun useShownName(name: String): Boolean = set(names.copy(shown = name.trim().takeIf { it.isNotEmpty() }))
+
+    /** The train route as typed in About you (tests and the Mac's bridge tests; blank for none), keeping the rest. */
+    fun useRoute(typed: String): Boolean = set(names.copy(route = RouteRules.parse(typed)))
 
     /** The council's holidays as his profile would hold them (tests; null for none), keeping the rest. */
     fun useCouncil(cal: TermCalendar?): Boolean = set(names.copy(council = cal))
