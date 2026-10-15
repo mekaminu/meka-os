@@ -73,12 +73,12 @@ class KidsFacadeTest {
         fold.syncNow(); mac.syncNow()
         fun kids(r: os.meka.core.domain.GovernorResult) = r.post.filter { it.source == os.meka.core.domain.NoticeSource.KIDS }
 
-        // Wed 13 Jan 2027: due, but the heads-up waits for Saturday.
+        // Tue 12 Jan 2027: due, but the heads-up waits for Saturday.
         now += 92L * 86_400_000L
         mac.tick()
         assertTrue(kids(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
         // Sat 16 Jan, 09:30.
-        now += 3L * 86_400_000L + 30 * 60_000L
+        now += 4L * 86_400_000L + 30 * 60_000L
         mac.tick()
         val gov = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
         val n = kids(gov).single()
