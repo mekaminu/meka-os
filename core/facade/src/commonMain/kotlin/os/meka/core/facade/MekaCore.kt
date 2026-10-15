@@ -4498,6 +4498,36 @@ class MekaCore(
     }
 
     /**
+     * Email triage completeness (2026-10-15): **Send all** on "From your mail" — the replies he read in each email's
+     * editor ([ids] and [texts] side by side, only Strings cross from the apps), each sent exactly as [replyToMailItem]
+     * sends one: nothing is sent here; each goes from the account its email came to, in its thread, at the server's next
+     * check once [os.meka.core.domain.MailNeedsRules.REPLY_HOLD_MS] have passed, and its email (with the ones linked to it)
+     * is archived. One Undo on the bar stops them all (until the server has sent them). A reply that couldn't be sent
+     * ([os.meka.core.domain.MailNeedsRules.replyProblem]) or an email no longer here is left out; with none left, the
+     * problem is returned and nothing is written.
+     */
+    suspend fun replyToMailItems(ids: List<String>, texts: List<String>): String = onCore {
+        val R = os.meka.core.domain.MailNeedsRules
+        val items = activity.mailItems().associateBy { it.id }
+        val ready = ids.zip(texts).filter { (id, text) -> items[id] != null && R.replyProblem(text) == null }
+        if (ready.isEmpty()) return@onCore texts.firstNotNullOfOrNull { R.replyProblem(it) } ?: R.UNKNOWN
+        val undos = ready.map { (id, text) ->
+            val group = mailGroup(id)
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.replyFields(text, nowMs()))
+            val undoLinked = doneLinked(group)
+            val undo: () -> Unit = {
+                replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.undoDoneFields(nowMs()))
+                undoLinked()
+            }
+            undo
+        }
+        mailNeedsUndo = { undos.forEach { it() } }
+        mailNeedsChanged()
+        if (ready.size == 1) R.replySendingLine(items.getValue(ready[0].first).account)
+        else os.meka.core.domain.MailSendAllRules.sendingLine(ready.size)
+    }
+
+    /**
      * Inbox autopilot, slice 6b-2b: **Draft it** in the reply editor on an email in "From your mail". One call to MEKA's
      * AI (`POST /v1/ai/mail-draft`, metered `mail.draft`) with what the card shows — the account's label, the sender's
      * name, the subject and the preview — and up to three of his own earlier sent replies for his tone

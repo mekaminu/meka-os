@@ -9,12 +9,22 @@ import SwiftUI
 /// for (slice 6b-1: made from the email, which is archived too) and Snooze (back tomorrow 08:00), each with Undo on the bar. It staggers in after the cards above; clicking the header folds the
 /// emails in and out on the expand spring; the headline cross-fades. Reduced motion: cross-fades. Slice 6c: emails linked
 /// to one (same thread, order number, or person and topic) fold under it and go with it.
+/// Email triage completeness (2026-10-15): with two or more emails, Draft replies to N drafts each one whose editor is
+/// empty and opens it to read and change; once two or more open editors hold a short reply, Send all N fades in and
+/// sends each from the account its email came to (the same path and hold as Send), one Undo for all.
 struct MailNeedsView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     var firstIndex: Int = 2
     @State private var open = true
+    // Draft replies and Send all: each open editor's words by email, the drafts Draft replies put in, and its line.
+    @State private var texts: [String: String] = [:]
+    @State private var incoming: [String: MailIncomingDraft] = [:]
+    @State private var drafted: [String: String] = [:]
+    @State private var seq = 0
+    @State private var draftingAll = false
+    @State private var allLine: String?
 
     var body: some View {
         Group {
@@ -36,6 +46,9 @@ struct MailNeedsView: View {
                     .accessibilityLabel("\(card.title). \(card.headline)")
                     if open {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
+                            if let draftLabel = MailSendAllRules.shared.draftLabel(rows: Int32(card.rows.count)) {
+                                sendAllBar(card: card, draftLabel: draftLabel)
+                            }
                             ForEach(card.rows, id: \.id) { row in
                                 MailNeedsRowView(row: row, palette: palette,
                                                  done: { model.doneMailItem(row.id) },
@@ -44,7 +57,9 @@ struct MailNeedsView: View {
                                                  snooze: { model.snoozeMailItem(row.id) },
                                                  send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) },
                                                  draft: { await model.draftMailReply(row.id) },
-                                                 alwaysTidy: { model.alwaysTidyMailItem(row.id) })
+                                                 alwaysTidy: { model.alwaysTidyMailItem(row.id) },
+                                                 incoming: incoming[row.id],
+                                                 onEditor: { t in texts[row.id] = t })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -71,6 +86,74 @@ struct MailNeedsView: View {
     }
 }
 
+extension MailNeedsView {
+    /// Draft replies to N, and Send all N once two or more open editors hold a short reply (it fades in), with the line
+    /// saying what Draft replies did or how Send all sends.
+    @ViewBuilder
+    fileprivate func sendAllBar(card: MailNeedsCard, draftLabel: String) -> some View {
+        let all = MailSendAllRules.shared.sendAll(rows: card.rows, texts: texts)
+        let shown = all != nil ? MailSendAllRules.shared.LINE : allLine
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(spacing: MekaSpace.xs) {
+                if let all {
+                    MailNeedsPill(label: all.label, palette: palette, spoken: all.spoken, action: { sendAll(all) })
+                        .transition(.opacity)
+                }
+                MailNeedsPill(label: draftingAll ? MailSendAllRules.shared.DRAFTING : draftLabel, palette: palette, quiet: true,
+                              spoken: MailSendAllRules.shared.draftSpoken(rows: Int32(card.rows.count)),
+                              action: { draftAll(card: card) })
+                    .disabled(draftingAll)
+            }
+            if let shown {
+                Text(shown).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .transition(.opacity)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: all?.label)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: shown)
+    }
+
+    /// Draft it for each email whose editor is empty or still holds Navilife's draft (never over his words), one after
+    /// another; each draft opens its email's editor.
+    fileprivate func draftAll(card: MailNeedsCard) {
+        MekaHaptics.light()
+        draftingAll = true
+        let targets = card.rows.map(\.id).filter { MailDraftRules.shared.canDraft(editor: texts[$0] ?? "", lastDraft: drafted[$0]) }
+        Task { @MainActor in
+            var n = 0
+            var problem: String?
+            for id in targets {
+                let d = await model.draftMailReply(id)
+                if let t = d.text {
+                    n += 1
+                    drafted[id] = t
+                    seq += 1
+                    incoming[id] = MailIncomingDraft(seq: seq, text: t)
+                } else {
+                    problem = d.line
+                }
+            }
+            draftingAll = false
+            allLine = MailSendAllRules.shared.draftedLine(drafted: Int32(n), asked: Int32(targets.count), lastProblem: problem)
+        }
+    }
+
+    fileprivate func sendAll(_ all: MailSendAll) {
+        let ids = all.ids
+        let words = all.texts
+        model.replyToMailItems(ids, words) {
+            for id in ids { texts[id] = nil; incoming[id] = nil; drafted[id] = nil }
+            allLine = nil
+        }
+    }
+}
+
+/// A draft Draft replies puts into one email's editor; `seq` makes the same words twice a new arrival.
+struct MailIncomingDraft: Equatable {
+    let seq: Int
+    let text: String
+}
+
 struct MailNeedsRowView: View {
     let row: MailNeedsRow
     let palette: MekaPalette
@@ -83,6 +166,10 @@ struct MailNeedsRowView: View {
     let draft: @MainActor () async -> (text: String?, line: String)
     /// Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive (nil: not offered here).
     var alwaysTidy: (() -> Void)? = nil
+    /// Draft replies on the card: a draft to open the editor with (nil: none), and where the open editor's words go
+    /// (nil when closed) for Send all.
+    var incoming: MailIncomingDraft? = nil
+    var onEditor: ((String?) -> Void)? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var replying = false
     @State private var text = ""
@@ -178,6 +265,13 @@ struct MailNeedsRowView: View {
         .onChange(of: row.replyDraft) { _, draft in
             if let draft { text = draft; replying = true }
         }
+        .onChange(of: incoming) { _, d in
+            if let d {
+                text = d.text; lastDraft = d.text; draftLine = MailDraftRules.shared.DRAFTED_LINE; replying = true
+            }
+        }
+        .onChange(of: text) { _, t in onEditor?(replying ? t : nil) }
+        .onChange(of: replying) { _, open in onEditor?(open ? text : nil) }
     }
 }
 

@@ -4294,6 +4294,21 @@ final class CoreModel {
         }
     }
 
+    /// Send all on "From your mail" (email triage completeness, 2026-10-15): the short replies he read in each email's
+    /// editor, each sent exactly as Send sends one — from the account its email came to, at the server's next check, one
+    /// Undo on the bar for all. Only Strings cross (two arrays, copied once into the task).
+    func replyToMailItems(_ ids: [String], _ texts: [String], sent: @escaping @MainActor () -> Void) {
+        guard let core, !ids.isEmpty, ids.count == texts.count else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.replyToMailItems(ids: ids, texts: texts)
+                sent()
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Send on a chase in "Time to chase" (Inbox autopilot, slice 6b-3): nothing is sent here; the server sends it from
     /// the account the email came to, in its thread, at its next check (Undo on the bar stops it). A problem with the
     /// words leaves the editor open. Only the id and the text (Strings) cross.

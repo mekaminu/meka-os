@@ -114,5 +114,35 @@ class MailDraftFacadeTest {
         assertEquals(3, server.sent.size)
     }
 
+    @Test
+    fun sendAllSendsEachFromItsOwnAccountAfterTheHoldAndOneUndoStopsThemAll() = runTest {
+        val a = email("m1", "Sam Taylor", "Saturday's game", "Business")
+        val b = email("m2", "Alex Reed", "Dinner")
+        val c = email("m3", "Pat Lee", "Kit")
+        val fold = core()
+        assertTrue(fold.syncNow())
+        val card = fold.mailNeeds.value!!
+        val all = os.meka.core.domain.MailSendAllRules.sendAll(card.rows, mapOf(a to "Yes, I'll drive.", b to "Sounds good, 7 it is."))!!
+        assertEquals(os.meka.core.domain.MailSendAllRules.sendingLine(2), fold.replyToMailItems(all.ids, all.texts))
+        // Both leave the card, the third stays; each carries its own words and is held for Undo's window.
+        assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
+        assertTrue(fold.syncNow())
+        val mac = core()
+        assertTrue(mac.syncNow())
+        val items = mac.mailNeeds.value!!.rows.map { it.id }
+        assertEquals(listOf(c), items)
+        // One Undo brings both back.
+        fold.undoMailItem()
+        assertEquals(setOf(a, b, c), fold.mailNeeds.value?.rows?.map { it.id }?.toSet())
+        // A blank reply is never sent; with nothing sendable, nothing is written.
+        assertEquals(MailNeedsRules.REPLY_EMPTY, fold.replyToMailItems(listOf(a), listOf("  ")))
+        assertEquals(MailNeedsRules.UNKNOWN, fold.replyToMailItems(listOf("nope"), listOf("Hi")))
+        assertEquals(3, fold.mailNeeds.value?.rows?.size)
+        // One that can go and one that can't: the good one goes, with the one-reply line from its own account.
+        assertEquals(MailNeedsRules.replySendingLine("Business"), fold.replyToMailItems(listOf(a, b), listOf("Yes.", "")))
+        assertEquals(setOf(b, c), fold.mailNeeds.value?.rows?.map { it.id }?.toSet())
+        assertTrue(server.sent.isEmpty())
+    }
+
     private data class MailDraft(val text: String?, val line: String)
 }

@@ -11,3 +11,4 @@ what: connects Gmail and Outlook: newsletters, receipts and promos are tidied aw
 how: Tap Connect and sign in with Google or Microsoft. Each tidy has Undo, and Autopilot can be paused per account.
 tip: Nothing is sent or deleted without your tap.
 tip: Disconnect can also delete that account's mail data.
+tip: In Needs you, Draft replies drafts a reply to each email for you to read; Send all then sends the short ones, each from its own account, with Undo.

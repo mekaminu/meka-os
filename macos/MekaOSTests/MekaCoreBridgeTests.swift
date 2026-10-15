@@ -2979,6 +2979,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(MailDraftRules.shared.canDraft(editor: "My words", lastDraft: "Draft"))
         XCTAssertEqual(MailDraftRules.shared.label(editor: ""), MailDraftRules.shared.DRAFT)
         XCTAssertNil(MailDraftRules.shared.check(raw: "See https://example.com"))
+        // Email triage completeness: Send all on unknown ids writes nothing; its rules reach Swift.
+        let unknownAll = try await core.replyToMailItems(ids: ["nothing", "nada"], texts: ["Yes", "No"])
+        XCTAssertEqual(unknownAll, MailNeedsRules.shared.UNKNOWN)
+        XCTAssertNil(MailSendAllRules.shared.draftLabel(rows: 1))
+        XCTAssertEqual(MailSendAllRules.shared.draftLabel(rows: 3), "Draft replies to 3")
+        XCTAssertTrue(MailSendAllRules.shared.easy(text: "Thanks, sorted."))
+        XCTAssertNil(MailSendAllRules.shared.sendAll(rows: [], texts: ["a": "Yes"]))
         try await core.undoMailItem()
         XCTAssertNil(core.mailNeeds.value)
         XCTAssertEqual(MailNeedsRules.shared.headline(n: 3), "3 emails need you")

@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,6 +57,7 @@ import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailSendAllRules
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.facade.MekaCore
 
@@ -66,6 +69,9 @@ import os.meka.core.facade.MekaCore
  * draft in his tone, never over his own words, still sent only on Send), **Done** (archived at the server's next check), **Task** and **Waiting for** (slice 6b-1: made
  * from the email, which is archived too) and **Snooze** (back tomorrow 08:00). Each has Undo on the bar. Slice 6c: emails
  * linked to it (same thread, order number, or person and topic) fold under it and go with it. Tapping the header folds the emails in and out (expand spring; reduced motion: cross-fade).
+ * Email triage completeness (2026-10-15): with two or more emails, **Draft replies to N** drafts each one whose editor is
+ * empty and opens it under its email to read and change; once two or more open editors hold a short reply, **Send all N**
+ * fades in and sends each from the account its email came to (the same path and hold as Send), one Undo for all.
  */
 @Composable
 internal fun MailNeedsSection(
@@ -81,6 +87,15 @@ internal fun MailNeedsSection(
             undo(said) { runCatching { core.undoMailItem() } }
         }
     }
+    // Draft replies and Send all: each open editor's words by email, the drafts Draft replies put in, and its line.
+    val texts = remember { mutableStateMapOf<String, String>() }
+    val incoming = remember { mutableStateMapOf<String, Pair<Int, String>>() }
+    val drafted = remember { mutableStateMapOf<String, String>() }
+    var seq by remember { mutableStateOf(0) }
+    var draftingAll by remember { mutableStateOf(false) }
+    var allLine by rememberSaveable { mutableStateOf<String?>(null) }
+    val draftAll = MailSendAllRules.draftLabel(card.rows.size)
+    val sendAll = MailSendAllRules.sendAll(card.rows, texts.toMap())
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).testTag("mail-needs"),
@@ -102,10 +117,46 @@ internal fun MailNeedsSection(
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {
             // A done or snoozed email leaves and the list closes up on the expand spring.
             Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                if (draftAll != null) {
+                    MailSendAllBar(
+                        draftLabel = if (draftingAll) MailSendAllRules.DRAFTING else draftAll, drafting = draftingAll,
+                        draftSpoken = MailSendAllRules.draftSpoken(card.rows.size),
+                        sendLabel = sendAll?.label, sendSpoken = sendAll?.spoken, line = allLine,
+                        onDraft = {
+                            haptics.light()
+                            draftingAll = true
+                            scope.launch {
+                                // Only into an editor that is empty or still holds Navilife's draft: never over his words.
+                                val targets = card.rows.filter { MailDraftRules.canDraft(texts[it.id] ?: "", drafted[it.id]) }
+                                var n = 0
+                                var problem: String? = null
+                                for (r in targets) {
+                                    val d = runCatching { core.draftMailReply(r.id) }.getOrNull()
+                                    val t = d?.text
+                                    if (t != null) { n++; drafted[r.id] = t; incoming[r.id] = (seq++) to t } else problem = d?.line ?: problem
+                                }
+                                draftingAll = false
+                                allLine = MailSendAllRules.draftedLine(n, targets.size, problem)
+                            }
+                        },
+                        onSendAll = onSendAll@{
+                            val all = sendAll ?: return@onSendAll
+                            haptics.medium()
+                            scope.launch {
+                                val said = runCatching { core.replyToMailItems(all.ids, all.texts) }.getOrNull() ?: return@launch
+                                all.ids.forEach { texts.remove(it); incoming.remove(it); drafted.remove(it) }
+                                allLine = null
+                                undo(said) { runCatching { core.undoMailItem() } }
+                            }
+                        },
+                    )
+                }
                 card.rows.forEach { row ->
                     androidx.compose.runtime.key(row.id) {
                         MailNeedsRowView(
                             row,
+                            incoming = incoming[row.id],
+                            onEditor = { t -> if (t == null) texts.remove(row.id) else texts[row.id] = t },
                             onDone = { haptics.medium(); answer { core.doneMailItem(row.id) } },
                             onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
                             onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
@@ -140,6 +191,8 @@ internal fun MailNeedsRowView(
     onDraft: suspend () -> MailDraft,
     onSend: (String, () -> Unit) -> Unit,
     onAlwaysTidy: (() -> Unit)? = null,
+    incoming: Pair<Int, String>? = null,
+    onEditor: ((String?) -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -152,6 +205,12 @@ internal fun MailNeedsRowView(
     var draftLine by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
     var drafting by remember { mutableStateOf(false) }
     var showLinked by rememberSaveable(row.id) { mutableStateOf(false) }
+    // Draft replies on the card puts its draft in this editor and opens it (the editor unfolds on the expand spring).
+    LaunchedEffect(incoming) {
+        incoming?.let { (_, t) -> text = t; lastDraft = t; draftLine = MailDraftRules.DRAFTED_LINE; replying = true }
+    }
+    // The card reads each open editor's words for Send all.
+    LaunchedEffect(replying, text) { onEditor?.invoke(if (replying) text else null) }
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -262,6 +321,31 @@ internal fun MailNeedsRowView(
                     spoken = "Archive this and always tidy ${row.from}'s emails as they arrive", onClick = onAlwaysTidy,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Draft replies to N and, once two or more open editors hold a short reply, Send all N (it fades in; reduced motion: the
+ * plain fade), with the line saying what Draft replies did or how Send all sends. Wraps on the narrow cover screen.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun MailSendAllBar(
+    draftLabel: String, drafting: Boolean, draftSpoken: String, sendLabel: String?, sendSpoken: String?, line: String?,
+    onDraft: () -> Unit, onSendAll: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().testTag("mail-send-all"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            AnimatedVisibility(sendLabel != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut()) {
+                MailNeedsPill(sendLabel ?: "", spoken = sendSpoken ?: "", onClick = onSendAll)
+            }
+            MailNeedsPill(draftLabel, quiet = true, enabled = !drafting, spoken = draftSpoken, onClick = onDraft)
+        }
+        val shown = if (sendLabel != null) MailSendAllRules.LINE else line
+        AnimatedContent(shown, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-send-all-line") { l ->
+            if (l != null) Text(l, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("mail-send-all-line"))
         }
     }
 }
