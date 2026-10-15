@@ -9,7 +9,7 @@ final class MacNeedsYouCardsTests: XCTestCase {
 
     private func card(_ id: String, from: String, gist: String, lane: TriageLane = .fyi) -> TriageCard {
         TriageCard(id: id, lane: lane, personKey: id, from: from, gist: gist, draft: nil, app: .sms, mentioned: false,
-                   atMs: 1_000, spoken: from, group: nil, askedBy: nil, number: nil)
+                   atMs: 1_000, spoken: from, group: nil, askedBy: nil, number: nil, phoneLive: false, phoneSend: nil)
     }
 
     func testOneStrongLineThenAMutedOne() {

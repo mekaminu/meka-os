@@ -12,3 +12,4 @@ tip: Nothing is ever sent without your tap.
 tip: If cards stop arriving, check Navilife still has notification access in Android's settings.
 tip: Send goes through WhatsApp's own notification while it's still in the shade; once it's gone (or on the Mac), Reply in WhatsApp opens that person's chat with your reply typed and you tap send there. Each card says which way its reply will go.
 tip: A message waiting for your reply keeps its notification in the shade until you send or finish its card, so Send keeps working.
+tip: On the Mac, Send (via your phone) sends your reply through your phone while the message is still showing there; if it was opened on your phone first, the card says so and offers Reply in WhatsApp instead.

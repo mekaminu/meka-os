@@ -4,6 +4,11 @@ package os.meka.core.domain
 enum class TriageCardPrimary {
     /** Send the drafted reply through the message's own notification Reply action (the Fold, while it is live). */
     SEND,
+    /**
+     * On the Mac, while the Fold still holds the message's notification (WhatsApp replies, slice 2): ask the phone to
+     * send the reply through that notification's own Reply. Only on Meka's tap; the phone answers Sent or why not.
+     */
+    SEND_VIA_PHONE,
     /** Open the chat (the drafted reply copied first, when there is one); Meka taps send in the app. */
     OPEN_CHAT,
     /**
@@ -37,12 +42,19 @@ object TriageReplyRules {
     const val SEEN = "Seen"
     const val REPLY_HINT = "Your reply"
     const val REPLY_IN_WHATSAPP = "Reply in WhatsApp"
+    const val SEND_VIA_PHONE = "Send (via your phone)"
 
     /** The line under a reply card's buttons saying which way the reply will go (WhatsApp replies, slice 1, item 4). */
     const val ROUTE_SEND = "Sends from your phone"
     const val ROUTE_REPLY_IN_APP = "Opens WhatsApp with your reply typed · you tap send"
     const val ROUTE_OPEN_CHAT = "Opens the chat with your reply copied · paste and send"
     const val ROUTE_COPY = "Copies your reply · paste it in the chat"
+    const val ROUTE_VIA_PHONE = "Sends from your phone · the message is still showing there"
+
+    /** The Mac's Send (via your phone), while the phone hasn't answered, and when it couldn't (slice 2). */
+    const val PHONE_WAITING_LINE = "Sending from your phone…"
+    const val PHONE_GONE_LINE = "Couldn't send · the message was opened on your phone"
+    const val PHONE_LATE_LINE = "Couldn't send · your phone didn't pick it up in time"
 
     /** An edited reply is Meka's own words: kept whole up to this length (WhatsApp's own limit is far above it). */
     const val MAX_REPLY = 2_000
@@ -58,6 +70,8 @@ object TriageReplyRules {
     fun primary(card: TriageCard, live: Boolean, canSend: Boolean = true): TriageCardPrimary = when {
         card.lane != TriageLane.NEEDS_REPLY -> TriageCardPrimary.SEEN
         canSend && live && card.draft != null -> TriageCardPrimary.SEND
+        // The Mac (slice 2): the phone still holds the notification, and the last request didn't time out there.
+        !canSend && card.phoneLive && card.draft != null && card.phoneSend != PhoneSendState.LATE -> TriageCardPrimary.SEND_VIA_PHONE
         card.draft != null && replyLink(card, card.draft) != null -> TriageCardPrimary.REPLY_IN_APP
         !canSend -> if (card.draft != null) TriageCardPrimary.COPY else TriageCardPrimary.SEEN
         else -> TriageCardPrimary.OPEN_CHAT
@@ -65,6 +79,7 @@ object TriageReplyRules {
 
     fun label(primary: TriageCardPrimary): String = when (primary) {
         TriageCardPrimary.SEND -> SEND
+        TriageCardPrimary.SEND_VIA_PHONE -> SEND_VIA_PHONE
         TriageCardPrimary.REPLY_IN_APP -> REPLY_IN_WHATSAPP
         TriageCardPrimary.OPEN_CHAT -> OPEN_CHAT
         TriageCardPrimary.COPY -> COPY
@@ -75,6 +90,7 @@ object TriageReplyRules {
     fun routeLine(card: TriageCard, primary: TriageCardPrimary): String? = when {
         card.lane != TriageLane.NEEDS_REPLY || card.draft == null -> null
         primary == TriageCardPrimary.SEND -> ROUTE_SEND
+        primary == TriageCardPrimary.SEND_VIA_PHONE -> if (card.phoneSend == PhoneSendState.WAITING) null else ROUTE_VIA_PHONE
         primary == TriageCardPrimary.REPLY_IN_APP -> ROUTE_REPLY_IN_APP
         primary == TriageCardPrimary.OPEN_CHAT -> ROUTE_OPEN_CHAT.replace("the chat", appName(card.app))
         primary == TriageCardPrimary.COPY -> ROUTE_COPY
@@ -91,6 +107,24 @@ object TriageReplyRules {
         val words = cleanReply(text) ?: return null
         return LeavingRules.waLink(card.number ?: return null, words)
     }
+
+    /**
+     * The Mac's line about its last Send (via your phone) on [card] (slice 2), shown above the route: waiting, or why the
+     * phone couldn't (then the card offers Reply in WhatsApp or Copy reply instead). Null when none is waiting or failed.
+     */
+    fun phoneSendLine(card: TriageCard): String? = when (card.phoneSend) {
+        PhoneSendState.WAITING -> PHONE_WAITING_LINE
+        // Once the phone holds a fresh notification for it again, Send (via your phone) is simply offered again.
+        PhoneSendState.GONE -> PHONE_GONE_LINE.takeUnless { card.phoneLive }
+        PhoneSendState.LATE -> PHONE_LATE_LINE
+        null -> null
+    }
+
+    /** Whether the Mac's lead button waits (a request is with the phone): it can't be pressed twice. */
+    fun waitingOnPhone(card: TriageCard): Boolean = card.phoneSend == PhoneSendState.WAITING
+
+    /** The Mac's undo bar after Send (via your phone). */
+    fun viaPhoneLine(card: TriageCard): String = "Sending to ${who(card)} from your phone"
 
     /** The undo bar after Reply in WhatsApp. */
     fun replyInAppLine(card: TriageCard): String = "Opened WhatsApp with your reply to ${who(card)} · tap send there"

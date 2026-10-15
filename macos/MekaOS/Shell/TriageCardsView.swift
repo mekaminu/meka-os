@@ -118,6 +118,7 @@ private struct TriageChatRow: View {
 private struct TriageCardRow: View {
     let card: TriageCard
     let palette: MekaPalette
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     /// true: the leading button (Copy reply or Seen); false: Not now.
     let answer: (Bool) -> Void
 
@@ -143,13 +144,21 @@ private struct TriageCardRow: View {
                     .padding(.top, MekaSpace.xs)
             }
             HStack(spacing: MekaSpace.xs) {
-                pill(lead, filled: true, spoken: primary == .replyInApp ? "Open WhatsApp with your reply to \(rules.who(card: card)) typed"
-                     : (card.draft != nil ? rules.copiedLine(card: card) : lead)) { answer(true) }
+                pill(lead, filled: true, spoken: spokenLead(primary, lead: lead)) { answer(true) }
+                    // While the phone has the request, the button waits (it can't be pressed twice).
+                    .disabled(rules.waitingOnPhone(card: card))
+                    .opacity(rules.waitingOnPhone(card: card) ? 0.5 : 1)
                 if let quiet = rules.secondary(card: card) {
                     pill(quiet, filled: false, quiet: true, spoken: "\(quiet): \(rules.who(card: card))") { answer(false) }
                 }
             }
             .padding(.top, MekaSpace.xs)
+            // Send (via your phone) waiting, or why the phone couldn't (WhatsApp replies, slice 2); cross-fades as it changes.
+            if let phone = rules.phoneSendLine(card: card) {
+                Text(phone).font(MekaType.caption)
+                    .foregroundStyle(rules.waitingOnPhone(card: card) ? palette.accent : palette.textSecondary)
+                    .transition(.opacity)
+            }
             // Which way the reply goes (WhatsApp replies, slice 1, item 4).
             if let route = rules.routeLine(card: card, primary: primary) {
                 Text(route).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -159,9 +168,19 @@ private struct TriageCardRow: View {
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        // The phone's answer to Send (via your phone) cross-fades in (WhatsApp replies, slice 2).
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: TriageReplyRules.shared.phoneSendLine(card: card) ?? "")
         .accessibilityElement(children: .contain)
         .accessibilityLabel(card.spoken)
         .mekaHoverLift()
+    }
+
+    /** What VoiceOver says for the lead button. */
+    private func spokenLead(_ primary: TriageCardPrimary, lead: String) -> String {
+        let rules = TriageReplyRules.shared
+        if primary == .sendViaPhone { return "Send your reply to \(rules.who(card: card)) from your phone" }
+        if primary == .replyInApp { return "Open WhatsApp with your reply to \(rules.who(card: card)) typed" }
+        return card.draft != nil ? rules.copiedLine(card: card) : lead
     }
 
     private func pill(_ label: String, filled: Bool, quiet: Bool = false, spoken: String, action: @escaping () -> Void) -> some View {

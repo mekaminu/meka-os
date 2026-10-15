@@ -40,6 +40,19 @@ object TriageCardFields {
      * slice 1), so Reply in WhatsApp opens that chat with the reply typed on the Fold and the Mac. Blanked once resolved.
      */
     const val NUMBER = "number"
+    /**
+     * True while the message's own Reply action is live on the Fold (WhatsApp replies, slice 2): its notification is
+     * still showing there, so the Mac may ask the phone to send. Written by the Fold only when it changes; absent = false.
+     */
+    const val PHONE_LIVE = "phoneLive"
+    /** The words Meka asked the Fold to send from the Mac ("Send (via your phone)", his tap); blanked once answered. */
+    const val PHONE_SEND_TEXT = "phoneSendText"
+    /** When the Mac asked (its clock); the Fold answers each request once, only within [TriageCards.PHONE_SEND_TTL_MS]. */
+    const val PHONE_SEND_AT = "phoneSendAtMs"
+    /** [PhoneSendOutcome.wire]: what the Fold did with the request at [PHONE_SEND_AT]. */
+    const val PHONE_SEND_OUTCOME = "phoneSendOutcome"
+    /** Which request ([PHONE_SEND_AT]) the outcome answers. */
+    const val PHONE_SEND_FOR = "phoneSendForMs"
     /** Sent, Not now or Seen on either device: gone from Needs you on both (TrueWins). */
     const val RESOLVED = "resolved"
     /** [TriageResolution.wire]. */
@@ -56,6 +69,27 @@ enum class TriageResolution(val wire: String) {
     /** An FYI read, or the chat opened. */
     SEEN("seen"),
 }
+
+/** What the Fold did with a Mac's "Send (via your phone)" (WhatsApp replies, slice 2). */
+enum class PhoneSendOutcome(val wire: String) {
+    /** Sent through the notification's own Reply; the card is resolved as Sent. */
+    SENT("sent"),
+    /** The notification had gone (opened, cleared or answered on the phone): nothing was sent. */
+    GONE("gone"),
+}
+
+/** Where a Mac's request to send from the phone stands, as the Mac shows it. */
+enum class PhoneSendState {
+    /** Asked; the phone hasn't answered yet. */
+    WAITING,
+    /** The phone couldn't: the message's notification had gone there. */
+    GONE,
+    /** The phone didn't answer within [TriageCards.PHONE_SEND_TTL_MS]; it won't send it now. */
+    LATE,
+}
+
+/** A request from the Mac for the Fold to send [text] as the reply to [messageId] (Meka's tap there). */
+data class PhoneSendRequest(val messageId: String, val text: String, val atMs: Long)
 
 /** One triaged message as both apps show it. */
 data class TriageCard(
@@ -84,6 +118,10 @@ data class TriageCard(
     val askedBy: String? = null,
     /** A one-to-one chat's phone number ([TriageCardFields.NUMBER]); null for groups or when the notification had none. */
     val number: String? = null,
+    /** The Fold can still send this reply itself ([TriageCardFields.PHONE_LIVE]); the Mac offers Send (via your phone). */
+    val phoneLive: Boolean = false,
+    /** The Mac's last Send (via your phone) on this card, while it matters; null when none was asked. */
+    val phoneSend: PhoneSendState? = null,
 ) {
     companion object {
         const val LOCAL_LINE = "Not sent to Navilife's AI"
@@ -162,11 +200,76 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
                 TriageCardFields.SUMMARY to FieldValue.Null,
                 TriageCardFields.DRAFT to FieldValue.Null,
                 TriageCardFields.NUMBER to FieldValue.Null,
+                TriageCardFields.PHONE_SEND_TEXT to FieldValue.Null,
             ),
         )
         return true
     }
 
+    /**
+     * The Fold notes which open reply cards it can still send itself ([live]: the message ids whose notification Reply
+     * is held), so the Mac knows when to offer Send (via your phone). Writes only the cards whose mark changed; returns
+     * how many. Cards without a draft are never marked (there's nothing to send).
+     */
+    fun markPhoneLive(live: Set<String>): Int {
+        var n = 0
+        stored().filter { !it.resolved && it.lane == TriageLane.NEEDS_REPLY && (it.draft != null || it.phoneLive) }.forEach { s ->
+            val want = s.messageId in live && s.draft != null
+            if (want == s.phoneLive) return@forEach
+            replica.commitLocal(EntityTypes.TRIAGE_CARD, entityId(s.messageId), mapOf(TriageCardFields.PHONE_LIVE to want.fv()))
+            n++
+        }
+        return n
+    }
+
+    /**
+     * The Mac's Send (via your phone), on Meka's tap: asks the Fold to send [text] as the reply to [messageId] through the
+     * notification it still holds. False when the card is answered or gone, the phone no longer holds its notification,
+     * the words are blank, or a request is already waiting. Nothing is sent here: the Fold sends on its next sync.
+     */
+    fun requestPhoneSend(messageId: String, text: String): Boolean {
+        val words = TriageReplyRules.cleanReply(text) ?: return false
+        val s = stored().firstOrNull { it.messageId == messageId } ?: return false
+        if (s.resolved || s.lane != TriageLane.NEEDS_REPLY || !s.phoneLive) return false
+        if (phoneState(s, nowMs()) == PhoneSendState.WAITING) return false
+        replica.commitLocal(
+            EntityTypes.TRIAGE_CARD, entityId(messageId),
+            mapOf(TriageCardFields.PHONE_SEND_TEXT to words.fv(), TriageCardFields.PHONE_SEND_AT to nowMs().fv()),
+        )
+        return true
+    }
+
+    /**
+     * The Mac's requests the Fold should answer now: open cards with a request it hasn't answered, asked at most
+     * [PHONE_SEND_TTL_MS] ago (a later one is never sent: Meka may have moved on). Oldest first.
+     */
+    fun phoneSendsDue(): List<PhoneSendRequest> {
+        val now = nowMs()
+        return stored().filter { !it.resolved && phoneState(it, now) == PhoneSendState.WAITING && it.phoneSendText != null }
+            .sortedBy { it.phoneSendAt }
+            .map { PhoneSendRequest(it.messageId, it.phoneSendText!!, it.phoneSendAt!!) }
+    }
+
+    /**
+     * The Fold answers the request asked at [atMs]: [PhoneSendOutcome.SENT] resolves the card as Sent on both devices;
+     * [PhoneSendOutcome.GONE] says the notification had gone (and the phone no longer holds it). The words are blanked
+     * either way. False when the card is answered already or a newer request replaced this one.
+     */
+    fun phoneSendDone(messageId: String, atMs: Long, outcome: PhoneSendOutcome): Boolean {
+        val s = stored().firstOrNull { it.messageId == messageId } ?: return false
+        if (s.resolved || s.phoneSendAt != atMs) return false
+        replica.commitLocal(
+            EntityTypes.TRIAGE_CARD, entityId(messageId),
+            buildMap {
+                put(TriageCardFields.PHONE_SEND_OUTCOME, outcome.wire.fv())
+                put(TriageCardFields.PHONE_SEND_FOR, atMs.fv())
+                put(TriageCardFields.PHONE_SEND_TEXT, FieldValue.Null)
+                if (outcome == PhoneSendOutcome.GONE) put(TriageCardFields.PHONE_LIVE, false.fv())
+            },
+        )
+        if (outcome == PhoneSendOutcome.SENT) resolve(messageId, TriageResolution.SENT)
+        return true
+    }
     /**
      * Every 1:1 message triaged so far, open or not, as last-contact facts for People (slice 2): when they wrote, and
      * when Meka replied through a card (resolved as Sent). Group messages aren't a contact with one person.
@@ -196,7 +299,21 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
         val resolved: Boolean,
         val watched: Boolean = false,
         val number: String? = null,
+        val phoneLive: Boolean = false,
+        val phoneSendText: String? = null,
+        val phoneSendAt: Long? = null,
+        val phoneSendOutcome: String? = null,
+        val phoneSendFor: Long? = null,
     )
+
+    /** Where the Mac's last request on [s] stands at [now]; null when none was asked (or it was sent). */
+    private fun phoneState(s: Stored, now: Long): PhoneSendState? {
+        val at = s.phoneSendAt ?: return null
+        if (s.phoneSendFor == at) {
+            return if (s.phoneSendOutcome == PhoneSendOutcome.GONE.wire) PhoneSendState.GONE else null
+        }
+        return if (now - at > PHONE_SEND_TTL_MS) PhoneSendState.LATE else PhoneSendState.WAITING
+    }
 
     private fun stored(): List<Stored> = replica.entities(EntityTypes.TRIAGE_CARD).mapNotNull { e ->
         val messageId = e[TriageCardFields.MESSAGE_ID].textOrNull ?: return@mapNotNull null
@@ -214,6 +331,11 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             resolved = e[TriageCardFields.RESOLVED].boolOrNull == true,
             watched = e[TriageCardFields.WATCHED].boolOrNull == true,
             number = e[TriageCardFields.NUMBER].textOrNull,
+            phoneLive = e[TriageCardFields.PHONE_LIVE].boolOrNull == true,
+            phoneSendText = e[TriageCardFields.PHONE_SEND_TEXT].textOrNull,
+            phoneSendAt = e[TriageCardFields.PHONE_SEND_AT].longOrNull,
+            phoneSendOutcome = e[TriageCardFields.PHONE_SEND_OUTCOME].textOrNull,
+            phoneSendFor = e[TriageCardFields.PHONE_SEND_FOR].longOrNull,
         )
     }
 
@@ -242,12 +364,20 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
             group = s.group?.trim()?.take(40)?.takeIf { it.isNotEmpty() },
             askedBy = askedBy,
             number = if (s.group == null) TriageReplyRules.cleanNumber(s.number) else null,
+            phoneLive = s.phoneLive && draft != null,
+            phoneSend = phoneState(s, nowMs()),
         )
     }
 
     companion object {
         const val REPLY_RETENTION_MS = 7 * 24 * 60 * 60_000L
         const val FYI_RETENTION_MS = 2 * 24 * 60 * 60_000L
+
+        /**
+         * How long the Fold may still answer a Mac's Send (via your phone): 5 minutes. Later, it never sends (Meka may
+         * have replied another way), and the Mac says the phone didn't pick it up.
+         */
+        const val PHONE_SEND_TTL_MS = 5 * 60_000L
 
         /** The `triage_card` id for a captured message: the same on every device and install. */
         fun entityId(messageId: String): String = "t" + ActivityRules.fnv64("triage:$messageId")

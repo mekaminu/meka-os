@@ -4182,6 +4182,19 @@ final class CoreModel {
         let rules = TriageReplyRules.shared
         if lead {
             MekaHaptics.light()
+            // Send (via your phone) (WhatsApp replies, slice 2): the Fold still holds the message's notification, so the
+            // Mac asks it, through the synced card, to send the draft with that notification's own Reply. Only Strings
+            // cross to the core; the card stays until the phone answers (Sent: it leaves; or why it couldn't).
+            if rules.primary(card: card, live: false, canSend: false) == .sendViaPhone, let draft = card.draft {
+                guard !rules.waitingOnPhone(card: card) else { return }
+                let line = rules.viaPhoneLine(card: card)
+                Task {
+                    do {
+                        if try await core.requestPhoneSend(messageId: id, text: draft).boolValue { offerEventUndo(line, nil) }
+                    } catch { lastError = error.localizedDescription }
+                }
+                return
+            }
             let line: String
             // Reply in WhatsApp (WhatsApp replies, slice 1): the chat opens in WhatsApp (the desktop app, else the web)
             // with the reply typed; Meka presses send there. Nothing is sent from here.

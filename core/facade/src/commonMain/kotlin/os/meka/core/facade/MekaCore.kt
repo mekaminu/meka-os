@@ -1931,6 +1931,35 @@ class MekaCore(
         onCore { messageIds.count { triageCards.resolve(it, os.meka.core.domain.TriageResolution.SEEN) } }
 
     /**
+     * WhatsApp replies, slice 2 (the Fold): which open reply cards the phone can still send itself ([live]: the message
+     * ids whose notification Reply it holds), synced so the Mac offers Send (via your phone). Writes only changes.
+     */
+    suspend fun notePhoneLive(live: Set<String>): Int = onCore { triageCards.markPhoneLive(live) }
+
+    /**
+     * Send (via your phone) on the Mac (WhatsApp replies, slice 2), Meka's tap: asks the Fold to send [text] as the
+     * reply to [messageId] through the notification it still holds. Nothing is sent here; the Fold sends on its next
+     * sync (within [os.meka.core.domain.TriageCards.PHONE_SEND_TTL_MS], else never) and answers Sent or why not.
+     */
+    suspend fun requestPhoneSend(messageId: String, text: String): Boolean =
+        onCore { triageCards.requestPhoneSend(messageId, text) }
+
+    /** The Fold: the Mac's Send (via your phone) requests to answer now, oldest first. */
+    suspend fun phoneSendsDue(): List<os.meka.core.domain.PhoneSendRequest> = onCore { triageCards.phoneSendsDue() }
+
+    /**
+     * The Fold answers the request asked at [atMs]: [sent] true when the notification's Reply took the words (the card
+     * resolves as Sent on both devices), false when the notification had gone (the Mac says so and offers Reply in
+     * WhatsApp). False when that request was answered or replaced already.
+     */
+    suspend fun phoneSendDone(messageId: String, atMs: Long, sent: Boolean): Boolean = onCore {
+        triageCards.phoneSendDone(
+            messageId, atMs,
+            if (sent) os.meka.core.domain.PhoneSendOutcome.SENT else os.meka.core.domain.PhoneSendOutcome.GONE,
+        )
+    }
+
+    /**
      * Step one of Approve on an approval card (Trading approvals, slice 2): what this device must sign
      * ([os.meka.core.domain.ApprovalPrep.message]) with its approval key, which only Meka's fingerprint unlocks, and
      * the decision key and time that text names; or [os.meka.core.domain.ApprovalPrep.refusal] (gone, answered,

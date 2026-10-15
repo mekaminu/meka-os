@@ -162,6 +162,19 @@ class MekaApplication : Application() {
         }
         // Urgent voice messages from the call assistant ring through as soon as they sync (also with the app open).
         appScope.launch { core.afterWork.collect { runCatching { nudger.alertVoiceMessages() } } }
+        // WhatsApp replies, slice 2: the Mac learns which reply cards this phone can still send (their notification's
+        // Reply is held), and its Send (via your phone) requests are answered as soon as they sync.
+        appScope.launch {
+            kotlinx.coroutines.flow.combine(os.meka.android.work.LiveReplies.live, core.triage) { live, _ -> live }
+                .collect { runCatching { core.notePhoneLive(it) } }
+        }
+        appScope.launch {
+            core.triage.collect { cards ->
+                if (cards.any { it.phoneSend == os.meka.core.domain.PhoneSendState.WAITING }) {
+                    runCatching { os.meka.android.work.PhoneSends.handle(this@MekaApplication) }
+                }
+            }
+        }
         // Health Connect, slice 2: the background read follows the switch and Health Connect's permissions (both can
         // change while MEKA is closed); also tells the core whether "Did you go?" waits for the watch.
         appScope.launch { runCatching { os.meka.android.goals.HealthWorkouts.sync(this@MekaApplication, core) } }
