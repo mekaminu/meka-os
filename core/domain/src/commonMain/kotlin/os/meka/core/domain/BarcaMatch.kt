@@ -170,3 +170,216 @@ object BarcaMatchRules {
                 )
             }
 }
+
+/**
+ * Barça match day, slice 3: the result in the next morning's brief and Ask/Talk "what's the score?" / "what channel is
+ * Barça on?". Everything is read back from the lines the server wrote into each match's notes (slices 1 and 2): the
+ * kick-off, where to watch it in the UK, the score and the goals. Those came from public web pages, so the Ask lines
+ * make the context untrusted (ADR-006). Nothing is stored.
+ */
+object BarcaBriefRules {
+    /** A finished match is said in the brief while its kick-off is at most this long ago. */
+    const val RESULT_HOURS = 30
+    private const val HOUR_MS = 3_600_000L
+    private const val EVENING_MIN = 17 * 60
+    private const val BARCA = "Barça"
+    private val WORDS = listOf("nil", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten")
+
+    /** The latest finished Barça match whose kick-off was in the last [RESULT_HOURS], with its final score. */
+    fun lastResult(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long): Pair<CalendarEvent, BarcaMatchRules.Score>? =
+        shownMatches(events, marks)
+            .filter { it.startAtMs <= nowMs && nowMs - it.startAtMs <= RESULT_HOURS * HOUR_MS }
+            .mapNotNull { e -> BarcaMatchRules.score(e)?.takeIf { !it.live }?.let { e to it } }
+            .maxByOrNull { it.first.startAtMs }
+
+    /**
+     * The brief's sentences: last night's result and Barça's scorers ("Last night Barça beat Getafe two–one, with goals
+     * from Lewandowski twice and Yamal."), then, on a match day, where today's match is on ("Barça's match at 8
+     * o'clock tonight is on TNT Sports 2 and HBO Max."). Empty when neither applies.
+     */
+    fun briefSentences(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<String> {
+        val out = mutableListOf<String>()
+        val today = cal.epochDayOf(nowMs)
+        lastResult(events, marks, nowMs)?.let { (e, s) ->
+            val day = cal.epochDayOf(e.startAtMs)
+            val whenSaid = when {
+                day == today -> "Earlier today"
+                day == today - 1 && cal.minuteOfDay(e.startAtMs) >= EVENING_MIN -> "Last night"
+                day == today - 1 -> "Yesterday"
+                else -> null
+            }
+            if (whenSaid != null) out += resultSentence(whenSaid, s)
+        }
+        shownMatches(events, marks)
+            .filter { BarcaMatchRules.isMatch(it) && cal.epochDayOf(it.startAtMs) == today && it.startAtMs > nowMs }
+            .minByOrNull { it.startAtMs }
+            ?.let { e ->
+                val watch = BarcaMatchRules.watchLine(e)
+                val min = cal.minuteOfDay(e.startAtMs)
+                val time = BriefScriptRules.clock(min) + if (min >= EVENING_MIN) " tonight" else ""
+                when {
+                    watch.startsWith("on ") -> out += "Barça's match at $time is on ${spokenChannels(watch.removePrefix("on "))}."
+                    watch == "not on UK TV" -> out += "Barça's match at $time isn't on UK TV."
+                }
+            }
+        return out
+    }
+
+    /** "Last night Barça beat Getafe two–one, with goals from Lewandowski twice and Yamal." */
+    fun resultSentence(whenSaid: String, s: BarcaMatchRules.Score): String {
+        val other = if (s.home == BARCA) s.away else s.home
+        val hi = maxOf(s.barcaGoals, s.otherGoals)
+        val lo = minOf(s.barcaGoals, s.otherGoals)
+        val score = "${said(hi)}–${said(lo)}"
+        val what = when {
+            s.barcaGoals > s.otherGoals -> "Barça beat $other $score"
+            s.barcaGoals < s.otherGoals -> "Barça lost $score to $other"
+            else -> "Barça drew $score with $other"
+        }
+        val extra = s.detail?.takeIf { it.isNotBlank() }?.let { ", $it" } ?: ""
+        val scorers = scorers(s)
+        val goals = when {
+            scorers.isEmpty() -> ""
+            scorers.size == 1 && s.barcaGoals == 1 -> ", with a goal from ${scorers[0]}"
+            else -> ", with goals from ${listing(scorers)}"
+        }
+        return "$whenSaid $what$extra$goals."
+    }
+
+    /** Barça's scorers in order, each once: "Lewandowski twice", "Yamal", "an own goal". */
+    fun scorers(s: BarcaMatchRules.Score): List<String> {
+        val names = s.goals.filter { it.team == BARCA }.map { g ->
+            val w = g.who.trim()
+            when {
+                OWN_GOAL.containsMatchIn(w) -> "an own goal"
+                else -> w.replace(PENALTY, "").trim()
+            }
+        }.filter { it.isNotEmpty() }
+        val counts = linkedMapOf<String, Int>()
+        names.forEach { counts[it] = (counts[it] ?: 0) + 1 }
+        return counts.map { (n, c) ->
+            when {
+                n == "an own goal" && c > 1 -> "$c own goals"
+                c == 2 -> "$n twice"
+                c >= 3 -> "$n with a hat-trick".takeIf { c == 3 } ?: "$n $c times"
+                else -> n
+            }
+        }
+    }
+
+    private val OWN_GOAL = Regex("""\b(og|o\.g\.|own goal)$""", RegexOption.IGNORE_CASE)
+    private val PENALTY = Regex("""\s+(pen|penalty|\(pen\))$""", RegexOption.IGNORE_CASE)
+
+    private fun said(n: Int) = WORDS.getOrNull(n) ?: n.toString()
+
+    /** "TNT Sports 2 · HBO Max" → "TNT Sports 2 and HBO Max". */
+    internal fun spokenChannels(line: String): String = listing(line.split(" · ").map { it.trim() }.filter { it.isNotEmpty() })
+
+    private fun listing(items: List<String>): String = when (items.size) {
+        0 -> ""
+        1 -> items[0]
+        else -> items.dropLast(1).joinToString(", ") + " and " + items.last()
+    }
+
+    /** The Barça matches shown on his calendar (the Fixtures feed, not hidden, timed). */
+    fun shownMatches(events: List<CalendarEvent>, marks: EventMarks): List<CalendarEvent> =
+        events.filter { it.isFixture && !it.allDay && !marks.isHidden(it.id) && !marks.isCalendarHidden(it) }.distinctBy { it.id }
+}
+
+/** Barça match day, slice 3: Ask and Talk know the matches ("what's the score?", "what channel is Barça on?"). */
+object BarcaAskRules {
+    /** Matches carried: the latest finished one (within [BarcaBriefRules.RESULT_HOURS]), then the coming ones. */
+    const val ASK_LINES = 4
+    /** Coming matches looked at, days ahead. */
+    const val AHEAD_DAYS = 14
+    private const val DAY_MS = 86_400_000L
+
+    private val ABOUT = Regex(
+        """\b(bar[cç]a|barcelona|the score|score\b|kick[- ]?off|channel|on (the )?tv|watch (the )?(match|game|football)|the (match|game) (on|tonight|today|tomorrow)|football tonight|who scored|did .* win)""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CHANNEL = Regex("""\b(channel|on (the )?tv|watch|which (station|app)|where.*(watch|on)|stream)""", RegexOption.IGNORE_CASE)
+    private val SCORE = Regex("""\b(score|result|scored|win|won|lose|lost|draw|drew|goal)""", RegexOption.IGNORE_CASE)
+
+    private val HOW_TO = Regex("""^\s*how\b|\b(turn (it |them )?(off|on)|notifications?|alerts?|heads-ups?|settings?|set (it )?up|help)\b""", RegexOption.IGNORE_CASE)
+
+    /** A question about the matches themselves ("what's the score?"), not how Navilife's Barça features work. */
+    fun isAbout(q: String): Boolean = ABOUT.containsMatchIn(q) && !HOW_TO.containsMatchIn(q)
+
+    /** The matches Ask carries: the latest finished one, a live one, then the coming ones, nearest first. */
+    fun matches(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long): List<CalendarEvent> {
+        val shown = BarcaBriefRules.shownMatches(events, marks)
+        val last = BarcaBriefRules.lastResult(events, marks, nowMs)?.first
+        val live = shown.filter { BarcaMatchRules.score(it)?.live == true && it.startAtMs <= nowMs }
+        val coming = shown.filter { it.startAtMs > nowMs && it.startAtMs - nowMs <= AHEAD_DAYS * DAY_MS }.sortedBy { it.startAtMs }
+        return (listOfNotNull(last) + live + coming).distinctBy { it.id }.take(ASK_LINES)
+    }
+
+    /**
+     * "Barça match · Sat 18 Oct 20:00 UK time · Barça v Getafe · LaLiga · on TNT Sports 2 · HBO Max · Live: Barça 2–1
+     * Getafe · 67' · Goals: 23' Lewandowski (Barça)".
+     */
+    fun askLines(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): List<String> =
+        matches(events, marks, nowMs).map { e -> line(e, nowMs, cal) }
+
+    private fun line(e: CalendarEvent, nowMs: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(e.startAtMs)
+        val tbc = !BarcaMatchRules.isMatch(e)
+        val title = e.title.removeSuffix("(kick-off TBC)").trim()
+        val time = if (tbc) "kick-off to be confirmed" else LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs)) + " UK time"
+        val s = BarcaMatchRules.score(e)
+        val state = when {
+            s != null && s.live -> "Live: ${s.line}" + (s.detail?.let { " · $it" } ?: "")
+            s != null -> "Full time: ${s.line}" + (s.detail?.let { " · $it" } ?: "") + " · ${s.outcome}"
+            BarcaMatchRules.scoreUnavailable(e) -> BarcaMatchRules.UNAVAILABLE
+            e.startAtMs <= nowMs -> "on now"
+            else -> null
+        }
+        val goals = s?.goals?.takeIf { it.isNotEmpty() }?.joinToString(", ") { g -> g.short + (g.team?.let { " ($it)" } ?: "") }?.let { "Goals: $it" }
+        val watch = if (s != null && !s.live) null else BarcaMatchRules.watchLine(e)
+        return listOfNotNull(
+            "Barça match", "${CivilDate.shortLabel(day)} $time", title, e.calendarName?.takeIf { it.isNotBlank() }, watch, state, goals,
+        ).joinToString(" · ")
+    }
+
+    /**
+     * The device's own answer when the AI can't be reached: where to watch for a channel question, the live or last score
+     * for a score question, else the next match. Null when his calendar holds no Barça match at
+     * all (no Fixtures calendar), so a question that only sounds like football gets the usual "offline" line.
+     */
+    fun localAnswer(q: String, events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, cal: LocalCalendar): String? {
+        val shown = BarcaBriefRules.shownMatches(events, marks).takeIf { it.isNotEmpty() } ?: return null
+        val live = shown.firstOrNull { BarcaMatchRules.score(it)?.live == true && it.startAtMs <= nowMs }
+        val next = shown.filter { it.startAtMs > nowMs && it.startAtMs - nowMs <= AHEAD_DAYS * DAY_MS }.minByOrNull { it.startAtMs }
+        val last = BarcaBriefRules.lastResult(events, marks, nowMs)
+        fun whenOf(e: CalendarEvent): String {
+            val day = cal.epochDayOf(e.startAtMs)
+            val today = cal.epochDayOf(nowMs)
+            val d = when (day) { today -> "today"; today + 1 -> "tomorrow"; else -> CivilDate.shortLabel(day) }
+            return if (!BarcaMatchRules.isMatch(e)) "$d, kick-off to be confirmed" else "$d at ${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))}"
+        }
+        fun title(e: CalendarEvent) = e.title.removeSuffix("(kick-off TBC)").trim()
+        if (CHANNEL.containsMatchIn(q) && !SCORE.containsMatchIn(q)) {
+            val e = live ?: next ?: return NO_MATCH
+            return "${title(e)}, ${whenOf(e)}: ${BarcaMatchRules.watchLine(e)}."
+        }
+        if (SCORE.containsMatchIn(q) || live != null) {
+            live?.let { e ->
+                val s = BarcaMatchRules.score(e)!!
+                return "${s.line}" + (s.detail?.let { ", $it" } ?: "") + "." + goalsSaid(s)
+            }
+            last?.let { (e, s) ->
+                return "Full time: ${s.line}" + (s.detail?.let { ", $it" } ?: "") + " (${whenOf(e).substringBefore(" at")}). ${s.outcome}." + goalsSaid(s)
+            }
+            val e = next ?: return NO_MATCH
+            return "No score yet: ${title(e)} is ${whenOf(e)}."
+        }
+        val e = next ?: return NO_MATCH
+        return "${title(e)}, ${whenOf(e)}" + (e.calendarName?.takeIf { it.isNotBlank() }?.let { ", $it" } ?: "") + ": ${BarcaMatchRules.watchLine(e)}."
+    }
+
+    private fun goalsSaid(s: BarcaMatchRules.Score): String =
+        s.goals.takeIf { it.isNotEmpty() }?.joinToString(", ") { it.short }?.let { " Goals: $it." } ?: ""
+
+    const val NO_MATCH = "There's no Barça match in your calendar in the next two weeks."
+}

@@ -125,6 +125,11 @@ data class BriefStory(
      * ([ReflectionRules.briefSentence]); said after the week's goals on weekdays; null when there is none.
      */
     val weekMatters: String? = null,
+    /**
+     * Barça match day, slice 3: last night's result with Barça's scorers, and where today's match is on, each already a
+     * spoken sentence ([BarcaBriefRules.briefSentences]); said after home and family, in every length.
+     */
+    val barca: List<String> = emptyList(),
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -207,6 +212,8 @@ object BriefScriptRules {
         // Home and family.
         v.school?.let { out += it.spoken }
         out += s.family.take(if (len.extras) s.family.size else 1).map { sentence(it) }
+        // Barça match day, slice 3: last night's result and today's channel.
+        out += s.barca
 
         return out.filter { it.isNotBlank() }
     }

@@ -5259,7 +5259,12 @@ class MekaCore(
         // "how do I set up the bedside clock?") is answered here from the bundled help, with Take me there, and no AI
         // call; one that only mentions a feature takes the matching entries to the AI. Questions the rules above answer
         // from his own data (notifications, email, the commute) are theirs.
-        val helpMatch = if (notifyAsked || mailAsked || os.meka.core.domain.CommuteAskRules.isAbout(q)) null else os.meka.core.domain.HelpRules.lookup(q)
+        // Barça match day, slice 3: "what's the score?" / "what channel is Barça on?" carry the matches' notes, and are
+        // answered from them rather than from the help entry, while his calendar holds a Barça match.
+        val barcaMarks = _eventMarks.value
+        val barcaEvents = if (!os.meka.core.domain.BarcaAskRules.isAbout(q)) emptyList() else onCore { currentEvents() }
+        val barcaAsked = os.meka.core.domain.BarcaBriefRules.shownMatches(barcaEvents, barcaMarks).isNotEmpty()
+        val helpMatch = if (notifyAsked || mailAsked || barcaAsked || os.meka.core.domain.CommuteAskRules.isAbout(q)) null else os.meka.core.domain.HelpRules.lookup(q)
         if (helpMatch?.strong == true && !beyondHelp) {
             return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.HelpRules.answer(helpMatch.entry, helpOnMac))
         }
@@ -5272,6 +5277,7 @@ class MekaCore(
                 ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal) else null)
                 ?: commuteLocal
                 ?: (if (kidsAsked) os.meka.core.domain.KidAskRules.localAnswer(q, kidsNow) else null)
+                ?: (if (barcaAsked) os.meka.core.domain.BarcaAskRules.localAnswer(q, barcaEvents, barcaMarks, nowMs(), cal) else null)
             return if (local != null) os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(local, emptyList()))
             else os.meka.core.domain.AskOutcome.Unavailable(line)
         }
@@ -5337,7 +5343,9 @@ class MekaCore(
                 help = helpLines,
                 // Kids' admin, slice 4: only for a question about the children, so "what size shoes is Alex?" has an answer.
                 kids = if (kidsAsked) os.meka.core.domain.KidAskRules.askLines(kidsNow) else emptyList(),
-                kidsFromOthers = kidsAsked && os.meka.core.domain.KidAskRules.fromOthers(kidsNow))
+                kidsFromOthers = kidsAsked && os.meka.core.domain.KidAskRules.fromOthers(kidsNow),
+                // Barça match day, slice 3: only for a question about Barça, so "what's the score?" has an answer.
+                barca = if (barcaAsked) os.meka.core.domain.BarcaAskRules.askLines(barcaEvents, barcaMarks, nowMs(), cal) else emptyList())
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -6648,6 +6656,8 @@ class MekaCore(
                         mail = os.meka.core.domain.MailAskRules.brief(activity.mailItems(), nowMs()),
                         // Weekly reflection, slice 2: the one thing that matters this week.
                         weekMatters = os.meka.core.domain.ReflectionRules.briefSentence(t.reflection, it.story.length, todayDay),
+                        // Barça match day, slice 3: last night's result and scorers, and where today's match is on.
+                        barca = os.meka.core.domain.BarcaBriefRules.briefSentences(allEvents, marks, nowMs(), ZoneCalendar(timeZone)),
                     ),
                 )
             }

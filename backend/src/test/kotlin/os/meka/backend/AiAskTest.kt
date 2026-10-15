@@ -64,6 +64,7 @@ class AiAskTest {
         assertEquals("milk, eggs", r.actions.last().title)
         assertTrue("add_shopping" in AskService.SYSTEM)
         assertTrue("school lines" in AskService.SYSTEM)
+        assertTrue("barca lines" in AskService.SYSTEM)
         assertTrue("meals line" in AskService.SYSTEM)
         assertTrue("plan_dinner" in AskService.KINDS)
         assertTrue("date night line" in AskService.SYSTEM)
