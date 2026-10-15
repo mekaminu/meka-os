@@ -45,7 +45,9 @@ import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.KidCard
 import os.meka.core.domain.KidFeeRow
 import os.meka.core.domain.KidSaved
+import os.meka.core.domain.KidWeekDay
 import os.meka.core.domain.KidsRules
+import os.meka.core.domain.KidsWeekRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -54,6 +56,9 @@ import os.meka.core.facade.MekaCore
  * back), when they were last checked (lit three months on) and **All still fit**. No children yet: a line and About you.
  * Slice 2: CLUB FEES under the sizes — each fee with its line (brass within 3 days of due), Paid and Remove (Undo), and
  * one field that reads "Football £35 monthly from 1 Nov"; each fee is a bill on the radar, so Bills due reminds once.
+ *
+ * Slice 3: THIS WEEK over the cards — what they need in the next 7 days, one block per day ("Tomorrow" · "Alex: PE kit"),
+ * fees and today's/tomorrow's school things in brass.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, the checked line and the line
  * under a card cross-fade (the checked line's colour blends to the accent when due; a refusal blends its line to the
@@ -96,6 +101,28 @@ fun KidsPane(core: MekaCore, onClose: () -> Unit, onAboutYou: () -> Unit) {
             item(key = "about-you") {
                 Text("About you ›", style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) { onAboutYou() }.minTouch().appear(rememberAppearance(2)))
+            }
+        }
+        // Slice 3: THIS WEEK — what they need in the next 7 days (School, club sessions, fees), one block per day.
+        v.week?.let { w ->
+            item(key = "week-head") {
+                Column(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2)),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(KidsWeekRules.HEAD, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Crossfade(w.line, animationSpec = MekaMotion.appear(reduced), label = "kids-week-line") { l ->
+                        Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+            }
+            w.days.forEachIndexed { i, d ->
+                item(key = "week-${d.day}") {
+                    KidWeekDayView(d, Modifier.animateItem().appear(rememberAppearance(3 + i)))
+                }
+            }
+            if (!w.isEmpty) {
+                item(key = "week-foot") {
+                    Text(KidsWeekRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                }
             }
         }
         v.kids.forEachIndexed { i, kid ->
@@ -290,5 +317,17 @@ private fun KidFeeRowView(fee: KidFeeRow, onPaid: () -> Unit, onRemove: () -> Un
         Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
                 .semantics { contentDescription = "Remove ${fee.title}" }.minTouch().padding(MekaSpace.xs))
+    }
+}
+
+/** Slice 3: one day of THIS WEEK: its label, then each thing (brass when it wants doing: a fee, kit for tomorrow). */
+@Composable
+private fun KidWeekDayView(d: KidWeekDay, modifier: Modifier) {
+    Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text(d.label, style = MekaType.caption, color = Meka.colors.textTertiary)
+        d.items.forEach { thing ->
+            Text(thing.text, style = MekaType.body, color = if (thing.lit) Meka.colors.accent else Meka.colors.textPrimary,
+                modifier = Modifier.semantics { contentDescription = thing.spoken })
+        }
     }
 }

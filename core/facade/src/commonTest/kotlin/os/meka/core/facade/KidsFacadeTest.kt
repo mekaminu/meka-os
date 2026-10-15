@@ -106,4 +106,22 @@ class KidsFacadeTest {
         assertEquals("Alex's Football · £35 due Sun 1 Nov", tile.text)
         assertTrue(tile.lit)
     }
+
+    @Test
+    fun thisWeekGathersSchoolAndFeesOnBothApps() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        assertNull(fold.kidsView.value.week) // no children, no week
+        fold.addAboutYouChild("Alex, U7, Oakfield School")
+        assertEquals(os.meka.core.domain.KidsWeekRules.EMPTY, fold.kidsView.value.week?.line)
+        fold.addSchool("PE Fridays")
+        fold.addKidFee("Alex", "Swimming £60 on the 14th every month")
+        fold.syncNow(); mac.syncNow()
+        val week = mac.kidsView.value.week!!
+        // Mon 12 Oct: PE on Friday, the fee on Wednesday.
+        assertEquals(listOf("Wed 14 Oct", "Fri 16 Oct"), week.days.map { it.label })
+        assertEquals("Alex's Swimming · £60 due", week.days[0].items.single().text)
+        assertEquals("PE kit", week.days[1].items.single().text)
+        assertEquals("2 things in the next 7 days", week.line)
+    }
 }

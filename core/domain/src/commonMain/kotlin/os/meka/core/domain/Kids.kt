@@ -71,7 +71,11 @@ data class KidFeeRow(val id: String, val title: String, val line: String, val du
 data class KidFeeDraft(val title: String, val costPence: Long?, val repeat: RenewalRepeat, val dueDay: Long)
 
 /** The Kids pane: a [summary], one card per child (About you's order), and [empty] when there are no children yet. */
-data class KidsView(val summary: String, val kids: List<KidCard>, val empty: String?, val tile: LifeTileLine?) {
+data class KidsView(
+    val summary: String, val kids: List<KidCard>, val empty: String?, val tile: LifeTileLine?,
+    /** Slice 3: what they need in the next 7 days (school, club sessions, fees); null with no children. */
+    val week: KidWeek? = null,
+) {
     val isEmpty: Boolean get() = kids.isEmpty()
 
     companion object {
@@ -346,6 +350,106 @@ object KidsRules {
 
     /** The line after All still fit. */
     fun fitLine(name: String): String = "Marked $name's sizes as still fitting · Navilife asks again in 3 months"
+}
+
+/** Slice 3: one thing in the week list: "Alex: PE kit", "Sam: Training 16:55", "Alex's Football · £35 due"; [lit] wants doing. */
+data class KidWeekItem(val text: String, val lit: Boolean, val spoken: String)
+
+/** Slice 3: one day of the week list: [label] "Today", "Tomorrow" or "Mon 19 Oct". */
+data class KidWeekDay(val day: Long, val label: String, val items: List<KidWeekItem>)
+
+/** Slice 3: THIS WEEK on the Kids pane: [line] how much there is (or that there's nothing), [days] only days with something. */
+data class KidWeek(val line: String, val days: List<KidWeekDay>) {
+    val isEmpty: Boolean get() = days.isEmpty()
+    val count: Int get() = days.sumOf { it.items.size }
+}
+
+/**
+ * Kids' admin, slice 3: **what the children need this week**, one list across them for today and the next six days,
+ * from what Navilife already holds: School's days off, dates and weekly things (PE as "PE kit"), the children's club
+ * sessions and matches in his calendar ([ClubChildRules]: the age group in the title or calendar, else whose series
+ * he set), and their club fees due (overdue ones on today). A school line for a child who isn't in About you is left
+ * out; a session whose child isn't known is listed without a name. Non-AI, pure; nothing new is stored.
+ */
+object KidsWeekRules {
+    const val HEAD = "THIS WEEK"
+    const val DAYS = 7
+    const val EMPTY = "Nothing in the next 7 days from School, club sessions or fees."
+    const val FOOT = "From School, the club sessions in your calendar and the fees above."
+
+    private fun dayLabel(day: Long, today: Long): String = when (day - today) {
+        0L -> "Today"
+        1L -> "Tomorrow"
+        else -> CivilDate.shortLabel(day)
+    }
+
+    /** About you's child named [who] (any case), or null; "" (both/all) is handled by the caller. */
+    private fun childNamed(who: String, children: List<AboutChild>): AboutChild? =
+        children.firstOrNull { it.name.trim().equals(who.trim(), ignoreCase = true) }
+
+    /** Whose club session [e] is, as About you names them: its age group first, else whose series he set; null if unknown. */
+    fun childOf(e: CalendarEvent, children: List<AboutChild>, clubSet: Map<String, String>, cal: LocalCalendar): AboutChild? {
+        val group = listOfNotNull(e.title, e.calendarTitle, e.calendarName).firstNotNullOfOrNull { FootballRules.ageGroup(it) }
+        if (group != null) children.firstOrNull { it.ageGroup == group }?.let { return it }
+        val named = clubSet[ClubChildRules.seriesId(e, cal)] ?: ClubChildRules.fromEvent(e)
+        return named?.let { childNamed(it, children) }
+    }
+
+    /** A school thing in the list's words: "Alex: PE kit", "Alex off school · INSET day", "No school · Half term". */
+    fun schoolText(t: SchoolThing, who: String?): String = when (t.kind) {
+        SchoolKind.OFF -> {
+            val head = if (who == null) SchoolRules.NO_SCHOOL else "$who off school"
+            if (t.title == SchoolRules.NO_SCHOOL) head else "$head · ${t.title}"
+        }
+        else -> SchoolRules.thingText(t.copy(who = who.orEmpty()), kit = t.kind == SchoolKind.WEEKLY)
+    }
+
+    fun week(
+        children: List<AboutChild>,
+        school: List<SchoolItem>,
+        events: List<CalendarEvent>,
+        clubSet: Map<String, String>,
+        radar: List<RenewalItem>,
+        nowMs: Long,
+        cal: LocalCalendar,
+        holidays: HolidayCalendar,
+    ): KidWeek {
+        if (children.isEmpty()) return KidWeek(EMPTY, emptyList())
+        val today = cal.epochDayOf(nowMs)
+        val ids = children.mapNotNull { c -> KidsRules.idFor(c.name)?.let { it to c.name } }.toMap()
+        val sessions = events.filter { !it.allDay && it.endAtMs > nowMs && ClubChildRules.asks(it) }.sortedBy { it.startAtMs }
+        val days = (today until today + DAYS).mapNotNull { d ->
+            val label = dayLabel(d, today)
+            val soon = d - today <= 1
+            val items = mutableListOf<KidWeekItem>()
+            SchoolRules.onDay(school, d, holidays).forEach { t ->
+                val who = if (t.who.isEmpty()) null else (childNamed(t.who, children)?.name ?: return@forEach)
+                val text = schoolText(t, who)
+                items += KidWeekItem(text, soon, "$label. $text")
+            }
+            sessions.filter { cal.epochDayOf(it.startAtMs) == d }.forEach { e ->
+                val who = childOf(e, children, clubSet, cal)?.name
+                val time = LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))
+                val what = e.title.trim().ifEmpty { "Training" }.take(40)
+                val text = (if (who != null) "$who: " else "") + "$what $time"
+                items += KidWeekItem(text, false, "$label. $text")
+            }
+            radar.filter { it.forChild != null && it.forChild in ids && (it.dueDay == d || (d == today && it.dueDay < today)) }
+                .sortedWith(compareBy<RenewalItem> { it.dueDay }.thenBy { it.title })
+                .forEach { f ->
+                    val cost = f.costPence?.let(RenewalRules::formatPence)
+                    val whenWord = if (f.dueDay < today) "was due ${CivilDate.shortLabel(f.dueDay)}" else "due"
+                    val text = "${ids.getValue(f.forChild!!)}'s ${f.title} · " + listOfNotNull(cost, whenWord).joinToString(" ")
+                    items += KidWeekItem(text, true, "$label. $text")
+                }
+            if (items.isEmpty()) null else KidWeekDay(d, label, items)
+        }
+        if (days.isEmpty()) return KidWeek(EMPTY, emptyList())
+        val n = days.sumOf { it.items.size }
+        val soon = days.filter { it.day - today <= 1 }.sumOf { it.items.size }
+        val line = "$n ${if (n == 1) "thing" else "things"} in the next 7 days" + if (soon > 0) " · $soon today or tomorrow" else ""
+        return KidWeek(line, days)
+    }
 }
 
 /** Kids' admin on a replica (both apps). The child is named as About you holds them; the facade checks they're there. */

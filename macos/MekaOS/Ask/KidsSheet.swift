@@ -1,11 +1,12 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
-/// Ask → Life → Kids on the Mac (Kids' admin, slices 1–2), like the Fold's KidsPane: a card per child from About you with
+/// Ask → Life → Kids on the Mac (Kids' admin, slices 1–3), like the Fold's KidsPane: a card per child from About you with
 /// their sizes (shoes, football boots, tops, trousers, coat, school jumper), when they were last checked (in the accent
 /// three months on) and All still fit. Type a size and press Return to keep it; clear it to remove it, with Undo.
 /// Slice 2: CLUB FEES under the sizes (each a bill on the radar, the line in the accent within 3 days of due) with Paid
-/// and Remove (Undo), and a field that reads "Football £35 monthly from 1 Nov". Only Strings cross to the core.
+/// and Remove (Undo), and a field that reads "Football £35 monthly from 1 Nov". Slice 3: THIS WEEK over the cards — what
+/// they need in the next 7 days from School, club sessions and fees. Only Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and each card's lines cross-fade; cards stagger in; the checked
 /// line blends to the accent when due; a save gives a light haptic, a refusal a tick. Reduce Motion: cross-fades.
@@ -37,6 +38,9 @@ struct KidsSheet: View {
                         Button("About you…") { dismiss(); model.showAboutYou = true }
                             .accessibilityLabel(empty)
                     }
+                    if let w = v.week {
+                        week(w).staggeredAppear(2)
+                    }
                     ForEach(Array(v.kids.enumerated()), id: \.element.name) { i, kid in
                         card(kid).staggeredAppear(2 + i)
                     }
@@ -54,6 +58,33 @@ struct KidsSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 480)
         .background(palette.surface)
+    }
+
+    /// Slice 3: THIS WEEK — what they need in the next 7 days, one block per day; fees and soon school things in the accent.
+    private func week(_ w: KidWeek) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(KidsWeekRules.shared.HEAD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(w.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: w.line)
+            ForEach(w.days, id: \.day) { d in
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(d.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    ForEach(Array(d.items.enumerated()), id: \.offset) { _, thing in
+                        Text(thing.text).font(MekaType.body)
+                            .foregroundStyle(thing.lit ? palette.accent : palette.textPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityLabel(thing.spoken)
+                    }
+                }
+                .transition(.opacity)
+            }
+            if !w.isEmpty {
+                Text(KidsWeekRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: w.line)
     }
 
     @ViewBuilder

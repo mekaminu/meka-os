@@ -1732,6 +1732,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 2: a typed club fee is read (or turned away with why).
         XCTAssertEqual(rules.readFee(typed: "Football £35 monthly", today: 20_741).second as? String, rules.FEE_NO_DATE)
         XCTAssertEqual(rules.readFee(typed: "Football £35 monthly from 1 Nov", today: 20_741).first?.title, "Football")
+        // Slice 3: THIS WEEK's words for a school thing ("Alex: PE kit").
+        let pe = SchoolThing(id: "pe", kind: SchoolKind.weekly, title: "PE", who: "Alex")
+        XCTAssertEqual(KidsWeekRules.shared.schoolText(t: pe, who: "Alex"), "Alex: PE kit")
     }
 
     func testReflectionRulesReachSwift() {

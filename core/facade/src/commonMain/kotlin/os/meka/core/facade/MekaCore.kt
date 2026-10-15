@@ -6522,7 +6522,13 @@ class MekaCore(
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
         _aboutYou.value = aboutYou.view(cal)
-        _kids.value = os.meka.core.domain.KidsRules.view(aboutYou.profile().children, kids.records(), todayDay, cal, listsNow.renewals.all)
+        val kidsChildren = aboutYou.profile().children
+        _kids.value = os.meka.core.domain.KidsRules.view(kidsChildren, kids.records(), todayDay, cal, listsNow.renewals.all).let { v ->
+            // Kids' admin, slice 3: what they need in the next 7 days, from School, club sessions and their fees.
+            if (kidsChildren.isEmpty()) v else v.copy(week = os.meka.core.domain.KidsWeekRules.week(
+                kidsChildren, schoolItems, dayEvents, marks.clubChildren, listsNow.renewals.all, nowMs(), cal, holidays,
+            ))
+        }
         _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
         _errands.value = errands.view()
