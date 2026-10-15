@@ -76,6 +76,10 @@ jobs:
         run: node design/type-check.mjs --self-test && node design/type-check.mjs
       - name: The app is called Navilife (no user-visible MEKA left)
         run: python3 tools/check-app-name.py --self-test && python3 tools/check-app-name.py
+      - name: No personal details in the repo (rule 13; the deny list is a secret, never printed)
+        env:
+          PERSONAL_DENY_LIST: ${{ secrets.PERSONAL_DENY_LIST }}
+        run: python3 tools/check-personal.py --self-test && python3 tools/check-personal.py
       - name: Navilife's built-in help bundled from docs/help (Ask knows how Navilife itself works)
         run: python3 tools/gen-help.py --check
       - name: Infra typecheck, invariant tests, synth (no credentials)

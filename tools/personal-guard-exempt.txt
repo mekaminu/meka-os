@@ -1,0 +1,2 @@
+# Paths the personal-details guard (tools/check-personal.py) skips whole. Each needs a reason; keep this short.
+backend/src/main/resources/db/V13__family_invite.sql # applied migration: editing its comment breaks the database's migration checksum

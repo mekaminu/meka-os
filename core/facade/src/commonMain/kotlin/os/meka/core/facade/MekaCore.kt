@@ -4206,6 +4206,7 @@ class MekaCore(
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
         const val DIGEST_KEY = "meka.digest"
+        // personal-guard: off · release 1's one-off copies into About you, deleted with release 2's final slice
         /** Release 2 slice 1's one-off copy into About you's new Clubs line ([AboutYouStore.seedClubsOnce]); removed with the final slice. */
         private const val RELEASE_ONE_CLUBS = "BUFC Biggleswade United, SJFC"
         /**
@@ -4245,6 +4246,7 @@ class MekaCore(
                 os.meka.core.domain.TermPeriod("Summer holidays", day(2028, 7, 22), day(2028, 8, 31)),
             ),
         )
+        // personal-guard: on
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
