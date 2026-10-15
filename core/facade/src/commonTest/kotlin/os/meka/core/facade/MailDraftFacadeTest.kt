@@ -110,6 +110,9 @@ class MailDraftFacadeTest {
         assertTrue(fold.syncNow())
         fold.waitingFromMailItem(a)
         now += 4 * 24 * hour
+        assertTrue(fold.syncNow())
+        fold.tick()
+        assertTrue(fold.mailChases.value!!.rows.any { it.id == a })
         fold.draftMailChase(a)
         val waiting = server.sent.last()
         assertEquals(MailDraftCodec.CHASE_WAITING, waiting.chase)
@@ -120,11 +123,11 @@ class MailDraftFacadeTest {
 
         // A usable answer only: a link drops it whole and the plain chase stays; AI off and offline say why.
         server.reply = MailDraftCodec.Response("answered", "Hi Sam, see https://example.com")
-        assertEquals(MailDraft(null, os.meka.core.domain.MailChaseDraftRules.UNUSABLE_LINE), fold.draftMailChase(fid))
+        fold.draftMailChase(fid).let { assertNull(it.text); assertEquals(os.meka.core.domain.MailChaseDraftRules.UNUSABLE_LINE, it.line) }
         server.reply = MailDraftCodec.Response("off", reason = "Navilife's AI is off")
         assertNull(fold.draftMailChase(fid).text)
         server.down = true
-        assertEquals(MailDraft(null, AskRules.OFFLINE_LINE), fold.draftMailChase(fid))
+        fold.draftMailChase(fid).let { assertNull(it.text); assertEquals(AskRules.OFFLINE_LINE, it.line) }
         assertEquals(os.meka.core.domain.MailChaseRules.UNKNOWN, fold.draftMailChase("nothing").line)
     }
 
