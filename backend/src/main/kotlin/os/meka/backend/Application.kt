@@ -32,6 +32,7 @@ import os.meka.backend.integrations.PublicNewsFeeds
 import os.meka.backend.integrations.NewsImages
 import os.meka.backend.integrations.PostgresNewsImageStore
 import os.meka.backend.integrations.EspnTeamFixtures
+import os.meka.backend.integrations.UkTvListings
 import os.meka.backend.integrations.GoogleCalendar
 import os.meka.backend.integrations.GmailMail
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
@@ -1080,7 +1081,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         store = PostgresIntegrationStore(opStore), ops = opStore,
         providers = listOf(GoogleCalendar(), MicrosoftCalendar()).associateBy { it.id },
         clients = SecretsManagerOAuthClients(secrets), cipher = KmsTokenCipher(key), publicUrl = publicUrl,
-        feeds = listOf(EspnTeamFixtures()).associateBy { it.id },
+        feeds = listOf(EspnTeamFixtures(UkTvListings())).associateBy { it.id },
         news = listOf(BbcNewsRss(), PublicNewsFeeds()).associateBy { it.id },
         holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
         weather = listOf(OpenMeteoWeather()).associateBy { it.id },

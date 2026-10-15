@@ -34,8 +34,11 @@ class EspnTeamFixtures internal constructor(
     private val fetch: (String) -> String,
     private val teamId: String = "83", // FC Barcelona
     private val teamName: String = "Barcelona",
+    /** Barça match day, slice 1: kick-off in UK time and the UK channels, written into each match's notes. */
+    private val tv: UkTvListings? = null,
 ) : FeedProvider {
     constructor() : this(::httpGet)
+    constructor(tv: UkTvListings) : this(::httpGet, tv = tv)
 
     override val id = "fixtures"
     override val label = "FC Barcelona"
@@ -56,7 +59,11 @@ class EspnTeamFixtures internal constructor(
         }
         // Cup schedules are often empty; only fail the sync when nothing at all could be read.
         if (failures == competitions.size) error("no fixture feed could be read")
-        return all.filter { it.startMs < toMs && it.endMs > fromMs }.distinctBy { it.id }
+        val shown = all.filter { it.startMs < toMs && it.endMs > fromMs }.distinctBy { it.id }
+        val listings = tv ?: return shown
+        // One read of the listings for all of them; a page that can't be read says "UK TV not listed yet".
+        val page = runCatching { listings.page() }.getOrNull()
+        return shown.map { it.copy(description = listings.notesFor(it.startMs, !it.title.endsWith(TBC), page)) }
     }
 
     internal fun parse(body: String, competition: String): List<RemoteEvent> {
@@ -74,7 +81,7 @@ class EspnTeamFixtures internal constructor(
             val home = side("home") ?: return@mapNotNull null
             val away = side("away") ?: return@mapNotNull null
             val timeKnown = e["timeValid"]?.jsonPrimitive?.booleanOrNull ?: true
-            val title = "${barca(home)} v ${barca(away)}" + if (timeKnown) "" else " (kick-off TBC)"
+            val title = "${barca(home)} v ${barca(away)}" + if (timeKnown) "" else TBC
             RemoteEvent(
                 id = "espn-$id", title = title, startMs = start, endMs = start + MATCH_MS, allDay = false,
                 location = comp?.get("venue")?.jsonObject?.str("fullName"), calendarName = competition,
@@ -94,6 +101,8 @@ class EspnTeamFixtures internal constructor(
     companion object {
         /** Kick-off to final whistle plus a margin, so the planner keeps the evening free. */
         const val MATCH_MS = 2 * 3_600_000L
+        /** The title's ending when the kick-off time isn't set yet. */
+        const val TBC = " (kick-off TBC)"
 
         private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
         fun httpGet(url: String): String {

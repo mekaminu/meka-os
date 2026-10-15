@@ -194,6 +194,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * 09:00 (again every four weeks while unchecked) — "Time to check Alex's sizes" · "Last checked Sat 11 Jul · …".
      */
     KIDS("Kids: time to check their sizes", NoticeTier.HEADS_UP),
+    /**
+     * Barça match day, slice 1 ([BarcaMatchRules.notices]): an hour before each Barça match in the Fixtures calendar,
+     * "Barça v Getafe · 20:00" · "LaLiga · kick-off in an hour · on Premier Sports 1".
+     */
+    BARCA("Barça match day", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -629,6 +634,7 @@ object Governor {
         NoticeSource.PARCELS -> if (n == 1) "a parcel out for delivery" else "$n parcels out for delivery"
         NoticeSource.PARKING -> if (n == 1) "parking about to end" else "$n parking timers about to end"
         NoticeSource.KIDS -> if (n == 1) "sizes to check" else "$n children's sizes to check"
+        NoticeSource.BARCA -> if (n == 1) "a Barça match soon" else "$n Barça matches soon"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -839,6 +845,8 @@ object NoticeSources {
         out += FixtureMoves.notices(events, marks, nowMs, cal)
         // Weekend football: "How did it go?" after a club match with nothing kept yet.
         out += FootballRules.notices(events, marks, nowMs, cal)
+        // Barça match day: an hour before kick-off, with where to watch it in the UK.
+        out += BarcaMatchRules.notices(events, marks, nowMs, cal)
         // Booked sessions (Gym): time to go, then "Did you go?" once the slot is over.
         out += SessionRules.notices(sessions, cal, sessionAskGraceMin)
         // Remind me, set on tasks.

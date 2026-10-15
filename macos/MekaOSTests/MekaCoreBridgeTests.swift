@@ -1767,6 +1767,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.laterTonight), "LATER_TONIGHT") // MacNotifier.laterTonightAction
         XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.allStillFit), "ALL_STILL_FIT") // MacNotifier.allStillFitAction, kids' admin, slice 6
         XCTAssertEqual(NotifyRules.shared.targetName(t: .kids), "KIDS")
+        XCTAssertEqual(NoticeSource.barca.label, "Barça match day") // Barça match day, slice 1: listed in Notifications like the rest
     }
 
     func testScreenshotRulesReachSwift() {
