@@ -4311,7 +4311,7 @@ class MekaCore(
         _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), ZoneCalendar(timeZone))
         mailMomentChanged(items)
         _mailChases.value = os.meka.core.domain.MailChaseRules.card(
-            items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone),
+            items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone), activity.mailFinds(),
         )
         mailFindsChanged()
     }
@@ -4424,8 +4424,19 @@ class MekaCore(
     }
 
     private fun chaseRow(id: String): os.meka.core.domain.MailChaseRow? = _mailChases.value?.rows?.firstOrNull { it.id == id }
-        ?: os.meka.core.domain.MailChaseRules.card(activity.mailItems(), lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone))
+        ?: os.meka.core.domain.MailChaseRules.card(activity.mailItems(), lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone), activity.mailFinds())
             ?.rows?.firstOrNull { it.id == id }
+
+    /**
+     * Follow-up radar, slice 2: a chase row is an email he received (its `mail_item`) or one he sent with no reply (its
+     * `mail_find`); the chase's fields go on whichever it is.
+     */
+    private fun chaseEntity(id: String): String =
+        if (activity.mailFinds().any { it.id == id }) os.meka.core.domain.EntityTypes.MAIL_FIND else os.meka.core.domain.EntityTypes.MAIL_ITEM
+
+    private fun chaseMarks(id: String): os.meka.core.domain.ChaseMarks? =
+        activity.mailFinds().firstOrNull { it.id == id }?.chase
+            ?: activity.mailItems().firstOrNull { it.id == id }?.let(os.meka.core.domain.MailChaseRules::marks)
 
     /**
      * Inbox autopilot, slice 6b-3: **Send** on a chase in "Time to chase". Nothing is sent here: his words go on the
@@ -4437,21 +4448,24 @@ class MekaCore(
     suspend fun chaseMailItem(id: String, text: String): String = onCore {
         val C = os.meka.core.domain.MailChaseRules
         val row = chaseRow(id) ?: return@onCore C.UNKNOWN
-        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore C.UNKNOWN
+        val entity = chaseEntity(id)
+        val (to, account) = activity.mailItems().firstOrNull { it.id == id }?.let { it.from to it.account }
+            ?: activity.mailFinds().firstOrNull { it.id == id }?.let { row.from to it.account }
+            ?: return@onCore C.UNKNOWN
         os.meka.core.domain.MailNeedsRules.replyProblem(text)?.let { return@onCore it }
         val before = chaseState(row.waitingId)
-        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.sendFields(text, nowMs()))
+        replica.commitLocal(entity, id, C.sendFields(text, nowMs()))
         lists.chased(row.waitingId)
         mailChaseUndo = {
-            val now = activity.mailItems().firstOrNull { it.id == id }
+            val now = chaseMarks(id)
             // Too late once the server sent it: the chase stands as recorded.
             if (now == null || !C.sent(now)) {
-                replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.undoFields(nowMs()))
+                replica.commitLocal(entity, id, C.undoFields(nowMs()))
                 replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, row.waitingId, before)
             }
         }
         mailNeedsChanged()
-        C.sendingLine(item.from, item.account)
+        C.sendingLine(to, account)
     }
 
     /** **Got it** on "Time to chase": the thing arrived, off Waiting for (Undo puts it back). Nothing is sent. */
@@ -4459,7 +4473,7 @@ class MekaCore(
         val C = os.meka.core.domain.MailChaseRules
         val row = chaseRow(id) ?: return@onCore C.UNKNOWN
         val before = chaseState(row.waitingId)
-        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.seenFields(nowMs()))
+        replica.commitLocal(chaseEntity(id), id, C.seenFields(nowMs()))
         lists.received(row.waitingId)
         mailChaseUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, row.waitingId, before) }
         mailNeedsChanged()
@@ -4471,7 +4485,7 @@ class MekaCore(
         val C = os.meka.core.domain.MailChaseRules
         val row = chaseRow(id) ?: return@onCore C.UNKNOWN
         val before = chaseState(row.waitingId)
-        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, C.seenFields(nowMs()))
+        replica.commitLocal(chaseEntity(id), id, C.seenFields(nowMs()))
         lists.setChase(row.waitingId, os.meka.core.domain.ListRules.DEFAULT_CHASE_DAYS)
         mailChaseUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, row.waitingId, before) }
         mailNeedsChanged()

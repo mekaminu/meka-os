@@ -313,6 +313,15 @@ class MailSyncTest {
             if (r == MailReplyResult.SENT) replies += id to text
             return r
         }
+
+        // Follow-up radar, slice 2: chases of his sent emails.
+        val chases = mutableListOf<Pair<String, String>>()
+        var chaseAnswer: () -> MailReplyResult = { MailReplyResult.SENT }
+        override fun chaseSent(accessToken: String, id: String, text: String): MailReplyResult {
+            val r = chaseAnswer()
+            if (r == MailReplyResult.SENT) chases += id to text
+            return r
+        }
     }
 
     private class Cipher : TokenCipher {
@@ -801,6 +810,68 @@ class MailSyncTest {
         val after = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values.single()
         assertEquals(FieldValue.Text(os.meka.core.domain.MailFollowUpRules.ANSWERED_REPLIED), after[os.meka.core.domain.MailFindFields.ANSWERED_WHY])
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+    }
+
+    @Test
+    fun hisChaseOfAnUnansweredEmailIsSentOnceInItsConversationAfterTheHold() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        gmail.sentMail += sentMsg("s1", 4, "Could you send the quote?")
+        i.syncAccount(id)
+        val (fid, _) = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).entries.single()
+        // Nothing is sent until he taps Send, and not inside Undo's hold.
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertTrue(gmail.chases.isEmpty())
+        MailChaseRules.sendFields("Hi Sam, any news on the quote?", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_FIND, fid, f, v) }
+        now += 5_000
+        i.syncAccount(id)
+        assertTrue(gmail.chases.isEmpty())
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        // Replying to the email he sent (its own id), once.
+        assertEquals(listOf("s1" to "Hi Sam, any news on the quote?"), gmail.chases)
+        assertTrue(gmail.replies.isEmpty())
+        val sent = os.meka.core.domain.MailRenewalRules.read(fid, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).getValue(fid))!!
+        assertTrue(MailChaseRules.sent(sent.chase))
+        i.syncAccount(id)
+        assertEquals(1, gmail.chases.size)
+        // Gmail can't find it next time: said so on the find, not retried.
+        gmail.chaseAnswer = { MailReplyResult.GONE }
+        now += 1_000
+        MailChaseRules.sendFields("Any news?", now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_FIND, fid, f, v) }
+        now += MailNeedsRules.REPLY_HOLD_MS
+        i.syncAccount(id)
+        i.syncAccount(id)
+        val failed = os.meka.core.domain.MailRenewalRules.read(fid, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).getValue(fid))!!
+        assertTrue(MailChaseRules.failed(failed.chase))
+        assertEquals(MailChaseRules.WHY_GONE, failed.chase.failedWhy)
+        assertEquals(1, gmail.chases.size)
+        // After his own chase ("wrote again"), Sam's reply still marks it replied.
+        gmail.sentMail += sentMsg("s2", 0, "Hi Sam, any news on the quote?", thread = "t-s1")
+        now += Integrations.FOLLOW_UPS_EVERY_MS
+        i.syncAccount(id)
+        assertEquals(FieldValue.Text(os.meka.core.domain.MailFollowUpRules.ANSWERED_WROTE_AGAIN),
+            EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).getValue(fid)[os.meka.core.domain.MailFindFields.ANSWERED_WHY])
+        gmail.mailbox["r1"] = msg("r1", 0, "sam@example.com").copy(threadId = "t-s1", receivedAtMs = now)
+        gmail.nextRound = { MailChanges(fetch = listOf("r1"), cursor = "h3") }
+        now += Integrations.FOLLOW_UPS_EVERY_MS
+        i.syncAccount(id)
+        assertEquals(FieldValue.Text(os.meka.core.domain.MailFollowUpRules.ANSWERED_REPLIED),
+            EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).getValue(fid)[os.meka.core.domain.MailFindFields.ANSWERED_WHY])
+    }
+
+    @Test
+    fun aChaseGoesToWhoTheEmailWentTo() {
+        assertEquals("sam@example.com, ann@example.com" to "jo@example.com",
+            MailReplyMessage.chaseRecipients("\"Taylor, Sam\" <sam@example.com>, ann@example.com", "Jo <jo@example.com>, sam@example.com"))
+        assertEquals("sam@example.com" to null, MailReplyMessage.chaseRecipients("Sam <sam@example.com>", null))
+        assertNull(MailReplyMessage.chaseRecipients("undisclosed-recipients:;", null))
+        val raw = MailReplyMessage.rfc822("sam@example.com", "Re: Quote", "<m1@x>", null, "Any news?", cc = "jo@example.com\r\nBcc: x@y")
+        assertTrue("Cc: jo@example.com  Bcc: x@y\r\n" in raw, raw)
+        assertFalse("\r\nBcc:" in raw)
     }
 
     // ---- Slice 3c: the daily Junk review ----

@@ -101,4 +101,26 @@ class MailFollowUpTest {
         val dismissed = f.copy(state = MailFindState.DISMISSED)
         assertFalse(MailFollowUpRules.showable(dismissed, emptyList(), today))
     }
+
+    @Test
+    fun theChasePointsAtHisEmailAndATheirReplyWaitsForGotIt() {
+        assertEquals("Hi Sam,\n\nJust following up on my email below — have you had a chance to look at it?\n\nThanks,\nAlex", MailChaseRules.followUpDraft("Sam Taylor", "Alex"))
+        assertEquals("Hi,\n\nJust following up on my email below — have you had a chance to look at it?\n\nThanks", MailChaseRules.followUpDraft("sam@example.com", null))
+        val f = MailRenewalRules.read("mf1", MailFollowUpRules.serverFields(MailFollowUp("Sam Taylor", "Reply about Quote"), "Personal", "Quote", sentDay))!!
+        assertFalse(MailChaseRules.repliedOpen(f))
+        val replied = f.copy(answeredAtMs = 2_000L, answeredWhy = MailFollowUpRules.ANSWERED_REPLIED)
+        assertTrue(MailChaseRules.repliedOpen(replied))
+        // His own chase counts as "wrote again", never as their reply; Got it or Not yet since puts it aside.
+        assertFalse(MailChaseRules.repliedOpen(replied.copy(answeredWhy = MailFollowUpRules.ANSWERED_WROTE_AGAIN)))
+        assertFalse(MailChaseRules.repliedOpen(replied.copy(chase = ChaseMarks(seenAtMs = 3_000L))))
+        // A chase read back from the find's fields is due after Undo's hold, once.
+        val asked = MailRenewalRules.read("mf1", MailFollowUpRules.serverFields(MailFollowUp("Sam Taylor", "Reply about Quote"), "Personal", "Quote", sentDay) +
+            MailChaseRules.sendFields("Any news?", 10_000L))!!
+        assertFalse(MailChaseRules.due(asked.chase, 10_000L))
+        assertTrue(MailChaseRules.due(asked.chase, 10_000L + MailNeedsRules.REPLY_HOLD_MS))
+        val sent = MailRenewalRules.read("mf1", MailFollowUpRules.serverFields(MailFollowUp("Sam Taylor", "Reply about Quote"), "Personal", "Quote", sentDay) +
+            MailChaseRules.sendFields("Any news?", 10_000L) + MailChaseRules.sentFields(40_000L))!!
+        assertFalse(MailChaseRules.due(sent.chase, 90_000L))
+    }
 }
+

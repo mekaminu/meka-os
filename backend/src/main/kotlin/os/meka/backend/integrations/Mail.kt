@@ -107,6 +107,13 @@ interface MailProvider {
      * (nothing is offered).
      */
     fun sent(accessToken: String, sinceMs: Long, limit: Int): List<MailSent>? = null
+
+    /**
+     * Follow-up radar, slice 2: Meka's chase of the email [id] that he sent, from this account, in its conversation, to
+     * the people it went to (To and Cc as they were), only because he tapped Send. [MailReplyResult.GONE] when the email
+     * no longer exists. Never retried by itself: a failure goes back to him.
+     */
+    fun chaseSent(accessToken: String, id: String, text: String): MailReplyResult = MailReplyResult.FAILED
 }
 
 /** Follow-up radar: one email Meka sent, as [MailProvider.sent] reads it. */
@@ -138,7 +145,7 @@ internal object MailReplyMessage {
         return if (s.length >= 3 && s.substring(0, 3).equals("re:", ignoreCase = true)) s else "Re: $s"
     }
 
-    fun rfc822(to: String, subject: String, messageId: String?, references: String?, text: String): String {
+    fun rfc822(to: String, subject: String, messageId: String?, references: String?, text: String, cc: String? = null): String {
         val subj = clean(subject)
         val encodedSubject = if (subj.all { it.code in 0x20..0x7e }) subj
         else "=?UTF-8?B?" + java.util.Base64.getEncoder().encodeToString(subj.toByteArray()) + "?="
@@ -147,12 +154,24 @@ internal object MailReplyMessage {
         val body = java.util.Base64.getMimeEncoder(76, "\r\n".toByteArray()).encodeToString(text.replace("\r\n", "\n").replace("\n", "\r\n").toByteArray())
         return buildString {
             append("To: ").append(clean(to)).append("\r\n")
+            clean(cc).takeIf { it.isNotEmpty() }?.let { append("Cc: ").append(it).append("\r\n") }
             append("Subject: ").append(encodedSubject).append("\r\n")
             id?.let { append("In-Reply-To: ").append(it).append("\r\n") }
             refs?.let { append("References: ").append(it).append("\r\n") }
             append("MIME-Version: 1.0\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n")
             append(body).append("\r\n")
         }
+    }
+
+    /**
+     * Follow-up radar, slice 2: who a chase of his sent email goes to — its To and Cc addresses (names dropped), each a
+     * [validAddress]; null when To has none.
+     */
+    fun chaseRecipients(to: String?, cc: String?): Pair<String, String?>? {
+        fun list(raw: String?) = MailAddress.parseList(raw).map { it.second.trim() }.filter(::validAddress).distinct()
+        val t = list(to).takeIf { it.isNotEmpty() } ?: return null
+        val c = list(cc).filter { it !in t }
+        return t.joinToString(", ") to c.takeIf { it.isNotEmpty() }?.joinToString(", ")
     }
 
     /** One plain address (who the reply goes to): no spaces, separators or brackets, one @ with something either side. */
@@ -425,6 +444,24 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return if (sent.status in 200..299) MailReplyResult.SENT else MailReplyResult.FAILED
     }
 
+    /** Follow-up radar, slice 2: his sent email's To, Cc and threading headers read, the chase sent in its thread. */
+    override fun chaseSent(accessToken: String, id: String, text: String): MailReplyResult {
+        val headers = listOf("To", "Cc", "Subject", "Message-ID", "References")
+        val url = "$API/messages/${Http.enc(id)}?format=metadata&" + headers.joinToString("&") { "metadataHeaders=" + Http.enc(it) }
+        val a = http.call("GET", url, accessToken)
+        if (a.status == 404) return MailReplyResult.GONE
+        val m = a.body?.takeIf { a.status in 200..299 } ?: return MailReplyResult.FAILED
+        val hs = ((m["payload"] as? JsonObject)?.get("headers") as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+            .mapNotNull { h -> h["name"].str()?.let { n -> n.lowercase() to (h["value"].str() ?: "") } }.toMap()
+        val (to, cc) = MailReplyMessage.chaseRecipients(hs["to"], hs["cc"]) ?: return MailReplyResult.FAILED
+        val raw = MailReplyMessage.rfc822(to, MailReplyMessage.subject(hs["subject"]), hs["message-id"], hs["references"], text, cc)
+        val sent = http.call("POST", "$API/messages/send", accessToken, buildJsonObject {
+            put("raw", java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(raw.toByteArray()))
+            m["threadId"].str()?.let { put("threadId", it) }
+        })
+        return if (sent.status in 200..299) MailReplyResult.SENT else MailReplyResult.FAILED
+    }
+
     /** Slice 8a: `in:inbox before:<seconds>`, 500 ids a page (Gmail's own search; nothing but ids comes back). */
     override fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage {
         val q = mutableMapOf("q" to "in:inbox before:${beforeMs / 1000}", "maxResults" to "500")
@@ -628,6 +665,36 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     override fun reply(accessToken: String, id: String, text: String): MailReplyResult {
         val a = http.call("POST", "$GRAPH/me/messages/${Http.enc(id)}/reply", accessToken, buildJsonObject {
             put("message", buildJsonObject { put("body", buildJsonObject { put("contentType", "Text"); put("content", text) }) })
+        })
+        return when {
+            a.status in 200..299 -> MailReplyResult.SENT
+            a.status == 404 -> MailReplyResult.GONE
+            else -> MailReplyResult.FAILED
+        }
+    }
+
+    /**
+     * Follow-up radar, slice 2: Graph's reply on his sent email would go back to him, so the reply names the people it
+     * went to (To and Cc as they were); Outlook threads it and keeps it in Sent Items.
+     */
+    override fun chaseSent(accessToken: String, id: String, text: String): MailReplyResult {
+        val r = http.call("GET", "$GRAPH/me/messages/${Http.enc(id)}?\$select=" + Http.enc("toRecipients,ccRecipients"), accessToken)
+        if (r.status == 404) return MailReplyResult.GONE
+        val m = r.body?.takeIf { r.status in 200..299 } ?: return MailReplyResult.FAILED
+        fun people(key: String) = (m[key] as? JsonArray).orEmpty().mapNotNull { e ->
+            ((e as? JsonObject)?.get("emailAddress") as? JsonObject)?.get("address").str()?.trim()?.takeIf(MailReplyMessage::validAddress)
+        }.distinct()
+        val to = people("toRecipients").takeIf { it.isNotEmpty() } ?: return MailReplyResult.FAILED
+        val cc = people("ccRecipients").filter { it !in to }
+        fun recipients(list: List<String>) = kotlinx.serialization.json.buildJsonArray {
+            list.forEach { addr -> add(buildJsonObject { put("emailAddress", buildJsonObject { put("address", addr) }) }) }
+        }
+        val a = http.call("POST", "$GRAPH/me/messages/${Http.enc(id)}/reply", accessToken, buildJsonObject {
+            put("message", buildJsonObject {
+                put("toRecipients", recipients(to))
+                if (cc.isNotEmpty()) put("ccRecipients", recipients(cc))
+                put("body", buildJsonObject { put("contentType", "Text"); put("content", text) })
+            })
         })
         return when {
             a.status in 200..299 -> MailReplyResult.SENT

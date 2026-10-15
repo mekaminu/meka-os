@@ -55,6 +55,10 @@ data class MailFind(
     val byStated: Boolean = false,
     /** Follow-up radar: when the server saw them answer (or him write again); null while unanswered. */
     val answeredAtMs: Long? = null,
+    /** Follow-up radar: [MailFollowUpRules.ANSWERED_REPLIED] or [MailFollowUpRules.ANSWERED_WROTE_AGAIN]. */
+    val answeredWhy: String? = null,
+    /** Follow-up radar, slice 2: his chase from Time to chase, and what the server did with it ([MailChaseRules]). */
+    val chase: ChaseMarks = ChaseMarks(),
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -77,6 +81,14 @@ object MailFindFields {
     /** Follow-up radar (server-written later): when they answered or he wrote again, and which ([MailFollowUpRules]). */
     const val ANSWERED_AT = "answeredAtMs"
     const val ANSWERED_WHY = "answeredWhy"
+    /** Follow-up radar, slice 2: the chase, named as on `mail_item` (the apps write the first four, the server the rest). */
+    const val CHASE_TEXT = MailItemFields.CHASE_TEXT
+    const val CHASE_ASKED_AT = MailItemFields.CHASE_ASKED_AT
+    const val CHASE_UNDO_AT = MailItemFields.CHASE_UNDO_AT
+    const val CHASE_SEEN_AT = MailItemFields.CHASE_SEEN_AT
+    const val CHASE_SENT_AT = MailItemFields.CHASE_SENT_AT
+    const val CHASE_FAILED_AT = MailItemFields.CHASE_FAILED_AT
+    const val CHASE_FAILED_WHY = MailItemFields.CHASE_FAILED_WHY
     // Written by the apps.
     const val STATE = "state"
     const val DECIDED_AT = "decidedAtMs"
@@ -279,6 +291,16 @@ object MailRenewalRules {
             what = f[MailFindFields.WHAT]?.textOrNull?.takeIf { it.isNotBlank() },
             byStated = f[MailFindFields.BY_STATED]?.boolOrNull ?: false,
             answeredAtMs = f[MailFindFields.ANSWERED_AT]?.longOrNull,
+            answeredWhy = f[MailFindFields.ANSWERED_WHY]?.textOrNull,
+            chase = ChaseMarks(
+                text = f[MailFindFields.CHASE_TEXT]?.textOrNull?.takeIf { it.isNotBlank() },
+                askedAtMs = f[MailFindFields.CHASE_ASKED_AT]?.longOrNull,
+                undoAtMs = f[MailFindFields.CHASE_UNDO_AT]?.longOrNull,
+                seenAtMs = f[MailFindFields.CHASE_SEEN_AT]?.longOrNull,
+                sentAtMs = f[MailFindFields.CHASE_SENT_AT]?.longOrNull,
+                failedAtMs = f[MailFindFields.CHASE_FAILED_AT]?.longOrNull,
+                failedWhy = f[MailFindFields.CHASE_FAILED_WHY]?.textOrNull,
+            ),
         )
     }
 

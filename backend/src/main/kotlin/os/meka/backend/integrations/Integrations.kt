@@ -486,6 +486,8 @@ class Integrations(
         ms.prune(a.id, since)
         // Slice 6a: Done and Undo asked on the "From your mail" cards, before sorting (an email put back is sorted again now).
         runCatching { mailNeedsAsks(a, m, token, ms) }
+        // Follow-up radar, slice 2: chases of his own unanswered emails, sent only after his Send.
+        runCatching { followUpChases(a, m, token) }
         sortHeaders(a, ms)
         // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
         runCatching { mailSenders(a, m, token, ms) }
@@ -533,12 +535,16 @@ class Integrations(
         val mirror = store.transaction { store.mirror(a.householdId, a.id) }
         // Open ones answered since: they replied, or he wrote again in the conversation.
         for ((id, row) in mirror) {
-            val t = row.remoteId?.takeIf { it.startsWith(FOLLOW_UP_THREAD) }?.removePrefix(FOLLOW_UP_THREAD) ?: continue
-            if (row.removed || MailFindFields.ANSWERED_AT in row.fieldOps) continue
+            val t = row.remoteId?.let { followUpThread(it) } ?: continue
+            if (row.removed) continue
+            // Once they replied it stands; after "wrote again" (his own chase among them) a reply still counts.
+            val wroteAgain = row.fieldOps[MailFindFields.ANSWERED_WHY]?.second == valueKey(FieldValue.Text(MailFollowUpRules.ANSWERED_WROTE_AGAIN))
+            if (MailFindFields.ANSWERED_AT in row.fieldOps && !wroteAgain) continue
             // Deleted with Delete mail data: left deleted (a write would bring it back).
             if (row.fieldOps[DELETED_FIELD]?.second == valueKey(FieldValue.Bool(true))) continue
             val why = when {
                 MailFollowUpRules.replied(row.startMs, inbound[t].orEmpty(), own) -> MailFollowUpRules.ANSWERED_REPLIED
+                wroteAgain -> continue
                 (latest[t]?.sentAtMs ?: 0L) > row.startMs + 1_000L -> MailFollowUpRules.ANSWERED_WROTE_AGAIN
                 else -> continue
             }
@@ -554,7 +560,39 @@ class Integrations(
             if (MailFollowUpRules.replied(s.sentAtMs, inbound[thread(s)].orEmpty(), own)) continue
             val facts = MailSentFacts(s.toName, s.toAddress, s.recipients, s.subject, s.preview, s.sentAtMs)
             val fu = MailFollowUpRules.read(facts, own, MailSortRules.isAutomated(s.toAddress)) ?: continue
-            writeFollowUp(a, id, MailFollowUpRules.serverFields(fu, account, s.subject, day), s.sentAtMs, FOLLOW_UP_THREAD + thread(s))
+            writeFollowUp(a, id, MailFollowUpRules.serverFields(fu, account, s.subject, day), s.sentAtMs, followUpRemote(thread(s), s.id))
+        }
+    }
+
+    /**
+     * Follow-up radar, slice 2: the chases he sent from Time to chase on his own unanswered emails. Each one due (his
+     * Send, Undo's hold over) is sent once from this account, in the conversation of the email he sent, to the people
+     * it went to ([MailProvider.chaseSent]); the find records that it went, or why not (his words come back to him).
+     * Never retried here and never sent without his Send.
+     */
+    internal fun followUpChases(a: AccountRow, m: MailProvider, token: String) {
+        val hh = a.householdId
+        val mirror = store.transaction { store.mirror(hh, a.id) }
+        val due = reader.entities(hh, EntityTypes.MAIL_FIND).filterKeys { it in mirror }
+            .mapNotNull { (id, f) -> MailRenewalRules.read(id, f) }
+            .filter { it.kind == MailFollowUpRules.KIND_FOLLOW_UP && MailChaseRules.due(it.chase, now()) }
+        if (due.isEmpty()) return
+        val name = if (m.id == os.meka.core.domain.MailProviders.OUTLOOK) "Outlook" else "Gmail"
+        for (f in due) {
+            val row = mirror.getValue(f.id)
+            val sentId = row.remoteId?.let { followUpMessage(it) }
+            val why = if (sentId == null) MailChaseRules.WHY_GONE else try {
+                when (m.chaseSent(token, sentId, f.chase.text!!)) {
+                    MailReplyResult.SENT -> null
+                    MailReplyResult.GONE -> MailChaseRules.WHY_GONE
+                    MailReplyResult.FAILED -> MailNeedsRules.whyRefused(name)
+                }
+            } catch (e: ReconnectRequired) {
+                "sign in to $name again"
+            } catch (e: Exception) {
+                MailNeedsRules.whyUnreachable(name)
+            }
+            writeFollowUp(a, f.id, if (why == null) MailChaseRules.sentFields(now()) else MailChaseRules.failedFields(now(), why), row.startMs, row.remoteId)
         }
     }
 
@@ -1845,6 +1883,19 @@ class Integrations(
         const val FOLLOW_UPS_LIMIT = 60
         /** Follow-up radar: the mirror row's remoteId prefix holding the conversation. */
         const val FOLLOW_UP_THREAD = "followup:"
+        /** Between the conversation and the sent email's id on a follow-up's mirror row (neither holds it). */
+        const val FOLLOW_UP_SEP = '|'
+
+        /** A follow-up's mirror row: "followup:<conversation>|<the sent email's id>". */
+        fun followUpRemote(thread: String, messageId: String): String = "$FOLLOW_UP_THREAD$thread$FOLLOW_UP_SEP$messageId"
+
+        /** The conversation (rows from before slice 2 hold only that). */
+        fun followUpThread(remote: String): String? =
+            remote.takeIf { it.startsWith(FOLLOW_UP_THREAD) }?.removePrefix(FOLLOW_UP_THREAD)?.substringBefore(FOLLOW_UP_SEP)
+
+        /** The sent email's id; null on a row from before slice 2. */
+        fun followUpMessage(remote: String): String? =
+            remote.takeIf { it.startsWith(FOLLOW_UP_THREAD) }?.substringAfter(FOLLOW_UP_SEP, "")?.takeIf { it.isNotEmpty() }
         /** Slice 2a: headers sorted per round (rules only, cheap; a big first listing takes a few rounds of one check). */
         const val SORT_BATCH = 500
         const val SORT_ROUNDS = 20

@@ -4,6 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MailChaseRules
+import os.meka.core.domain.MailFindFields
 import os.meka.core.domain.MailFollowUpRules
 import os.meka.core.domain.MailPromiseRules
 import os.meka.core.domain.MailSentFacts
@@ -149,5 +151,51 @@ class MailFindFacadeTest {
         fold.undoMailFind()
         assertEquals(0, fold.listsView.value.waiting.size)
         assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+    }
+
+    @Test
+    fun aFollowUpOnWaitingForIsChasedFromTimeToChaseAndTheirReplyComesBackToGotIt() = runTest {
+        val sentDay = CivilDate.toEpochDay(2026, 10, 12)
+        val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote", "Could you send the quote?", now - 5 * 86_400_000L), setOf("alex@example.com"), false)!!
+        val id = MailFollowUpRules.findId("acc1", "s1")
+        serverWrite(id, MailFollowUpRules.serverFields(fu, "Personal", "Quote", sentDay))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow())
+        fold.addMailFind(id)
+        // On Waiting for to chase today: Time to chase offers it with a chase that points at his email.
+        val row = fold.mailChases.value!!.rows.single()
+        assertEquals(id, row.id)
+        assertEquals("Sam Taylor", row.from)
+        assertEquals("Reply about Quote", row.title)
+        assertEquals("Personal · you wrote Mon 12 Oct · chase today", row.line)
+        assertTrue(row.draft.startsWith("Hi Sam,\n\nJust following up on my email below"), row.draft)
+        assertEquals("To Sam Taylor · in the same conversation as your email, from Personal, only when you tap Send", row.replyLine)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf(id), mac.mailChases.value!!.rows.map { it.id })
+
+        // Send: his words on the find for the server; off the card on both apps. Undo brings it back, nothing sent.
+        assertEquals("Chase sending to Sam Taylor from Personal at Navilife's next check · Undo stops it", fold.chaseMailItem(id, "Hi Sam, any news on the quote?"))
+        assertNull(fold.mailChases.value)
+        fold.undoMailChase()
+        assertEquals(listOf(id), fold.mailChases.value!!.rows.map { it.id })
+        fold.chaseMailItem(id, "Hi Sam, any news on the quote?")
+        assertTrue(fold.syncNow())
+        val asked = serverOps.after("hh", 0, 10_000).map { it.op }.last { it.entityId == id && it.field == MailFindFields.CHASE_TEXT }
+        assertEquals(FieldValue.Text("Hi Sam, any news on the quote?"), asked.value)
+        assertTrue(mac.syncNow())
+        assertNull(mac.mailChases.value)
+
+        // The server sent it; then Sam replies: the row comes back saying so, and Got it takes it off Waiting for.
+        now += 120_000
+        serverWrite(id, MailChaseRules.sentFields(now))
+        now += 60_000
+        serverWrite(id, MailFollowUpRules.answeredFields(now, MailFollowUpRules.ANSWERED_REPLIED))
+        assertTrue(fold.syncNow())
+        val back = fold.mailChases.value!!.rows.single()
+        assertEquals("They replied on Sat 17 Oct · Got it if that settles it", back.notice)
+        assertEquals(MailChaseRules.GOT_LINE, fold.gotMailChase(id))
+        assertNull(fold.mailChases.value)
+        assertEquals(0, fold.listsView.value.waiting.size)
     }
 }
