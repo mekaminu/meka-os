@@ -1729,6 +1729,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.withHint(field: "Shipped it\ngym", hint: "Gym"), "Shipped it\ngym")
         XCTAssertEqual(rules.facts(done: 5, habitsMet: 1, habits: 2, wins: 1, stillOpen: 0), "5 done · 1 of 2 habits met · 1 win")
         XCTAssertEqual(rules.facts(done: 0, habitsMet: 0, habits: 0, wins: 0, stillOpen: 0), rules.QUIET_WEEK)
+        // Slice 2: "reflect on my week" said to Talk on the Mac opens the reflection.
+        let said = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "reflect on my week",
+                                         places: TalkOpenRules.shared.MAC)
+        XCTAssertEqual((said.effects.first as? TalkEffectSpeak)?.text, rules.OPENING)
+        let done = TalkFlow.shared.spoke(s: said.session)
+        XCTAssertEqual((done.effects.last as? TalkEffectOpen)?.place, TalkPlace.reflect)
     }
 
     func testScreenshotRulesReachSwift() {

@@ -925,6 +925,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
+                    // (lit in the accent on Monday); cross-fades as it comes and changes.
+                    today.reflection?.let { thing ->
+                        Crossfade(thing, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflection-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     today.dateNight?.let { night ->
                         Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->

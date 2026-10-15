@@ -93,4 +93,36 @@ class ReflectionFacadeTest {
         fold.skipReflection(false)
         assertTrue(fold.reflectionView.value.asking)
     }
+
+    @Test
+    fun theOneThingShowsOnTodayAndInTheBriefTheNextWeek() = runTest {
+        val fold = core("android")
+        fold.tick()
+        fold.saveReflection("Rang the garage", "", "Run 5k twice", null, keepWins = false)
+        // Sunday evening: next week's one thing doesn't show yet.
+        assertEquals(null, fold.today.value.reflection)
+        now += 14 * 3_600_000L // Mon 19 Oct, 09:00
+        fold.tick()
+        val line = fold.today.value.reflection!!
+        assertEquals("This week's one thing · Run 5k twice", line.text)
+        assertTrue(line.lit)
+        assertEquals("The one thing that matters this week: Run 5k twice.", fold.briefView.value.story.weekMatters)
+    }
+
+    @Test
+    fun reflectOnMyWeekOpensItMidweekAndUndoesASkip() = runTest {
+        val fold = core("android")
+        now += 3 * 24 * 3_600_000L // Wed 21 Oct, 19:00
+        fold.tick()
+        assertFalse(fold.reflectionView.value.asking)
+        fold.skipReflection(true)
+        fold.openReflection()
+        val v = fold.reflectionView.value
+        assertTrue(v.asking)
+        assertFalse(v.skipped)
+        assertEquals(fold.reviewView.value.weekStart, v.weekStart)
+        assertTrue(fold.reviewView.value.isCurrent)
+        fold.saveReflection("A calm week", "", "", null, keepWins = false)
+        assertFalse(fold.reflectionView.value.asking)
+    }
 }

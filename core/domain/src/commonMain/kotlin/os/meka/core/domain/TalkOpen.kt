@@ -15,7 +15,7 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE }
+enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -32,19 +32,19 @@ object TalkOpenRules {
     const val OPENED_INBOX = "Started the ten-minute inbox."
 
     /** What a device without a bedside clock (the Mac) can open. */
-    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX)
+    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT)
 
     /**
      * The Fold: the planner, the bedside clock, the ten-minute inbox and Find my car (car and parking, slice 1: where
      * the car is parked is kept on the phone only, so the Mac has nothing to open).
      */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE)
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT)
 
     /**
      * The Mac (voice notes into actions, slice 3): the planner, the ten-minute inbox and a voice note, which the Mac now
      * records too; no bedside clock and no Find my car (the parked spot stays on the phone).
      */
-    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE)
+    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT)
 
     /** The Galaxy Watch's Capture (voice notes into actions, slice 4): only a voice note opens from what it hears. */
     val WATCH: Set<TalkPlace> = setOf(TalkPlace.VOICE_NOTE)
@@ -96,6 +96,27 @@ object TalkOpenRules {
         add(listOf("inbox", "zero")); add(listOf("start", "inbox", "zero")); add(listOf("start", "my", "inbox"))
     }
 
+    /**
+     * Weekly reflection, slice 2: "reflect on my week", "let's reflect on the week", "weekly reflection", "do my weekly
+     * reflection", "look back on my week", "open my reflection" (what's left once [DROP] is gone). Opens Review on this
+     * week with the reflection unfolded; nothing is written until Save there. "How did my week go?" stays a question.
+     */
+    private val REFLECT: Set<List<String>> = buildSet {
+        val weeks = listOf(listOf("my", "week"), listOf("the", "week"), listOf("this", "week"), listOf("week"), listOf("last", "week"))
+        for (verb in listOf(listOf("reflect", "on"), listOf("look", "back", "on"), listOf("look", "back", "at"))) {
+            weeks.forEach { add(verb + it) }
+            add(verb.take(verb.size - 1))
+        }
+        add(listOf("reflect"))
+        for (verb in listOf(null, "do", "start", "open", "my", "the")) for (det in listOf(null, "my", "the")) {
+            if (verb == det && verb != null) continue
+            for (n in listOf(listOf("weekly", "reflection"), listOf("reflection"), listOf("week's", "reflection"))) {
+                if (verb == null && det == null && n.size == 1) continue // "reflection" alone is too little
+                add(listOfNotNull(verb, det) + n)
+            }
+        }
+    }
+
     /** "Bedside clock", "open the bedside clock", "show me the bedside clock", "night clock", "bedside mode". */
     private val BEDSIDE = setOf(
         listOf("bedside", "clock"), listOf("the", "bedside", "clock"), listOf("open", "bedside", "clock"),
@@ -139,6 +160,7 @@ object TalkOpenRules {
             ws in INBOX && TalkPlace.INBOX in places -> TalkPlace.INBOX
             ws in CAR && TalkPlace.CAR in places -> TalkPlace.CAR
             ws in VOICE_NOTE && TalkPlace.VOICE_NOTE in places -> TalkPlace.VOICE_NOTE
+            ws in REFLECT && TalkPlace.REFLECT in places -> TalkPlace.REFLECT
             else -> null
         }
     }
@@ -150,6 +172,7 @@ object TalkOpenRules {
         TalkPlace.INBOX -> OPENING_INBOX
         TalkPlace.CAR -> ParkingRules.OPENING
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENING
+        TalkPlace.REFLECT -> ReflectionRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
@@ -159,6 +182,7 @@ object TalkOpenRules {
         TalkPlace.INBOX -> OPENED_INBOX
         TalkPlace.CAR -> ParkingRules.OPENED
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENED
+        TalkPlace.REFLECT -> ReflectionRules.OPENED
     }
 }
 

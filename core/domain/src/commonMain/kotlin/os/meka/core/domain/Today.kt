@@ -54,6 +54,8 @@ data class Today(
     val trip: TripLine? = null,
     /** Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from shipping emails ([ParcelRules.todayLine]); set by the facade. */
     val parcels: ParcelLine? = null,
+    /** Weekly reflection, slice 2: "This week's one thing · Run 5k" through the week (lit on Monday, [ReflectionRules.weekLine]); set by the facade. */
+    val reflection: ReflectionWeekLine? = null,
     /**
      * Needs you's Coming up (Fold review 2026-10-12 17:56, item 3): the next two task reminders this week, shown under
      * the empty line ([NeedsYouMeanwhileRules.comingUp]); set by the facade, which sees every task.

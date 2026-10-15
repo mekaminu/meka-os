@@ -91,6 +91,12 @@ data class ReflectionView(
     }
 }
 
+/**
+ * Slice 2: the one thing that matters this week, from last week's reflection, on Today's header ("This week's one
+ * thing · Run 5k", lit on Monday) and in the brief ([ReflectionRules.briefSentence]).
+ */
+data class ReflectionWeekLine(val text: String, val spoken: String, val lit: Boolean)
+
 /** What Save said: the line under the fields, and whether it was turned away (lit in the accent). */
 data class ReflectionSaved(val line: String, val refused: Boolean)
 
@@ -207,6 +213,8 @@ object ReflectionRules {
         today: Long,
         minute: Int,
         cal: LocalCalendar,
+        /** Slice 2: the week "reflect on my week" was said to Talk for: open and lit like Sunday evening's until saved. */
+        requestedWeek: Long? = null,
     ): ReflectionView {
         val ws = v.weekStart
         val r = all.firstOrNull { it.weekStart == ws }
@@ -234,7 +242,7 @@ object ReflectionRules {
             mattersHints = mattersHints(goals, ws + 7),
             saved = saved,
             skipped = skipped,
-            asking = asking(v.card, ws, r, today, minute),
+            asking = asking(v.card, ws, r, today, minute) || (requestedWeek == ws && !saved && !skipped),
             journalTitle = journalTitle(journal.size),
             journal = journal,
         )
@@ -269,6 +277,38 @@ object ReflectionRules {
 
     /** The went-well lines that go to the wins log: each line, as a win would read it. */
     fun winLines(wentWell: String): List<String> = tidy(wentWell).split('\n').mapNotNull { WinRules.read(it) }
+
+    // ---- Slice 2: the one thing through the week, and "reflect on my week" said to Talk ----
+
+    const val WEEK_LINE = "This week's one thing"
+    const val MAX_WEEK_LINE = 60
+    const val OPENING = "Here's your week. Two minutes: what went well, what to drop, and one thing that matters next week."
+    const val OPENED = "Opened the weekly reflection."
+
+    /**
+     * The week's one thing for Today's header: the first line of what last week's reflection said matters (the
+     * reflection for the week before [today]'s, saved on its Sunday evening or the Monday), from Monday until Sunday's
+     * reflection opens (18:00), when next week's is asked instead. Lit on the Monday. Null when last week had none.
+     */
+    fun weekLine(all: List<Reflection>, today: Long, minute: Int): ReflectionWeekLine? {
+        val dow = CivilDate.isoDayOfWeek(today)
+        if (dow == 7 && minute >= ReviewRules.CARD_START_MIN) return null
+        val monday = today - (dow - 1)
+        val r = all.firstOrNull { it.weekStart == monday - 7 && it.written } ?: return null
+        val thing = r.matters.split('\n').map { it.trim().trimEnd('.', '!', ';', ',') }.firstOrNull { it.isNotEmpty() } ?: return null
+        val short = if (thing.length <= MAX_WEEK_LINE) thing else thing.take(MAX_WEEK_LINE).substringBeforeLast(' ', thing.take(MAX_WEEK_LINE)).trimEnd() + "…"
+        return ReflectionWeekLine("$WEEK_LINE · $short", "The one thing that matters this week: $thing.", lit = dow == 1)
+    }
+
+    /**
+     * The brief's sentence for [line]: on Monday whatever its length, on the other weekdays Standard and Full only
+     * (Short keeps to the day); never at the weekend (the brief there is lighter).
+     */
+    fun briefSentence(line: ReflectionWeekLine?, length: BriefLength, today: Long): String? {
+        val dow = CivilDate.isoDayOfWeek(today)
+        if (line == null || dow >= 6) return null
+        return line.spoken.takeIf { dow == 1 || length.extras }
+    }
 
     /** The goal to pick: the chip's goal, when its title is still in the one thing's words. */
     fun goalToPick(matters: String, goalId: String?, goals: List<GoalItem>): GoalItem? {

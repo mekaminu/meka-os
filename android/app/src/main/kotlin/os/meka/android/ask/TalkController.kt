@@ -267,6 +267,11 @@ class TalkController(
                 os.meka.core.domain.TalkPlace.VOICE_NOTE -> {
                     runCatching { context.startActivity(os.meka.android.capture.CaptureIntents.voiceNote(context)) }
                 }
+                // Weekly reflection, slice 2: "reflect on my week" opens Review on the card's week with the reflection open.
+                os.meka.core.domain.TalkPlace.REFLECT -> {
+                    scope.launch { runCatching { core.openReflection() } }
+                    (context.applicationContext as? os.meka.android.MekaApplication)?.openDestination?.value = os.meka.android.shell.ShellDestination.REVIEW
+                }
                 // Inbox autopilot, slice 7b: "clear my inbox" starts the ten-minute inbox and Needs you comes forward.
                 os.meka.core.domain.TalkPlace.INBOX -> {
                     scope.launch { core.startMailMoment() }

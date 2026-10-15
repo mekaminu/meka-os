@@ -85,7 +85,7 @@ data class BriefStory(
     val leaveMin: Int? = null,
     /** … and when he's home (local minute), or null. */
     val homeMin: Int? = null,
-    /** Both places on an office day: "Biggleswade 9° now · Canary Wharf 14°, rain from 15:00 — take a coat". */
+    /** Both places on an office day: "Home 9° now · work 14°, rain from 15:00 — take a coat". */
     val placesLine: String? = null,
     /** The trains on the route, as TfL says (already spoken): "Thameslink, Elizabeth line, good service". */
     val route: String? = null,
@@ -120,6 +120,11 @@ data class BriefStory(
     val workClashes: List<String> = emptyList(),
     /** Inbox autopilot, slice 9a: the emails that need him now ([MailAskRules.brief]); null when none (or no mail). */
     val mail: BriefMail? = null,
+    /**
+     * Weekly reflection, slice 2: "The one thing that matters this week: Run 5k." from last week's reflection
+     * ([ReflectionRules.briefSentence]); said after the week's goals on weekdays; null when there is none.
+     */
+    val weekMatters: String? = null,
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -196,6 +201,7 @@ object BriefScriptRules {
             else -> out += if (len.extras) sentence("Habits today: " + listing(s.habits.take(3))) else sentence("Today's habit: ${s.habits[0]}")
         }
         if (!s.weekend && len.extras) s.weekGoals?.let { out += sentence(it) }
+        if (!s.weekend) s.weekMatters?.let { out += it }
         if (len.extras) v.fastingLine?.let { out += sentence(it) }
 
         // Home and family.

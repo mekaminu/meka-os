@@ -219,6 +219,16 @@ struct TodayView: View {
                             .accessibilityLabel(parcels.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Weekly reflection, slice 2: "This week's one thing · Run 5k" from last week's reflection, all week
+                    // (lit on Monday); cross-fades.
+                    if let thing = model.today?.reflection {
+                        Text(thing.text).font(MekaType.caption)
+                            .foregroundStyle(thing.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: thing.text)
+                            .accessibilityLabel(thing.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

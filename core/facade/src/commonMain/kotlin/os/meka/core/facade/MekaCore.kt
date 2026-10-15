@@ -2576,6 +2576,23 @@ class MekaCore(
         )
     }
 
+    /** The week "reflect on my week" was said for (slice 2): its reflection stays open and lit until saved. */
+    private var reflectRequestedWeek: Long? = null
+
+    /**
+     * Weekly reflection, slice 2: "reflect on my week" said to Talk. Review moves to the week Today's card is about
+     * (this week, or last week on a Monday), a skip for it is undone, and its reflection opens lit as on Sunday
+     * evening; nothing is written until Save. The apps then show Review.
+     */
+    suspend fun openReflection() = onCore {
+        reviewOffset = _review.value.card.offset
+        refresh()
+        val ws = _review.value.weekStart
+        if (reflections.all().firstOrNull { it.weekStart == ws }?.skipped == true) reflections.skip(ws, false)
+        reflectRequestedWeek = ws
+        refresh()
+    }
+
     /** "Skip this week" ([on]) or, after a skip, "Reflect now" for the week Review shows. */
     suspend fun skipReflection(on: Boolean) = onCore { reflections.skip(_review.value.weekStart, on); refresh() }
 
@@ -6381,6 +6398,8 @@ class MekaCore(
             trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
             // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
             parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
+            // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
+            reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs())),
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
@@ -6433,6 +6452,8 @@ class MekaCore(
                         asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
                         // Inbox autopilot, slice 9a: how many emails need him and who from.
                         mail = os.meka.core.domain.MailAskRules.brief(activity.mailItems(), nowMs()),
+                        // Weekly reflection, slice 2: the one thing that matters this week.
+                        weekMatters = os.meka.core.domain.ReflectionRules.briefSentence(t.reflection, it.story.length, todayDay),
                     ),
                 )
             }
@@ -6452,7 +6473,7 @@ class MekaCore(
         _reflection.value = ZoneCalendar(timeZone).let { cal ->
             os.meka.core.domain.ReflectionRules.view(
                 _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,
-                cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs()), cal,
+                cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs()), cal, reflectRequestedWeek,
             )
         }
         _search.value = runSearch(all)

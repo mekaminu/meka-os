@@ -855,6 +855,13 @@ final class CoreModel {
         startMailMoment()
     }
 
+    /// "Reflect on my week" said to Talk (weekly reflection, slice 2): Review comes forward on the week Today's card is
+    /// about with its reflection open and lit (the core keeps it open until Save); nothing crosses but the call.
+    func openReflectionFromTalk() {
+        run { try await $0.openReflection() }
+        go(to: .review, reduced: MotionSetting.reduced)
+    }
+
     /// Runs a command-bar row by doing what the same button elsewhere on the Mac does (appearance is the view's).
     func perform(_ row: CommandBarRow, reduced: Bool) {
         if let d = CommandBarNav.destination(row.action) {
