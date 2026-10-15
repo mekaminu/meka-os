@@ -210,10 +210,10 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      */
     BARCA_RESULT("Barça full time", NoticeTier.HEADS_UP),
     /**
-     * Meeting prep, slice 1 ([MeetingPrepRules.notices]): fifteen minutes before a meeting with other people — "Prep ·
+     * Meeting prep, slice 1 ([MeetingPrepRules.notices]): fifteen minutes (his choice since slice 2, or off) before a meeting with other people — "Prep ·
      * Quote review at 14:00" · "With Sam Taylor · last email Tue 13:02 · you promised 1". Opens Today.
      */
-    MEETING_PREP("Meeting prep (15 min before)", NoticeTier.HEADS_UP),
+    MEETING_PREP("Meeting prep (before meetings)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
@@ -753,6 +753,8 @@ object NoticeSources {
         kidRecords: Map<String, KidRecord> = emptyMap(),
         /** Meeting prep, slice 1: the synced emails, for each guest's last one ([MeetingPrepRules.notices]). */
         mail: List<MailItem> = emptyList(),
+        /** Meeting prep, slice 2: his lead time in minutes (0 = off; [MeetingPrepRules.read]). */
+        prepLeadMin: Int = MeetingPrepRules.LEAD_MIN,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -899,7 +901,7 @@ object NoticeSources {
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         out += KidsRules.notices(kids, kidRecords, nowMs, cal)
         // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.
-        out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal)
+        out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal, prepLeadMin)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)
         // A line on the route not running well during an office day's commute (Places item 4): a heads-up, once.
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)

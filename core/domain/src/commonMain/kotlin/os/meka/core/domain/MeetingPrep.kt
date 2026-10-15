@@ -1,5 +1,8 @@
 package os.meka.core.domain
 
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.fv
+
 /**
  * Meeting prep, slice 1 (build plan V1, "Meeting prep"; Meka's email assistant set, Fri 16 Oct): fifteen minutes
  * before a meeting with other people, who's coming, the last email MEKA holds from each of them and what's open
@@ -17,8 +20,13 @@ data class PrepPerson(
     val lastEmail: String?,
     /** "You promised: Send the figures · by today", "Waiting for: Signed contract · chase Fri 16 Oct". */
     val owed: List<String>,
+    /**
+     * Slice 2: "Last met Tue 6 Oct · “Quote kickoff”" — the latest earlier meeting in the calendar with this person on it
+     * (only meetings mirrored since guests were written, slice 1); null when there is none.
+     */
+    val lastMet: String? = null,
 ) {
-    val hasSomething: Boolean get() = lastEmail != null || owed.isNotEmpty()
+    val hasSomething: Boolean get() = lastEmail != null || owed.isNotEmpty() || lastMet != null
 }
 
 data class MeetingPrep(
@@ -36,7 +44,38 @@ data class MeetingPrep(
     val joinUrl: String? = null,
 )
 
+/**
+ * Slice 2: how long before a meeting the prep shows (Today's card and the heads-up), or Off. Synced on one `context_mode`
+ * entity, id [MeetingPrepRules.ENTITY_ID] (ADR-008 addendum 2026-10-15): `leadMin` (Int64, 0 = off) and `changedAtMs`,
+ * LWW, either app writes. Absent = [MeetingPrepRules.LEAD_MIN] (15 min), so nothing changes until he picks.
+ */
+enum class MeetingPrepLead(val key: String, val label: String, val minutes: Int) {
+    OFF("off", "Off", 0),
+    FIVE("5", "5 min", 5),
+    TEN("10", "10 min", 10),
+    FIFTEEN("15", "15 min", 15),
+    THIRTY("30", "30 min", 30),
+    ;
+
+    companion object {
+        fun of(key: String?): MeetingPrepLead? = entries.firstOrNull { it.key == key }
+        /** A stored lead back to its chip: 0 or less is Off, else the nearest chip at or above it (never Off by mistake). */
+        fun ofMinutes(min: Long): MeetingPrepLead =
+            if (min <= 0) OFF else entries.filter { it != OFF && it.minutes >= min }.minByOrNull { it.minutes } ?: THIRTY
+    }
+}
+
+object MeetingPrepFields {
+    const val LEAD_MIN = "leadMin"
+    const val CHANGED_AT = "changedAtMs"
+}
+
 object MeetingPrepRules {
+    const val ENTITY_ID = "meeting_prep"
+    const val TITLE = "Meeting prep"
+    val DEFAULT = MeetingPrepLead.FIFTEEN
+    /** How far back "Last met" looks. */
+    const val MET_LOOKBACK_DAYS = 365
     const val LEAD_MIN = 15
     const val AFTER_START_MIN = 10
     const val MAX_LINES = 4
@@ -46,16 +85,37 @@ object MeetingPrepRules {
     const val NOTICE_HORIZON_H = 24
     const val NOTHING_LINE = "No recent emails or anything open with them"
 
+    fun read(fields: Map<String, FieldValue>?): MeetingPrepLead =
+        fields?.get(MeetingPrepFields.LEAD_MIN)?.longOrNull?.let { MeetingPrepLead.ofMinutes(it) } ?: DEFAULT
+
+    fun settingFields(lead: MeetingPrepLead, nowMs: Long): Map<String, FieldValue> =
+        mapOf(MeetingPrepFields.LEAD_MIN to lead.minutes.toLong().fv(), MeetingPrepFields.CHANGED_AT to nowMs.fv())
+
+    /** Under the title in Mail. */
+    fun settingLine(lead: MeetingPrepLead): String =
+        if (lead == MeetingPrepLead.OFF) "Off · no prep on Today and no heads-up before meetings"
+        else "${lead.label} before a meeting with other people · on Today and as a heads-up: who's coming, when you last met, " +
+            "your last emails and what's open"
+
+    /** What Mail says after a change. */
+    fun switchedLine(lead: MeetingPrepLead): String =
+        if (lead == MeetingPrepLead.OFF) "Meeting prep off" else "Meeting prep ${lead.label} before each meeting with other people"
+
     /** A timed event with other people on it (not a fixture, not all-day). */
     fun isMeeting(e: CalendarEvent): Boolean =
         !e.allDay && !e.isFixture && e.guests.isNotEmpty() && e.endAtMs >= e.startAtMs
 
-    /** The meeting to prepare for now: the soonest one between [LEAD_MIN] before its start and [AFTER_START_MIN] after. */
-    fun next(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long): CalendarEvent? =
-        events.filter { e ->
+    /**
+     * The meeting to prepare for now: the soonest one between [leadMin] (his setting, slice 2) before its start and
+     * [AFTER_START_MIN] after; none when prep is off.
+     */
+    fun next(events: List<CalendarEvent>, marks: EventMarks, nowMs: Long, leadMin: Int = LEAD_MIN): CalendarEvent? {
+        if (leadMin <= 0) return null
+        return events.filter { e ->
             isMeeting(e) && !marks.isHidden(e.id) &&
-                nowMs >= e.startAtMs - LEAD_MIN * 60_000L && nowMs < e.startAtMs + AFTER_START_MIN * 60_000L
+                nowMs >= e.startAtMs - leadMin * 60_000L && nowMs < e.startAtMs + AFTER_START_MIN * 60_000L
         }.minWithOrNull(compareBy<CalendarEvent> { it.startAtMs }.thenBy { it.id })
+    }
 
     /** Today's card, or null when no meeting with other people is about to start. */
     fun card(
@@ -66,7 +126,8 @@ object MeetingPrepRules {
         waiting: List<WaitingItem>,
         nowMs: Long,
         cal: LocalCalendar,
-    ): MeetingPrep? = next(events, marks, nowMs)?.let { prep(it, mail, promised, waiting, nowMs, cal) }
+        leadMin: Int = LEAD_MIN,
+    ): MeetingPrep? = next(events, marks, nowMs, leadMin)?.let { prep(it, mail, promised, waiting, nowMs, cal, events, marks) }
 
     fun prep(
         e: CalendarEvent,
@@ -75,8 +136,11 @@ object MeetingPrepRules {
         waiting: List<WaitingItem>,
         nowMs: Long,
         cal: LocalCalendar,
+        /** Slice 2: the calendar, for when he last met each guest. */
+        events: List<CalendarEvent> = emptyList(),
+        marks: EventMarks? = null,
     ): MeetingPrep {
-        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal) }
+        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal, lastMet(it, e, events, marks, nowMs, cal)) }
         val lines = lines(people)
         val headline = headline(e, nowMs, cal)
         val who = whoLine(e.guests)
@@ -84,6 +148,7 @@ object MeetingPrepRules {
             append(headline.replace(" · ", ". ")).append(". ").append(who).append('.')
             people.filter { it.hasSomething }.forEach { p ->
                 append(' ').append(p.name).append('.')
+                p.lastMet?.let { append(' ').append(it.replace(" · ", ", ")).append('.') }
                 p.lastEmail?.let { append(' ').append(it.replace(" · ", ", ")).append('.') }
                 p.owed.forEach { append(' ').append(it.replace(" · ", ", ")).append('.') }
             }
@@ -116,6 +181,7 @@ object MeetingPrepRules {
         waiting: List<WaitingItem>,
         nowMs: Long,
         cal: LocalCalendar,
+        lastMet: String? = null,
     ): PrepPerson {
         val key = People.key(name)
         val theirs = mail.filter { same(it.from, key) && it.receivedAtMs <= nowMs }
@@ -132,13 +198,42 @@ object MeetingPrepRules {
             waiting.filter { w -> w.who?.let { same(it, key) } == true }
                 .sortedWith(compareBy<WaitingItem> { if (it.state == DueState.DUE) 0 else 1 }.thenBy { it.chaseDay ?: Long.MAX_VALUE }.thenBy { it.id })
                 .map { "Waiting for: ${it.title}" + (bare(it.meta, key)?.let { m -> " · $m" } ?: "") }
-        return PrepPerson(name, lastEmail, owed)
+        return PrepPerson(name, lastEmail, owed, lastMet)
     }
 
-    /** Today's lines: each person's last email, then what's owed, named ("Sam Taylor · …"); capped with "+N more". */
+    /**
+     * Slice 2: "Last met Tue 6 Oct · “Quote kickoff”" ("Last met yesterday", "Last met earlier today") — the latest
+     * meeting before [meeting] (started before it, already begun by now, not hidden, within [MET_LOOKBACK_DAYS]) with this
+     * person on it; null when the calendar holds none.
+     */
+    fun lastMet(
+        name: String, meeting: CalendarEvent, events: List<CalendarEvent>, marks: EventMarks?, nowMs: Long, cal: LocalCalendar,
+    ): String? {
+        val key = People.key(name)
+        val since = meeting.startAtMs - MET_LOOKBACK_DAYS * 86_400_000L
+        val met = events.filter { e ->
+            e.id != meeting.id && isMeeting(e) && marks?.isHidden(e.id) != true && e.startAtMs < meeting.startAtMs &&
+                e.startAtMs <= nowMs && e.startAtMs >= since && e.guests.any { same(it, key) }
+        }.maxWithOrNull(compareBy<CalendarEvent> { it.startAtMs }.thenBy { it.id }) ?: return null
+        val day = cal.epochDayOf(met.startAtMs)
+        val today = cal.epochDayOf(nowMs)
+        val whenLabel = when (day) {
+            today -> "earlier today"
+            today - 1 -> "yesterday"
+            else -> CivilDate.shortLabel(day)
+        }
+        val title = met.title.trim().take(50).takeIf { it.isNotEmpty() }?.let { " · “$it”" }.orEmpty()
+        return "Last met $whenLabel$title"
+    }
+
+    /**
+     * Today's lines: each person's last email, then what's owed, then (slice 2) when you last met, named ("Sam Taylor ·
+     * …"); capped with "+N more".
+     */
     fun lines(people: List<PrepPerson>): List<String> {
         val all = people.flatMap { p ->
-            listOfNotNull(p.lastEmail?.let { "${p.name} · ${lower(it)}" }) + p.owed.map { "${p.name} · ${lower(it)}" }
+            listOfNotNull(p.lastEmail?.let { "${p.name} · ${lower(it)}" }) + p.owed.map { "${p.name} · ${lower(it)}" } +
+                listOfNotNull(p.lastMet?.let { "${p.name} · ${lower(it)}" })
         }
         if (all.isEmpty()) return listOf(NOTHING_LINE)
         if (all.size <= MAX_LINES) return all
@@ -146,7 +241,7 @@ object MeetingPrepRules {
     }
 
     /**
-     * One heads-up per meeting with other people, [LEAD_MIN] before it starts: "Prep · Quote review at 14:00" ·
+     * One heads-up per meeting with other people, [leadMin] (his setting, slice 2; none when off) before it starts: "Prep · Quote review at 14:00" ·
      * "With Sam Taylor · last email Tue 13:02 · you promised 1". Opens Today; gone [AFTER_START_MIN] after the start.
      */
     fun notices(
@@ -157,23 +252,28 @@ object MeetingPrepRules {
         waiting: List<WaitingItem>,
         nowMs: Long,
         cal: LocalCalendar,
-    ): List<Notice> = events.filter { e ->
+        leadMin: Int = LEAD_MIN,
+    ): List<Notice> = if (leadMin <= 0) emptyList() else events.filter { e ->
         isMeeting(e) && !marks.isHidden(e.id) && e.startAtMs + AFTER_START_MIN * 60_000L > nowMs &&
             e.startAtMs - nowMs <= NOTICE_HORIZON_H * 3_600_000L
     }.map { e ->
-        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal) }
+        val people = e.guests.map { person(it, mail, promised, waiting, nowMs, cal, lastMet(it, e, events, marks, nowMs, cal)) }
         val at = LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))
         Notice(
             key = "prep:${e.id}:${e.startAtMs}", source = NoticeSource.MEETING_PREP, tier = NoticeTier.HEADS_UP,
             title = "Prep · ${e.title.trim().take(60)} at $at", text = noticeText(e.guests, people),
-            atMs = e.startAtMs - LEAD_MIN * 60_000L, target = NoticeTarget.TODAY,
+            atMs = e.startAtMs - leadMin * 60_000L, target = NoticeTarget.TODAY,
             expiresAtMs = e.startAtMs + AFTER_START_MIN * 60_000L,
         )
     }
 
-    /** "With Sam Taylor · last email Tue 13:02 · you promised 1 · waiting for 1". */
+    /**
+     * "With Sam Taylor · last email Tue 13:02 · you promised 1 · waiting for 1"; with no email held, when they last met
+     * ("With Sam Taylor · last met Tue 6 Oct", slice 2).
+     */
     fun noticeText(guests: List<String>, people: List<PrepPerson>): String {
-        val newest = people.mapNotNull { it.lastEmail }.firstOrNull()?.substringBefore(" · “")?.let(::lower)
+        val newest = (people.mapNotNull { it.lastEmail }.firstOrNull() ?: people.mapNotNull { it.lastMet }.firstOrNull())
+            ?.substringBefore(" · “")?.let(::lower)
         val promised = people.sumOf { p -> p.owed.count { it.startsWith("You promised") } }
         val waiting = people.sumOf { p -> p.owed.count { it.startsWith("Waiting for") } }
         return listOfNotNull(

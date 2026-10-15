@@ -24,3 +24,4 @@ tip: If they can't make the times you offered, their answer says so with Suggest
 tip: When they write back picking one of the times you offered, their email says "Sam picked Tue 20 Oct, 13:00–14:00"; Book it puts it in your calendar (Undo for five seconds), and nothing is sent to them.
 tip: To have renewals and promises from your mail added for you, turn on Renewals and promises from mail in What Navilife may do; each one shows in Activity with Undo, and an undone one comes back to Needs you with Add.
 tip: Fifteen minutes before a meeting with other people, Today shows Prep: who is coming, the last email from each of them and what you promised them or are waiting on from them; a heads-up says the same.
+tip: Prep also says when you last met each of them ("Last met Tue 6 Oct"); choose how early it comes (5, 10, 15 or 30 minutes) or turn it off under Meeting prep in Mail.

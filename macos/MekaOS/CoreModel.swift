@@ -206,6 +206,8 @@ final class CoreModel {
     private(set) var mailMomentKey: String?
     /// Slice 3f: Warranty reminders' threshold as its key ("off", "50", "100", "250", "500"); nil until read.
     private(set) var mailWarrantyKey: String?
+    /// Meeting prep, slice 2: how early the prep comes ("off", "5", "10", "15", "30"); the Mail sheet's chips.
+    private(set) var meetingPrepLeadKey: String?
     /// Follow-up radar, slice 4: Mail → Chase waits (the people he set his own chase wait for); nil until read.
     private(set) var followUpWaits: FollowUpWaitsPanel?
     /// Slice 4: whether the Mail sheet offers Undo on the last Chase waits change.
@@ -4476,6 +4478,22 @@ final class CoreModel {
     func loadMailMomentKey() async {
         guard let core else { return }
         mailMomentKey = try? await core.mailMomentTimeKey()
+    }
+
+    /// Meeting prep, slice 2: the Mail sheet reads how early the prep comes (a String key comes back).
+    func loadMeetingPrepLeadKey() async {
+        guard let core else { return }
+        meetingPrepLeadKey = try? await core.meetingPrepLeadKey()
+    }
+
+    /// Off · 5 · 10 · 15 · 30 min in the Mail sheet (synced). Only the key (a String) crosses; the line comes back.
+    func setMeetingPrepLeadKey(_ key: String) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let line = try? await core.setMeetingPrepLeadKey(key: key) else { return }
+        meetingPrepLeadKey = key
+        mailNote = line
     }
 
     /// Slice 3f: the Mail sheet reads Warranty reminders' threshold (a String key comes back).

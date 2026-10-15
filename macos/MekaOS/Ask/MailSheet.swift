@@ -63,6 +63,13 @@ struct MailSheet: View {
                         .staggeredAppear(2)
                     }
                 }
+                // Meeting prep, slice 2: how early the prep comes, or Off (synced with the Fold; works without mail).
+                if let key = model.meetingPrepLeadKey {
+                    PrepLeadPanelView(key: key, palette: palette) { picked in
+                        Task { await model.setMeetingPrepLeadKey(picked) }
+                    }
+                    .staggeredAppear(2)
+                }
                 ForEach(Array(view.rows.enumerated()), id: \.element.email) { i, row in
                     MailAccountRowView(row: row, palette: palette, onReconnect: {
                         guard let c = view.connects.first(where: { $0.provider == row.provider }) else { return }
@@ -146,7 +153,7 @@ struct MailSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mail?.rows.map { $0.rules.map(\.id) } ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.followUpWaits?.rows.map(\.id) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.followUpWaitUndo)
-        .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey(); await model.loadFollowUpWaits() }
+        .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey(); await model.loadMeetingPrepLeadKey(); await model.loadFollowUpWaits() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadMail() }
         }
@@ -196,6 +203,47 @@ private struct MomentPanelView: View {
 }
 
 /// Slice 3f: Warranty reminders — Off · £50 · £100 · £250 · £500 (the lit chip in the accent; the line cross-fades).
+/// Meeting prep, slice 2: Off · 5 · 10 · 15 · 30 min chips (the lit one in the accent, tick haptic); the line cross-fades.
+private struct PrepLeadPanelView: View {
+    let key: String
+    let palette: MekaPalette
+    let onPick: (String) -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    private let leads: [MeetingPrepLead] = [.off, .five, .ten, .fifteen, .thirty]
+
+    var body: some View {
+        let current = MeetingPrepLead.companion.of(key: key) ?? MeetingPrepLead.fifteen
+        let line = MeetingPrepRules.shared.settingLine(lead: current)
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(MeetingPrepRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(leads, id: \.key) { l in
+                    let lit = l.key == key
+                    Button(l.label) { if !lit { onPick(l.key) } }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
+                        .padding(.horizontal, MekaSpace.m)
+                        .padding(.vertical, MekaSpace.xxs)
+                        .background(Capsule().fill(lit ? palette.accent : palette.hairline))
+                        .accessibilityLabel("Meeting prep: \(l.label)")
+                        .accessibilityAddTraits(lit ? .isSelected : [])
+                }
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: key)
+    }
+}
+
 private struct WarrantyPanelView: View {
     let key: String
     let palette: MekaPalette

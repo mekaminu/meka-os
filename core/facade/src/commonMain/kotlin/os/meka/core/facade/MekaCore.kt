@@ -4993,6 +4993,38 @@ class MekaCore(
         return setMailMomentTime(time)
     }
 
+    // ---- Meeting prep, slice 2: how early, or off ----
+
+    private fun meetingPrepLead(): os.meka.core.domain.MeetingPrepLead = os.meka.core.domain.MeetingPrepRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MeetingPrepRules.ENTITY_ID)?.fields,
+    )
+
+    /** Mail pane: how long before a meeting the prep shows (absent = 15 min). */
+    suspend fun meetingPrepLeadSetting(): os.meka.core.domain.MeetingPrepLead = onCore { meetingPrepLead() }
+
+    /** Mail pane: Off · 5 · 10 · 15 · 30 min (synced). Today and the heads-up follow at once. Returns what the pane says. */
+    suspend fun setMeetingPrepLead(lead: os.meka.core.domain.MeetingPrepLead): String = onCore {
+        if (meetingPrepLead() != lead ||
+            replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MeetingPrepRules.ENTITY_ID)?.get(os.meka.core.domain.MeetingPrepFields.LEAD_MIN) == null
+        ) {
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MeetingPrepRules.ENTITY_ID,
+                os.meka.core.domain.MeetingPrepRules.settingFields(lead, nowMs()),
+            )
+        }
+        refresh()
+        os.meka.core.domain.MeetingPrepRules.switchedLine(lead)
+    }
+
+    /** The Mac's way in (only Strings cross): the lead's key ("off", "5", "10", "15", "30"). */
+    suspend fun meetingPrepLeadKey(): String = meetingPrepLeadSetting().key
+
+    /** The Mac's way in: [key] is a [os.meka.core.domain.MeetingPrepLead] key; an unknown one changes nothing. */
+    suspend fun setMeetingPrepLeadKey(key: String): String {
+        val lead = os.meka.core.domain.MeetingPrepLead.of(key) ?: return os.meka.core.domain.MeetingPrepRules.switchedLine(meetingPrepLeadSetting())
+        return setMeetingPrepLead(lead)
+    }
+
     // ---- Inbox autopilot, slice 3f: warranty reminders from receipts ----
 
     /** Mail pane: the lowest order price that puts a warranty's end on Renewals (synced; absent = £100). */
@@ -7033,7 +7065,7 @@ class MekaCore(
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),
             // Meeting prep, slice 1: from 15 min before a meeting with other people, who's coming and what's open.
             meetingPrep = os.meka.core.domain.MeetingPrepRules.card(
-                dayEvents, marks, activity.mailItems(), listsNow.promised, listsNow.waiting, nowMs(), cal,
+                dayEvents, marks, activity.mailItems(), listsNow.promised, listsNow.waiting, nowMs(), cal, meetingPrepLead().minutes,
             ),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
@@ -7273,6 +7305,8 @@ class MekaCore(
             kids = aboutYou.profile().children, kidRecords = kids.records(),
             // Meeting prep, slice 1: each guest's last email for the heads-up 15 min before.
             mail = activity.mailItems(),
+            // Meeting prep, slice 2: how early (or off), his synced choice.
+            prepLeadMin = meetingPrepLead().minutes,
         )
 
     /**

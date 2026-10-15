@@ -79,6 +79,8 @@ import os.meka.core.domain.MailRuleRow
 import os.meka.core.domain.MailLabel
 import os.meka.core.domain.MailMomentRules
 import os.meka.core.domain.MailMomentTime
+import os.meka.core.domain.MeetingPrepLead
+import os.meka.core.domain.MeetingPrepRules
 import os.meka.core.domain.MailWarrantyLevel
 import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.facade.ConnectStart
@@ -113,6 +115,9 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     // Slice 7: when the ten-minute inbox comes (synced).
     var momentTime by remember { mutableStateOf<MailMomentTime?>(null) }
     LaunchedEffect(Unit) { momentTime = runCatching { core.mailMomentTime() }.getOrNull() }
+    // Meeting prep, slice 2: how early the prep comes before a meeting, or Off (synced).
+    var prepLead by remember { mutableStateOf<MeetingPrepLead?>(null) }
+    LaunchedEffect(Unit) { prepLead = runCatching { core.meetingPrepLeadSetting() }.getOrNull() }
     // Slice 3f: the lowest order price that puts a warranty's end on Renewals (synced).
     var warranty by remember { mutableStateOf<MailWarrantyLevel?>(null) }
     LaunchedEffect(Unit) { warranty = runCatching { core.mailWarranty() }.getOrNull() }
@@ -171,6 +176,13 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         message = null
         note = core.setMailMomentTime(time)
         momentTime = time
+    }
+
+    fun setPrepLead(lead: MeetingPrepLead) = scope.launch {
+        haptics.tick()
+        message = null
+        note = core.setMeetingPrepLead(lead)
+        prepLead = lead
     }
 
     fun setWarranty(level: MailWarrantyLevel) = scope.launch {
@@ -257,6 +269,8 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 if (v.autopilot != null) waits?.let { p ->
                     WaitsCard(p, Modifier.appear(rememberAppearance(0)), onPick = { id, d -> changeWait(id, d) })
                 }
+                // Meeting prep, slice 2: works from the calendar alone, so it shows whether or not mail is connected.
+                prepLead?.let { l -> PrepLeadCard(l, Modifier.appear(rememberAppearance(0))) { setPrepLead(it) } }
                 v.rows.forEachIndexed { i, row ->
                     MailAccountCard(
                         row, Modifier.appear(rememberAppearance(i + 1)),
@@ -460,6 +474,41 @@ private fun MomentCard(time: MailMomentTime, modifier: Modifier, onPick: (MailMo
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
                         .clickable(role = Role.Button) { if (!lit) onPick(t) }
                         .semantics { selected = lit; contentDescription = "Ten-minute inbox: ${t.label}" }
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Meeting prep, slice 2: how early the prep comes — Off · 5 · 10 · 15 · 30 min chips (the lit one blends to the accent
+ * with a tick haptic; the line cross-fades). Synced with the Mac.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PrepLeadCard(lead: MeetingPrepLead, modifier: Modifier, onPick: (MeetingPrepLead) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MeetingPrepRules.TITLE + ". " + MeetingPrepRules.settingLine(lead) }) {
+            Text(MeetingPrepRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(MeetingPrepRules.settingLine(lead), animationSpec = MekaMotion.appear(reduced), label = "prep-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            MeetingPrepLead.entries.forEach { l ->
+                val lit = l == lead
+                val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "prep-chip")
+                val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "prep-ink")
+                Text(
+                    l.label, style = MekaType.itemMeta, color = ink,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                        .clickable(role = Role.Button) { if (!lit) onPick(l) }
+                        .semantics { selected = lit; contentDescription = "Meeting prep: ${l.label}" }
                         .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
             }

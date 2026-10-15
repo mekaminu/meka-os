@@ -110,4 +110,50 @@ class MeetingPrepTest {
         assertEquals(NoticeTarget.TODAY, n.target)
         assertTrue(NoticeSource.MEETING_PREP in NoticeSource.ADJUSTABLE)
     }
+
+    @Test
+    fun whenYouLastMetEachGuest() {
+        val now = at(13, 50)
+        val meeting = event("a", 14, listOf("Sam Taylor", "Alex Green", "Robin Lee"))
+        val events = listOf(
+            meeting,
+            event("old", 10, listOf("Sam Taylor"), title = "Quote kickoff").copy(startAtMs = at(10, d = day - 9), endAtMs = at(11, d = day - 9)),
+            event("newer", 10, listOf("Sam"), title = "Site visit").copy(startAtMs = at(10, d = day - 1), endAtMs = at(11, d = day - 1)),
+            event("hidden", 9, listOf("Sam Taylor"), title = "Hidden one"),
+            event("later", 16, listOf("Alex Green"), title = "Later today"),
+            event("alexToday", 9, listOf("Alex Green"), title = "Stand-up"),
+            event("solo", 8, emptyList(), title = "Focus"),
+            event("ancient", 10, listOf("Robin Lee")).copy(startAtMs = at(10, d = day - 400), endAtMs = at(11, d = day - 400)),
+        )
+        val marks = EventMarks(hidden = setOf("hidden"), prepTasks = emptyMap())
+        val p = MeetingPrepRules.prep(meeting, emptyList(), emptyList(), emptyList(), now, cal, events, marks)
+        assertEquals("Last met yesterday · “Site visit”", p.people[0].lastMet)
+        assertEquals("Last met earlier today · “Stand-up”", p.people[1].lastMet)
+        assertNull(p.people[2].lastMet) // over a year ago
+        assertEquals(listOf("Sam Taylor · last met yesterday · “Site visit”", "Alex Green · last met earlier today · “Stand-up”"), p.lines)
+        assertEquals("Last met Tue 6 Oct · “Quote kickoff”", MeetingPrepRules.lastMet("Sam Taylor", meeting, events - events[2], marks, now, cal))
+        // With no email held, the heads-up says when they last met.
+        val n = MeetingPrepRules.notices(events, marks, emptyList(), emptyList(), emptyList(), at(10), cal).first { it.key == "prep:a:${at(14)}" }
+        assertEquals("With Sam Taylor, Alex Green and Robin Lee · last met yesterday", n.text)
+    }
+
+    @Test
+    fun hisLeadTimeOrOff() {
+        val events = listOf(event("a", 14, listOf("Sam Taylor")))
+        fun card(now: Long, lead: Int) = MeetingPrepRules.card(events, noMarks, emptyList(), emptyList(), emptyList(), now, cal, lead)
+        assertNull(card(at(13, 29), 30))
+        assertEquals("Prep · Quote review at 14:00 · in 30 min", card(at(13, 30), 30)!!.headline)
+        assertNull(card(at(13, 54), 5))
+        assertEquals("Prep · Quote review at 14:00 · in 5 min", card(at(13, 55), 5)!!.headline)
+        assertNull(card(at(13, 58), 0))
+        assertEquals(at(13, 30), MeetingPrepRules.notices(events, noMarks, emptyList(), emptyList(), emptyList(), at(10), cal, 30).single().atMs)
+        assertTrue(MeetingPrepRules.notices(events, noMarks, emptyList(), emptyList(), emptyList(), at(10), cal, 0).isEmpty())
+        // The setting: absent is 15 min; stored minutes come back to their chip; 0 is Off.
+        assertEquals(MeetingPrepLead.FIFTEEN, MeetingPrepRules.read(null))
+        assertEquals(MeetingPrepLead.THIRTY, MeetingPrepRules.read(MeetingPrepRules.settingFields(MeetingPrepLead.THIRTY, 1L)))
+        assertEquals(MeetingPrepLead.OFF, MeetingPrepRules.read(MeetingPrepRules.settingFields(MeetingPrepLead.OFF, 1L)))
+        assertEquals(MeetingPrepLead.TEN, MeetingPrepLead.ofMinutes(7))
+        assertEquals(MeetingPrepLead.THIRTY, MeetingPrepLead.ofMinutes(90))
+        assertEquals("Off · no prep on Today and no heads-up before meetings", MeetingPrepRules.settingLine(MeetingPrepLead.OFF))
+    }
 }
