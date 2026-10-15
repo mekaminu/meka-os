@@ -191,7 +191,7 @@ struct NeedsYouView: View {
                     // The weekly "Not opened in 30 days" (Inbox autopilot, slice 5c), from Saturday 09:00 until answered.
                     UnopenedOfferView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.mailUnopened == nil ? 0 : MekaSpace.m)
-                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
+                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {
                         // The breathing check ring beside a light line and what lands here (catalogue "Empty
                         // states"; Fold review 2026-10-08, item 7); Off: still.
                         HStack(spacing: MekaSpace.m) {
@@ -210,6 +210,8 @@ struct NeedsYouView: View {
                     } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
                     }
+                    // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
+                    ScamTextsView(palette: palette)
                 }
                 .padding(.horizontal, MekaSpace.gutterWide)
                 .padding(.vertical, MekaSpace.xl)

@@ -209,7 +209,8 @@ class TriageCards(private val replica: Replica, private val nowMs: () -> Long, p
     private fun card(raw: Stored): TriageCard {
         // A group name stored with the app's count ("BUFC U7s (2 messages)") reads as the group (Fold review 2026-10-12).
         val s = raw.copy(group = ChatTitleRules.cleanOrNull(raw.group))
-        val who = s.person.trim().take(40)
+        // A number as people write it ("07480 538349"), Mac presentation pass item 6.
+        val who = NeedsYouCardRules.who(s.person).take(40)
         val time = TaskWhenRules.timeLabel(calendar.minuteOfDay(s.atMs))
         val from = if (s.group != null) "$who in ${s.group.trim().take(40)} · $time" else "$who · $time"
         val gist = when {

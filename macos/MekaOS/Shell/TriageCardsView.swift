@@ -129,8 +129,10 @@ private struct TriageCardRow: View {
             if let name = card.askedBy {
                 Text(TriageChatRules.shared.askedLine(name: name)).font(MekaType.itemMeta).foregroundStyle(palette.accent)
             }
-            Text("\(card.from) · \(card.lane.label)").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-            Text(card.gist).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(3)
+            // One strong line (who · what they need), the rest muted (Mac presentation pass, item 6).
+            let look = NeedsYouCardRules.shared
+            Text(look.headline(card: card)).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
+            Text(look.meta(card: card)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
             if let draft = card.draft {
                 Text(draft).font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .textSelection(.enabled)
@@ -145,9 +147,10 @@ private struct TriageCardRow: View {
                     pill(quiet, filled: false, quiet: true, spoken: "\(quiet): \(rules.who(card: card))") { answer(false) }
                 }
             }
-            .padding(.top, MekaSpace.m)
+            .padding(.top, MekaSpace.xs)
         }
-        .padding(MekaSpace.m)
+        // Less inner padding at the Mac's type sizes, still on the 8/16 rhythm.
+        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .accessibilityElement(children: .contain)

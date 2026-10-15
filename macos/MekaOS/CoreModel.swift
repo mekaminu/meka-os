@@ -175,10 +175,13 @@ final class CoreModel {
     var triageChats: [TriageChat] {
         // A busy chat's one-line summary rides on its card (slice 3c), made on the Fold and synced.
         ChatSummaryRules.shared.withSummaries(
-            chats: TriageChatRules.shared.withGists(chats: TriageChatRules.shared.chatsWith(cards: triage, requests: requests), gists: groupGists),
+            // Likely-scam texts are kept out (Mac presentation pass, item 6): they sit greyed under LIKELY SCAMS.
+            chats: TriageChatRules.shared.withGists(chats: TriageChatRules.shared.chatsWith(cards: NeedsYouCardRules.shared.shown(cards: triage), requests: requests), gists: groupGists),
             summaries: chatSummaries
         )
     }
+    /// Texts the AI judged a scam (Mac presentation pass, item 6): out of Needs you, greyed at its foot with Delete/Block.
+    var scamTriage: [TriageCard] { NeedsYouCardRules.shared.scams(cards: triage) }
     /// Busy chats' one-line summaries (messages grouped per chat, slice 3c): made on the Fold, never the messages.
     private(set) var chatSummaries: [ChatSummary] = []
     /// The digest's cards no chat carries: GroupGistsView shows only these (slice 3b).
@@ -4140,6 +4143,34 @@ final class CoreModel {
                 let seen = try await core.seenTriageChat(messageIds: ids).int32Value
                 if !groupKeys.isEmpty { _ = try await core.catchUpGroupDigest(groupKeys: groupKeys) }
                 if seen > 0 { offerEventUndo(line, nil) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Delete on a likely scam (Mac presentation pass, item 6): clears it on both devices like Not now; only the id
+    /// crosses to the core.
+    func deleteScamText(_ card: TriageCard) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        let id = card.id
+        let line = NeedsYouCardRules.shared.deletedLine(card: card)
+        Task {
+            do {
+                if try await core.dismissTriage(messageId: id).boolValue { offerEventUndo(line, nil) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Block number on a likely scam: the sender's number goes on the block list, then the text is deleted.
+    func blockScamText(_ card: TriageCard) {
+        guard let core, let number = NeedsYouCardRules.shared.number(card: card) else { return }
+        // Only Strings are kept: the card itself never goes into the task.
+        let id = card.id
+        let line = NeedsYouCardRules.shared.deletedLine(card: card)
+        Task {
+            guard await blockCaller(number) else { return }
+            do {
+                if try await core.dismissTriage(messageId: id).boolValue { offerEventUndo(line, nil) }
             } catch { lastError = error.localizedDescription }
         }
     }

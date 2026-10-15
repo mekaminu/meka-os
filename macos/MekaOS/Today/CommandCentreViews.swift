@@ -71,7 +71,7 @@ struct CommandNeedsYouView: View {
                     MailChaseView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     UnopenedOfferView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
-                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triage.isEmpty && model.needsYouAsks == 0 {
+                    if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {
                         // The breathing check ring and the line, then what's coming instead of a blank column (Fold
                         // review 2026-10-09 00:10, item 6).
                         HStack(spacing: MekaSpace.m) {
@@ -85,6 +85,8 @@ struct CommandNeedsYouView: View {
                     } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
                     }
+                    // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
+                    ScamTextsView(palette: palette)
                 }
                 .padding(.horizontal, MekaSpace.gutterWide)
                 .padding(.top, MekaSpace.xs)

@@ -167,18 +167,40 @@ struct EventUndoBar: View {
 
 /// An event: time on the left, title and where/which calendar under it. A running one is marked "Now".
 struct TimelineEventRow: View {
+    @Environment(CoreModel.self) private var model
     let row: TimelineRow
     let past: Bool
     let palette: MekaPalette
 
     var body: some View {
+        // Mac presentation pass, item 7: "Rex or Logan?" read as a glitch inline; a club session nobody is set for shows
+        // a small "Whose is it? ›" chip (a menu of the children) and the place on its own line.
+        let club = ClubChildRules.shared
+        let asking = !past && row.event != nil && club.asking(detail: row.detail)
+        let detail = asking ? club.withoutAsk(detail: row.detail) : row.detail
         HStack(alignment: .firstTextBaseline, spacing: 0) {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(past ? palette.textTertiary : palette.textSecondary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(past ? palette.textTertiary : palette.textPrimary)
-                let line = [row.running ? "Now" : nil, row.detail].compactMap { $0 }.joined(separator: " · ")
+                if asking, let event = row.event {
+                    Menu {
+                        ForEach(club.NAMES, id: \.self) { name in
+                            Button(name) { model.setClubChild(event, name) }
+                        }
+                    } label: {
+                        Text(club.WHOSE).font(MekaType.captionStrong).foregroundStyle(palette.accent)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                            .background(palette.surfaceRaised, in: Capsule())
+                    }
+                    .menuStyle(.button)
+                    .buttonStyle(.plain)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Choose whose session this is; every one in the series follows")
+                }
+                let line = [row.running ? "Now" : nil, detail].compactMap { $0 }.joined(separator: " · ")
                 if !line.isEmpty {
                     Text(line).font(MekaType.caption).foregroundStyle(row.running ? palette.accent : palette.textTertiary)
                 }

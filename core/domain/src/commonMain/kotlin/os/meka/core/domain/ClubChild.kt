@@ -23,6 +23,16 @@ object ClubChildRules {
     /** "Rex or Logan?": the agenda row's line while nobody is set. */
     val ASK: String get() = NAMES.joinToString(" or ") + "?"
 
+    /** The Mac timeline's small chip in place of [ASK] (Mac presentation pass, item 7): it opens the choice. */
+    const val WHOSE = "Whose is it? ›"
+
+    /** Whether a timeline row's [detail] starts with [ASK], so the Mac shows the [WHOSE] chip instead. */
+    fun asking(detail: String?): Boolean = detail != null && (detail == ASK || detail.startsWith("$ASK · "))
+
+    /** The row's [detail] without [ASK] (the place, on its own line), or null when nothing is left. */
+    fun withoutAsk(detail: String?): String? =
+        if (!asking(detail)) detail else detail!!.removePrefix(ASK).removePrefix(" · ").trim().ifEmpty { null }
+
     /** Words that make an event a child's session even off a club's calendar ("Training", "Practice"). */
     private val SESSION_WORDS = setOf("training", "practice")
 
