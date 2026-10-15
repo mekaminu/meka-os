@@ -3590,6 +3590,16 @@ class MekaCore(
             refresh()
             return@onCore os.meka.core.domain.MailAutopilotPanelRules.switchedLine(on)
         }
+        // Mail finds, slice 3: "Renewals and promises from mail" — Turn on / Turn off.
+        if (kindKey == os.meka.core.domain.MailFindAutoRules.ENTITY_ID) {
+            val on = !mailFindsAutoOn()
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailFindAutoRules.ENTITY_ID,
+                os.meka.core.domain.MailFindAutoRules.switchFields(on, nowMs()),
+            )
+            refresh()
+            return@onCore os.meka.core.domain.MailFindAutoRules.switchedLine(on)
+        }
         val kind = os.meka.core.domain.TrustKind.of(kindKey) ?: return@onCore null
         val before = trust.reset(kind) ?: return@onCore null
         os.meka.core.domain.AutonomyRules.resetLine(kind, before)
@@ -4405,7 +4415,9 @@ class MekaCore(
         if (f.kind == os.meka.core.domain.MailFollowUpRules.KIND_FOLLOW_UP) return@onCore addMailFollowUp(f)
         val oid = R.obligationId(id)
         val before = replica.entity(os.meka.core.domain.EntityTypes.OBLIGATION, oid)
-        replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, R.obligationFields(f, nowMs(), cal))
+        // Slice 3: a renewal added on its own and undone (its item deleted) comes back on this tap.
+        val revive = if (before?.deleted == true) mapOf(os.meka.core.sync.DELETED_FIELD to false.fv()) else emptyMap()
+        replica.commitLocal(os.meka.core.domain.EntityTypes.OBLIGATION, oid, R.obligationFields(f, nowMs(), cal) + revive)
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
         mailFindUndo = {
             if (before == null) {
@@ -5057,6 +5069,77 @@ class MekaCore(
     private fun mailAutopilotSetting(): os.meka.core.domain.MailAutopilotSetting = os.meka.core.domain.MailAutopilotRules.read(
         replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID)?.fields,
     )
+
+    /** Mail finds, slice 3: "Renewals and promises from mail" in What Navilife may do (synced; absent = off). */
+    private fun mailFindsAutoOn(): Boolean = os.meka.core.domain.MailFindAutoRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailFindAutoRules.ENTITY_ID)?.fields,
+    )
+
+    /**
+     * ADR-006: may the finds add themselves? Only when the policy engine permits Level 4 under the rule Meka's switch made
+     * (the finds come from the server's fixed rules, never a model; reversible; the kill switch holds them at asking).
+     */
+    private fun mailFindAutoAllowed(): Boolean {
+        val rule = os.meka.core.domain.MailFindAutoRules.RULE_ID
+        val config = PolicyConfig(
+            levels = mapOf((PolicyDomain.TASKS to ActionType.CREATE_TASK) to AutonomyLevel.AUTO_UNDER_RULE),
+            autoRules = mapOf(rule to ActionType.CREATE_TASK),
+            killSwitch = autonomy.paused(),
+        )
+        val decision = PolicyEngine(config).decide(
+            ActionRequest(
+                ActionType.CREATE_TASK, PolicyDomain.TASKS, provenance = Provenance.DETERMINISTIC_RULE, reversible = true,
+                requestedLevel = AutonomyLevel.AUTO_UNDER_RULE, ruleId = rule,
+            ),
+        )
+        return decision is PolicyDecision.Permit
+    }
+
+    /**
+     * Mail finds, slice 3: with "Renewals and promises from mail" on, each new renewal goes onto Lists → Renewals and
+     * each promise onto Waiting for exactly as Add puts them there, each one an Activity entry ("Done for you") whose
+     * Undo takes it off and brings the card back (never added on its own again: the find keeps its mark). One entry per
+     * find, so the Fold and the Mac adding the same find write the same items and the same entry. Nothing is sent.
+     */
+    private fun autoAddMailFinds() {
+        if (replica.isRecording || !mailFindsAutoOn()) return
+        val A = os.meka.core.domain.MailFindAutoRules
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val finds = activity.mailFinds()
+        val due = A.due(finds, radarFields(), now, cal, lists.waitingItems(), A.addedToday(finds, now, cal))
+        if (due.isEmpty() || !mailFindAutoAllowed()) return
+        val today = cal.epochDayOf(now)
+        var added = 0
+        for (f in due) {
+            val entry = A.activityId(f.id)
+            // The mark first, outside the recorded change, so an Undo never makes it add itself again.
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, A.markFields(now))
+            if (activity.has(entry)) continue
+            runCatching {
+                activity.actRecorded(
+                    A.summary(f, today), A.WHY, A.SOURCE, AutonomyLevel.AUTO_UNDER_RULE.name, A.detail(f), entry,
+                ) {
+                    if (f.kind == os.meka.core.domain.MailPromiseRules.KIND_PROMISE) {
+                        val P = os.meka.core.domain.MailPromiseRules
+                        val wid = lists.addWaiting(f.what ?: "What ${P.title(f)} promised", f.merchant, P.chaseInDays(f, today), withId = P.waitingId(f.id))
+                        lists.editWaiting(wid, notes = A.promiseNote(f))
+                    } else {
+                        replica.commitLocal(
+                            os.meka.core.domain.EntityTypes.OBLIGATION, os.meka.core.domain.MailRenewalRules.obligationId(f.id),
+                            A.obligationFields(f, now, cal),
+                        )
+                    }
+                    replica.commitLocal(
+                        os.meka.core.domain.EntityTypes.MAIL_FIND, f.id,
+                        os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, now),
+                    )
+                }
+                added++
+            }
+        }
+        if (added > 0) activityChanged()
+    }
 
     /** Writes Autopilot's switch (synced; the server reads it at its next check). False when it already was. */
     private fun writeMailAutopilot(on: Boolean): Boolean {
@@ -6798,6 +6881,8 @@ class MekaCore(
     private suspend fun <T> onCore(block: () -> T): T = withContext(confined) { block() }
 
     private fun refresh() {
+        // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.
+        autoAddMailFinds()
         // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.
         archivedChanged()
         // Slice 5c: the weekly "Not opened in 30 days" follows the synced senders, its answers and Saturday 09:00.
@@ -6951,7 +7036,7 @@ class MekaCore(
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
-        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting())
+        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()

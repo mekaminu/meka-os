@@ -733,7 +733,19 @@ class ActivityLog(
      * with what each was, so [undo] can put it back exactly as [act] would (an entity it made is deleted on undo).
      * Returns what [block] returned and the entry's id; null when the block changed nothing (no entry is written).
      */
-    fun <T> actRecorded(summary: String, why: String, source: String, level: String?, detail: String? = null, block: () -> T): Pair<T, String?> {
+    fun <T> actRecorded(summary: String, why: String, source: String, level: String?, detail: String? = null, block: () -> T): Pair<T, String?> =
+        actRecorded(summary, why, source, level, detail, null, block)
+
+    /** Whether the log holds an entry [id] (MEKA's own entries). */
+    fun has(id: String): Boolean = replica.entity(EntityTypes.AGENT_ACTION, id) != null
+
+    /**
+     * As [actRecorded], under the entry id [entryId] when given (mail finds slice 3: one entry per find, so two devices
+     * adding the same find write the same entry) instead of a new one.
+     */
+    fun <T> actRecorded(
+        summary: String, why: String, source: String, level: String?, detail: String?, entryId: String?, block: () -> T,
+    ): Pair<T, String?> {
         val (result, recorded) = replica.recording(block)
         if (recorded.isEmpty()) return result to null
         val created = recorded.filter { it.created }.map { it.entityType to it.entityId }.distinct()
@@ -750,7 +762,7 @@ class ActivityLog(
         if (changes.isEmpty()) return result to null
         val encoded = ActivityRules.encodeChanges(changes)
         require(encoded.length <= Op.MAX_TEXT) { "too many changes for one entry" }
-        val id = newId()
+        val id = entryId ?: newId()
         write(id, ActivityKind.CHANGED, summary, detail, why, source, level, encoded)
         return result to id
     }

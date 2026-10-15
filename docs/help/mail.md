@@ -22,3 +22,4 @@ tip: With Navilife's AI on, tapping Chase writes the follow-up from your email (
 tip: An email asking to meet says "Asks to meet" in Needs you; Suggest times opens the reply with three times you are free from your calendars, sent only when you tap Send.
 tip: If they can't make the times you offered, their answer says so with Suggest times for other days; if their email says where they are ("I'm in New York"), the times are also written in their time and kept inside their working day.
 tip: When they write back picking one of the times you offered, their email says "Sam picked Tue 20 Oct, 13:00–14:00"; Book it puts it in your calendar (Undo for five seconds), and nothing is sent to them.
+tip: To have renewals and promises from your mail added for you, turn on Renewals and promises from mail in What Navilife may do; each one shows in Activity with Undo, and an undone one comes back to Needs you with Add.

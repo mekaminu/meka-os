@@ -5,6 +5,7 @@ import kotlinx.datetime.TimeZone
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailChaseRules
+import os.meka.core.domain.MailFindAutoRules
 import os.meka.core.domain.MailFindFields
 import os.meka.core.domain.MailFollowUpRules
 import os.meka.core.domain.MailPromiseRules
@@ -270,5 +271,57 @@ class MailFindFacadeTest {
         assertEquals(MailChaseRules.GOT_LINE, fold.gotMailChase(id))
         assertNull(fold.mailChases.value)
         assertEquals(0, fold.listsView.value.waiting.size)
+    }
+
+    @Test
+    fun trustedInWhatNavilifeMayDoTheFindsAddThemselvesOnceAndUndoBringsTheCardBack() = runTest {
+        val a = renewal("Your membership renews soon", "It renews on 3 Nov for £10.99 a month", "Streamly")
+        val ida = MailRenewalRules.findId("acc1", "m1", a)
+        val p = MailPromiseRules.read("Sam Taylor", "sam@example.com", "Re: contract", "I'll send you the signed contract by Tuesday", received)!!
+        val idp = MailPromiseRules.findId("acc1", "m9")
+        serverWrite(ida, MailRenewalRules.serverFields(a, "Personal", "Your membership renews soon", received))
+        serverWrite(idp, MailPromiseRules.serverFields(p, "Personal", "Re: contract", received))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        // Off by default: both wait as cards.
+        val row = fold.autonomyView.value.sections.flatMap { it.rows }.single { it.key == MailFindAutoRules.ENTITY_ID }
+        assertEquals(MailFindAutoRules.OFF_LINE, row.line)
+        assertEquals(MailFindAutoRules.TURN_ON, row.action)
+        assertEquals(2, fold.mailFinds.value!!.rows.size)
+
+        // Turned on (on the Mac): both apps add them, each once, with one Activity entry per find.
+        assertEquals(MailFindAutoRules.switchedLine(true), mac.resetTrust(MailFindAutoRules.ENTITY_ID))
+        assertNull(mac.mailFinds.value)
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertNull(fold.mailFinds.value)
+        assertEquals(1, fold.listsView.value.renewals.let { it.attention + it.upcoming + it.later }.count { it.title == "Streamly" })
+        assertEquals(listOf(MailPromiseRules.waitingId(idp)), fold.listsView.value.waiting.map { it.id })
+        assertTrue(fold.listsView.value.waiting.single().notes!!.contains("added for you"))
+        val rows = fold.activityView.value.days.flatMap { it.rows }.filter { it.why.contains("Renewals and promises from mail") }
+        assertEquals(
+            setOf(MailFindAutoRules.activityId(ida), MailFindAutoRules.activityId(idp)), rows.map { it.id }.toSet(),
+        )
+        assertTrue(rows.any { it.summary.startsWith("Added Streamly to Renewals · renews Tue 3 Nov") })
+        assertEquals(MailFindAutoRules.ON_LINE, fold.autonomyView.value.sections.flatMap { it.rows }.single { it.key == MailFindAutoRules.ENTITY_ID }.line)
+
+        // Undo the renewal: off Renewals, the card comes back, and it never adds itself again.
+        fold.undoActivity(MailFindAutoRules.activityId(ida))
+        assertEquals(0, fold.listsView.value.renewals.let { it.attention + it.upcoming + it.later }.count { it.title == "Streamly" })
+        assertEquals(listOf(ida), fold.mailFinds.value!!.rows.map { it.id })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf(ida), mac.mailFinds.value!!.rows.map { it.id })
+        // His own Add still works after the undo.
+        assertEquals("On Renewals: Streamly · renews Tue 3 Nov", mac.addMailFind(ida))
+        assertEquals(1, mac.listsView.value.renewals.let { it.attention + it.upcoming + it.later }.count { it.title == "Streamly" })
+
+        // Paused: a new find waits for the tap.
+        val c = renewal("Your plan will auto-renew", "Renews on 20 Nov for £5.99 a month", "Musicbox")
+        val idc = MailRenewalRules.findId("acc1", "m3", c)
+        serverWrite(idc, MailRenewalRules.serverFields(c, "Personal", null, received))
+        assertTrue(mac.syncNow())
+        fold.setAutonomyPaused(true)
+        assertTrue(fold.syncNow())
+        assertEquals(listOf(idc), fold.mailFinds.value!!.rows.map { it.id })
     }
 }

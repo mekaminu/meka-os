@@ -10,3 +10,4 @@ mac_where: Ask → Settings → What Navilife may do
 what: what Navilife does on its own and what waits for you, and the switch that pauses it all.
 how: After five yeses in a row to the same kind of thing, Navilife offers to just do it; you can take that back there.
 tip: Messages to people and anything with money always wait for you.
+tip: Under Your mail, Renewals and promises from mail (off until you turn it on) puts renewals from your email on Renewals and promises on Waiting for as they're spotted, each in Activity with Undo.

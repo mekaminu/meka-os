@@ -59,6 +59,8 @@ data class MailFind(
     val answeredWhy: String? = null,
     /** Follow-up radar, slice 2: his chase from Time to chase, and what the server did with it ([MailChaseRules]). */
     val chase: ChaseMarks = ChaseMarks(),
+    /** Slice 3: when Navilife added it on its own ([MailFindAutoRules]); kept through Undo; null = never. */
+    val autoAtMs: Long? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -92,6 +94,8 @@ object MailFindFields {
     // Written by the apps.
     const val STATE = "state"
     const val DECIDED_AT = "decidedAtMs"
+    /** Slice 3: when a device added it on its own ([MailFindAutoRules]); never cleared, so an undone one stays a card. */
+    const val AUTO_AT = "autoAtMs"
 }
 
 data class MailFindRow(
@@ -306,6 +310,7 @@ object MailRenewalRules {
                 failedAtMs = f[MailFindFields.CHASE_FAILED_AT]?.longOrNull,
                 failedWhy = f[MailFindFields.CHASE_FAILED_WHY]?.textOrNull,
             ),
+            autoAtMs = f[MailFindFields.AUTO_AT]?.longOrNull?.takeIf { it > 0 },
         )
     }
 

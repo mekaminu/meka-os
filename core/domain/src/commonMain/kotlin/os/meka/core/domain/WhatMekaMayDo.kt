@@ -164,6 +164,18 @@ object AutonomyRules {
         AutonomySection(LOCKED_LABEL, LOCKED),
     )
 
+    /**
+     * Promises, receipts and renewals from email, slice 3: Your mail also holds "Renewals and promises from mail"
+     * ([MailFindAutoRules.row]), off until Meka turns it on; its Turn on / Turn off goes to the facade's `resetTrust`.
+     */
+    fun sections(
+        states: Map<TrustKind, TrustState>, paused: Boolean, mail: MailAutopilotSetting, mailFinds: Boolean,
+    ): List<AutonomySection> = listOf(
+        AutonomySection(LISTS_LABEL, TrustKind.entries.map { trustRow(it, states[it] ?: TrustState(), paused) }),
+        AutonomySection(MAIL_LABEL, listOf(mailRow(mail, paused), MailFindAutoRules.row(mailFinds, paused))),
+        AutonomySection(LOCKED_LABEL, LOCKED),
+    )
+
     fun summary(states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long): String {
         val trusted = states.count { it.value.trusted }
         if (setting.paused) {
@@ -198,6 +210,26 @@ object AutonomyRules {
         pauseButton = if (setting.paused) RESUME else PAUSE,
         sections = sections(states, setting.paused, mail),
     )
+
+    /** Slice 3 of the mail finds: with "Renewals and promises from mail" under Your mail (counted in the summary when on). */
+    fun view(
+        states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long,
+        mail: MailAutopilotSetting, mailFinds: Boolean,
+    ): AutonomyView {
+        val base = summary(states, setting, cal, nowMs)
+        val trusted = states.count { it.value.trusted } + (if (mailFinds) 1 else 0)
+        val summary = when {
+            setting.paused || !mailFinds -> base
+            trusted == 1 -> "Navilife does 1 thing on its own · each with Undo and in Activity"
+            else -> "Navilife does $trusted things on its own · each with Undo and in Activity"
+        }
+        return AutonomyView(
+            paused = setting.paused,
+            summary = summary,
+            pauseButton = if (setting.paused) RESUME else PAUSE,
+            sections = sections(states, setting.paused, mail, mailFinds),
+        )
+    }
 
     /** The undo bar's line after Pause / Resume. */
     fun pausedLine(paused: Boolean): String =

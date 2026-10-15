@@ -56,6 +56,9 @@ class Replica(
      * Runs [block] and returns what it returned with every field its local commits changed, in order (remote changes
      * are never recorded). Not nested: one recording at a time on a replica.
      */
+    /** True while [recording] runs (so an automatic action never starts inside another's recorded change). */
+    val isRecording: Boolean get() = recorder != null
+
     fun <T> recording(block: () -> T): Pair<T, List<RecordedChange>> {
         check(recorder == null) { "already recording" }
         val out = mutableListOf<RecordedChange>()
