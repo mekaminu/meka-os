@@ -65,10 +65,14 @@ struct TodayView: View {
             todayColumn
                 .environment(\.selectionNamespace, selection)
                 .frame(width: widths.first ?? 0)
+                .accessibilityElement(children: .contain)
+                .accessibilityIdentifier(TodayView.columnID(CommandColumn.today))
             if let side, widths.count > 1 {
                 CommandSideView(column: columns[1], palette: palette)
                     .columnEntrance(step: Int(side.step), slide: CGFloat(side.slidePt), play: side.staggers)
                     .frame(width: widths[1])
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(TodayView.columnID(columns[1]))
                     .overlay(alignment: .leading) { columnRule }
                     .transition(.column(slide: CGFloat(side.slidePt)))
             }
@@ -76,6 +80,8 @@ struct TodayView: View {
                 ComingUpColumnView(shared: false, palette: palette)
                     .columnEntrance(step: Int(coming.step), slide: CGFloat(coming.slidePt), play: coming.staggers)
                     .frame(width: widths[2])
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(TodayView.columnID(CommandColumn.comingUp))
                     .overlay(alignment: .leading) { columnRule }
                     .transition(.column(slide: CGFloat(coming.slidePt)))
             }
@@ -94,6 +100,9 @@ struct TodayView: View {
             }
         }
     }
+
+    /// Accessibility identifiers for the UI-test target's fit check: "column-today", "column-needs_you", …
+    static func columnID(_ column: CommandColumn) -> String { "column-" + column.name.lowercased() }
 
     /// The hairline between two columns.
     private var columnRule: some View {

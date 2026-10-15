@@ -43,6 +43,9 @@ struct ShellView: View {
         } detail: {
             ZStack {
                 destination(model.destination)
+                    // The UI-test target checks the screen a click switched to by this.
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier(ShellView.screenID(model.destination))
                     .id(model.destination)
                     .transition(transition)
             }
@@ -59,6 +62,8 @@ struct ShellView: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.showCommandBar)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { openSidebarIfWide($0) }
+        // `-MekaWindowSize 1440x900` (the UI-test target's window sizes); an ordinary launch does nothing.
+        .onAppear { LaunchWindowSize.apply() }
         .background(palette.background)
         // The shell's sheets, in groups so each one type-checks quickly (one long chain timed out on the Mac CI).
         .modifier(ShellSheetsA(palette: palette))
@@ -86,6 +91,8 @@ struct ShellView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .simultaneousGesture(TapGesture().onEnded { go(d, via: "click") })
+            // The UI-test target clicks each row by this (MekaOSUITests/SidebarUITests).
+            .accessibilityIdentifier(ShellView.sidebarID(d))
     }
 
     /// Animates the switch; nil or the screen already showing does nothing.
@@ -94,6 +101,10 @@ struct ShellView: View {
         ShellView.log.debug("sidebar \(via, privacy: .public) → \(to.label, privacy: .public)")
         model.go(to: to, reduced: reduceMotion)
     }
+
+    /// Accessibility identifiers for the UI-test target: "sidebar-calendar", "screen-calendar".
+    static func sidebarID(_ d: ShellDestination) -> String { "sidebar-" + String(describing: d) }
+    static func screenID(_ d: ShellDestination) -> String { "screen-" + String(describing: d) }
 
     private static let log = Logger(subsystem: "os.meka.MekaOS", category: "shell")
 

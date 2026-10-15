@@ -117,6 +117,20 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated   # WidgetKit's provider runs off the main actor
         SKIP_INSTALL: YES
         LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"
+  # The Mac's UI checks (Mac presentation pass, 2026-10-15): the sidebar clicked row by row and Today photographed at
+  # 1440×900 and 1000 wide. Its own scheme (MekaOSUI), so the unit tests' unsigned run is unchanged; ci's nightly
+  # macOS job runs it signed to run locally (ad hoc).
+  MekaOSUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources: [MekaOSUITests]
+    dependencies:
+      - target: MekaOS
+    settings:
+      base:
+        SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated   # XCTestCase initialisers are nonisolated
+        TEST_TARGET_NAME: MekaOS
+        PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac.uitests
   MekaOSTests:
     type: bundle.unit-test
     platform: macOS
@@ -132,3 +146,13 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated   # XCTestCase initialisers are nonisolated
         BUNDLE_LOADER: $(TEST_HOST)
         TEST_HOST: $(BUILT_PRODUCTS_DIR)/MekaOS.app/Contents/MacOS/MekaOS
+schemes:
+  # The UI checks alone (ci's macOS job: `xcodebuild -scheme MekaOSUI … test`); the MekaOS scheme keeps the unit tests.
+  MekaOSUI:
+    build:
+      targets:
+        MekaOS: all
+        MekaOSUITests: [test]
+    test:
+      config: Debug
+      targets: [MekaOSUITests]
