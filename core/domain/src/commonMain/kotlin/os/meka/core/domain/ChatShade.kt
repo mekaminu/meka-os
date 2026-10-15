@@ -81,7 +81,7 @@ object ChatShadeRules {
 
     /**
      * Whether [chat] may have "Clear from the shade as soon as MEKA has it": never a one-to-one chat with someone on
-     * the family or always-notify list (Jeanette's messages always stay in the shade).
+     * the family or always-notify list (his wife's messages always stay in the shade).
      */
     fun canClearOnArrival(chat: TriageChat, lists: PeopleLists): Boolean =
         chat.isGroup || chat.cards.none { lists.isFamily(it.personKey) || lists.isAlwaysNotify(it.personKey) } &&

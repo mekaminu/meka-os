@@ -30,7 +30,7 @@ class PostgresFamilyInviteStoreTest {
             PostgresDeviceRegistry(ds).enrol("hh-fam", "fold", "fold")
             val store = PostgresFamilyInviteStore(ds)
             val t0 = 1_791_540_000_000L
-            store.create(FamilyInvite("hh-fam", "fam" + "1".repeat(20), "jeanette", t0), "a".repeat(64))
+            store.create(FamilyInvite("hh-fam", "fam" + "1".repeat(20), "jordan", t0), "a".repeat(64))
             store.create(FamilyInvite("hh-fam", "fam" + "2".repeat(20), "gran", t0 + 1_000), "b".repeat(64))
             val first = store.byToken("a".repeat(64))!!
             assertEquals(FamilyInvite.WAITING, first.state)
@@ -40,7 +40,7 @@ class PostgresFamilyInviteStoreTest {
             assertEquals(t0 + 5_000, store.byId(first.id)!!.claimedAtMs)
             store.seen(first.id, t0 + 9_000)
             assertEquals(t0 + 9_000, store.byId(first.id)!!.lastSeenAtMs)
-            assertEquals(listOf("gran", "jeanette"), store.list("hh-fam").map { it.name })
+            assertEquals(listOf("gran", "jordan"), store.list("hh-fam").map { it.name })
             assertFalse(store.revoke("someone-else", first.id, t0))
             assertTrue(store.revoke("hh-fam", first.id, t0 + 10_000))
             assertTrue(store.revoke("hh-fam", first.id, t0 + 20_000))

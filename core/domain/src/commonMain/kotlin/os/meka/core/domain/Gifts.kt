@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * Gift planner (V1), slice 1: birthdays and anniversaries typed once — "Mum's birthday 3 Nov", "Jeanette birthday 14
+ * Gift planner (V1), slice 1: birthdays and anniversaries typed once — "Mum's birthday 3 Nov", "Jordan birthday 14
  * March 1988", "Wedding anniversary 20 Aug 2015", "Rex 5 June · delivery 5 days" — gift ideas noted against each, and
  * an order-by date worked out from how long delivery takes (3 days unless typed, plus a spare day).
  *
@@ -17,7 +17,7 @@ import os.meka.core.sync.fv
  * One synced `occasion` entity per person and kind, and one `gift_idea` per idea (ADR-008 addendum 2026-10-12).
  */
 object OccasionFields {
-    /** "Mum", "Jeanette", "Uncle Tony"; "" for a wedding anniversary with no one named (at most [GiftRules.MAX_PERSON]). */
+    /** "Mum", "Jordan", "Uncle Tony"; "" for a wedding anniversary with no one named (at most [GiftRules.MAX_PERSON]). */
     const val PERSON = "person"
     /** [OccasionKind.key]. */
     const val KIND = "kind"
@@ -171,7 +171,7 @@ object GiftRules {
 
     /**
      * What one typed line says, or null when it names no day and month MEKA can read, or no one for a birthday.
-     * "Mum's birthday 3 Nov", "Jeanette birthday 14 March 1988", "3rd November: Dad", "Rex 5/6/2016", "Wedding
+     * "Mum's birthday 3 Nov", "Jordan birthday 14 March 1988", "3rd November: Dad", "Rex 5/6/2016", "Wedding
      * anniversary 20 Aug 2015", "Mum birthday 3 Nov delivery 5 days". With no kind word it's a birthday.
      */
     fun read(text: String, thisYear: Int): OccasionEntry? {
@@ -458,7 +458,7 @@ object GiftRules {
 
 /**
  * Gift planner, slice 2: Ask and Talk know the birthdays, anniversaries and ideas ("when's Mum's birthday?", "what
- * did I note for Jeanette?"), and a model's `add_gift_idea` ("Mum: silk scarf") becomes a card that notes the idea
+ * did I note for his wife?"), and a model's `add_gift_idea` ("Mum: silk scarf") becomes a card that notes the idea
  * on Meka's tap, with Undo. Plain rules; nothing is ordered or sent.
  */
 object GiftAskRules {
@@ -506,7 +506,7 @@ object GiftAskRules {
     }
 
     /**
-     * The occasion "Mum", "Mum's birthday", "Jeanette's", "the wedding anniversary" or "Mum and Dad's anniversary"
+     * The occasion "Mum", "Mum's birthday", "Jordan's", "the wedding anniversary" or "Mum and Dad's anniversary"
      * names; a birthday before an anniversary when only the person is given; null when none matches.
      */
     fun match(items: List<Occasion>, who: String): Occasion? {

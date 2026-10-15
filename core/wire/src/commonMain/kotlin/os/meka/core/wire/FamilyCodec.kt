@@ -11,7 +11,7 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 /**
- * Family sharing's invites on the wire (build plan "Family sharing with Jeanette", slice 4): a keyed device makes, lists
+ * Family sharing's invites on the wire (build plan "Family sharing with Jordan", slice 4): a keyed device makes, lists
  * and turns off the family page's links (`POST /v1/family/invites/create · list · revoke`, ADR-005 amendment
  * 2026-10-10). The server's JSON has no wire version (the family page reads the same server); unknown keys are ignored.
  * A listing never carries a token or a browser key; the token comes back once, inside [Made.path] ("/family#<hex>").

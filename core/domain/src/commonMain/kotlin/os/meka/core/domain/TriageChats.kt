@@ -52,7 +52,7 @@ data class TriageChat(
      */
     val repeatIds: List<String> = emptyList(),
     /**
-     * "Jeanette" when someone Meka watches for asked something in this group (Fold review 2026-10-12, bug 3): the card
+     * "Jordan" when someone Meka watches for asked something in this group (Fold review 2026-10-12, bug 3): the card
      * shows [TriageChatRules.askedLine] in brass above its name and the chat sits at the top of Needs you.
      */
     val askedBy: String? = null,
@@ -80,7 +80,7 @@ object TriageChatRules {
         return "$app|$who"
     }
 
-    /** "Jeanette asked": above a group's card when someone Meka watches for asked something there. */
+    /** "Jordan asked": above a group's card when someone Meka watches for asked something there. */
     fun askedLine(name: String): String = "$name asked"
 
     /** A group where someone Meka watches for asked something first, then chats needing a reply, then the newest. */
@@ -94,7 +94,7 @@ object TriageChatRules {
 
     /**
      * [chats] with each request from a person filed under that person's 1:1 chat (the latest one when they wrote on two
-     * apps), so Jeanette's messages and what she asked are one card (slice 3). A request from a group, from Meka himself
+     * apps), so his wife's messages and what she asked are one card (slice 3). A request from a group, from Meka himself
      * ("Handle this", the brief's share) or from someone with no open message stays a card of its own ([looseRequests]).
      */
     fun chatsWith(cards: List<TriageCard>, requests: List<RequestCard>): List<TriageChat> {

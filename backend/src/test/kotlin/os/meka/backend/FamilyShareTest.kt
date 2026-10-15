@@ -44,7 +44,7 @@ class TestBrowserKey(private val now: () -> Long) {
     }
 }
 
-/** Jeanette's page (family sharing with Jeanette, slice 2): invite, first open, signed requests, the shared list. */
+/** Jordan's page (family sharing with Jordan, slice 2): invite, first open, signed requests, the shared list. */
 class FamilyShareTest {
     private var nowMs = 1_791_540_000_000L // Sat 10 Oct 2026, 10:00 London
     private val ops = InMemoryServerOpStore()
@@ -57,7 +57,7 @@ class FamilyShareTest {
     private fun obj(s: String) = json.parseToJsonElement(s).jsonObject
     private fun JsonObject.str(k: String) = this[k]?.jsonPrimitive?.content
 
-    private fun invite(name: String = "Jeanette"): Pair<String, String> {
+    private fun invite(name: String = "Jordan"): Pair<String, String> {
         val r = family.invite("hh", """{"name":"$name"}""")
         assertEquals(200, r.status)
         val o = obj(r.body)
@@ -91,7 +91,7 @@ class FamilyShareTest {
         val phone = TestBrowserKey { nowMs }
         val first = claim(token, phone)
         assertEquals(200, first.status)
-        assertEquals("Jeanette", obj(first.body).str("name"))
+        assertEquals("Jordan", obj(first.body).str("name"))
         // A retried first open with the same key is fine; another browser with the link alone is refused.
         assertEquals(200, claim(token, phone).status)
         val other = TestBrowserKey { nowMs }
@@ -123,11 +123,11 @@ class FamilyShareTest {
     }
 
     @Test
-    fun herAddsAndTicksReachMekasListsMarkedFromJeanette() {
+    fun herAddsAndTicksReachMekasListsMarkedFromJordan() {
         val (id, token) = invite()
         val phone = TestBrowserKey { nowMs }
         claim(token, phone)
-        val jeanette = invites.byId(id)!!
+        val jordan = invites.byId(id)!!
         // Meka already has milk on the list (made on his Mac, pushed to the server).
         var n = 0
         val mac = Replica("hh", "mac", HlcClock("mac", { nowMs }), InMemoryReplicaStore(), MekaSchema) { "mac${n++}" }
@@ -136,9 +136,9 @@ class FamilyShareTest {
             .forEach { ops.append(it) }
 
         nowMs += 60_000
-        val added = obj(family.add(jeanette, """{"text":"milk, Bread, fish and chips"}""").body)
+        val added = obj(family.add(jordan, """{"text":"milk, Bread, fish and chips"}""").body)
         assertEquals(listOf("Milk", "Bread", "fish and chips"), added["toBuy"]!!.jsonArray.map { it.jsonObject.str("title") })
-        // Her own things carry no "From Jeanette" on her page.
+        // Her own things carry no "From Jordan" on her page.
         assertEquals(listOf(null, null, null), added["toBuy"]!!.jsonArray.map { it.jsonObject.str("meta") })
         assertEquals("3 to buy", added.str("line"))
         assertEquals(listOf("hh"), woken)
@@ -146,23 +146,23 @@ class FamilyShareTest {
         // On Meka's Fold: milk is still one row, hers say who added them.
         var lists = fold().view()
         assertEquals(listOf("Milk", "Bread", "fish and chips"), lists.toBuy.map { it.title })
-        assertEquals(listOf(null, "From Jeanette · today", "From Jeanette · today"), lists.toBuy.map { it.meta })
+        assertEquals(listOf(null, "From Jordan · today", "From Jordan · today"), lists.toBuy.map { it.meta })
         assertTrue(ops.after("hh", 0, 1000).map { it.op }.filter { it.deviceId == "server" }.all { it.entityType == EntityTypes.SHOPPING_ITEM })
 
         // She ticks Meka's milk; he sees it under Got. She puts it back; it is back on his list.
         nowMs += 60_000
-        val got = obj(family.got(jeanette, """{"id":"milk1"}""").body)
+        val got = obj(family.got(jordan, """{"id":"milk1"}""").body)
         assertEquals(listOf("Milk"), got["got"]!!.jsonArray.map { it.jsonObject.str("title") })
         assertEquals("Got today", got["got"]!!.jsonArray[0].jsonObject.str("meta"))
         lists = fold().view()
         assertEquals(listOf("Milk"), lists.got.map { it.title })
         nowMs += 60_000
-        family.putBack(jeanette, """{"id":"milk1"}""")
+        family.putBack(jordan, """{"id":"milk1"}""")
         assertEquals(listOf("Milk", "Bread", "fish and chips"), fold().view().toBuy.map { it.title })
 
         // An id that isn't a shopping item writes nothing.
         val before = ops.size
-        family.got(jeanette, """{"id":"some-task"}""")
+        family.got(jordan, """{"id":"some-task"}""")
         assertEquals(before, ops.size)
     }
 
@@ -179,7 +179,7 @@ class FamilyShareTest {
         // Meal plan slice 3.
         val (id, token) = invite()
         assertTrue("meals" in claim(token, TestBrowserKey { nowMs }).body)
-        val jeanette = invites.byId(id)!!
+        val jordan = invites.byId(id)!!
         // On his Mac Meka has Chilli as a favourite, planned for tonight, and rice already to buy.
         var n = 0
         val mac = Replica("hh", "mac", HlcClock("mac", { nowMs }), InMemoryReplicaStore(), MekaSchema) { "mac${n++}" }
@@ -191,7 +191,7 @@ class FamilyShareTest {
             .flatMap { (item, fields) -> mac.commitLocal(EntityTypes.SHOPPING_ITEM, item, fields) }
             .forEach { ops.append(it) }
 
-        val week = obj(family.meals(jeanette).body)
+        val week = obj(family.meals(jordan).body)
         assertEquals("1 of 7 dinners planned · tonight: Chilli", week.str("summary"))
         val days = week["week"]!!.jsonArray.map { it.jsonObject }
         assertEquals(7, days.size)
@@ -199,32 +199,32 @@ class FamilyShareTest {
         assertEquals(listOf("Chilli", null), days.take(2).map { it.str("title") })
         assertEquals(listOf("mince, rice"), week["favourites"]!!.jsonArray.map { it.jsonObject.str("line") })
 
-        // She adds a favourite: her page shows it without "from Jeanette"; Meka's Dinners say who added it.
+        // She adds a favourite: her page shows it without "from Jordan"; Meka's Dinners say who added it.
         nowMs += 60_000
-        val added = obj(family.addMeal(jeanette, """{"text":"Fajitas: wraps, peppers"}""").body)
+        val added = obj(family.addMeal(jordan, """{"text":"Fajitas: wraps, peppers"}""").body)
         assertEquals(listOf("Chilli", "Fajitas"), added["favourites"]!!.jsonArray.map { it.jsonObject.str("title") })
         assertEquals("wraps, peppers", added["favourites"]!!.jsonArray[1].jsonObject.str("line"))
         assertEquals(listOf("hh"), woken)
         val fold = foldDinners().view(setOf("rice"))
-        assertEquals(listOf("mince, rice", "wraps, peppers · from Jeanette"), fold.favourites.map { it.line })
+        assertEquals(listOf("mince, rice", "wraps, peppers · from Jordan"), fold.favourites.map { it.line })
         assertEquals("Chilli", fold.week.first().title)
 
         // The same name again updates its ingredients on the same entity; nothing new is made.
         nowMs += 60_000
-        val updated = obj(family.addMeal(jeanette, """{"text":"chilli: mince, rice, kidney beans"}""").body)
+        val updated = obj(family.addMeal(jordan, """{"text":"chilli: mince, rice, kidney beans"}""").body)
         assertEquals(2, updated["favourites"]!!.jsonArray.size)
         assertEquals(listOf("mince", "rice", "kidney beans"), foldDinners().meals().single { it.id == "chilli1" }.ingredients)
         // Her page writes nothing but the shared types.
         assertTrue(ops.after("hh", 0, 10_000).map { it.op }.filter { it.deviceId == "server" }.all { it.entityType in FamilyShare.SHARED_TYPES })
 
         // Nothing readable, too long or not JSON is refused; so is a 101st favourite.
-        assertEquals(400, family.addMeal(jeanette, """{"text":"  "}""").status)
-        assertEquals(400, family.addMeal(jeanette, """{"text":": wraps"}""").status)
-        assertEquals(400, family.addMeal(jeanette, """{"text":"${"x".repeat(301)}"}""").status)
-        assertEquals(400, family.addMeal(jeanette, "not json").status)
-        (3..MealRules.MAX_FAVOURITES).forEach { assertEquals(200, family.addMeal(jeanette, """{"text":"Dinner $it"}""").status) }
-        assertEquals("""{"error":"full"}""", family.addMeal(jeanette, """{"text":"One more"}""").body)
-        assertEquals(200, family.addMeal(jeanette, """{"text":"Fajitas: wraps, peppers, salsa"}""").status) // an update still goes in
+        assertEquals(400, family.addMeal(jordan, """{"text":"  "}""").status)
+        assertEquals(400, family.addMeal(jordan, """{"text":": wraps"}""").status)
+        assertEquals(400, family.addMeal(jordan, """{"text":"${"x".repeat(301)}"}""").status)
+        assertEquals(400, family.addMeal(jordan, "not json").status)
+        (3..MealRules.MAX_FAVOURITES).forEach { assertEquals(200, family.addMeal(jordan, """{"text":"Dinner $it"}""").status) }
+        assertEquals("""{"error":"full"}""", family.addMeal(jordan, """{"text":"One more"}""").body)
+        assertEquals(200, family.addMeal(jordan, """{"text":"Fajitas: wraps, peppers, salsa"}""").status) // an update still goes in
     }
 
     @Test
@@ -232,8 +232,8 @@ class FamilyShareTest {
         // Emergency card slice 1.
         val (id, token) = invite()
         assertTrue("emergency" in claim(token, TestBrowserKey { nowMs }).body)
-        val jeanette = invites.byId(id)!!
-        val empty = obj(family.emergency(jeanette).body)
+        val jordan = invites.byId(id)!!
+        val empty = obj(family.emergency(jordan).body)
         assertEquals("Meka hasn't filled the emergency card in yet.", empty.str("summary"))
         assertEquals(0, empty["groups"]!!.jsonArray.size)
 
@@ -252,7 +252,7 @@ class FamilyShareTest {
             EmergencyFields.SECTION to "accounts".fv(), EmergencyFields.TITLE to "Bank PIN".fv(), EmergencyFields.DETAIL to "4821".fv(),
         )).forEach { ops.append(it) }
 
-        val card = obj(family.emergency(jeanette).body)
+        val card = obj(family.emergency(jordan).body)
         assertEquals("Kept up to date by Meka", card.str("summary"))
         val groups = card["groups"]!!.jsonArray.map { it.jsonObject }
         assertEquals(listOf("Who to call", "Key accounts"), groups.map { it.str("label") })
@@ -261,7 +261,7 @@ class FamilyShareTest {
         assertEquals("Dr Patel, 01767 123456", gp.str("detail"))
         assertEquals("01767123456", gp.str("phone"))
         assertEquals(listOf("Home insurance"), groups[1]["rows"]!!.jsonArray.map { it.jsonObject.str("title") })
-        assertTrue("4821" !in family.emergency(jeanette).body)
+        assertTrue("4821" !in family.emergency(jordan).body)
         // The page can't write it: no route, and the server's writer refuses the type.
         assertTrue(EntityTypes.EMERGENCY_ENTRY !in FamilyShare.WRITABLE_TYPES)
         assertTrue(ops.after("hh", 0, 10_000).map { it.op }.none { it.deviceId == "server" && it.entityType == EntityTypes.EMERGENCY_ENTRY })
@@ -269,14 +269,14 @@ class FamilyShareTest {
 
     @Test
     fun theOwnerSeesInvitesButNeverTheirTokensOrKeys() {
-        val (id, token) = invite("  Jeanette ")
+        val (id, token) = invite("  Jordan ")
         claim(token, TestBrowserKey { nowMs })
         invite("Gran")
         val listed = family.list("hh").body
         assertTrue(token !in listed)
         assertTrue("publicKey" !in listed)
         val rows = obj(listed)["invites"]!!.jsonArray.map { it.jsonObject }
-        assertEquals(setOf("jeanette", "gran"), rows.map { it.str("name") }.toSet())
+        assertEquals(setOf("jordan", "gran"), rows.map { it.str("name") }.toSet())
         assertEquals(FamilyInvite.JOINED, rows.single { it.str("id") == id }.str("state"))
         assertEquals(400, family.invite("hh", """{"name":"meka"}""").status)
         assertEquals(400, family.invite("hh", """{"name":"<b>"}""").status)
@@ -288,10 +288,10 @@ class FamilyShareTest {
     fun tooMuchAtOnceIsRefusedAndTheLondonDayIsUsed() {
         val (id, token) = invite()
         claim(token, TestBrowserKey { nowMs })
-        val jeanette = invites.byId(id)!!
-        assertEquals(400, family.add(jeanette, """{"text":"${(1..31).joinToString(",") { "thing$it" }}"}""").status)
-        assertEquals(400, family.add(jeanette, """{"text":"${"x".repeat(1_001)}"}""").status)
-        assertEquals(400, family.add(jeanette, """not json""").status)
+        val jordan = invites.byId(id)!!
+        assertEquals(400, family.add(jordan, """{"text":"${(1..31).joinToString(",") { "thing$it" }}"}""").status)
+        assertEquals(400, family.add(jordan, """{"text":"${"x".repeat(1_001)}"}""").status)
+        assertEquals(400, family.add(jordan, """not json""").status)
         // 23:30 UTC on a summer evening is already tomorrow in London.
         val june = java.time.ZonedDateTime.of(2026, 6, 1, 23, 30, 0, 0, java.time.ZoneOffset.UTC).toInstant().toEpochMilli()
         assertEquals(java.time.LocalDate.of(2026, 6, 2).toEpochDay(), LondonCalendar.epochDayOf(june))
@@ -302,9 +302,9 @@ class FamilyShareTest {
     @Test
     fun theAppsReadWhatTheServerSaysAboutItsLinks() {
         // Slice 4: Settings → Family on both apps reads these answers with the core's FamilyCodec.
-        val made = family.invite("hh", os.meka.core.wire.FamilyCodec.encodeCreate("Jeanette"))
+        val made = family.invite("hh", os.meka.core.wire.FamilyCodec.encodeCreate("Jordan"))
         val link = os.meka.core.wire.FamilyCodec.decodeMade(made.body)
-        assertEquals("jeanette", link.name)
+        assertEquals("jordan", link.name)
         val token = link.path.substringAfter('#')
         nowMs += 60_000L
         assertEquals(200, claim(token, TestBrowserKey { nowMs }).status)

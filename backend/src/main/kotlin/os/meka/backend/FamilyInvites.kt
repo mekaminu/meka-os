@@ -5,14 +5,14 @@ import java.sql.Timestamp
 import javax.sql.DataSource
 
 /**
- * An invite to Meka's family page (build plan "Family sharing with Jeanette", slice 2). The link's token is never
+ * An invite to Meka's family page (build plan "Family sharing with Jordan", slice 2). The link's token is never
  * stored, only its SHA-256; the first browser to open it registers its own P-256 key ([publicKey]), and from then on
  * only that browser's signed requests are let in, so the link alone is no use. Revoking shuts it at once.
  */
 data class FamilyInvite(
     val householdId: String,
     val id: String,
-    /** The family member's name key ("jeanette"): what her items carry in `by`, shown as "From Jeanette". */
+    /** The family member's name key ("jordan"): what her items carry in `by`, shown as "From Jordan". */
     val name: String,
     val createdAtMs: Long,
     val claimedAtMs: Long? = null,

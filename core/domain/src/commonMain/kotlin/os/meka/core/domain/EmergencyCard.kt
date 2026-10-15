@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * The emergency card (V1, Meka approved 2026-10-10): one page Jeanette can open from her family link — who to call,
+ * The emergency card (V1, Meka approved 2026-10-10): one page his wife can open from her family link — who to call,
  * where important documents are, and key accounts by name only. Meka edits it on his apps; she sees it read-only.
  * One synced entity type (ADR-008 addendum 2026-10-10): `emergency_entry`, one line of the card, a random id.
  *
@@ -57,7 +57,7 @@ data class EmergencyGroup(val section: String, val label: String, val hint: Stri
 data class EmergencyView(
     /** Always the three parts, in order (an empty part shows its hint). */
     val groups: List<EmergencyGroup>,
-    /** "5 lines · Jeanette sees it read-only", or how to start. */
+    /** "5 lines · your partner sees it read-only", or how to start. */
     val summary: String,
     val count: Int,
 ) {
@@ -81,12 +81,12 @@ object EmergencyRules {
     /** Most lines the card holds (it is one page, read in a hurry). */
     const val MAX_LINES = 60
 
-    const val EMPTY_SUMMARY = "Empty. Add who to call, where important documents are and key accounts by name; Jeanette sees it on her family page."
+    const val EMPTY_SUMMARY = "Empty. Add who to call, where important documents are and key accounts by name; your partner sees it on their family page."
     const val NOT_READ = "Type a name, then a colon and the details: “GP: Dr Patel, 01767 123456”."
     const val REFUSED_SECRET = "Navilife keeps passwords and PINs off the card. Write where they're kept instead: “Passwords: in the family password manager”."
     const val REFUSED_NUMBER = "Navilife keeps card, account and policy numbers off the card. Write the name and where the paperwork is: “Home insurance: Aviva, policy in the blue folder”."
     const val FULL = "The card is full. Remove a line first."
-    const val SHARED = "Jeanette sees this card on her family page, read-only. Passwords, PINs and card or account numbers never go on it."
+    const val SHARED = "Your partner sees this card on their family page, read-only. Passwords, PINs and card or account numbers never go on it."
 
     private val SEPARATORS = listOf(":", " - ", " – ", " — ")
 
@@ -203,7 +203,7 @@ object EmergencyRules {
         val summary = when {
             n == 0 -> if (viewer == ShoppingRules.OWNER) EMPTY_SUMMARY else "Meka hasn't filled the emergency card in yet."
             viewer != ShoppingRules.OWNER -> "Kept up to date by Meka"
-            else -> "${if (n == 1) "1 line" else "$n lines"} · Jeanette sees it read-only on her family page"
+            else -> "${if (n == 1) "1 line" else "$n lines"} · your partner sees it read-only on their family page"
         }
         return EmergencyView(groups, summary, n)
     }

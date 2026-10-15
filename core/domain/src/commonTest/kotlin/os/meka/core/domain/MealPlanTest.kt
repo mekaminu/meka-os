@@ -148,7 +148,7 @@ class MealPlanTest {
         assertTrue(mFold.set(sat, chilli.id))
         val line = MealRules.askLine(mFold.view(emptySet()))!!
         assertTrue(line.startsWith("Dinners · tonight: Chilli · Tomorrow: not planned"), line)
-        // The week goes with a question as one meals line; Jeanette's favourites make it someone else's words.
+        // The week goes with a question as one meals line; Jordan's favourites make it someone else's words.
         val today = TodayProjection.project(emptyList(), world.clock.nowMs, DayWindow(at(sat, 0), at(sat + 1, 0)))
         val ctx = AskRules.context(today, world.clock.nowMs, cal, meals = line)
         assertEquals(listOf(line.take(AskRules.MAX_LINE)), ctx.items.filter { it.kind == AskItemKind.MEALS }.map { it.line })
@@ -181,15 +181,15 @@ class MealPlanTest {
 
     @Test
     fun theFamilyPageAddsFavouritesByThePureRulesAndSeesItsOwnWithoutItsName() {
-        // Meal plan slice 3: the server writes Jeanette's favourites with the same plan the devices commit.
-        val made = MealRules.addPlan("Fajitas: wraps, peppers", emptyList(), "Jeanette", 5L) { "m1" }!!
+        // Meal plan slice 3: the server writes Jordan's favourites with the same plan the devices commit.
+        val made = MealRules.addPlan("Fajitas: wraps, peppers", emptyList(), "Jordan", 5L) { "m1" }!!
         assertFalse(made.updated)
         val (id, fields) = made.writes.single()
         assertEquals("m1", id)
-        assertEquals("jeanette", fields[MealFields.BY]?.textOrNull)
+        assertEquals("jordan", fields[MealFields.BY]?.textOrNull)
         val fajitas = MealRules.meals(mapOf(id to fields)).single()
-        assertEquals("wraps, peppers · from Jeanette", MealRules.mealLine(fajitas))
-        assertEquals("wraps, peppers", MealRules.mealLine(fajitas, viewer = "jeanette"))
+        assertEquals("wraps, peppers · from Jordan", MealRules.mealLine(fajitas))
+        assertEquals("wraps, peppers", MealRules.mealLine(fajitas, viewer = "jordan"))
         // The same name: an update on the same entity, only its ingredients; no ingredients typed writes nothing.
         val again = MealRules.addPlan("fajitas - wraps; peppers; salsa", listOf(fajitas), "meka", 6L) { "m2" }!!
         assertTrue(again.updated)
@@ -200,7 +200,7 @@ class MealPlanTest {
         assertEquals(listOf("wraps", "peppers"), bare.entry.ingredients)
         assertNull(MealRules.addPlan(" : wraps", emptyList(), "meka", 8L) { "m4" })
         // Her view of the week names nobody on her own favourites, and Meka's never.
-        val view = MealRules.view(listOf(fajitas), emptyMap(), 0L, emptySet(), viewer = "jeanette")
+        val view = MealRules.view(listOf(fajitas), emptyMap(), 0L, emptySet(), viewer = "jordan")
         assertEquals("wraps, peppers", view.favourites.single().line)
     }
 }

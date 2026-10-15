@@ -58,7 +58,7 @@ data class WeekAheadToday(val text: String, val spoken: String)
 
 /**
  * The Sunday week ahead (Meka approved 2026-10-10), slice 1: the coming week day by day and the things that need both
- * him and Jeanette. Built by [WeekAheadRules.view] from what MEKA already knows; nothing in it changes anything.
+ * him and his wife. Built by [WeekAheadRules.view] from what MEKA already knows; nothing in it changes anything.
  */
 data class WeekAheadView(
     /** The week's Monday (local epoch day). */
@@ -151,7 +151,7 @@ data class WeekAheadInputs(
  *   night, appointments booked, bin collections, trips and their bookings, and renewals or bills due (a cancel-by date lit). At most [MAX_LINES] a day.
  * - **Family sync** (things that need both of them, at most [MAX_SYNC]): the boys off on an office day (who's
  *   covering?), the boys' club fixtures (who's taking them?), date night (sitter sorted?) and family events (an event
- *   whose title or calendar names Jeanette, family, school or the boys).
+ *   whose title or calendar names his partner or a child (from About you), family, school or the boys).
  * - **The heads-up:** Sunday at [HEADS_UP_MIN] (18:05, just after the evening digest, so it arrives on its own;
  *   [NoticeSource.WEEK_AHEAD], opening the week ahead): "Your week ahead" · the summary. Today's header carries the same
  *   from 18:00 until midnight.
@@ -175,8 +175,14 @@ object WeekAheadRules {
     const val MAX_SYNC = 6
     const val MAX_GOAL_CHOICES = 8
     const val QUIET = "A quiet week so far"
-    /** A family event names one of these (whole words, any case) in its title or calendar. */
-    val FAMILY_WORDS = setOf("jeanette", "family", "school", "rex", "logan", "boys", "kids", "parents")
+    /**
+     * A family event names one of these (whole words, any case) in its title or calendar, or a name from About you
+     * ([HouseholdNames.familyWords]; rule 13, never in the code).
+     */
+    val FAMILY_WORDS = setOf("family", "school", "boys", "kids", "parents")
+
+    /** "To sort out with Sam" (About you's partner), else "To sort out together". */
+    fun syncTitle(): String = Household.names.partnerFirst?.let { "To sort out with $it" } ?: "To sort out together"
 
     /** The week's Monday: next Monday from Saturday, else this week's. */
     fun weekStart(today: Long): Long {
@@ -220,7 +226,7 @@ object WeekAheadRules {
     }
 
     fun isFamilyEvent(e: CalendarEvent): Boolean =
-        !e.isFixture && listOfNotNull(e.title, e.calendarTitle, e.calendarName).any { t -> words(t).any { it in FAMILY_WORDS } }
+        !e.isFixture && listOfNotNull(e.title, e.calendarTitle, e.calendarName).any { t -> words(t).any { it in FAMILY_WORDS || it in Household.names.familyWords } }
 
     private data class Keyed(val key: Long, val line: WeekAheadLine)
 
@@ -432,7 +438,7 @@ object WeekAheadRules {
             add("Your week ahead. ${summary.replace(" · ", ", ")}.")
             mail?.let { add(MailWeekRules.spokenLine(it)) }
             days.filter { it.dayLine != null || it.lines.isNotEmpty() }.forEach { add(it.spoken) }
-            if (sync.isNotEmpty()) add("To sort out with Jeanette: " + sync.joinToString("; ") { it.replace(" · ", ", ") } + ".")
+            if (sync.isNotEmpty()) add(syncTitle() + ": " + sync.joinToString("; ") { it.replace(" · ", ", ") } + ".")
             spokenGoals(goals).takeIf { it.isNotEmpty() }?.let { add(it) }
         }.joinToString(" ")
         return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals, mail,
@@ -486,7 +492,7 @@ object WeekAheadRules {
         val head = view.summary + (view.mailNotice?.let { " · $it" } ?: "")
         val text = listOfNotNull(
             head,
-            view.sync.takeIf { it.isNotEmpty() }?.let { "${ShutdownRules.count(it.size, "thing")} to sort out with Jeanette" },
+            view.sync.takeIf { it.isNotEmpty() }?.let { "${ShutdownRules.count(it.size, "thing")} ${syncTitle().replaceFirstChar { c -> c.lowercase() }}" },
             if (view.goals.goals.isNotEmpty() && view.goals.picked == 0) "Pick your goals for the week?" else null,
         ).joinToString(". ").let { if (it.endsWith("?")) it else if (it == head) it else "$it." }
         return listOf(

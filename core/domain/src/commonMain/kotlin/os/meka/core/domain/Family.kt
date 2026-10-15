@@ -1,14 +1,14 @@
 package os.meka.core.domain
 
 /**
- * Settings → Family on both apps (build plan "Family sharing with Jeanette", slice 4): Meka makes Jeanette's private
+ * Settings → Family on both apps (build plan "Family sharing with Jordan", slice 4): Meka makes his partner's private
  * link to the shopping list, sees whether she has opened it ("Joined Sat 10 Oct · seen today") and turns it off in one
  * tap. The invites live on MEKA's server (ADR-005 amendment 2026-10-10); the devices only read them, so nothing here is
  * synced except the Activity entries ([ActivityKind.FAMILY]). Pure rules, no AI.
  */
 enum class FamilyState { WAITING, JOINED, OFF }
 
-/** One invite as the server lists it (never its token or her browser's key). [name] is the server's key ("jeanette"). */
+/** One invite as the server lists it (never its token or her browser's key). [name] is the server's key ("sam"). */
 data class FamilyMember(
     val id: String,
     val name: String,
@@ -18,7 +18,7 @@ data class FamilyMember(
     val lastSeenAtMs: Long? = null,
 )
 
-/** A row in Family: "Jeanette" and "Joined Sat 10 Oct · seen today"; [lit] while it waits on her; Turn off while on. */
+/** A row in Family: "Sam" and "Joined Sat 10 Oct · seen today"; [lit] while it waits on her; Turn off while on. */
 data class FamilyRow(
     val id: String,
     val title: String,
@@ -31,7 +31,8 @@ data class FamilyRow(
 /**
  * The Family screen. [summary] says who can use the list; [rows] are the links that are on (newest first), then up to
  * [FamilyRules.MAX_OFF_SHOWN] turned off; [problem] says why the server couldn't be read (the rows are the last ones
- * read). [canInvite]: no link is on for [FamilyRules.DEFAULT_NAME] yet, so the screen offers to make one.
+ * read). [canInvite]: About you names a partner ([inviteName]) and no link is on for them yet, so the screen offers
+ * to make one ([inviteLabel]: "Make a link for Sam"). Rule 13 release 2 slice 2: the name comes only from About you.
  */
 data class FamilyView(
     val summary: String,
@@ -39,13 +40,17 @@ data class FamilyView(
     val shared: String,
     val canInvite: Boolean,
     val problem: String? = null,
+    /** About you's partner, the name a new link is made for; null with none. */
+    val inviteName: String? = null,
+    /** "Make a link for Sam"; empty with no partner. */
+    val inviteLabel: String = "",
 )
 
 /** A link just made: what the share sheet sends. The URL carries the token, so it is shown once and never stored. */
 data class FamilyLink(val id: String, val name: String, val url: String, val shareText: String, val note: String)
 
 object FamilyRules {
-    const val DEFAULT_NAME = "Jeanette"
+    const val NO_PARTNER = "No one yet · add your partner in About you to make their link to the shopping list"
     const val MAX_NAME = 30
     const val MAX_OFF_SHOWN = 3
     const val SHARED = "Only the shopping list, the dinners and the emergency card (read only) are shared. Nothing else of yours leaves Navilife."
@@ -56,7 +61,7 @@ object FamilyRules {
     const val OFFLINE = "Couldn't reach Navilife's server · try again"
 
     /**
-     * A name MEKA's server accepts ("Jeanette", "Mary-Jane"): letters, spaces, hyphens and apostrophes, up to 30, and
+     * A name MEKA's server accepts ("Sam", "Mary-Jane"): letters, spaces, hyphens and apostrophes, up to 30, and
      * not Meka's own. Spaces are tidied; null when it isn't one.
      */
     fun validName(raw: String): String? {
@@ -67,7 +72,7 @@ object FamilyRules {
         return t
     }
 
-    /** "jeanette" → "Jeanette", "mary jane" → "Mary Jane" (the server keeps names lower case). */
+    /** "sam" → "Sam", "mary jane" → "Mary Jane" (the server keeps names lower case). */
     fun display(name: String): String =
         name.split(' ').joinToString(" ") { w -> w.replaceFirstChar { it.uppercase() } }
 
@@ -103,7 +108,12 @@ object FamilyRules {
         canTurnOff = m.state != FamilyState.OFF,
     )
 
-    fun view(members: List<FamilyMember>, nowMs: Long, cal: LocalCalendar, problem: String? = null): FamilyView {
+    /** [partner]: About you's partner ([Household]), whom a new link is for; null or blank with none. */
+    fun view(
+        members: List<FamilyMember>, nowMs: Long, cal: LocalCalendar, problem: String? = null,
+        partner: String? = Household.names.partner,
+    ): FamilyView {
+        val invite = partner?.let { validName(it) }
         val newest = members.sortedWith(compareByDescending<FamilyMember> { it.createdAtMs }.thenBy { it.id })
         val on = newest.filter { it.state != FamilyState.OFF }
         val off = newest.filter { it.state == FamilyState.OFF }.take(MAX_OFF_SHOWN)
@@ -112,14 +122,17 @@ object FamilyRules {
         val summary = when {
             joined.isNotEmpty() -> "${names(joined)} can see and add to the shopping list and dinners"
             waiting.isNotEmpty() -> "Waiting for ${names(waiting)} to open the link"
-            else -> "No one yet · make a link so $DEFAULT_NAME can add to the shopping list"
+            invite == null -> NO_PARTNER
+            else -> "No one yet · make a link so $invite can add to the shopping list"
         }
         return FamilyView(
             summary = summary,
             rows = (on + off).map { row(it, nowMs, cal) },
             shared = SHARED,
-            canInvite = on.none { it.name.equals(DEFAULT_NAME, ignoreCase = true) },
+            canInvite = invite != null && on.none { it.name.equals(invite, ignoreCase = true) },
             problem = problem,
+            inviteName = invite,
+            inviteLabel = invite?.let { "Make a link for $it" }.orEmpty(),
         )
     }
 

@@ -49,7 +49,7 @@ class ChatShadeTest {
 
     @Test
     fun aNoisyChatLeavesTheShadeOnceMekaHasEachMessageButNeverFamilyOrUrgent() {
-        val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Mum"))
+        val lists = PeopleLists(family = setOf("Jordan"), alwaysNotify = setOf("Mum"))
         // The item's key matches the card's, so the switch on the chat's card reaches what the listener sees.
         assertEquals(chat.key, ChatShadeRules.key(item("x", "Tunde")))
         val on = TriageSettings(clearOnArrival = ChatShadeRules.setClearOnArrival(emptyMap(), chat, on = true))
@@ -60,8 +60,8 @@ class ChatShadeTest {
         // Off by default; a message MEKA hasn't got yet (AI offline) stays for WhatsApp's re-post.
         assertFalse(ChatShadeRules.clearsOnArrival(chatter, TriageSettings(), lists, had = setOf("1", "2")))
         assertFalse(ChatShadeRules.clearsOnArrival(chatter, on, lists, had = setOf("1")))
-        // Jeanette, Mum or an urgent message in the same notification: it stays.
-        assertFalse(ChatShadeRules.clearsOnArrival(chatter + item("3", "Jeanette"), on, lists, had = setOf("1", "2", "3")))
+        // Jordan, Mum or an urgent message in the same notification: it stays.
+        assertFalse(ChatShadeRules.clearsOnArrival(chatter + item("3", "Jordan"), on, lists, had = setOf("1", "2", "3")))
         assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("4", "Mum")), on, lists, had = setOf("4")))
         assertFalse(ChatShadeRules.clearsOnArrival(listOf(item("5", "Tunde", text = "URGENT call me")), on, lists, had = setOf("5")))
         // Another chat's message isn't touched.
@@ -71,11 +71,11 @@ class ChatShadeTest {
     }
 
     @Test
-    fun theSwitchIsNeverOfferedForJeanetteOrAlwaysNotifyOneToOne() {
-        val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Mum"))
-        val jeanette = TriageChatRules.chats(listOf(card("j1", "Jeanette", 1, group = null), card("j2", "Jeanette", 2, group = null))).single()
+    fun theSwitchIsNeverOfferedForJordanOrAlwaysNotifyOneToOne() {
+        val lists = PeopleLists(family = setOf("Jordan"), alwaysNotify = setOf("Mum"))
+        val jordan = TriageChatRules.chats(listOf(card("j1", "Jordan", 1, group = null), card("j2", "Jordan", 2, group = null))).single()
         val tunde = TriageChatRules.chats(listOf(card("t1", "Tunde", 1, group = null), card("t2", "Tunde", 2, group = null))).single()
-        assertFalse(ChatShadeRules.canClearOnArrival(jeanette, lists))
+        assertFalse(ChatShadeRules.canClearOnArrival(jordan, lists))
         assertTrue(ChatShadeRules.canClearOnArrival(tunde, lists))
         assertTrue(ChatShadeRules.canClearOnArrival(chat, lists))
     }

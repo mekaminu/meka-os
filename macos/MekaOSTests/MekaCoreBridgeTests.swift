@@ -328,7 +328,9 @@ final class MekaCoreBridgeTests: XCTestCase {
             databaseKeyHex: nil, encrypted: false,
             databaseDirectory: NSTemporaryDirectory(), databaseName: "leaving-\(UUID().uuidString).db", deviceKey: nil
         )
-        XCTAssertEqual(core.leavingView.value.to, "Jeanette")
+        // Rule 13: no partner in About you, no one to send it to (the name lives only in his data).
+        XCTAssertEqual(core.leavingView.value.to, "")
+        XCTAssertEqual(core.leavingView.value.summary, LeavingRules.shared.NO_ONE)
         let line = try await core.setLeavingNow(on: true, to: "Wife", journeyMin: 80)
         XCTAssertEqual(line, "On · a draft to Wife when work ends on office days · about 1 h 20 home")
         XCTAssertEqual(core.leavingView.value.journeyMin, 80)
@@ -525,13 +527,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(task.task?.id, id)
         XCTAssertEqual(v.groups.last?.hits.first?.target, .listsWaiting)
         // People, slice 3b: a promise is found by its title or the person, in its own group before Waiting for.
-        _ = try await core.addPromise(title: "Send the passport form", to: "Jeanette", byInDays: KotlinInt(int: 0))
+        _ = try await core.addPromise(title: "Send the passport form", to: "Jordan", byInDays: KotlinInt(int: 0))
         try await core.search(query: "passp")
         XCTAssertEqual(core.searchView.value.groups.map(\.label), ["Tasks", "You promised", "Waiting for"])
-        try await core.search(query: "jean")
+        try await core.search(query: "jord")
         let promised = try XCTUnwrap(core.searchView.value.groups.first?.hits.first)
         XCTAssertEqual(promised.kind, .promised)
-        XCTAssertEqual(promised.detail, "Jeanette · due today")
+        XCTAssertEqual(promised.detail, "Jordan · due today")
         XCTAssertEqual(promised.target, .listsWaiting)
         try await core.search(query: "")
         XCTAssertFalse(core.searchView.value.active)
@@ -1402,14 +1404,14 @@ final class MekaCoreBridgeTests: XCTestCase {
             TriageCard(id: "g4", lane: .fyi, personKey: "femi", from: "Femi in Barça lads · 14:04", gist: "Kick-off time",
                        draft: nil, app: .whatsapp, mentioned: true, atMs: 4, spoken: "x", group: "Barça lads", askedBy: nil),
         ])
-        // Fold review 2026-10-12, bug 3: a question from someone Meka watches for lifts the group with "Jeanette asked".
+        // Fold review 2026-10-12, bug 3: a question from someone Meka watches for lifts the group with "Jordan asked".
         let asked = TriageChatRules.shared.chats(cards: cards + [
-            TriageCard(id: "j1", lane: .fyi, personKey: "jeanette", from: "Jeanette in BUFC U7s · 14:05", gist: "Asks if there's no match Saturday",
-                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "BUFC U7s", askedBy: "Jeanette"),
+            TriageCard(id: "j1", lane: .fyi, personKey: "jordan", from: "Jordan in BUFC U7s · 14:05", gist: "Asks if there's no match Saturday",
+                       draft: nil, app: .whatsapp, mentioned: true, atMs: 1, spoken: "x", group: "BUFC U7s", askedBy: "Jordan"),
         ])
         XCTAssertEqual(asked.map(\.title), ["BUFC U7s", "Barça lads"])
-        XCTAssertEqual(asked.first?.askedBy, "Jeanette")
-        XCTAssertEqual(TriageChatRules.shared.askedLine(name: "Jeanette"), "Jeanette asked")
+        XCTAssertEqual(asked.first?.askedBy, "Jordan")
+        XCTAssertEqual(TriageChatRules.shared.askedLine(name: "Jordan"), "Jordan asked")
         XCTAssertNil(asked.last?.askedBy)
         let summary = ChatSummary(chatKey: busy[0].key, title: "Barça lads", summary: "Saturday's lineup and kick-off", upToMs: 4, count: 4, madeAtMs: 5)
         let summed = ChatSummaryRules.shared.withSummaries(chats: busy, summaries: [summary])
@@ -1850,7 +1852,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Family sharing, slice 1: the shopping list's rules and Lists' new tab reach the Mac.
         XCTAssertEqual(ShoppingRules.shared.split(text: "milk, fish and chips;eggs"), ["milk", "fish and chips", "eggs"])
         XCTAssertEqual(ShoppingRules.shared.line(toBuy: 2, got: 1), "2 to buy · 1 got")
-        XCTAssertEqual(ShoppingRules.shared.byName(by: "jeanette"), "Jeanette")
+        XCTAssertEqual(ShoppingRules.shared.byName(by: "jordan"), "Jordan")
         XCTAssertNil(ShoppingRules.shared.byName(by: "meka"))
         XCTAssertEqual(ShoppingView.companion.EMPTY.line, "Nothing to buy")
         XCTAssertEqual(ListsView.companion.EMPTY.shopping.count, 0)
@@ -2133,12 +2135,12 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testFamilyReachesSwift() {
         // Family sharing, slice 4: Settings → Family's rules reach the Mac (only Strings cross from the sheet).
         let rules = FamilyRules.shared
-        XCTAssertEqual(rules.validName(raw: "  Jeanette "), "Jeanette")
+        XCTAssertEqual(rules.validName(raw: "  Jordan "), "Jordan")
         XCTAssertNil(rules.validName(raw: "meka"))
-        XCTAssertEqual(rules.display(name: "jeanette"), "Jeanette")
+        XCTAssertEqual(rules.display(name: "jordan"), "Jordan")
         XCTAssertEqual(rules.state(server: "joined"), .joined)
-        let link = rules.link(id: "fam1", name: "jeanette", url: "https://meka.example/family#ab")
-        XCTAssertEqual(link.name, "Jeanette")
+        let link = rules.link(id: "fam1", name: "jordan", url: "https://meka.example/family#ab")
+        XCTAssertEqual(link.name, "Jordan")
         XCTAssertTrue(link.shareText.hasSuffix("https://meka.example/family#ab"))
         XCTAssertEqual(link.note, rules.NOTE)
     }

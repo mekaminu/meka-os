@@ -64,13 +64,14 @@ import os.meka.core.domain.WeekAheadGoals
 import os.meka.core.domain.WeekAheadKind
 import os.meka.core.domain.WeekAheadLine
 import os.meka.core.domain.WeekAheadSettingView
+import os.meka.core.domain.WeekAheadRules
 import os.meka.core.facade.MekaCore
 
 /**
  * Ask → More → Week ahead (Sunday week ahead, slice 1), and the pane Sunday's 18:00 heads-up and Today's "Your week
  * ahead · …" line open: the coming week day by day — what kind of day (office or from home with the hours, annual
  * leave, a bank holiday), the weather while the forecast reaches it, then events, fixtures, school, date night,
- * appointments and renewals in time order — and FAMILY SYNC, the things that need both Meka and Jeanette.
+ * appointments and renewals in time order — and FAMILY SYNC, the things that need both Meka and his partner.
  *
  * Slice 2: **▶ Listen** reads the week aloud in MEKA's voice ([MekaSpeaker], the phone's own if the voice can't be
  * reached); Listen on Sunday's heads-up opens the pane already reading ([listenNow]). **Sunday heads-up** at the end:
@@ -152,7 +153,7 @@ fun WeekAheadPane(
                 Column(Modifier.animateItem().padding(top = MekaSpace.l).appear(rememberAppearance(2 + v.days.size)),
                     verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     SectionLabel("Family sync", Modifier.semantics { heading() })
-                    Text("To sort out with Jeanette", style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(WeekAheadRules.syncTitle(), style = MekaType.caption, color = Meka.colors.textTertiary)
                     v.sync.forEach { line ->
                         Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.Top) {
                             Box(Modifier.padding(top = MekaSpace.xs).size(6.dp).background(Meka.colors.accent, CircleShape))

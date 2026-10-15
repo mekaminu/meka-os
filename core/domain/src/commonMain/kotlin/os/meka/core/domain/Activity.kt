@@ -70,7 +70,7 @@ enum class ActivityKind {
     CALL,
     /**
      * Family sharing (slice 4): a shopping list link made or turned off in Family, and the day the family member's
-     * phone opened it ("Jeanette joined the shopping list"). Ids come from the invite, so both devices write one entry.
+     * phone opened it ("Jordan joined the shopping list"). Ids come from the invite, so both devices write one entry.
      * Nothing to undo here (Turn off is in Family). Added 2026-10-10.
      */
     FAMILY,

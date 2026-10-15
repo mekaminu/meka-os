@@ -16,7 +16,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-/** The family page's routes (family sharing with Jeanette, slice 2), end to end through Ktor. */
+/** The family page's routes (family sharing with Jordan, slice 2), end to end through Ktor. */
 class FamilyRoutesTest {
     private val devices = InMemoryDeviceRegistry()
     private val foldSecret = devices.enrol("hh", "fold")
@@ -44,14 +44,14 @@ class FamilyRoutesTest {
         application { mekaSync(ops, devices, verifier = verifier, family = family) }
         // Meka, from his Fold: make the invite.
         val create = "/v1/family/invites/create"
-        val made = client.post(create) { with(foldKey) { signed(foldSecret, create, """{"name":"Jeanette"}""") } }
+        val made = client.post(create) { with(foldKey) { signed(foldSecret, create, """{"name":"Jordan"}""") } }
         assertEquals(HttpStatusCode.OK, made.status)
         val text = made.bodyAsText()
         val id = field(text, "id")
         val token = field(text, "token")
         assertEquals("/family#$token", field(text, "path"))
         // Without the Fold's signature nothing is made.
-        assertEquals(HttpStatusCode.Unauthorized, client.post(create) { setBody("""{"name":"Jeanette"}""") }.status)
+        assertEquals(HttpStatusCode.Unauthorized, client.post(create) { setBody("""{"name":"Jordan"}""") }.status)
 
         // Her browser: first open.
         val phone = TestBrowserKey(System::currentTimeMillis)
@@ -61,7 +61,7 @@ class FamilyRoutesTest {
             header("X-Meka-Time", t); header("X-Meka-Nonce", n); header("X-Meka-Signature", s); setBody(claimBody)
         }
         assertEquals(HttpStatusCode.OK, joined.status)
-        assertEquals("Jeanette", field(joined.bodyAsText(), "name"))
+        assertEquals("Jordan", field(joined.bodyAsText(), "name"))
 
         // Her add, signed with her key.
         val add = "/family/v1/shopping/add"

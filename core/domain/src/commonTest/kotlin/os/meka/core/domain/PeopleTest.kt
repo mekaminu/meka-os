@@ -69,23 +69,23 @@ class PeopleTest {
     fun theLastContactIsTheNewestMessageOrReplyAndOnlyJoinsSomeoneAlreadyListed() {
         val at = { day: Long, min: Int -> cal.toEpochMs(day, min) }
         val contacts = listOf(
-            ContactSeen("Jeanette Akunebuni", at(today - 1, 18 * 60 + 40), CaptureApp.WHATSAPP, fromMe = false),
-            ContactSeen("Jeanette Akunebuni", at(today, 13 * 60 + 2), CaptureApp.WHATSAPP, fromMe = true),
+            ContactSeen("Jordan Lane", at(today - 1, 18 * 60 + 40), CaptureApp.WHATSAPP, fromMe = false),
+            ContactSeen("Jordan Lane", at(today, 13 * 60 + 2), CaptureApp.WHATSAPP, fromMe = true),
             ContactSeen("Rex", at(today - 3, 9 * 60), CaptureApp.PHONE, false, CaptureKind.MISSED_CALL),
             ContactSeen("Tunde", at(today, 14 * 60), CaptureApp.SMS, false), // no row: not listed
         )
         val v = PeopleRules.view(
-            listOf(promise("p", "Book the table", "Jeanette"), promise("q", "Fix the bike", "Rex")), emptyList(), emptyList(),
+            listOf(promise("p", "Book the table", "Jordan"), promise("q", "Fix the bike", "Rex")), emptyList(), emptyList(),
             contacts, today, now, cal,
         )
-        assertEquals(listOf("Jeanette", "Rex"), v.rows.map { it.name })
+        assertEquals(listOf("Jordan", "Rex"), v.rows.map { it.name })
         assertEquals("You replied 13:02 · WhatsApp", v.rows[0].lastContact)
         assertEquals("Missed call Fri 9 Oct 09:00 · Phone", v.rows[1].lastContact)
         // A first name only one row has joins; two rows sharing it join neither.
-        assertEquals("jeanette", PeopleRules.match("jeanette akunebuni", listOf("jeanette", "rex")))
-        assertEquals("jeanette akunebuni", PeopleRules.match("jeanette", listOf("jeanette akunebuni")))
+        assertEquals("jordan", PeopleRules.match("jordan lane", listOf("jordan", "rex")))
+        assertEquals("jordan lane", PeopleRules.match("jordan", listOf("jordan lane")))
         assertNull(PeopleRules.match("jo", listOf("jo smith", "jo brown")))
-        assertNull(PeopleRules.match("tunde", listOf("jeanette")))
+        assertNull(PeopleRules.match("tunde", listOf("jordan")))
     }
 
     @Test
@@ -96,11 +96,11 @@ class PeopleTest {
         val cards = TriageCards(fold.replica, { world.clock.nowMs }, cal)
         fun item(id: String, who: String, group: String? = null) =
             CapturedItem(id, CaptureApp.WHATSAPP, CaptureKind.MESSAGE, who, "hi", group, now - hour)
-        cards.save(item("m1", "Jeanette"), MessageTriage(TriageLane.NEEDS_REPLY, summary = "Asks about dinner", draft = "Yes!"))
+        cards.save(item("m1", "Jordan"), MessageTriage(TriageLane.NEEDS_REPLY, summary = "Asks about dinner", draft = "Yes!"))
         cards.save(item("m2", "Tunde", group = "Barça lads"), MessageTriage(TriageLane.FYI, summary = "Score"))
         cards.resolve("m1", TriageResolution.SENT)
         val seen = cards.contacts().sortedBy { it.atMs }
-        assertEquals(listOf("Jeanette" to false, "Jeanette" to true), seen.map { it.person to it.fromMe })
+        assertEquals(listOf("Jordan" to false, "Jordan" to true), seen.map { it.person to it.fromMe })
         assertEquals(now, seen.last().atMs)
 
         val summary = AfterWorkSummaries.build(listOf(item("h1", "Mum"), item("h2", "Ada", group = "Family chat")), PeopleLists())
@@ -151,7 +151,7 @@ class PeopleTest {
         assertEquals("added your promise to Rex: Sort his bike lights, by tomorrow", TalkRules.phrase(c.proposal, today, past = true))
         assertNull(TrustRules.kindOf(c.proposal))
         // Someone new keeps the name as given; nobody named, no date.
-        assertEquals(AskProposal.AddPromise("Jeanette", "The photos", null), card("Jeanette: the photos")!!.proposal)
+        assertEquals(AskProposal.AddPromise("Jordan", "The photos", null), card("Jordan: the photos")!!.proposal)
         val nobody = card("Clear the gutters")!!
         assertEquals(AskProposal.AddPromise(null, "Clear the gutters", null), nobody.proposal)
         assertEquals("Promise · Clear the gutters", nobody.line)
@@ -165,19 +165,19 @@ class PeopleTest {
     @Test
     fun theFoldsListsGivePeopleARowAndJoinTheOnesThatExist() {
         val listed = ListedPeople(
-            family = setOf("Jeanette", "mum", "07700 900123"),
+            family = setOf("Jordan", "mum", "07700 900123"),
             alwaysNotify = setOf("Mum", "Tunde"),
             watched = setOf("Coach Dave", "Tunde"),
         )
         val v = PeopleRules.view(
-            promises = listOf(promise("p", "Book the table", "Jeanette Akunebuni")),
+            promises = listOf(promise("p", "Book the table", "Jordan Lane")),
             waiting = emptyList(),
             occasions = listOf(birthday("Mum", 11, 3, 1966)),
             contacts = listOf(ContactSeen("Tunde", now - hour, CaptureApp.WHATSAPP, fromMe = false)),
             today = today, nowMs = now, cal = cal, listed = listed,
         )
         // A first name joins the promise's row; a number with no name is no row; the first list that has them names them.
-        assertEquals(listOf("Coach Dave", "Jeanette Akunebuni", "Mum", "Tunde"), v.rows.map { it.name })
+        assertEquals(listOf("Coach Dave", "Jordan Lane", "Mum", "Tunde"), v.rows.map { it.name })
         assertEquals(listOf("Watched for requests", "Family", "Family", "Always notify"), v.rows.map { it.listed })
         val tunde = v.rows.last()
         assertNull(tunde.owedLine)
@@ -187,8 +187,8 @@ class PeopleTest {
         assertEquals("4 people", v.summary)
         assertEquals("Mum · family · birthday Tue 3 Nov · in 22 days · turns 60", PeopleAskRules.askLines(v)[4])
         // Without the lists (the Mac) only promises and birthdays make rows, as before.
-        assertEquals(listOf("Jeanette Akunebuni", "Mum"), PeopleRules.view(
-            listOf(promise("p", "Book the table", "Jeanette Akunebuni")), emptyList(), listOf(birthday("Mum", 11, 3, 1966)),
+        assertEquals(listOf("Jordan Lane", "Mum"), PeopleRules.view(
+            listOf(promise("p", "Book the table", "Jordan Lane")), emptyList(), listOf(birthday("Mum", 11, 3, 1966)),
             emptyList(), today, now, cal,
         ).rows.map { it.name })
         assertTrue(PeopleRules.view(emptyList(), emptyList(), emptyList(), emptyList(), today, now, cal, ListedPeople(family = setOf("07700 900123"))).isEmpty)

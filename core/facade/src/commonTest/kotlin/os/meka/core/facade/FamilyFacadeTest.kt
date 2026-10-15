@@ -14,6 +14,7 @@ import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.TransportException
 import os.meka.core.wire.FamilyCodec
 import kotlin.random.Random
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,21 +64,31 @@ class FamilyFacadeTest {
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
+    @AfterTest
+    fun noHousehold() { os.meka.core.domain.Household.set(os.meka.core.domain.HouseholdNames.EMPTY) }
+
     @Test
     fun makeALinkSeeHerJoinAndTurnItOff() = runTest {
         val c = core()
         assertNull(c.familyView.value)
-        val first = c.refreshFamily()
+        // Rule 13: the link is offered for About you's partner only (an invented name here).
+        val none = c.refreshFamily()
+        assertFalse(none.canInvite)
+        assertEquals(FamilyRules.NO_PARTNER, none.summary)
+        c.setAboutYouField("partnerName", "Jordan")
+        val first = c.familyView.value!!
         assertTrue(first.canInvite)
+        assertEquals("Jordan", first.inviteName)
+        assertEquals("Make a link for Jordan", first.inviteLabel)
         assertTrue(first.rows.isEmpty())
 
-        val link = assertNotNull(c.inviteFamily("  Jeanette "))
-        assertEquals(listOf("Jeanette"), server.names)
-        assertEquals("Jeanette", link.name)
+        val link = assertNotNull(c.inviteFamily("  Jordan "))
+        assertEquals(listOf("Jordan"), server.names)
+        assertEquals("Jordan", link.name)
         assertTrue(link.url.startsWith("https://meka.example/family#"))
         assertTrue(link.shareText.endsWith(link.url))
         val waiting = c.familyView.value!!
-        assertEquals("Waiting for Jeanette to open the link", waiting.summary)
+        assertEquals("Waiting for Jordan to open the link", waiting.summary)
         assertFalse(waiting.canInvite)
         assertEquals("Waiting · link made today", waiting.rows.single().line)
 
@@ -85,25 +96,25 @@ class FamilyFacadeTest {
         now += 3_600_000L
         server.invites[0] = server.invites[0].copy(state = "joined", claimedAtMs = now, lastSeenAtMs = now)
         val joined = c.refreshFamily()
-        assertEquals("Jeanette can see and add to the shopping list and dinners", joined.summary)
+        assertEquals("Jordan can see and add to the shopping list and dinners", joined.summary)
         assertEquals("Joined today · seen today", joined.rows.single().line)
         c.refreshFamily()
         val family = c.activityView.value.days.flatMap { it.rows }.filter { it.kind == ActivityKind.FAMILY }.map { it.summary }
-        assertEquals(listOf("Jeanette joined the shopping list", "Made a shopping list link for Jeanette"), family)
+        assertEquals(listOf("Jordan joined the shopping list", "Made a shopping list link for Jordan"), family)
 
         now += 60_000L
         assertTrue(c.turnOffFamily(link.id))
         val off = c.familyView.value!!
         assertEquals(FamilyState.OFF, off.rows.single().state)
         assertTrue(off.canInvite)
-        assertEquals("Turned off Jeanette's link", c.activityView.value.days.first().rows.first().summary)
+        assertEquals("Turned off Jordan's link", c.activityView.value.days.first().rows.first().summary)
         // A link the server doesn't know: false, nothing logged.
         assertFalse(c.turnOffFamily("fam" + "9".repeat(20)))
     }
 
     @Test
     fun theJoinIsLoggedOnceAcrossBothDevices() = runTest {
-        server.invites += FamilyCodec.Invite("fam" + "1".repeat(20), "jeanette", "joined", now - 7_200_000L, now - 3_600_000L, now)
+        server.invites += FamilyCodec.Invite("fam" + "1".repeat(20), "jordan", "joined", now - 7_200_000L, now - 3_600_000L, now)
         val fold = core("android")
         val mac = core("mac")
         fold.refreshFamily()
@@ -120,7 +131,7 @@ class FamilyFacadeTest {
     @Test
     fun whenTheServerCantAnswerTheLastRowsStayWithTheReason() = runTest {
         val c = core()
-        c.inviteFamily("Jeanette")
+        c.inviteFamily("Jordan")
         server.down = true
         val v = c.refreshFamily()
         assertEquals(FamilyRules.OFFLINE, v.problem)

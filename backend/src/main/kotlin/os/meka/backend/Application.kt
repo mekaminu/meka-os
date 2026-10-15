@@ -119,7 +119,7 @@ fun Application.mekaSync(
     here: HereWeather? = integrations?.hereWeather(),
     /** Cheapest fuel nearby (Car and parking, slice 6): Fuel Finder's prices at a rounded point; null leaves the route out. */
     fuel: FuelFinder? = null,
-    /** The family page (family sharing with Jeanette, slice 2); null leaves its routes out. */
+    /** The family page (family sharing with his wife, slice 2); null leaves its routes out. */
     family: FamilyShare? = null,
     /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
     deviceLink: DeviceLink? = DeviceLink(devices, verifier),
@@ -254,7 +254,7 @@ fun Application.mekaSync(
         }
 
         if (family != null) {
-            // Jeanette's page (family sharing, slice 2): static, self-contained, no personal data in it.
+            // his wife's page (family sharing, slice 2): static, self-contained, no personal data in it.
             get(FamilyShare.PAGE_PATH) { call.familyAsset("index.html", ContentType.Text.Html) }
             get("${FamilyShare.PAGE_PATH}/app.js") { call.familyAsset("app.js", ContentType.Application.JavaScript) }
             get("${FamilyShare.PAGE_PATH}/app.css") { call.familyAsset("app.css", ContentType.Text.CSS) }
@@ -1041,7 +1041,7 @@ fun main(args: Array<String>) {
                 )
             }
             val verifier = RequestVerifier()
-            // Jeanette's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
+            // his wife's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
             // and the dinners, written as server ops, and the emergency card, read only. FamilyShare only ever asks for its
             // SHARED_TYPES and writes its WRITABLE_TYPES.
             val family = FamilyShare(

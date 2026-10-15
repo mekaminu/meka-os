@@ -85,10 +85,10 @@ class AskShoppingTest {
         shop.view().toBuy.forEach { shop.got(it.id) }
         assertEquals("Shopping list · nothing to buy",
             AskRules.context(today(), world.clock.nowMs, cal, shopping = shop.view()).items.single { it.kind == AskItemKind.SHOPPING }.line)
-        // Something Jeanette added is someone else's words: proposals then count as from untrusted content.
+        // Something Jordan added is someone else's words: proposals then count as from untrusted content.
         fold.replica.commitLocal(EntityTypes.SHOPPING_ITEM, "j1", mapOf(
             ShoppingFields.TITLE to "nappies".fv(), ShoppingFields.GOT to false.fv(),
-            ShoppingFields.ADDED_AT to world.clock.nowMs.fv(), ShoppingFields.BY to "jeanette".fv(),
+            ShoppingFields.ADDED_AT to world.clock.nowMs.fv(), ShoppingFields.BY to "jordan".fv(),
         ))
         assertTrue(AskRules.context(today(), world.clock.nowMs, cal, shopping = shop.view()).untrusted)
         // A long list is cut to one line.

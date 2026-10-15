@@ -218,7 +218,7 @@ class ListsTest {
     fun promisesSortDueFirstAndUndatedOnesSaySinceWhen() {
         val a = l.addPromise("Call Mum back", to = "Mum")
         world.clock.advance(day)
-        val b = l.addPromise("Send the photos", to = "Jeanette", byInDays = 3)
+        val b = l.addPromise("Send the photos", to = "Jordan", byInDays = 3)
         val c = l.addPromise("Return the drill", byInDays = 0)
         assertEquals(listOf(c, b, a), l.promisedItems().map { it.id })
         assertEquals("Mum · since ${CivilDate.shortLabel(today() - 1)}", l.promisedItems().last().meta)
@@ -249,7 +249,7 @@ class ListsTest {
     fun aDateMovedOnOneDeviceAndKeptOnAnotherEndsKeptAndSyncs() {
         val mac = world.device("mac")
         val ml = lists(mac)
-        val id = l.addPromise("Book the boys' haircuts", to = "Jeanette", byInDays = 1)
+        val id = l.addPromise("Book the boys' haircuts", to = "Jordan", byInDays = 1)
         d.sync(); mac.sync()
         assertEquals(listOf("Book the boys' haircuts"), ml.view(mac.tasks.all()).promised.map { it.title })
         d.goOffline(); mac.goOffline()
@@ -263,7 +263,7 @@ class ListsTest {
 
     @Test
     fun aDuePromiseIsADigestNotice() {
-        l.addPromise("Fix the shed door", to = "Jeanette", byInDays = 0)
+        l.addPromise("Fix the shed door", to = "Jordan", byInDays = 0)
         l.addPromise("Later one", byInDays = 5)
         val ns = NoticeSources.collect(
             l.view(d.tasks.all()), FastingView.EMPTY, ShutdownView.EMPTY.copy(doneToday = true), Today(emptyList(), null, emptyList(), emptyList()),
@@ -271,7 +271,7 @@ class ListsTest {
         ).filter { it.source == NoticeSource.PROMISE }
         val n = ns.single()
         assertEquals("Promised: Fix the shed door", n.title)
-        assertEquals("Jeanette · due today", n.text)
+        assertEquals("Jordan · due today", n.text)
         assertEquals(NoticeTier.DIGEST, n.tier)
         assertEquals(NoticeTarget.LISTS, n.target)
     }

@@ -38,7 +38,7 @@ class EmergencyCardFacadeTest {
 
         fold.syncNow(); mac.syncNow()
         val v = mac.emergencyView.value
-        assertEquals("2 lines · Jeanette sees it read-only on her family page", v.summary)
+        assertEquals("2 lines · your partner sees it read-only on their family page", v.summary)
         val gp = v.groups.first { it.section == "call" }.rows.single()
         assertEquals("01767123456", gp.phone)
 

@@ -216,7 +216,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     MEETING_PREP("Meeting prep (before meetings)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
-    /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jeanette · due today"). */
+    /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jordan · due today"). */
     PROMISE("Promises you made", NoticeTier.DIGEST),
     REVIEW("Decisions to review", NoticeTier.DIGEST),
     OVERDUE("Overdue tasks", NoticeTier.DIGEST),
@@ -229,7 +229,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     TRAINS("Trains on your route", NoticeTier.HEADS_UP),
     /**
      * "Leaving now" ([LeavingRules.notices]): when an office day's work ends, the drafted "Leaving now, home about 18:40"
-     * for Jeanette, with Send (Meka's tap) and Edit; once more if the trains change on the way.
+     * for his wife, with Send (Meka's tap) and Edit; once more if the trains change on the way.
      */
     LEAVING("Leaving now (a draft to send home)", NoticeTier.HEADS_UP),
     /**

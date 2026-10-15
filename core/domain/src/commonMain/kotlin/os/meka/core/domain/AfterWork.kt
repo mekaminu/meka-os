@@ -297,7 +297,7 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
 
     /**
      * The first two people by the summary's order and how many more (Fold review 2026-10-12 17:56, item 3: the card
-     * gave no names): "Jeanette and Ada", "Jeanette, Ada and 3 more"; null when empty.
+     * gave no names): "Jordan and Ada", "Jordan, Ada and 3 more"; null when empty.
      */
     val namesLine: String? get() = when (people.size) {
         0 -> null

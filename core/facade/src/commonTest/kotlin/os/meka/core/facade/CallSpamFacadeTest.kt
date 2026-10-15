@@ -28,7 +28,7 @@ class CallSpamFacadeTest {
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private val lists = PeopleLists(family = setOf("Jeanette")).withNumber("Jeanette", "+447700900111")
+    private val lists = PeopleLists(family = setOf("Jordan")).withNumber("Jordan", "+447700900111")
 
     @Test
     fun aBlockedNumberIsRejectedAndLoggedOnce() = runTest {
@@ -57,7 +57,7 @@ class CallSpamFacadeTest {
         assertTrue(c.blockCaller("07700 900555", "Kept ringing"))
         assertFalse(c.blockCaller("abc", null))
         assertEquals(CallReason.AUTO_BLOCKED, c.screenIncomingCall("01632 960000", lists, emptyList(), CallSignals(verificationFailed = true)).reason)
-        // Jeanette is family: never treated as spam.
+        // Jordan is family: never treated as spam.
         assertTrue(c.screenIncomingCall("07700900111", lists, emptyList(), CallSignals(verificationFailed = true)).rings)
         // A withheld number rings by day (a Saturday, off work)…
         assertTrue(c.screenIncomingCall(null, lists, emptyList(), CallSignals.NONE).rings)
@@ -74,9 +74,9 @@ class CallSpamFacadeTest {
         val c = core()
         val stranger = os.meka.core.domain.CapturedItem("v1", os.meka.core.domain.CaptureApp.PHONE, os.meka.core.domain.CaptureKind.VOICE_MESSAGE,
             "+441632960691", "This is the police", null, now - 60_000)
-        val jeanette = stranger.copy(id = "v2", personName = "+447700900111")
-        val summary = os.meka.core.domain.AfterWorkSummaries.build(listOf(stranger, jeanette), lists)
-        val known = summary.people.single { it.personName == "Jeanette" }
+        val jordan = stranger.copy(id = "v2", personName = "+447700900111")
+        val summary = os.meka.core.domain.AfterWorkSummaries.build(listOf(stranger, jordan), lists)
+        val known = summary.people.single { it.personName == "Jordan" }
         assertFalse(c.blockHeldCaller(known))
         val p = summary.people.single { it.personName == "01632 960691" }
         assertTrue(c.blockHeldCaller(p))

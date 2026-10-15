@@ -57,7 +57,7 @@ data class TriageSettings(
     /**
      * The people Meka watches for ([RequestWatchRules.everyone]: the Family list and Watch for requests from), filled in
      * by the Fold when it triages (never stored with these settings): a question or ask from one of them in a group is
-     * read like a mention (Fold review 2026-10-12, bug 3: Jeanette asking in BUFC U7s).
+     * read like a mention (Fold review 2026-10-12, bug 3: his wife asking in BUFC U7s).
      */
     val watched: Set<String> = emptySet(),
 ) {

@@ -48,7 +48,7 @@ fun LeavingNowSection(view: LeavingView, lists: PeopleLists, modifier: Modifier 
             Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text("To", style = MekaType.caption, color = Meka.colors.textTertiary)
                 val names = (lists.family + lists.alwaysNotify).toList().let { n ->
-                    if (n.any { LeavingRules.samePerson(view.to, it) }) n else listOf(view.to) + n
+                    if (view.to.isBlank() || n.any { LeavingRules.samePerson(view.to, it) }) n else listOf(view.to) + n
                 }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     names.forEach { name ->

@@ -5,11 +5,11 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * The shared shopping list (build plan "Family sharing with Jeanette", slice 1, Meka approved 2026-10-09). One synced
+ * The shared shopping list (build plan "Family sharing with Jordan", slice 1, Meka approved 2026-10-09). One synced
  * `shopping_item` entity per thing to buy (ADR-008 addendum 2026-10-10). Ticking it ("Got") is a field, never a
  * delete, so it can be put back; adding a name that is already on the list never makes a second row (a got one comes
- * back instead). [ShoppingFields.BY] says who added it ("meka", or "jeanette" once her page lands), so Lists can say
- * "From Jeanette". Plain, non-AI rules; nothing here leaves Meka's own synced data.
+ * back instead). [ShoppingFields.BY] says who added it ("meka", or "jordan" once her page lands), so Lists can say
+ * "From Jordan". Plain, non-AI rules; nothing here leaves Meka's own synced data.
  */
 object ShoppingFields {
     const val TITLE = "title"
@@ -17,7 +17,7 @@ object ShoppingFields {
     const val GOT = "got"
     const val ADDED_AT = "addedAtMs"
     const val GOT_AT = "gotAtMs"
-    /** Who added it: [ShoppingRules.OWNER] or a family member's name key ("jeanette"). Display only. */
+    /** Who added it: [ShoppingRules.OWNER] or a family member's name key ("jordan"). Display only. */
     const val BY = "by"
     const val DELETED = ActionableFields.DELETED
 }
@@ -68,14 +68,14 @@ object ShoppingRules {
     fun split(text: String): List<String> =
         text.split(',', ';', '\n').map(::tidy).filter { it.isNotEmpty() }.distinctBy(::key)
 
-    /** "jeanette" → "Jeanette"; [OWNER] and blanks → null (Meka's own items carry no name). */
+    /** "jordan" → "Jordan"; [OWNER] and blanks → null (Meka's own items carry no name). */
     fun byName(by: String?): String? {
         val b = by?.trim().orEmpty()
         if (b.isEmpty() || b.equals(OWNER, ignoreCase = true)) return null
         return b.replaceFirstChar { it.uppercase() }
     }
 
-    /** A to-buy row's line: "From Jeanette · today"; null for Meka's own. */
+    /** A to-buy row's line: "From Jordan · today"; null for Meka's own. */
     fun toBuyMeta(by: String?, addedAtMs: Long, nowMs: Long, cal: LocalCalendar): String? =
         byName(by)?.let { "From $it · ${day(addedAtMs, nowMs, cal)}" }
 
@@ -89,7 +89,7 @@ object ShoppingRules {
         else -> "$toBuy to buy · $got got"
     }
 
-    /** "Jeanette " → "jeanette": who added a thing, as stored in [ShoppingFields.BY]; blank is [OWNER]. */
+    /** "Jordan " → "jordan": who added a thing, as stored in [ShoppingFields.BY]; blank is [OWNER]. */
     fun whoKey(by: String): String = by.trim().lowercase().ifEmpty { OWNER }.take(40)
 
     private fun Map<String, FieldValue>.f(field: String): FieldValue = this[field] ?: FieldValue.Null

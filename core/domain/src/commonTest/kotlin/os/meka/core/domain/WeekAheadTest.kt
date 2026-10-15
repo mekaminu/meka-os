@@ -4,6 +4,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -12,7 +13,7 @@ class WeekAheadTest {
     @BeforeTest
     fun household() {
         // Rule 13, release 2: the children and clubs come from About you; these are invented.
-        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC")
+        Household.useTyped("Max, U7\nFelix, U10", "OTFC Lindenbrook United, HRFC", "Jordan")
     }
 
     @AfterTest
@@ -61,6 +62,18 @@ class WeekAheadTest {
     )
 
     private fun view(nowMs: Long = at(sun, 18), i: WeekAheadInputs = inputs()) = WeekAheadRules.view(i, nowMs, cal, ::window)
+
+    @Test
+    fun familyEventsAndTheSyncTitleFollowAboutYou() {
+        // Rule 13 release 2 slice 2: names come from About you (set in @BeforeTest: Jordan, Max and Felix).
+        assertTrue(WeekAheadRules.isFamilyEvent(ev("e1", "Jordan's dentist", mon, 10)))
+        assertTrue(WeekAheadRules.isFamilyEvent(ev("e2", "Felix party", mon, 10)))
+        assertEquals("To sort out with Jordan", WeekAheadRules.syncTitle())
+        Household.set(HouseholdNames.EMPTY)
+        assertFalse(WeekAheadRules.isFamilyEvent(ev("e3", "Jordan's dentist", mon, 10)))
+        assertTrue(WeekAheadRules.isFamilyEvent(ev("e4", "School play", mon, 10)))
+        assertEquals("To sort out together", WeekAheadRules.syncTitle())
+    }
 
     @Test
     fun onSundayItIsNextWeekDayByDay() {
@@ -114,7 +127,7 @@ class WeekAheadTest {
         assertTrue(home.sync.none { it.contains("who's covering") })
         assertTrue(home.days[3].lines.first { it.kind == WeekAheadKind.SCHOOL }.lit.not())
         assertTrue(home.spoken.startsWith("Your week ahead. "))
-        assertTrue(home.spoken.contains("To sort out with Jeanette: "))
+        assertTrue(home.spoken.contains("To sort out with Jordan: "))
     }
 
     @Test
@@ -143,7 +156,7 @@ class WeekAheadTest {
         assertEquals(at(sun, 18, 5), n.atMs) // after the 18:00 evening digest
         assertEquals(at(mon, 12), n.expiresAtMs)
         assertEquals("Your week ahead", n.title)
-        assertTrue(n.text.endsWith("4 things to sort out with Jeanette."))
+        assertTrue(n.text.endsWith("4 things to sort out with Jordan."))
         // Today's header carries it from 18:00 until midnight.
         assertNull(WeekAheadRules.todayLine(v, at(sun, 17, 59), cal))
         assertEquals("Your week ahead · ${v.summary}", WeekAheadRules.todayLine(v, at(sun, 18), cal)!!.text)

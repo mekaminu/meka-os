@@ -72,7 +72,7 @@ class NotifyRoutingTest {
     fun leavingNowShowsSendAndEditOnTheFold() {
         val n = os.meka.core.domain.Notice(
             key = "leaving:20738:good", source = os.meka.core.domain.NoticeSource.LEAVING, tier = os.meka.core.domain.NoticeTier.HEADS_UP,
-            title = "Tell Jeanette you're leaving?", text = "Leaving now, home about 18:40", atMs = 0L,
+            title = "Tell Jordan you're leaving?", text = "Leaving now, home about 18:40", atMs = 0L,
             target = os.meka.core.domain.NoticeTarget.TODAY,
             actions = listOf(NoticeAction.SEND_MESSAGE, NoticeAction.EDIT_MESSAGE, NoticeAction.COPY_MESSAGE), postAs = "leaving:20738",
         )

@@ -99,7 +99,7 @@ class ClubChildTest {
         assertEquals("Felix", ea.marks().clubChildren.values.single())
         assertEquals("Felix", ea.setClubChild(training, null)) // Undo back to nobody
         assertTrue(ea.marks().clubChildren.isEmpty())
-        assertNull(ea.setClubChild(training, "Jeanette")) // not a child: nothing written
+        assertNull(ea.setClubChild(training, "Jordan")) // not a child: nothing written
         assertTrue(ea.marks().clubChildren.isEmpty())
         ea.setClubChild(ev("a", "OTFC U7s training"), "Felix") // the title says Max: nothing written
         assertTrue(ea.marks().clubChildren.isEmpty())

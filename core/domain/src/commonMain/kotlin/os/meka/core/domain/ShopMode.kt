@@ -4,7 +4,7 @@ package os.meka.core.domain
  * Shop mode (Checklists in tasks, slice 2; Meka, 2026-10-10: "going shopping with a list, check it off as I shop"): a
  * task's checklist or the shared Shopping list full screen, big text, still to get first, the screen kept awake. It
  * reads Meka's own synced data on the device, so it works offline; ticks sync when the phone is back online (a tick on
- * the shared list then shows on Jeanette's page). Plain, non-AI rules shared by both apps.
+ * the shared list then shows on his wife's page). Plain, non-AI rules shared by both apps.
  */
 data class ShopRow(val id: String, val text: String, val done: Boolean, val meta: String?)
 

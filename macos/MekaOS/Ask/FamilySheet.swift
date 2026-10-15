@@ -2,7 +2,7 @@
 import AppKit
 import SwiftUI
 
-/// Ask → More → Family on the Mac (family sharing with Jeanette, slice 4), like the Fold's FamilyPane: make Jeanette's
+/// Ask → More → Family on the Mac (family sharing with his wife, slice 4), like the Fold's FamilyPane: make his wife's
 /// private link to the shopping list and send it (the system share menu, or Copy link), see whether she has opened it
 /// ("Joined Sat 10 Oct · seen today") and turn it off in one click. The rows are the core's `FamilyRules`; the link just
 /// made is held only while the sheet is open (it carries the link's secret), never saved.
@@ -45,8 +45,8 @@ struct FamilySheet: View {
                         .staggeredAppear(i + 2)
                     }
                 }
-                if view.canInvite && made == nil {
-                    Button("Make a link for Jeanette") {
+                if view.canInvite && view.inviteName != nil && made == nil {
+                    Button(view.inviteLabel) {
                         MekaHaptics.light()
                         Task {
                             if let link = await model.inviteFamily() {

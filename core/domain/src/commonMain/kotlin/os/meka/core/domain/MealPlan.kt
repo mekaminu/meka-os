@@ -17,7 +17,7 @@ object MealFields {
     /** The ingredients as typed, one per line ("mince\nkidney beans\nrice"); empty when none were given. */
     const val INGREDIENTS = "ingredients"
     const val ADDED_AT = "addedAtMs"
-    /** Who added it: [ShoppingRules.OWNER] or a family member's name key ("jeanette"). Display only. */
+    /** Who added it: [ShoppingRules.OWNER] or a family member's name key ("jordan"). Display only. */
     const val BY = "by"
     const val DELETED = ActionableFields.DELETED
 }
@@ -99,7 +99,7 @@ object MealRules {
     const val SHOPPING_HINT = "Pick the week's dinners and their ingredients can go on the shopping list in one tap."
     const val NOT_PLANNED = "Not planned"
     const val NONE_CHOICE = "None"
-    const val SHARED = "Favourites and the week's dinners are on the Fold, the Mac and Jeanette's family page, where she can add favourites. Ingredients go on the shopping list you share."
+    const val SHARED = "Favourites and the week's dinners are on the Fold, the Mac and your partner's family page, where they can add favourites. Ingredients go on the shopping list you share."
     /** Most favourites the family page lets the list grow to (Meka's own apps aren't limited). */
     const val MAX_FAVOURITES = 100
 
@@ -183,7 +183,7 @@ object MealRules {
 
     /**
      * A favourite's line: its ingredients ("mince, kidney beans, rice", cut at a word past 80), and who added it unless
-     * that is the [viewer] (Jeanette's page leaves "from Jeanette" off her own).
+     * that is the [viewer] (his wife's page leaves "from Jordan" off her own).
      */
     fun mealLine(m: Meal, viewer: String = ShoppingRules.OWNER): String {
         val list = if (m.ingredients.isEmpty()) "No ingredients yet · type “${m.title}: …” to add them" else {

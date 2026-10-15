@@ -11,7 +11,7 @@ import os.meka.core.sync.fv
  * with Undo and kept in Activity; an Undo of one sends that kind back to asking first.
  *
  * Only MEKA's own lists qualify (adding or ticking off a task, adding to Shopping, keeping a win), and only for a
- * question that carried nothing from other people (no calendar lines, shared links or Jeanette's items, ADR-006):
+ * question that carried nothing from other people (no calendar lines, shared links or his wife's items, ADR-006):
  * otherwise the card still waits for his tap. Never personal messages, money or trading (those are not Ask cards at all and the policy engine's ceilings
  * hold them at Level 3), and, for now, nothing that reaches a calendar, rings an alarm, starts a fast, books leave or
  * changes a family evening or a renewal date.
@@ -62,7 +62,7 @@ object TrustRules {
         // it could never run on its own, so it isn't offered.
         is AskProposal.QueueDone -> null
         // A move can carry a planned block in Google; an alarm or timer rings the phone; a fast is health; leave is
-        // work days; dinner and date night are Jeanette's evening too; a renewal's next date hides a real one if wrong;
+        // work days; dinner and date night are his wife's evening too; a renewal's next date hides a real one if wrong;
         // a fact is what MEKA answers from later, so a misheard one should always be seen first.
         is AskProposal.MoveTask, is AskProposal.StartFast, is AskProposal.Timer, is AskProposal.Alarm,
         is AskProposal.PlanDinner, is AskProposal.SkipDateNight, is AskProposal.RenewalDone, is AskProposal.BookLeave,

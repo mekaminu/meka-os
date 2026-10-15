@@ -49,7 +49,7 @@ private struct TriageChatRow: View {
         let rules = TriageChatRules.shared
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                // "Jeanette asked" above the group's name (Fold review 2026-10-12, bug 3): why this chat is at the top.
+                // "Jordan asked" above the group's name (Fold review 2026-10-12, bug 3): why this chat is at the top.
                 if let name = chat.askedBy {
                     Text(rules.askedLine(name: name)).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 }
@@ -125,7 +125,7 @@ private struct TriageCardRow: View {
         let rules = TriageReplyRules.shared
         let lead = rules.label(primary: rules.primary(card: card, live: false, canSend: false))
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            // Someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): "Jeanette asked", in brass.
+            // Someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): "Jordan asked", in brass.
             if let name = card.askedBy {
                 Text(TriageChatRules.shared.askedLine(name: name)).font(MekaType.itemMeta).foregroundStyle(palette.accent)
             }

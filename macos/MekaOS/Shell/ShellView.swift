@@ -252,7 +252,7 @@ private struct ShellSheetsA: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showSetup }, set: { model.showSetup = $0 })) { SetupSheet(palette: palette) }
             // Opened from Today's header or Ask's More list, so they live on the shell.
             .sheet(isPresented: Binding(get: { model.showCalendars }, set: { model.showCalendars = $0 })) { CalendarsSheet(palette: palette) }
-            // Family (Ask → More): Jeanette's link to the shopping list.
+            // Family (Ask → More): his wife's link to the shopping list.
             .sheet(isPresented: Binding(get: { model.showFamily }, set: { model.showFamily = $0 })) { FamilySheet(palette: palette) }
             // Watch (Ask → More): link a Galaxy Watch with the code it shows.
             .sheet(isPresented: Binding(get: { model.showWatch }, set: { model.showWatch = $0 })) { WatchSheet(palette: palette) }
@@ -285,7 +285,7 @@ private struct ShellSheetsB: ViewModifier {
             // Date night (Ask → More): the fortnightly evening kept clear (date night, slice 1).
             .sheet(isPresented: Binding(get: { model.showDateNight }, set: { model.showDateNight = $0 })) { DateNightSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showLifeAdmin }, set: { model.showLifeAdmin = $0 })) { LifeAdminSheet(palette: palette) }
-            // Emergency card (Ask → More): who to call, where things are, key accounts by name; Jeanette reads it.
+            // Emergency card (Ask → More): who to call, where things are, key accounts by name; his wife reads it.
             .sheet(isPresented: Binding(get: { model.showEmergency }, set: { model.showEmergency = $0 })) { EmergencySheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showKids }, set: { model.showKids = $0 })) { KidsSheet(palette: palette) }
     }

@@ -68,10 +68,10 @@ class HttpSyncTransportTest {
             "/v1/ai/group-digest" -> respond(digestReply, digestStatus, json)
             "/v1/weather/here" -> respond(hereReply, hereStatus, json)
             "/v1/family/invites/list" -> respond(
-                """{"invites":[{"id":"$familyId","name":"jeanette","state":"joined","createdAtMs":1,"claimedAtMs":2}]}""", familyStatus, json,
+                """{"invites":[{"id":"$familyId","name":"jordan","state":"joined","createdAtMs":1,"claimedAtMs":2}]}""", familyStatus, json,
             )
             "/v1/family/invites/create" -> respond(
-                """{"id":"$familyId","name":"jeanette","token":"$familyToken","path":"/family#$familyToken"}""", familyStatus, json,
+                """{"id":"$familyId","name":"jordan","token":"$familyToken","path":"/family#$familyToken"}""", familyStatus, json,
             )
             "/v1/family/invites/revoke" ->
                 if (familyStatus == HttpStatusCode.NotFound) respond("""{"error":"unknown"}""", familyStatus, json)
@@ -159,12 +159,12 @@ class HttpSyncTransportTest {
     @Test
     fun familyLinksAreMadeListedAndTurnedOffSignedWithThisServerInFront() = runTest {
         val t = HttpSyncTransport(client(), "https://meka.example/", RecordingKey()) { "s".repeat(64) }
-        val (made, url) = t.createFamilyInvite("Jeanette")
+        val (made, url) = t.createFamilyInvite("Jordan")
         assertEquals(familyId, made.id)
         assertEquals("https://meka.example/family#$familyToken", url)
         val create = requests.last()
         assertEquals("/v1/family/invites/create", create.url.encodedPath)
-        assertEquals("""{"name":"Jeanette"}""", (create.body as TextContent).text)
+        assertEquals("""{"name":"Jordan"}""", (create.body as TextContent).text)
         assertTrue(create.headers[RequestSigning.HEADER_SIGNATURE] != null)
         assertEquals(listOf("joined"), t.familyInvites().map { it.state })
         assertTrue(t.revokeFamilyInvite(familyId))

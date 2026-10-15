@@ -30,7 +30,7 @@ object TriageCardFields {
     const val DRAFT = "draft"
     /**
      * True for a group message from someone Meka watches for (family, Watch for requests from) that asked something
-     * (Fold review 2026-10-12, bug 3): the group's card rises to the top with "Jeanette asked". Absent otherwise.
+     * (Fold review 2026-10-12, bug 3): the group's card rises to the top with "Jordan asked". Absent otherwise.
      */
     const val WATCHED = "watched"
     /** True when the message never went to the AI (a person or group Meka keeps from it). */
@@ -73,8 +73,8 @@ data class TriageCard(
     /** The group's name for a group message that named Meka; null for a 1:1 chat (messages grouped per chat, slice 1). */
     val group: String? = null,
     /**
-     * "Jeanette" when someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): the card shows
-     * "Jeanette asked" and its chat goes to the top of Needs you. Null for a 1:1 chat or anyone else.
+     * "Jordan" when someone Meka watches for asked this in a group (Fold review 2026-10-12, bug 3): the card shows
+     * "Jordan asked" and its chat goes to the top of Needs you. Null for a 1:1 chat or anyone else.
      */
     val askedBy: String? = null,
 ) {

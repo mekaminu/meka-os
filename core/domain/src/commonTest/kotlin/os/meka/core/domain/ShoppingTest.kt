@@ -93,12 +93,12 @@ class ShoppingTest {
 
     @Test
     fun someoneElsesItemSaysWhoAddedItAndBothDevicesAgree() {
-        val (bread) = sMac.add("Bread", by = "Jeanette")
+        val (bread) = sMac.add("Bread", by = "Jordan")
         sync()
         val row = sFold.view().toBuy.single()
         assertEquals("Bread", row.title)
-        assertEquals("jeanette", row.by)
-        assertEquals("From Jeanette · today", row.meta)
+        assertEquals("jordan", row.by)
+        assertEquals("From Jordan · today", row.meta)
         // Got on the Fold while the Mac puts it back later: the latest wins on both.
         sFold.got(bread)
         world.clock.nowMs += 60_000
@@ -117,7 +117,7 @@ class ShoppingTest {
 
     @Test
     fun thePureRulesReadPlainFieldsAsTheServerHoldsThem() {
-        // MEKA's server (Jeanette's page) has each item's latest fields, not a replica: the same rules read them.
+        // MEKA's server (Jordan's page) has each item's latest fields, not a replica: the same rules read them.
         val now = at(sat, 10)
         val items = mapOf(
             "a" to mapOf(ShoppingFields.TITLE to "Milk".fv(), ShoppingFields.GOT to false.fv(), ShoppingFields.ADDED_AT to now.fv()),
@@ -128,11 +128,11 @@ class ShoppingTest {
         assertEquals(listOf("Milk"), v.toBuy.map { it.title })
         assertEquals(listOf("Eggs"), v.got.map { it.title })
         var k = 0
-        val add = ShoppingRules.add("milk, eggs, tea, bread", items, " Jeanette", now, { "new${k++}" })
+        val add = ShoppingRules.add("milk, eggs, tea, bread", items, " Jordan", now, { "new${k++}" })
         // Milk is already to buy, eggs come back on their own row, tea was removed so it is new, as is bread.
         assertEquals(listOf("a", "b", "new0", "new1"), add.ids)
         assertEquals(listOf("b", "new0", "new1"), add.writes.map { it.first })
-        assertEquals("jeanette".fv(), add.writes[0].second[ShoppingFields.BY])
+        assertEquals("jordan".fv(), add.writes[0].second[ShoppingFields.BY])
         assertEquals((now + 3).fv(), add.writes[2].second[ShoppingFields.ADDED_AT])
         assertNull(ShoppingRules.gotFields(items["b"], now)) // already got
         assertNull(ShoppingRules.gotFields(items["c"], now)) // removed
@@ -146,7 +146,7 @@ class ShoppingTest {
     fun namesReadNaturally() {
         assertNull(ShoppingRules.byName("meka"))
         assertNull(ShoppingRules.byName(" "))
-        assertEquals("Jeanette", ShoppingRules.byName("jeanette"))
+        assertEquals("Jordan", ShoppingRules.byName("jordan"))
         assertEquals("Nothing to buy", ShoppingRules.line(0, 0))
         assertEquals("2 to buy · 1 got", ShoppingRules.line(2, 1))
     }

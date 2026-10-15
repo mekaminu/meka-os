@@ -80,9 +80,9 @@ class ApprovalsTest {
         // Answered once: a second answer is refused.
         assertEquals(ApprovalDecision.Refused(ApprovalRefusal.ANSWERED), a.decide(id, false, ApprovalConfirmation.TAP, "k2", "android"))
 
-        val other = approvals(fold).request(ApprovalKind.SHARE, "Vault", "d1", "Share passport scan with Jeanette", emptyList())!!
+        val other = approvals(fold).request(ApprovalKind.SHARE, "Vault", "d1", "Share passport scan with Jordan", emptyList())!!
         val no = assertIs<ApprovalDecision.Write>(a.decide(other, false, ApprovalConfirmation.TAP, "k3", "android"))
-        assertEquals("Declined · Share passport scan with Jeanette", no.line)
+        assertEquals("Declined · Share passport scan with Jordan", no.line)
         assertEquals(ApprovalDecision.Refused(ApprovalRefusal.GONE), a.decide("nope", false, ApprovalConfirmation.TAP, "k4", "android"))
     }
 

@@ -5,7 +5,7 @@ import os.meka.core.sync.Replica
 import os.meka.core.sync.fv
 
 /**
- * "Leaving now" to Jeanette (build plan, Meka approved 2026-10-10), slice 1. When an office day's work ends, MEKA drafts
+ * "Leaving now" to his wife (build plan, Meka approved 2026-10-10), slice 1. When an office day's work ends, MEKA drafts
  * "Leaving now, home about 18:40" from the journey home and TfL's line status (until the National Rail key, Needs Meka
  * #16) and puts it in one heads-up ([NoticeSource.LEAVING]) with **Send** and **Edit** on the Fold, **Copy** on the Mac.
  *
@@ -22,7 +22,9 @@ import os.meka.core.sync.fv
  * updated draft once ("Leaving now, home about 19:00 — Thameslink has severe delays, so I'm coming via King's Cross").
  *
  * Stored as one `context_mode` entity, id [LeavingRules.ENTITY_ID] (ADR-008 addendum 2026-10-11): `on` (Bool), `to`
- * (the family entry's name), `journeyMin` (Int64). All LWW. On by default, to "Jeanette". Plain, non-AI rules.
+ * (the family entry's name), `journeyMin` (Int64). All LWW. On by default. Rule 13 release 2 slice 2 (2026-10-15): with
+ * no `to` typed the draft goes to the partner named in About you ([Household]); with neither, no draft is made and the
+ * line says to add them. Plain, non-AI rules.
  *
  * Later: "when he leaves the work place, if location is on" (MEKA's location is on demand only, never background, so
  * that waits on a decision), and live departures once the Darwin key lands.
@@ -35,7 +37,8 @@ object LeavingFields {
 
 data class LeavingSetting(val on: Boolean, val to: String, val journeyMin: Int) {
     companion object {
-        val DEFAULT = LeavingSetting(true, LeavingRules.DEFAULT_TO, LeavingRules.DEFAULT_JOURNEY)
+        /** On, to About you's partner (blank with none), the usual journey. */
+        val DEFAULT: LeavingSetting get() = LeavingSetting(true, LeavingRules.defaultTo(), LeavingRules.DEFAULT_JOURNEY)
     }
 }
 
@@ -60,7 +63,6 @@ sealed interface LeavingTap {
 /** Non-AI, pure. */
 object LeavingRules {
     const val ENTITY_ID = "leaving_now"
-    const val DEFAULT_TO = "Jeanette"
     const val DEFAULT_JOURNEY = 70
     val JOURNEY_CHOICES: List<Int> = listOf(50, 60, 70, 80, 90)
     private const val MAX_TO = 40
@@ -75,9 +77,15 @@ object LeavingRules {
     const val NOTE = "When an office day's work ends, Navilife drafts the message from your journey home and the trains. " +
         "Nothing is sent until you tap Send; Edit opens the chat with the words in."
 
+    /** Who the draft goes to when no one is typed: About you's partner; "" with none. */
+    fun defaultTo(): String = Household.names.partner.orEmpty()
+
+    /** Work mode's line when there's no one to send it to. */
+    const val NO_ONE = "On · add your partner in About you (or type a name) and Navilife drafts it when work ends"
+
     fun read(fields: Map<String, FieldValue>?): LeavingSetting {
         if (fields == null) return LeavingSetting.DEFAULT
-        val to = cleanName(fields[LeavingFields.TO]?.textOrNull) ?: DEFAULT_TO
+        val to = cleanName(fields[LeavingFields.TO]?.textOrNull) ?: defaultTo()
         val j = fields[LeavingFields.JOURNEY]?.longOrNull?.toInt()?.takeIf { it in 10..240 } ?: DEFAULT_JOURNEY
         return LeavingSetting(fields[LeavingFields.ON]?.boolOrNull ?: true, to, j)
     }
@@ -89,9 +97,10 @@ object LeavingRules {
         return LeavingView(set.on, set.to, set.journeyMin, summary(set))
     }
 
-    /** "On · a draft to Jeanette when work ends on office days · about 1 h 20 home" / "Off". */
+    /** "On · a draft to Sam when work ends on office days · about 1 h 20 home" / "Off" / [NO_ONE]. */
     fun summary(s: LeavingSetting): String =
-        if (s.on) "On · a draft to ${s.to} when work ends on office days · about ${CommuteRules.label(s.journeyMin)} home"
+        if (s.on && s.to.isBlank()) NO_ONE
+        else if (s.on) "On · a draft to ${s.to} when work ends on office days · about ${CommuteRules.label(s.journeyMin)} home"
         else "Off · no draft when work ends"
 
     /**
@@ -170,7 +179,7 @@ object LeavingRules {
      * starting good doesn't buzz again. Its text is the draft itself, word for word what Send sends.
      */
     fun notices(s: LeavingSetting, office: OfficeWindow?, lines: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar): List<Notice> {
-        if (!s.on || office == null) return emptyList()
+        if (!s.on || office == null || s.to.isBlank()) return emptyList()
         val until = office.endMs + WINDOW_MS
         if (nowMs >= until) return emptyList()
         val d = draft(s, maxOf(nowMs, office.endMs), lines, nowMs, cal)
@@ -196,7 +205,7 @@ object LeavingRules {
         key: String, shown: String, s: LeavingSetting, office: OfficeWindow?, lines: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar,
         edit: Boolean = false,
     ): LeavingTap? {
-        if (!isKey(key) || office == null || !s.on) return null
+        if (!isKey(key) || office == null || !s.on || s.to.isBlank()) return null
         if (dayOf(key) != cal.epochDayOf(office.endMs)) return null
         val now = notices(s, office, lines, nowMs, cal).firstOrNull() ?: return null
         if (edit || now.text == shown) return LeavingTap.Send(s.to, shown)
@@ -208,8 +217,8 @@ object LeavingRules {
     }
 
     /**
-     * Whether [name] (a WhatsApp sender or a Family entry, "Jeanette Akunebuni") is the person the draft goes to ([to],
-     * "Jeanette"): the same name, or the same first name.
+     * Whether [name] (a WhatsApp sender or a Family entry, "Sam Lane") is the person the draft goes to ([to],
+     * "Sam"): the same name, or the same first name.
      */
     fun samePerson(to: String, name: String): Boolean {
         val a = People.key(to)
@@ -222,7 +231,7 @@ object LeavingRules {
     fun familyEntry(to: String, names: Collection<String>): String? =
         names.firstOrNull { People.key(it) == People.key(to) } ?: names.firstOrNull { samePerson(to, it) }
 
-    /** The quiet note after Send: "Sent to Jeanette" · the words. */
+    /** The quiet note after Send: "Sent to Sam" · the words. */
     fun sentTitle(to: String) = "Sent to $to"
     const val OPENED_LINE = "Opened the chat with the words in · tap send in WhatsApp"
 
@@ -261,16 +270,22 @@ object LeavingRules {
 class LeavingNow(private val replica: Replica) {
     fun setting(): LeavingSetting = LeavingRules.read(replica.entity(EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID)?.fields)
 
-    /** False (nothing written) when the name is unusable, the journey is out of range, or nothing changes. */
+    /**
+     * False (nothing written) when the name is unusable, the journey is out of range, or nothing changes. A blank [to]
+     * writes only the switch and the journey, so the draft keeps following About you's partner.
+     */
     fun set(on: Boolean, to: String, journeyMin: Int): Boolean {
-        val name = LeavingRules.cleanName(to) ?: return false
+        val name = LeavingRules.cleanName(to)
+        if (name == null && to.isNotBlank()) return false
         if (journeyMin !in 10..240) return false
-        val next = LeavingSetting(on, name, journeyMin)
+        val next = LeavingSetting(on, name ?: setting().to, journeyMin)
         if (replica.entity(EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID) != null && setting() == next) return false
-        replica.commitLocal(
-            EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID,
-            mapOf(LeavingFields.ON to on.fv(), LeavingFields.TO to name.fv(), LeavingFields.JOURNEY to journeyMin.toLong().fv()),
-        )
+        val fields = buildMap {
+            put(LeavingFields.ON, on.fv())
+            if (name != null) put(LeavingFields.TO, name.fv())
+            put(LeavingFields.JOURNEY, journeyMin.toLong().fv())
+        }
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, LeavingRules.ENTITY_ID, fields)
         return true
     }
 }

@@ -36,14 +36,14 @@ data class FamilyReply(val status: Int, val body: String) {
 }
 
 /**
- * Meka's family page (build plan "Family sharing with Jeanette", slice 2; Meka approved 2026-10-09). Meka makes a
+ * Meka's family page (build plan "Family sharing with Jordan", slice 2; Meka approved 2026-10-09). Meka makes a
  * private invite link ([invite]); the first browser to open it makes its own non-extractable P-256 key with WebCrypto
  * and registers it ([claim], signed with that key, so possession is proved); from then on the page's requests are
  * signed like the apps' ([guest]) and the link alone is no use. Only the shopping list and the dinners are shared: the
  * page reads the list ([shopping]) and adds, ticks and puts back items ([add], [got], [putBack]); it reads the week's
  * dinners and the favourites ([meals], meal plan slice 3) and adds a favourite ([addMeal]); and it reads the emergency
  * card ([emergency], read-only: the server never writes it). Writes are server ops with `by` = her name, so they sync
- * into Meka's Lists and Dinners like any other change ("From Jeanette"). Nothing else of Meka's data is reachable:
+ * into Meka's Lists and Dinners like any other change ("From Jordan"). Nothing else of Meka's data is reachable:
  * [read] is only ever asked for [SHARED_TYPES], and only [WRITABLE_TYPES] are ever written.
  *
  * Kept free of Ktor so its rules are tested directly; the routes in [mekaSync] only authenticate and forward.
@@ -65,7 +65,7 @@ class FamilyShare(
 
     // ---- Meka's side (a keyed device of the household) ----
 
-    /** Makes an invite for [body]'s `name` ("Jeanette"); the answer carries the link's token, the only time it is shown. */
+    /** Makes an invite for [body]'s `name` ("Jordan"); the answer carries the link's token, the only time it is shown. */
     fun invite(householdId: String, body: String): FamilyReply {
         val raw = field(body, "name") ?: return FamilyReply.refused(400, "name")
         val name = nameKey(raw) ?: return FamilyReply.refused(400, "name")
@@ -170,7 +170,7 @@ class FamilyShare(
 
     /**
      * The week's dinners from today (London) and the favourites, as her page shows them (meal plan slice 3): her own
-     * favourites without "from Jeanette", Meka's without a name. Read only; planning a day stays on Meka's apps.
+     * favourites without "from Jordan", Meka's without a name. Read only; planning a day stays on Meka's apps.
      */
     fun meals(guest: FamilyInvite): FamilyReply {
         val v = mealView(guest, fieldsOf(read(guest.householdId, EntityTypes.MEAL)))
@@ -260,7 +260,7 @@ class FamilyShare(
         fun row(i: ShoppingItem) = buildJsonObject {
             put("id", i.id)
             put("title", i.title)
-            // Her own things need no "From Jeanette" on her own page.
+            // Her own things need no "From Jordan" on her own page.
             val meta = if (!i.got && i.by == guest.name) null else i.meta
             meta?.let { put("meta", it) }
         }
@@ -324,7 +324,7 @@ class FamilyShare(
         const val MAX_TO_BUY = 200
         private const val HEX = "0123456789abcdef"
 
-        /** "Jeanette" → "jeanette"; letters, spaces, hyphens and apostrophes only, up to 30; else null. */
+        /** "Jordan" → "jordan"; letters, spaces, hyphens and apostrophes only, up to 30; else null. */
         fun nameKey(raw: String): String? {
             val t = raw.trim().replace(Regex("\\s+"), " ")
             if (t.isEmpty() || t.length > 30) return null
@@ -333,7 +333,7 @@ class FamilyShare(
             return t.lowercase()
         }
 
-        /** "jeanette" → "Jeanette". */
+        /** "jordan" → "Jordan". */
         fun display(name: String): String = ShoppingRules.byName(name) ?: name
 
         fun isInviteId(id: String) = id.length == 23 && id.startsWith("fam") && id.drop(3).all { it in HEX }

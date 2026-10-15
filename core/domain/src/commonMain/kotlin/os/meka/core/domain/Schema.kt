@@ -60,7 +60,7 @@ object EntityTypes {
     const val MEAL = "meal"
     /** What's for dinner on one day, id `d<epoch day>` (see [MealPlan]). */
     const val MEAL_DAY = "meal_day"
-    /** One line of the emergency card Jeanette sees read-only (see [EmergencyCard]). */
+    /** One line of the emergency card his wife sees read-only (see [EmergencyCard]). */
     const val EMERGENCY_ENTRY = "emergency_entry"
     /** One link saved for the train (see [TrainQueue]). */
     const val QUEUE_ITEM = "queue_item"
@@ -414,7 +414,7 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.CHAT_SUMMARY -> MergePolicy.Lww
         // The block list: Block and Unblock on either device, the latest wins.
         entityType == EntityTypes.BLOCKED_CALLER -> MergePolicy.Lww
-        // Shopping: Got and Put back on any device (or Jeanette's page), the latest wins; a removal is for good.
+        // Shopping: Got and Put back on any device (or his wife's page), the latest wins; a removal is for good.
         entityType == EntityTypes.SHOPPING_ITEM && field == ShoppingFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.SHOPPING_ITEM -> MergePolicy.Lww
         // Venues: the travel time last set for a ground on any device wins.

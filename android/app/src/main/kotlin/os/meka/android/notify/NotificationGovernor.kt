@@ -208,7 +208,7 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
     /** "Leaving now": the draft moved on before Send, so the same notification shows the new words (nothing sent). */
     fun repost(n: Notice) { if (WorkAlerts.canPost(context)) post(n) }
 
-    /** After Send: the same notification becomes a quiet "Sent to Jeanette" · the words, gone after ten minutes. */
+    /** After Send: the same notification becomes a quiet "Sent to Jordan" · the words, gone after ten minutes. */
     fun postSent(postId: String, title: String, text: String) {
         if (!WorkAlerts.canPost(context)) return
         val channel = ensureChannel(NoticeTier.HEADS_UP)

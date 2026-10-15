@@ -9,7 +9,7 @@ internal object HelpIndex {
             title = "About you",
             keywords = listOf("about you", "my details", "household", "partner", "children", "school website", "clubs", "football club"),
             what = "your name, partner, children (with their club age group), home, work, the school's website, the children's clubs and numbers, kept in your encrypted data, never in Navilife's code.",
-            how = "Type each line there; clearing one has Undo. Clubs takes each club's short name as your calendar writes it, then its full name (\"OFC Oakfield Town, HRFC\"): those fixtures get kit reminders and the child's name.",
+            how = "Type each line there; clearing one has Undo. Clubs takes each club's short name as your calendar writes it, then its full name (\"OFC Oakfield Town, HRFC\"): those fixtures get kit reminders and the child's name. Your partner's name is who Leaving now drafts to (unless you type another in Work mode) and whom Family makes the shopping list link for.",
             tips = listOf(),
             fold = HelpPlace.ABOUT_YOU,
             foldWhere = "Ask → Settings → About you",

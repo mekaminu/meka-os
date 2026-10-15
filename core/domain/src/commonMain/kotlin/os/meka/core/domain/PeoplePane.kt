@@ -85,7 +85,7 @@ object PeopleRules {
      * The People pane. [promises] and [waiting] as Lists reads them, [occasions] from Gifts (anniversaries aren't a
      * person's and are left out), [contacts] from the triage cards and held messages. A contact only adds to a row
      * someone else made (MEKA doesn't list everyone who ever messaged): the same name, or a first name that only one
-     * row has ("Jeanette" and "Jeanette Akunebuni"). [listed] (the Fold's own lists, slice 4) gives each listed name
+     * row has ("Jordan" and "Jordan Lane"). [listed] (the Fold's own lists, slice 4) gives each listed name
      * a row of its own, or joins the row its name (or a first name only one row has) already made; a listed phone
      * number with no name is left out.
      */
@@ -209,7 +209,7 @@ object PeopleRules {
 }
 
 /**
- * People, slice 3: Ask and Talk know the People pane ("what did I promise Jeanette?", "what am I waiting on from
+ * People, slice 3: Ask and Talk know the People pane ("what did I promise Jordan?", "what am I waiting on from
  * Rex?", "when did Mum last message?"), and a model's `add_promise` ("Rex: fix his bike", a by-day optional) becomes a
  * card that adds the promise to Lists → Promises on Meka's tap, with Undo. Plain rules; nothing is sent to anyone.
  */

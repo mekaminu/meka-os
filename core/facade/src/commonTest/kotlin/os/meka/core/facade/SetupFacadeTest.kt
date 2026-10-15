@@ -67,8 +67,8 @@ class SetupFacadeTest {
 
     private val fold = SetupDevice(
         mac = false, notificationsAllowed = true, batteryExempt = true, notificationAccess = true, callRoleHeld = true,
-        people = PeopleLists(family = setOf("Jeanette"), numbers = mapOf("Jeanette" to setOf("+447700900123"))),
-        watch = RequestWatch(people = setOf("Jeanette")),
+        people = PeopleLists(family = setOf("Jordan"), numbers = mapOf("Jordan" to setOf("+447700900123"))),
+        watch = RequestWatch(people = setOf("Jordan")),
     )
 
     @Test

@@ -20,10 +20,10 @@ class SetupTest {
         HealthAccount("travel", "Google Routes · drive times to football", "Travel times", "ok", now),
     )
     private val editing = listOf(SignIn("google", "meka@gmail.com", SignInState.OK, null, canEdit = true))
-    private val family = PeopleLists(family = setOf("Jeanette"), numbers = mapOf("Jeanette" to setOf("+447700900123")))
+    private val family = PeopleLists(family = setOf("Jordan"), numbers = mapOf("Jordan" to setOf("+447700900123")))
     private val fold = SetupDevice(
         mac = false, notificationsAllowed = true, batteryExempt = true, notificationAccess = true, callRoleHeld = true,
-        people = family, watch = RequestWatch(people = setOf("Jeanette")),
+        people = family, watch = RequestWatch(people = setOf("Jordan")),
     )
     private val mac = SetupDevice(mac = true, notificationsAllowed = true)
 
@@ -53,7 +53,7 @@ class SetupTest {
         assertFalse(SetupRules.cardShown(v, hiddenOnDay = null, today = day))
         assertEquals("Connected · meka@gmail.com", v.step("calendar.google").line)
         assertEquals("Allowed on Google · add and move events from Navilife", v.step("calendar.editing").line)
-        assertEquals("Jeanette always ring", v.step("calls.family").line)
+        assertEquals("Jordan always ring", v.step("calls.family").line)
         assertEquals("Speaking as Amy", v.step("voice.picked").line)
         assertEquals("Home Biggleswade · work Canary Wharf · change in Calendars", v.step("weather").line)
         assertEquals("Connected", v.step("mac").line)
@@ -102,8 +102,8 @@ class SetupTest {
 
     @Test
     fun aFamilyNameWithoutANumberIsLeftToDo() {
-        val v = SetupRules.view(facts(device = fold.copy(people = PeopleLists(family = setOf("Jeanette", "Mum"), numbers = mapOf("Mum" to setOf("+447700900999"))))))
-        assertEquals("Jeanette has no number · their calls won't be recognised", v.step("calls.family").line)
+        val v = SetupRules.view(facts(device = fold.copy(people = PeopleLists(family = setOf("Jordan", "Mum"), numbers = mapOf("Mum" to setOf("+447700900999"))))))
+        assertEquals("Jordan has no number · their calls won't be recognised", v.step("calls.family").line)
         assertEquals(SetupFix.WORK, v.step("calls.family").fix)
         val many = SetupRules.view(facts(device = fold.copy(people = PeopleLists(family = setOf("A", "B", "C"), numbers = mapOf("A" to setOf("1"), "B" to setOf("2"), "C" to setOf("3"))))))
         assertEquals("A and B and 1 more always ring", many.step("calls.family").line)

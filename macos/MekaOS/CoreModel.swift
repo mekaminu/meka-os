@@ -60,7 +60,7 @@ final class CoreModel {
     /// Protected time (V1, slice 1): the evenings and weekends Plan my day and Move to later keep tasks out of
     /// (Ask → More → Protected time). Synced with the Fold.
     private(set) var protectedTime: ProtectedView?
-    /// "Leaving now" (V1): the draft to Jeanette when an office day's work ends; set here or on the Fold.
+    /// "Leaving now" (V1): the draft to his wife when an office day's work ends; set here or on the Fold.
     private(set) var leaving: LeavingView?
     /// Ask → More → Protected time.
     var showProtected = false
@@ -72,7 +72,7 @@ final class CoreModel {
     /// The answer to the sheet's last tap ("Paused · MEKA asks before everything"), shown under its summary.
     private(set) var autonomySaid: String?
     /// The emergency card (V1, slice 1): who to call, where things are and key accounts by name (Ask → More →
-    /// Emergency card). Synced with the Fold; Jeanette reads it on her family page.
+    /// Emergency card). Synced with the Fold; his wife reads it on her family page.
     private(set) var emergency: EmergencyView?
     /// Ask → More → Emergency card.
     var showEmergency = false
@@ -349,7 +349,7 @@ final class CoreModel {
     /// A quiet line under the accounts (what the provider will ask, or the new label).
     var mailNote: String?
     var mailMessage: String?
-    /// Ask → More → Family (family sharing slice 4): Jeanette's link to the shopping list.
+    /// Ask → More → Family (family sharing slice 4): his wife's link to the shopping list.
     var showFamily = false
     /// Who can use the shopping list and each link's state, as the server last listed them; nil until read once.
     private(set) var family: FamilyView?
@@ -1822,7 +1822,7 @@ final class CoreModel {
         _ = try? await core.refreshHealth(device: device, force: force)
     }
 
-    // MARK: Family (family sharing with Jeanette, slice 4)
+    // MARK: Family (family sharing with his wife, slice 4)
 
     /// Reads the links from MEKA's server (and logs, once across both devices, the day one was opened).
     func refreshFamily() async {
@@ -1830,12 +1830,13 @@ final class CoreModel {
         _ = try? await core.refreshFamily()
     }
 
-    /// Makes Jeanette's link; nil when it couldn't be made (the view's problem says why). Only the name crosses.
+    /// Makes the partner's link (About you's name, never one in the code); nil when it couldn't be made (the view's
+    /// problem says why). Only the name String crosses.
     func inviteFamily() async -> FamilyLink? {
-        guard let core, !familyBusy else { return nil }
+        guard let core, !familyBusy, let name = family?.inviteName else { return nil }
         familyBusy = true
         defer { familyBusy = false }
-        return try? await core.inviteFamily(name: "Jeanette")
+        return try? await core.inviteFamily(name: name)
     }
 
     /// Turns a link off at once. Only the id String crosses.

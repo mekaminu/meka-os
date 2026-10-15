@@ -209,7 +209,7 @@ struct WorkSheet: View {
         let rules = LeavingRules.shared
         let view = model.leaving
         let on = view?.on ?? true
-        let to = view?.to ?? rules.DEFAULT_TO
+        let to = view?.to ?? ""
         let journey = Int(view?.journeyMin ?? Int32(rules.DEFAULT_JOURNEY))
         return VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("LEAVING NOW").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)

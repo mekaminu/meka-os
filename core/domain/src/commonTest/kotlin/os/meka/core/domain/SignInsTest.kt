@@ -50,7 +50,7 @@ class SignInsTest {
         // Once its time has gone the server says expired; until then an ended one says nothing.
         assertNull(SignInRules.line(listOf(ending), at(fri + 1, 14, 5), cal))
 
-        val expired = SignIn("microsoft", "akunebuni@hotmail.co.uk", SignInState.EXPIRED, at(fri, 8))
+        val expired = SignIn("microsoft", "lane@hotmail.co.uk", SignInState.EXPIRED, at(fri, 8))
         val both = SignInRules.line(listOf(ending, expired), now, cal)!!
         assertEquals("Outlook sign-in expired · calendars aren't updating · Reconnect", both.text)
         assertTrue(both.critical)

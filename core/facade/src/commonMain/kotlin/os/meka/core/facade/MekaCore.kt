@@ -584,7 +584,7 @@ class MekaCore(
      * copies, for a profile that predates them, and go with the final release-2 slice.
      */
     private fun aboutYouBefore(): os.meka.core.domain.AboutYou = os.meka.core.domain.AboutYou(
-        partnerName = leavingNow.setting().to,
+        partnerName = leavingNow.setting().to.ifBlank { null },
         partnerWatch = true,
         // The children were copied on 13 Oct and live only in his profile now (both apps hold it).
         clubs = RELEASE_ONE_CLUBS,
@@ -738,7 +738,7 @@ class MekaCore(
     private val _emergency = MutableStateFlow(os.meka.core.domain.EmergencyView.EMPTY)
     /**
      * The emergency card (V1, slice 1): who to call, where important documents are and key accounts by name only
-     * (Ask → More → Emergency card). Synced; Jeanette sees it read-only on her family page. Never a password, PIN or
+     * (Ask → More → Emergency card). Synced; his wife sees it read-only on her family page. Never a password, PIN or
      * card or account number ([os.meka.core.domain.EmergencyRules.refusal]).
      */
     val emergencyView: StateFlow<os.meka.core.domain.EmergencyView> = _emergency.asStateFlow()
@@ -800,7 +800,7 @@ class MekaCore(
     val protectedView: StateFlow<os.meka.core.domain.ProtectedView> = _protected.asStateFlow()
 
     private val _leaving = MutableStateFlow(os.meka.core.domain.LeavingView.EMPTY)
-    /** "Leaving now" (V1): the draft to Jeanette when an office day's work ends (Work mode → Leaving now). Synced. */
+    /** "Leaving now" (V1): the draft to his wife when an office day's work ends (Work mode → Leaving now). Synced. */
     val leavingView: StateFlow<os.meka.core.domain.LeavingView> = _leaving.asStateFlow()
 
     private val _weekAhead = MutableStateFlow(os.meka.core.domain.WeekAheadView.EMPTY)
@@ -1722,7 +1722,7 @@ class MekaCore(
                 val quote = checked.summary ?: os.meka.core.domain.TriageCard.NO_GIST_LINE
                 requestCards.save(os.meka.core.domain.RequestMessage(item.id, item.personName.trim(), quote, item.atMs), checked.proposals)
             } else emptyList()
-            // A question from someone Meka watches for in a group (Fold review 2026-10-12, bug 3): "Jeanette asked".
+            // A question from someone Meka watches for in a group (Fold review 2026-10-12, bug 3): "Jordan asked".
             val watched = (route as? os.meka.core.domain.TriageRoute.AskAi)?.watched == true
             TriageRead.Read(triageCards.save(item, checked, watched = watched), requests)
         }
@@ -2831,7 +2831,7 @@ class MekaCore(
     // ---- "Leaving now" (V1, slice 1; Work mode → Leaving now) ----
 
     /**
-     * Sets "Leaving now": on or off, who the draft goes to (a Family entry's name, e.g. "Jeanette") and the usual
+     * Sets "Leaving now": on or off, who the draft goes to (a Family entry's name, e.g. "Jordan") and the usual
      * journey home in minutes. Returns the summary line, or null when nothing changed or the values don't make sense.
      */
     suspend fun setLeavingNow(on: Boolean, to: String, journeyMin: Int): String? = onCore {
@@ -5804,7 +5804,7 @@ class MekaCore(
                 lifeAdmin = os.meka.core.domain.LifeAdminRules.askLine(_lifeAdmin.value, nowMs()),
                 // Gift planner, slice 2: each birthday and anniversary with its ideas, so "when's Mum's birthday?" has an answer.
                 gifts = os.meka.core.domain.GiftAskRules.askLines(gifts.view()),
-                // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jeanette?" has an answer.
+                // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jordan?" has an answer.
                 people = os.meka.core.domain.PeopleAskRules.askLines(_people.value),
                 // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
                 trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs())),
@@ -6226,16 +6226,16 @@ class MekaCore(
         }
     }
 
-    // ---- Family (family sharing with Jeanette, slice 4) ----
+    // ---- Family (family sharing with his wife, slice 4) ----
 
     /**
-     * Ask → More → Family: who can use the shopping list ("Jeanette can see and add to the shopping list") and each
+     * Ask → More → Family: who can use the shopping list ("Jordan can see and add to the shopping list") and each
      * link's state. Null until [refreshFamily] has run once.
      */
     val familyView: StateFlow<os.meka.core.domain.FamilyView?> = _family.asStateFlow()
 
     /**
-     * Reads the links from MEKA's server and logs, once across both devices, the day each was opened ("Jeanette joined
+     * Reads the links from MEKA's server and logs, once across both devices, the day each was opened ("Jordan joined
      * the shopping list"). When the server can't be read the last rows stay, with the reason as the view's problem.
      */
     suspend fun refreshFamily(): os.meka.core.domain.FamilyView {
@@ -6262,7 +6262,7 @@ class MekaCore(
     }
 
     /**
-     * Makes a link for [name] ("Jeanette"): the whole address and what the share sheet sends with it. Null when it
+     * Makes a link for [name] ("Jordan"): the whole address and what the share sheet sends with it. Null when it
      * couldn't be made (a name the server won't take, or the server can't be reached; [familyView]'s problem says why).
      * The address carries the link's secret, so it is handed to the share sheet once and never kept.
      */
@@ -6335,7 +6335,9 @@ class MekaCore(
 
     /** On the core thread. */
     private fun familyNow(problem: String?): os.meka.core.domain.FamilyView =
-        os.meka.core.domain.FamilyRules.view(familyMembers, nowMs(), ZoneCalendar(timeZone), problem).also { _family.value = it }
+        os.meka.core.domain.FamilyRules.view(
+            familyMembers, nowMs(), ZoneCalendar(timeZone), problem, aboutYou.profile().partnerName,
+        ).also { _family.value = it }
 
     // ---- Watch (Galaxy Watch, slice 1) ----
 
@@ -6708,7 +6710,7 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.CompleteTask, is os.meka.core.domain.AskProposal.MoveTask -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
             is os.meka.core.domain.AskProposal.StartFast -> ActionType.CREATE_TASK to PolicyDomain.HEALTH
             is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Meka's own list (Jeanette sees it, but adding to it sends nothing to anyone).
+            // Meka's own list (his wife sees it, but adding to it sends nothing to anyone).
             is os.meka.core.domain.AskProposal.AddShopping -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // The week's dinners: Meka's own plan (nothing is sent or bought).
             is os.meka.core.domain.AskProposal.PlanDinner -> ActionType.CREATE_TASK to PolicyDomain.TASKS
@@ -6922,7 +6924,7 @@ class MekaCore(
 
     private fun refresh() {
         // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
-        os.meka.core.domain.Household.use(aboutYou.profile())
+        if (os.meka.core.domain.Household.use(aboutYou.profile()) && _family.value != null) familyNow(_family.value?.problem)
         // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.
         autoAddMailFinds()
         // Inbox autopilot, slice 4: "Archived for you" follows the synced tidies, Got it and the digest times.

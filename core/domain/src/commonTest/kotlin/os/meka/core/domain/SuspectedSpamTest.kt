@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 /** Suspected spam (call assistant polish 8b c): the AI's flag, the list, Block · Not spam, and screening. */
 class SuspectedSpamTest {
     private val t = 1_791_360_000_000L
-    private val lists = PeopleLists(family = setOf("Jeanette")).withNumber("Jeanette", "+447700900111")
+    private val lists = PeopleLists(family = setOf("Jordan")).withNumber("Jordan", "+447700900111")
     private val scamKey = BlockedCallerRules.keyOf("+441632960691")!!
 
     private fun decide(number: String?, on: Boolean = true, atWork: Boolean = false, signals: CallSignals = CallSignals.NONE, recent: List<ScreenedCall> = emptyList()) =

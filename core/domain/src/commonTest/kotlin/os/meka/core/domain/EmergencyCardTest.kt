@@ -82,7 +82,7 @@ class EmergencyCardTest {
 
         sync()
         val v = cMac.view()
-        assertEquals("3 lines · Jeanette sees it read-only on her family page", v.summary)
+        assertEquals("3 lines · your partner sees it read-only on their family page", v.summary)
         val gp = v.groups[0].rows.single()
         assertEquals("GP", gp.title)
         assertEquals("Dr Patel, 01767 123456", gp.detail)
@@ -113,7 +113,7 @@ class EmergencyCardTest {
             EmergencyFields.DETAIL to os.meka.core.sync.FieldValue.Text("4821"),
         ))
         assertEquals(0, cFold.view().count)
-        val her = EmergencyRules.view(emptyList(), viewer = "jeanette")
+        val her = EmergencyRules.view(emptyList(), viewer = "jordan")
         assertEquals("Meka hasn't filled the emergency card in yet.", her.summary)
     }
 }

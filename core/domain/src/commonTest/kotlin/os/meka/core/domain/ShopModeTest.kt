@@ -65,13 +65,13 @@ class ShopModeTest {
         assertEquals("All 3 ticked", v.line)
 
         val shop = ShoppingView(
-            toBuy = listOf(ShoppingItem("s1", "milk", false, "From Jeanette · today", "jeanette", 0)),
+            toBuy = listOf(ShoppingItem("s1", "milk", false, "From Jordan · today", "jordan", 0)),
             got = listOf(ShoppingItem("s2", "eggs", true, "Got today", "meka", 0)),
         )
         val s = ShopModeRules.ofShopping(shop)
         assertEquals("Shopping", s.title)
         assertEquals("1 left · 1 got", s.line)
-        assertEquals("From Jeanette · today", s.toGet.single().meta)
+        assertEquals("From Jordan · today", s.toGet.single().meta)
         assertNull(s.done.single().meta)
         assertEquals("Got", s.doneLabel)
         assertEquals("All got", ShopModeRules.line(0, 1, "got"))

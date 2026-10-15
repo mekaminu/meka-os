@@ -16,11 +16,11 @@ class NeedsYouReviewTest {
         assertEquals("Ada", AfterWorkSummaries.build(listOf(msg("Ada", 1)), PeopleLists()).namesLine)
         assertEquals("Tom and Ada", AfterWorkSummaries.build(listOf(msg("Ada", 1), msg("Tom", 2)), PeopleLists()).namesLine)
         val five = AfterWorkSummaries.build(
-            listOf(msg("Ada", 1), msg("Tom", 2), msg("Bea", 3), msg("Cal", 4), msg("Jeanette", 5), msg("Jeanette", 6)),
-            PeopleLists(family = setOf("Jeanette")),
+            listOf(msg("Ada", 1), msg("Tom", 2), msg("Bea", 3), msg("Cal", 4), msg("Jordan", 5), msg("Jordan", 6)),
+            PeopleLists(family = setOf("Jordan")),
         )
         // Family first, then by latest.
-        assertEquals("Jeanette, Cal and 3 more", five.namesLine)
+        assertEquals("Jordan, Cal and 3 more", five.namesLine)
         assertEquals(6, five.toCatchUp)
         assertEquals("Open", AfterWorkSummary.OPEN_LABEL)
     }

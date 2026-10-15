@@ -62,7 +62,7 @@ import os.meka.core.domain.FamilyState
 import os.meka.core.facade.MekaCore
 
 /**
- * Ask → More → Family (family sharing with Jeanette, slice 4): make Jeanette's private link to the shopping list and
+ * Ask → More → Family (family sharing with his wife, slice 4): make his partner's private link to the shopping list and
  * send it with the phone's share sheet, see whether she has opened it ("Joined Sat 10 Oct · seen today") and turn it off
  * in one tap. The links live on MEKA's server; the one just made is held only while this pane is open (it carries the
  * link's secret), never saved.
@@ -119,14 +119,15 @@ fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
-            if (v.canInvite && made == null) {
-                PillButton("Make a link for ${FamilyRules.DEFAULT_NAME}", enabled = !busy,
+            val inviteName = v.inviteName
+            if (v.canInvite && inviteName != null && made == null) {
+                PillButton(v.inviteLabel, enabled = !busy,
                     modifier = Modifier.appear(rememberAppearance(v.rows.size + 2))) {
                     haptics.light()
                     busy = true
                     scope.launch {
                         try {
-                            val link = core.inviteFamily(FamilyRules.DEFAULT_NAME)
+                            val link = core.inviteFamily(inviteName)
                             if (link != null) { made = link; shareFamilyLink(context, link) }
                         } finally { busy = false }
                     }

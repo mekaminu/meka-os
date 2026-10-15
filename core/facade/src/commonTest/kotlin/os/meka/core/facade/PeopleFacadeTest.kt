@@ -28,7 +28,7 @@ class PeopleFacadeTest {
         val mac = core("mac")
         assertTrue(fold.peopleView.value.isEmpty)
         fold.addPromise("Fix Rex's bike", "Rex", 2)
-        fold.addWaiting("Football photos", "Jeanette", null)
+        fold.addWaiting("Football photos", "Jordan", null)
         fold.addOccasion("Rex 15 Oct 2016")
         val rex = fold.peopleView.value.rows.first { it.name == "Rex" }
         assertEquals("You promised 1", rex.owedLine)
@@ -37,7 +37,7 @@ class PeopleFacadeTest {
 
         fold.syncNow(); mac.syncNow()
         mac.tick()
-        assertEquals(listOf("Rex", "Jeanette"), mac.peopleView.value.rows.map { it.name })
+        assertEquals(listOf("Rex", "Jordan"), mac.peopleView.value.rows.map { it.name })
         assertEquals("Waiting for 1", mac.peopleView.value.rows[1].owedLine)
         assertEquals("2 people", mac.peopleView.value.summary)
 
@@ -52,9 +52,9 @@ class PeopleFacadeTest {
         val fold = core("android")
         val mac = core("mac")
         fold.addPromise("Fix Rex's bike", "Rex", 2)
-        fold.setListedPeople(listOf("Jeanette", "Rex"), listOf("Mum"), listOf("Coach Dave"))
+        fold.setListedPeople(listOf("Jordan", "Rex"), listOf("Mum"), listOf("Coach Dave"))
         assertEquals(
-            listOf("Coach Dave" to "Watched for requests", "Jeanette" to "Family", "Mum" to "Always notify", "Rex" to "Family"),
+            listOf("Coach Dave" to "Watched for requests", "Jordan" to "Family", "Mum" to "Always notify", "Rex" to "Family"),
             fold.peopleView.value.rows.map { it.name to it.listed },
         )
         fold.syncNow(); mac.syncNow()

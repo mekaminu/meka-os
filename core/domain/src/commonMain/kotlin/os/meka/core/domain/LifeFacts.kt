@@ -30,14 +30,19 @@ object FactFields {
 
 /** The page's groups, in the order it shows them; a fact's group comes from the words of its name. */
 enum class FactGroup(val key: String, val label: String, val words: Set<String>) {
-    // Sizes first ("Rex shoe size" is a size), then health and care, the car, the home, the family.
+    // Sizes first ("Alex shoe size" is a size), then health and care, the car, the home, the family (whose words also
+    // take in the partner's and children's first names from About you: rule 13, never in the code).
     SIZES("sizes", "Sizes", setOf("size", "shoe", "shirt", "collar", "waist", "dress", "trouser", "jean", "chest", "bra", "glove", "hat", "ring", "leg")),
     HEALTH("health", "Health and care", setOf("gp", "doctor", "surgery", "dentist", "optician", "pharmacy", "chemist", "nhs", "vet", "physio", "hospital", "clinic", "health", "blood")),
     CAR("car", "Car", setOf("car", "reg", "registration", "mot", "tyre", "vehicle", "breakdown", "rac", "aa", "garage", "van", "plate")),
     HOME("home", "Home and utilities", setOf("home", "house", "boiler", "electric", "electricity", "gas", "water", "energy", "broadband", "wifi", "internet", "council", "bin", "mortgage", "landlord", "rent", "licence", "meter", "utility", "supplier", "plumber", "electrician", "address", "postcode")),
-    FAMILY("family", "Family and school", setOf("school", "rex", "logan", "jeanette", "kid", "boy", "son", "daughter", "wife", "teacher", "nursery", "club", "childminder", "family", "birthday", "mum", "dad")),
+    FAMILY("family", "Family and school", setOf("school", "kid", "boy", "son", "daughter", "wife", "teacher", "nursery", "club", "childminder", "family", "birthday", "mum", "dad")),
     OTHER("other", "Other", emptySet()),
     ;
+
+    /** Whether [ws] (lower-case words) says this group: its own words, and for [FAMILY] the household's names. */
+    fun has(ws: Collection<String>): Boolean =
+        words.any { it in ws } || (this == FAMILY && Household.names.familyWords.any { it in ws })
 
     companion object {
         fun of(key: String?): FactGroup = entries.firstOrNull { it.key == key } ?: OTHER
@@ -147,7 +152,7 @@ object FactRules {
     /** The group a fact's name puts it in: the first group (in [FactGroup] order) one of its words belongs to. */
     fun groupOf(label: String): FactGroup {
         val ws = words(label).toSet()
-        return FactGroup.entries.firstOrNull { g -> g.words.any { it in ws } } ?: FactGroup.OTHER
+        return FactGroup.entries.firstOrNull { g -> g.has(ws) } ?: FactGroup.OTHER
     }
 
     /**
@@ -265,7 +270,7 @@ object FactAskRules {
         if (ASKS_ALL.containsMatchIn(question)) return usable.take(ASK_ALL)
         val qs = FactRules.words(question).filter { it !in STOP }.toSet()
         if (qs.isEmpty()) return emptyList()
-        val groups = FactGroup.entries.filter { g -> g.words.any { it in qs } }.toSet()
+        val groups = FactGroup.entries.filter { g -> g.has(qs) }.toSet()
         return usable.filter { f ->
             f.group in groups || FactRules.words(f.label).any { it !in STOP && it in qs }
         }.take(ASK_ITEMS)

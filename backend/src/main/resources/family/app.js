@@ -1,4 +1,4 @@
-// MEKA's family page (build plan "Family sharing with Jeanette", slice 2).
+// MEKA's family page (build plan "Family sharing with Jordan", slice 2).
 // First open: the invite's token (in the link's #fragment, never sent in a URL) is exchanged for this browser's own
 // key, a non-extractable P-256 key made here with WebCrypto and kept in IndexedDB. Every later request is signed with
 // it exactly as MEKA's apps sign theirs: "MEKA1\nPOST\n<path>\n<time>\n<nonce>\n<sha256 of body>". So the link alone is

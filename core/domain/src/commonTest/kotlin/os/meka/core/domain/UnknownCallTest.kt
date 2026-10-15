@@ -12,8 +12,8 @@ class UnknownCallTest {
     /** Wed 7 Oct 2026, 08:00 UTC. */
     private val t = 1_791_360_000_000L
     private val cal = LocalCalendar.UTC
-    private val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Ada"))
-        .withNumber("Jeanette", "+447700900111")
+    private val lists = PeopleLists(family = setOf("Jordan"), alwaysNotify = setOf("Ada"))
+        .withNumber("Jordan", "+447700900111")
         .withNumber("Ada", "07700 900222")
     private val stranger = "+441632960691"
 

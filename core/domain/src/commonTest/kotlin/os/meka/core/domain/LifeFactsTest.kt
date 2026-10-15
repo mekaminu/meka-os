@@ -43,6 +43,15 @@ class LifeFactsTest {
         assertEquals(FactGroup.HOME, FactRules.groupOf("Energy supplier"))
         assertEquals(FactGroup.FAMILY, FactRules.groupOf("Rex's school"))
         assertEquals(FactGroup.OTHER, FactRules.groupOf("Favourite takeaway"))
+        // Rule 13: the family's own names come from About you (invented here), never the code.
+        assertEquals(FactGroup.OTHER, FactRules.groupOf("Max passport"))
+        try {
+            Household.useTyped("Max, U7", "", "Jordan Lane")
+            assertEquals(FactGroup.FAMILY, FactRules.groupOf("Max passport"))
+            assertEquals(FactGroup.FAMILY, FactRules.groupOf("Jordan NI number"))
+        } finally {
+            Household.set(HouseholdNames.EMPTY)
+        }
     }
 
     @Test

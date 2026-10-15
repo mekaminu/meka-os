@@ -28,7 +28,7 @@ class VoicePlaylistTest {
         ).forEach { assertTrue(VoicePlaylistRules.isPlayRequest(it), it) }
         listOf(
             "read my messages", "play some music", "play my messages from Tom tomorrow", "message Tom", "who is Tom",
-            "any plans today", "what messages did Jeanette send", "", "play",
+            "any plans today", "what messages did Jordan send", "", "play",
         ).forEach { assertFalse(VoicePlaylistRules.isPlayRequest(it), it) }
     }
 

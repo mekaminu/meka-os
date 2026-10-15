@@ -308,9 +308,9 @@ class CommuteTest {
 
     @Test
     fun leavingNowsJourneyHomeIsTheCommuteHome() {
-        val s = LeavingRules.withCommute(LeavingSetting.DEFAULT, CommuteSetting(80, 90, chosen = true))
+        val s = LeavingRules.withCommute(LeavingSetting(true, "Jordan", LeavingRules.DEFAULT_JOURNEY), CommuteSetting(80, 90, chosen = true))
         assertEquals(90, s.journeyMin)
-        assertEquals("On · a draft to ${LeavingRules.DEFAULT_TO} when work ends on office days · about 1 h 30 home", LeavingRules.summary(s))
+        assertEquals("On · a draft to Jordan when work ends on office days · about 1 h 30 home", LeavingRules.summary(s))
         assertEquals("Journey home: 1 h 30 · your commute home, set under Commute", LeavingRules.journeyNote(90))
         val office = OfficeWindow(ms(fri, 9 * 60), ms(fri, 17 * 60 + 30))
         val lines = LineStatusSnapshot.EMPTY

@@ -31,7 +31,7 @@ class GiftsTest {
     @Test
     fun anOccasionIsReadFromOneLine() {
         assertEquals(OccasionEntry("Mum", OccasionKind.BIRTHDAY, 11, 3, 0, null), GiftRules.read("Mum's birthday 3 Nov", 2026))
-        assertEquals(OccasionEntry("Jeanette", OccasionKind.BIRTHDAY, 3, 14, 1988, null), GiftRules.read("Jeanette birthday 14 March 1988", 2026))
+        assertEquals(OccasionEntry("Jordan", OccasionKind.BIRTHDAY, 3, 14, 1988, null), GiftRules.read("Jordan birthday 14 March 1988", 2026))
         assertEquals(OccasionEntry("Dad", OccasionKind.BIRTHDAY, 11, 3, 0, null), GiftRules.read("3rd November: Dad", 2026))
         assertEquals(OccasionEntry("Rex", OccasionKind.BIRTHDAY, 6, 5, 2016, null), GiftRules.read("Rex 5/6/2016", 2026))
         assertEquals(OccasionEntry("Logan", OccasionKind.BIRTHDAY, 1, 9, 0, null), GiftRules.read("logan's bday jan 9th", 2026))
@@ -166,7 +166,7 @@ class GiftsTest {
         assertEquals("Mum's birthday", GiftAskRules.match(items, "Mum's birthday")?.let(GiftRules::title))
         assertEquals("Wedding anniversary", GiftAskRules.match(items, "Wedding anniversary")?.let(GiftRules::title))
         assertEquals("Mum and Dad's anniversary", GiftAskRules.match(items, "mum and dad's anniversary")?.let(GiftRules::title))
-        assertNull(GiftAskRules.match(items, "Jeanette"))
+        assertNull(GiftAskRules.match(items, "Jordan"))
         assertNull(GiftAskRules.match(items, "Mum's anniversary"))
 
         val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), world.clock.nowMs, cal, gifts = GiftAskRules.askLines(gFold.view()))
@@ -181,7 +181,7 @@ class GiftsTest {
         assertEquals("noted garden voucher as a gift idea for Mum's birthday", TalkRules.phrase(card.proposal, sat, past = true))
         assertNull(TrustRules.kindOf(card.proposal))
         // No one Meka keeps, no colon, no idea, or one already noted: no card.
-        for (t in listOf("Jeanette: perfume", "Mum silk scarf", "Mum:  ", "Mum: silk SCARF")) {
+        for (t in listOf("Jordan: perfume", "Mum silk scarf", "Mum:  ", "Mum: silk SCARF")) {
             assertNull(AskRules.card(AskRawAction("add_gift_idea", title = t), ctx, emptyMap(), world.clock.nowMs, cal, occasions = items), t)
         }
 

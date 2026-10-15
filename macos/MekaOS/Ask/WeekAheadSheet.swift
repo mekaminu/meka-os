@@ -4,7 +4,7 @@ import SwiftUI
 /// Ask → More → Week ahead on the Mac (Sunday week ahead, slice 1), like the Fold's WeekAheadPane: the coming week day
 /// by day — what kind of day (office or from home with the hours, annual leave, a bank holiday), the weather while the
 /// forecast reaches it, then events, fixtures, school, date night, appointments and renewals in time order — and
-/// FAMILY SYNC, what needs both Meka and Jeanette. Read-only; Today's "Your week ahead · …" line opens it on Sunday
+/// FAMILY SYNC, what needs both Meka and his partner. Read-only; Today's "Your week ahead · …" line opens it on Sunday
 /// evening.
 ///
 /// Slice 2: **▶ Listen** reads the week aloud in MEKA's voice (else the Mac's own); Listen on Sunday's heads-up opens
@@ -64,7 +64,7 @@ struct WeekAheadSheet: View {
                     if !v.sync.isEmpty {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                             label("Family sync")
-                            Text("To sort out with Jeanette").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            Text(WeekAheadRules.shared.syncTitle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                             ForEach(v.sync, id: \.self) { line in
                                 HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                                     Circle().fill(palette.accent).frame(width: 6, height: 6)

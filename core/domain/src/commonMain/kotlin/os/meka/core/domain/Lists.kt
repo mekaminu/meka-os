@@ -38,18 +38,18 @@ data class WaitingItem(
     val hasConflict: Boolean,
 )
 
-/** Something Meka promised someone (People, slice 1): "Fix Jeanette's bike" · "Jeanette · by Thu 15 Oct". */
+/** Something Meka promised someone (People, slice 1): "Fix Jordan's bike" · "Jordan · by Thu 15 Oct". */
 data class PromiseItem(
     val id: String,
     val title: String,
-    /** Who it was promised to ("Jeanette", "Rex's coach"); null when not said. */
+    /** Who it was promised to ("Jordan", "Rex's coach"); null when not said. */
     val to: String?,
     val notes: String?,
     val sinceMs: Long,
     /** Local epoch day it's promised by; null for no date. */
     val byDay: Long?,
     val state: DueState,
-    /** "Jeanette · by Thu 15 Oct", "Jeanette · due today", "was due Mon 12 Oct", "Jeanette · since Mon 5 Oct". */
+    /** "Jordan · by Thu 15 Oct", "Jordan · due today", "was due Mon 12 Oct", "Jordan · since Mon 5 Oct". */
     val meta: String,
     val hasConflict: Boolean,
 )

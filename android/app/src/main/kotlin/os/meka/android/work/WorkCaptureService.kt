@@ -117,7 +117,7 @@ class WorkCaptureService : NotificationListenerService() {
     private suspend fun triage(meka: MekaApplication, items: List<CapturedItem>) = requestLock.withLock {
         val store = meka.captures
         // Each group's mode as switched on its digest card (slice 4) and the never-to-AI list (slice 5); the people Meka
-        // watches for, so a question from Jeanette in a group is read like a mention (Fold review 2026-10-12, bug 3).
+        // watches for, so a question from his wife in a group is read like a mention (Fold review 2026-10-12, bug 3).
         val settings = store.triageSettings.value.copy(
             watched = RequestWatchRules.everyone(store.lists.value, store.watch.value).toSet(),
         )

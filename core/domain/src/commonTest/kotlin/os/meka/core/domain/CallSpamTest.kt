@@ -10,8 +10,8 @@ import kotlin.test.assertTrue
 /** Spam call protection (build plan "Call assistant live — polish" 8b): the decision table, the block list, contact numbers. */
 class CallSpamTest {
     private val t = 1_791_360_000_000L
-    private val lists = PeopleLists(family = setOf("Jeanette"), alwaysNotify = setOf("Ada"))
-        .withNumber("Jeanette", "+447700900111")
+    private val lists = PeopleLists(family = setOf("Jordan"), alwaysNotify = setOf("Ada"))
+        .withNumber("Jordan", "+447700900111")
         .withNumber("Ada", "07700 900222")
     private val scam = "01632 960691"
     private val blocked = setOf(BlockedCallerRules.keyOf(scam)!!)
@@ -152,11 +152,11 @@ class CallSpamTest {
         assertNull(ContactNumbers.e164("12"))
         assertNull(ContactNumbers.e164("Mum mobile"))
 
-        val l = PeopleLists(family = setOf("Jeanette")).withNumbers("Jeanette", listOf("07700 900444", "+44 7700 900444", null, "01767 600000"))
-        assertEquals(setOf("+447700900444", "+441767600000"), l.numbers["Jeanette"])
-        assertEquals("Jeanette", l.nameForNumber("07700900444"))
-        assertEquals("Jeanette", l.nameForNumber("01767 600000"))
-        assertFalse(PeopleLists(family = setOf("Jeanette")).withNumbers("Jeanette", listOf(null, "")).hasNumber("Jeanette"))
+        val l = PeopleLists(family = setOf("Jordan")).withNumbers("Jordan", listOf("07700 900444", "+44 7700 900444", null, "01767 600000"))
+        assertEquals(setOf("+447700900444", "+441767600000"), l.numbers["Jordan"])
+        assertEquals("Jordan", l.nameForNumber("07700900444"))
+        assertEquals("Jordan", l.nameForNumber("01767 600000"))
+        assertFalse(PeopleLists(family = setOf("Jordan")).withNumbers("Jordan", listOf(null, "")).hasNumber("Jordan"))
     }
 
     private fun voice(from: String, at: Long = t, family: Boolean = false) =
@@ -172,7 +172,7 @@ class CallSpamTest {
         )
         val by = s.people.associate { it.personName to it.blockNumber }
         assertEquals("+441632960691", by["01632 960691"])
-        assertNull(by["Jeanette"]); assertNull(by["Ada"]); assertNull(by["Tunde"]); assertNull(by[CallerNames.TEST_CALL]); assertNull(by["Bola"])
+        assertNull(by["Jordan"]); assertNull(by["Ada"]); assertNull(by["Tunde"]); assertNull(by[CallerNames.TEST_CALL]); assertNull(by["Bola"])
         // The Mac (no lists, no contacts) still knows the number, and a family flag from the Fold keeps Block off.
         val mac = AfterWorkSummaries.build(listOf(voice("+441632960691"), voice("+447700900111", family = true)), PeopleLists())
         assertEquals("+441632960691", mac.people.single { !it.isFamily }.blockNumber)
