@@ -3061,10 +3061,12 @@ class MekaCore(
      */
     suspend fun addSchool(text: String): String? = onCore {
         school.add(text)?.let { (_, e) -> os.meka.core.domain.SchoolRules.addedLine(e) }
+            // School logistics from email: a line he typed hides the school's find for the same thing.
+            .also { mailFindsChanged() }
     }
 
     /** Removes a school line for good (typed by mistake). */
-    suspend fun removeSchool(id: String): Boolean = onCore { school.remove(id) }
+    suspend fun removeSchool(id: String): Boolean = onCore { school.remove(id).also { mailFindsChanged() } }
 
     /**
      * School dates filled in (slice 1): fills in [councilId]'s holidays still to come (the council card's choice,

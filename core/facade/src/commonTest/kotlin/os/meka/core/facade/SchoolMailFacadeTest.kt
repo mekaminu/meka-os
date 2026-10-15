@@ -53,8 +53,9 @@ class SchoolMailFacadeTest {
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         val card = fold.mailFinds.value!!
         assertEquals(SchoolMailRules.TITLE, card.title)
-        assertEquals(listOf(idt, idi), card.rows.map { it.id })
-        assertTrue(card.rows.first().line.startsWith("Trip payment · £12 · due Fri 20 Nov"))
+        // Soonest first: the INSET day (Mon 2 Nov) before the payment (Fri 20 Nov).
+        assertEquals(listOf(idi, idt), card.rows.map { it.id })
+        assertTrue(card.rows.first { it.id == idt }.line.startsWith("Trip payment · £12 · due Fri 20 Nov"), card.rows.first { it.id == idt }.line)
         assertEquals(2, mac.mailFinds.value!!.rows.size)
 
         val added = fold.addMailFind(idt)
@@ -70,7 +71,7 @@ class SchoolMailFacadeTest {
         // Undo: out of School, back in the card.
         fold.undoMailFind()
         assertTrue(fold.schoolView.value.dates.isEmpty())
-        assertEquals(listOf(idt, idi), fold.mailFinds.value!!.rows.map { it.id })
+        assertEquals(listOf(idi, idt), fold.mailFinds.value!!.rows.map { it.id })
 
         // A day off he typed himself for that day hides the INSET find; Add on the Mac then lands the trip once.
         mac.addSchool("INSET 2 Nov")
