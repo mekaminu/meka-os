@@ -72,6 +72,7 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.MekaHaptics
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.AfterWorkDone
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BlockedCallersView
@@ -299,6 +300,8 @@ fun AfterWorkPane(
     /** ▶ Play on an urgent alert: this message's caller opens unfolded and it starts playing ([onAutoPlayed] once). */
     autoPlay: String? = null,
     onAutoPlayed: () -> Unit = {},
+    /** Done on one card (its pill or a swipe either way): clears only that card, with Undo ([AfterWorkDone]). */
+    onDoneOne: (PersonSummary) -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     var open by rememberSaveable { mutableStateOf<String?>(CallAssistantRules.personWith(summary, autoPlay)?.items?.first()?.personKey) }
@@ -312,18 +315,31 @@ fun AfterWorkPane(
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text(summary.title, style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(0)))
-        Text(summary.headline, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+        // Clear all sits beside the headline (Meka, 2026-10-15 20:28), not at the foot of a long sheet.
+        Row(Modifier.fillMaxWidth().appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
+            AnimatedContentText(summary.headline, Modifier.weight(1f))
+            if (!summary.isEmpty) {
+                Text(AfterWorkDone.CLEAR_ALL, style = MekaType.captionStrong, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { haptics.light(); onDone() }
+                        .minTouch().padding(horizontal = MekaSpace.xs))
+            }
+        }
+        if (!summary.isEmpty) Text(AfterWorkDone.SWIPE_HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
         Spacer(Modifier.height(MekaSpace.xs))
-        // Email-triage style: people sort into place with a stagger.
+        // Email-triage style: people sort into place with a stagger; a card cleared folds away and the rest close up.
         summary.people.forEachIndexed { i, p ->
             val key = p.items.first().personKey
-            PersonCard(p, expanded = open == key, Modifier.appear(rememberAppearance(i + 1)), blocked.has(p.blockNumber), onBlock, onReport, audio, autoPlay, onAutoPlayed) {
-                open = if (open == key) null else key
+            androidx.compose.runtime.key(key) {
+                SwipeToDone(AfterWorkDone.doneLabel(p), onDone = { onDoneOne(p) }, modifier = Modifier.appear(rememberAppearance(i + 1))) {
+                    PersonCard(p, expanded = open == key, Modifier, blocked.has(p.blockNumber), onBlock, onReport, audio, autoPlay, onAutoPlayed,
+                        onDone = { haptics.light(); onDoneOne(p) }) {
+                        open = if (open == key) null else key
+                    }
+                }
             }
         }
         Spacer(Modifier.height(MekaSpace.m))
-        if (!summary.isEmpty) PillButton("Done", filled = true) { haptics.light(); onDone() }
-        Text("Done clears Navilife's copy on the Fold and the Mac. WhatsApp and Messages are untouched.", style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(AfterWorkDone.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
         if (summary.people.any { p -> p.items.any { it.hasAudio } }) {
             Text(privacy, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
@@ -333,12 +349,19 @@ fun AfterWorkPane(
 
 /** A calm card for Needs you: what's waiting after work, or how much is being held during it. */
 @Composable
-fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> Unit) {
+fun AfterWorkCard(
+    core: MekaCore,
+    modifier: Modifier = Modifier,
+    /** Clear all from the card itself (Meka, 2026-10-15 20:28), with Undo on Needs you's bar. */
+    undoLine: (String, (suspend () -> Unit)?) -> Unit = { _, _ -> },
+    onOpen: () -> Unit,
+) {
     val context = LocalContext.current
     val store = (context.applicationContext as MekaApplication).captures
     val synced by core.afterWork.collectAsState()
     val lists by store.lists.collectAsState()
     val work by core.workMode.collectAsState()
+    val cardHaptics = rememberMekaHaptics()
     if (synced.isEmpty) return
     val summary = remember(synced, lists) { synced.withLists(lists, CallerLookup.names(context)) }
     if (work.atWork) {
@@ -353,6 +376,11 @@ fun AfterWorkCard(core: MekaCore, modifier: Modifier = Modifier, onOpen: () -> U
         // Title with an Open › affordance, then the first two names over the counts (Fold review 2026-10-12 17:56, item 3).
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(summary.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            val app = context.applicationContext as MekaApplication
+            Text(AfterWorkDone.CLEAR_ALL, style = MekaType.captionStrong, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { cardHaptics.light(); clearAfterWorkCards(app, summary.people, AfterWorkDone.clearedAll(summary), undoLine) }
+                    .minTouch().padding(horizontal = MekaSpace.xs))
             Text(AfterWorkSummary.OPEN_LABEL + " ›", style = MekaType.captionStrong, color = Meka.colors.accent)
         }
         summary.namesLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -434,16 +462,21 @@ fun AfterWorkHost(onClose: () -> Unit) {
     LaunchedEffect(Unit) { app.nudger.dismiss() } // he's reading it: the nudge has done its job
     val autoPlay by app.playVoiceMessage.collectAsState()
     DisposableEffect(Unit) { onDispose { app.playVoiceMessage.value = null } } // an ask for a message gone stays no longer
+    val undo = os.meka.android.calendar.rememberEventUndo()
+    // Done per card and Clear all (Meka, 2026-10-15 20:28): the cards leave at once, Undo for 5 s, then cleared on
+    // both devices (the core waits out the Undo); this phone's sealed copy and a call's notification go with them.
+    val clear: (List<PersonSummary>, String) -> Unit = { people, line -> clearAfterWorkCards(app, people, line, undo::show) }
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
     AfterWorkPane(summary, onDone = {
-        scope.launch { runCatching { app.core.clearAfterWork() } }
-        store.clear()
-        onClose()
-    }, onClose = onClose, blocked = blocked,
+        clear(summary.people, AfterWorkDone.clearedAll(summary))
+    }, onDoneOne = { p -> clear(listOf(p), AfterWorkDone.clearedOne(p)) }, onClose = onClose, blocked = blocked,
         onBlock = { p -> scope.launch { runCatching { app.core.blockHeldCaller(p) } } },
         onReport = { number -> reportScamCall(context, number) },
         audio = { id -> app.core.voiceMessageAudio(id) },
         privacy = VoiceRecordingRules.privacy(work.recordingDays),
         autoPlay = autoPlay, onAutoPlayed = { app.playVoiceMessage.value = null })
+    os.meka.android.calendar.EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
+    }
 }
 
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
@@ -460,6 +493,7 @@ private fun PersonCard(
     audio: suspend (String) -> ByteArray?,
     autoPlay: String?,
     onAutoPlayed: () -> Unit,
+    onDone: () -> Unit,
     onTap: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -475,6 +509,12 @@ private fun PersonCard(
             if (p.isFamily) Text("Family", style = MekaType.caption, color = Meka.colors.accent)
             Spacer(Modifier.weight(1f))
             Text(time(p.latestAtMs), style = MekaType.caption, color = Meka.colors.textTertiary)
+            // Its own Done (Meka, 2026-10-15 20:28): clears just this card, Undo on the bar.
+            Text(AfterWorkDone.DONE, style = MekaType.captionStrong, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.background)
+                    .clickable(role = Role.Button) { onDone() }
+                    .semantics { contentDescription = AfterWorkDone.doneLabel(p) }
+                    .minTouch().padding(horizontal = MekaSpace.xs))
         }
         Text("${p.line} · ${p.apps.joinToString(", ") { it.label }}", style = MekaType.caption, color = Meka.colors.textSecondary)
         if (!expanded) p.latestText?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2) }

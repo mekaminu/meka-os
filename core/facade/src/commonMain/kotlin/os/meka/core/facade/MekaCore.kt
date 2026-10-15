@@ -419,6 +419,8 @@ class MekaCore(
      */
     val searchView: StateFlow<SearchView> = _search.asStateFlow()
 
+    /** Held items whose card's Done (or Clear all) is waiting out its Undo: hidden from [afterWork], not yet written. */
+    private val afterWorkHiding = LinkedHashSet<String>()
     private val _afterWork = MutableStateFlow(os.meka.core.domain.AfterWorkSummary(emptyList()))
     /**
      * "While you were at work": what the Fold held during work mode, grouped by person (urgent, then family, then
@@ -1476,7 +1478,33 @@ class MekaCore(
     suspend fun holdCaptured(items: List<os.meka.core.domain.CapturedItem>, lists: os.meka.core.domain.PeopleLists): Int =
         onCore { held.hold(items, lists) }
     /** Done on the after-work summary: cleared on every device, texts blanked. WhatsApp and Messages are untouched. */
-    suspend fun clearAfterWork(): Int = onCore { held.clear() }
+    suspend fun clearAfterWork(): Int = onCore { afterWorkHiding.clear(); held.clear() }
+
+    /**
+     * Done on one card, or Clear all ([os.meka.core.domain.AfterWorkDone]): [ids] leave [afterWork] at once (the
+     * Needs you card's counts follow) and are cleared on both devices after
+     * [os.meka.core.domain.AfterWorkDone.UNDO_MS] unless [undoClearAfterWork] took them back first.
+     */
+    suspend fun clearAfterWorkSoon(ids: List<String>) {
+        if (ids.isEmpty()) return
+        onCore { afterWorkHiding += ids; refresh() }
+        scope.launch {
+            delay(os.meka.core.domain.AfterWorkDone.UNDO_MS)
+            runCatching { commitAfterWorkClear(ids) }
+        }
+    }
+
+    /** Undo on the bar after a card's Done: those items come back, nothing was written. */
+    suspend fun undoClearAfterWork(ids: List<String>) = onCore { afterWorkHiding -= ids.toSet(); refresh() }
+
+    /** Writes a waiting Done now (the delay ending, or the app going to the background); returns how many cleared. */
+    suspend fun commitAfterWorkClear(ids: List<String>): Int = onCore {
+        val still = ids.filter { it in afterWorkHiding }
+        afterWorkHiding -= still.toSet()
+        val n = held.clear(still)
+        if (n == 0) refresh()
+        n
+    }
 
     /**
      * Requests from people Meka watches (V1, slice 2): reads one message the Fold's listener captured. Only a message
@@ -7285,7 +7313,7 @@ class MekaCore(
         val editsNow = calendarEdits.all()
         _editsSeen.value = editsNow
         _editLines.value = os.meka.core.domain.EditLineRules.lines(editsNow, nowMs())
-        _afterWork.value = held.summary()
+        _afterWork.value = held.summary().without(afterWorkHiding)
         _requests.value = requestCards.open()
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))

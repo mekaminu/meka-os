@@ -89,6 +89,16 @@ class CaptureStore(context: Context, private val nowMs: () -> Long = System::cur
     /** The owner has read the summary. Only MEKA's copy goes; WhatsApp and Messages are untouched. */
     fun clear() = synchronized(lock) { _items.value = emptyList(); save() }
 
+    /**
+     * Done on one card: only those items leave this phone's copy. [heldIds] are the synced `held_message` ids
+     * ([HeldMessages.entityId] of a capture id), so either form matches.
+     */
+    fun clearHeld(heldIds: Set<String>) = synchronized(lock) {
+        if (heldIds.isEmpty()) return@synchronized
+        val kept = _items.value.filter { it.id !in heldIds && os.meka.core.domain.HeldMessages.entityId(it.id) !in heldIds }
+        if (kept.size != _items.value.size) { _items.value = kept; save() }
+    }
+
     fun setLists(lists: PeopleLists) = synchronized(lock) { _lists.value = lists.pruned(); save() }
 
     fun setWatch(watch: RequestWatch) = synchronized(lock) { _watch.value = watch; save() }

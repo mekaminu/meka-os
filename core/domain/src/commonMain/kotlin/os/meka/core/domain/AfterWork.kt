@@ -268,6 +268,27 @@ data class PersonSummary(
         plural(voiceMessages, "voice message").takeIf { voiceMessages > 0 },
         plural(missedCalls, "missed call").takeIf { missedCalls > 0 },
     ).joinToString(" · ")
+
+    /** The held items' ids, what Done on this card clears ([HeldMessages.clear]). */
+    val ids: List<String> get() = items.map { it.id }
+
+    /** This card with only [kept] of its items (counts worked out again), or null when none is left. */
+    fun keeping(kept: List<CapturedItem>): PersonSummary? {
+        if (kept.isEmpty()) return null
+        if (kept.size == items.size) return this
+        val sorted = kept.sortedBy { it.atMs }
+        return copy(
+            urgent = sorted.any { it.isUrgent },
+            messages = sorted.count { it.kind == CaptureKind.MESSAGE },
+            voiceMessages = sorted.count { it.kind == CaptureKind.VOICE_MESSAGE },
+            missedCalls = sorted.count { it.kind == CaptureKind.MISSED_CALL },
+            apps = sorted.map { it.app }.distinct(),
+            firstAtMs = sorted.first().atMs,
+            latestAtMs = sorted.last().atMs,
+            latestText = sorted.lastOrNull { it.text != null }?.text,
+            items = sorted,
+        )
+    }
 }
 
 data class AfterWorkSummary(val people: List<PersonSummary>) {
@@ -311,6 +332,14 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
         2 -> "${people[0].personName} and ${people[1].personName}"
         else -> "${people[0].personName}, ${people[1].personName} and ${people.size - 2} more"
     }
+
+    /**
+     * The summary without the items in [ids] (a card's Done waiting out its 5 s Undo, [AfterWorkDone]): a card left
+     * with nothing goes, the others keep their order, and every count follows at once on both screens.
+     */
+    fun without(ids: Set<String>): AfterWorkSummary =
+        if (ids.isEmpty()) this
+        else AfterWorkSummary(people.mapNotNull { p -> p.keeping(p.items.filter { it.id !in ids }) })
 
     /** Messages and voice messages waiting to be caught up on (Needs you's empty line counts them). */
     val toCatchUp: Int get() = messages + voiceMessages
@@ -360,6 +389,34 @@ object AfterWorkSummaries {
             .thenBy { it.personName.lowercase() }
         return AfterWorkSummary(people.sortedWith(rank))
     }
+}
+
+/**
+ * Done per card on the after-work summary (Meka, 2026-10-15 20:28: "all the call and WhatsApp messages can't be marked
+ * as done or closed"). Each card (a person, a caller, a voice message) has its own Done and clears on a swipe; "Clear
+ * all" sits beside the headline. Either leaves the screen at once and waits [UNDO_MS] for Undo before it is written
+ * (a held message's cleared mark only ever turns on, so Undo has to come before the write); then it is cleared on the
+ * Fold and the Mac with its words blanked, exactly like the old Done.
+ */
+object AfterWorkDone {
+    const val DONE = "Done"
+    const val CLEAR_ALL = "Clear all"
+    const val UNDO_MS = 5_000L
+    const val HINT = "Done clears Navilife's copy on the Fold and the Mac. WhatsApp and Messages are untouched."
+    const val SWIPE_HINT = "Swipe a card, or tap Done, to clear just that one."
+
+    /** The undo bar after one card's Done: "Cleared Alex · 3 messages". */
+    fun clearedOne(p: PersonSummary): String = "Cleared ${p.personName.trim()}" + p.line.takeIf { it.isNotEmpty() }?.let { " · $it" }.orEmpty()
+
+    /** The undo bar after Clear all: "Cleared 4 people · 9 messages". */
+    fun clearedAll(s: AfterWorkSummary): String = "Cleared " + s.headline
+
+    /** What a screen reader says for a card's Done. */
+    fun doneLabel(p: PersonSummary): String = "Done with ${p.personName.trim()}"
+
+    /** Whether Done on this card also takes down its call notification on the phone (a missed call or voice message). */
+    fun clearsCallNotice(p: PersonSummary): Boolean =
+        p.items.any { it.app == CaptureApp.PHONE && it.kind != CaptureKind.MESSAGE }
 }
 
 internal fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
@@ -542,12 +599,21 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
      * Done: everything held up to now leaves the summary on both devices, and its text is blanked. Something that
      * arrives later (a message held while the Mac's Done was on its way) stays until the next Done.
      */
-    fun clear(): Int {
+    fun clear(): Int = clearWhere(null)
+
+    /**
+     * Done on one card ([AfterWorkDone]): only the held items in [ids] leave the summary on both devices, words
+     * blanked; everything else stays. Ids not held (or already cleared) are skipped.
+     */
+    fun clear(ids: Collection<String>): Int = if (ids.isEmpty()) 0 else clearWhere(ids.toSet())
+
+    private fun clearWhere(only: Set<String>?): Int {
         val now = nowMs()
         var n = 0
         for (e in replica.entities(EntityTypes.HELD_MESSAGE)) {
+            if (only != null && e.ref.entityId !in only) continue
             if (e[HeldMessageFields.CLEARED].boolOrNull == true) continue
-            if ((e[HeldMessageFields.AT].longOrNull ?: 0L) > now) continue
+            if (only == null && (e[HeldMessageFields.AT].longOrNull ?: 0L) > now) continue
             replica.commitLocal(
                 EntityTypes.HELD_MESSAGE, e.ref.entityId,
                 mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null,

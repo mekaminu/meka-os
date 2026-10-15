@@ -2999,6 +2999,16 @@ final class CoreModel {
         run { _ = try await $0.clearAfterWork() }
     }
 
+    /// Done on one person's card, or Clear all (Meka, 2026-10-15 20:28): they leave the sheet and Needs you at once and
+    /// the bar offers Undo for 5 s; then the core clears them here and on the Fold. Only Strings cross to the core.
+    func clearAfterWorkCards(_ people: [PersonSummary], line: String) {
+        let ids: [String] = people.flatMap { $0.ids }
+        guard !ids.isEmpty else { return }
+        MekaHaptics.light()
+        run { try await $0.clearAfterWorkSoon(ids: ids) }
+        offerEventUndo(line, .afterWork(ids))
+    }
+
     func showEvent(_ eventID: String) {
         MekaHaptics.light()
         run { try await $0.showEvent(eventId: eventID) }
@@ -3069,6 +3079,7 @@ final class CoreModel {
         case .dateNightBooked(let day): run { _ = try await $0.bookDateNight(day: day, booked: false) }
         case .dateNightSkipped(let day): run { _ = try await $0.skipDateNight(day: day, skip: false) }
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
+        case .afterWork(let ids): run { try await $0.undoClearAfterWork(ids: ids) }
         case .archivedSeen: run { try await $0.undoSeenArchivedForYou() }
         case .mailUnopened: run { try await $0.undoUnopened() }
         case .mailItem: run { try await $0.undoMailItem() }
@@ -4829,6 +4840,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case dateNightBooked(Int64)
         /// Skip this one on date night's week-before card: the night is kept clear again.
         case dateNightSkipped(Int64)
+        /// Done on an after-work card, or Clear all: those held messages come back (nothing was cleared yet).
+        case afterWork([String])
         /// Caught up on the group digest: its cards come back on both devices.
         case groupDigest(GroupDigestUndo)
         /// Got it on "Archived for you": the card comes back on both devices.

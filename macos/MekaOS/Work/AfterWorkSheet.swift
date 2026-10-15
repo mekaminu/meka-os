@@ -12,25 +12,49 @@ struct AfterWorkSheet: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var open: String?
+    /// The row last clicked: ⌫ clears it (Done per card, 2026-10-15).
+    @State private var selected: String?
 
     var body: some View {
         let summary = model.afterWork
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text(summary?.title ?? "While you were at work").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(summary?.headline ?? "Nothing came in.")
-                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                .staggeredAppear(0)
+            HStack {
+                Text(summary?.headline ?? "Nothing came in.")
+                    .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+                Spacer()
+                // Clear all sits beside the headline (Meka, 2026-10-15 20:28), with Undo on the bar.
+                if let summary, !summary.isEmpty {
+                    Button(AfterWorkDone.shared.CLEAR_ALL) {
+                        model.clearAfterWorkCards(summary.people, line: AfterWorkDone.shared.clearedAll(s: summary))
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .foregroundStyle(palette.accent)
+                    .font(MekaType.captionStrong)
+                }
+            }
+            .staggeredAppear(0)
             if let summary, !summary.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         ForEach(Array(summary.people.enumerated()), id: \.element.personName) { i, p in
                             person(p).staggeredAppear(i + 1)
+                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
                         }
                     }
                 }
                 .frame(maxHeight: 460)
+                .focusable()
+                .focusEffectDisabled()
+                .onKeyPress(keys: [.delete, .deleteForward]) { _ in
+                    guard let key = selected, let p = summary.people.first(where: { Self.key($0) == key }) else { return .ignored }
+                    done(p)
+                    return .handled
+                }
             }
-            Text("Done clears Navilife's copy here and on the Fold. WhatsApp and Messages are untouched.")
+            if model.eventUndo != nil { EventUndoBar(palette: palette) }
+            Text("Done on a card clears just that one (or select it and press ⌫); Clear all clears everyone. Navilife's copy goes here and on the Fold; WhatsApp and Messages are untouched.")
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             if summary?.people.contains(where: { $0.items.contains(where: { $0.hasAudio }) }) == true {
@@ -39,13 +63,10 @@ struct AfterWorkSheet: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             HStack {
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                if summary?.isEmpty == false {
-                    Button("Done") { model.clearAfterWork() }
-                        .buttonStyle(.borderedProminent)
-                        .keyboardShortcut(.defaultAction)
-                }
+                Button("Close") { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.cancelAction)
             }
             .padding(.top, MekaSpace.m)
         }
@@ -53,10 +74,18 @@ struct AfterWorkSheet: View {
         .frame(width: 520)
         .background(palette.surface)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: summary?.people.map { Self.key($0) } ?? [])
+    }
+
+    private static func key(_ p: PersonSummary) -> String { p.items.first?.personKey ?? p.personName }
+
+    private func done(_ p: PersonSummary) {
+        if selected == Self.key(p) { selected = nil }
+        model.clearAfterWorkCards([p], line: AfterWorkDone.shared.clearedOne(p: p))
     }
 
     private func person(_ p: PersonSummary) -> some View {
-        let key = p.items.first?.personKey ?? p.personName
+        let key = Self.key(p)
         let expanded = open == key
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             HStack(spacing: MekaSpace.xs) {
@@ -69,6 +98,12 @@ struct AfterWorkSheet: View {
                 }
                 Spacer()
                 Text(Self.time(p.latestAtMs)).font(MekaType.caption).foregroundStyle(palette.textTertiary).monospacedDigit()
+                // Its own Done (Meka, 2026-10-15 20:28): clears just this card, Undo on the bar.
+                Button(AfterWorkDone.shared.DONE) { done(p) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.captionStrong)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel(AfterWorkDone.shared.doneLabel(p: p))
             }
             Text("\(p.line) · \(p.apps.map { $0.label }.joined(separator: ", "))")
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
@@ -106,9 +141,11 @@ struct AfterWorkSheet: View {
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent.opacity(selected == key ? 0.6 : 0), lineWidth: 1))
         .contentShape(Rectangle())
         .onTapGesture {
             MekaHaptics.tick()
+            selected = key
             open = expanded ? nil : key
         }
         .accessibilityElement(children: .combine)
@@ -173,6 +210,12 @@ struct AfterWorkCard: View {
                         HStack {
                             Text(summary.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                             Spacer(minLength: MekaSpace.xs)
+                            Button(AfterWorkDone.shared.CLEAR_ALL) {
+                                model.clearAfterWorkCards(summary.people, line: AfterWorkDone.shared.clearedAll(s: summary))
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .font(MekaType.captionStrong)
+                            .foregroundStyle(palette.accent)
                             Text(AfterWorkSummary.companion.OPEN_LABEL + " ›").font(MekaType.captionStrong).foregroundStyle(palette.accent)
                         }
                         if let names = summary.namesLine {

@@ -410,7 +410,7 @@ internal fun NeedsYouColumn(
             }
         }
         item(key = "after-work") {
-            AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1, play))) { openAfterWork() }
+            AfterWorkCard(core, Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(1, play)), moves.undoLine) { openAfterWork() }
         }
         digest?.takeIf { it.due }?.let { d ->
             item(key = "group-digest") {
