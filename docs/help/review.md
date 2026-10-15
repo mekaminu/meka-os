@@ -16,3 +16,4 @@ tip: Saving keeps it in "Your reflections" (open it from an earlier week), adds 
 tip: Say "reflect on my week" to Talk (on the phone or the Mac) and Review opens on this week (last week on a Monday) with Reflect open, any day. Nothing is kept until you tap Save.
 tip: The one thing you said matters shows under Today's header all the next week ("This week's one thing · …", in brass on the Monday), and the morning brief says it on Monday (and every weekday on Standard and Full).
 tip: To have the review and reflection come at another time on Sunday, tap Change beside "Comes on Sundays at 18:00" at the bottom of Reflect (on the Mac, pick the time there) and choose 16:00 to 21:00. The review's heads-up and Today's card move with it, on both apps.
+tip: Not now on a Sunday? Tap "Later tonight" on Today's review card or on its notification: the card steps away and the review comes back two hours on (never after 22:00), on the phone and the Mac.

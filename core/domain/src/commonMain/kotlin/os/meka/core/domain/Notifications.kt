@@ -45,7 +45,7 @@ enum class NoticeAction(val label: String) {
     WENT("Went"),
     DIDNT_GO("Didn't go"),
     /**
-     * "Leaving now" ([LeavingRules]): sends the notification's own words to Jeanette, on Meka's tap (Level 3). Fold only.
+     * "Leaving now" ([LeavingRules]): sends the notification's own words to his wife, on Meka's tap (Level 3). Fold only.
      */
     SEND_MESSAGE("Send"),
     /** Opens the chat with the words filled in, for Meka to change and send himself. Fold only. */
@@ -66,7 +66,12 @@ enum class NoticeAction(val label: String) {
      * The commute counts everywhere, slice 7 ([CommuteDisruptionRules.notices]): tomorrow's trains are in trouble, so
      * the wake alarm moves ten minutes earlier, on Meka's tap only. Both apps.
      */
-    WAKE_EARLIER("Wake 10 min earlier");
+    WAKE_EARLIER("Wake 10 min earlier"),
+    /**
+     * Weekly reflection, slice 4 ([ReviewRules.laterMinute]): Sunday's weekly review heads-up comes back in two hours
+     * (never after 22:00), on both devices. Both apps.
+     */
+    LATER_TONIGHT(ReviewRules.LATER_LABEL);
 
     /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
     fun shownOn(send: Boolean): Boolean = when (this) {
@@ -506,10 +511,10 @@ object Governor {
     }
 
     /** Keys whose notification comes down once the notice stops being produced: approvals (they can't come back). */
-    fun withdrawable(key: String): Boolean = key.startsWith(ApprovalRules.NOTICE_PREFIX)
+    fun withdrawable(key: String): Boolean = key.startsWith(ApprovalRules.NOTICE_PREFIX) || key.startsWith(ReviewRules.NOTICE_PREFIX)
 
     /** Where a withdrawable key was posted: an approval's notices share "approval:<id>". */
-    internal fun withdrawSlot(key: String): String = ApprovalRules.noticeSlot(key)
+    internal fun withdrawSlot(key: String): String = if (key.startsWith(ApprovalRules.NOTICE_PREFIX)) ApprovalRules.noticeSlot(key) else key
 
     /** What the settings screens show. */
     fun preview(notices: List<Notice>, settings: NotificationSettings, nowMs: Long, cal: LocalCalendar): NotificationPreview {
@@ -802,12 +807,17 @@ object NoticeSources {
             )
         }
         // The weekly review: a heads-up at its time (18:00 unless set) on the week's Sunday, standing until it's reviewed or Monday ends.
+        // Weekly reflection, slice 4: "Later tonight" (Sunday only) puts it off; it comes back under a fresh key then.
         if (review.weekStart > 0 && !review.reviewed) {
+            val sunday = cal.toEpochMs(review.weekStart + 6, review.startMinute)
+            val later = review.laterUntilMs.takeIf { it > sunday }
             out += Notice(
-                key = "weekly-review:${review.weekStart}", source = NoticeSource.WEEKLY_REVIEW, tier = NoticeTier.HEADS_UP,
+                key = later?.let { ReviewRules.laterKey(review.weekStart, it) } ?: "${ReviewRules.NOTICE_PREFIX}${review.weekStart}",
+                source = NoticeSource.WEEKLY_REVIEW, tier = NoticeTier.HEADS_UP,
                 title = review.title.ifEmpty { "Review your week" }, text = review.line,
-                atMs = cal.toEpochMs(review.weekStart + 6, review.startMinute), target = NoticeTarget.REVIEW,
+                atMs = later ?: sunday, target = NoticeTarget.REVIEW,
                 expiresAtMs = cal.toEpochMs(review.weekStart + 8, 0),
+                actions = if (review.laterOffered) listOf(NoticeAction.LATER_TONIGHT) else emptyList(),
             )
         }
         // Remind me and Leave by, set on calendar events.

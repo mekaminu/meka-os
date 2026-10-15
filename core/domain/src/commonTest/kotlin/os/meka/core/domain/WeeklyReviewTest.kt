@@ -338,4 +338,62 @@ class WeeklyReviewTest {
         val silent = settings.copy(tiers = mapOf(NoticeSource.WEEKLY_REVIEW to NoticeTier.SILENT))
         assertTrue(Governor.evaluate(notices(), silent, DeviceAlerts.ALL, GovernorState(), now(), cal).post.isEmpty())
     }
+
+    @Test
+    fun laterTonightIsTwoHoursOnNeverAfterTenAndOnlyOnSunday() {
+        val sun = monday + 6
+        assertEquals(20 * 60, ReviewRules.laterMinute(sun, 18 * 60))
+        assertEquals(20 * 60 + 15, ReviewRules.laterMinute(sun, 18 * 60 + 2)) // rounded up to the quarter hour
+        assertEquals(22 * 60, ReviewRules.laterMinute(sun, 21 * 60)) // never after 22:00
+        assertEquals(22 * 60, ReviewRules.laterMinute(sun, 21 * 60 + 45))
+        assertEquals(null, ReviewRules.laterMinute(sun, 21 * 60 + 50)) // under a quarter of an hour away
+        assertEquals(null, ReviewRules.laterMinute(monday + 7, 9 * 60)) // Monday: no
+        assertEquals("Your weekly review comes back at 20:15", ReviewRules.laterSaid(20 * 60 + 15))
+    }
+
+    @Test
+    fun laterTonightHidesTheCardAndTheHeadsUpComesBackUnderAFreshKey() {
+        val cal = LocalCalendar.UTC
+        val empty = Today(emptyList(), null, emptyList(), emptyList())
+        fun notices() = NoticeSources.collect(ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, empty, now(), cal, review = view().card)
+            .filter { it.source == NoticeSource.WEEKLY_REVIEW }
+        val settings = NotificationSettings(digestMinutes = emptyList())
+
+        world.clock.nowMs = at(monday + 6, 18) + 5 * 60_000L
+        val first = notices().single()
+        assertEquals(listOf(NoticeAction.LATER_TONIGHT), first.actions)
+        assertTrue(view().card.laterOffered)
+        val r1 = Governor.evaluate(notices(), settings, DeviceAlerts.ALL, GovernorState(), now(), cal)
+        assertEquals(listOf("weekly-review:$monday"), r1.post.map { it.key })
+
+        // Later tonight at 18:05: back at 20:15, the card off Today until then.
+        val until = at(monday + 6, 20) + 15 * 60_000L
+        wa.putOff(monday, until)
+        assertFalse(view().card.offered)
+        assertEquals(until, view().card.laterUntilMs)
+        assertEquals("A look back, and the week ahead", view().card.line) // kept for the heads-up
+        val later = notices().single()
+        assertEquals("weekly-review:$monday:later:$until", later.key)
+        assertEquals(until, later.atMs)
+        // The first one comes down (on the other device too); nothing posts until 20:15, and the governor wakes for it.
+        val r2 = Governor.evaluate(notices(), settings, DeviceAlerts.ALL, r1.state, now(), cal)
+        assertEquals(listOf("weekly-review:$monday"), r2.withdraw)
+        assertTrue(r2.post.isEmpty())
+        assertEquals(until, r2.nextWakeMs)
+
+        world.clock.nowMs = until + 60_000L
+        assertTrue(view().card.offered)
+        val r3 = Governor.evaluate(notices(), settings, DeviceAlerts.ALL, r2.state, now(), cal)
+        assertEquals(listOf(later.key), r3.post.map { it.key })
+        assertEquals(listOf(NoticeAction.LATER_TONIGHT), r3.post.single().actions) // 20:16: can go again, to 22:00
+
+        // Reviewed: it comes down everywhere.
+        wa.markReviewed(monday)
+        assertEquals(listOf(later.key), Governor.evaluate(notices(), settings, DeviceAlerts.ALL, r3.state, now(), cal).withdraw)
+
+        // Monday's card has no Later tonight.
+        world.clock.nowMs = at(monday + 14, 9)
+        assertFalse(view().card.laterOffered)
+        assertTrue(notices().single().actions.isEmpty())
+    }
 }

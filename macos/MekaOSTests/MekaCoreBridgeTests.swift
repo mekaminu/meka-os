@@ -1740,6 +1740,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(review.whenLine(start: 19 * 60 + 30), "Comes on Sundays at 19:30 · through Monday")
         XCTAssertEqual(review.timeChoices(start: 18 * 60).map { Int($0.int32Value) }, [960, 1020, 1080, 1140, 1200, 1260])
         XCTAssertFalse(review.validStart(minute: 23 * 60))
+        // Slice 4: Later tonight, its button and what it says, and the heads-up's button name the Mac answers.
+        XCTAssertEqual(review.LATER_LABEL, "Later tonight")
+        XCTAssertEqual(review.laterSaid(minute: 20 * 60 + 15), "Your weekly review comes back at 20:15")
+        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.laterTonight), "LATER_TONIGHT") // MacNotifier.laterTonightAction
     }
 
     func testScreenshotRulesReachSwift() {

@@ -2603,6 +2603,27 @@ class MekaCore(
         os.meka.core.domain.ReviewRules.startSaid(minute)
     }
 
+    /**
+     * Weekly reflection, slice 4: "Later tonight" on Sunday's review, from Today's card ([key] null) or its heads-up
+     * ([key] that notice's key, which must still be about the card's week). The card leaves Today and the heads-up comes
+     * back two hours on (never after 22:00) on both devices. Returns "Your weekly review comes back at 20:15", or null
+     * when it can't be put off now (not Sunday, too late, or reviewed already).
+     */
+    suspend fun reviewLater(key: String?): String? = onCore {
+        val card = _review.value.card
+        if (card.weekStart <= 0 || card.reviewed) return@onCore null
+        val mine = os.meka.core.domain.ReviewRules.NOTICE_PREFIX + card.weekStart
+        if (key != null && key != mine && !key.startsWith("$mine:")) return@onCore null
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        if (!os.meka.core.domain.ReviewRules.cardWindow(today, cal.minuteOfDay(now), card.startMinute)) return@onCore null
+        val m = os.meka.core.domain.ReviewRules.laterMinute(today, cal.minuteOfDay(now)) ?: return@onCore null
+        review.putOff(card.weekStart, cal.toEpochMs(today, m))
+        refresh()
+        os.meka.core.domain.ReviewRules.laterSaid(m)
+    }
+
     /** "Skip this week" ([on]) or, after a skip, "Reflect now" for the week Review shows. */
     suspend fun skipReflection(on: Boolean) = onCore { reflections.skip(_review.value.weekStart, on); refresh() }
 

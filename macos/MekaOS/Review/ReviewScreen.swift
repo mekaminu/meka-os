@@ -284,5 +284,15 @@ struct ReviewCardView: View {
         }
         .buttonStyle(MekaPressStyle())
         .mekaHoverLift()
+        // Weekly reflection, slice 4: Sunday only; the card leaves (its own exit) and the heads-up comes back two hours on.
+        .overlay(alignment: .trailing) {
+            if card.laterOffered {
+                Button(ReviewRules.shared.LATER_LABEL) { model.reviewLater() }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .padding(.trailing, MekaSpace.l)
+            }
+        }
     }
 }

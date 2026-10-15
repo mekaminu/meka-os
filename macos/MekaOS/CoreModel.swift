@@ -2103,6 +2103,13 @@ final class CoreModel {
         go(to: .review, reduced: reduced)
     }
 
+    /// Weekly reflection, slice 4: "Later tonight" on Today's review card (Sunday only): it leaves Today and the
+    /// heads-up comes back two hours on, on both apps.
+    func reviewLater() {
+        MekaHaptics.light()
+        run { _ = try await $0.reviewLater(key: nil) }
+    }
+
     // MARK: Goals and habits
 
     func addHabit(_ title: String, perWeek: Int, timing: HabitTiming) {
@@ -2318,6 +2325,14 @@ final class CoreModel {
         if name == MacNotifier.wakeEarlierAction {
             Task {
                 _ = try? await core.wakeEarlierForTrains(key: key)
+                MacNotifier.remove(key: key)
+            }
+            return
+        }
+        // Sunday's weekly review: Later tonight brings it back two hours on, on both apps (weekly reflection, slice 4).
+        if name == MacNotifier.laterTonightAction {
+            Task {
+                _ = try? await core.reviewLater(key: key)
                 MacNotifier.remove(key: key)
             }
             return

@@ -22,6 +22,9 @@ object ReviewFields {
     const val REVIEWED_AT = "reviewedAtMs"
     /** Weekly reflection, slice 3: the card's Sunday start, minutes after midnight (on [ReviewRules.TIME_ENTITY_ID]). */
     const val START_MIN = "startMinute"
+    /** Weekly reflection, slice 4: "Later tonight" — the card's week (a Monday) and when it comes back, on [WeeklyReview.ENTITY_ID]. */
+    const val LATER_WEEK = "laterWeek"
+    const val LATER_UNTIL = "laterUntilMs"
 }
 
 /** A number at the top of the review; it counts up on appear. */
@@ -115,10 +118,17 @@ data class ReviewCard(
     val reviewed: Boolean,
     /** "Review your week" (Sunday) or "Review last week" (Monday). */
     val title: String,
-    /** "12 done · 3 of 4 habits met · 2 still open"; empty while not offered. */
+    /** "12 done · 3 of 4 habits met · 2 still open"; empty outside the card's window (kept while put off). */
     val line: String,
     /** Weekly reflection, slice 3: when on Sunday the card (and its heads-up) starts, minutes after midnight. */
     val startMinute: Int = ReviewRules.CARD_START_MIN,
+    /**
+     * Weekly reflection, slice 4: when "Later tonight" puts it back (epoch ms), 0 when it wasn't put off. While that is
+     * still ahead the card is not [offered] and the heads-up waits for it.
+     */
+    val laterUntilMs: Long = 0,
+    /** "Later tonight" can be offered now (Sunday, at least a quarter of an hour before 22:00), on the card and its heads-up. */
+    val laterOffered: Boolean = false,
 ) {
     companion object {
         val NONE = ReviewCard(offered = false, weekStart = 0, offset = 0, reviewed = false, title = "", line = "")
@@ -162,6 +172,33 @@ object ReviewRules {
         1 -> true
         else -> false
     }
+
+    /** Weekly reflection, slice 4: how long "Later tonight" puts the review off, and the latest it comes back on Sunday. */
+    const val LATER_MIN = 120
+    /** The button, on Today's card and on the heads-up ([NoticeAction.LATER_TONIGHT]). */
+    const val LATER_LABEL = "Later tonight"
+    const val LATER_LATEST_MIN = 22 * 60
+    private const val LATER_AT_LEAST_MIN = 15
+
+    /**
+     * When "Later tonight" pressed at [minute] on [today] brings the review back, minutes after midnight that same
+     * Sunday: two hours on, rounded up to the quarter hour, but never after 22:00; null on any other day, or when that
+     * would be less than a quarter of an hour away.
+     */
+    fun laterMinute(today: Long, minute: Int): Int? {
+        if (CivilDate.isoDayOfWeek(today) != 7) return null
+        val m = minOf(((minute + LATER_MIN + 14) / 15) * 15, LATER_LATEST_MIN)
+        return m.takeIf { it - minute >= LATER_AT_LEAST_MIN }
+    }
+
+    /** What pressing it says: "Your weekly review comes back at 20:15". */
+    fun laterSaid(minute: Int): String = "Your weekly review comes back at ${LocalClock.formatMinute(minute)}"
+
+    /** The heads-up's key once put off: a fresh key, so it posts again when it comes back. */
+    fun laterKey(weekStart: Long, untilMs: Long): String = "${NOTICE_PREFIX}$weekStart:later:$untilMs"
+
+    /** The weekly review's heads-ups ("weekly-review:<Monday>", and the put-off "…:later:<ms>"). */
+    const val NOTICE_PREFIX = "weekly-review:"
 
     fun cardTitle(offset: Int): String = if (offset == 0) "Review your week" else "Review last week"
 
@@ -254,6 +291,22 @@ class WeeklyReview(
         return true
     }
 
+    /**
+     * Weekly reflection, slice 4: "Later tonight" on the week [weekStart]'s card: it comes back at [untilMs] on both
+     * devices (synced, last writer wins).
+     */
+    fun putOff(weekStart: Long, untilMs: Long) {
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(ReviewFields.LATER_WEEK to GoalRules.weekStart(weekStart).fv(), ReviewFields.LATER_UNTIL to untilMs.fv()),
+        )
+    }
+
+    private fun laterUntil(weekStart: Long): Long {
+        val s = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID) ?: return 0
+        return if (s[ReviewFields.LATER_WEEK].longOrNull == weekStart) s[ReviewFields.LATER_UNTIL].longOrNull ?: 0 else 0
+    }
+
     fun reviewedWeek(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(ReviewFields.REVIEWED_WEEK)?.longOrNull
 
     /** "Done reviewing" for the week starting [weekStart] (a Monday); synced. */
@@ -285,11 +338,14 @@ class WeeklyReview(
         val cardWs = GoalRules.weekStart(today) + 7L * cardOff
         val reviewed = reviewedWeek() == cardWs
         val start = startMinute()
-        val offered = !reviewed && ReviewRules.cardWindow(today, calendar.minuteOfDay(now), start)
-        val line = if (!offered) "" else (if (cardOff == off) main else build(cardOff, all, events, goals, fasts, window)).let { v ->
+        val later = laterUntil(cardWs)
+        val inWindow = !reviewed && ReviewRules.cardWindow(today, calendar.minuteOfDay(now), start)
+        val offered = inWindow && now >= later
+        val line = if (!inWindow) "" else (if (cardOff == off) main else build(cardOff, all, events, goals, fasts, window)).let { v ->
             ReviewRules.cardLine(v.done.size + v.doneMore, v.habits.count { it.met }, v.habits.size, v.stillOpen.size + v.stillOpenMore)
         }
-        return main.copy(card = ReviewCard(offered, cardWs, cardOff, reviewed, ReviewRules.cardTitle(cardOff), line, start))
+        val laterOffered = inWindow && ReviewRules.laterMinute(today, calendar.minuteOfDay(now)) != null
+        return main.copy(card = ReviewCard(offered, cardWs, cardOff, reviewed, ReviewRules.cardTitle(cardOff), line, start, later, laterOffered))
     }
 
     private fun build(

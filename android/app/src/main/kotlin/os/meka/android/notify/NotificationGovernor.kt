@@ -371,6 +371,10 @@ class NoticeActionReceiver : BroadcastReceiver() {
                             // Tomorrow's trains (the commute counts everywhere, slice 7): only this tap moves the alarm.
                             val line = runCatching { app.core.wakeEarlierForTrains(key) }.getOrNull()
                             if (line != null) app.governor.postSent(key, "Wake alarm moved", line) else app.governor.cancel(key)
+                        } else if (action == NoticeAction.LATER_TONIGHT) {
+                            // Sunday's weekly review (weekly reflection, slice 4): back two hours on, on both apps.
+                            runCatching { app.core.reviewLater(key) }
+                            app.governor.cancel(key)
                         } else {
                             val card = action?.let { runCatching { app.core.answerSessionNotice(key, it) }.getOrNull() }
                             if (card != null) app.governor.postAnswered(key, card) else app.governor.cancel(key)

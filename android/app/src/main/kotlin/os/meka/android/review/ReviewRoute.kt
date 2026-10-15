@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +59,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.NorthStarMetric
+import os.meka.core.domain.ReviewRules
 import os.meka.core.domain.ReviewCard
 import os.meka.core.domain.ReviewGoal
 import os.meka.core.domain.ReviewHabit
@@ -409,12 +412,25 @@ private fun ReviewedCheck(visible: Boolean) {
  * and stays through Monday until that week is reviewed on either device; tapping it opens Review on that week.
  */
 @Composable
-internal fun ReviewCardTile(card: ReviewCard, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier) {
-    Column(
+internal fun ReviewCardTile(
+    card: ReviewCard, onOpen: () -> Unit, onLater: (() -> Unit)? = null, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier,
+) {
+    Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
-        Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+        Column(Modifier.weight(1f)) {
+            Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
+            Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+        }
+        // Weekly reflection, slice 4: Sunday only; the card leaves (its own exit) and the heads-up comes back two hours on.
+        if (onLater != null && card.laterOffered) {
+            Text(
+                ReviewRules.LATER_LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { onLater() }.heightIn(min = MekaSpace.touch).padding(horizontal = MekaSpace.s).wrapContentHeight(),
+            )
+        }
     }
 }

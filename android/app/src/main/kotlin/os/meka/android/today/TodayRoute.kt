@@ -386,6 +386,7 @@ fun TodayRoute(
                         openSearch = { showSearch = true },
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
+                        laterReviewCard = { scope.launch { runCatching { core.reviewLater(null) } } },
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers, undo = eventUndo,
                         now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
                         upNext = upNextView, upNextHandlers = upNextHandlers,
@@ -688,6 +689,8 @@ private fun TodayPane(
     shutdown: ShutdownView, openShutdown: () -> Unit, shutdownOpen: Boolean, openSearch: () -> Unit,
     brief: MorningBriefView, openBrief: () -> Unit, briefOpen: Boolean,
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
+    /** Weekly reflection, slice 4: "Later tonight" on the review card (Sunday only): it leaves and comes back in two hours. */
+    laterReviewCard: () -> Unit = {},
     openEvent: (CalendarEvent) -> Unit = {},
     eventHandlers: EventActionHandlers? = null,
     /** False in the command centre, where the Needs you column beside Today shows them. */
@@ -1044,7 +1047,7 @@ private fun TodayPane(
             if (reviewCard.offered) {
                 item(key = "review") {
                     // Its title travels across the shell into the Review tab's.
-                    ReviewCardTile(reviewCard, openReviewCard, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
+                    ReviewCardTile(reviewCard, openReviewCard, onLater = laterReviewCard, modifier = Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
                         titleModifier = Modifier.sharedPlace(SharedMotion.placeKey(ShellDestination.REVIEW, PlaceVia.CARD)))
                 }
             }

@@ -153,4 +153,33 @@ class ReflectionFacadeTest {
         assertEquals(20 * 60, mac.reflectionView.value.startMinute)
         assertTrue(mac.reflectionView.value.asking)
     }
+
+    @Test
+    fun laterTonightPutsTheReviewOffOnBothAppsUntilTwoHoursOn() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.tick()
+        val card = fold.reviewView.value.card
+        assertTrue(card.offered)
+        assertTrue(card.laterOffered)
+        assertEquals(null, fold.reviewLater("weekly-review:${card.weekStart - 7}")) // an older week's heads-up
+        assertEquals("Your weekly review comes back at 21:00", fold.reviewLater("weekly-review:${card.weekStart}"))
+        assertFalse(fold.reviewView.value.card.offered)
+        fold.syncNow(); mac.syncNow()
+        mac.tick()
+        assertFalse(mac.reviewView.value.card.offered)
+        assertTrue(mac.reviewView.value.card.laterUntilMs > 0)
+        now += 2 * 3_600_000L // 21:00
+        mac.tick()
+        assertTrue(mac.reviewView.value.card.offered)
+        assertEquals("Your weekly review comes back at 22:00", mac.reviewLater(null)) // never after 22:00
+        now += 55 * 60_000L // 21:55
+        mac.tick()
+        assertEquals(null, mac.reviewLater(null)) // too late now
+        now += 12 * 3_600_000L // Monday 09:55
+        mac.tick()
+        assertTrue(mac.reviewView.value.card.offered)
+        assertFalse(mac.reviewView.value.card.laterOffered)
+        assertEquals(null, mac.reviewLater(null))
+    }
 }
