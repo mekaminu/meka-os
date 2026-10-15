@@ -21,6 +21,7 @@ import os.meka.core.domain.MailWarrantyRules
 import os.meka.core.domain.LocalCalendar
 import os.meka.core.domain.MailBacklogFacts
 import os.meka.core.domain.MailBacklog
+import os.meka.core.domain.MailBacklogFields
 import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailTidyFacts
@@ -812,8 +813,11 @@ class Integrations(
         val nowMs = now()
         // Inbox fixes, slice 2: a plan made by older rules (30 days, the old sort) that he hasn't approved and nothing has
         // moved under is started again, so the plan he approves is what today's rules would do.
+        // Decided once per rules version: the server's own record says whether it already wrote this version.
         val entityId0 = MailBacklogRules.entityId(a.id)
-        if (ms.backlogScan(a.id) != null) {
+        val wroteVersion = store.mirror(a.householdId, a.id)[entityId0]?.fieldOps?.get(MailBacklogFields.PLAN_VERSION)?.second ==
+            valueKey(FieldValue.Int64(MailBacklogRules.PLAN_VERSION.toLong()))
+        if (!wroteVersion && ms.backlogScan(a.id) != null) {
             val before = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId0) }.getOrNull()
                 ?.let { MailBacklogRules.read(entityId0, it) }
             if (MailBacklogRules.needsReplan(before) && ms.tidied(a.id, MailBacklogRules.tidyBatchId(a.id)).isEmpty()) {

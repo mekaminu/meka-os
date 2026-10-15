@@ -1812,7 +1812,7 @@ class MailSyncTest {
     fun aPlanMadeByOlderRulesIsStartedAgainUnlessApproved() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()
-        val (gmail, _, i) = world(ms, ops = ops)
+        val (gmail, store, i) = world(ms, ops = ops)
         gmail.mailbox["n1"] = msg("n1", 10, "editor@weekly.example").copy(listId = "<weekly.example>")
         gmail.mailbox["p1"] = msg("p1", 50)
         gmail.backlogPages = mapOf(null to MailBacklogPage(ids = listOf("n1", "p1"), next = null))
@@ -1827,8 +1827,17 @@ class MailSyncTest {
         assertEquals(mapOf(MailBacklogKind.NEWSLETTER to 1, MailBacklogKind.KEEP to 1), plan().counts)
         i.syncAccount(id); now += 300_000
         assertEquals(1, gmail.backlogAsked.size)
-        // A plan the older rules wrote (version 1): the next check starts again from the listing.
+        // A device writing a version changes nothing: the server knows what it wrote.
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.PLAN_VERSION, FieldValue.Int64(1))
+        now += 1
+        i.syncAccount(id); now += 300_000
+        assertEquals(1, gmail.backlogAsked.size)
+        // A plan the older rules wrote (no version, before this server): the next check starts again from the listing.
+        fun forgetVersion() {
+            val row = store.mirror("home", id).getValue(entityId)
+            store.putMirror("home", row.copy(fieldOps = row.fieldOps - MailBacklogFields.PLAN_VERSION))
+        }
+        forgetVersion()
         now += 1
         i.syncAccount(id); now += 300_000
         assertEquals(2, gmail.backlogAsked.size)
@@ -1838,6 +1847,7 @@ class MailSyncTest {
         // Approved: an old version is left as it is.
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.APPROVED_AT, FieldValue.Int64(now))
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.PLAN_VERSION, FieldValue.Int64(1))
+        forgetVersion()
         now += 1
         i.syncAccount(id); now += 300_000
         assertEquals(2, gmail.backlogAsked.size)
