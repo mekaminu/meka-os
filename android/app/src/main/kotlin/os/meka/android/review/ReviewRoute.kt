@@ -429,7 +429,7 @@ internal fun ReviewCardTile(
             Text(
                 ReviewRules.LATER_LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
-                    .clickable(role = Role.Button) { onLater() }.heightIn(min = MekaSpace.touch).padding(horizontal = MekaSpace.s).wrapContentHeight(),
+                    .clickable(role = Role.Button) { onLater() }.heightIn(min = MekaSpace.touch).padding(horizontal = MekaSpace.xs).wrapContentHeight(),
             )
         }
     }
