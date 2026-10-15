@@ -74,6 +74,7 @@ class SchoolMailFacadeTest {
         assertEquals(listOf(idi, idt), fold.mailFinds.value!!.rows.map { it.id })
 
         // A day off he typed himself for that day hides the INSET find; Add on the Mac then lands the trip once.
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         mac.addSchool("INSET 2 Nov")
         assertEquals(listOf(idt), mac.mailFinds.value!!.rows.map { it.id })
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
