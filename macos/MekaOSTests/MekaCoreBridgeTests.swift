@@ -3020,6 +3020,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 2: promises share the card.
         XCTAssertEqual(MailRenewalRules.shared.headline(renewals: 0, promises: 2), "2 to add to Waiting for · nothing goes on until you tap Add")
         XCTAssertEqual(MailPromiseRules.shared.TITLE, "Promises from your mail")
+        // Scheduling assistant, slice 1: an email asking to meet offers Suggest times; the times are worked out on the Mac.
+        XCTAssertTrue(MeetingRequestRules.shared.asks(subject: "Catch up?", preview: "Can we meet next week?"))
+        XCTAssertFalse(MeetingRequestRules.shared.asks(subject: "Invitation: Weekly sync", preview: nil))
+        XCTAssertEqual(MeetingRequestRules.shared.SUGGEST, "Suggest times")
+        let noTimes = try await core.suggestMeetingTimes(id: "nothing")
+        XCTAssertNil(noTimes.text)
+        XCTAssertEqual(noTimes.line, MeetingRequestRules.shared.UNKNOWN)
         // Follow-up radar: his emails with no reply share the card.
         XCTAssertEqual(MailFollowUpRules.shared.TITLE, "No reply yet")
         // Follow-up radar, slice 3: per-person waits.

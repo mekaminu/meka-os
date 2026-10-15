@@ -59,7 +59,8 @@ struct MailNeedsView: View {
                                                  draft: { await model.draftMailReply(row.id) },
                                                  alwaysTidy: { model.alwaysTidyMailItem(row.id) },
                                                  incoming: incoming[row.id],
-                                                 onEditor: { t in texts[row.id] = t })
+                                                 onEditor: { t in texts[row.id] = t },
+                                                 suggestTimes: { await model.suggestMeetingTimes(row.id) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -170,12 +171,15 @@ struct MailNeedsRowView: View {
     /// (nil when closed) for Send all.
     var incoming: MailIncomingDraft? = nil
     var onEditor: ((String?) -> Void)? = nil
+    /// Scheduling assistant, slice 1: his free times as a reply for an email that asks to meet (nil: not offered here).
+    var suggestTimes: (@MainActor () async -> (text: String?, line: String))? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var replying = false
     @State private var text = ""
     @State private var lastDraft: String?
     @State private var draftLine: String?
     @State private var drafting = false
+    @State private var suggesting = false
     @State private var showLinked = false
 
     var body: some View {
@@ -195,6 +199,9 @@ struct MailNeedsRowView: View {
                     Text(preview).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).lineLimit(2)
                 }
                 Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                if row.asksToMeet {
+                    Text(MeetingRequestRules.shared.ASKS).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
                 if let notice = row.notice {
                     Text(notice).font(MekaType.itemMeta).foregroundStyle(palette.critical)
                 }
@@ -237,6 +244,14 @@ struct MailNeedsRowView: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
             HStack(spacing: MekaSpace.xs) {
+                // Scheduling assistant, slice 1: the editor opens (expand spring) with his free times; never over his words.
+                if row.asksToMeet, suggestTimes != nil, MailDraftRules.shared.canDraft(editor: text, lastDraft: lastDraft) {
+                    MailNeedsPill(label: suggesting ? MeetingRequestRules.shared.FINDING : MeetingRequestRules.shared.SUGGEST,
+                                  palette: palette,
+                                  spoken: "Put your free times in a reply to \(row.from); nothing is sent until you tap Send",
+                                  action: { askTimes() })
+                    .disabled(suggesting)
+                }
                 if !replying {
                     MailNeedsPill(label: MailNeedsRules.shared.REPLY, palette: palette,
                                   spoken: "Reply to \(row.from)", action: { replying = true })
@@ -276,6 +291,20 @@ struct MailNeedsRowView: View {
 }
 
 extension MailNeedsRowView {
+    /// Suggest times: his free times from his calendars into the editor (never over his own words); nothing is sent.
+    fileprivate func askTimes() {
+        guard let suggestTimes else { return }
+        MekaHaptics.light()
+        suggesting = true
+        Task { @MainActor in
+            let result = await suggestTimes()
+            suggesting = false
+            if let t = result.text, MailDraftRules.shared.canDraft(editor: text, lastDraft: lastDraft) { text = t; lastDraft = t }
+            draftLine = result.line
+            replying = true
+        }
+    }
+
     /// Draft it: ask once, put the draft in the editor (never over his own words) and say what happened.
     fileprivate func askDraft() {
         MekaHaptics.light()

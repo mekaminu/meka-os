@@ -4288,6 +4288,18 @@ final class CoreModel {
         }
     }
 
+    /// Suggest times on an email that asks to meet (Scheduling assistant, slice 1): his free times as a reply, worked out
+    /// on the device; nothing is written or sent. Only the id (a String) crosses to the core; two Strings come back.
+    func suggestMeetingTimes(_ id: String) async -> (text: String?, line: String) {
+        guard let core else { return (nil, AskRules.shared.NOT_CONNECTED_LINE) }
+        do {
+            let draft = try await core.suggestMeetingTimes(id: id)
+            return (draft.text, draft.line)
+        } catch {
+            return (nil, MeetingRequestRules.shared.NONE_FREE_LINE)
+        }
+    }
+
     /// The chase written by the AI in "Time to chase" (Follow-up radar, slice 5): nothing is written or sent (Send does that,
     /// on his tap). Only the id (a String) crosses to the core; the draft's two Strings come back.
     func draftMailChase(_ id: String) async -> (text: String?, line: String) {

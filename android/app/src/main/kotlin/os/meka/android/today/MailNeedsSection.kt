@@ -62,6 +62,7 @@ import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailSendAllRules
+import os.meka.core.domain.MeetingRequestRules
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.facade.MekaCore
 
@@ -168,6 +169,7 @@ internal fun MailNeedsSection(
                             // Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive.
                             onAlwaysTidy = { haptics.medium(); answer { core.alwaysTidyMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
+                            onSuggestTimes = { core.suggestMeetingTimes(row.id) },
                             onSend = { text, sent ->
                                 haptics.medium()
                                 scope.launch {
@@ -197,6 +199,8 @@ internal fun MailNeedsRowView(
     onAlwaysTidy: (() -> Unit)? = null,
     incoming: Pair<Int, String>? = null,
     onEditor: ((String?) -> Unit)? = null,
+    /** Scheduling assistant, slice 1: his free times as a reply, for an email that asks to meet (null: not offered here). */
+    onSuggestTimes: (suspend () -> MailDraft)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -208,6 +212,7 @@ internal fun MailNeedsRowView(
     var lastDraft by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
     var draftLine by rememberSaveable(row.id) { mutableStateOf<String?>(null) }
     var drafting by remember { mutableStateOf(false) }
+    var suggesting by remember { mutableStateOf(false) }
     var showLinked by rememberSaveable(row.id) { mutableStateOf(false) }
     // Draft replies on the card puts its draft in this editor and opens it (the editor unfolds on the expand spring).
     LaunchedEffect(incoming) {
@@ -231,6 +236,7 @@ internal fun MailNeedsRowView(
             Text(row.subject, style = MekaType.body, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             row.preview?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis) }
             Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            if (row.asksToMeet) Text(MeetingRequestRules.ASKS, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-asks-to-meet"))
             row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
         }
         // Slice 6c: the emails linked to this one, folded under it; the line unfolds them (expand spring; reduced
@@ -314,6 +320,24 @@ internal fun MailNeedsRowView(
             Modifier.padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
+            // Scheduling assistant, slice 1: the editor opens (expand spring) with his free times; never over his own words.
+            if (row.asksToMeet && onSuggestTimes != null && MailDraftRules.canDraft(text, lastDraft)) {
+                MailNeedsPill(
+                    if (suggesting) MeetingRequestRules.FINDING else MeetingRequestRules.SUGGEST, enabled = !suggesting,
+                    spoken = "Put your free times in a reply to ${row.from}; nothing is sent until you tap Send",
+                    onClick = {
+                        haptics.light()
+                        suggesting = true
+                        scope.launch {
+                            val d = runCatching { onSuggestTimes() }.getOrNull()
+                            suggesting = false
+                            d?.text?.let { if (MailDraftRules.canDraft(text, lastDraft)) { text = it; lastDraft = it } }
+                            draftLine = d?.line ?: MeetingRequestRules.NONE_FREE_LINE
+                            replying = true
+                        }
+                    },
+                )
+            }
             if (!replying) MailNeedsPill(MailNeedsRules.REPLY, spoken = "Reply to ${row.from}", onClick = { replying = true })
             MailNeedsPill(MailNeedsRules.DONE, spoken = "${MailNeedsRules.DONE}: archive ${row.subject}", onClick = onDone)
             MailNeedsPill(MailNeedsRules.TASK, spoken = "Make a task from ${row.subject} and archive the email", onClick = onTask)

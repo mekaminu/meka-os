@@ -68,7 +68,8 @@ struct MailMomentView: View {
                              waiting: { model.waitingFromMailItem(id) },
                              snooze: { model.snoozeMailItem(id) },
                              send: { text, sent in model.replyToMailItem(id, text, sent: sent) },
-                             draft: { await model.draftMailReply(id) })
+                             draft: { await model.draftMailReply(id) },
+                             suggestTimes: { await model.suggestMeetingTimes(id) })
                 .id(id)
                 .padding(.top, MekaSpace.xs)
                 .offset(x: reduceMotion ? 0 : dragged)

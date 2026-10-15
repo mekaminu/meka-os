@@ -2,6 +2,7 @@ package os.meka.core.facade
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import os.meka.core.domain.AskContext
 import os.meka.core.domain.AskRules
 import os.meka.core.domain.EntityTypes
@@ -215,4 +216,43 @@ class MailDraftFacadeTest {
     }
 
     private data class MailDraft(val text: String?, val line: String)
+
+    /** Scheduling assistant, slice 1: Suggest times writes his free times as a reply; nothing is written, booked or sent. */
+    @Test
+    fun suggestTimesOffersFreeTimesFromHisCalendarsAndWritesNothing() = runTest {
+        val london = TimeZone.of("Europe/London")
+        fun at(day: Int, h: Int, min: Int = 0) = kotlinx.datetime.LocalDateTime(2026, 10, day, h, min).toInstant(london).toEpochMilliseconds()
+        val id = MailNeedsRules.itemId("acc1", "meet")
+        serverWrite(id, MailNeedsRules.serverFields("Business", "Sam Taylor", "sam@example.com", "Catch up?", "Can we meet next week to go over the plan?", now - hour, 1))
+        // Monday morning is taken until 11:00 on one calendar.
+        mapOf(
+            os.meka.core.domain.EventFields.TITLE to FieldValue.Text("Planning"),
+            os.meka.core.domain.EventFields.START_AT to FieldValue.Int64(at(19, 9)),
+            os.meka.core.domain.EventFields.END_AT to FieldValue.Int64(at(19, 11)),
+            os.meka.core.domain.EventFields.ALL_DAY to FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.REMOVED to FieldValue.Bool(false),
+        ).forEach { (f, v) -> serverOps.append(Op("srvmd${k++}", "hh", EntityTypes.EVENT, "ev1", f, v, clock.now(), emptyList(), "server")) }
+        val fold = core()
+        assertTrue(fold.syncNow())
+        fold.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Alex")
+        assertTrue(fold.syncNow())
+        assertTrue(fold.mailNeeds.value!!.rows.single().asksToMeet)
+        val opsBefore = serverOps.after("hh", 0, 100_000).size
+
+        val d = fold.suggestMeetingTimes(id)
+        assertEquals(os.meka.core.domain.MeetingRequestRules.SUGGESTED_LINE, d.line)
+        assertEquals(
+            "Hi Sam,\n\nHappy to meet. I'm free at any of these times (UK time):\n\n" +
+                "• Monday 19 October, 11:30–12:30\n• Tuesday 20 October, 13:00–14:00\n• Wednesday 21 October, 09:00–10:00\n\n" +
+                "Let me know which suits you and I'll send an invite.\n\nAlex",
+            d.text,
+        )
+        // No AI asked, nothing written: the card is still there and the server has no new op.
+        assertTrue(server.sent.isEmpty())
+        assertTrue(fold.syncNow())
+        assertEquals(opsBefore, serverOps.after("hh", 0, 100_000).size)
+        assertEquals(listOf(id), fold.mailNeeds.value?.rows?.map { it.id })
+        assertEquals(os.meka.core.domain.MeetingRequestRules.UNKNOWN, fold.suggestMeetingTimes("nothing").line)
+    }
 }

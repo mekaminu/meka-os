@@ -4760,6 +4760,27 @@ class MekaCore(
     }
 
     /**
+     * Scheduling assistant, slice 1: **Suggest times** on an email that asks to meet. Up to three free times from his
+     * own calendars ([os.meka.core.domain.MeetingRequestRules.slots]: work days, inside the day's work hours, clear of
+     * every event on any calendar and of protected time, a morning and an afternoon in turn), written as a reply for the
+     * editor with his name from About you. Worked out on the device; no AI and nothing written, booked or sent: it goes
+     * only when he taps Send ([replyToMailItem]). No free time: no text and a line saying so.
+     */
+    suspend fun suggestMeetingTimes(id: String): os.meka.core.domain.MailDraft = onCore {
+        val R = os.meka.core.domain.MeetingRequestRules
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailDraft(null, R.UNKNOWN)
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val slots = R.slots(
+            now, work.hours(localClock(), cal.epochDayOf(now)), currentEvents(), ::protectedSlots, cal,
+            R.minutes(item.subject, item.preview),
+        )
+        val text = R.draft(item.from, slots, cal, R.zoneLabel(timeZone().id), aboutYou.profile().shownName)
+            ?: return@onCore os.meka.core.domain.MailDraft(null, R.NONE_FREE_LINE)
+        os.meka.core.domain.MailDraft(text, R.SUGGESTED_LINE)
+    }
+
+    /**
      * Follow-up radar, slice 5: **the chase written by the AI** in "Time to chase". One call to MEKA's AI
      * (`POST /v1/ai/mail-draft` with a `chase`, metered `mail.chase`) with what the row knows: who, the email's subject
      * (and, for an email he received, its preview), what he's waiting for, since when, whether he chased before, his

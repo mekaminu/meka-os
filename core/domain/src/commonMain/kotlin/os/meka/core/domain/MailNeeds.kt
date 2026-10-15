@@ -141,6 +141,11 @@ data class MailNeedsRow(
     val linked: List<MailLinkedRow> = emptyList(),
     /** Slice 6c: "+ 2 linked · same order 112-4455", or null when none is. */
     val linkedLine: String? = null,
+    /**
+     * Scheduling assistant, slice 1: the email asks to meet ([MeetingRequestRules.asks]) and he hasn't replied yet, so
+     * the row says "Asks to meet" and offers Suggest times.
+     */
+    val asksToMeet: Boolean = false,
 )
 
 data class MailNeedsCard(
@@ -434,15 +439,17 @@ object MailNeedsRules {
                 MailLinkedRow(l.id, l.from, l.subject, listOf(l.account, whenLabel(l.receivedAtMs, nowMs, cal)).joinToString(" · "))
             }
             val linkedLine = MailLinkRules.linkedLine(group)
+            val meet = !replySent(i) && MeetingRequestRules.asks(i.subject, i.preview)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, linkedLine, notice).joinToString(". "),
+                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet }, linkedLine, notice).joinToString(". "),
                 notice = notice,
                 replyDraft = if (notice != null) i.replyText else null,
                 replyLine = "To ${i.from} · sent from ${i.account} only when you tap Send",
                 linked = linked,
                 linkedLine = linkedLine,
+                asksToMeet = meet,
             )
         }
 
