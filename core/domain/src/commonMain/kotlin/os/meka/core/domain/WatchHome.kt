@@ -26,6 +26,8 @@ data class WatchHomeView(
     val parking: List<WatchParking> = emptyList(),
     /** Barça match day, slice 4: the match from the hour before kick-off to the evening's full time ([WatchMatchRules]). */
     val match: WatchMatch? = null,
+    /** Meeting prep, slice 3: who's coming and what's open, from his lead time until 10 min after the start ([WatchPrepRules]). */
+    val prep: WatchPrep? = null,
 )
 
 /**
@@ -202,7 +204,7 @@ object WatchHomeRules {
 
     fun view(
         now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null,
-        parking: List<WatchParking> = emptyList(), match: WatchMatch? = null,
+        parking: List<WatchParking> = emptyList(), match: WatchMatch? = null, prep: WatchPrep? = null,
     ): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
@@ -226,6 +228,7 @@ object WatchHomeRules {
             inbox = inbox,
             parking = parking,
             match = match,
+            prep = prep,
         )
     }
 

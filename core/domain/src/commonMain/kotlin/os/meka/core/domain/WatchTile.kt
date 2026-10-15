@@ -50,6 +50,8 @@ data class WatchTileView(
      */
     val matchLine: String? = null,
     val matchLit: Boolean = false,
+    /** Meeting prep, slice 3: "Prep · Quote review · in 12 min" (always lit); null with no prep. The inbox gives way to it. */
+    val prepLine: String? = null,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */
@@ -118,15 +120,16 @@ object WatchTileRules {
             home.line?.let(::add)
             if (f.running) add("${f.title}, ${spokenClock(f.clock)}")
             button?.let { add("Double tap ${it.label} to ${it.label.lowercase()}") }
-        }.joinToString(". ") + "." + (home.match?.let { " " + it.spoken } ?: "") +
+        }.joinToString(". ") + "." + (home.prep?.let { " " + it.spoken } ?: "") + (home.match?.let { " " + it.spoken } ?: "") +
             (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
-        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null }
+        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null && home.prep == null }
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
             spoken = spoken, capture = true, inboxLine = inbox?.short, inboxLit = inbox?.lit == true,
             parkingLine = parking?.short, parkingLit = parking?.lit == true,
             matchLine = home.match?.short, matchLit = home.match?.lit == true,
+            prepLine = home.prep?.short,
         )
     }
 
@@ -135,7 +138,7 @@ object WatchTileRules {
      * fast's clock runs or something is starting ("IN 12 MIN" counts down), else a quarter hour.
      */
     fun refreshAfterMs(home: WatchHomeView?, nowMs: Long): Long {
-        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended } || home.match?.lit == true)
+        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended } || home.match?.lit == true || home.prep != null)
         return if (counting) WatchHomeRules.nextTickMs(nowMs) - nowMs else CALM_REFRESH_MS
     }
 

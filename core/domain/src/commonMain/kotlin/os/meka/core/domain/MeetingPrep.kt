@@ -42,6 +42,8 @@ data class MeetingPrep(
     val spoken: String,
     /** The provider's call link, when the meeting has one. */
     val joinUrl: String? = null,
+    /** Slice 3: the meeting's title (trimmed to 60), for the watch's own headline. */
+    val title: String = "",
 )
 
 /**
@@ -153,7 +155,7 @@ object MeetingPrepRules {
                 p.owed.forEach { append(' ').append(it.replace(" · ", ", ")).append('.') }
             }
         }
-        return MeetingPrep(e.id, e.startAtMs, headline, who, people, lines, spoken, e.joinUrl)
+        return MeetingPrep(e.id, e.startAtMs, headline, who, people, lines, spoken, e.joinUrl, e.title.trim().take(60))
     }
 
     /** "Prep · Quote review at 14:00 · in 12 min", "… · now", "Prep · Quote review · started 14:00". */

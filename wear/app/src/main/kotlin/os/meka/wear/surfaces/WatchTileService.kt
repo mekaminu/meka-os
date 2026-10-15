@@ -102,6 +102,11 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.fastReached) C.success else C.accent, 1))
         }
+        // Meeting prep, slice 3: the meeting about to start, lit (the inbox gives way).
+        v.prepLine?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, C.accent, 1))
+        }
         // Barça match day, slice 4: the match and its score, lit until full time (the inbox gives way).
         v.matchLine?.let {
             column.addContent(gap(MekaSpace.xs.value))

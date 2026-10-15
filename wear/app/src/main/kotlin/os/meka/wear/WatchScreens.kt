@@ -317,6 +317,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         Spacer(Modifier.height(MekaSpace.xs))
         CaptureBlock(core, reduced, listen, onListen)
 
+        PrepRow(home.prep, reduced)
+
         MatchRow(home.match, reduced)
 
         ParkingRows(home.parking, reduced) { carId -> scope.launch { runCatching { core.watchParkingExtend(carId) } } }
@@ -365,6 +367,44 @@ private fun InboxRow(inbox: os.meka.core.domain.WatchInbox?, reduced: Boolean) {
                 label = "inboxCount",
             ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
             v.streakLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary)) }
+        }
+    }
+}
+
+/**
+ * Meeting prep, slice 3: from his lead time before a meeting with other people until ten minutes after its start —
+ * "PREP · IN 12 MIN", the meeting and its time, who's coming and the one or two most useful lines (last email, what's
+ * open, when you last met). It unfolds on the expand spring (reduced motion: a fade) and folds away after the start;
+ * the countdown cross-fades each minute. The heads-up's buzz is the phone's, which Wear OS brings to the wrist.
+ */
+@Composable
+private fun PrepRow(prep: os.meka.core.domain.WatchPrep?, reduced: Boolean) {
+    // The last prep shown, so the row folds away still showing it (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchPrep>(1) }
+    if (prep != null) last[0] = prep
+    AnimatedVisibility(
+        visible = prep != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "prep",
+    ) {
+        val v = prep ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = MekaSpace.m)
+                .semantics(mergeDescendants = true) { contentDescription = v.spoken },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            AnimatedContent(
+                targetState = v.label,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "prepWhen",
+            ) { label -> Line(label, MekaType.captionStrong.copy(color = C.accent, fontFeatureSettings = "tnum"), maxLines = 1) }
+            Line(v.title, MekaType.metaStrong.copy(color = C.textPrimary), maxLines = 2)
+            if (v.who.isNotEmpty()) Line(v.who, MekaType.caption.copy(color = C.textSecondary), maxLines = 2)
+            for (l in v.lines) Line(l, MekaType.caption.copy(color = C.textTertiary), maxLines = 2)
         }
     }
 }

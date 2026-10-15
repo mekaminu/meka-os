@@ -3967,6 +3967,8 @@ class MekaCore(
             coverNow(), _fasting.value, nowMs(), watchInbox(), watchParking(),
             // Barça match day, slice 4: the match, worked out again at this minute from the last synced score.
             os.meka.core.domain.WatchMatchRules.view(_barcaNear.value, nowMs(), ZoneCalendar(timeZone)),
+            // Meeting prep, slice 3: Today's prep (worked out each minute), its countdown at this minute.
+            os.meka.core.domain.WatchPrepRules.view(_today.value.meetingPrep, nowMs(), ZoneCalendar(timeZone)),
         )
 
     /**
