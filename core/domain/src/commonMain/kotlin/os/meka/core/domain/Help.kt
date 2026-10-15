@@ -26,6 +26,7 @@ enum class HelpPlace(val key: String) {
     BINS("bins"),
     DATE_NIGHT("dateNight"),
     SCHOOL("school"),
+    KIDS("kids"),
     APPOINTMENTS("appointments"),
     LEAVE("leave"),
     GIFTS("gifts"),

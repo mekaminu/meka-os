@@ -1722,6 +1722,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallLogRules.shared.dayLabel(day: 10, today: 11), "Yesterday")
     }
 
+    func testKidsRulesReachSwift() {
+        // Kids' admin, slice 1: a size is tidied, both apps write the same child, no children → About you first.
+        let rules = KidsRules.shared
+        XCTAssertEqual(rules.tidy(typed: "7-8 years"), "7–8 years")
+        XCTAssertNil(rules.tidy(typed: "big"))
+        XCTAssertEqual(rules.idFor(name: "Mary Jane"), "c-mary-jane")
+        XCTAssertEqual(KidsView.companion.EMPTY.empty, rules.NO_CHILDREN)
+    }
+
     func testReflectionRulesReachSwift() {
         // Weekly reflection, slice 1: a suggestion adds once on its own line; the week's facts in one line.
         let rules = ReflectionRules.shared

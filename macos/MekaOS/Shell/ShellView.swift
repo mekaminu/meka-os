@@ -250,6 +250,7 @@ private struct ShellSheetsB: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showLifeAdmin }, set: { model.showLifeAdmin = $0 })) { LifeAdminSheet(palette: palette) }
             // Emergency card (Ask → More): who to call, where things are, key accounts by name; Jeanette reads it.
             .sheet(isPresented: Binding(get: { model.showEmergency }, set: { model.showEmergency = $0 })) { EmergencySheet(palette: palette) }
+            .sheet(isPresented: Binding(get: { model.showKids }, set: { model.showKids = $0 })) { KidsSheet(palette: palette) }
     }
 }
 

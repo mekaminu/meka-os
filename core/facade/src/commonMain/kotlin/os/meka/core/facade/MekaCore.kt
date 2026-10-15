@@ -166,6 +166,7 @@ class MekaCore(
     private val leavingNow = os.meka.core.domain.LeavingNow(replica)
     // About you (rule 13, slice 1): the household profile, synced.
     private val aboutYou = os.meka.core.domain.AboutYouStore(replica, nowMs)
+    private val kids = os.meka.core.domain.Kids(replica, nowMs)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -581,6 +582,29 @@ class MekaCore(
         work = workPlace.wanted() ?: os.meka.core.domain.PlacesRules.WORK,
         assistantNumber = os.meka.core.domain.CallScreeningRules.ASSISTANT_NUMBER,
     )
+
+    private val _kids = MutableStateFlow(os.meka.core.domain.KidsView.EMPTY)
+    /**
+     * Kids' admin (V1, slice 1; Ask → Life → Kids on both apps): a card per child from About you with their sizes and
+     * when they were last checked, lit three months on. Synced; the children's names stay in his data.
+     */
+    val kidsView: StateFlow<os.meka.core.domain.KidsView> = _kids.asStateFlow()
+
+    /**
+     * Keeps [text] as [child]'s size [size] (`shoes` · `boots` · `tops` · `trousers` · `coat` · `jumper`); blank clears
+     * it with Undo ([os.meka.core.domain.KidSaved.undo]). Refused, nothing written, for a child not in About you or text
+     * that can't be a size. Any save counts as checking their sizes.
+     */
+    suspend fun setKidSize(child: String, size: String, text: String): os.meka.core.domain.KidSaved = onCore {
+        if (aboutYou.profile().children.none { it.name == child }) os.meka.core.domain.KidSaved(os.meka.core.domain.KidsRules.NOT_CHILD, refused = true)
+        else kids.setSize(child, size, text)
+    }
+
+    /** "All still fit": [child]'s sizes count as checked today; the line to show, or null when nothing is kept for them. */
+    suspend fun kidSizesFit(child: String): String? = onCore {
+        if (aboutYou.profile().children.none { it.name == child }) null
+        else if (kids.allFit(child)) os.meka.core.domain.KidsRules.fitLine(child) else null
+    }
 
     private val _emergency = MutableStateFlow(os.meka.core.domain.EmergencyView.EMPTY)
     /**
@@ -6442,6 +6466,7 @@ class MekaCore(
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
         _aboutYou.value = aboutYou.view(cal)
+        _kids.value = os.meka.core.domain.KidsRules.view(aboutYou.profile().children, kids.records(), todayDay, cal)
         _facts.value = lifeFacts.view()
         _queue.value = trainQueue.view()
         _errands.value = errands.view()
@@ -6542,6 +6567,8 @@ class MekaCore(
             _appointments.value, _leave.value, _gifts.value, _trips.value, _errands.value, _emergency.value, _facts.value,
             _people.value,
         ).copy(
+            // Kids' admin, slice 1: a due size check (lit), else the first child's shoe size.
+            kidsLine = _kids.value.tile,
             // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
             // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
             // Two cars (2026-10-14): each car on its own line, its timer or next date.

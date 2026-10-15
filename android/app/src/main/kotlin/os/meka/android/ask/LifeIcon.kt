@@ -81,6 +81,15 @@ private fun DrawScope.drawLifeGlyph(tile: LifeTile, color: Color) {
             path { moveTo(w * 0.26f, w * 0.5f); lineTo(w * 0.26f, w * 0.72f); quadraticTo(w * 0.5f, w * 0.86f, w * 0.74f, w * 0.72f); lineTo(w * 0.74f, w * 0.5f) }
             line(0.92f, 0.4f, 0.92f, 0.66f)
         }
+        LifeTile.KIDS -> {
+            // A child's T-shirt: shoulders, short sleeves and the body, with a round neck.
+            path {
+                moveTo(w * 0.36f, w * 0.16f); lineTo(w * 0.14f, w * 0.28f); lineTo(w * 0.22f, w * 0.46f); lineTo(w * 0.3f, w * 0.42f)
+                lineTo(w * 0.3f, w * 0.86f); lineTo(w * 0.7f, w * 0.86f); lineTo(w * 0.7f, w * 0.42f); lineTo(w * 0.78f, w * 0.46f)
+                lineTo(w * 0.86f, w * 0.28f); lineTo(w * 0.64f, w * 0.16f)
+                quadraticTo(w * 0.5f, w * 0.3f, w * 0.36f, w * 0.16f)
+            }
+        }
         LifeTile.APPOINTMENTS -> {
             // A clock face.
             ring(0.5f, 0.5f, 0.38f); line(0.5f, 0.5f, 0.5f, 0.28f); line(0.5f, 0.5f, 0.66f, 0.6f)

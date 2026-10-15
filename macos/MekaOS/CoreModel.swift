@@ -76,6 +76,9 @@ final class CoreModel {
     private(set) var emergency: EmergencyView?
     /// Ask → More → Emergency card.
     var showEmergency = false
+    /// Kids' admin (slice 1): a card per child from About you with their sizes and when they were checked. Synced.
+    private(set) var kids: KidsView?
+    var showKids = false
     /// About you (rule 13, slice 1): the household profile, synced with the Fold; kept in his data, not in code.
     private(set) var aboutYou: AboutYouView?
     /// Ask → Settings → About you.
@@ -521,6 +524,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await e in core.emergencyView { self?.emergency = e }
+        })
+        observers.append(Task { [weak self] in
+            for await k in core.kidsView { self?.kids = k }
         })
         observers.append(Task { [weak self] in
             for await a in core.aboutYouView { self?.aboutYou = a }
@@ -3137,6 +3143,41 @@ final class CoreModel {
     func setAboutYouPartnerWatch(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setAboutYouPartnerWatch(on: on) } }
 
     // MARK: Emergency card (slice 1)
+
+    // MARK: Kids' admin (slice 1)
+
+    /// What a size save said: the line under the field, whether it was turned away, and what Undo puts back.
+    struct KidSaid: Equatable {
+        let line: String
+        let refused: Bool
+        let undo: String?
+    }
+
+    /// Keeps one size for a child (blank clears it); only Strings cross to the core.
+    func setKidSize(child: String, size: String, text: String) async -> KidSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.setKidSize(child: child, size: size, text: text)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return KidSaid(line: r.line, refused: r.refused, undo: r.undo)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// "All still fit": the child's sizes count as checked today. Returns the line to show, nil when nothing is kept.
+    func kidSizesFit(child: String) async -> String? {
+        guard let core else { return nil }
+        do {
+            let line = try await core.kidSizesFit(child: child)
+            if line != nil { MekaHaptics.light() }
+            return line
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
 
     /// What adding a line said: the line to show and whether it was turned away (a secret or a number).
     struct EmergencySaid: Equatable {

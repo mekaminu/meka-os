@@ -70,7 +70,7 @@ class ShellNavTest {
     fun askIsALifeGridDailyAndOneSettingsRow() {
         // Fold review 2026-10-12, item 7.
         assertEquals(
-            listOf("Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Car", "Emergency card", "What Navilife knows"),
+            listOf("Lists", "Goals and habits", "People", "Dinners", "Bins", "Date night", "School", "Kids", "Appointments", "Annual leave", "Gifts", "Trips", "Errands", "Car", "Emergency card", "What Navilife knows"),
             ShellNav.lifeTiles().map { it.label },
         )
         assertEquals(LifeTileRules.ORDER, ShellNav.lifeTiles().map { it.tile })

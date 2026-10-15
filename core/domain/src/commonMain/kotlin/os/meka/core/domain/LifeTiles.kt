@@ -8,7 +8,11 @@ package os.meka.core.domain
  * shows its fixed description any more, and tiles with something today float to the top ([LifeTileRules.ordered]).
  */
 enum class LifeTile {
-    LISTS, GOALS, PEOPLE, DINNERS, BINS, DATE_NIGHT, SCHOOL, APPOINTMENTS, LEAVE, GIFTS, TRIPS, ERRANDS,
+    LISTS, GOALS, PEOPLE, DINNERS, BINS, DATE_NIGHT, SCHOOL,
+
+    /** Kids' admin, slice 1: a check of the children's sizes when due, else the first child's shoe size. */
+    KIDS,
+    APPOINTMENTS, LEAVE, GIFTS, TRIPS, ERRANDS,
 
     /** Car and parking, slice 1: where the car is parked (the Fold), else the next of the cars' dates. */
     CAR,
@@ -51,6 +55,8 @@ data class LifeTileInputs(
     /** The next day off ("Half term") and how many days until it starts (0 = today). */
     val schoolNextOff: String? = null,
     val schoolNextOffIn: Long? = null,
+    /** Kids' admin ([KidsView.tile]): a due size check (lit), else the first child's shoe size; null with nothing kept. */
+    val kidsLine: LifeTileLine? = null,
     val appointmentsSummary: String? = null,
     val appointmentsDue: Int = 0,
     /** The first appointment that's due ("Dentist"). */
@@ -91,6 +97,7 @@ object LifeTileRules {
         LifeTile.BINS -> "Set your bin days"
         LifeTile.DATE_NIGHT -> "Set up date night"
         LifeTile.SCHOOL -> "Add the term dates"
+        LifeTile.KIDS -> "Add the kids' sizes"
         LifeTile.APPOINTMENTS -> "Add the dentist and others"
         LifeTile.LEAVE -> "Add your leave"
         LifeTile.GIFTS -> "Add a birthday"
@@ -187,6 +194,7 @@ object LifeTileRules {
         if (i.schoolToday != null) put(LifeTile.SCHOOL, i.schoolToday, lit = true)
         else if (i.schoolNextOff != null && i.schoolNextOffIn != null) put(LifeTile.SCHOOL, schoolLine(i.schoolNextOff, i.schoolNextOffIn))
         else put(LifeTile.SCHOOL, i.schoolSummary)
+        i.kidsLine?.let { put(LifeTile.KIDS, it.text, lit = it.lit) }
         if (i.appointmentDueTitle != null) {
             val more = if (i.appointmentsDue > 1) " · +${i.appointmentsDue - 1}" else ""
             put(LifeTile.APPOINTMENTS, "${i.appointmentDueTitle} due$more", lit = true)

@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, appointments, leave, gifts, trips, errands, car, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -75,6 +75,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .bins: "Bins"
         case .dateNight: "Date night"
         case .school: "School"
+        case .kids: KidsRules.shared.TITLE
         case .appointments: "Appointments"
         case .leave: "Annual leave"
         case .gifts: "Gifts"
@@ -122,7 +123,8 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .dinners: "Favourites, the week's dinners and their shopping"
         case .bins: "Which bins go out, the evening before"
         case .dateNight: "An evening every two weeks, kept clear"
-        case .school: "Rex and Logan's days off, PE and trips"
+        case .school: "The children's days off, PE and trips"
+        case .kids: KidsRules.shared.ROW_LINE
         case .appointments: "Dentist, optician, haircut · a nudge when one's due"
         case .leave: "Days booked, days left and the school holidays"
         case .gifts: "Birthdays, anniversaries and gift ideas"
@@ -149,7 +151,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .talk: "⌥Space and the mic"
         case .calendars: "Connected accounts and feeds"
         case .mail: MailAccountRules.shared.ROW_LINE
-        case .family: "Share the shopping list with Jeanette"
+        case .family: "Share the shopping list with your partner"
         case .watch: "Link your Galaxy Watch to Navilife"
         case .recovery: RecoveryKeyRules.shared.ROW_LINE
         case .autonomy: "What it does on its own · the pause switch"
@@ -165,7 +167,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
 
     var group: MoreGroup {
         switch self {
-        case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .appointments, .leave, .gifts, .trips, .errands, .car, .emergency, .facts: .life
+        case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .kids, .appointments, .leave, .gifts, .trips, .errands, .car, .emergency, .facts: .life
         case .brief, .weekAhead, .news, .shutdown, .trainQueue, .voiceNotes, .lifeAdmin, .review: .daily
         case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
@@ -191,6 +193,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .bins: .bins
         case .dateNight: .dateNight
         case .school: .school
+        case .kids: .kids
         case .appointments: .appointments
         case .leave: .leave
         case .gifts: .gifts
@@ -213,6 +216,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .bins: "trash"
         case .dateNight: "moon.stars"
         case .school: "graduationcap"
+        case .kids: "tshirt"
         case .appointments: "clock"
         case .leave: "sun.horizon"
         case .gifts: "gift"
