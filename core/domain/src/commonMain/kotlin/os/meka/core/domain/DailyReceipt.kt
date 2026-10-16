@@ -27,7 +27,9 @@ object ReceiptRules {
     )
 
     fun counts(i: ActivityItem): Boolean =
-        i.kind in HANDLED && !(i.kind == ActivityKind.CHANGED && i.undoneAtMs != null)
+        i.kind in HANDLED && !(i.kind == ActivityKind.CHANGED && i.undoneAtMs != null) &&
+            // Drafted replies, slice 3: a reply is sent on his tap, so it's his, not something Navilife handled.
+            i.source != MailSentActivityRules.SOURCE
 
     /** Today's receipt, or null when MEKA hasn't handled anything today. */
     fun receipt(items: List<ActivityItem>, nowMs: Long, cal: LocalCalendar): DailyReceipt? {

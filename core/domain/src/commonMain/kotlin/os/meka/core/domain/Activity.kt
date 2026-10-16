@@ -120,8 +120,14 @@ data class ActivityItem(
      */
     val mailTidy: Boolean = false,
     val undoAskedAtMs: Long? = null,
+    /**
+     * Drafted replies, slice 3: a reply he tapped Send on that the server still holds ([MailSentActivityRules]); its
+     * Undo stops it, as the bar's does.
+     */
+    val mailReplyWaiting: Boolean = false,
 ) {
-    val canUndo: Boolean get() = undoneAtMs == null && (changes.isNotEmpty() || (mailTidy && undoAskedAtMs == null))
+    val canUndo: Boolean get() = undoneAtMs == null &&
+        (changes.isNotEmpty() || (mailTidy && undoAskedAtMs == null) || mailReplyWaiting)
 }
 
 /** One row of the Activity screen. */
@@ -181,6 +187,10 @@ enum class UndoOutcome(val line: String) {
     NOT_UNDOABLE("This can't be undone"),
     /** Inbox autopilot (slice 3b-2): asked; the server puts the emails back at its next check. */
     ASKED("Putting them back in the inbox at the next check"),
+    /** Drafted replies, slice 3: a held reply stopped from Activity. */
+    REPLY_STOPPED(MailSentActivityRules.STOPPED),
+    /** Drafted replies, slice 3: Undo on a reply the server had already sent. */
+    REPLY_SENT(MailSentActivityRules.TOO_LATE),
 }
 
 /** Pure rules, unit-tested without a replica. */
@@ -550,7 +560,10 @@ class ActivityLog(
     private val calendar: LocalCalendar = LocalCalendar.UTC,
 ) {
     /** Everything in the log: MEKA's own entries, then Meka's calendar edits (read from the edits themselves). */
-    fun items(): List<ActivityItem> = stored() + calendarEdits() + mailTidies() + unsubscribes()
+    fun items(): List<ActivityItem> = stored() + calendarEdits() + mailTidies() + unsubscribes() + mailReplies()
+
+    /** Drafted replies, slice 3: each reply he tapped Send on, read from the synced `mail_item` itself. */
+    private fun mailReplies(): List<ActivityItem> = mailItems().mapNotNull { MailSentActivityRules.item(it) }
 
     /** Inbox autopilot (slice 5a): each Unsubscribe the server tried, read from the synced `mail_sender` entity. */
     private fun unsubscribes(): List<ActivityItem> = mailSenders().mapNotNull { ActivityRules.unsubscribeItem(it) }
@@ -804,6 +817,7 @@ class ActivityLog(
      */
     fun undo(id: String): UndoOutcome {
         val item = items().firstOrNull { it.id == id } ?: return UndoOutcome.NOT_UNDOABLE
+        if (item.source == MailSentActivityRules.SOURCE) return undoReply(id)
         if (item.mailTidy) {
             if (item.undoneAtMs != null) return UndoOutcome.UNDONE
             if (item.undoAskedAtMs != null) return if (item.undoAskedAtMs == item.atMs) UndoOutcome.NOT_UNDOABLE else UndoOutcome.ASKED
@@ -839,6 +853,25 @@ class ActivityLog(
             ),
         )
         return outcome
+    }
+
+    /**
+     * Drafted replies, slice 3: Undo on a reply row stops a held reply (its email, and the ones of its thread the same
+     * Send archived, come back to the card), as the bar's Undo does. Too late once the server has sent it.
+     */
+    private fun undoReply(id: String): UndoOutcome {
+        val all = mailItems()
+        val mail = all.firstOrNull { it.id == MailSentActivityRules.mailIdOf(id) } ?: return UndoOutcome.NOT_UNDOABLE
+        return when {
+            MailNeedsRules.replySent(mail) -> UndoOutcome.REPLY_SENT
+            MailSentActivityRules.stopped(mail) -> UndoOutcome.UNDONE
+            !MailNeedsRules.replyWaiting(mail) -> UndoOutcome.NOT_UNDOABLE
+            else -> {
+                val now = nowMs()
+                MailSentActivityRules.undoGroup(mail, all).forEach { replica.commitLocal(EntityTypes.MAIL_ITEM, it, MailNeedsRules.undoDoneFields(now)) }
+                UndoOutcome.REPLY_STOPPED
+            }
+        }
     }
 
     private fun current(type: String, id: String, field: String): FieldValue =

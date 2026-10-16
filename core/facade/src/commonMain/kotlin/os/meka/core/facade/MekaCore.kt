@@ -4443,6 +4443,8 @@ class MekaCore(
             items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone), activity.mailFinds(),
         )
         mailFindsChanged()
+        // Drafted replies, slice 3: a reply sent or taken back shows in Activity at once.
+        activityChanged()
     }
 
     private fun radarFields(): List<Map<String, FieldValue>> =
