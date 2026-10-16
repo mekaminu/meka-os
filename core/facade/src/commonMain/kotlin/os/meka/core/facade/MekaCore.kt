@@ -7224,6 +7224,8 @@ class MekaCore(
             trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
             // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
             parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
+            // Inbox fixes, slice 7: each account's unread mail and how much of it Navilife can tidy, counted by the server.
+            mailUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs()),
             // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
             reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs()), review.startMinute()),
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),

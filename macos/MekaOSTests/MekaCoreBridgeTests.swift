@@ -93,6 +93,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(core.eventMarks.value.leaveRingsOf(eventId: "ev2"))
     }
 
+    /// Inbox fixes, slice 7: Today's unread mail line reaches Swift (nothing counted yet: no line).
+    func testMailUnreadLineReachesSwift() {
+        XCTAssertNil(MailUnreadRules.shared.todayLine(backlogs: [], nowMs: 0))
+        XCTAssertEqual(MailUnreadRules.shared.NONE_UNREAD, "Mail · nothing unread ✓")
+    }
+
     func testRepeatingTaskThroughTheBridge() async throws {
         let core = MacCoreFactory.shared.create(
             householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,

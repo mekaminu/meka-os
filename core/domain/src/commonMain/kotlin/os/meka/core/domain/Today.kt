@@ -54,6 +54,8 @@ data class Today(
     val trip: TripLine? = null,
     /** Inbox autopilot, slice 3g: "2 parcels arriving today · Amazon, DPD" from shipping emails ([ParcelRules.todayLine]); set by the facade. */
     val parcels: ParcelLine? = null,
+    /** Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can tidy" ([MailUnreadRules.todayLine]); set by the facade. */
+    val mailUnread: MailUnreadLine? = null,
     /** Weekly reflection, slice 2: "This week's one thing · Run 5k" through the week (lit on Monday, [ReflectionRules.weekLine]); set by the facade. */
     val reflection: ReflectionWeekLine? = null,
     /**

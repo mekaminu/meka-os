@@ -928,6 +928,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can
+                    // tidy" (several accounts: "Unread mail · Personal 412 · Outlook 82 · …"); quiet, cross-fades as it changes.
+                    today.mailUnread?.let { unread ->
+                        Crossfade(unread, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-unread-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Meeting prep, slice 1: from 15 min before a meeting with other people, "Prep · Quote review at 14:00 ·
                     // in 12 min" lit in the accent, who's coming, then each guest's last email and what's open between you
                     // (at most four lines). Cross-fades as it comes, counts down and goes ten minutes after the start.

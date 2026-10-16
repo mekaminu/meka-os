@@ -18,6 +18,13 @@ class MailCheckTest {
         assertEquals(MailCheckRules.NETWORK, MailCheckRules.classify(null, true, true))
         assertEquals(MailCheckRules.SIGN_IN, MailCheckRules.classify(400, false, true))
         assertEquals(MailCheckRules.OTHER, MailCheckRules.classify(null, false, false))
+        // Inbox fixes, slice 7: a 403's reason word tells "API off" and "no permission" from a rate limit.
+        assertEquals(MailCheckRules.API_OFF, MailCheckRules.classify(403, false, false, "accessNotConfigured"))
+        assertEquals(MailCheckRules.API_OFF, MailCheckRules.classify(403, false, false, "SERVICE_DISABLED"))
+        assertEquals(MailCheckRules.NO_PERMISSION, MailCheckRules.classify(403, false, false, "insufficientPermissions"))
+        assertEquals(MailCheckRules.BUSY, MailCheckRules.classify(403, false, false, "userRateLimitExceeded"))
+        assertEquals(MailCheckRules.REFUSED, MailCheckRules.classify(403, false, false, "somethingElse"))
+        assertEquals(MailCheckRules.API_OFF, MailCheckRules.read("apioff"))
         // An older server's exception name isn't a reason.
         assertNull(MailCheckRules.read("IllegalStateException"))
         assertEquals(MailCheckRules.BUSY, MailCheckRules.read(" Busy "))
@@ -39,6 +46,15 @@ class MailCheckTest {
         )
         assertTrue(MailCheckRules.errorLine(MailProviders.GMAIL, MailCheckRules.REFUSED, null, now).contains("Gmail API is off"))
         assertTrue(MailCheckRules.errorLine(MailProviders.OUTLOOK, MailCheckRules.DOWN, null, now).startsWith("Outlook's servers had a problem"))
+        // Inbox fixes, slice 7: the API switched off, and a missing permission, said as what to do.
+        assertEquals(
+            "The Gmail API is off in Navilife's Google Cloud project · turn it on: Google Cloud console → APIs & Services → Library → Gmail API → Enable",
+            MailCheckRules.errorLine(MailProviders.GMAIL, MailCheckRules.API_OFF, null, now),
+        )
+        assertEquals(
+            "Google didn't give Navilife permission to read this mail · Reconnect and keep every permission ticked",
+            MailCheckRules.errorLine(MailProviders.GMAIL, MailCheckRules.NO_PERMISSION, null, now),
+        )
         // A busy provider never asks him to reconnect, however long it lasts.
         assertFalse(MailCheckRules.errorLine(MailProviders.GMAIL, MailCheckRules.BUSY, now - 3 * 24 * 60 * min, now).contains("Reconnect"))
     }

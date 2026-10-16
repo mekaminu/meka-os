@@ -257,6 +257,16 @@ struct TodayView: View {
                             .accessibilityLabel(parcels.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can
+                    // tidy" (several accounts: "Unread mail · Personal 412 · Outlook 82 · …"); quiet, cross-fades.
+                    if let unread = model.today?.mailUnread {
+                        Text(unread.text).font(MekaType.caption)
+                            .foregroundStyle(unread.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: unread.text)
+                            .accessibilityLabel(unread.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Meeting prep, slice 1: from 15 min before a meeting with other people, the countdown lit in the
                     // accent, who's coming, then each guest's last email and what's open between you; cross-fades.
                     if let prep = model.today?.meetingPrep {

@@ -230,9 +230,27 @@ internal class Http(private val client: HttpClient = HttpClient.newBuilder().con
         val resp = client.send(b.build(), HttpResponse.BodyHandlers.ofString())
         val code = resp.statusCode()
         if (code == 401) throw ReconnectRequired("provider API refused the token")
-        if (code == 403) throw WriteRefused("provider refused the change")
+        if (code == 403) throw WriteRefused("provider refused the change" + (refusedReason(resp.body())?.let { " [$it]" } ?: ""))
         if (code >= 500 || code == 429) throw IllegalStateException("provider HTTP $code")
         return Answer(code, runCatching { json.parseToJsonElement(resp.body()).jsonObject }.getOrNull())
+    }
+
+    /**
+     * Inbox fixes, slice 7: the reason word in a 403's error body (Google: `error.errors[].reason`, `error.details[].reason`
+     * or `error.status`; Microsoft: `error.code`), kept only when it is one of [os.meka.core.domain.MailCheckRules.KNOWN_REASONS]
+     * (so "the Gmail API is off" can be told from a rate limit); the provider's own message is never kept.
+     */
+    internal fun refusedReason(body: String?): String? {
+        val err = runCatching { json.parseToJsonElement(body ?: return null).jsonObject["error"] as? JsonObject }.getOrNull() ?: return null
+        val words = buildList {
+            (err["errors"] as? JsonArray)?.forEach { e -> (e as? JsonObject)?.get("reason").str()?.let(::add) }
+            (err["details"] as? JsonArray)?.forEach { d -> (d as? JsonObject)?.get("reason").str()?.let(::add) }
+            err["status"].str()?.let(::add)
+            err["code"].str()?.let(::add)
+        }
+        val known = os.meka.core.domain.MailCheckRules.KNOWN_REASONS
+        return words.firstOrNull { it in os.meka.core.domain.MailCheckRules.API_OFF_REASONS }
+            ?: words.firstOrNull { it in known }
     }
 
     private fun send(req: HttpRequest, apiCall: Boolean = false): JsonObject {

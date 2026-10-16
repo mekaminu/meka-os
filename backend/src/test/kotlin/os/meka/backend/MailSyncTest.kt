@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import os.meka.backend.integrations.MailBulkHeaders
 import os.meka.backend.integrations.WriteRefused
+import os.meka.backend.integrations.Http
 import os.meka.backend.integrations.mailWhy
 import os.meka.core.domain.MailSortRules
 import os.meka.backend.integrations.GmailHistory
@@ -221,7 +222,9 @@ class MailSyncTest {
             TokenSet("access", "refresh", 3600, "openid email ${GmailMail.MODIFY} ${GmailMail.SEND}")
         override fun refresh(client: OAuthClient, refreshToken: String) = TokenSet("access", null, 3600)
         override fun accountEmail(accessToken: String) = "alex@example.com"
-        override fun inbox(accessToken: String) = MailboxCheck(mailbox.size.toLong(), 0)
+        /** Inbox fixes, slice 7: the inbox's unread count the provider reports (null: none, so nothing is written). */
+        var unreadInInbox: Long? = null
+        override fun inbox(accessToken: String) = MailboxCheck(mailbox.size.toLong(), unreadInInbox)
         override fun changes(accessToken: String, cursor: String?, sinceMs: Long): MailChanges {
             cursorsAsked += cursor; sinceAsked = sinceMs
             return nextRound(cursor)
@@ -524,6 +527,24 @@ class MailSyncTest {
         assertEquals(MailCheckRules.NETWORK, mailWhy(java.net.ConnectException("refused"), true))
         assertEquals(MailCheckRules.SIGN_IN, mailWhy(IllegalStateException("no access_token"), true))
         assertEquals(MailCheckRules.OTHER, mailWhy(IllegalStateException("Gmail answered without a body"), false))
+        // Inbox fixes, slice 7: the reason word Http.call keeps from a 403's body.
+        assertEquals(MailCheckRules.API_OFF, mailWhy(WriteRefused("provider refused the change [accessNotConfigured]"), false))
+        assertEquals(MailCheckRules.NO_PERMISSION, mailWhy(WriteRefused("provider refused the change [insufficientPermissions]"), false))
+        assertEquals(MailCheckRules.REFUSED, mailWhy(WriteRefused("provider refused the change [madeUp]"), false))
+    }
+
+    @Test
+    fun aRefusalsReasonIsReadFromGoogleAndMicrosoftBodies() {
+        val http = Http()
+        val gmailOff = """{"error":{"code":403,"message":"Gmail API has not been used in project 123 before or it is disabled.","errors":[{"message":"…","domain":"usageLimits","reason":"accessNotConfigured"}],"status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"SERVICE_DISABLED"}]}}"""
+        assertEquals("accessNotConfigured", http.refusedReason(gmailOff))
+        val scope = """{"error":{"code":403,"errors":[{"reason":"insufficientPermissions"}],"status":"PERMISSION_DENIED","details":[{"reason":"ACCESS_TOKEN_SCOPE_INSUFFICIENT"}]}}"""
+        assertEquals("insufficientPermissions", http.refusedReason(scope))
+        assertEquals("ErrorAccessDenied", http.refusedReason("""{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}"""))
+        // An unknown reason, or no JSON at all, keeps nothing.
+        assertEquals(null, http.refusedReason("""{"error":{"code":403,"status":"PERMISSION_DENIED"}}"""))
+        assertEquals(null, http.refusedReason("<html>Forbidden</html>"))
+        assertEquals(null, http.refusedReason(null))
     }
 
     @Test
@@ -842,6 +863,36 @@ class MailSyncTest {
         val after = EntityReader.scanning(ops).entities("home", EntityTypes.PARCEL)
         assertEquals(setOf(pid), after.keys)
         assertEquals(FieldValue.Text(ParcelState.DELIVERED.name), after.getValue(pid)[ParcelFields.STATE])
+    }
+
+    @Test
+    fun theInboxsUnreadCountAndWhatCanBeTidiedReachTheBacklogEntity() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        gmail.unreadInInbox = 412
+        gmail.mailbox["n1"] = msg("n1", 0, "news@weekly.example").copy(listId = "<weekly.example>", listUnsubscribe = "<mailto:off@weekly.example>")
+        gmail.mailbox["n2"] = msg("n2", 0, "news@weekly.example").copy(listId = "<weekly.example>", listUnsubscribe = "<mailto:off@weekly.example>", unread = false)
+        gmail.mailbox["p1"] = msg("p1", 0, "sam@example.com")
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        fun backlog() = MailBacklogRules.read(entityId, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_BACKLOG).getValue(entityId))!!
+        val b = backlog()
+        assertEquals(412, b.inboxUnread)
+        // Only the unread newsletter counts (the read one and the person's email don't).
+        assertEquals(1, b.tidyUnread)
+        assertEquals(now, b.unreadCountedAtMs)
+        // A small change soon after isn't written; a big one is.
+        val at = now
+        now += 60_000L
+        gmail.unreadInInbox = 415
+        i.syncAccount(id)
+        assertEquals(412, backlog().inboxUnread)
+        assertEquals(at, backlog().unreadCountedAtMs)
+        gmail.unreadInInbox = 380
+        i.syncAccount(id)
+        assertEquals(380, backlog().inboxUnread)
     }
 
     @Test

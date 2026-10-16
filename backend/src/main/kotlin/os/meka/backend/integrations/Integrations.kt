@@ -34,6 +34,7 @@ import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailCheckRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailJunkClearRules
+import os.meka.core.domain.MailUnreadRules
 import os.meka.core.domain.MailJunkFacts
 import os.meka.core.domain.MailJunkRules
 import os.meka.core.domain.MailTidyBatchFields
@@ -592,6 +593,8 @@ class Integrations(
         stage(a, "junkReview") { junkReview(a, m, token, ms) }
         // Slice 8a: the backlog clean-up's plan (read-only: nothing in the mailbox moves).
         stage(a, "backlog") { backlog(a, m, token, ms) }
+        // Inbox fixes, slice 7: the inbox's unread count and how many of those Navilife can tidy, for Today's line.
+        stage(a, "unreadCounts") { unreadCounts(a, ms) }
         // Inbox fixes, slice 3: "Empty Junk" (counted for its card; cleared out only after his Approve).
         stage(a, "junkClearOut") { junkClearOut(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
@@ -992,6 +995,26 @@ class Integrations(
         // Slice 8b: once Meka approved the final plan, apply it (or put it back after an Undo).
         val plan = reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
         if (plan.approved || plan.applied > 0) applyBacklog(a, m, token, ms, plan, items, account)
+    }
+
+    /**
+     * Inbox fixes, slice 7: Today's unread line. The provider's own unread count for the inbox (read at the start of
+     * this check) and how many unread emails still in the inbox the tidy rules would move ([MailTidyRules.plan], as
+     * the dry run counts them), written on the account's `mail_backlog` entity when [MailUnreadRules.writeDue] says the
+     * change is worth a sync. Counts only.
+     */
+    internal fun unreadCounts(a: AccountRow, ms: MailStore) {
+        val unread = mailChecks[a.id]?.inboxUnread?.toInt() ?: return
+        val keep = keepAddresses(a.householdId)
+        val inbox = ms.inboxSorted(a.id).filter { (h, _) -> h.inInbox && h.unread }
+        val rules = senderRules(a.householdId, a.id, inbox.map { it.first.fromAddress })
+        val tidy = inbox.count { (h, s) ->
+            MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] })) != MailTidy.KEEP
+        }.coerceAtMost(unread)
+        val entityId = MailBacklogRules.entityId(a.id)
+        val prev = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId) }.getOrNull()?.let { MailBacklogRules.read(entityId, it) }
+        if (!MailUnreadRules.writeDue(prev, unread, tidy, now())) return
+        writeMail(a, entityId, MailUnreadRules.fields(unread, tidy, now()), EntityTypes.MAIL_BACKLOG)
     }
 
     /**
@@ -2406,13 +2429,18 @@ class Integrations(
 internal fun mailWhy(e: Throwable, duringSignIn: Boolean): String {
     var status: Int? = null
     var network = false
+    var reason: String? = null
     var t: Throwable? = e
     var depth = 0
     while (t != null && depth++ < 6) {
-        if (t is WriteRefused) status = status ?: 403
+        if (t is WriteRefused) {
+            status = status ?: 403
+            // Inbox fixes, slice 7: the provider's reason word, when Http.call kept a known one ("… [accessNotConfigured]").
+            reason = reason ?: Regex("""\[([A-Za-z_]+)]""").find(t.message.orEmpty())?.groupValues?.get(1)?.takeIf { it in MailCheckRules.KNOWN_REASONS }
+        }
         if (t is java.io.IOException) network = true
         Regex("""HTTP (\d{3})""").find(t.message.orEmpty())?.let { status = status ?: it.groupValues[1].toInt() }
         t = t.cause
     }
-    return MailCheckRules.classify(status, network && status == null, duringSignIn)
+    return MailCheckRules.classify(status, network && status == null, duringSignIn, reason)
 }

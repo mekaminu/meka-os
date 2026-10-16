@@ -84,6 +84,15 @@ object MailBacklogFields {
     const val JUNK_CLEARED = "junkCleared"
     const val JUNK_FINISHED_AT = "junkFinishedAtMs"
 
+    /**
+     * Inbox fixes, slice 7 (Today's unread line, [MailUnreadRules]): the inbox's unread count as the provider gives it,
+     * how many of those unread ones Navilife's rules would tidy (newsletters, promos, notifications, receipts), and when
+     * they were counted. Counts only.
+     */
+    const val INBOX_UNREAD = "inboxUnread"
+    const val TIDY_UNREAD = "tidyUnread"
+    const val UNREAD_COUNTED_AT = "unreadCountedAtMs"
+
     fun countField(k: MailBacklogKind): String = when (k) {
         MailBacklogKind.KEEP -> KEPT
         MailBacklogKind.NEWSLETTER -> NEWSLETTERS
@@ -117,6 +126,10 @@ data class MailBacklog(
     val junkApprovedAtMs: Long? = null,
     val junkCleared: Int = 0,
     val junkFinishedAtMs: Long? = null,
+    /** Inbox fixes, slice 7: the inbox's unread count, the unread ones Navilife can tidy, and when ([MailUnreadRules]). */
+    val inboxUnread: Int? = null,
+    val tidyUnread: Int = 0,
+    val unreadCountedAtMs: Long? = null,
 ) {
     val ready: Boolean get() = readyAtMs != null
     val approved: Boolean get() = approvedAtMs != null
@@ -300,6 +313,9 @@ object MailBacklogRules {
             junkApprovedAtMs = long(MailBacklogFields.JUNK_APPROVED_AT)?.takeIf { it > 0 },
             junkCleared = long(MailBacklogFields.JUNK_CLEARED)?.toInt() ?: 0,
             junkFinishedAtMs = long(MailBacklogFields.JUNK_FINISHED_AT)?.takeIf { it > 0 },
+            inboxUnread = long(MailBacklogFields.INBOX_UNREAD)?.toInt()?.takeIf { it >= 0 },
+            tidyUnread = long(MailBacklogFields.TIDY_UNREAD)?.toInt()?.coerceAtLeast(0) ?: 0,
+            unreadCountedAtMs = long(MailBacklogFields.UNREAD_COUNTED_AT)?.takeIf { it > 0 },
         )
     }
 
