@@ -39,7 +39,7 @@ class AboutYouFacadeTest {
 
     @Test
     fun theFoldCopiesWhatMekaHadOnceAndTheMacSeesIt() = runTest(timeout = SLOW_RUNNER) {
-        val fold = core("android").apply { seedsAboutYou = true }
+        val fold = core("android").apply { seedsAboutYou = true; releaseOneClubs = "OTFC Oakfield Town" }
         val mac = core("mac")
         // The Mac never copies: its profile stays empty after a sync.
         mac.syncNow()
@@ -51,7 +51,7 @@ class AboutYouFacadeTest {
         val v = fold.aboutYouView.value
         assertEquals("Alex", v.rows.first { it.field == AboutField.PARTNER_NAME }.value)
         assertEquals("Hilltown", v.rows.first { it.field == AboutField.HOME }.value)
-        // Release 2 slice 1: no child is copied from the code any more; the clubs MEKA knew are.
+        // Release 2 slice 1: no child is copied from the code any more; the clubs the Fold carried are (invented here).
         assertTrue(v.children.isEmpty())
         assertNotNull(v.rows.first { it.field == AboutField.CLUBS }.value)
         assertTrue(v.summary.startsWith("Navilife filled this in today"))
