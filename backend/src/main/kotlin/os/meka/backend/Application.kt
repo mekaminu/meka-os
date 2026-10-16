@@ -1058,7 +1058,7 @@ fun main(args: Array<String>) {
                     foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
                     notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push, profile = { hh ->
                         opStore.latestFields(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)[AboutYouRules.ENTITY_ID]
-                    }, assistantCalls = assistantCallsReader(opStore)),
+                    }, assistantCalls = assistantCallsReader(opStore), mailChecks = { hh -> integrations?.mailReport(hh).orEmpty() }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.

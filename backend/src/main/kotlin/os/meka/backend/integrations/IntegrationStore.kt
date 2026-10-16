@@ -31,6 +31,8 @@ data class AccountRow(
     val grantedAtMs: Long? = null,
     /** A mail account's label (Inbox autopilot, slice 1: a `MailLabel` name); null elsewhere. */
     val label: String? = null,
+    /** Why the last sync failed (`last_error`; mail: a `MailCheckRules.WHY` word, inbox fixes slice 6); null once it worked. */
+    val lastError: String? = null,
 )
 
 /** What the server last wrote for one mirrored event: per field, the op id and an encoded value. */
@@ -133,8 +135,8 @@ class InMemoryIntegrationStore(private val knownHouseholds: List<String> = empty
     override fun households() = knownHouseholds
     @Synchronized override fun updateRefreshToken(id: String, enc: ByteArray) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(refreshTokenEnc = enc) } }
     // A sync that was already running when Meka disconnected never brings the account back.
-    @Synchronized override fun markSynced(id: String, atMs: Long) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(status = "ok", lastSyncAtMs = atMs) } }
-    @Synchronized override fun markError(id: String, status: String, error: String) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(status = status) } }
+    @Synchronized override fun markSynced(id: String, atMs: Long) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(status = "ok", lastSyncAtMs = atMs, lastError = null) } }
+    @Synchronized override fun markError(id: String, status: String, error: String) { accounts[id]?.takeIf { it.status != DISCONNECTED }?.let { accounts[id] = it.copy(status = status, lastError = error.take(300)) } }
     override fun lockAccount(id: String) = Unit
     @Synchronized override fun mirror(householdId: String, accountId: String) =
         mirrors.filter { (k, v) -> k.first == householdId && v.accountId == accountId }.values.associateBy { it.entityId }
@@ -181,13 +183,13 @@ class PostgresIntegrationStore(private val ops: PostgresOpStore) : IntegrationSt
     }
 
     private fun query(sql: String, vararg args: String): List<AccountRow> = c { c ->
-        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit, granted_at, label FROM integration_account $sql").use { st ->
+        c.prepareStatement("SELECT id, household_id, provider, email, refresh_token_enc, status, last_sync_at, can_edit, granted_at, label, last_error FROM integration_account $sql").use { st ->
             args.forEachIndexed { i, a -> st.setString(i + 1, a) }
             st.executeQuery().use { rs ->
                 buildList {
                     while (rs.next()) add(AccountRow(
                         rs.getString(1), rs.getString(2), rs.getString(3), rs.getString(4), rs.getBytes(5), rs.getString(6),
-                        rs.getTimestamp(7)?.time, rs.getBoolean(8), rs.getTimestamp(9)?.time, rs.getString(10),
+                        rs.getTimestamp(7)?.time, rs.getBoolean(8), rs.getTimestamp(9)?.time, rs.getString(10), rs.getString(11),
                     ))
                 }
             }

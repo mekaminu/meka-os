@@ -154,6 +154,8 @@ object WireCodec {
         val sorted: Map<String, Int>? = null,
         /** Inbox autopilot, slice 3a: the dry run's counts per `MailTidy` name. Additive: absent = not planned yet. */
         val wouldTidy: Map<String, Int>? = null,
+        /** Inbox fixes, slice 6: why the last check failed (a `MailCheckRules.WHY` word). Additive: absent = none. */
+        val why: String? = null,
     )
 
     /** Naming what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook. */
@@ -214,6 +216,7 @@ object WireCodec {
                 a.label?.let { put("label", it) }
                 a.sorted?.let { m -> put("sorted", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
                 a.wouldTidy?.let { m -> put("tidy", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
+                a.why?.let { put("why", it.take(12)) }
             }
         }))
     }
@@ -231,6 +234,7 @@ object WireCodec {
                 label = a["label"]?.jsonPrimitive?.contentOrNull,
                 sorted = counts(a["sorted"]),
                 wouldTidy = counts(a["tidy"]),
+                why = a["why"]?.jsonPrimitive?.contentOrNull?.take(12)?.takeIf { w -> w.all { it in 'a'..'z' } },
             )
         }
     }

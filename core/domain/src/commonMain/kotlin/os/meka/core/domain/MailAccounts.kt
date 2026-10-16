@@ -50,6 +50,8 @@ data class MailAccountFacts(
     val sorted: Map<String, Int>? = null,
     /** Slice 3a: what Autopilot would do per [MailTidy] name (a dry run), or null before the server planned any. */
     val wouldTidy: Map<String, Int>? = null,
+    /** Inbox fixes, slice 6: why the last check failed (a [MailCheckRules.WHY] word), or null. */
+    val why: String? = null,
 )
 
 /** One row in Mail. */
@@ -164,8 +166,13 @@ object MailAccountRules {
     fun line(status: String, lastSyncAtMs: Long?, nowMs: Long): String = line(status, lastSyncAtMs, nowMs, sorting = false)
 
     /** [sorting]: the server already sorts this account (slice 2a), so the line no longer promises it. */
-    fun line(status: String, lastSyncAtMs: Long?, nowMs: Long, sorting: Boolean): String = when {
+    fun line(status: String, lastSyncAtMs: Long?, nowMs: Long, sorting: Boolean): String =
+        line(status, lastSyncAtMs, nowMs, sorting, provider = "", why = null)
+
+    /** Inbox fixes, slice 6: a failed check says why ([MailCheckRules.errorLine]) and when it last worked. */
+    fun line(status: String, lastSyncAtMs: Long?, nowMs: Long, sorting: Boolean, provider: String, why: String?): String = when {
         status == "needs_reconnect" -> "Sign-in ended · Reconnect to keep Navilife reading it"
+        status == "error" && MailCheckRules.read(why) != null -> MailCheckRules.errorLine(provider, why, lastSyncAtMs, nowMs)
         status == "error" -> "Couldn't reach it last time · Navilife tries again every few minutes"
         lastSyncAtMs == null -> "Connected · checking the sign-in…"
         // Inbox fixes: the Autopilot line under it says what moved; this one no longer claims nothing did.
@@ -182,7 +189,7 @@ object MailAccountRules {
         return MailAccountRow(
             provider = a.provider, email = a.email, label = label,
             title = "${label.label} · ${MailProviders.name(a.provider)}",
-            line = endsAt?.let { endingLine(it, nowMs) } ?: line(a.status, a.lastSyncAtMs, nowMs, sorting = a.sorted != null),
+            line = endsAt?.let { endingLine(it, nowMs) } ?: line(a.status, a.lastSyncAtMs, nowMs, sorting = a.sorted != null, provider = a.provider, why = a.why),
             needsReconnect = a.status == "needs_reconnect" || endsAt != null,
             labels = listOf(label) + MailLabel.entries.filter { it != label },
             ending = endsAt != null,

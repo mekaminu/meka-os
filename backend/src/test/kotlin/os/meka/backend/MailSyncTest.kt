@@ -6,6 +6,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import os.meka.backend.integrations.MailBulkHeaders
 import os.meka.backend.integrations.WriteRefused
+import os.meka.backend.integrations.mailWhy
 import os.meka.core.domain.MailSortRules
 import os.meka.backend.integrations.GmailHistory
 import os.meka.backend.integrations.GmailMail
@@ -40,6 +41,7 @@ import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailAutopilotFields
 import os.meka.core.domain.MailAutopilotRules
+import os.meka.core.domain.MailCheckRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
@@ -449,6 +451,79 @@ class MailSyncTest {
         assertEquals("error", store.account(id)!!.status)
         assertEquals(listOf("a"), ms.messages(id).map { it.id })
         assertEquals("h1", ms.cursor(id))
+    }
+
+    @Test
+    fun aFailedCheckKeepsItsRealReasonForTheCardAndTheReport() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, store, i) = world(ms, ops = ops)
+        gmail.mailbox["a"] = msg("a", 1)
+        val id = connect(i)
+        i.syncAccount(id)
+        // Gmail says slow down: the card says busy, not "couldn't reach it".
+        gmail.nextRound = { throw IllegalStateException("provider HTTP 429") }
+        runCatching { i.syncAccount(id) }
+        assertEquals("error", store.account(id)!!.status)
+        assertEquals(MailCheckRules.BUSY, i.accounts("home").single().why)
+        // A refusal (403) and a timeout are told apart too.
+        gmail.nextRound = { throw WriteRefused("provider refused the change") }
+        runCatching { i.syncAccount(id) }
+        assertEquals(MailCheckRules.REFUSED, i.accounts("home").single().why)
+        gmail.nextRound = { throw java.net.http.HttpTimeoutException("timed out") }
+        runCatching { i.syncAccount(id) }
+        assertEquals(MailCheckRules.NETWORK, i.accounts("home").single().why)
+        // The report says it by label, never the address.
+        val r = i.mailReport("home").single()
+        assertEquals("Personal", r.label)
+        assertEquals("error", r.status)
+        assertEquals(MailCheckRules.NETWORK, r.why)
+        assertEquals(now + MailAutopilotRules.DRY_RUN_MS, r.dryRunEndsAtMs)
+        val line = MailCheckRules.reportLine(r, now) { "t$it" }
+        assertFalse(line.contains("@"))
+        // It works again: no reason is sent and the report counts the inbox.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(null, i.accounts("home").single().why)
+        val ok = i.mailReport("home").single()
+        assertEquals("ok", ok.status)
+        assertEquals(1L, ok.inboxTotal)
+        assertEquals("not tidying", ok.autopilot) // Autopilot isn't on
+    }
+
+    @Test
+    fun aFailingStageIsInTheReportWithoutFailingTheCheck() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        autopilotOn(ops)
+        now += day * 2
+        gmail.headerFailsAfter = 0
+        gmail.mailbox["n1"] = msg("n1", 0, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.nextRound = { MailChanges(fetch = listOf("n1"), cursor = "h2") }
+        i.syncAccount(id)
+        val r = i.mailReport("home").single()
+        assertEquals("ok", r.status)
+        assertEquals(MailCheckRules.REFUSED, r.stageFailures["headers"])
+        assertTrue(MailCheckRules.reportLine(r, now) { "t" }.contains("failed: headers=refused"))
+        // Once the headers come, Autopilot says what it did.
+        gmail.headerFailsAfter = null
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals("planned 1, moved 1", i.mailReport("home").single().autopilot)
+        assertEquals(null, i.mailReport("home").single().stageFailures["headers"])
+    }
+
+    @Test
+    fun mailWhySortsTheFailure() {
+        assertEquals(MailCheckRules.BUSY, mailWhy(IllegalStateException("provider HTTP 429"), false))
+        assertEquals(MailCheckRules.DOWN, mailWhy(RuntimeException("wrapped", IllegalStateException("provider HTTP 503 (backendError)")), false))
+        assertEquals(MailCheckRules.REFUSED, mailWhy(WriteRefused("provider refused the change"), false))
+        assertEquals(MailCheckRules.NETWORK, mailWhy(java.net.ConnectException("refused"), true))
+        assertEquals(MailCheckRules.SIGN_IN, mailWhy(IllegalStateException("no access_token"), true))
+        assertEquals(MailCheckRules.OTHER, mailWhy(IllegalStateException("Gmail answered without a body"), false))
     }
 
     @Test

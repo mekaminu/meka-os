@@ -3,6 +3,7 @@ package os.meka.backend
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AssistantCallEntry
 import os.meka.core.domain.AssistantCallReportRules
+import os.meka.core.domain.MailCheckRules
 import os.meka.core.sync.FieldValue
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import javax.sql.DataSource
@@ -31,6 +32,9 @@ class NotifyReports(
      * job's "Call assistant" notices; never a number or a word.
      */
     private val assistantCalls: ((householdId: String) -> List<AssistantCallEntry>)? = null,
+    /** Inbox fixes, slice 6: each mail account's last check ([MailCheckRules.Report]), for the "Mail autopilot" notices. */
+    private val mailChecks: ((householdId: String) -> List<MailCheckRules.Report>)? = null,
+    private val now: () -> Long = System::currentTimeMillis,
 ) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
         // The publisher reads; it never reports.
@@ -43,9 +47,13 @@ class NotifyReports(
         val calls = assistantCalls?.let { read -> runCatching { read(who.householdId) }.getOrNull() }?.map { e ->
             NotifyDiagnosticsCodec.Entry(e.atMs, if (e.automated) "automated" else "voice", AssistantCallReportRules.line(e))
         }
+        val nowMs = now()
+        val mail = mailChecks?.let { read -> runCatching { read(who.householdId) }.getOrNull() }?.map { r ->
+            NotifyDiagnosticsCodec.Entry(r.lastCheckAtMs ?: nowMs, r.label, MailCheckRules.reportLine(r, nowMs) { utc(it) })
+        }
         val about = NotifyDiagnosticsCodec.Latest(
             null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs,
-            aboutClubs = held?.clubs, aboutCouncil = held?.council, aboutRoute = held?.route, assistant = calls,
+            aboutClubs = held?.clubs, aboutCouncil = held?.council, aboutRoute = held?.route, assistant = calls, mail = mail,
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)
@@ -59,6 +67,9 @@ class NotifyReports(
     }
 
     companion object {
+        /** "2026-10-16 06:50 UTC". */
+        fun utc(ms: Long): String = java.time.Instant.ofEpochMilli(ms).toString().take(16).replace('T', ' ') + " UTC"
+
         /** The wire's word for a send's result. */
         fun word(r: SendResult): String = when (r) {
             SendResult.SENT -> NotifyDiagnosticsCodec.SENT

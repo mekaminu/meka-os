@@ -136,6 +136,24 @@ class NotifyReportsTest {
     }
 
     @Test
+    fun thePublisherPrintsEachMailAccountByLabelAndWarnsOnAFailure() {
+        val ok = os.meka.core.domain.MailCheckRules.Report(
+            label = "Personal", provider = "gmail", status = "ok", why = null, lastCheckAtMs = at, lastOkAtMs = at,
+            inboxTotal = 88, inboxUnread = 31, dryRunEndsAtMs = at - 1, autopilotOn = true, paused = false, autopilot = "planned 3, moved 3",
+        )
+        val bad = ok.copy(label = "Outlook", provider = "outlook_mail", status = "error", why = "busy", autopilot = null)
+        val reports = NotifyReports(InMemoryNotifyReportStore(), null, mailChecks = { listOf(ok, bad) }, now = { at })
+        val lines = ReleasePublisherCli.mailLines(reports.latest(DeviceIdentity("hh", ReleasePublisher.ID)))
+        assertEquals(
+            "::notice title=Mail · Personal::Gmail · ok · checked 2026-10-13 20:41 UTC · ok 2026-10-13 20:41 UTC · inbox 88 · 31 unread · autopilot on: planned 3, moved 3",
+            lines[0],
+        )
+        assertTrue(lines[1].startsWith("::warning title=Mail · Outlook::Outlook · error (busy)"), lines[1])
+        assertEquals(listOf("::notice title=Mail autopilot::the server doesn't report mail checks yet"), ReleasePublisherCli.mailLines(NotifyDiagnosticsCodec.Latest(null)))
+        assertEquals(listOf("::notice title=Mail autopilot::no mail account connected"), ReleasePublisherCli.mailLines(NotifyDiagnosticsCodec.Latest(null, mail = emptyList())))
+    }
+
+    @Test
     fun thePublisherPrintsEachChannelsLastPostWhenThePhoneSendsThem() {
         val withPosts = report.copy(channels = listOf(
             NotifyDiagnosticsCodec.Channel("meka_heads_up", "Heads-ups", true, at - 60_000),

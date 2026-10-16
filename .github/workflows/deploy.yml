@@ -245,6 +245,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-assistant "${{ steps.decide.outputs.url }}"
 
+      # Why mail isn't being tidied (inbox fixes, slice 6): per account (by its label, never the address) its state and
+      # the reason a check failed, the inbox counts, Autopilot's mode and what it did, and any stage that failed.
+      - name: Mail autopilot
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-mail "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

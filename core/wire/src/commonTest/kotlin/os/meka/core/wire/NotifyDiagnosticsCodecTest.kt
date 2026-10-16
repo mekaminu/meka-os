@@ -59,6 +59,10 @@ class NotifyDiagnosticsCodecTest {
         assertEquals(l, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(l)))
         assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null}""").assistant)
         assertEquals(emptyList(), NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, assistant = emptyList()))).assistant)
+        // Inbox fixes, slice 6: the mail accounts' lines round-trip; an older server has none.
+        val mail = listOf(NotifyDiagnosticsCodec.Entry(1_790_000_000_000L, "Personal", "Gmail · ok · inbox 88"))
+        assertEquals(mail, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, mail = mail))).mail)
+        assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null}""").mail)
     }
 
     @Test

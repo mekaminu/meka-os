@@ -31,6 +31,7 @@ import os.meka.core.domain.MailSenderRule
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
+import os.meka.core.domain.MailCheckRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailJunkClearRules
 import os.meka.core.domain.MailJunkFacts
@@ -254,7 +255,9 @@ class Integrations(
         store.accounts(householdId).filter { it.status != DISCONNECTED }.map {
             val sorted = if (it.provider in mail) sortedCounts(it.id) else null
             WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = sorted,
-                wouldTidy = if (sorted != null) tidyCounts(householdId, it.id, keepAddresses(householdId)) else null)
+                wouldTidy = if (sorted != null) tidyCounts(householdId, it.id, keepAddresses(householdId)) else null,
+                // Inbox fixes, slice 6: why a mail check failed, for the card (only a known word; an old exception name isn't sent).
+                why = if (it.provider in mail && it.status == "error") MailCheckRules.read(it.lastError) else null)
         }
 
     /**
@@ -480,20 +483,66 @@ class Integrations(
     private fun syncMail(a: AccountRow, m: MailProvider) {
         val client = clients.get(m.oauth) ?: return
         val ctx = context(a.householdId, a.provider)
+        // Inbox fixes, slice 6: what this check did, for the report (the card reads the stored reason).
+        val check = mailChecks.computeIfAbsent(a.id) { MailCheckState() }.also { it.lastCheckAtMs = now(); it.stages.clear(); it.autopilot = null }
+        var signingIn = true
         try {
             val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
             val tokens = m.refresh(client, refresh)
             if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
                 store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
             }
-            m.inbox(tokens.accessToken)
+            signingIn = false
+            val box = m.inbox(tokens.accessToken)
+            check.inboxTotal = box.messages; check.inboxUnread = box.unread
             mailStore?.let { syncHeaders(a, m, tokens.accessToken, it) }
             store.transaction { store.markSynced(a.id, now()) }
+            check.lastOkAtMs = now()
         } catch (e: ReconnectRequired) {
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
         } catch (e: Exception) {
-            store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
+            store.transaction { store.markError(a.id, "error", mailWhy(e, signingIn)) }
             throw e
+        }
+    }
+
+    /** Inbox fixes, slice 6: each mail account's last check, in memory (a restart starts it again; never an address). */
+    internal class MailCheckState {
+        @Volatile var lastCheckAtMs: Long? = null
+        @Volatile var lastOkAtMs: Long? = null
+        @Volatile var inboxTotal: Long? = null
+        @Volatile var inboxUnread: Long? = null
+        @Volatile var autopilot: String? = null
+        val stages = java.util.concurrent.ConcurrentHashMap<String, String>()
+    }
+
+    private val mailChecks = java.util.concurrent.ConcurrentHashMap<String, MailCheckState>()
+
+    /** A stage of a mail check that never fails the check; a failure is kept for the report as its [MailCheckRules.WHY]. */
+    private inline fun stage(a: AccountRow, name: String, block: () -> Unit) {
+        try { block() } catch (e: Exception) { mailChecks[a.id]?.stages?.put(name, mailWhy(e, false)) }
+    }
+
+    /**
+     * Inbox fixes, slice 6: the household's mail accounts as the publish job's "Mail autopilot" notices sees them —
+     * label, state and reason, last check, inbox counts, Autopilot's mode and what it did, the sort and the dry run,
+     * and any stage that failed. Never an address.
+     */
+    fun mailReport(householdId: String): List<MailCheckRules.Report> {
+        val rows = store.accounts(householdId).filter { it.provider in mail && it.status != DISCONNECTED }
+        if (rows.isEmpty()) return emptyList()
+        val setting = runCatching { MailAutopilotRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID)) }.getOrNull()
+        val paused = runCatching { AutonomyRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused }.getOrNull()
+        val listed = runCatching { accounts(householdId) }.getOrNull().orEmpty()
+        return rows.map { a ->
+            val c = mailChecks[a.id]
+            val wire = listed.firstOrNull { it.provider == a.provider && it.email == a.email }
+            MailCheckRules.Report(
+                label = MailLabel.of(a.label)?.label ?: "Unlabelled", provider = a.provider, status = a.status, why = a.lastError,
+                lastCheckAtMs = c?.lastCheckAtMs, lastOkAtMs = a.lastSyncAtMs, inboxTotal = c?.inboxTotal, inboxUnread = c?.inboxUnread,
+                dryRunEndsAtMs = a.grantedAtMs?.plus(MailAutopilotRules.DRY_RUN_MS), autopilotOn = setting?.on, paused = paused,
+                autopilot = c?.autopilot, sorted = wire?.sorted, wouldTidy = wire?.wouldTidy, stageFailures = c?.stages?.toMap().orEmpty(),
+            )
         }
     }
 
@@ -520,44 +569,45 @@ class Integrations(
             } catch (e: ReconnectRequired) {
                 throw e
             } catch (e: Exception) {
+                mailChecks[a.id]?.stages?.put("headers", mailWhy(e, false))
                 break
             }
             if (h == null) ms.remove(a.id, id) else ms.put(a.householdId, a.id, h)
         }
         ms.prune(a.id, since)
         // Slice 6a: Done and Undo asked on the "From your mail" cards, before sorting (an email put back is sorted again now).
-        runCatching { mailNeedsAsks(a, m, token, ms) }
+        stage(a, "mailNeedsAsks") { mailNeedsAsks(a, m, token, ms) }
         // Follow-up radar, slice 2: chases of his own unanswered emails, sent only after his Send.
-        runCatching { followUpChases(a, m, token) }
+        stage(a, "followUpChases") { followUpChases(a, m, token) }
         // Inbox fixes, slice 1: Outlook's emails that only look like a person's have their own list and bulk headers read.
-        runCatching { bulkLook(a, m, token, ms) }
+        stage(a, "bulkLook") { bulkLook(a, m, token, ms) }
         // Inbox fixes, slice 4: the people he has written to (once a day), so their mail is his before it's sorted.
-        runCatching { readCorrespondents(a, m, token) }
+        stage(a, "readCorrespondents") { readCorrespondents(a, m, token) }
         sortHeaders(a, ms)
         // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
-        runCatching { mailSenders(a, m, token, ms) }
+        stage(a, "mailSenders") { mailSenders(a, m, token, ms) }
         // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
-        runCatching { autopilot(a, m, token, ms) }
+        stage(a, "autopilot") { autopilot(a, m, token, ms) }
         // Slice 3c: the daily Junk review (same switch and dry-run day as Autopilot).
-        runCatching { junkReview(a, m, token, ms) }
+        stage(a, "junkReview") { junkReview(a, m, token, ms) }
         // Slice 8a: the backlog clean-up's plan (read-only: nothing in the mailbox moves).
-        runCatching { backlog(a, m, token, ms) }
+        stage(a, "backlog") { backlog(a, m, token, ms) }
         // Inbox fixes, slice 3: "Empty Junk" (counted for its card; cleared out only after his Approve).
-        runCatching { junkClearOut(a, m, token, ms) }
+        stage(a, "junkClearOut") { junkClearOut(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
-        runCatching { publishMailNeeds(a, ms) }
+        stage(a, "publishMailNeeds") { publishMailNeeds(a, ms) }
         // Follow-up radar, slice 1: his own emails with no reply, a few times a day (on his tap in the apps).
-        runCatching { followUps(a, m, token, ms) }
+        stage(a, "followUps") { followUps(a, m, token, ms) }
         // Slice 3g: parcels arriving, from the shipping emails (whether or not Autopilot has tidied them).
-        runCatching { parcels(a, ms) }
+        stage(a, "parcels") { parcels(a, ms) }
         // Slice 3h: bills due, from the bill emails (whether or not Autopilot has tidied them).
-        runCatching { bills(a, ms) }
+        stage(a, "bills") { bills(a, ms) }
         // Promises, receipts and renewals, slice 1: renewals to add, from the renewal emails (on his tap in the apps).
-        runCatching { renewals(a, ms) }
+        stage(a, "renewals") { renewals(a, ms) }
         // Slice 2: promises made to him, to add to Waiting for (on his tap in the apps).
-        runCatching { promises(a, ms) }
+        stage(a, "promises") { promises(a, ms) }
         // School and family logistics, slice 1: the school's dates, payments, forms and trips (on his tap in the apps).
-        runCatching { schoolMail(a, ms) }
+        stage(a, "schoolMail") { schoolMail(a, ms) }
     }
 
     /** Follow-up radar: when each account's sent mail was last read (in memory; a restart just reads it again). */
@@ -1182,10 +1232,12 @@ class Integrations(
         undoTidies(a, m, token, ms)
         val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
         val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
-        val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, now()) ?: return
+        val check = mailChecks[a.id]
+        val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, now())
+            ?: return run { check?.autopilot = "not tidying" }
         val never = ms.neverTidied(a.id)
         val candidates = ms.inboxSorted(a.id).filter { (h, _) -> h.receivedAtMs >= since && h.id !in never }
-        if (candidates.isEmpty()) return
+        if (candidates.isEmpty()) return run { check?.autopilot = "no new sorted mail since it started" }
         // Can't tell which threads he wrote in: nothing is tidied this check.
         val replied = m.repliedThreads(token, since - MAIL_WINDOW_MS)
         val keep = keepAddresses(hh)
@@ -1205,12 +1257,13 @@ class Integrations(
             ))
             if (t == MailTidy.KEEP) null else h to t
         }.take(MailAutopilotRules.MAX_PER_CHECK)
-        if (plan.isEmpty()) return
+        if (plan.isEmpty()) return run { check?.autopilot = "${candidates.size} new, nothing to tidy" }
         val at = now()
         val batchId = MailAutopilotRules.batchId(a.id, at)
         // Completeness: a provider failure part-way still records (with Undo) what moved; the rest are tried next check.
         val moved = m.tidyKept(token, plan.associate { (h, t) -> h.id to t }).first
         val done = plan.filter { (h, _) -> h.id in moved }
+        check?.autopilot = "planned ${plan.size}, moved ${done.size}"
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
         // Inbox fixes, slice 1: what was tidied is marked read too (his switch), best effort.
@@ -1310,6 +1363,7 @@ class Integrations(
         // Completeness: a provider failure part-way still records (with Undo) what moved; the rest are tried next check.
         val moved = m.tidyKept(token, plan.associate { (h, t) -> h.id to t }).first
         val done = plan.filter { (h, _) -> h.id in moved }
+        check?.autopilot = "planned ${plan.size}, moved ${done.size}"
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
         if (setting.markRead) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
@@ -1373,6 +1427,7 @@ class Integrations(
         }
         val (moved, _) = m.tidyKept(token, plan.associate { (h, t) -> h.id to t })
         val done = plan.filter { (h, _) -> h.id in moved }
+        check?.autopilot = "planned ${plan.size}, moved ${done.size}"
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
         if (markingRead(hh)) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
@@ -2343,4 +2398,23 @@ class Integrations(
             FieldValue.Null -> "n"
         }
     }
+}
+
+/**
+ * Inbox fixes, slice 6: a mail check's failure as a [MailCheckRules.WHY] word, from the provider's status where it
+ * answered ("provider HTTP 429" in the message chain, a 403 refusal), a timeout or a lost connection, or the sign-in
+ * refresh ([duringSignIn]). Never the provider's own words.
+ */
+internal fun mailWhy(e: Throwable, duringSignIn: Boolean): String {
+    var status: Int? = null
+    var network = false
+    var t: Throwable? = e
+    var depth = 0
+    while (t != null && depth++ < 6) {
+        if (t is WriteRefused) status = status ?: 403
+        if (t is java.io.IOException) network = true
+        Regex("""HTTP (\d{3})""").find(t.message.orEmpty())?.let { status = status ?: it.groupValues[1].toInt() }
+        t = t.cause
+    }
+    return MailCheckRules.classify(status, network && status == null, duringSignIn)
 }

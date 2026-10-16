@@ -32,6 +32,8 @@ object NotifyDiagnosticsCodec {
     const val CHANNELS_MAX = 24
     const val ASSISTANT_MAX = 10
     const val ASSISTANT_DETAIL_MAX = 160
+    const val MAIL_MAX = 6
+    const val MAIL_DETAIL_MAX = 400
     const val DETAIL_MAX = 120
     const val NAME_MAX = 40
     const val MODEL_MAX = 40
@@ -89,6 +91,12 @@ object NotifyDiagnosticsCodec {
          * Null from a server before it.
          */
         val assistant: List<Entry>? = null,
+        /**
+         * Inbox fixes, slice 6: one line per connected mail account (kind = its label, "Personal"; detail =
+         * `MailCheckRules.reportLine`: state and reason, last check, inbox counts, Autopilot, the sort; never an
+         * address). Null from a server before it.
+         */
+        val mail: List<Entry>? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -128,6 +136,13 @@ object NotifyDiagnosticsCodec {
                 }
             })
         }
+        l.mail?.let { list ->
+            put("mail", buildJsonArray {
+                list.take(MAIL_MAX).forEach { e ->
+                    add(buildJsonObject { put("at", e.atMs); put("kind", clean(e.kind, 12)); put("detail", clean(e.detail, MAIL_DETAIL_MAX)) })
+                }
+            })
+        }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -147,6 +162,7 @@ object NotifyDiagnosticsCodec {
             aboutCouncil = (o["aboutCouncil"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
             aboutRoute = (o["aboutRoute"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull,
             assistant = (o["assistant"] as? JsonArray)?.let { a -> entries(a, ASSISTANT_MAX, ASSISTANT_DETAIL_MAX) },
+            mail = (o["mail"] as? JsonArray)?.let { a -> entries(a, MAIL_MAX, MAIL_DETAIL_MAX) },
         )
     }
 

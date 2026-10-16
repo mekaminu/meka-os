@@ -256,7 +256,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -304,6 +304,12 @@ object ReleasePublisherCli {
                     assistantLines(l).forEach(::println)
                     0
                 }
+                "publisher-mail" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    mailLines(l).forEach(::println)
+                    0
+                }
                 else -> {
                     val apk = File(args.getOrNull(2) ?: return@runBlocking fail("usage: publisher-publish <url> <apk> <metadata>"))
                     val meta = File(args.getOrNull(3) ?: return@runBlocking fail("usage: publisher-publish <url> <apk> <metadata>"))
@@ -317,6 +323,19 @@ object ReleasePublisherCli {
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * Inbox fixes, slice 6: one notice per mail account ("Mail · Personal"), a warning when its last check failed or a
+     * stage did; else one notice saying why there's nothing. Never an address.
+     */
+    fun mailLines(l: NotifyDiagnosticsCodec.Latest): List<String> {
+        val list = l.mail ?: return listOf("::notice title=Mail autopilot::the server doesn't report mail checks yet")
+        if (list.isEmpty()) return listOf("::notice title=Mail autopilot::no mail account connected")
+        return list.map { e ->
+            val bad = e.detail.contains(" · error") || e.detail.contains(" · needs_reconnect") || e.detail.contains("failed: ")
+            "::${if (bad) "warning" else "notice"} title=Mail · ${e.kind}::${e.detail}".replace("%", "%25")
         }
     }
 

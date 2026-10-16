@@ -2918,8 +2918,8 @@ final class MekaCoreBridgeTests: XCTestCase {
         // no server to ask, so Mail says it couldn't reach it (nil).
         let rules = MailAccountRules.shared
         let v = rules.view(accounts: [
-            MailAccountFacts(provider: "gmail", email: "shop@example.com", status: "ok", lastSyncAtMs: nil, label: "BUSINESS", sorted: ["NEEDS_YOU": KotlinInt(int: 2)], wouldTidy: ["ARCHIVE": KotlinInt(int: 3)]),
-            MailAccountFacts(provider: "gmail", email: "alex@example.com", status: "needs_reconnect", lastSyncAtMs: nil, label: nil, sorted: nil, wouldTidy: nil),
+            MailAccountFacts(provider: "gmail", email: "shop@example.com", status: "ok", lastSyncAtMs: nil, label: "BUSINESS", sorted: ["NEEDS_YOU": KotlinInt(int: 2)], wouldTidy: ["ARCHIVE": KotlinInt(int: 3)], why: nil),
+            MailAccountFacts(provider: "gmail", email: "alex@example.com", status: "needs_reconnect", lastSyncAtMs: nil, label: nil, sorted: nil, wouldTidy: nil, why: nil),
         ], nowMs: 0)
         XCTAssertEqual(v.rows.map(\.title), ["Personal · Gmail", "Business · Gmail"])
         XCTAssertTrue(v.rows[0].needsReconnect)
