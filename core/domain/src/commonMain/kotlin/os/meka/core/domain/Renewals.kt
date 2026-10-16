@@ -603,6 +603,7 @@ class Renewals(
                 val rule = ruleOf(s)
                 val cost = s[ObligationFields.COST_MINOR].longOrNull
                 val repeat = if (rawRule != null && rule == null) null else RenewalRules.repeatOf(rule)
+                val returning = rule == null && MailReturnRules.isReturn(s[ActionableFields.TITLE].textOrNull)
                 RenewalItem(
                     id = s.ref.entityId,
                     title = s[ActionableFields.TITLE].textOrNull ?: "",
@@ -617,8 +618,9 @@ class Renewals(
                     repeatLabel = repeat?.let(RenewalRules::repeatLabel) ?: rule?.describe() ?: "Repeats (set on a newer version)",
                     state = RenewalRules.state(due, cancel, lead, today),
                     meta = RenewalRules.meta(kind, due, cancel, cost, rule, today),
-                    doneLabel = RenewalRules.doneLabel(kind),
-                    stopLabel = RenewalRules.stopLabel(kind),
+                    // Returns and warranties, completeness: a return reminder reads Sent it back · Keeping it.
+                    doneLabel = if (returning) MailReturnRules.SENT_BACK_LABEL else RenewalRules.doneLabel(kind),
+                    stopLabel = if (returning) MailReturnRules.KEEPING_LABEL else RenewalRules.stopLabel(kind),
                     hasConflict = replica.conflictsFor(EntityTypes.OBLIGATION, s.ref.entityId).isNotEmpty(),
                     nextDueDay = rule?.next(due),
                     payLink = SessionRules.cleanAppLink(s[ObligationFields.PAY_LINK].textOrNull),

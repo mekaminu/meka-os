@@ -185,6 +185,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      */
     PARCELS("Parcels out for delivery", NoticeTier.HEADS_UP),
     /**
+     * Returns and warranties, completeness ([MailReturnRules.notices]): two days before an order's last day to return
+     * it and on the day, at 09:00 — "Last day to return · Amazon order is Fri 13 Nov · £40" · "In 2 days · in Lists:
+     * Sent it back or Keeping it". Gone once he taps either.
+     */
+    RETURNS("Returns: the last days to send things back", NoticeTier.HEADS_UP),
+    /**
      * Car and parking, slice 2 ([ParkingTimerRules.notices]): ten minutes before a parking timer ends — "Parking ends
      * at 15:30" · "10 min left · extend it in your parking app, or move the car". Again for an extended time.
      */
@@ -647,6 +653,7 @@ object Governor {
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
         NoticeSource.MAIL_MOMENT -> "your ten-minute inbox"
         NoticeSource.PARCELS -> if (n == 1) "a parcel out for delivery" else "$n parcels out for delivery"
+        NoticeSource.RETURNS -> if (n == 1) "a return due" else "$n returns due"
         NoticeSource.PARKING -> if (n == 1) "parking about to end" else "$n parking timers about to end"
         NoticeSource.KIDS -> if (n == 1) "sizes to check" else "$n children's sizes to check"
         NoticeSource.BARCA -> if (n == 1) "a Barça match soon" else "$n Barça matches soon"
@@ -774,7 +781,7 @@ object NoticeSources {
         }
         // The car's dates, the money dates and bills get their own reminders (Car on autopilot, UK money deadlines, Bills
         // due), not the digest line; once overdue they are summed in the digest like any renewal.
-        for (r in lists.renewals.attention.filter { it.state == RenewalState.OVERDUE || !(CarRules.isCar(it) || MoneyDateRules.isMoney(it) || BillRules.isBill(it)) }) {
+        for (r in lists.renewals.attention.filter { it.state == RenewalState.OVERDUE || !(CarRules.isCar(it) || MoneyDateRules.isMoney(it) || BillRules.isBill(it) || MailReturnRules.isReturn(it.title)) }) {
             out += Notice(
                 key = "renewal:${r.id}:${r.dueDay}", source = NoticeSource.RENEWAL, tier = NoticeTier.DIGEST,
                 title = r.title, text = r.meta, atMs = todayStart, target = NoticeTarget.LISTS,
@@ -893,6 +900,7 @@ object NoticeSources {
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
+        out += MailReturnRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)
         out += DocumentRules.notices(documents, nowMs, cal)
         if (lifeAdmin != null) out += LifeAdminRules.notices(lifeAdmin, nowMs)

@@ -22,7 +22,7 @@ class MailReturnTest {
 
     @Test
     fun aWindowInDaysCountsFromTheEmail() {
-        assertEquals(received + 30, MailReturnRules.lastDay("Order confirmed", "Total £40.00 · 30-day returns", received))
+        assertEquals(received + 30, MailReturnRules.lastDay("Order confirmed", "Total £40 · 30-day returns", received))
         assertEquals(received + 28, MailReturnRules.lastDay("Thanks for your order", "Free returns within 28 days", received))
         assertEquals(received + 14, MailReturnRules.lastDay("Your order", "You have 14 days to return any item", received))
         // An explicit date wins over a window.
@@ -60,5 +60,56 @@ class MailReturnTest {
         assertTrue(detail.endsWith("· 1 return date → Renewals"), detail)
         assertEquals(" · 2 return dates → Renewals", MailReturnRules.suffix(2))
         assertEquals("", MailReturnRules.suffix(0))
+    }
+
+    @Test
+    fun aReturnReminderReadsSentItBackAndKeepingIt() {
+        assertTrue(MailReturnRules.isReturn("Last day to return · Amazon order"))
+        assertTrue(MailReturnRules.isReturn("  last day to return · your order"))
+        assertTrue(!MailReturnRules.isReturn("Warranty ends · Currys order"))
+        assertEquals("Amazon", MailReturnRules.merchantOf("Last day to return · Amazon order"))
+        assertNull(MailReturnRules.merchantOf("Last day to return · your order"))
+        assertNull(MailReturnRules.merchantOf("Boiler service"))
+        assertEquals("Refund · Amazon order · £40", MailReturnRules.refundTitle("Amazon", 4000))
+        assertEquals("Refund · your order", MailReturnRules.refundTitle(null, null))
+        assertEquals(MailReturnRules.refundWaitId("mr1"), MailReturnRules.refundWaitId("mr1"))
+        assertTrue(MailReturnRules.refundWaitId("mr1") != MailReturnRules.refundWaitId("mr2"))
+
+        val world = os.meka.core.testing.SyncWorld()
+        var n = 0
+        val r = Renewals(world.device("android").replica, { "R${n++}" }, { world.clock.nowMs })
+        val today = world.clock.nowMs.floorDiv(CivilDate.DAY_MS)
+        r.add("Last day to return · Amazon order", ObligationKind.OTHER, today + 10, cost = "40")
+        r.add("Boiler service", ObligationKind.BOILER, today + 10, RenewalRepeat.YEARLY)
+        val ret = r.items().single { it.title.startsWith("Last") }
+        assertEquals(MailReturnRules.SENT_BACK_LABEL, ret.doneLabel)
+        assertEquals(MailReturnRules.KEEPING_LABEL, ret.stopLabel)
+        assertEquals("Serviced", r.items().single { it.title == "Boiler service" }.doneLabel)
+    }
+
+    @Test
+    fun aHeadsUpTwoDaysBeforeTheLastDayAndOnIt() {
+        val cal = LocalCalendar.UTC
+        val last = CivilDate.toEpochDay(2026, 11, 13)
+        val item = RenewalItem(
+            id = "mr1", title = "Last day to return · Amazon order", kind = ObligationKind.OTHER, subject = null, notes = null,
+            dueDay = last, cancelByDay = null, leadDays = 5, costPence = 4000, repeats = RenewalRepeat.NONE, repeatLabel = "",
+            state = RenewalState.SOON, meta = "", doneLabel = MailReturnRules.SENT_BACK_LABEL, stopLabel = MailReturnRules.KEEPING_LABEL,
+            hasConflict = false,
+        )
+        assertTrue(MailReturnRules.notices(listOf(item), cal.toEpochMs(last - 3, 600), cal).isEmpty())
+        val before = MailReturnRules.notices(listOf(item), cal.toEpochMs(last - 2, 600), cal).single()
+        assertEquals("Last day to return · Amazon order is Fri 13 Nov · £40", before.title)
+        assertEquals("In 2 days · in Lists: Sent it back or Keeping it", before.text)
+        assertEquals(NoticeSource.RETURNS, before.source)
+        assertEquals(cal.toEpochMs(last - 2, 9 * 60), before.atMs)
+        assertEquals(NoticeTarget.LISTS, before.target)
+        val tomorrow = MailReturnRules.notices(listOf(item), cal.toEpochMs(last - 1, 600), cal).single()
+        assertEquals(before.key, tomorrow.key) // the same heads-up, posted once
+        val day = MailReturnRules.notices(listOf(item), cal.toEpochMs(last, 600), cal).single()
+        assertEquals("Last day to return · Amazon order is today · £40", day.title)
+        assertTrue(day.key != before.key)
+        assertTrue(MailReturnRules.notices(listOf(item), cal.toEpochMs(last + 1, 600), cal).isEmpty())
+        assertTrue(MailReturnRules.notices(listOf(item.copy(title = "Boiler service")), cal.toEpochMs(last, 600), cal).isEmpty())
     }
 }

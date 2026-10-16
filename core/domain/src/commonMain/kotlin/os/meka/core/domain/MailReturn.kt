@@ -122,6 +122,70 @@ object MailReturnRules {
         return out
     }
 
+    // ---- Returns and warranties, completeness slice (2026-10-16): Sent it back · Keeping it, a refund to wait for ----
+
+    const val TITLE_PREFIX = "Last day to return · "
+    /** A return reminder's Done: it's gone back (a one-off, so it leaves the radar) and the refund goes on Waiting for. */
+    const val SENT_BACK_LABEL = "Sent it back"
+    /** A return reminder's Stop: he's keeping it; off the radar, nothing to wait for. */
+    const val KEEPING_LABEL = "Keeping it"
+    /** Days until the refund's first chase on Waiting for (most shops refund within two weeks of receiving it). */
+    const val REFUND_CHASE_DAYS = 14
+    /** The heads-up comes this many days before the last day, and again on it. */
+    const val REMIND_DAYS = 2
+    /** Minute of the day the heads-up comes (09:00). */
+    const val NOTICE_MIN = 9 * 60
+
+    /** Whether a radar item is a return reminder (the title the server writes, or the same words typed). */
+    fun isReturn(title: String?): Boolean = title?.trim()?.startsWith(TITLE_PREFIX.trim(), ignoreCase = true) == true
+
+    /** "Amazon" from "Last day to return · Amazon order"; null for "your order", anything else, or no shop. */
+    fun merchantOf(title: String?): String? {
+        if (!isReturn(title)) return null
+        val rest = title!!.trim().substring(TITLE_PREFIX.trim().length).trim().removePrefix("·").trim()
+        if (!rest.endsWith(" order", ignoreCase = true)) return null
+        val shop = rest.dropLast(" order".length).trim()
+        return shop.takeIf { it.isNotEmpty() && !it.equals("your", ignoreCase = true) }
+    }
+
+    /** The Waiting for row "Sent it back" adds: "Refund · Amazon order · £40", "Refund · your order". */
+    fun refundTitle(merchant: String?, pence: Long?): String =
+        "Refund · " + (merchant?.let { "$it order" } ?: "your order") + (pence?.let { " · " + RenewalRules.formatPence(it) } ?: "")
+
+    /** The refund's Waiting for id, from the reminder's, so the Fold and the Mac converge and a second tap lands on it. */
+    fun refundWaitId(obligationId: String): String = "rf" + ActivityRules.fnv64("refund:$obligationId")
+
+    /** The undo bar's line after Sent it back. */
+    fun sentBackLine(merchant: String?): String =
+        "Sent back · waiting for the refund from ${merchant ?: "the shop"} in Lists → Waiting for"
+
+    /** The undo bar's line after Keeping it. */
+    fun keepingLine(merchant: String?): String = "Keeping ${merchant?.let { "the $it order" } ?: "it"} · off the radar"
+
+    /**
+     * The heads-up for each return reminder still open: [REMIND_DAYS] days before the last day and on it, at 09:00 —
+     * "Last day to return · Amazon order is Fri 13 Nov · £40" · "In 2 days · in Lists: Sent it back or Keeping it";
+     * on the day "… is today". Nothing once it's past, done or stopped (only open items are passed in).
+     */
+    fun notices(items: List<RenewalItem>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val today = cal.epochDayOf(nowMs)
+        return items.filter { isReturn(it.title) }.mapNotNull { item ->
+            val left = (item.dueDay - today).toInt()
+            if (left !in 0..REMIND_DAYS) return@mapNotNull null
+            val at = if (left == 0) item.dueDay else item.dueDay - REMIND_DAYS
+            val dayWord = when (left) { 0 -> "today"; 1 -> "tomorrow"; else -> CivilDate.shortLabel(item.dueDay) }
+            val inWords = when (left) { 0 -> "Today"; 1 -> "Tomorrow"; else -> "In $left days" }
+            Notice(
+                key = "return:${item.id}:${item.dueDay}:${if (left == 0) "day" else "before"}",
+                source = NoticeSource.RETURNS, tier = NoticeTier.HEADS_UP,
+                title = "${item.title} is $dayWord" + (item.costPence?.let { " · ${RenewalRules.formatPence(it)}" } ?: ""),
+                text = "$inWords · in Lists: $SENT_BACK_LABEL or $KEEPING_LABEL",
+                atMs = cal.toEpochMs(at, NOTICE_MIN), target = NoticeTarget.LISTS,
+                expiresAtMs = cal.toEpochMs(item.dueDay + 1, 0),
+            )
+        }
+    }
+
     /** What a tidy's receipts line adds: " · 1 return date → Renewals"; "" for none. */
     fun suffix(count: Int): String = when {
         count <= 0 -> ""

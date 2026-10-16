@@ -13,6 +13,7 @@ tip: Nothing is sent or deleted without your tap.
 tip: Disconnect can also delete that account's mail data.
 tip: In Needs you, Draft replies drafts a reply to each email for you to read; Send all then sends the short ones, each from its own account, with Undo.
 tip: A renewal email (a subscription or policy about to renew) shows in Needs you under Renewals from your mail; Add puts it on Lists → Renewals with its day and price, Not needed clears it.
+tip: An order email that says how long you have to send it back puts "Last day to return" on Lists → Renewals, with a heads-up two days before and on the day; tap Sent it back and the refund goes on Waiting for, or Keeping it to take it off the radar.
 tip: A promise in an email (“I'll send it by Friday”) shows there too; Add puts it on Waiting for, chased the day after the day they gave.
 tip: The life audit reads the last 60 days of your mail for payments that repeat: each subscription shows in Needs you with its price, how often you paid and the next payment, and the card adds up what they cost a month; Add puts one on Lists → Renewals, Not needed clears it for good.
 tip: Mail → Life audit → Review shows what 60 days of your mail turned up as one review: what was read, your subscriptions and what they cost a month, emails waiting on you and who needs a reply, what others owe you, warranties and bills due in the next 30 days, each saying where it lives. It only counts: nothing is paid, cancelled or sent.

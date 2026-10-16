@@ -2276,7 +2276,18 @@ class MekaCore(
     suspend fun addRenewal(title: String, kind: ObligationKind, dueDay: Long, repeats: RenewalRepeat, cost: String?, cancelByDaysBefore: Int?): String =
         onCore { renewals.add(title, kind, dueDay, repeats, cost, cancelByDaysBefore) }
     /** "Renewed" / "Paid": a repeating one moves to its next due day; a one-off leaves the list. */
-    suspend fun renewalDone(id: String) = onCore { renewals.done(id) }
+    suspend fun renewalDone(id: String) = onCore {
+        // Returns and warranties, completeness: "Sent it back" on a return reminder also waits for the refund.
+        val item = renewals.items().firstOrNull { it.id == id }
+        renewals.done(id)
+        if (item != null && item.repeats == RenewalRepeat.NONE && os.meka.core.domain.MailReturnRules.isReturn(item.title)) {
+            val shop = os.meka.core.domain.MailReturnRules.merchantOf(item.title)
+            lists.addWaiting(
+                os.meka.core.domain.MailReturnRules.refundTitle(shop, item.costPence), shop,
+                os.meka.core.domain.MailReturnRules.REFUND_CHASE_DAYS, os.meka.core.domain.MailReturnRules.refundWaitId(id),
+            )
+        }
+    }
     suspend fun setRenewalDue(id: String, dueDay: Long) = onCore { renewals.setDue(id, dueDay) }
     suspend fun setRenewalRepeat(id: String, repeats: RenewalRepeat) = onCore { renewals.setRepeat(id, repeats) }
     suspend fun setRenewalCost(id: String, cost: String?) = onCore { renewals.setCost(id, cost) }
