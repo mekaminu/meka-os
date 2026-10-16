@@ -19,6 +19,8 @@ import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.ChatShadeRules
 import os.meka.core.domain.ChatTitleRules
+import os.meka.core.domain.DiscordCaptured
+import os.meka.core.domain.DiscordRules
 import os.meka.core.domain.GroupDigestRules
 import os.meka.core.domain.MessageTriageRules
 import os.meka.core.domain.RequestWatchRules
@@ -59,6 +61,16 @@ class WorkCaptureService : NotificationListenerService() {
         os.meka.android.ask.HealthDevice.noteNotification(this)
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
+        // Discord channel watch (slice 1): its own path — noted and kept for the channels he follows, never triaged,
+        // never held for after work, never sent to the AI, and never answered or cleared.
+        if (DiscordRules.isDiscord(sbn.packageName)) {
+            val posts = runCatching { readDiscord(sbn, n) }.getOrDefault(emptyList())
+            if (posts.isNotEmpty()) {
+                val meka = application as MekaApplication
+                scope.launch { runCatching { meka.core.noteDiscord(posts) } }
+            }
+            return
+        }
         val defaultSms = runCatching { Telephony.Sms.getDefaultSmsPackage(this) }.getOrNull()
         val app = NotificationRules.appFor(sbn.packageName, n.category, defaultSms) ?: return
         val meka = application as MekaApplication
@@ -194,6 +206,33 @@ class WorkCaptureService : NotificationListenerService() {
             TriageReplyRules.chatNumber(sender, null, n.shortcutId)
         } else null
         return listOf(item(app, CaptureKind.MESSAGE, sender, text!!.trim(), ChatTitleRules.cleanOrNull(group), at, number))
+    }
+
+    /**
+     * A Discord notification's posts: its MessagingStyle messages (each with its author and time) under the channel
+     * read from the conversation title, title and sub-text ([DiscordRules.channelOf]). One-to-one DMs and Meka's own
+     * posts are skipped; a notification without MessagingStyle is read as one post when it names a channel.
+     */
+    private fun readDiscord(sbn: StatusBarNotification, n: Notification): List<DiscordCaptured> {
+        if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return emptyList()
+        val extras = n.extras
+        val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+        val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+        val sub = extras.getCharSequence(Notification.EXTRA_SUB_TEXT)?.toString()
+        val at = n.`when`.takeIf { it > 0 } ?: sbn.postTime
+        val style = NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(n)
+        if (style != null && style.messages.isNotEmpty()) {
+            val channel = DiscordRules.channelOf(style.conversationTitle?.toString(), title, sub, style.isGroupConversation) ?: return emptyList()
+            return style.messages.mapNotNull { m ->
+                val author = m.person?.name?.toString()?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null // null = Meka himself
+                val body = m.text?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                DiscordCaptured(channel, author, body, m.timestamp.takeIf { it > 0 } ?: at)
+            }
+        }
+        val channel = DiscordRules.channelOf(null, title, sub, false) ?: return emptyList()
+        val author = title?.substringBefore(" (")?.trim()?.takeIf { it.isNotEmpty() && '#' !in it } ?: "Someone"
+        val body = text?.takeIf { it.isNotBlank() } ?: return emptyList()
+        return listOf(DiscordCaptured(channel, author, body, at))
     }
 
     companion object {

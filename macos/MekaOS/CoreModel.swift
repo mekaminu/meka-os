@@ -203,6 +203,10 @@ final class CoreModel {
     private(set) var mailChases: MailChaseCard?
     /// Promises, receipts and renewals, slice 1: "Renewals from your mail" — renewals to add, each only on his tap.
     private(set) var mailFinds: MailFindCard?
+    /// Discord channel watch, slice 1: one card per channel he follows with the posts the Fold kept, each with Done.
+    private(set) var discord: DiscordCards?
+    /// Discord channel watch, slice 1: Work → Discord's channels (from the Fold's notifications), each Follow / Stop.
+    private(set) var discordWatch: DiscordWatchView?
     /// Inbox autopilot, slice 7: the ten-minute inbox's card in Needs you (from the moment while emails need him).
     private(set) var mailMoment: MailMomentCard?
     /// Slice 7: the ten-minute inbox under way on this Mac (one email at a time), or nil.
@@ -462,6 +466,12 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await f in core.mailFinds { self?.mailFinds = f }
+        })
+        observers.append(Task { [weak self] in
+            for await d in core.discord { self?.discord = d }
+        })
+        observers.append(Task { [weak self] in
+            for await w in core.discordWatch { self?.discordWatch = w }
         })
         observers.append(Task { [weak self] in
             for await m in core.mailMoment { self?.mailMoment = m }
@@ -3098,6 +3108,7 @@ final class CoreModel {
         case .mailItem: run { try await $0.undoMailItem() }
         case .mailChase: run { try await $0.undoMailChase() }
         case .mailFind: run { try await $0.undoMailFind() }
+        case .discord: run { try await $0.undoDiscord() }
         case .mailMoment: run { try await $0.undoMailMoment() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
@@ -4475,6 +4486,31 @@ final class CoreModel {
         }
     }
 
+    /// Done on a Discord channel's card (Discord channel watch, slice 1): its posts leave both apps, Undo on the bar.
+    /// Only the channel's key crosses.
+    func discordDone(_ key: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.discordDone(key: key)
+                offerEventUndo(line, .discord)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Follow / Stop on Work → Discord: synced, so the Fold keeps (or drops) that channel's posts. Returns via the bar.
+    func setDiscordWatched(_ key: String, on: Bool) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                let line = try await core.setDiscordWatched(key: key, on: on)
+                offerEventUndo(line, nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Not needed on "Renewals from your mail": gone on both apps, Undo on the bar. Only the id crosses.
     func notNeededMailFind(_ id: String) {
         guard let core else { return }
@@ -4937,6 +4973,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case mailChase
         /// Add or Not needed on "Renewals from your mail": the find comes back (an added reminder comes off).
         case mailFind
+        /// Done on a Discord channel's card: its posts come back on both apps.
+        case discord
         /// Not today on the ten-minute inbox: its card comes back on both apps.
         case mailMoment
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.

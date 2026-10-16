@@ -382,6 +382,7 @@ internal fun NeedsYouColumn(
     val mailNeeds by core.mailNeeds.collectAsState()
     val mailChases by core.mailChases.collectAsState()
     val mailFinds by core.mailFinds.collectAsState()
+    val discord by core.discord.collectAsState()
     val mailMoment by core.mailMoment.collectAsState()
     val mailMomentSession by core.mailMomentSession.collectAsState()
     val gists by core.groupGists.collectAsState()
@@ -460,6 +461,13 @@ internal fun NeedsYouColumn(
         mailFinds?.let { f ->
             item(key = "mail-finds") {
                 MailFindSection(f, core, moves.undoLine,
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+            }
+        }
+        // Discord channel watch, slice 1: one card per channel he follows, its posts since he last looked, Done.
+        discord?.let { d ->
+            item(key = "discord") {
+                DiscordSection(d, core, moves.undoLine,
                     Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
             }
         }

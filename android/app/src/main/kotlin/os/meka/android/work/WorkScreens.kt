@@ -278,6 +278,8 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         )
         Spacer(Modifier.height(MekaSpace.m))
         MessagesSetupSection(core, store, listening, 8)
+        Spacer(Modifier.height(MekaSpace.m))
+        DiscordSetupSection(core, 9)
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }

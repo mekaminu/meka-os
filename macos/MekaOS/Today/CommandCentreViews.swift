@@ -69,6 +69,7 @@ struct CommandNeedsYouView: View {
                     MailMomentView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     MailNeedsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     MailChaseView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
+                    DiscordCardsView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     ArchivedForYouView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     UnopenedOfferView(palette: palette, firstIndex: 2 + model.triage.count + model.needsYouAsks + model.requests.count)
                     if model.needsYouCards.isEmpty && model.approvals.isEmpty && model.requests.isEmpty && model.triageChats.isEmpty && model.needsYouAsks == 0 {

@@ -169,6 +169,7 @@ class MekaCore(
     private val aboutYou = os.meka.core.domain.AboutYouStore(replica, nowMs)
     private val kids = os.meka.core.domain.Kids(replica, nowMs)
     private val kidChores = os.meka.core.domain.KidChores(replica)
+    private val discordStore = os.meka.core.domain.DiscordStore(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -963,6 +964,20 @@ class MekaCore(
 
     /** Takes back the last Add or Not needed on "Renewals from your mail" on this device; null after an Undo. */
     private var mailFindUndo: (() -> Unit)? = null
+
+    private val _discord = MutableStateFlow<os.meka.core.domain.DiscordCards?>(null)
+    /**
+     * Discord channel watch, slice 1: Needs you's Discord block — one card per channel he follows with the posts the
+     * Fold's listener kept since he last looked, each with Done; null when nothing is waiting. Information only.
+     */
+    val discord: StateFlow<os.meka.core.domain.DiscordCards?> = _discord.asStateFlow()
+
+    private val _discordWatch = MutableStateFlow(os.meka.core.domain.DiscordWatchView(emptyList(), "Nothing from Discord yet", os.meka.core.domain.DiscordRules.EMPTY))
+    /** Work mode → Discord on both apps: every channel Discord notified about, with Follow / Stop. */
+    val discordWatch: StateFlow<os.meka.core.domain.DiscordWatchView> = _discordWatch.asStateFlow()
+
+    /** Posts just Done on this device, hidden at once and written after the Undo window; Undo takes them back. */
+    private var discordUndo: List<String>? = null
 
     private val _mailMoment = MutableStateFlow<os.meka.core.domain.MailMomentCard?>(null)
     /**
@@ -4747,6 +4762,50 @@ class MekaCore(
     }
 
     /** Undo on the bar after Add or Not needed: the find comes back (and an added reminder comes off). */
+    // ---- Discord channel watch, slice 1 ----
+
+    private fun discordChanged() {
+        val cal = ZoneCalendar(timeZone)
+        val watched = discordStore.watched()
+        _discordWatch.value = os.meka.core.domain.DiscordRules.view(discordStore.seen(), watched, nowMs(), cal)
+        _discord.value = os.meka.core.domain.DiscordRules.cards(discordStore.posts(), watched, nowMs(), cal)
+    }
+
+    /**
+     * The Fold's listener: Discord posts read from Discord's own notifications. Every channel is noted for Work mode →
+     * Discord; only posts from channels he follows are kept (synced, so the Mac shows them). Nothing goes to the AI or
+     * back to Discord. Returns how many posts were new.
+     */
+    suspend fun noteDiscord(posts: List<os.meka.core.domain.DiscordCaptured>): Int = onCore {
+        val n = discordStore.note(posts, nowMs())
+        discordChanged()
+        n
+    }
+
+    /** Work mode → Discord: Follow (or Stop) a channel Discord notified about; synced. Returns the line for the bar. */
+    suspend fun setDiscordWatched(key: String, on: Boolean): String = onCore {
+        val (line, _) = discordStore.setWatched(key, on, nowMs())
+        discordChanged()
+        line
+    }
+
+    /** Done on a channel's card: its posts leave Needs you on both apps; Undo on the bar brings them back. */
+    suspend fun discordDone(key: String): String = onCore {
+        val card = _discord.value?.cards?.firstOrNull { it.key == key } ?: return@onCore "Already done"
+        discordStore.markDone(card.ids, true, nowMs())
+        discordUndo = card.ids
+        discordChanged()
+        os.meka.core.domain.DiscordRules.doneLine(card.title, card.ids.size)
+    }
+
+    /** Undo after Done on a Discord card: those posts are back on the card. */
+    suspend fun undoDiscord() = onCore {
+        val ids = discordUndo ?: return@onCore
+        discordUndo = null
+        discordStore.markDone(ids, false, nowMs())
+        discordChanged()
+    }
+
     suspend fun undoMailFind() = onCore {
         val undo = mailFindUndo ?: return@onCore
         mailFindUndo = null
@@ -7229,6 +7288,8 @@ class MekaCore(
         unopenedChanged()
         // Slice 6a: "From your mail" follows the synced emails, Done/Snooze on either app and the minute (a snooze ending).
         mailNeedsChanged()
+        // Discord channel watch: the cards follow the Fold's kept posts, Done on either app and the channels he follows.
+        discordChanged()
         val all = tasks.all()
         val marks = eventActions.marks(all)
         _eventMarks.value = marks

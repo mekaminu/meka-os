@@ -199,6 +199,9 @@ struct NeedsYouView: View {
                     // Renewals read from his mail (Promises, receipts and renewals, slice 1), added only on his tap.
                     MailFindView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.mailFinds == nil ? 0 : MekaSpace.m)
+                    // The channels he follows on Discord (Discord channel watch, slice 1), each with Done.
+                    DiscordCardsView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
+                        .padding(.bottom, model.discord == nil ? 0 : MekaSpace.m)
                     // What Autopilot archived (Inbox autopilot, slice 4), with the digests until Got it.
                     ArchivedForYouView(palette: palette, firstIndex: 3 + model.triage.count + model.needsYouAsks + model.requests.count)
                         .padding(.bottom, model.archivedForYou == nil ? 0 : MekaSpace.m)

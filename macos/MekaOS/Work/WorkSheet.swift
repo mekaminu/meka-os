@@ -105,6 +105,7 @@ struct WorkSheet: View {
                 .staggeredAppear(4)
 
             messages.staggeredAppear(5)
+            discordSection.staggeredAppear(5)
 
             HStack {
                 Spacer()
@@ -413,6 +414,50 @@ struct WorkSheet: View {
         }
         .padding(.top, MekaSpace.m)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showMessageDetails)
+    }
+
+    /// Work mode → Discord (Discord channel watch, slice 1): the channels the Fold's Discord notifications have named,
+    /// each with Follow / Stop (synced, so the Fold keeps only those channels' posts), how to set Discord up, and the
+    /// limits. Following changes the row's chip and line with a cross-fade.
+    private var discordSection: some View {
+        let rules = DiscordRules.shared
+        let view = model.discordWatch
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text("DISCORD").font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textTertiary)
+            Text(view?.statusLine ?? " ")
+                .font(MekaType.itemMeta)
+                .foregroundStyle((view?.rows.contains { $0.watched } ?? false) ? palette.accent : palette.textSecondary)
+                .contentTransition(.opacity)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(rules.SETUP_LINE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let empty = view?.emptyLine {
+                Text(empty).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(view?.rows ?? [], id: \.key) { row in
+                HStack(spacing: MekaSpace.m) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(row.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(row.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .contentTransition(.opacity)
+                    }
+                    Spacer()
+                    Button(row.watched ? "Following" : "Follow") { model.setDiscordWatched(row.key, on: !row.watched) }
+                        .buttonStyle(MekaPressStyle())
+                        .foregroundStyle(row.watched ? palette.accent : palette.textSecondary)
+                        .font(MekaType.itemMeta)
+                        .accessibilityLabel(row.watched ? "Stop following \(row.label)" : "Follow \(row.label)")
+                }
+            }
+            ForEach(rules.LIMITS, id: \.self) { line in
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(.top, MekaSpace.m)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: view?.rows.map(\.watched) ?? [])
     }
 
     /// Hours → each day (Places item 1): one row per work day, lit when it has its own hours; clicking a row unfolds
