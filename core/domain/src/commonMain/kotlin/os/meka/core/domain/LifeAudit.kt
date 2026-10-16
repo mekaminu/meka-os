@@ -86,11 +86,13 @@ object LifeAuditRules {
 
     /**
      * The payment an email shows, or null: it must read as a payment with one sure £ amount ([MailReceiptRules.amount])
-     * and a company, and must not say it was cancelled, failed or refunded.
+     * and a company, and must not say it was cancelled, failed or refunded, nor announce a renewal still to come.
      */
     fun payment(fromName: String?, fromAddress: String?, subject: String?, preview: String?, day: Long): AuditPayment? {
         val texts = listOfNotNull(subject, preview).filter { it.isNotBlank() }
         if (texts.isEmpty() || texts.none { PAYMENT.containsMatchIn(it) } || texts.any { STOPPED.containsMatchIn(it) }) return null
+        // A notice of a renewal still to come is Renewals from your mail's, not a payment.
+        if (MailRenewalRules.read(fromName, fromAddress, subject, preview, day) != null) return null
         val pence = MailReceiptRules.amount(subject, preview) ?: return null
         val merchant = MailReceiptRules.merchant(fromName, fromAddress) ?: return null
         val all = texts.joinToString(" ")

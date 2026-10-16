@@ -25,6 +25,7 @@ class LifeAuditTest {
         assertNull(pay("Your refund", "We've refunded £10.99", d(10, 8)))
         assertNull(pay("Payment failed", "We couldn't take £10.99", d(10, 8)))
         assertNull(pay("New films this week", "From £3.99", d(10, 8))) // not a payment
+        assertNull(pay("Your membership renews soon", "It renews on 3 Nov for £10.99 a month", d(10, 8))) // a renewal notice
         assertTrue(LifeAuditRules.stopped("Your membership was cancelled", null))
     }
 
