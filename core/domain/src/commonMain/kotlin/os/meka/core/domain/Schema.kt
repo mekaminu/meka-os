@@ -137,6 +137,8 @@ object EntityTypes {
     const val MONEY_RULE = "money_rule"
     /** Money manager, slice 2 (2026-10-16): one kind of money tip he hid ("habit", "over", "rise"), id the kind (see [MoneyTips]). */
     const val MONEY_TIPS = "money_tips"
+    /** Money manager, slice 3 (2026-10-16): one watchdog alert he put away ("That's fine"), id the alert's id (see [MoneyWatch]). */
+    const val MONEY_ALERT = "money_alert"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -147,7 +149,7 @@ object EntityTypes {
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
-        FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS,
+        FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT,
     )
 }
 
@@ -527,6 +529,7 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.MONEY_TXN -> MergePolicy.Lww
         entityType == EntityTypes.MONEY_RULE -> MergePolicy.Lww
         entityType == EntityTypes.MONEY_TIPS -> MergePolicy.Lww
+        entityType == EntityTypes.MONEY_ALERT -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

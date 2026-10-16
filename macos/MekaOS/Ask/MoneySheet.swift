@@ -13,6 +13,9 @@ import UniformTypeIdentifiers
 /// Slice 2: this month also shows tips from his own numbers (each with Hide tips like this, Undo, Show them again)
 /// and his regular payments with their monthly total.
 ///
+/// Slice 3: this month leads with WORTH A LOOK (a possible double charge, a payment much bigger than usual or a first big
+/// one, fees), each with That's fine (both devices, Undo); Navilife never acts on them.
+///
 /// Locking: the core holds no figures for the screen until `openMoney()` after Touch ID's yes; the sheet closing, the
 /// screen sleeping or the session locking calls `closeMoney()`.
 ///
@@ -90,6 +93,12 @@ struct MoneySheet: View {
             if let vs = m.vsLine {
                 Text(vs).font(MekaType.caption).foregroundStyle(m.vsLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
             }
+            if !v.alerts.isEmpty {
+                Text(MoneyWatch.shared.head(n: Int32(v.alerts.count))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.xs).contentTransition(.opacity)
+                ForEach(v.alerts, id: \.id) { a in alert(a).transition(.opacity) }
+                Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
             if !v.tips.isEmpty {
                 Text("TIPS FROM YOUR NUMBERS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(v.tips, id: \.id) { t in tip(t).transition(.opacity) }
@@ -120,6 +129,26 @@ struct MoneySheet: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: m.label)
+    }
+
+    /// Slice 3: one payment worth a look, with That's fine (Undo in the line below).
+    private func alert(_ a: MoneyAlert) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(a.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(a.line).font(MekaType.caption).foregroundStyle(a.lit ? palette.accent : palette.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(a.spoken)
+            Button(MoneyWatch.shared.FINE) {
+                let id = a.id
+                Task { said = await model.moneyAlertFine(alertId: id) }
+            }
+            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
     }
 
     /// Slice 2: one tip from his own numbers, with Hide tips like this (Undo in the line below).

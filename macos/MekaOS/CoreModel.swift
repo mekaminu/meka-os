@@ -3269,6 +3269,17 @@ final class CoreModel {
         }
     }
 
+    /// Slice 3: That's fine on one watchdog alert, on both devices; Undo with `undoMoneyCategory`.
+    func moneyAlertFine(alertId: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyAlertFine(alertId: alertId))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 2: every hidden kind of tip shown again.
     func showMoneyTips() async -> MoneySaid? {
         guard let core else { return nil }

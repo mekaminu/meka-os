@@ -1789,6 +1789,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(MoneyView.companion.LOCKED.tips.isEmpty)
     }
 
+    func testMoneyWatchReachesSwift() {
+        // Money manager, slice 3: the watchdog's words and head cross to Swift; a locked screen has no alerts.
+        XCTAssertEqual(MoneyWatch.shared.FINE, "That's fine")
+        XCTAssertEqual(MoneyWatch.shared.head(n: 2), "WORTH A LOOK · 2")
+        XCTAssertEqual(MoneyAlertKind.duplicate.key, "double")
+        XCTAssertTrue(MoneyView.companion.LOCKED.alerts.isEmpty)
+    }
+
     func testKidsRulesReachSwift() {
         // Kids' admin, slice 1: a size is tidied, both apps write the same child, no children → About you first.
         let rules = KidsRules.shared

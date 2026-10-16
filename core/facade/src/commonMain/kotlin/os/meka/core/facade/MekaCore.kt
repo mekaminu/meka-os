@@ -675,10 +675,15 @@ class MekaCore(
         if (!moneyOpen) moneyLocked() else money.showTips().also { refreshMoney() }
     }
 
+    /** Slice 3: "That's fine" on one watchdog alert, on both devices; Undo by [undoMoneyCategory]. */
+    suspend fun moneyAlertFine(alertId: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.alertFine(alertId).also { refreshMoney() }
+    }
+
     private fun refreshMoney() {
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
-            money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(),
+            money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
         )
     }
 

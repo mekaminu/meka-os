@@ -47,6 +47,12 @@ object MoneyTipsFields {
     const val HIDDEN = "hidden"
 }
 
+/** Slice 3: one watchdog alert he put away, id the alert's id ([MoneyWatch]). */
+object MoneyAlertFields {
+    /** True once he said "That's fine"; false after Undo; Null after Delete all money data. */
+    const val FINE = "fine"
+}
+
 object MoneyRuleFields {
     const val MERCHANT = "merchant"
     /** A [MoneyCategory.key]; Null when the correction was taken back. */
@@ -382,6 +388,8 @@ data class MoneyView(
     val regular: MoneyRegular? = null,
     /** Slice 2: "Hidden: tips on habits" with Show them again; null when nothing is hidden. */
     val hiddenTips: String? = null,
+    /** Slice 3: payments worth a second look ([MoneyWatch]), shown with this month only. */
+    val alerts: List<MoneyAlert> = emptyList(),
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -473,7 +481,7 @@ object MoneyRules {
      */
     fun view(
         accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>, today: Long, cal: LocalCalendar, offset: Int,
-        hiddenTips: Set<String> = emptySet(),
+        hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
@@ -556,6 +564,9 @@ object MoneyRules {
             tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),
             regular = MoneyTips.regularView(regular),
             hiddenTips = MoneyTips.hiddenLine(hiddenTips),
+            alerts = if (partial) MoneyWatch.alerts(
+                mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) }, today, names, fineAlerts,
+            ) else emptyList(),
         )
     }
 
@@ -569,7 +580,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -603,6 +614,17 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         val kind = MoneyTipKind.of(kindKey) ?: return MoneySaved(MoneyRules.GONE, refused = true)
         replica.commitLocal(EntityTypes.MONEY_TIPS, kind.key, mapOf(MoneyTipsFields.HIDDEN to true.fv()))
         return MoneySaved(MoneyTips.hiddenSaid(kind), undo = TIPS_UNDO + kind.key)
+    }
+
+    /** Slice 3: the watchdog alerts he put away. */
+    fun fineAlerts(): Set<String> = replica.entities(EntityTypes.MONEY_ALERT)
+        .filter { it[MoneyAlertFields.FINE].boolOrNull == true }.map { it.ref.entityId }.toSet()
+
+    /** "That's fine" on one alert: put away on both devices; Undo (by [undoCategory] with the token) brings it back. */
+    fun alertFine(alertId: String): MoneySaved {
+        if (!alertId.startsWith("w") || alertId.length > 40) return MoneySaved(MoneyRules.GONE, refused = true)
+        replica.commitLocal(EntityTypes.MONEY_ALERT, alertId, mapOf(MoneyAlertFields.FINE to true.fv()))
+        return MoneySaved(MoneyWatch.FINE_SAID, undo = ALERT_UNDO + alertId)
     }
 
     /** Shows every hidden kind of tip again. */
@@ -661,6 +683,12 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(ALERT_UNDO)) {
+            val id = token.removePrefix(ALERT_UNDO)
+            if (replica.entity(EntityTypes.MONEY_ALERT, id) == null) return false
+            replica.commitLocal(EntityTypes.MONEY_ALERT, id, mapOf(MoneyAlertFields.FINE to false.fv()))
+            return true
+        }
         if (token.startsWith(TIPS_UNDO)) {
             val kind = MoneyTipKind.of(token.removePrefix(TIPS_UNDO)) ?: return false
             replica.commitLocal(EntityTypes.MONEY_TIPS, kind.key, mapOf(MoneyTipsFields.HIDDEN to false.fv()))
@@ -700,6 +728,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 ))
             }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
+            replica.entities(EntityTypes.MONEY_ALERT).forEach { replica.commitLocal(EntityTypes.MONEY_ALERT, it.ref.entityId, mapOf(MoneyAlertFields.FINE to FieldValue.Null)) }
             rules.forEach {
                 replica.commitLocal(EntityTypes.MONEY_RULE, it.ref.entityId, mapOf(
                     MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null,

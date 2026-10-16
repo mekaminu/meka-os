@@ -481,3 +481,5 @@ Addendum 2026-10-13 (spam calls still ring, slice 4): additive fields on `blocke
 
 *Addendum, 2026-10-16 (Money manager, slice 2: tips):* one new synced entity type `money_tips`, LWW: id a tip kind (`habit`, `over`, `rise`), `hidden` (Bool: true while he has that kind of tip hidden; false after Undo or Show them again; Null after Delete all money data). The tips and regular payments themselves are worked out on the device from `money_txn` and never stored. No migration.
 
+*Addendum, 2026-10-16 (Money manager, slice 3: the watchdog):* one new synced entity type `money_alert`, LWW: id a watchdog alert's id (`w<hash>` of its kind and the statement lines' ids, so it never carries an amount or a shop), `fine` (Bool: true once he said "That's fine"; false after Undo; Null after Delete all money data). The alerts themselves are worked out on the device from `money_txn` and never stored. No migration.
+

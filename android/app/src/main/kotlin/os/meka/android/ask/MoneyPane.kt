@@ -57,6 +57,7 @@ import os.meka.android.lists.Field
 import os.meka.android.security.FoldBiometric
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.MoneyAlert
 import os.meka.core.domain.MoneyCategoryRow
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
@@ -64,6 +65,7 @@ import os.meka.core.domain.MoneySaved
 import os.meka.core.domain.MoneyTip
 import os.meka.core.domain.MoneyTips
 import os.meka.core.domain.MoneyTxnRow
+import os.meka.core.domain.MoneyWatch
 import os.meka.core.facade.MekaCore
 
 /**
@@ -72,6 +74,9 @@ import os.meka.core.facade.MekaCore
  * the 6 months before, each category with its share as a bar (brass when well over its average), and the month's
  * payments; tap one to put that shop in another category from now on (Undo). Import: name the account, pick the CSV file
  * from the bank. Remove an account (tap twice), Delete all money data (asks first). Read-only; nothing is ever paid.
+ *
+ * Slice 3: this month leads with **WORTH A LOOK**: a possible double charge, a payment much bigger than usual or a first big
+ * one, and fees (foreign, late, interest), each with "That's fine" (on both devices, Undo); Navilife never acts on them.
  *
  * Locking: the core holds no figures for the screen until [MekaCore.openMoney] after the prompt's yes, and closing the
  * pane (or leaving it) calls [MekaCore.closeMoney].
@@ -174,6 +179,25 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                             Text(l, style = MekaType.caption, color = c)
                         }
                     }
+                }
+            }
+            // Slice 3: payments worth a second look (this month only), before the tips.
+            if (v.alerts.isNotEmpty()) {
+                item(key = "alerts-head") {
+                    Crossfade(MoneyWatch.head(v.alerts.size), animationSpec = MekaMotion.appear(reduced), label = "money-alerts-head",
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m)) { h ->
+                        Text(h, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    }
+                }
+                v.alerts.forEachIndexed { i, a ->
+                    item(key = "alert-${a.id}") {
+                        AlertCard(a, Modifier.animateItem().appear(rememberAppearance(4 + i))) {
+                            scope.launch { runCatching { core.moneyAlertFine(a.id) }.getOrNull()?.let(say) }
+                        }
+                    }
+                }
+                item(key = "alerts-foot") {
+                    Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
                 }
             }
             // Slice 2: tips from his own numbers, then his regular payments (this month only).
@@ -419,5 +443,22 @@ private fun RegularRow(r: MoneyRegularRow, modifier: Modifier) {
             Text(r.line, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
         }
         Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+    }
+}
+
+@Composable
+private fun AlertCard(a: MoneyAlert, modifier: Modifier, onFine: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (a.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-alert-${a.id}")
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = a.spoken }) {
+            Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            Text(a.line, style = MekaType.caption, color = c)
+        }
+        Text(MoneyWatch.FINE, style = MekaType.caption, color = Meka.colors.accent,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFine).minTouch())
     }
 }

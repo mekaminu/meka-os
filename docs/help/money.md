@@ -1,7 +1,7 @@
 ---
 id: money
 title: Money
-keywords: money, money tips, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
+keywords: money, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
 data: yes
 fold: MONEY
 fold_where: Ask → Life → Money
@@ -18,3 +18,5 @@ tip: Remove takes one account and its transactions off every device; Delete all 
 tip: Connecting your banks directly (read-only, through Open Banking) comes once it's set up; a statement file works for any bank or card meanwhile.
 tip: This month also shows tips from your own numbers: a habit and what halving it would save ("Coffee 19× · £71 in the last 30 days"), a category already well over its 6-month average, and a regular payment that went up. Hide tips like this turns that kind off on both devices (Undo, or Show them again later).
 tip: Regular payments lists what's taken about once a month for about the same amount (subscriptions, the gym, bills), with when it was last taken, when it's next due and the monthly and yearly total.
+tip: Worth a look leads this month when a payment deserves a second look: the same amount at the same shop twice within a day, a payment much bigger than usual or a first big one somewhere new, and fees (foreign, late, interest).
+tip: Not you? Your bank's app can stop or dispute it; Navilife never acts on your accounts. That's fine puts an alert away on both devices, with Undo.

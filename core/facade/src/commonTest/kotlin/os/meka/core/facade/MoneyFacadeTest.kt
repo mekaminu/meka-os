@@ -110,4 +110,29 @@ class MoneyFacadeTest {
         assertTrue(fold.undoMoneyCategory(again.undo!!))
         assertEquals(1, fold.moneyView.value.tips.count { it.kind == "habit" })
     }
+    @Test
+    fun anAlertPutAwayOnTheFoldIsAwayOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // The same £23.40 at the same shop twice on Tue 13 Oct.
+        val csv = "Date,Description,Amount\n13/10/2026,AMAZON MARKETPLACE,-23.40\n13/10/2026,AMAZON MARKETPLACE,-23.40\n"
+        assertTrue(fold.moneyAlertFine("w1").refused) // locked
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        val a = fold.moneyView.value.alerts.single()
+        assertEquals("Possibly charged twice · Amazon Marketplace", a.title)
+        assertEquals("£23.40 twice on Tue 13 Oct · Current account", a.line)
+        val fine = fold.moneyAlertFine(a.id)
+        assertEquals("Put away · on both devices", fine.line)
+        assertTrue(fold.moneyView.value.alerts.isEmpty())
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertTrue(mac.moneyView.value.alerts.isEmpty())
+        // Undo brings it back.
+        assertTrue(fold.undoMoneyCategory(fine.undo!!))
+        assertEquals(1, fold.moneyView.value.alerts.size)
+        // Delete all money data clears it on both.
+        fold.deleteAllMoney()
+        assertTrue(fold.moneyView.value.alerts.isEmpty())
+    }
 }
