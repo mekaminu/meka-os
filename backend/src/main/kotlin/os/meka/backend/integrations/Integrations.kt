@@ -1363,7 +1363,6 @@ class Integrations(
         // Completeness: a provider failure part-way still records (with Undo) what moved; the rest are tried next check.
         val moved = m.tidyKept(token, plan.associate { (h, t) -> h.id to t }).first
         val done = plan.filter { (h, _) -> h.id in moved }
-        check?.autopilot = "planned ${plan.size}, moved ${done.size}"
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
         if (setting.markRead) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
@@ -1427,7 +1426,6 @@ class Integrations(
         }
         val (moved, _) = m.tidyKept(token, plan.associate { (h, t) -> h.id to t })
         val done = plan.filter { (h, _) -> h.id in moved }
-        check?.autopilot = "planned ${plan.size}, moved ${done.size}"
         if (done.isEmpty()) return
         ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
         if (markingRead(hh)) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
