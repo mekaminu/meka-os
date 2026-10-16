@@ -392,6 +392,8 @@ data class MoneyView(
     val alerts: List<MoneyAlert> = emptyList(),
     /** Slice 4: the forecast at his pace with what-ifs ([MoneyForecast]), shown with this month only. */
     val forecast: MoneyForecastView? = null,
+    /** Slice 5: refunds on Waiting for checked against his statements ([MoneyRefunds]), shown with this month only. */
+    val refunds: MoneyRefundsView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -484,6 +486,7 @@ object MoneyRules {
     fun view(
         accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>, today: Long, cal: LocalCalendar, offset: Int,
         hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(), whatIf: MoneyWhatIf = MoneyWhatIf(),
+        refundWaits: List<WaitingItem> = emptyList(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
@@ -561,15 +564,15 @@ object MoneyRules {
         // Slice 2: tips and regular payments go with this month (they're about now, not the month shown).
         val lines = if (partial) mine.map { MoneyLine(it.day, it.pence, keyOf(it), cat(it)) } else emptyList()
         val regular = if (partial) MoneyTips.regular(lines, today) else emptyList()
+        val watch = if (partial) mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) } else emptyList()
         return MoneyView(
             false, summary, null, month, accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
             tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),
             regular = MoneyTips.regularView(regular),
             hiddenTips = MoneyTips.hiddenLine(hiddenTips),
-            alerts = if (partial) MoneyWatch.alerts(
-                mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) }, today, names, fineAlerts,
-            ) else emptyList(),
+            alerts = if (partial) MoneyWatch.alerts(watch, today, names, fineAlerts) else emptyList(),
             forecast = if (partial) MoneyForecast.view(lines, today, whatIf) else null,
+            refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
         )
     }
 

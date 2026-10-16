@@ -137,6 +137,38 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun aRefundBackInTheStatementClosesOnBothDevicesWithUndo() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Waiting since Fri 9 Oct for £40 from Amazon; the statement has it back on Thu 15 Oct.
+        now -= 7 * 86_400_000L
+        val wid = fold.addWaiting("Refund · Amazon order · £40", "Amazon", null)
+        now += 7 * 86_400_000L
+        val csv = "Date,Description,Amount\n01/10/2026,AMAZON.CO.UK,-40.00\n15/10/2026,AMAZON.CO.UK,40.00\n16/10/2026,COSTA COFFEE,-3.20\n"
+        assertTrue(fold.moneyRefundClose(wid).refused) // locked
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        val r = fold.moneyView.value.refunds!!.rows.single()
+        assertEquals(os.meka.core.domain.MoneyRefunds.BACK, r.state)
+        assertEquals("+£40 from Amazon.co.uk on Thu 15 Oct · Current account", r.line)
+        val closed = fold.moneyRefundClose(wid)
+        assertEquals("Closed Refund · Amazon order · £40 · it's back in your statement", closed.line)
+        assertTrue(fold.moneyView.value.refunds == null)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertTrue(mac.moneyView.value.refunds == null)
+        // Undo puts the row back on Waiting for, here and on the Mac.
+        assertTrue(fold.undoMoneyCategory(closed.undo!!))
+        assertEquals(1, fold.moneyView.value.refunds!!.rows.size)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(1, mac.moneyView.value.refunds!!.rows.size)
+        // A stale token does nothing.
+        assertFalse(fold.undoMoneyCategory(closed.undo!!))
+        // Copy the chase marks it chased (it isn't late here, but he can still copy one from a late row).
+        assertEquals("Chase copied · paste it to the shop · next look Fri 23 Oct", fold.moneyRefundChased(wid).line)
+    }
+
+    @Test
     fun theForecastsWhatIfsStayOnThisDeviceAndGoWhenMoneyLocks() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

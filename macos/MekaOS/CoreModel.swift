@@ -3294,6 +3294,28 @@ final class CoreModel {
         }
     }
 
+    /// Slice 5: Close it on a refund that's back in his statement (Waiting for's row as received); Undo with `undoMoneyCategory`.
+    func moneyRefundClose(waitingId: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyRefundClose(waitingId: waitingId))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 5: after Copy the chase put the words on the pasteboard, marks the refund chased (next look in a week).
+    func moneyRefundChased(waitingId: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyRefundChased(waitingId: waitingId))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 2: every hidden kind of tip shown again.
     func showMoneyTips() async -> MoneySaid? {
         guard let core else { return nil }

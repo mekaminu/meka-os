@@ -654,7 +654,50 @@ class MekaCore(
     }
 
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
-        moneyOpen && money.undoCategory(token).also { refreshMoney() }
+        if (!moneyOpen) return@onCore false
+        if (token.startsWith(moneyRefundUndoPrefix)) {
+            val undo = moneyRefundUndo.takeIf { token == it.first }?.second ?: return@onCore false
+            moneyRefundUndo = "" to null
+            undo()
+            refresh()
+            return@onCore true
+        }
+        money.undoCategory(token).also { refreshMoney() }
+    }
+
+    private val moneyRefundUndoPrefix = "refund|"
+    // Slice 5: the last Close it on a refund, undone by its token (Waiting for's row back as it was).
+    private var moneyRefundUndo: Pair<String, (() -> Unit)?> = "" to null
+
+    /**
+     * Slice 5: **Close it** on a refund that's back in his statement — the Waiting for row leaves the list as received,
+     * on both devices; Undo (by [undoMoneyCategory] with the result's token) puts it back as it was. Only while Money is
+     * open and only for a row the refunds section shows as back.
+     */
+    suspend fun moneyRefundClose(waitingId: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val row = _money.value.refunds?.rows?.firstOrNull { it.id == waitingId && it.state == os.meka.core.domain.MoneyRefunds.BACK }
+        val w = lists.waitingItems().firstOrNull { it.id == waitingId }
+        if (row == null || w == null) return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        val before = chaseState(w.id)
+        lists.received(w.id)
+        val token = moneyRefundUndoPrefix + w.id
+        val undo: () -> Unit = { replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, w.id, before) }
+        moneyRefundUndo = token to undo
+        refresh()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRefunds.closedSaid(w.title), undo = token)
+    }
+
+    /**
+     * Slice 5: **Copy the chase** — the app has put the drafted chase on the clipboard; this marks the refund chased on
+     * Waiting for (next look in a week). Navilife sends nothing.
+     */
+    suspend fun moneyRefundChased(waitingId: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        if (lists.waitingItems().none { it.id == waitingId }) return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        lists.chased(waitingId, os.meka.core.domain.MoneyRefunds.AGAIN_DAYS)
+        refresh()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRefunds.chasedSaid(todayEpochDay()))
     }
 
     /** Takes [accountId] and its transactions off every device. */
@@ -704,7 +747,7 @@ class MekaCore(
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf,
+            moneyWhatIf, lists.waitingItems(),
         )
     }
 

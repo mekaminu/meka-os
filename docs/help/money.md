@@ -1,7 +1,7 @@
 ---
 id: money
 title: Money
-keywords: money, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
+keywords: money, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
 data: yes
 fold: MONEY
 fold_where: Ask → Life → Money
@@ -22,3 +22,4 @@ tip: Worth a look leads this month when a payment deserves a second look: the sa
 tip: Not you? Your bank's app can stop or dispute it; Navilife never acts on your accounts. That's fine puts an alert away on both devices, with Undo.
 tip: Forecast at your pace takes your average whole month (what comes in, what goes out, what's left over) and says where that leaves you in 6 and 12 months. It needs two whole months of statements; it's an average, not a promise, and not financial advice.
 tip: What if: tap Halve on one of your biggest everyday categories, or type an extra amount a month (£200, £50 a week, £1,200 a year), and the 6- and 12-month lines say how much more it would leave you. What-ifs stay on the device you're using and go when Money locks.
+tip: Refunds on the way lists each refund on Waiting for and checks your statements for it: when the shop's money is back, Close it takes it off Waiting for (Undo). Two weeks on with nothing back, it lights and drafts a chase; Copy the chase puts it on the clipboard for you to send in the shop's chat or email, and marks it chased. Navilife never sends it.

@@ -1806,6 +1806,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MoneyView.companion.LOCKED.forecast)
     }
 
+    func testMoneyRefundsReachSwift() {
+        // Money manager, slice 5: the refunds section's words cross to Swift; a locked screen has none.
+        XCTAssertEqual(MoneyRefunds.shared.HEAD, "REFUNDS ON THE WAY")
+        XCTAssertEqual(MoneyRefunds.shared.CLOSE, "Close it")
+        XCTAssertEqual(MoneyRefunds.shared.BACK, "back")
+        XCTAssertNil(MoneyView.companion.LOCKED.refunds)
+    }
+
     func testKidsRulesReachSwift() {
         // Kids' admin, slice 1: a size is tidied, both apps write the same child, no children → About you first.
         let rules = KidsRules.shared

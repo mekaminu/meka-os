@@ -62,6 +62,8 @@ import os.meka.core.domain.MoneyCategoryRow
 import os.meka.core.domain.MoneyForecast
 import os.meka.core.domain.MoneyForecastRow
 import os.meka.core.domain.MoneyForecastView
+import os.meka.core.domain.MoneyRefundRow
+import os.meka.core.domain.MoneyRefunds
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneySaved
@@ -80,6 +82,9 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 3: this month leads with **WORTH A LOOK**: a possible double charge, a payment much bigger than usual or a first big
  * one, and fees (foreign, late, interest), each with "That's fine" (on both devices, Undo); Navilife never acts on them.
+ *
+ * Slice 5: **REFUNDS ON THE WAY** — each refund on Waiting for, back in his statement (Close it, Undo) or not yet, and after
+ * two weeks a chase to copy (Copy the chase marks it chased; he sends it himself, Navilife sends nothing).
  *
  * Slice 4: **FORECAST AT YOUR PACE** — his average whole month (in, out, left over) and where that leaves him in 6 and 12
  * months; what-ifs (halve one of his three biggest everyday categories, an extra amount a month he types) live on this
@@ -205,6 +210,31 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 item(key = "alerts-foot") {
                     Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                }
+            }
+            // Slice 5: refunds on Waiting for, checked against his statements (this month only).
+            v.refunds?.let { rf ->
+                item(key = "refunds-head") {
+                    Crossfade(rf.head, animationSpec = MekaMotion.appear(reduced), label = "money-refunds-head",
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m)) { h ->
+                        Text(h, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    }
+                }
+                rf.rows.forEachIndexed { i, r ->
+                    item(key = "refund-${r.id}") {
+                        RefundCard(r, Modifier.animateItem().appear(rememberAppearance(4 + i)),
+                            onClose = { scope.launch { runCatching { core.moneyRefundClose(r.id) }.getOrNull()?.let(say) } },
+                            onCopy = { chase ->
+                                val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                                cm?.setPrimaryClip(android.content.ClipData.newPlainText("Refund chase", chase))
+                                scope.launch { runCatching { core.moneyRefundChased(r.id) }.getOrNull()?.let(say) }
+                            })
+                    }
+                }
+                rf.foot?.let { f ->
+                    item(key = "refunds-foot") {
+                        Text(f, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                    }
                 }
             }
             // Slice 2: tips from his own numbers, then his regular payments (this month only).
@@ -482,6 +512,36 @@ private fun AlertCard(a: MoneyAlert, modifier: Modifier, onFine: () -> Unit) {
         }
         Text(MoneyWatch.FINE, style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFine).minTouch())
+    }
+}
+
+/** Slice 5: one refund — Close it when it's back in his statement, the chase to copy when it's late (he sends it). */
+@Composable
+private fun RefundCard(r: MoneyRefundRow, modifier: Modifier, onClose: () -> Unit, onCopy: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (r.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-refund-${r.id}")
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+            Text(r.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-refund-line-${r.id}") { l ->
+                Text(l, style = MekaType.caption, color = c)
+            }
+        }
+        if (r.state == MoneyRefunds.BACK) {
+            Text(MoneyRefunds.CLOSE, style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClose).minTouch())
+        }
+        r.chase?.let { chase ->
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(chase, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(MoneyRefunds.COPY, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onCopy(chase) }.minTouch())
+                Text(MoneyRefunds.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
     }
 }
 

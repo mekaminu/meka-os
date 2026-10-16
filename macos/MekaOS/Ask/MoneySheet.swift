@@ -16,6 +16,9 @@ import UniformTypeIdentifiers
 /// Slice 3: this month leads with WORTH A LOOK (a possible double charge, a payment much bigger than usual or a first big
 /// one, fees), each with That's fine (both devices, Undo); Navilife never acts on them.
 ///
+/// Slice 5: REFUNDS ON THE WAY — each refund on Waiting for, back in his statement (Close it, Undo) or not yet, and after
+/// two weeks a chase to copy (Copy the chase marks it chased; he sends it himself).
+///
 /// Locking: the core holds no figures for the screen until `openMoney()` after Touch ID's yes; the sheet closing, the
 /// screen sleeping or the session locking calls `closeMoney()`.
 ///
@@ -99,6 +102,12 @@ struct MoneySheet: View {
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
                 ForEach(v.alerts, id: \.id) { a in alert(a).transition(.opacity) }
                 Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            if let r = v.refunds {
+                Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.xs).contentTransition(.opacity)
+                ForEach(r.rows, id: \.id) { row in refund(row).transition(.opacity) }
+                if let f = r.foot { Text(f).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             }
             if !v.tips.isEmpty {
                 Text("TIPS FROM YOUR NUMBERS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
@@ -204,6 +213,43 @@ struct MoneySheet: View {
                 Task { said = await model.moneyAlertFine(alertId: id) }
             }
             .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+
+    /// Slice 5: one refund on Waiting for, checked against his statements: Close it when it's back (Undo in the line
+    /// below), the chase to copy when it's late (he sends it himself; Navilife sends nothing).
+    private func refund(_ r: MoneyRefundRow) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(r.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(r.line).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(r.spoken)
+            if r.state == MoneyRefunds.shared.BACK {
+                Button(MoneyRefunds.shared.CLOSE) {
+                    let id = r.id
+                    Task { said = await model.moneyRefundClose(waitingId: id) }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+            }
+            if let chase = r.chase {
+                Text(chase).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                Button(MoneyRefunds.shared.COPY) {
+                    let pb = NSPasteboard.general
+                    pb.clearContents()
+                    pb.setString(chase, forType: .string)
+                    let id = r.id
+                    Task { said = await model.moneyRefundChased(waitingId: id) }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                Text(MoneyRefunds.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
         }
         .padding(MekaSpace.m)
         .frame(maxWidth: .infinity, alignment: .leading)
