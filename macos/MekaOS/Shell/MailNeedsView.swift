@@ -38,6 +38,12 @@ struct MailNeedsView: View {
                             Text(card.headline).font(MekaType.body).foregroundStyle(palette.textPrimary)
                                 .contentTransition(.opacity)
                                 .animation(MekaMotion.expand(reduced: reduceMotion), value: card.headline)
+                            // Drafted replies: "3 emails need a reply · 2 drafted" (cross-fades as drafts go).
+                            if let replies = card.replyLine {
+                                Text(replies).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                                    .contentTransition(.opacity)
+                                    .animation(MekaMotion.expand(reduced: reduceMotion), value: replies)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())
@@ -61,7 +67,8 @@ struct MailNeedsView: View {
                                                  incoming: incoming[row.id],
                                                  onEditor: { t in texts[row.id] = t },
                                                  suggestTimes: { await model.suggestMeetingTimes(row.id) },
-                                                 book: { model.bookMeetingPick(row.id) })
+                                                 book: { model.bookMeetingPick(row.id) },
+                                                 notNeeded: { model.dismissMailDraft(row.id) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -176,8 +183,11 @@ struct MailNeedsRowView: View {
     var suggestTimes: (@MainActor () async -> (text: String?, line: String))? = nil
     /// Scheduling assistant, slice 2: Book the time their reply picked from his offer (nil: not offered here).
     var book: (() -> Void)? = nil
+    /// Drafted replies: Not needed on Navilife's draft (nil: not offered here).
+    var notNeeded: (() -> Void)? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var replying = false
+    @State private var fullDraft = false
     @State private var text = ""
     @State private var lastDraft: String?
     @State private var draftLine: String?
@@ -215,9 +225,21 @@ struct MailNeedsRowView: View {
                 if let notice = row.notice {
                     Text(notice).font(MekaType.itemMeta).foregroundStyle(palette.critical)
                 }
+                // Drafted replies: what they want, in their words.
+                if let wants = row.wants {
+                    let needs = MailAutoDraftRules.shared.NEEDS_REPLY
+                    Text(wants == needs ? wants : "\(needs) · \(wants)")
+                        .font(MekaType.itemMeta).foregroundStyle(palette.accent).lineLimit(2)
+                }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.spoken)
+            // Drafted replies: Navilife's draft, ready to Send (his click), Edit or put away; it unfolds on the expand
+            // spring and folds away once he edits, sends or says Not needed (reduced motion: cross-fade).
+            if let auto = row.autoDraft, !replying {
+                autoDraftBox(auto)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
             // Slice 6c: the emails linked to this one fold under it; the line unfolds them. Done, Snooze, Task and
             // Waiting for take them all, and one Undo brings them back.
             if let linkedLine = row.linkedLine {
@@ -289,6 +311,8 @@ struct MailNeedsRowView: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: replying)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showLinked)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: row.autoDraft)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: fullDraft)
         .onAppear {
             // A reply that didn't send opens again with his words.
             if let draft = row.replyDraft { text = draft; replying = true }
@@ -307,6 +331,42 @@ struct MailNeedsRowView: View {
 }
 
 extension MailNeedsRowView {
+    /// Drafted replies: the draft (four lines, click for all of it), its line, and Send · Edit · Not needed · Remind me later.
+    @ViewBuilder
+    fileprivate func autoDraftBox(_ auto: String) -> some View {
+        let R = MailAutoDraftRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button { MekaHaptics.tick(); fullDraft.toggle() } label: {
+                Text(auto).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .lineLimit(fullDraft ? nil : 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Navilife's draft reply to \(row.from): \(auto)")
+            Text(R.DRAFT_LABEL).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+            HStack(spacing: MekaSpace.xs) {
+                MailNeedsPill(label: R.SEND, palette: palette, spoken: "Send Navilife's draft to \(row.from) now",
+                              action: { send(auto) {} })
+                MailNeedsPill(label: R.EDIT, palette: palette, quiet: true, spoken: "Edit the draft before sending",
+                              action: {
+                                  MekaHaptics.light()
+                                  text = auto; lastDraft = auto; draftLine = MailDraftRules.shared.DRAFTED_LINE; replying = true
+                              })
+                if let notNeeded {
+                    MailNeedsPill(label: R.NOT_NEEDED, palette: palette, quiet: true,
+                                  spoken: "No reply needed to \(row.from); put the draft away", action: notNeeded)
+                }
+                MailNeedsPill(label: R.LATER, palette: palette, quiet: true,
+                              spoken: "Remind me about \(row.subject) tomorrow at 8", action: snooze)
+            }
+        }
+        .padding(MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.s))
+        .padding(.top, MekaSpace.xs)
+    }
+
     /// Suggest times: his free times from his calendars into the editor (never over his own words); nothing is sent.
     fileprivate func askTimes() {
         guard let suggestTimes else { return }

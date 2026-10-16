@@ -17,6 +17,7 @@ import os.meka.backend.integrations.InMemoryMailStore
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.MailAddress
 import os.meka.backend.integrations.MailAiSorter
+import os.meka.backend.integrations.MailDrafter
 import os.meka.backend.integrations.MailChanges
 import os.meka.backend.integrations.MailCursorExpired
 import os.meka.backend.integrations.MailHeader
@@ -377,12 +378,12 @@ class MailSyncTest {
     private fun world(
         mailStore: MailStore, gmail: FakeGmail = FakeGmail(), store: InMemoryIntegrationStore = InMemoryIntegrationStore(),
         mailAi: MailAiSorter? = null, ops: InMemoryServerOpStore = InMemoryServerOpStore(),
-        unsubscriber: OneClickUnsubscriber = OneClickUnsubscriber.NONE,
+        unsubscriber: OneClickUnsubscriber = OneClickUnsubscriber.NONE, mailDrafter: MailDrafter? = null,
     ) =
         Triple(gmail, store, Integrations(
             store, ops, emptyMap(), { p -> if (p == "google") OAuthClient("cid", "s") else null },
             Cipher(), "https://meka.example", { now }, mail = mapOf("gmail" to gmail), mailStore = mailStore, mailAi = mailAi,
-            unsubscriber = unsubscriber,
+            unsubscriber = unsubscriber, mailDrafter = mailDrafter,
         ))
 
     private fun connect(i: Integrations): String {
@@ -1692,6 +1693,75 @@ class MailSyncTest {
         assertTrue(i.disconnectMail("home", "gmail", "alex@example.com"))
         assertTrue(EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER).values.none { it["deleted"] == FieldValue.Bool(true) })
         assertTrue(ms.messages(id).isEmpty())
+    }
+
+    // ---- Drafted replies come to him ----
+
+    @Test
+    fun anEmailAskingHimSomethingGetsOneDraftOnItsCardAndNothingIsSent() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val asked = mutableListOf<os.meka.core.wire.MailDraftCodec.Request>()
+        val answer = os.meka.core.wire.MailDraftCodec.Response(os.meka.core.wire.AskCodec.Response.ANSWERED, draft = "Yes, I can take them. See you at 9.")
+        val (gmail, _, i) = world(ms, ops = ops, mailDrafter = MailDrafter { r -> asked += r; answer })
+        gmail.mailbox["q"] = msg("q", 0).copy(fromName = "Sam Taylor", subject = "Saturday", preview = "Hi Alex, can you take the boys on Saturday? Sam")
+        gmail.mailbox["f"] = msg("f", 0, from = "jo@example.com").copy(fromName = "Jo Park", subject = "Photos", preview = "Here are the photos from the weekend.")
+        gmail.mailbox["u"] = msg("u", 0, from = "ali@example.com").copy(fromName = "Ali Khan", subject = "Quote", preview = "Could you send the quote?")
+        val id = connect(i)
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        val q = MailNeedsRules.read(MailNeedsRules.itemId(id, "q"), items(ops).getValue(MailNeedsRules.itemId(id, "q")))!!
+        val f = MailNeedsRules.read(MailNeedsRules.itemId(id, "f"), items(ops).getValue(MailNeedsRules.itemId(id, "f")))!!
+        val u = MailNeedsRules.read(MailNeedsRules.itemId(id, "u"), items(ops).getValue(MailNeedsRules.itemId(id, "u")))!!
+        assertTrue(q.replyNeeded)
+        assertEquals("Can you take the boys on Saturday?", q.wants)
+        assertEquals("Yes, I can take them. See you at 9.", q.autoDraft)
+        assertTrue(u.replyNeeded)
+        assertFalse(f.replyNeeded)
+        assertNull(f.autoDraft)
+        // Only the two that ask were drafted, with the card's words (never an address).
+        assertEquals(setOf("Sam Taylor", "Ali Khan"), asked.map { it.from }.toSet())
+        assertTrue(asked.none { it.from.contains("@") })
+        // Nothing sent, nothing archived.
+        assertTrue(gmail.replies.isEmpty())
+        assertTrue(gmail.tidyCalls.isEmpty())
+        // Later checks never ask again.
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(2, asked.size)
+        assertTrue(gmail.replies.isEmpty())
+        // The draft goes only on his Send (the reply path's hold).
+        MailNeedsRules.replyFields(q.autoDraft!!, now).forEach { (k, v) -> device(ops, EntityTypes.MAIL_ITEM, q.id, k, v) }
+        now += MailNeedsRules.REPLY_HOLD_MS + 1
+        i.syncAccount(id)
+        assertEquals(listOf("q" to "Yes, I can take them. See you at 9."), gmail.replies)
+    }
+
+    @Test
+    fun anUnusableOrRefusedDraftIsTriedOnceAndAiOffAsksAgainLater() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        var calls = 0
+        var answer = os.meka.core.wire.MailDraftCodec.Response(os.meka.core.wire.AskCodec.Response.OFF)
+        val (gmail, _, i) = world(ms, ops = ops, mailDrafter = MailDrafter { calls++; answer })
+        gmail.mailbox["q"] = msg("q", 0).copy(fromName = "Sam Taylor", subject = "Saturday?", preview = "Are you free?")
+        val id = connect(i)
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        val qid = MailNeedsRules.itemId(id, "q")
+        assertEquals(1, calls)
+        assertNull(MailNeedsRules.read(qid, items(ops).getValue(qid))!!.autoDraftTriedAtMs)
+        // AI back: an answer with a link is dropped whole and recorded as tried.
+        answer = os.meka.core.wire.MailDraftCodec.Response(os.meka.core.wire.AskCodec.Response.ANSWERED, draft = "Yes, see https://example.com")
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(2, calls)
+        val q = MailNeedsRules.read(qid, items(ops).getValue(qid))!!
+        assertNull(q.autoDraft)
+        assertNotNull(q.autoDraftTriedAtMs)
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(2, calls)
     }
 
     // ---- Slice 6b-2a: Reply ----

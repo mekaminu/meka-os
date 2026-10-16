@@ -120,6 +120,14 @@ fun interface MailAiSorter {
     fun lanes(emails: List<MailHeader>): Map<String, String?>?
 }
 
+/**
+ * Drafted replies come to him: one reply drafted by MEKA's AI for an email that needs a reply (the same `mail.draft`
+ * call as the apps' Draft it). The draft is only ever shown on his card; it is sent only when he taps Send.
+ */
+fun interface MailDrafter {
+    fun draft(request: os.meka.core.wire.MailDraftCodec.Request): os.meka.core.wire.MailDraftCodec.Response
+}
+
 class InMemoryMailStore : MailStore {
     private val cursors = mutableMapOf<String, String>()
     private val rows = mutableMapOf<String, LinkedHashMap<String, MailHeader?>>()

@@ -44,6 +44,8 @@ import os.meka.core.domain.MailSender
 import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.MailUnopenedRules
 import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailAutoDraftRules
+import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.MailItem
@@ -154,6 +156,8 @@ class Integrations(
     private val mailAi: MailAiSorter? = null,
     /** Slice 5a: RFC 8058 one-click unsubscribe (an https POST, only on Meka's tap); [OneClickUnsubscriber.NONE] in tests. */
     private val unsubscriber: OneClickUnsubscriber = OneClickUnsubscriber.NONE,
+    /** Drafted replies come to him: a draft for each email that needs a reply (AI off, tests: null drafts nothing). */
+    private val mailDrafter: MailDrafter? = null,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -602,6 +606,8 @@ class Integrations(
         stage(a, "junkClearOut") { junkClearOut(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         stage(a, "publishMailNeeds") { publishMailNeeds(a, ms) }
+        // Drafted replies come to him: a draft on the card of each new email that asks him something (sent only on his tap).
+        stage(a, "autoDrafts") { autoDrafts(a) }
         // Follow-up radar, slice 1: his own emails with no reply, a few times a day (on his tap in the apps).
         stage(a, "followUps") { followUps(a, m, token, ms) }
         // Slice 3g: parcels arriving, from the shipping emails (whether or not Autopilot has tidied them).
@@ -1242,16 +1248,61 @@ class Integrations(
             .take(MailNeedsRules.MAX_PER_ACCOUNT)
         val threads = if (needs.isEmpty()) emptyMap() else ms.messages(a.id).groupingBy { it.threadId ?: it.id }.eachCount()
         val previews = ms.previews(a.id, needs.map { it.id })
+        val reasons = ms.inboxSorted(a.id).associate { (h, s) -> h.id to s.reason }
         val shown = HashSet<String>()
         for (h in needs) {
             val id = MailNeedsRules.itemId(a.id, h.id)
             shown += id
+            val preview = previews[h.id] ?: h.preview
+            // Drafted replies: whether a person asks him something, and what, in their words (headers and preview only).
+            val asks = MailAutoDraftRules.needsReply(reasons[h.id], h.fromAddress, h.subject, preview)
             writeMail(a, id, MailNeedsRules.serverFields(
-                account, h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
+                account, h.fromName, h.fromAddress, h.subject, preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
                 threadKey = MailNeedsRules.threadKey(a.id, h.threadId ?: h.id),
-            ), EntityTypes.MAIL_ITEM)
+            ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
+    }
+
+    /**
+     * Drafted replies come to him ([MailAutoDraftRules]): each email of this account on the cards that needs a reply
+     * and has no draft yet gets one from MEKA's AI ([mailDrafter], the `mail.draft` call: the account's label, the
+     * sender's name, the subject, the preview and up to three of his own sent replies for his tone), at most
+     * [MailAutoDraftRules.PER_CHECK] a check and [MailAutoDraftRules.DAILY_CAP] a day for the household. A checked draft
+     * ([MailDraftRules.check]) is written on the email for his card; anything else is recorded as tried and never asked
+     * again. AI off or over budget: nothing is written and the next check asks again. **Nothing is sent here**: the
+     * draft goes only when he taps Send on the card (the reply path in [mailNeedsAsks]).
+     */
+    internal fun autoDrafts(a: AccountRow) {
+        val drafter = mailDrafter ?: return
+        val hh = a.householdId
+        val nowMs = now()
+        val mine = store.transaction { store.mirror(hh, a.id) }.keys
+        val all = reader.entities(hh, EntityTypes.MAIL_ITEM).mapNotNull { (id, f) -> MailNeedsRules.read(id, f) }
+        val due = MailAutoDraftRules.toDraft(all.filter { it.id in mine }, all, nowMs, calendar)
+        if (due.isEmpty()) return
+        val codec = os.meka.core.wire.MailDraftCodec
+        val today = calendar.epochDayOf(nowMs)
+        val readable = "${CivilDate.longLabel(today)} ${CivilDate.fromEpochDay(today).year} · ${os.meka.core.domain.LocalClock.formatMinute(calendar.minuteOfDay(nowMs))}"
+        val examples = MailDraftRules.examples(all).map { it.take(codec.MAX_EXAMPLE) }.take(codec.MAX_EXAMPLES)
+        for (item in due) {
+            val request = os.meka.core.wire.MailDraftCodec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today), now = readable.take(os.meka.core.wire.MessageRequestCodec.MAX_NOW),
+                account = item.account.take(codec.MAX_ACCOUNT), business = item.account == MailLabel.BUSINESS.label,
+                from = item.from.take(codec.MAX_FROM), subject = item.subject.take(codec.MAX_SUBJECT),
+                preview = item.preview?.take(codec.MAX_PREVIEW), examples = examples,
+            )
+            val answer = runCatching { drafter.draft(request) }.getOrNull()
+            when (answer?.state) {
+                null -> return // unreachable: try again at the next check
+                os.meka.core.wire.AskCodec.Response.OFF, os.meka.core.wire.AskCodec.Response.OVER -> return
+                os.meka.core.wire.AskCodec.Response.ANSWERED -> {
+                    val text = MailDraftRules.check(answer?.draft)
+                    writeMail(a, item.id, if (text != null) MailAutoDraftRules.draftedFields(text, nowMs) else MailAutoDraftRules.triedFields(nowMs), EntityTypes.MAIL_ITEM)
+                }
+                else -> writeMail(a, item.id, MailAutoDraftRules.triedFields(nowMs), EntityTypes.MAIL_ITEM)
+            }
+        }
     }
 
     /**

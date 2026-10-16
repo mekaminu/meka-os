@@ -121,6 +121,13 @@ data class MailItem(
     /** Scheduling assistant, slice 2: Book it's calendar edit and the start it booked, or null. */
     val meetingEditId: String? = null,
     val meetingAtMs: Long? = null,
+    /** Drafted replies ([MailAutoDraftRules]): the server's "needs a reply", what they want and its draft; his Not needed. */
+    val replyNeeded: Boolean = false,
+    val wants: String? = null,
+    val autoDraft: String? = null,
+    val autoDraftAtMs: Long? = null,
+    val autoDraftTriedAtMs: Long? = null,
+    val draftDismissedAtMs: Long? = null,
 )
 
 /** One email on the card. */
@@ -160,6 +167,10 @@ data class MailNeedsRow(
     val pickedLine: String? = null,
     /** Slice 2: Book it is offered (picked, not booked yet). */
     val canBook: Boolean = false,
+    /** Drafted replies: it needs a reply ("Asks if you can take the boys on Saturday", or [MailAutoDraftRules.NEEDS_REPLY]). */
+    val wants: String? = null,
+    /** Drafted replies: Navilife's draft to Send, Edit or put away (Not needed); null when there is none to show. */
+    val autoDraft: String? = null,
 )
 
 data class MailNeedsCard(
@@ -173,6 +184,8 @@ data class MailNeedsCard(
     val moreLine: String?,
     /** "2 snoozed till tomorrow 08:00" or null. */
     val snoozedLine: String?,
+    /** Drafted replies: "3 emails need a reply · 2 drafted", or null when none does. */
+    val replyLine: String? = null,
 )
 
 object MailNeedsRules {
@@ -324,6 +337,12 @@ object MailNeedsRules {
             tidyClearedAtMs = ms(MailItemFields.TIDY_CLEARED_AT),
             meetingEditId = text(MailItemFields.MEETING_EDIT_ID),
             meetingAtMs = ms(MailItemFields.MEETING_AT),
+            replyNeeded = (f[MailAutoDraftFields.REPLY_NEEDED] as? FieldValue.Bool)?.value == true,
+            wants = text(MailAutoDraftFields.WANTS),
+            autoDraft = (f[MailAutoDraftFields.AUTO_DRAFT] as? FieldValue.Text)?.value?.takeIf { it.isNotBlank() },
+            autoDraftAtMs = ms(MailAutoDraftFields.AUTO_DRAFT_AT),
+            autoDraftTriedAtMs = ms(MailAutoDraftFields.AUTO_DRAFT_TRIED_AT),
+            draftDismissedAtMs = ms(MailAutoDraftFields.DISMISSED_AT),
         )
     }
 
@@ -437,6 +456,7 @@ object MailNeedsRules {
                 1 -> "1 snoozed"
                 else -> "$snoozedCount snoozed"
             },
+            replyLine = MailAutoDraftRules.replyLine(all),
         )
     }
 
@@ -466,7 +486,9 @@ object MailNeedsRules {
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice).joinToString(". "),
+                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
+                    i.wants?.let { "Needs a reply: $it" }?.takeIf { MailAutoDraftRules.needsReply(i) },
+                    "Navilife drafted a reply".takeIf { MailAutoDraftRules.draftShowing(i) && notice == null }).joinToString(". "),
                 notice = notice,
                 replyDraft = if (notice != null) i.replyText else null,
                 replyLine = "To ${i.from} · sent from ${i.account} only when you tap Send",
@@ -475,6 +497,8 @@ object MailNeedsRules {
                 asksToMeet = meet,
                 pickedLine = pickedLine,
                 canBook = pick != null && !booked,
+                wants = if (MailAutoDraftRules.needsReply(i)) i.wants ?: MailAutoDraftRules.NEEDS_REPLY else null,
+                autoDraft = i.autoDraft?.takeIf { MailAutoDraftRules.draftShowing(i) && notice == null },
             )
         }
 

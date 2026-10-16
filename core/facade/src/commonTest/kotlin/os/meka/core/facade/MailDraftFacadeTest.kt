@@ -220,6 +220,33 @@ class MailDraftFacadeTest {
         assertTrue(server.sent.isEmpty())
     }
 
+    /** Drafted replies come to him: the server's draft shows on the card; Not needed puts it away (Undo); nothing is sent. */
+    @Test
+    fun theServersDraftShowsOnTheCardAndNotNeededPutsItAway() = runTest {
+        val a = email("m1", "Sam Taylor", "Saturday")
+        serverWrite(a, os.meka.core.domain.MailAutoDraftRules.serverFields(true, "Are you still OK to drive on Saturday?") +
+            os.meka.core.domain.MailAutoDraftRules.draftedFields("Yes, still fine. See you at 9.", now))
+        val fold = core()
+        assertTrue(fold.syncNow())
+        val card = fold.mailNeeds.value!!
+        assertEquals("1 email needs a reply · 1 drafted", card.replyLine)
+        val row = card.rows.single()
+        assertEquals("Yes, still fine. See you at 9.", row.autoDraft)
+        assertEquals("Are you still OK to drive on Saturday?", row.wants)
+        // Not needed: the draft goes, the email stays; Undo brings it back.
+        assertEquals(os.meka.core.domain.MailAutoDraftRules.NOT_NEEDED_LINE, fold.dismissMailDraft(a))
+        assertNull(fold.mailNeeds.value!!.rows.single().autoDraft)
+        assertNull(fold.mailNeeds.value!!.replyLine)
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals("Yes, still fine. See you at 9.", fold.mailNeeds.value!!.rows.single().autoDraft)
+        assertEquals(MailNeedsRules.UNKNOWN, fold.dismissMailDraft("nope"))
+        // Send is his tap: the draft's words go through the reply path (held for Undo), never by themselves.
+        assertEquals(MailNeedsRules.replySendingLine("Personal"), fold.replyToMailItem(a, row.autoDraft!!))
+        assertTrue(fold.mailNeeds.value == null)
+        assertTrue(server.sent.isEmpty())
+    }
+
     private data class MailDraft(val text: String?, val line: String)
 
     /** Scheduling assistant, slice 1: Suggest times writes his free times as a reply; nothing is written, booked or sent. */

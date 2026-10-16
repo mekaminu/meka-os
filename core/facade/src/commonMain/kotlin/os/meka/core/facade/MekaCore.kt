@@ -4761,6 +4761,18 @@ class MekaCore(
         return { rest.forEach { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, it, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs())) } }
     }
 
+    /**
+     * Drafted replies: **Not needed** on Navilife's draft of a reply — the draft goes and the email no longer counts as
+     * needing a reply on both apps; the email itself stays in "From your mail". Undo brings the draft back.
+     */
+    suspend fun dismissMailDraft(id: String): String = onCore {
+        activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailAutoDraftRules.dismissFields(nowMs()))
+        mailNeedsUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailAutoDraftRules.dismissFields(0L)) }
+        mailNeedsChanged()
+        os.meka.core.domain.MailAutoDraftRules.NOT_NEEDED_LINE
+    }
+
     /** **Snooze** on an email in "From your mail": its card leaves both apps until tomorrow 08:00 (with Undo). */
     suspend fun snoozeMailItem(id: String): String = onCore {
         activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN

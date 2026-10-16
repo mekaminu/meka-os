@@ -58,6 +58,7 @@ import os.meka.core.domain.MailFindCard
 import os.meka.core.domain.MailFindRow
 import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailDraftRules
+import os.meka.core.domain.MailAutoDraftRules
 import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
@@ -118,6 +119,10 @@ internal fun MailNeedsSection(
                 AnimatedContent(card.headline, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-needs-headline") {
                     Text(it, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.testTag("mail-needs-headline"))
                 }
+                // Drafted replies: "3 emails need a reply · 2 drafted" (cross-fades as drafts are sent or put away).
+                AnimatedContent(card.replyLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-needs-replies") { line ->
+                    if (line != null) Text(line, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-needs-replies"))
+                }
             }
         }
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {
@@ -171,6 +176,8 @@ internal fun MailNeedsSection(
                             onAlwaysTidy = { haptics.medium(); answer { core.alwaysTidyMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSuggestTimes = { core.suggestMeetingTimes(row.id) },
+                            // Drafted replies: Not needed puts Navilife's draft away (Undo on the bar); the email stays.
+                            onNotNeeded = { haptics.light(); answer { core.dismissMailDraft(row.id) } },
                             onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
                             onSend = { text, sent ->
                                 haptics.medium()
@@ -205,6 +212,8 @@ internal fun MailNeedsRowView(
     onSuggestTimes: (suspend () -> MailDraft)? = null,
     /** Scheduling assistant, slice 2: Book the time their reply picked from his offer (null: not offered here). */
     onBook: (() -> Unit)? = null,
+    /** Drafted replies: Not needed on Navilife's draft (null: not offered here). */
+    onNotNeeded: (() -> Unit)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -250,6 +259,47 @@ internal fun MailNeedsRowView(
                 if (picked != null) Text(picked, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-picked"))
             }
             row.notice?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-reply-notice")) }
+            // Drafted replies: what they want, in their words.
+            row.wants?.let { w ->
+                Text(
+                    if (w == MailAutoDraftRules.NEEDS_REPLY) w else "${MailAutoDraftRules.NEEDS_REPLY} · $w",
+                    style = MekaType.itemMeta, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.testTag("mail-wants-${row.id}"),
+                )
+            }
+        }
+        // Drafted replies: Navilife's draft, ready to Send (his tap), Edit or put away; it unfolds on the expand spring and
+        // folds away once he edits, sends or says Not needed (reduced motion: cross-fade).
+        AnimatedVisibility(row.autoDraft != null && !replying, enter = unfold(), exit = fold()) {
+            val draft = row.autoDraft ?: ""
+            var full by rememberSaveable(row.id) { mutableStateOf(false) }
+            Column(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+                    .padding(MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)).testTag("mail-auto-draft-${row.id}"),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                Text(
+                    draft, style = MekaType.body, color = Meka.colors.textPrimary,
+                    maxLines = if (full) Int.MAX_VALUE else 4, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.fillMaxWidth().clickable(role = Role.Button) { haptics.tick(); full = !full }
+                        .semantics { contentDescription = "Navilife's draft reply to ${row.from}: $draft" },
+                )
+                Text(MailAutoDraftRules.DRAFT_LABEL, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    MailNeedsPill(
+                        MailAutoDraftRules.SEND, spoken = "Send Navilife's draft to ${row.from} now",
+                        onClick = { onSend(draft) { } },
+                    )
+                    MailNeedsPill(
+                        MailAutoDraftRules.EDIT, quiet = true, spoken = "Edit the draft before sending",
+                        onClick = { haptics.light(); text = draft; lastDraft = draft; draftLine = MailDraftRules.DRAFTED_LINE; replying = true },
+                    )
+                    if (onNotNeeded != null) {
+                        MailNeedsPill(MailAutoDraftRules.NOT_NEEDED, quiet = true, spoken = "No reply needed to ${row.from}; put the draft away", onClick = onNotNeeded)
+                    }
+                    MailNeedsPill(MailAutoDraftRules.LATER, quiet = true, spoken = "Remind me about ${row.subject} tomorrow at 8", onClick = onSnooze)
+                }
+            }
         }
         // Slice 6c: the emails linked to this one, folded under it; the line unfolds them (expand spring; reduced
         // motion: cross-fade). Done, Snooze, Task and Waiting for take them all; one Undo brings them back.

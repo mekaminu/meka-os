@@ -4622,6 +4622,19 @@ final class CoreModel {
     }
 
     /// Snooze on an email in "From your mail": back tomorrow 08:00 on both apps, with Undo. Only the id crosses.
+    /// Drafted replies: Not needed on Navilife's draft — the draft goes, the email stays (Undo on the bar). Only the id
+    /// (a String) crosses; the line comes back for the bar.
+    func dismissMailDraft(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                let line = try await core.dismissMailDraft(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     func snoozeMailItem(_ id: String) {
         guard let core else { return }
         MekaHaptics.light()

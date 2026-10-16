@@ -25,6 +25,7 @@ import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.get
 import os.meka.backend.integrations.BbcNewsRss
 import os.meka.backend.integrations.DvlaCarLookup
+import os.meka.backend.integrations.MailDrafter
 import os.meka.backend.integrations.FuelFinder
 import os.meka.backend.integrations.CalendarWriter
 import os.meka.backend.integrations.EntityReader
@@ -1104,6 +1105,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         mailAi = ai?.provider?.let { MailSortAi(it) },
         // Slice 5a: RFC 8058 one-click unsubscribe, only when Meka taps Unsubscribe (public https hosts only).
         unsubscriber = HttpOneClickUnsubscriber(),
+        // Drafted replies come to him: the same mail.draft call as Draft it, shown on his card, sent only on his tap.
+        mailDrafter = ai?.provider?.let { p -> MailDrafter { r -> MailDraftService(p).draft(r) } },
     )
 }
 
