@@ -877,7 +877,9 @@ class MailSyncTest {
         gmail.mailbox["p1"] = msg("p1", 0, "sam@example.com")
         i.syncAccount(id)
         val entityId = MailBacklogRules.entityId(id)
-        fun backlog() = MailBacklogRules.read(entityId, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_BACKLOG).getValue(entityId))!!
+        // Read the counts straight off the entity (the backlog's own plan fields may not be written yet in this world).
+        fun backlog() = MailBacklogRules.read(entityId, mapOf(MailBacklogFields.STARTED_AT to FieldValue.Int64(1L)) +
+            EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_BACKLOG).getValue(entityId))!!
         val b = backlog()
         assertEquals(412, b.inboxUnread)
         // Only the unread newsletter counts (the read one and the person's email don't).
