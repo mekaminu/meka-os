@@ -923,6 +923,8 @@ class MailSyncTest {
         assertTrue(gmail.markedDone.isEmpty())
         assertEquals(2, backlog().tidyUnread)
         now += 60_000L
+        // The card (and the server) read the entity as a backlog plan, which this world never starts: stand one in.
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.STARTED_AT, FieldValue.Int64(1L))
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.MARK_READ_APPROVED_AT, FieldValue.Int64(now))
         gmail.markReadRefusedAfter = 1
         i.syncAccount(id)
