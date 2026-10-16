@@ -587,16 +587,22 @@ class MailSyncTest {
     }
 
     @Test
-    fun theAiSeesAtMostOneBatchACheckNewestFirst() {
+    fun theAiSeesAtMostItsRoundsOfBatchesACheckNewestFirst() {
         val ms = InMemoryMailStore()
         val ai = FakeAi { e -> e.associate { it.id to "needs_you" } }
         val (gmail, _, i) = world(ms, mailAi = ai)
-        gmail.nextRound = { MailChanges(headers = (0 until Integrations.AI_BATCH + 3).map { n -> msg("m$n", n.toLong() % 50) }, cursor = "h1") }
+        val most = Integrations.AI_BATCH * Integrations.AI_ROUNDS
+        gmail.nextRound = { MailChanges(headers = (0 until most + 3).map { n -> msg("m$n", n.toLong() % 50) }, cursor = "h1") }
         val id = connect(i)
         i.syncAccount(id)
-        assertEquals(Integrations.AI_BATCH, ai.asked.single().size)
-        assertEquals(3, ms.unsure(id, 100).size)
-        assertTrue(ms.unsure(id, 100).all { h -> ai.asked.single().none { it == h.id } })
+        assertEquals(List(Integrations.AI_ROUNDS) { Integrations.AI_BATCH }, ai.asked.map { it.size })
+        val left = ms.unsure(id, 1000)
+        assertEquals(3, left.size)
+        val asked = ai.asked.flatten().toSet()
+        assertTrue(left.none { it.id in asked })
+        // Newest first: what waits is no newer than anything asked.
+        val oldestAsked = ms.messages(id).filter { it.id in asked }.minOf { it.receivedAtMs }
+        assertTrue(left.all { it.receivedAtMs <= oldestAsked })
     }
 
     // ---- Slice 3a: Autopilot's dry run ----
