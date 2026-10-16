@@ -94,7 +94,7 @@ private struct ArchivedLineRow: View {
             // "Archived for you" shows which emails: the tidy's emails by sender, each subject with its reason and time
             // (the sender's words, shown as plain text only).
             if !line.emails.isEmpty {
-                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                VStack(alignment: .leading, spacing: MekaSpace.m) {
                     ForEach(line.emails, id: \.id) { group in
                         ArchivedEmailGroupRow(group: group, palette: palette)
                     }
@@ -102,7 +102,7 @@ private struct ArchivedLineRow: View {
                         Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                     }
                 }
-                .padding(.leading, MekaSpace.s)
+                .padding(.leading, MekaSpace.m)
             }
         }
     }
@@ -123,7 +123,7 @@ private struct ArchivedEmailGroupRow: View {
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Text(row.chip).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
-                        .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                        .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
                         .background(palette.surface, in: Capsule())
                     Text(row.time).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                 }

@@ -123,8 +123,8 @@ private fun ArchivedLineRow(line: ArchivedForYouLine, onPutBack: () -> Unit) {
         // (the sender's words, shown as plain text only).
         if (line.emails.isNotEmpty()) {
             Column(
-                Modifier.fillMaxWidth().padding(start = MekaSpace.s),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+                Modifier.fillMaxWidth().padding(start = MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
             ) {
                 line.emails.forEach { g -> androidx.compose.runtime.key(g.id) { ArchivedEmailGroupRow(g) } }
                 line.emailsMore?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
@@ -158,7 +158,7 @@ private fun ReasonChip(label: String) {
     Text(
         label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
-            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
     )
 }
 
