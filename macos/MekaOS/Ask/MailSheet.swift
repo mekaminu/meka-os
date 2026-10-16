@@ -41,6 +41,12 @@ struct MailSheet: View {
                         Task { await model.setMailAutopilot(on) }
                     }
                     .staggeredAppear(2)
+                    // Inbox fixes, slice 5: "Mark tidied mail as read" (synced with the Fold).
+                    MarkReadPanelView(panel: panel, palette: palette) {
+                        let on = !panel.markRead
+                        Task { await model.setMailMarkRead(on) }
+                    }
+                    .staggeredAppear(2)
                     // Slice 7: when the ten-minute inbox comes (synced with the Fold).
                     if let key = model.mailMomentKey {
                         MomentPanelView(key: key, palette: palette) { picked in
@@ -94,6 +100,14 @@ struct MailSheet: View {
                         Task { await model.disconnectMail(provider: provider, email: email, deleteData: true) }
                     })
                     .staggeredAppear(i + 3)
+                }
+                // Inbox fixes, slice 5: every sender with his own rule, once, under the accounts.
+                if let line = view.rulesLine {
+                    RulesPanelView(line: line, rules: view.rules, palette: palette) { id, sets in
+                        Task { await model.setMailSenderRule(id, rule: sets) }
+                    }
+                    .staggeredAppear(view.rows.count + 3)
+                    .transition(.opacity)
                 }
                 if let left = view.toConnect {
                     Text(left).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -150,7 +164,8 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.state ?? "" } } ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.rows.map { $0.senders.map { $0.ruleLine ?? "" } } ?? [])
-        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mail?.rows.map { $0.rules.map(\.id) } ?? [])
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mail?.rules.map(\.id) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.markRead)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.followUpWaits?.rows.map(\.id) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.followUpWaitUndo)
         .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey(); await model.loadMeetingPrepLeadKey(); await model.loadFollowUpWaits() }
@@ -375,6 +390,76 @@ private struct AutopilotPanelView: View {
     }
 }
 
+/// Inbox fixes, slice 5: "Mark tidied mail as read", its line and Turn off / Turn on.
+private struct MarkReadPanelView: View {
+    let panel: MailAutopilotPanel
+    let palette: MekaPalette
+    let onSwitch: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MekaSpace.xs) {
+            Circle().fill(panel.markRead ? palette.accent : palette.hairline)
+                .frame(width: 10, height: 10)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.markRead)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(panel.markReadTitle).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(panel.markReadLine).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: MekaSpace.xs)
+            Button(panel.markReadAction, action: onSwitch)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xxs)
+                .background(Capsule().fill(palette.hairline))
+        }
+        .padding(MekaSpace.m)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+    }
+}
+
+/// Inbox fixes, slice 5: "Your rules" once for every account, each with Let Autopilot decide (only Strings cross).
+private struct RulesPanelView: View {
+    let line: String
+    let rules: [MailRuleRow]
+    let palette: MekaPalette
+    let onRule: (String, String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                .contentTransition(.opacity)
+            ForEach(rules, id: \.id) { r in
+                HStack(alignment: .center) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
+                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(r.spoken)
+                    Spacer()
+                    let id = r.id, sets = r.sets
+                    Button(r.action) { onRule(id, sets) }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                }
+                .padding(.top, MekaSpace.xxs)
+                .transition(.opacity)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+    }
+}
+
 private struct MailAccountRowView: View {
     let row: MailAccountRow
     let palette: MekaPalette
@@ -510,31 +595,6 @@ private struct MailAccountRowView: View {
                     .buttonStyle(MekaPressStyle())
                     .font(MekaType.caption)
                     .foregroundStyle(palette.accent)
-                }
-            }
-            // Slice 10b: the senders with his own rule, each with Let Autopilot decide.
-            if let line = row.rulesLine {
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .padding(.top, MekaSpace.xs)
-                    .contentTransition(.opacity)
-                ForEach(row.rules, id: \.id) { r in
-                    HStack(alignment: .center) {
-                        VStack(alignment: .leading, spacing: 0) {
-                            Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
-                            Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        .accessibilityElement(children: .ignore)
-                        .accessibilityLabel(r.spoken)
-                        Spacer()
-                        let id = r.id, sets = r.sets
-                        Button(r.action) { onRule(id, sets) }
-                            .buttonStyle(MekaPressStyle())
-                            .font(MekaType.caption)
-                            .foregroundStyle(palette.accent)
-                    }
-                    .padding(.top, MekaSpace.xxs)
-                    .transition(.opacity)
                 }
             }
             // Slice 8a: the backlog clean-up's plan for the older mail already in the inbox (nothing moves yet).

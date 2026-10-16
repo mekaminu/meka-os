@@ -171,6 +171,16 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         if (now != null) view = Result.success(now) else reload++
     }
 
+    // Inbox fixes, slice 5: "Mark tidied mail as read" (synced; the server follows it from its next check).
+    fun switchMarkRead(on: Boolean) = scope.launch {
+        haptics.tick()
+        message = null
+        val r = core.setMailMarkRead(on)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
     fun setMoment(time: MailMomentTime) = scope.launch {
         haptics.tick()
         message = null
@@ -264,6 +274,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 val v = current.getOrThrow()
                 v.emptyLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
+                v.autopilot?.let { MarkReadCard(it, Modifier.appear(rememberAppearance(0))) { switchMarkRead(!it.markRead) } }
                 if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }
                 if (v.autopilot != null) warranty?.let { w -> WarrantyCard(w, Modifier.appear(rememberAppearance(0))) { setWarranty(it) } }
                 if (v.autopilot != null) waits?.let { p ->
@@ -284,6 +295,8 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         onApprove = { id, yes -> approveBacklog(id, yes) },
                     )
                 }
+                // Inbox fixes, slice 5: every sender with his own rule, once, under the accounts.
+                RulesCard(v, Modifier.appear(rememberAppearance(v.rows.size + 1))) { id, sets -> setRule(id, sets) }
                 v.toConnect?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
                 Spacer(Modifier.height(MekaSpace.l))
                 v.connects.forEach { c -> ConnectButton(c.label) { connect(c.provider, c.note) } }
@@ -369,22 +382,6 @@ private fun MailAccountCard(
             if (row.senders.size > SENDERS_FOLDED) {
                 Text(if (allSenders) "Show fewer" else "Show ${row.senders.size - SENDERS_FOLDED} more", style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); allSenders = !allSenders }.minTouch())
-            }
-        }
-        // Slice 10b: the senders with his own rule (Keep in inbox, or Always tidy from a card), each with Let Autopilot
-        // decide; unfolds when the first rule comes and closes up when the last goes.
-        AnimatedVisibility(
-            row.rulesLine != null,
-            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
-            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
-        ) {
-            Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced))) {
-                Crossfade(row.rulesLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-rules") {
-                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
-                }
-                row.rules.forEach { r ->
-                    androidx.compose.runtime.key(r.id) { RuleLine(r) { onRule(r.id, r.sets) } }
-                }
             }
         }
         // Slice 8a: the backlog clean-up's plan (the older mail already in the inbox); unfolds once the server starts it,
@@ -634,6 +631,63 @@ private fun AutopilotCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitc
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
                     .clickable(role = Role.Button) { onSwitch() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
+        }
+    }
+}
+
+/** Inbox fixes, slice 5: "Mark tidied mail as read" with its line and Turn off / Turn on (tick haptic). */
+@Composable
+private fun MarkReadCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val dot by animateColorAsState(
+        if (panel.markRead) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "mark-read-dot",
+    )
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
+            .semantics(mergeDescendants = true) { contentDescription = panel.markReadTitle + ". " + panel.markReadLine },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+        Column(Modifier.weight(1f)) {
+            Text(panel.markReadTitle, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(panel.markReadLine, animationSpec = MekaMotion.appear(reduced), label = "mark-read-line") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        Crossfade(panel.markReadAction, animationSpec = MekaMotion.appear(reduced), label = "mark-read-action") { a ->
+            Text(
+                a, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
+                    .clickable(role = Role.Button) { onSwitch() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            )
+        }
+    }
+}
+
+/**
+ * Inbox fixes, slice 5: "Your rules" once for every account (each line naming its account when several are
+ * connected), each with Let Autopilot decide; unfolds when the first rule comes and closes up when the last goes.
+ */
+@Composable
+private fun RulesCard(v: MailAccountsView, modifier: Modifier, onRule: (String, String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    AnimatedVisibility(
+        v.rulesLine != null,
+        modifier = modifier,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+    ) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
+                .animateContentSize(MekaMotion.expand(reduced)),
+        ) {
+            Crossfade(v.rulesLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-rules") {
+                Text(it, style = MekaType.body, color = Meka.colors.textPrimary)
+            }
+            v.rules.forEach { r ->
+                androidx.compose.runtime.key(r.id) { RuleLine(r) { onRule(r.id, r.sets) } }
+            }
         }
     }
 }

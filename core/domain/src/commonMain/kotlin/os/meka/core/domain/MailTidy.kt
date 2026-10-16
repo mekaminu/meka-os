@@ -158,6 +158,12 @@ object MailTidyBatchFields {
     const val AT = "atMs"
     /** The account's label as Mail shows it ("Personal", "Business", "Outlook"), never the address. */
     const val ACCOUNT = "account"
+    /**
+     * Inbox fixes, slice 5: which account the batch belongs to ([MailAccountRules.key]: a hash of the provider and the
+     * address, never the address), so Mail shows each account only its own tidies even when two accounts carry the
+     * same label. Absent on batches written before slice 5 (those match by [ACCOUNT]).
+     */
+    const val ACCOUNT_KEY = "accountKey"
     const val SUMMARY = "summary"
     const val DETAIL = "detail"
     const val COUNT = "count"
@@ -218,6 +224,8 @@ data class MailTidyBatch(
     val receiptsPriced: Int = 0,
     /** Slice 3d: who the receipts were from, most first. */
     val merchants: List<String> = emptyList(),
+    /** Inbox fixes, slice 5: [MailTidyBatchFields.ACCOUNT_KEY], or null on an older batch. */
+    val accountKey: String? = null,
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -329,6 +337,7 @@ object MailAutopilotRules {
             receiptsPence = (f[MailTidyBatchFields.RECEIPTS_PENCE] as? FieldValue.Int64)?.value?.takeIf { it > 0 },
             receiptsPriced = (f[MailTidyBatchFields.RECEIPTS_PRICED] as? FieldValue.Int64)?.value?.toInt() ?: 0,
             merchants = text(MailTidyBatchFields.MERCHANTS)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
+            accountKey = text(MailTidyBatchFields.ACCOUNT_KEY),
         )
     }
 
@@ -368,6 +377,11 @@ data class MailAutopilotPanel(
     val action: String,
     /** MEKA's kill switch is on: nothing moves whatever the switch says. */
     val paused: Boolean,
+    /** Inbox fixes, slice 5: "Mark tidied mail as read" (synced; absent = on), its line and Turn off / Turn on. */
+    val markRead: Boolean = true,
+    val markReadTitle: String = MailAutopilotPanelRules.MARK_READ_TITLE,
+    val markReadLine: String = MailAutopilotPanelRules.MARK_READ_ON_LINE,
+    val markReadAction: String = MailAutopilotPanelRules.TURN_OFF,
 )
 
 object MailAutopilotPanelRules {
@@ -398,7 +412,21 @@ object MailAutopilotPanelRules {
         },
         action = if (setting.on) TURN_OFF else TURN_ON,
         paused = paused,
+        markRead = setting.markRead,
+        markReadLine = if (setting.markRead) MARK_READ_ON_LINE else MARK_READ_OFF_LINE,
+        markReadAction = if (setting.markRead) TURN_OFF else TURN_ON,
     )
+
+    // ---- Inbox fixes, slice 5: the Mark-read switch in Mail (Meka, 2026-10-15 20:59: "I thought it would mark emails as read") ----
+
+    const val MARK_READ_TITLE = "Mark tidied mail as read"
+    const val MARK_READ_ON_LINE = "On · whatever Navilife tidies (archived, cleaned up or sent from Junk to Trash) is marked read, " +
+        "so your unread counts fall; Undo puts it back unread"
+    const val MARK_READ_OFF_LINE = "Off · tidied mail keeps its unread mark; turn on to have your unread counts fall"
+
+    /** What the switch says once flipped (Mail's note). */
+    fun markReadSwitchedLine(on: Boolean): String =
+        if (on) "Tidied mail will be marked read from Navilife's next check" else "Tidied mail keeps its unread mark from Navilife's next check"
 
     /** What switching says (Mail's note, What Navilife may do's undo bar). */
     fun switchedLine(on: Boolean): String =

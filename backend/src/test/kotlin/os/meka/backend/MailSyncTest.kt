@@ -52,6 +52,7 @@ import os.meka.core.domain.MailWarrantyFields
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.ActionableFields
 import os.meka.core.domain.ObligationFields
+import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.backend.integrations.EntityReader
 import os.meka.backend.integrations.MailMoved
@@ -671,6 +672,8 @@ class MailSyncTest {
         val (batchId, f) = tidies(ops).entries.single()
         assertEquals(FieldValue.Text("Tidied 3 emails · Personal"), f[MailTidyBatchFields.SUMMARY])
         assertEquals(FieldValue.Int64(3), f[MailTidyBatchFields.COUNT])
+        // Inbox fixes, slice 5: the account's key (a hash, never the address) on the tidy.
+        assertEquals(FieldValue.Text(MailAccountRules.key("gmail", "alex@example.com")), f[MailTidyBatchFields.ACCOUNT_KEY])
         // Slice 3d: the receipt's amount and who from, read from its subject and preview.
         assertEquals(FieldValue.Int64(1250), f[MailTidyBatchFields.RECEIPTS_PENCE])
         assertEquals(FieldValue.Text("Shop"), f[MailTidyBatchFields.MERCHANTS])
@@ -1291,6 +1294,11 @@ class MailSyncTest {
         i.syncAccount(id)
         // Kept stays, always-tidy is archived, a bank is never tidied whatever the rule says.
         assertEquals(mapOf("p1" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        // Inbox fixes, slice 5: a sender the server writes carries the account's key, so Mail lists it under its own account.
+        assertEquals(
+            FieldValue.Text(MailAccountRules.key("gmail", "alex@example.com")),
+            EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)[weekly]?.get(MailSenderFields.ACCOUNT_KEY),
+        )
         assertTrue(gmail.mailbox.getValue("n1").inInbox)
         assertTrue(gmail.mailbox.getValue("b1").inInbox)
         // Taken off ("Let Autopilot decide"): the next newsletter is tidied as usual.

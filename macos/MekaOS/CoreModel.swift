@@ -1100,6 +1100,16 @@ final class CoreModel {
         if let v = r.view { mail = v } else { await loadMail() }
     }
 
+    /// Inbox fixes, slice 5: "Mark tidied mail as read" (synced; the server follows it from its next check). Only the Bool crosses.
+    func setMailMarkRead(_ on: Bool) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let r = try? await core.setMailMarkRead(on: on) else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
     /// Undo on one of Autopilot's tidies: the server puts the emails back at its next check. Only the id crosses.
     func undoMailTidy(_ id: String) async {
         guard let core else { return }

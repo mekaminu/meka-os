@@ -80,8 +80,10 @@ data class MailAccountRow(
     val backlog: MailBacklogRow? = null,
     /** Slice 10b: the senders that carry his own rule ([MailSenderRuleRules.rows]), each with Let Autopilot decide. */
     val rules: List<MailRuleRow> = emptyList(),
-    /** Slice 10b: "Your rules · 2 senders", or null with none. */
+    /** Slice 10b: "Your rules · 2 senders", or null with none. Inbox fixes, slice 5: empty here, see [MailAccountsView.rules]. */
     val rulesLine: String? = null,
+    /** Inbox fixes, slice 5: [MailAccountRules.key] of this account (a hash, never shown). */
+    val key: String = "",
 )
 
 /** One "Connect …" button. */
@@ -98,6 +100,13 @@ data class MailAccountsView(
     val toConnect: String?,
     /** Slice 3b-2: Autopilot's switch, or null (an older caller, or nothing connected). */
     val autopilot: MailAutopilotPanel? = null,
+    /**
+     * Inbox fixes, slice 5 (Meka, 2026-10-15 21:09: "the same Your rules list appears under every account"): every sender
+     * he set a rule for, in one list under the accounts, each naming its account when more than one is connected.
+     */
+    val rules: List<MailRuleRow> = emptyList(),
+    /** "Your rules · 20 senders", or null with none. */
+    val rulesLine: String? = null,
 )
 
 object MailAccountRules {
@@ -108,6 +117,21 @@ object MailAccountRules {
     const val OFFLINE = "Couldn't reach your server. Your accounts are still connected; try again."
     /** The label chips, always in this order (both apps). */
     val LABELS: List<MailLabel> = MailLabel.entries.toList()
+
+    /**
+     * Inbox fixes, slice 5: an account's key on the synced tidies and senders ("ma" + a hash of the provider and the
+     * address, lower-cased), so each account's card shows only its own even when two accounts share a label. The
+     * server writes it; the apps work it out from the account list. Never the address itself.
+     */
+    fun key(provider: String, email: String): String = "ma" + ActivityRules.fnv64("mailaccount:$provider:${email.trim().lowercase()}")
+
+    /**
+     * Whether an entity (a tidy or a sender) belongs to [row]: by its key when it has one; an older one without a key by
+     * its label, and then only on the first card with that label (so it is never listed twice).
+     */
+    fun belongs(entityKey: String?, entityAccount: String, row: MailAccountRow, rows: List<MailAccountRow>): Boolean =
+        if (entityKey != null) entityKey == row.key
+        else entityAccount == row.label.label && rows.firstOrNull { it.label == row.label } === row
 
     fun connectLabel(provider: String): String = "Connect ${MailProviders.name(provider)}"
 
@@ -162,6 +186,7 @@ object MailAccountRules {
             needsReconnect = a.status == "needs_reconnect" || endsAt != null,
             labels = listOf(label) + MailLabel.entries.filter { it != label },
             ending = endsAt != null,
+            key = key(a.provider, a.email),
             sortedLine = MailSortRules.summary(a.sorted),
             tidyLine = MailTidyRules.dryRunLine(a.wouldTidy),
         )
@@ -206,24 +231,42 @@ object MailAccountRules {
     ): MailAccountsView {
         val base = view(accounts, nowMs, signIns)
         val facts = accounts.filter { MailProviders.isMail(it.provider) }
+        val shared = mutableListOf<Pair<MailAccountRow, MailRuleRow>>()
         val rows = base.rows.map { r ->
             val a = facts.firstOrNull { it.provider == r.provider && it.email == r.email }
+            val label = r.label.label
+            // Inbox fixes, slice 5: only this account's own tidies and senders (by key; older ones by label, once),
+            // read as this card's label so a relabelled account keeps its history.
+            val own = batches.filter { belongs(it.accountKey, it.account, r, base.rows) }.map { it.copy(account = label) }
+            val ownSenders = senders.filter { belongs(it.accountKey, it.account, r, base.rows) }.map { it.copy(account = label) }
             // Slice 8b: the backlog clean-up's tidy has its own lines under Backlog clean-up (Activity lists it too).
-            val mine = batches.filter { it.account == r.label.label && !it.backlog }
+            val mine = own.filter { !it.backlog }
+            MailSenderRuleRules.rows(ownSenders, label).forEach { shared += r to it }
             r.copy(
                 tidyLine = MailAutopilotPanelRules.accountLine(
-                    autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, r.label.label, nowMs, cal),
+                    autopilot, paused, a?.wouldTidy, MailAutopilotPanelRules.todays(mine, label, nowMs, cal),
                     // Completeness: a revoked or expired sign-in (not one merely ending today) pauses it.
                     signInEnded = a?.status == "needs_reconnect",
                 ),
                 tidies = MailAutopilotPanelRules.rows(mine, nowMs, cal),
-                senders = MailSenderPanelRules.rows(senders, r.label.label, nowMs, cal),
-                backlog = MailBacklogRules.rowFor(backlogs, r.label.label, batches, paused, nowMs),
-                rules = MailSenderRuleRules.rows(senders, r.label.label),
-            ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders), rulesLine = MailSenderRuleRules.header(it.rules)) }
+                senders = MailSenderPanelRules.rows(ownSenders, label, nowMs, cal),
+                backlog = MailBacklogRules.rowFor(backlogs, label, own, paused, nowMs),
+            ).let { it.copy(sendersLine = MailSenderPanelRules.header(it.senders)) }
         }
-        return base.copy(rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused))
+        val rules = sharedRules(shared, many = rows.size > 1)
+        return base.copy(
+            rows = rows, autopilot = if (rows.isEmpty()) null else MailAutopilotPanelRules.panel(autopilot, paused),
+            rules = rules, rulesLine = MailSenderRuleRules.header(rules),
+        )
     }
+
+    /** Inbox fixes, slice 5: the one "Your rules" list, by sender then account; "· Business" on each line when several are connected. */
+    fun sharedRules(rules: List<Pair<MailAccountRow, MailRuleRow>>, many: Boolean): List<MailRuleRow> =
+        rules.sortedWith(compareBy<Pair<MailAccountRow, MailRuleRow>> { it.second.name.lowercase() }.thenBy { it.first.label.ordinal }.thenBy { it.second.id })
+            .map { (row, rule) ->
+                if (!many) rule
+                else rule.copy(line = "${rule.line} · ${row.label.label}", spoken = "${rule.spoken}. ${row.label.label}")
+            }
 
     /** Of the three accounts he named: which kinds have no account yet. */
     fun toConnect(rows: List<MailAccountRow>): String? {

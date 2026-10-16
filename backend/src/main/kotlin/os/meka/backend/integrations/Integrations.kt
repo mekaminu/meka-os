@@ -2193,9 +2193,14 @@ class Integrations(
         remoteId: String? = prev?.remoteId,
     ): Boolean {
         val fieldOps = HashMap(prev?.fieldOps ?: emptyMap())
+        // Inbox fixes, slice 5: every tidy and sender carries its account's key (a hash, never the address), so Mail
+        // shows each account only its own even when two accounts share a label.
+        val keyed = if ((entityType == EntityTypes.MAIL_TIDY || entityType == EntityTypes.MAIL_SENDER) && asked.isNotEmpty() &&
+            asked[DELETED_FIELD] != FieldValue.Bool(true)
+        ) asked + (MailTidyBatchFields.ACCOUNT_KEY to FieldValue.Text(MailAccountRules.key(a.provider, a.email))) else asked
         // Delete mail data: an entity the server deleted comes back when it's written again.
-        val desired = if (prev?.fieldOps?.get(DELETED_FIELD)?.second == valueKey(FieldValue.Bool(true)) && DELETED_FIELD !in asked)
-            asked + (DELETED_FIELD to FieldValue.Bool(false)) else asked
+        val desired = if (prev?.fieldOps?.get(DELETED_FIELD)?.second == valueKey(FieldValue.Bool(true)) && DELETED_FIELD !in keyed)
+            keyed + (DELETED_FIELD to FieldValue.Bool(false)) else keyed
         var changed = prev == null || prev.removed != removed || prev.startMs != startMs || prev.endMs != endMs ||
             (remoteId != null && prev.remoteId != remoteId)
         var appended = false

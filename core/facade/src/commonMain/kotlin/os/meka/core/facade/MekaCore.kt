@@ -5332,6 +5332,23 @@ class MekaCore(
     }
 
     /**
+     * Inbox fixes, slice 5: Mail's "Mark tidied mail as read" switch (synced on the Autopilot entity, absent = on; the
+     * server reads it at its next check). Returns what Mail says and the pane as it is now.
+     */
+    suspend fun setMailMarkRead(on: Boolean): MailSwitched {
+        onCore {
+            if (mailAutopilotSetting().markRead != on) {
+                replica.commitLocal(
+                    os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID,
+                    os.meka.core.domain.MailAutopilotRules.markReadFields(on),
+                )
+                refresh()
+            }
+        }
+        return MailSwitched(os.meka.core.domain.MailAutopilotPanelRules.markReadSwitchedLine(on), lastMailFacts?.let { mailView(it) })
+    }
+
+    /**
      * Undo on one of Autopilot's tidies (Mail or Activity): asks the server to put the emails back in the inbox at its
      * next check (they are never tidied again). Returns what was said and the pane as it is now.
      */

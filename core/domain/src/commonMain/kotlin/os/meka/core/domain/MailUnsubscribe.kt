@@ -177,6 +177,7 @@ object MailUnsubscribeRules {
             unopenedAtMs = ms(MailSenderFields.UNOPENED_AT),
             keptAtMs = ms(MailSenderFields.KEPT_AT),
             rule = MailSenderRule.of(text(MailSenderFields.RULE)),
+            accountKey = text(MailSenderFields.ACCOUNT_KEY),
         )
     }
 
@@ -236,6 +237,8 @@ enum class UnsubscribeState(val note: String) {
  */
 object MailSenderFields {
     const val ACCOUNT = "account"
+    /** Inbox fixes, slice 5: [MailAccountRules.key] of the account (never the address); absent on older senders. */
+    const val ACCOUNT_KEY = "accountKey"
     const val NAME = "name"
     const val DOMAIN = "domain"
     const val METHOD = "method"
@@ -284,6 +287,8 @@ data class MailSender(
     val keptAtMs: Long? = null,
     /** Meka's own rule for the sender, or null. */
     val rule: MailSenderRule? = null,
+    /** Inbox fixes, slice 5: [MailSenderFields.ACCOUNT_KEY], or null on an older sender. */
+    val accountKey: String? = null,
 )
 
 /** One sender under its account in Mail. */
