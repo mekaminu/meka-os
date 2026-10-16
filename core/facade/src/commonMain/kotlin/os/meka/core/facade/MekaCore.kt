@@ -4405,6 +4405,43 @@ class MekaCore(
         archivedChanged()
     }
 
+    private fun tidyBatch(batchId: String): os.meka.core.domain.MailTidyBatch? =
+        replica.entity(os.meka.core.domain.EntityTypes.MAIL_TIDY, batchId)?.let { s ->
+            os.meka.core.domain.MailAutopilotRules.readBatch(batchId, s.fields)
+        }
+
+    /**
+     * "Archived for you" shows which emails, slice 2: the preview of one email of a tidy (tap its row), or null when the
+     * tidy or the email isn't there any more.
+     */
+    suspend fun archivedEmail(batchId: String, key: String): os.meka.core.domain.ArchivedEmailPreview? = onCore {
+        tidyBatch(batchId)?.let { os.meka.core.domain.MailTidiedAskRules.preview(it, key, nowMs(), ZoneCalendar(timeZone)) }
+    }
+
+    /**
+     * Slice 2: Put back, Always keep from this sender or Unsubscribe on one email ([action] a [MailTidiedAction] name):
+     * synced, done by the server at its next check. Returns the bar's line, or null when it can't be asked (already
+     * asked, too old, gone).
+     */
+    suspend fun askArchivedEmail(batchId: String, key: String, action: String): String? = onCore {
+        val a = os.meka.core.domain.MailTidiedAction.of(action) ?: return@onCore null
+        val b = tidyBatch(batchId) ?: return@onCore null
+        val fields = os.meka.core.domain.MailTidiedAskRules.ask(b, key, a, nowMs()) ?: return@onCore null
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_TIDY, batchId, fields)
+        archivedChanged()
+        val e = b.emails.first { it.key == key }
+        os.meka.core.domain.MailTidiedAskRules.barLine(a, e.from, junk = e.tidy == os.meka.core.domain.MailTidy.JUNK_TRASH || e.tidy == os.meka.core.domain.MailTidy.RESCUE)
+    }
+
+    /** Undo on the bar after [askArchivedEmail]: the ask comes off while the server hasn't acted on it yet. */
+    suspend fun undoArchivedEmail(batchId: String, key: String, action: String) = onCore {
+        val a = os.meka.core.domain.MailTidiedAction.of(action) ?: return@onCore
+        val b = tidyBatch(batchId) ?: return@onCore
+        val fields = os.meka.core.domain.MailTidiedAskRules.unask(b, key, a) ?: return@onCore
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_TIDY, batchId, fields)
+        archivedChanged()
+    }
+
     private fun unopenedSeen(): Long? = os.meka.core.domain.MailUnopenedRules.readSeen(
         replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailUnopenedRules.ENTITY_ID)?.fields,
     )

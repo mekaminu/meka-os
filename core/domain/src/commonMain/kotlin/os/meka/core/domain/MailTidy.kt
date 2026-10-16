@@ -195,6 +195,13 @@ object MailTidyBatchFields {
      * address or the body), Text; absent on older batches and on the backlog and Empty Junk clean-ups.
      */
     const val EMAILS = "emails"
+    /**
+     * Slice 2 (2026-10-16): what he asked for on single emails from the preview (Put back, Always keep from this
+     * sender, Unsubscribe), one per line ([MailTidiedAskRules.encodeAsks]), Text, an app's; and the server's answers
+     * ([EMAIL_DONE], one per line with the line the apps show), Text, the server's. Absent until he asks.
+     */
+    const val EMAIL_ASKS = "emailAsks"
+    const val EMAIL_DONE = "emailDone"
 
     /** The count field of each tidy kind. */
     fun kindField(t: MailTidy): String? = when (t) {
@@ -234,6 +241,9 @@ data class MailTidyBatch(
     val accountKey: String? = null,
     /** Slice 1 of "Archived for you shows which emails": what it moved, newest first (empty on an older batch). */
     val emails: List<MailTidiedEmail> = emptyList(),
+    /** Slice 2: his asks on single emails, and the server's answers. */
+    val emailAsks: List<MailTidiedAsk> = emptyList(),
+    val emailDone: List<MailTidiedDone> = emptyList(),
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -347,6 +357,8 @@ object MailAutopilotRules {
             merchants = text(MailTidyBatchFields.MERCHANTS)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
             accountKey = text(MailTidyBatchFields.ACCOUNT_KEY),
             emails = MailTidiedRules.decode(text(MailTidyBatchFields.EMAILS)),
+            emailAsks = MailTidiedAskRules.decodeAsks(text(MailTidyBatchFields.EMAIL_ASKS)),
+            emailDone = MailTidiedAskRules.decodeDone(text(MailTidyBatchFields.EMAIL_DONE)),
         )
     }
 

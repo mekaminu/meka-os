@@ -29,6 +29,11 @@ import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailTidyFacts
 import os.meka.core.domain.MailSenderRule
 import os.meka.core.domain.MailSenderRuleRules
+import os.meka.core.domain.MailSenderFields
+import os.meka.core.domain.MailSenderPanelRules
+import os.meka.core.domain.MailTidiedAction
+import os.meka.core.domain.MailTidiedDone
+import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailCheckRules
@@ -1340,6 +1345,7 @@ class Integrations(
     internal fun autopilot(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
         val hh = a.householdId
         undoTidies(a, m, token, ms)
+        tidiedEmailAsks(a, m, token, ms)
         val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
         val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
         val check = mailChecks[a.id]
@@ -1393,7 +1399,7 @@ class Integrations(
         // "Archived for you" shows which emails: the batch lists them (sender's name and domain, subject; never the address).
         val sorts = candidates.associate { (h, s) -> h.id to s.sort }
         val pence = receiptHeaders.zip(receipts).associate { (h, r) -> h.id to r.pence }
-        val emails = tidiedEmails(a, done) { h, t -> (if (t == MailTidy.ARCHIVE || t == MailTidy.TRASH) sorts[h.id] else null) to pence[h.id] }
+        val emails = tidiedEmails(a, ms, done) { h, t -> (if (t == MailTidy.ARCHIVE || t == MailTidy.TRASH) sorts[h.id] else null) to pence[h.id] }
         writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts, returns, warranties) + emails)
         // Slice 5b: each unsubscribed sender's row in Mail says how many later emails went to Trash.
         done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
@@ -1484,22 +1490,28 @@ class Integrations(
         val rescued = done.filter { it.second == MailTidy.RESCUE }
         if (rescued.isNotEmpty()) ms.neverTidy(a.id, rescued.map { it.first.id } + rescued.map { moved.getValue(it.first.id) })
         val account = MailLabel.of(a.label)?.label ?: "Mail"
-        writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()) + tidiedEmails(a, done))
+        writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()) + tidiedEmails(a, ms, done))
     }
 
     /** "Archived for you" shows which emails, slice 1: the [MailTidyBatchFields.EMAILS] field for what a tidy moved. */
     private fun tidiedEmails(
-        a: AccountRow, done: List<Pair<MailHeader, MailTidy>>,
+        a: AccountRow, ms: MailStore, done: List<Pair<MailHeader, MailTidy>>,
         extra: (MailHeader, MailTidy) -> Pair<MailSort?, Long?> = { _, _ -> null to null },
-    ): Map<String, FieldValue> = MailTidiedRules.fields(done.map { (h, t) ->
-        val (sort, pence) = extra(h, t)
-        MailTidiedEmail(
-            key = MailTidiedRules.key(a.id, h.id), tidy = t, sort = sort, receivedAtMs = h.receivedAtMs,
-            from = MailReceiptRules.merchant(h.fromName, h.fromAddress) ?: "Unknown sender",
-            domain = MailSortRules.domain(h.fromAddress), subject = h.subject?.takeIf { it.isNotBlank() } ?: MailTidiedRules.NO_SUBJECT,
-            pence = pence,
-        )
-    })
+    ): Map<String, FieldValue> {
+        // Slice 2: the provider's short preview (for the email's preview in the apps) and whether it offered an unsubscribe.
+        val previews = if (done.isEmpty()) emptyMap() else runCatching { ms.previews(a.id, done.map { it.first.id }) }.getOrDefault(emptyMap())
+        return MailTidiedRules.fields(done.map { (h, t) ->
+            val (sort, pence) = extra(h, t)
+            MailTidiedEmail(
+                key = MailTidiedRules.key(a.id, h.id), tidy = t, sort = sort, receivedAtMs = h.receivedAtMs,
+                from = MailReceiptRules.merchant(h.fromName, h.fromAddress) ?: "Unknown sender",
+                domain = MailSortRules.domain(h.fromAddress), subject = h.subject?.takeIf { it.isNotBlank() } ?: MailTidiedRules.NO_SUBJECT,
+                pence = pence,
+                unsubscribe = MailUnsubscribeRules.plan(h.listUnsubscribe, h.oneClickUnsubscribe).method != UnsubscribeMethod.NONE,
+                preview = previews[h.id] ?: h.preview,
+            )
+        })
+    }
 
     /**
      * Inbox fixes, slice 3: **Empty Junk**. Until Meka approves, the Junk folder is counted now and then
@@ -1683,6 +1695,87 @@ class Integrations(
     }
 
     /**
+     * "Archived for you" shows which emails, slice 2: what he asked for on single emails of this account's tidies (from
+     * the email's preview on either app), done once each and answered on the tidy. **Put back** returns just that email
+     * (never tidied again, unread again when tidies mark read); **Always keep** sets his "never tidy" rule on the sender
+     * (its entity made if Autopilot hadn't published it: the account's label, the name and domain, never the address)
+     * and puts the email back; **Unsubscribe** goes the sender's own way (as Mail's Unsubscribe does). The email is found
+     * by its key among the tidy's own moves, so an ask can't reach any other email. A provider failure leaves the ask for
+     * the next check.
+     */
+    private fun tidiedEmailAsks(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val batches = reader.entities(a.householdId, EntityTypes.MAIL_TIDY)
+            .mapNotNull { (id, f) -> MailAutopilotRules.readBatch(id, f) }
+            .filter { b -> !b.backlog && now() - b.atMs <= MailAutopilotRules.UNDO_DAYS * 86_400_000L && MailTidiedAskRules.pending(b).isNotEmpty() }
+        if (batches.isEmpty()) return
+        val headers by lazy { ms.messages(a.id).associateBy { it.id } }
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        for (b in batches) {
+            val items = ms.tidied(a.id, b.id)
+            if (items.isEmpty()) continue // another account's tidy
+            val byKey = items.associateBy { MailTidiedRules.key(a.id, it.id) }
+            val answered = mutableListOf<MailTidiedDone>()
+            val backKeys = b.emailDone.filter { it.action != MailTidiedAction.UNSUBSCRIBE && it.note.startsWith("Back") }.map { it.key }.toMutableSet()
+            for (ask in MailTidiedAskRules.pending(b)) {
+                val item = byKey[ask.key]
+                if (item == null) { answered += MailTidiedDone(ask.key, ask.action, now(), MailTidiedAskRules.UNKNOWN); continue }
+                val place = if (item.tidy == MailTidy.JUNK_TRASH || item.tidy == MailTidy.RESCUE) "in Junk" else "in the inbox"
+                fun header(vararg ids: String?) = ids.firstNotNullOfOrNull { id -> id?.let { headers[it] } }
+                // Put back (Put back, and Always keep's own email): skipped when the whole tidy or this email is already back.
+                var backId: String? = null
+                var putBack = true
+                if (ask.action != MailTidiedAction.UNSUBSCRIBE && b.canUndo && ask.key !in backKeys) {
+                    val (back, interrupted) = m.untidyKept(token, mapOf(item.movedId to item.tidy))
+                    // Couldn't reach the provider: asked again next check. Not in the answer: the email had gone.
+                    if (interrupted) continue
+                    putBack = item.movedId in back
+                    backId = back[item.movedId]
+                    if (putBack) {
+                        ms.neverTidy(a.id, listOfNotNull(item.id, item.movedId, backId))
+                        if (markingRead(a.householdId) && item.tidy.marksRead) markRead(m, token, listOfNotNull(backId), false)
+                        backKeys += ask.key
+                    }
+                }
+                val h = header(item.id, item.movedId, backId)
+                val from = h?.let { MailUnsubscribeRules.displayName(it.fromName, it.fromAddress) } ?: b.emails.firstOrNull { it.key == ask.key }?.from ?: "the sender"
+                val note = when (ask.action) {
+                    MailTidiedAction.PUT_BACK -> if (!b.canUndo) "Already back · the whole tidy was put back" else if (putBack) "Back $place" else "Couldn't put it back · it had gone"
+                    MailTidiedAction.KEEP -> {
+                        val address = h?.fromAddress
+                        if (h == null || address == null) "Couldn't find that sender" else {
+                            val id = MailUnsubscribeRules.senderId(a.id, address)
+                            val current = reader.entity(a.householdId, EntityTypes.MAIL_SENDER, id)
+                            val base = if (current?.get(MailSenderFields.NAME) == null) MailUnsubscribeRules.senderFields(
+                                account, from, MailSortRules.domain(address), UnsubscribeMethod.NONE, h.receivedAtMs, 1,
+                            ) else emptyMap()
+                            writeSender(a, id, base + MailSenderRuleRules.fields(MailSenderRule.KEEP, ask.atMs), rewrite = setOf(MailSenderFields.RULE, MailSenderFields.RULE_AT))
+                            "Kept · $from stays in the inbox from now on" + if (putBack && b.canUndo) " · this one is back" else ""
+                        }
+                    }
+                    MailTidiedAction.UNSUBSCRIBE -> {
+                        val address = h?.fromAddress
+                        val plan = h?.let { MailUnsubscribeRules.plan(it.listUnsubscribe, it.oneClickUnsubscribe) }
+                        if (h == null || address == null || plan == null || plan.method == UnsubscribeMethod.NONE) UnsubscribeState.FAILED.note else {
+                            val id = MailUnsubscribeRules.senderId(a.id, address)
+                            val current = reader.entity(a.householdId, EntityTypes.MAIL_SENDER, id)
+                            val s = current?.let { MailUnsubscribeRules.read(id, it) }
+                            if (s?.state?.finished == true) MailSenderPanelRules.ALREADY else {
+                                if (current?.get(MailSenderFields.NAME) == null) writeSender(a, id, MailUnsubscribeRules.senderFields(
+                                    account, from, MailSortRules.domain(address), plan.method, h.receivedAtMs, 1,
+                                ))
+                                // Its outcome (RETRY included: Mail's Unsubscribe on the sender tries again) is the answer.
+                                unsubscribe(a, m, token, id, plan).note
+                            }
+                        }
+                    }
+                }
+                answered += MailTidiedDone(ask.key, ask.action, now(), note)
+            }
+            if (answered.isNotEmpty()) writeTidy(a, b.id, MailTidiedAskRules.doneFields(b, answered))
+        }
+    }
+
+    /**
      * Inbox autopilot, slice 5a: the account's busiest newsletter and promo senders published as `mail_sender` entities
      * (name, domain, how they can be unsubscribed, their last email and count; never an email id or the header), and
      * any Unsubscribe an app asked for done now. Outlook's list headers are read from each sender's newest email, a few
@@ -1724,7 +1817,7 @@ class Integrations(
      * One Unsubscribe Meka asked for: one-click first, else the list's unsubscribe email from this account, else the
      * sender's page handed back to open. The outcome goes on the sender's entity (Mail and Activity show it).
      */
-    private fun unsubscribe(a: AccountRow, m: MailProvider, token: String, id: String, plan: UnsubscribePlan) {
+    private fun unsubscribe(a: AccountRow, m: MailProvider, token: String, id: String, plan: UnsubscribePlan): UnsubscribeState {
         val url = plan.url
         val mailto = plan.mailto
         val oneClick = plan.method == UnsubscribeMethod.ONE_CLICK && url != null && runCatching { unsubscriber.post(url) }.getOrDefault(false)
@@ -1743,6 +1836,7 @@ class Integrations(
             else -> UnsubscribeState.FAILED
         }
         writeSender(a, id, MailUnsubscribeRules.outcomeFields(state, now(), if (state == UnsubscribeState.OPEN_LINK) plan.fallbackUrl else null))
+        return state
     }
 
     /**

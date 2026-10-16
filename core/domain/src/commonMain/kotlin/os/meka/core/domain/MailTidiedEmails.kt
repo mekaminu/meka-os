@@ -30,6 +30,10 @@ data class MailTidiedEmail(
     val subject: String,
     /** A priced receipt's amount, else null. */
     val pence: Long?,
+    /** Slice 2: the email offered a way to unsubscribe (a `List-Unsubscribe` header). */
+    val unsubscribe: Boolean = false,
+    /** Slice 2: the provider's own short preview (Gmail's snippet, Outlook's bodyPreview), cut; never the body. */
+    val preview: String? = null,
 )
 
 /** One email under a sender in the card. */
@@ -41,6 +45,10 @@ data class ArchivedEmailRow(
     val chip: String,
     /** "14:02" today, else "Mon 12 Oct · 14:02". */
     val time: String,
+    /** Slice 2: "Putting back at the next check…", the server's "Back in the inbox", …; null while nothing was asked. */
+    val state: String? = null,
+    /** The tidy it belongs to (slice 2: a tap opens [MailTidiedAskRules.preview] with both). */
+    val batchId: String = "",
 )
 
 /** A sender's emails in one tidy: "Deliveroo · 4 promos" when several, else the sender alone. */
@@ -64,6 +72,8 @@ object MailTidiedRules {
     const val MAX_FROM = 60
     const val MAX_DOMAIN = 80
     const val MAX_SUBJECT = 140
+    /** Slice 2: the preview's first lines, cut to this. */
+    const val MAX_PREVIEW = 120
     const val NO_SUBJECT = "(no subject)"
     /** Senders listed under one tidy in the card; the rest are counted. */
     const val GROUPS_SHOWN = 6
@@ -76,22 +86,37 @@ object MailTidiedRules {
         s.orEmpty().map { if (it == '\t' || it == '\n' || it == '\r' || it.code < 0x20) ' ' else it }.joinToString("")
             .replace(Regex("""\s+"""), " ").trim().let { if (it.length <= max) it else it.take(max - 1).trimEnd() + "…" }
 
-    /** The email as one line of the field (tab-separated, version 1). */
-    fun line(e: MailTidiedEmail): String = listOf(
+    /**
+     * The email as one line of the field (tab-separated, version 1). Slice 2 adds two trailing columns (a reader from
+     * slice 1 ignores them): "u" when it offered an unsubscribe, and the cut preview ([withPreview]).
+     */
+    fun line(e: MailTidiedEmail, withPreview: Boolean = true): String = listOf(
         "1", e.key, e.tidy.name, e.sort?.name.orEmpty(), e.receivedAtMs.toString(), clean(e.from, MAX_FROM),
         clean(e.domain, MAX_DOMAIN), clean(e.subject, MAX_SUBJECT), e.pence?.toString().orEmpty(),
+        if (e.unsubscribe) "u" else "", if (withPreview) clean(e.preview, MAX_PREVIEW) else "",
     ).joinToString("\t")
 
-    /** The field's value: newest first, as many as fit in [MAX_CHARS]; null for none. */
+    /**
+     * The field's value: newest first, as many as fit in [MAX_CHARS]; null for none. When the previews would leave
+     * emails out, the list keeps every email it can without them (who and what matter more than the first lines).
+     */
     fun encode(emails: List<MailTidiedEmail>): String? {
-        val out = StringBuilder()
-        for (e in emails.sortedByDescending { it.receivedAtMs }) {
-            val l = line(e)
-            if (out.length + l.length + 1 > MAX_CHARS) break
-            if (out.isNotEmpty()) out.append('\n')
-            out.append(l)
+        val sorted = emails.sortedByDescending { it.receivedAtMs }
+        fun build(withPreview: Boolean): Pair<String, Int> {
+            val out = StringBuilder()
+            var n = 0
+            for (e in sorted) {
+                val l = line(e, withPreview)
+                if (out.length + l.length + 1 > MAX_CHARS) break
+                if (out.isNotEmpty()) out.append('\n')
+                out.append(l)
+                n++
+            }
+            return out.toString() to n
         }
-        return out.toString().takeIf { it.isNotEmpty() }
+        val (full, n) = build(true)
+        val text = if (n < sorted.size) build(false).first else full
+        return text.takeIf { it.isNotEmpty() }
     }
 
     fun fields(emails: List<MailTidiedEmail>): Map<String, FieldValue> =
@@ -107,6 +132,7 @@ object MailTidiedRules {
             receivedAtMs = p[4].toLongOrNull() ?: return@mapNotNull null,
             from = p[5].ifBlank { "Unknown sender" }, domain = p[6].ifBlank { null },
             subject = p[7].ifBlank { NO_SUBJECT }, pence = p[8].toLongOrNull()?.takeIf { it > 0 },
+            unsubscribe = p.getOrNull(9) == "u", preview = p.getOrNull(10)?.ifBlank { null },
         )
     }
 
@@ -168,13 +194,15 @@ object MailTidiedRules {
             val first = es.first()
             val title = if (es.size == 1) first.from else "${first.from} · ${count(es)}"
             val meta = listOfNotNull(first.domain, batch.account).joinToString(" · ")
-            val rows = es.take(ROWS_SHOWN).map { e -> ArchivedEmailRow(e.key, e.subject, chip(e), time(e.receivedAtMs, today, cal)) }
+            val rows = es.take(ROWS_SHOWN).map { e ->
+                ArchivedEmailRow(e.key, e.subject, chip(e), time(e.receivedAtMs, today, cal), MailTidiedAskRules.state(batch, e.key), batch.id)
+            }
             val more = es.size - rows.size
             ArchivedEmailGroup(
                 id = batch.id + ":" + first.key,
                 title = title, meta = meta, rows = rows,
                 moreLine = if (more > 0) "+ $more more from ${first.from}" else null,
-                spoken = "$title, $meta. " + rows.joinToString(". ") { "${it.subject}, ${it.chip}, ${it.time}" } + ".",
+                spoken = "$title, $meta. " + rows.joinToString(". ") { r -> listOfNotNull(r.subject, r.chip, r.time, r.state).joinToString(", ") } + ".",
             )
         }
         val listedInGroups = bySender.take(GROUPS_SHOWN).sumOf { it.size }

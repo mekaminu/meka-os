@@ -71,7 +71,7 @@ class MailTidiedEmailsTest {
         assertEquals(listOf("Amazon", "Deliveroo · 4 promos", "The Weekly"), groups.map { it.title })
         assertEquals("amazon.co.uk · Personal", groups[0].meta)
         assertEquals("Personal", groups[2].meta)
-        assertEquals(ArchivedEmailRow(MailTidiedRules.key("acc1", "a1"), "Your order has shipped", "Receipt £12.99", "11:00"), groups[0].rows[0])
+        assertEquals(ArchivedEmailRow(MailTidiedRules.key("acc1", "a1"), "Your order has shipped", "Receipt £12.99", "11:00"), groups[0].rows[0].copy(batchId = ""))
         assertEquals(listOf("Your weekly treat", "Free delivery", "20% off tonight"), groups[1].rows.map { it.subject })
         assertEquals("+ 1 more from Deliveroo", groups[1].moreLine)
         assertEquals("Newsletter", groups[2].rows[0].chip)

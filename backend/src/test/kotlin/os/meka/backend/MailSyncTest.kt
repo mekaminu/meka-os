@@ -71,6 +71,10 @@ import os.meka.core.domain.MailJunkClearRules
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
+import os.meka.core.domain.MailTidiedAction
+import os.meka.core.domain.MailTidiedAsk
+import os.meka.core.domain.MailTidiedAskRules
+import os.meka.core.domain.MailTidiedRules
 import os.meka.core.domain.MailSenderFields
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.MailSenderRule
@@ -1320,6 +1324,70 @@ class MailSyncTest {
         gmail.repliedFails = false
         i.syncAccount(id)
         assertEquals(mapOf("s1" to MailTidy.JUNK_TRASH), gmail.tidyCalls.single())
+    }
+
+    @Test
+    fun oneEmailOfATidyCanBePutBackKeptOrUnsubscribedFromItsPreview() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val posted = mutableListOf<String>()
+        val (gmail, _, i) = world(ms, ops = ops, unsubscriber = { url -> posted += url; true })
+        val id = connect(i)
+        i.syncAccount(id)
+        now += day + 1
+        autopilotOn(ops)
+        now += 1
+        gmail.mailbox["n1"] = newsletter("n1", "editor@weekly.example", "The Weekly", "<https://weekly.example/u/1>", oneClick = true)
+            .copy(preview = "This week's picks and more")
+        gmail.mailbox["n2"] = newsletter("n2", "deals@shop.example", "Shop Deals", null)
+        gmail.mailbox["n3"] = newsletter("n3", "news@club.example", "Club News", null)
+        gmail.nextRound = { MailChanges(fetch = listOf("n1", "n2", "n3"), cursor = "h2") }
+        i.syncAccount(id)
+        val batchId = tidies(ops).keys.single()
+        assertTrue(listOf("n1", "n2", "n3").none { gmail.mailbox.getValue(it).inInbox })
+        // The list carries the preview and whether it offered an unsubscribe (never the address).
+        val f0 = tidies(ops).getValue(batchId)
+        val emails = MailTidiedRules.decode((f0[MailTidyBatchFields.EMAILS] as FieldValue.Text).value)
+        val weekly = emails.single { it.domain == "weekly.example" }
+        assertTrue(weekly.unsubscribe)
+        assertEquals("This week's picks and more", weekly.preview)
+        assertFalse(emails.single { it.domain == "shop.example" }.unsubscribe)
+        // On the Fold: Put back on Shop Deals, Unsubscribe on The Weekly, Always keep on Club News.
+        now += 60_000
+        fun key(m: String) = MailTidiedRules.key(id, m)
+        val asks = listOf(
+            MailTidiedAsk(key("n2"), MailTidiedAction.PUT_BACK, now), MailTidiedAsk(key("n1"), MailTidiedAction.UNSUBSCRIBE, now),
+            MailTidiedAsk(key("n3"), MailTidiedAction.KEEP, now), MailTidiedAsk("te-not-in-this-tidy", MailTidiedAction.PUT_BACK, now),
+        )
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.EMAIL_ASKS, FieldValue.Text(MailTidiedAskRules.encodeAsks(asks)))
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        // Just those emails back; The Weekly stays archived and is unsubscribed one-click.
+        assertTrue(gmail.mailbox.getValue("n2").inInbox && gmail.mailbox.getValue("n3").inInbox)
+        assertFalse(gmail.mailbox.getValue("n1").inInbox)
+        assertTrue("n2" in ms.neverTidied(id) && "n3" in ms.neverTidied(id) && "n1" !in ms.neverTidied(id))
+        assertEquals(listOf("https://weekly.example/u/1"), posted)
+        // Club News carries his "never tidy" rule now.
+        val club = senders(ops).getValue(MailUnsubscribeRules.senderId(id, "news@club.example"))
+        assertEquals(FieldValue.Text(MailSenderRule.KEEP.name), club[MailSenderFields.RULE])
+        assertEquals(FieldValue.Text("Club News"), club[MailSenderFields.NAME])
+        // Each answered on the tidy; the tidy itself still stands.
+        val b = MailAutopilotRules.readBatch(batchId, tidies(ops).getValue(batchId))!!
+        assertTrue(b.canUndo)
+        assertTrue(MailTidiedAskRules.pending(b).isEmpty())
+        assertEquals("Back in the inbox", MailTidiedAskRules.state(b, key("n2")))
+        assertEquals(UnsubscribeState.DONE.note, MailTidiedAskRules.state(b, key("n1")))
+        assertEquals("Kept · Club News stays in the inbox from now on · this one is back", MailTidiedAskRules.state(b, key("n3")))
+        assertEquals(MailTidiedAskRules.UNKNOWN, b.emailDone.single { it.key == "te-not-in-this-tidy" }.note)
+        assertFalse(b.emailDone.any { "@" in it.note })
+        // Done once: the next check does nothing more, and Club News' next email stays in the inbox.
+        now += 60_000
+        gmail.mailbox["n4"] = newsletter("n4", "news@club.example", "Club News", null)
+        gmail.nextRound = { MailChanges(fetch = listOf("n4"), cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(1, posted.size)
+        assertTrue(gmail.mailbox.getValue("n4").inInbox)
+        assertEquals(1, gmail.tidyCalls.size)
     }
 
     @Test

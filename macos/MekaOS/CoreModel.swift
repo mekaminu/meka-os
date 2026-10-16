@@ -3091,6 +3091,7 @@ final class CoreModel {
         case .groupDigest(let undo): run { try await $0.undoCatchUpGroupDigest(undo: undo) }
         case .afterWork(let ids): run { try await $0.undoClearAfterWork(ids: ids) }
         case .archivedSeen: run { try await $0.undoSeenArchivedForYou() }
+        case .archivedEmail(let batchId, let key, let action): run { try await $0.undoArchivedEmail(batchId: batchId, key: key, action: action) }
         case .mailUnopened: run { try await $0.undoUnopened() }
         case .mailItem: run { try await $0.undoMailItem() }
         case .mailChase: run { try await $0.undoMailChase() }
@@ -4659,6 +4660,26 @@ final class CoreModel {
         }
     }
 
+    /// "Archived for you" shows which emails, slice 2: one email's preview (from the synced tidy), or nil when it has gone.
+    func archivedEmail(batchId: String, key: String) async -> ArchivedEmailPreview? {
+        guard let core else { return nil }
+        return try? await core.archivedEmail(batchId: batchId, key: key)
+    }
+
+    /// Slice 2: Put back, Always keep or Unsubscribe on one email (an action's name), done at the server's next check;
+    /// Undo on the bar takes the ask off until then. Only Strings cross to the core.
+    func askArchivedEmail(batchId: String, key: String, action: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            do {
+                if let line = try await core.askArchivedEmail(batchId: batchId, key: key, action: action) {
+                    offerEventUndo(line, .archivedEmail(batchId, key, action))
+                }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Caught up on the group digest (one group's card, or all of them): the cards leave Needs you here and on the Fold,
     /// with Undo on the bar. Only the groups' keys (Strings) cross to the core.
     func catchUpGroupDigest(_ gists: [GroupGist]) {
@@ -4884,6 +4905,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case groupDigest(GroupDigestUndo)
         /// Got it on "Archived for you": the card comes back on both devices.
         case archivedSeen
+        /// Put back, Always keep or Unsubscribe on one archived email: the ask comes off (while the server hasn't acted).
+        case archivedEmail(String, String, String)
         /// Unsubscribe from all, Not now or Keep on "Not opened in 30 days": the last answer is taken back.
         case mailUnopened
         /// Done or Snooze on an email in "From your mail": the card comes back (and the email, if already archived).
