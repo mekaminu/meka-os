@@ -149,4 +149,72 @@ class SchoolMailTest {
         val council = SchoolItem("c", SchoolKind.OFF, "October half term", "", CivilDate.toEpochDay(2026, 10, 26), CivilDate.toEpochDay(2026, 11, 2), 0, null, emptyList(), 0L, "council:x")
         assertFalse(SchoolMailRules.showable(f, listOf(council), received))
     }
+
+    // ---- Slice 2: asks without a date become tasks ----
+
+    @Test
+    fun asksWithoutADateAreReadAsTasks() {
+        val coat = assertNotNull(read("Cold weather", "Please send in a named coat for Alex as the weather is turning."))
+        assertTrue(coat.ask)
+        assertEquals("Send in a named coat for Alex", coat.title)
+        assertEquals("Alex", coat.who)
+        assertEquals(received, coat.startDay)
+        assertEquals(received + SchoolMailRules.ASK_DAYS, coat.endDay)
+        assertEquals("Return the reply slip", assertNotNull(read("Reply slip", "Please could you return the reply slip.")).title)
+        assertEquals("Pack wellies and a waterproof coat", assertNotNull(read("Forest school", "Children will need wellies and a waterproof coat.")).title)
+        assertEquals("Label all uniform", assertNotNull(read(null, "Please remember to label all uniform, thank you.")).title)
+        // An ask with a day of its own (and none of the dated kinds) is due that day.
+        val dated = assertNotNull(read("Harvest", "Please send in a tin of food by Friday 23 October."))
+        assertTrue(dated.ask)
+        assertEquals("Send in a tin of food", dated.title)
+        assertEquals(CivilDate.toEpochDay(2026, 10, 23), dated.startDay)
+        assertEquals(dated.startDay, dated.endDay)
+        // The dated kinds still win.
+        assertFalse(assertNotNull(read("Trip payment", "Please pay £12 for the trip by 20 Nov.")).ask)
+        // Not asks.
+        assertNull(read("Newsletter", "Please find attached this week's newsletter."))
+        assertNull(read("Allergies", "Please do not send in any nuts."))
+        assertNull(read("Pick-up", "Children need to be collected from the side gate."))
+        assertNull(read("Year 3", "Children have been learning about the Romans."))
+        assertNull(read("Portal", "Please sign in to the portal with your password."))
+        assertNull(read("Link", "Please book via https://example.org/slots"))
+        // Long things are cut at a word.
+        val long = assertNotNull(read(null, "Please send in old cardboard boxes, yoghurt pots and kitchen roll tubes for our model making week."))
+        assertEquals("Send in old cardboard boxes", long.title)
+        val longer = assertNotNull(read(null, "Please send in old cardboard boxes and yoghurt pots and kitchen roll tubes and egg boxes for making models."))
+        assertTrue(longer.title.endsWith("…") && longer.title.length <= 60, longer.title)
+    }
+
+    @Test
+    fun anAsksFindShowsAndMakesATask() {
+        val s = assertNotNull(read("Cold weather", "Please send in a named coat for Alex."))
+        val f = find(s)
+        assertEquals(SchoolMailRules.ASK, f.schoolKind)
+        assertTrue(SchoolMailRules.isAsk(f))
+        assertTrue(SchoolMailRules.undated(f))
+        val row = SchoolMailRules.row(f, received)
+        assertEquals("Send in a named coat for Alex · no date given", row.line)
+        assertEquals("Make Send in a named coat for Alex a task", row.addSpoken)
+        val card = assertNotNull(MailRenewalRules.card(listOf(f), emptyList(), received * 86_400_000L + 3_600_000L, LocalCalendar.UTC))
+        assertEquals("1 from the school · nothing is added until you tap Add", card.headline)
+        // Offered for a week, then gone; answered, gone.
+        assertTrue(SchoolMailRules.showable(f, emptyList(), received + SchoolMailRules.ASK_DAYS))
+        assertFalse(SchoolMailRules.showable(f, emptyList(), received + SchoolMailRules.ASK_DAYS + 1))
+        assertFalse(SchoolMailRules.showable(find(s, MailFindState.ADDED), emptyList(), received))
+        // The task names the child once, says where it came from, and is due the next school morning at 08:00.
+        assertEquals("Send in a named coat for Alex", SchoolMailRules.taskTitle(f))
+        assertTrue(SchoolMailRules.taskNotes(f).startsWith("From Oakfield Primary's email “Subject” · Personal mail."), SchoolMailRules.taskNotes(f))
+        val cal = LocalCalendar.UTC
+        val thu = received * 86_400_000L
+        assertEquals(received, SchoolMailRules.taskDueDay(f, thu + 7 * 3_600_000L, cal)) // Thu 07:00 → today
+        assertEquals(received + 1, SchoolMailRules.taskDueDay(f, thu + 9 * 3_600_000L, cal)) // Thu 09:00 → Fri
+        assertEquals(received + 4, SchoolMailRules.taskDueDay(f, thu + 86_400_000L + 9 * 3_600_000L, cal)) // Fri 09:00 → Mon
+        assertEquals("Task added: Send in a named coat for Alex · due tomorrow, 08:00", SchoolMailRules.askAddedLine(f, thu + 9 * 3_600_000L, cal))
+        // A dated ask is due that morning; a reminder within the fortnight is the same find.
+        val dated = find(assertNotNull(read("Harvest", "Please send in a tin of food by Friday 23 October.")))
+        assertFalse(SchoolMailRules.undated(dated))
+        assertEquals(CivilDate.toEpochDay(2026, 10, 23), SchoolMailRules.taskDueDay(dated, thu, cal))
+        val again = assertNotNull(SchoolMailRules.read("Reminder", "Please send in a named coat for Alex.", received + 2, kids))
+        assertEquals(SchoolMailRules.findId("a", s), SchoolMailRules.findId("a", again))
+    }
 }

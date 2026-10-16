@@ -13,3 +13,4 @@ how: Tap Fill in under Holidays from the council for the council's term dates, t
 tip: The council's dates say "check with the school"; days you type always win.
 tip: Add the school's website in About you and School links to it.
 tip: Add the addresses the school writes from under School's email in About you: its trips, payments, forms and days off then show in Needs you with Add, and Add puts them in School.
+tip: A request with no date of its own, like "please send in a named coat", shows there too; Add makes it a task for the next school morning, not a School date.

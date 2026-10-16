@@ -379,8 +379,10 @@ object MailRenewalRules {
     }
 
     /** School logistics: the school's finds join the card ("2 to add to School…" alone, "To add from your mail" mixed). */
-    fun headline(renewals: Int, promises: Int, followUps: Int, school: Int): String = when {
+    fun headline(renewals: Int, promises: Int, followUps: Int, school: Int, asks: Int = 0): String = when {
         school == 0 -> headline(renewals, promises, followUps)
+        // Slice 2 of school logistics: an ask becomes a task, not a School line.
+        renewals == 0 && promises == 0 && followUps == 0 && asks > 0 -> "$school from the school · nothing is added until you tap Add"
         renewals == 0 && promises == 0 && followUps == 0 -> "$school to add to School · nothing goes in until you tap Add"
         else -> "${renewals + promises + followUps + school} to add · nothing goes on until you tap Add"
     }
@@ -429,7 +431,7 @@ object MailRenewalRules {
         }
         val more = open.size - rows.size
         return MailFindCard(
-            title(renewals.size, promises.size, followUps.size, school.size), headline(renewals.size, promises.size, followUps.size, school.size), rows,
+            title(renewals.size, promises.size, followUps.size, school.size), headline(renewals.size, promises.size, followUps.size, school.size, school.count(SchoolMailRules::isAsk)), rows,
             if (more > 0) "+ $more more · answer these first" else null,
         )
     }

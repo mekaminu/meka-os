@@ -4740,6 +4740,17 @@ class MekaCore(
      */
     private fun addMailSchool(f: os.meka.core.domain.MailFind, cal: ZoneCalendar): String {
         val S = os.meka.core.domain.SchoolMailRules
+        if (S.isAsk(f)) {
+            // Slice 2: an ask ("Please send in a named coat") becomes a task due the school morning, never a School line.
+            val taskId = tasks.createWithId(S.taskId(f.id), os.meka.core.domain.NewTask(S.taskTitle(f), notes = S.taskNotes(f), dueAtMs = S.taskDueMs(f, nowMs(), cal)))
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
+            mailFindUndo = {
+                runCatching { tasks.delete(taskId) }
+                replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs()))
+            }
+            refresh()
+            return S.askAddedLine(f, nowMs(), cal)
+        }
         val sid = S.schoolItemId(f.id)
         replica.commitLocal(os.meka.core.domain.EntityTypes.SCHOOL_ITEM, sid, S.schoolFields(f, nowMs()))
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))

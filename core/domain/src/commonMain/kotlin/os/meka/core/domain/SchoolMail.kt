@@ -16,6 +16,13 @@ import os.meka.core.sync.fv
  * the week-ahead "who's covering?" and Kids' THIS WEEK all follow; Undo takes it off) and **Not needed**. Nothing goes
  * into School without that tap; there is no second list.
  *
+ * Slice 2: **asks without a date become tasks, on his tap**. "Please send in a named coat", "Children will need wellies
+ * and a waterproof", "Please return the reply slip" — a request from the school that names no date (or a date that is
+ * none of the kinds above) becomes a find with [SchoolMailRules.ASK] as its school kind: "Send in a named coat · Alex ·
+ * no date given" in the same card, and **Add** makes a task ("Send in a named coat for Alex", due the next school
+ * morning at 08:00, or the morning of the day the email gave) with Undo, never a School line. An undated ask is offered
+ * for [SchoolMailRules.ASK_DAYS] days.
+ *
  * Every word of an email is someone else's (ADR-006): a find only proposes a date he can remove; nothing is paid, signed
  * or sent because of it. Codes, passwords and newsletters' unsubscribe noise propose nothing. Rule 13: the school, its
  * senders and the children's names come from his data (About you), never from the code; tests use invented ones.
@@ -32,6 +39,8 @@ data class SchoolMailFind(
     val startDay: Long,
     val endDay: Long,
     val pence: Long?,
+    /** Slice 2: a request to do something ([SchoolMailRules.ASK]), made a task on Add rather than a School line. */
+    val ask: Boolean = false,
 )
 
 object SchoolMailRules {
@@ -48,6 +57,13 @@ object SchoolMailRules {
     const val SOURCE_LINE = "From the school's email · added on your tap"
     const val MAX_SENDERS = 6
     private const val MAX_TITLE = 48
+    /** Slice 2: the school kind of an ask ([SchoolMailFind.ask]); an older app reads it as a date. */
+    const val ASK = "ask"
+    /** An undated ask is offered this many days after its email. */
+    const val ASK_DAYS = 7
+    /** Its task is due at this minute of the school morning. */
+    const val ASK_MINUTE = 8 * 60
+    private const val MAX_ASK = 60
 
     private val I = setOf(RegexOption.IGNORE_CASE)
 
@@ -84,6 +100,23 @@ object SchoolMailRules {
         """assembly""" to "Class assembly",
         """fair|fayre""" to "School fair",
     ).map { (re, title) -> Regex("""\b(?:$re)\b""", I) to title }
+    /** Slice 2: "Please (could you / remember to / make sure you) send in a named coat …". */
+    private val PLEASE = Regex(
+        """\bplease\s+(?:could\s+you\s+|can\s+you\s+|remember\s+to\s+|(?:ensure|make\s+sure)\s+(?:that\s+)?you\s+|do\s+)?""" +
+            """(send\s+in|send|bring\s+in|bring|provide|label|name|pack|return|sign|complete|fill\s+in|book|donate|pay)\s+([^.!?\n]{2,90})""", I,
+    )
+    /** "Children will need wellies", "your child should bring a packed lunch": what to pack. */
+    private val NEEDS = Regex(
+        """\b(?:your\s+child(?:ren)?|children|pupils|everyone)\s+(?:(?:will|should|must)\s+(?:need\s+to\s+bring|need|bring)|""" +
+            """needs?\s+to\s+bring|needs?|(?:are|is)\s+asked\s+to\s+bring)\s+([^.!?\n]{2,90})""", I,
+    )
+    /** Where an ask's thing ends: its date, a reason, the next clause. */
+    private val ASK_CUT = Regex(
+        """\s+(?:by|before|on|this|next|no\s+later|as|so|because|in\s+case|which|ready|if|when|please|thank)\b.*$|\s*[,;:(].*$|\s+[–-]\s.*$""", I,
+    )
+    /** Not a thing to pack or send: "to wear …", "with them", "a lovely time". */
+    private val NOT_A_THING = Regex("""^(?:to\b|a\s+(?:lovely|great|good|fantastic)\b|fun\b|us\b|you\b|it\b|this\b|any\s+questions)""", I)
+
     /** Already over or called off: nothing to add. */
     private val NOT_COMING = Regex("""\b(cancell?ed|postponed\s+indefinitely|thank\s+you\s+for\s+(?:paying|your\s+payment)|payment\s+(?:received|confirmed|successful)|receipt)\b""", I)
 
@@ -144,8 +177,9 @@ object SchoolMailRules {
         if (texts.isEmpty() || texts.any { NOISE.containsMatchIn(it) }) return null
         val all = texts.joinToString(". ")
         if (NOT_COMING.containsMatchIn(all)) return null
-        val (start, end) = span(texts, receivedDay) ?: return null
         val who = who(all, children)
+        val (start, end) = span(texts, receivedDay)
+            ?: return ask(all)?.let { SchoolMailFind(SchoolKind.DAY, it, who, receivedDay, receivedDay + ASK_DAYS, null, ask = true) }
         val tripTo = TRIP.find(all)?.let { tripTitle(it.groupValues[1]) }
         val isTrip = tripTo != null || TRIP_WORD.containsMatchIn(all)
         val event = EVENTS.firstOrNull { it.first.containsMatchIn(all) }?.second
@@ -178,7 +212,35 @@ object SchoolMailRules {
         }
         if (isTrip) return SchoolMailFind(SchoolKind.DAY, tripTo?.let { "Trip to $it" } ?: "School trip", who, start, start, amount)
         if (event != null) return SchoolMailFind(SchoolKind.DAY, event, who, start, start, amount)
+        return ask(all)?.let { SchoolMailFind(SchoolKind.DAY, it, who, start, start, null, ask = true) }
+    }
+
+    /**
+     * Slice 2: the one thing a school email asks him to do, as a task's title — "Send in a named coat", "Return the reply
+     * slip", "Pack wellies and a waterproof coat" — else null. The first ask in the email; its date and reasons cut off.
+     */
+    fun ask(text: String): String? {
+        PLEASE.find(text)?.let { m ->
+            val verb = m.groupValues[1].replace(Regex("""\s+"""), " ").lowercase()
+            thing(m.groupValues[2])?.let { return askTitle(verb, it) }
+        }
+        NEEDS.find(text)?.let { m -> thing(m.groupValues[1])?.let { return askTitle("pack", it) } }
         return null
+    }
+
+    private fun askTitle(verb: String, thing: String): String {
+        val t = "${verb.replaceFirstChar { it.uppercase() }} $thing"
+        if (t.length <= MAX_ASK) return t
+        val cut = t.take(MAX_ASK - 1)
+        return cut.substring(0, cut.lastIndexOf(' ').takeIf { it > 10 } ?: cut.length).trimEnd() + "…"
+    }
+
+    private fun thing(raw: String): String? {
+        // A link or an address anywhere in the ask: it's a "click here", not a thing to do by hand.
+        if (Regex("""https?:|www\.|@""", I).containsMatchIn(raw)) return null
+        val t = raw.replace(ASK_CUT, "").trim().trimEnd('.', ',', ' ')
+        if (t.length < 3 || NOT_A_THING.containsMatchIn(t)) return null
+        return t
     }
 
     /** "the Science Museum on Fri 20 Nov" → "the Science Museum" (cut at the date words), up to [MAX_TITLE]. */
@@ -214,7 +276,53 @@ object SchoolMailRules {
 
     /** One find per account, thing and day, so a reminder email about the same trip lands on the same one. */
     fun findId(accountId: String, s: SchoolMailFind): String =
-        "mf" + ActivityRules.fnv64("mailschool:$accountId:${s.kind.wire}:${s.title.lowercase()}:${s.who.lowercase()}:${s.startDay}")
+        if (s.ask) {
+            // An undated ask repeated within a fortnight ("Reminder: please send in…") lands on the same find.
+            val day = if (s.endDay > s.startDay) "~" + s.startDay / 14 else s.startDay.toString()
+            "mf" + ActivityRules.fnv64("mailschool:$accountId:$ASK:${s.title.lowercase()}:${s.who.lowercase()}:$day")
+        } else {
+            "mf" + ActivityRules.fnv64("mailschool:$accountId:${s.kind.wire}:${s.title.lowercase()}:${s.who.lowercase()}:${s.startDay}")
+        }
+
+    /** Slice 2: whether [f] is an ask (made a task on Add). */
+    fun isAsk(f: MailFind): Boolean = f.kind == KIND_SCHOOL && f.schoolKind == ASK
+
+    /** Slice 2: an ask with no date of its own (offered for [ASK_DAYS] days from its email). */
+    fun undated(f: MailFind): Boolean = (f.endDay ?: f.renewDay) > f.renewDay
+
+    /** The task Add makes for an ask: one per find, so Add on both apps lands on the same task. */
+    fun taskId(findId: String): String = "st" + ActivityRules.fnv64("mailask:$findId")
+
+    /** "Send in a named coat for Alex" (the child named in the email, unless the ask names them already). */
+    fun taskTitle(f: MailFind): String {
+        val what = f.what ?: "What the school asked"
+        val who = f.who?.takeIf { it.isNotBlank() && !Regex("""\b${Regex.escape(it)}\b""", I).containsMatchIn(what) }
+        return if (who != null) "$what for $who" else what
+    }
+
+    fun taskNotes(f: MailFind): String = listOfNotNull(
+        "From ${title(f)}'s email" + (f.subject?.let { " “$it”" } ?: "") + " · ${f.account} mail.",
+        "Added on your tap. Navilife doesn't reply, pay or sign anything.",
+    ).joinToString("\n")
+
+    /**
+     * When the task is due: the morning of the day the email gave, at [ASK_MINUTE]; an undated one (or one whose day is
+     * past) the next school morning — today if it isn't yet [ASK_MINUTE] on a weekday, else the next weekday.
+     */
+    fun taskDueDay(f: MailFind, nowMs: Long, cal: LocalCalendar): Long {
+        val today = cal.epochDayOf(nowMs)
+        if (!undated(f) && f.renewDay > today) return f.renewDay
+        if (!undated(f) && f.renewDay == today && cal.minuteOfDay(nowMs) < ASK_MINUTE) return today
+        var d = if (cal.minuteOfDay(nowMs) < ASK_MINUTE) today else today + 1
+        while (CivilDate.isoDayOfWeek(d) > 5) d++
+        return d
+    }
+
+    fun taskDueMs(f: MailFind, nowMs: Long, cal: LocalCalendar): Long = cal.toEpochMs(taskDueDay(f, nowMs, cal), ASK_MINUTE)
+
+    /** The bar's line after Add on an ask: "Task added: Send in a named coat for Alex · due tomorrow, 08:00". */
+    fun askAddedLine(f: MailFind, nowMs: Long, cal: LocalCalendar): String =
+        "Task added: ${taskTitle(f)} · due ${RenewalRules.dayWord(taskDueDay(f, nowMs, cal), cal.epochDayOf(nowMs))}, 08:00"
 
     /** The School line Add writes: one per find, so Add on both apps lands on the same line. */
     fun schoolItemId(findId: String): String = "sm" + ActivityRules.fnv64("mailfind:$findId")
@@ -228,7 +336,7 @@ object SchoolMailRules {
         MailFindFields.END_DAY to s.endDay.fv(),
         MailFindFields.PENCE to (s.pence?.fv() ?: FieldValue.Null),
         MailFindFields.WHAT to s.title.fv(),
-        MailFindFields.SCHOOL_KIND to s.kind.wire.fv(),
+        MailFindFields.SCHOOL_KIND to (if (s.ask) ASK else s.kind.wire).fv(),
         MailFindFields.WHO to s.who.fv(),
         MailFindFields.RECEIVED_DAY to receivedDay.fv(),
         MailFindFields.SUBJECT to (subject?.trim()?.take(MailRenewalRules.MAX_SUBJECT)?.takeIf { it.isNotEmpty() }?.fv() ?: FieldValue.Null),
@@ -251,6 +359,13 @@ object SchoolMailRules {
 
     /** "Trip payment · £12 · due Fri 20 Nov · Alex", "INSET day · Mon 2 Nov · no school · everyone". */
     fun line(f: MailFind, today: Long): String {
+        if (isAsk(f)) {
+            // Slice 2: "Send in a named coat · Alex · no date given" / "… · by Fri 20 Nov".
+            val what = f.what ?: "What the school asked"
+            val who = f.who?.takeIf { it.isNotBlank() && !Regex("""\b${Regex.escape(it)}\b""", I).containsMatchIn(what) }
+            val day = if (undated(f)) "no date given" else "by " + RenewalRules.dayWord(f.renewDay, today)
+            return listOfNotNull(what, who, day).joinToString(" · ")
+        }
         val e = entry(f)
         val who = SchoolRules.whoLabel(e.who).takeIf { it.isNotBlank() }
         val what = f.what ?: "From the school"
@@ -271,8 +386,8 @@ object SchoolMailRules {
             id = f.id, title = title, line = line, from = MailRenewalRules.fromLine(f),
             business = f.account == MailLabel.BUSINESS.label,
             spoken = "$title. $line. From your ${f.account} mail.",
-            addSpoken = "Add $what to School",
-            notNeededSpoken = "$what isn't needed in School",
+            addSpoken = if (isAsk(f)) "Make $what a task" else "Add $what to School",
+            notNeededSpoken = if (isAsk(f)) "$what isn't needed" else "$what isn't needed in School",
         )
     }
 
@@ -282,6 +397,8 @@ object SchoolMailRules {
      */
     fun showable(f: MailFind, items: List<SchoolItem>, today: Long): Boolean {
         if (f.kind != KIND_SCHOOL || f.state != MailFindState.OPEN) return false
+        // Slice 2: an ask stays until its day (an undated one for ASK_DAYS days); answered, it's gone.
+        if (isAsk(f)) return (f.endDay ?: f.renewDay) >= today
         val e = entry(f)
         if (e.endDay < today) return false
         val sid = schoolItemId(f.id)

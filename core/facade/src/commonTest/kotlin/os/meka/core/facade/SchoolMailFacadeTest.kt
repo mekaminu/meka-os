@@ -84,4 +84,42 @@ class SchoolMailFacadeTest {
         assertEquals(1, fold.schoolView.value.dates.size)
         assertNull(fold.mailFinds.value)
     }
+
+    /** The task's fields as the server holds them after a sync (deleted ones included). */
+    private fun serverTask(id: String): Map<String, FieldValue> =
+        serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityType == EntityTypes.TASK && it.entityId == id }
+            .associate { it.field to it.value }
+
+    @Test
+    fun anAskBecomesATaskOnBothAppsAndUndoTakesItOff() = runTest {
+        // Slice 2: "Please send in a named coat" names no day: Add makes a task for the next school morning.
+        val ask = SchoolMailRules.read("Cold weather", "Please send in a named coat for Alex as the weather turns.", received, listOf("Alex", "Sam"))!!
+        val id = SchoolMailRules.findId("acc1", ask)
+        serverWrite(id, SchoolMailRules.serverFields(ask, "Oakfield Primary", "Personal", "Cold weather", received))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val card = fold.mailFinds.value!!
+        assertEquals("1 from the school · nothing is added until you tap Add", card.headline)
+        assertEquals("Send in a named coat for Alex · no date given", card.rows.single().line)
+
+        // Saturday 09:30: due Monday 08:00, and nothing goes into School.
+        assertEquals("Task added: Send in a named coat for Alex · due Mon 19 Oct, 08:00", mac.addMailFind(id))
+        assertNull(mac.mailFinds.value)
+        assertTrue(mac.schoolView.value.dates.isEmpty())
+        assertTrue(mac.syncNow()); assertTrue(fold.syncNow())
+        assertNull(fold.mailFinds.value)
+        val task = serverTask(SchoolMailRules.taskId(id))
+        assertEquals(FieldValue.Text("Send in a named coat for Alex"), task[os.meka.core.domain.ActionableFields.TITLE])
+        val due = (task[os.meka.core.domain.ActionableFields.DUE_AT] as FieldValue.Int64).value
+        assertEquals(1_792_393_200_000L, due) // Mon 19 Oct 2026, 08:00 in London (BST)
+
+        // Add on the Fold too lands on the same task; Undo there takes it off and brings the find back on both.
+        fold.addMailFind(id)
+        fold.undoMailFind()
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(FieldValue.Bool(true), serverTask(SchoolMailRules.taskId(id))[os.meka.core.domain.ActionableFields.DELETED])
+        assertEquals(listOf(id), mac.mailFinds.value!!.rows.map { it.id })
+    }
 }
