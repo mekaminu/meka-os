@@ -114,6 +114,15 @@ interface MailProvider {
      */
     fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader>? = null
 
+    /** Inbox fixes, slice 3 ("Empty Junk"): how many emails sit in the Junk folder. Null when this provider can't say. */
+    fun junkCount(accessToken: String): Int? = null
+
+    /**
+     * Inbox fixes, slice 3: the headers of Junk received before [beforeMs], newest first, at most [limit] (the folder's
+     * older mail, a check at a time; what moved leaves the folder, so the next call reaches further back). Never a body.
+     */
+    fun junkOlder(accessToken: String, beforeMs: Long, limit: Int): List<MailHeader>? = null
+
     /**
      * Follow-up radar, slice 1: what Meka sent since [sinceMs], newest first, at most [limit] — the first recipient,
      * how many, the subject, the provider's preview and the time; never a body. Null when this provider can't list it
@@ -498,6 +507,18 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
     }
 
     /** Slice 3c: `in:spam after:<seconds>` (one page of ids), then each one's headers. */
+    override fun junkCount(accessToken: String): Int? {
+        val label = http.call("GET", "$API/labels/SPAM", accessToken).body ?: error("Gmail answered without a body")
+        return label["messagesTotal"].long()?.toInt()
+    }
+
+    override fun junkOlder(accessToken: String, beforeMs: Long, limit: Int): List<MailHeader> {
+        val q = mapOf("q" to "in:spam before:${beforeMs / 1000}", "maxResults" to limit.coerceIn(1, 500).toString())
+        val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
+        val ids = (body["messages"] as? JsonArray)?.mapNotNull { m -> (m as? JsonObject)?.get("id").str() }.orEmpty()
+        return ids.mapNotNull { header(accessToken, it) }.filter { "SPAM" in it.labels }
+    }
+
     override fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader> {
         val q = mapOf("q" to "in:spam after:${sinceMs / 1000}", "maxResults" to limit.coerceIn(1, 500).toString())
         val body = http.call("GET", "$API/messages?" + Http.query(q), accessToken).body ?: error("Gmail answered without a body")
@@ -751,6 +772,21 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
     }
 
     /** Slice 3c: the Junk Email folder's messages received since [sinceMs], whole headers, newest first. */
+    override fun junkCount(accessToken: String): Int? {
+        val f = http.call("GET", "$GRAPH/me/mailFolders/junkemail?\$select=totalItemCount", accessToken).body
+            ?: error("Outlook answered without a body")
+        return f["totalItemCount"].long()?.toInt()
+    }
+
+    override fun junkOlder(accessToken: String, beforeMs: Long, limit: Int): List<MailHeader> {
+        val url = "$GRAPH/me/mailFolders/junkemail/messages?\$top=${limit.coerceIn(1, 100)}" +
+            "&\$select=" + Http.enc("from,subject,receivedDateTime,isRead,conversationId") +
+            "&\$filter=" + Http.enc("receivedDateTime lt " + graphTime(beforeMs)) +
+            "&\$orderby=" + Http.enc("receivedDateTime desc")
+        val body = http.call("GET", url, accessToken).body ?: error("Outlook answered without a body")
+        return GraphDelta.read(body).headers.map { it.copy(inInbox = false) }
+    }
+
     override fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader> {
         val url = "$GRAPH/me/mailFolders/junkemail/messages?\$top=${limit.coerceIn(1, 100)}" +
             "&\$select=" + Http.enc("from,subject,receivedDateTime,isRead,conversationId") +

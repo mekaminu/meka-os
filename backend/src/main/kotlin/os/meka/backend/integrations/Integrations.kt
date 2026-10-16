@@ -30,6 +30,7 @@ import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailTidy
+import os.meka.core.domain.MailJunkClearRules
 import os.meka.core.domain.MailJunkFacts
 import os.meka.core.domain.MailJunkRules
 import os.meka.core.domain.MailTidyBatchFields
@@ -512,6 +513,8 @@ class Integrations(
         runCatching { junkReview(a, m, token, ms) }
         // Slice 8a: the backlog clean-up's plan (read-only: nothing in the mailbox moves).
         runCatching { backlog(a, m, token, ms) }
+        // Inbox fixes, slice 3: "Empty Junk" (counted for its card; cleared out only after his Approve).
+        runCatching { junkClearOut(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
         runCatching { publishMailNeeds(a, ms) }
         // Follow-up radar, slice 1: his own emails with no reply, a few times a day (on his tap in the apps).
@@ -1267,6 +1270,8 @@ class Integrations(
                 h.fromAddress, h.fromName, h.subject, keep,
                 replied = h.threadId?.let { it in replied } == true,
                 knownSender = h.fromAddress?.lowercase()?.let { it in known } == true,
+                // Inbox fixes, slice 3: Junk older than two days goes to Trash.
+                receivedAtMs = h.receivedAtMs, nowMs = nowMs,
             )))
             if (t == MailTidy.KEEP) null else h to t
         }.take(MailJunkRules.MAX_PER_REVIEW)
@@ -1284,6 +1289,69 @@ class Integrations(
         if (rescued.isNotEmpty()) ms.neverTidy(a.id, rescued.map { it.first.id } + rescued.map { moved.getValue(it.first.id) })
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()))
+    }
+
+    /**
+     * Inbox fixes, slice 3: **Empty Junk**. Until Meka approves, the Junk folder is counted now and then
+     * ([MailJunkClearRules.countDue]) onto the account's `mail_backlog` entity, which Needs you shows as a card. After his
+     * Approve (and while Navilife isn't paused and no Undo was asked), each check reads up to a couple of hundred of the
+     * folder's emails older than [MailJunkRules.CLEAR_AFTER_MS] (headers only) and moves each by
+     * [MailJunkRules.verdict] (Trash, or rescued for someone he knows; banks, public bodies and schools left), recorded
+     * under one `mail_tidy` batch ([MailJunkClearRules.batchId]) whose Undo puts it all back in Junk. A check that finds
+     * nothing more to move finishes it. Can't tell which threads he wrote in: nothing moves this check.
+     */
+    internal fun junkClearOut(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        val nowMs = now()
+        val entityId = MailBacklogRules.entityId(a.id)
+        val b = reader.entity(hh, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
+        if (MailJunkClearRules.countDue(b, nowMs)) {
+            val count = m.junkCount(token) ?: return
+            writeMail(a, entityId, MailJunkClearRules.countFields(count, nowMs), EntityTypes.MAIL_BACKLOG)
+            return
+        }
+        val batchId = MailJunkClearRules.batchId(a.id)
+        val batch = reader.entity(hh, EntityTypes.MAIL_TIDY, batchId)?.let { MailAutopilotRules.readBatch(batchId, it) }
+        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        if (!MailJunkClearRules.shouldClear(b, paused, batch)) return
+        val perCheck = if (m.id == MailProviders.OUTLOOK) MailJunkClearRules.PER_CHECK_OUTLOOK else MailJunkClearRules.PER_CHECK_GMAIL
+        val never = ms.neverTidied(a.id)
+        val listed = m.junkOlder(token, nowMs - MailJunkRules.CLEAR_AFTER_MS, perCheck) ?: return
+        val junk = listed.filter { it.id !in never }
+        val before = ms.tidied(a.id, batchId)
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val plan = if (junk.isEmpty()) emptyList() else {
+            val oldest = junk.minOf { it.receivedAtMs }
+            val replied = m.repliedThreads(token, oldest - MAIL_WINDOW_MS)
+            val keep = keepAddresses(hh)
+            val known = ms.inboxSorted(a.id)
+                .filter { (h, s) -> h.inInbox && (s.sort == MailSort.NEEDS_YOU || s.sort == MailSort.FYI) }
+                .mapNotNull { it.first.fromAddress?.lowercase() }.toSet()
+            junk.mapNotNull { h ->
+                val t = MailJunkRules.tidyOf(MailJunkRules.verdict(MailJunkFacts(
+                    h.fromAddress, h.fromName, h.subject, keep,
+                    replied = h.threadId?.let { it in replied } == true,
+                    knownSender = h.fromAddress?.lowercase()?.let { it in known } == true,
+                    receivedAtMs = h.receivedAtMs, nowMs = nowMs,
+                )))
+                if (t == MailTidy.KEEP) null else h to t
+            }
+        }
+        if (plan.isEmpty()) {
+            // Nothing more it may move (what's left is for him to check, or too new): finished.
+            writeMail(a, entityId, MailJunkClearRules.progressFields(before.size, nowMs), EntityTypes.MAIL_BACKLOG)
+            return
+        }
+        val (moved, _) = m.tidyKept(token, plan.associate { (h, t) -> h.id to t })
+        val done = plan.filter { (h, _) -> h.id in moved }
+        if (done.isEmpty()) return
+        ms.recordTidy(a.id, batchId, done.map { (h, t) -> MailMoved(h.id, moved.getValue(h.id), t) })
+        if (markingRead(hh)) markRead(m, token, done.filter { (h, t) -> t.marksRead && h.unread }.map { (h, _) -> moved.getValue(h.id) }, true)
+        val rescued = done.filter { it.second == MailTidy.RESCUE }
+        if (rescued.isNotEmpty()) ms.neverTidy(a.id, rescued.map { it.first.id } + rescued.map { moved.getValue(it.first.id) })
+        val all = ms.tidied(a.id, batchId)
+        writeTidy(a, batchId, MailJunkClearRules.batchFields(batch?.atMs ?: nowMs, account, all.groupingBy { it.tidy }.eachCount()))
+        writeMail(a, entityId, MailJunkClearRules.progressFields(all.size, null), EntityTypes.MAIL_BACKLOG)
     }
 
     /**

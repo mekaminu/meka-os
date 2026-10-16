@@ -11,6 +11,9 @@ import os.meka.core.sync.fv
  * not paused, the account's dry-run day over). What it moves is one `mail_tidy` batch flagged
  * [MailTidyBatchFields.JUNK], with Undo like any tidy (Trash back to Junk, a rescued email back to Junk).
  *
+ * Inbox fixes, slice 3: everything else still in Junk after [MailJunkRules.CLEAR_AFTER_MS] goes to Trash too, and
+ * [MailJunkClearRules] empties the folder's older mail once, on Meka's Approve.
+ *
  * Rescue needs a strong sign the email is real: his partner's address (About you), a thread he wrote in, or an exact
  * address that already writes to him (mail from it sits in his inbox, sorted as needing him or FYI). Trash needs an
  * obvious scam: a scam phrase in the subject or name, or a name claiming a well-known company or public body sent
@@ -30,13 +33,22 @@ data class MailJunkFacts(
     val replied: Boolean = false,
     /** Mail from this exact address already sits in his inbox, sorted as needing him or FYI. */
     val knownSender: Boolean = false,
+    /** Inbox fixes, slice 3: when it arrived, and now: Junk older than [MailJunkRules.CLEAR_AFTER_MS] goes to Trash. */
+    val receivedAtMs: Long? = null,
+    val nowMs: Long = 0L,
 )
 
 object MailJunkRules {
     /** Reviewed once a day: the next review waits this long after the last. */
     const val REVIEW_EVERY_MS = 20 * 3_600_000L
     /** Junk received in this window is looked at (a missed day is still covered). */
-    const val WINDOW_MS = 3 * 86_400_000L
+    const val WINDOW_MS = 4 * 86_400_000L
+    /**
+     * Inbox fixes, slice 3 (Meka, 2026-10-15: "the Junk mailbox has a lot of rubbish spam"): the provider already called
+     * it spam, so anything still in Junk after two days goes to Trash (recoverable 30 days), unless it's someone he knows
+     * (rescued) or a bank, public body or school (left for him to check).
+     */
+    const val CLEAR_AFTER_MS = 2 * 86_400_000L
     /** At most this many emails moved per review, so a mistake can never sweep the folder. */
     const val MAX_PER_REVIEW = 100
 
@@ -105,7 +117,9 @@ object MailJunkRules {
         if (MailTidyRules.protectedSender(f.fromAddress, emptySet())) return MailJunkVerdict.LEAVE
         // Someone who already writes to him is never trashed; rescued unless it reads as a scam (a hacked account).
         if (f.knownSender && address != null) return if (scam == null) MailJunkVerdict.RESCUE else MailJunkVerdict.LEAVE
-        return if (scam != null) MailJunkVerdict.TRASH else MailJunkVerdict.LEAVE
+        if (scam != null) return MailJunkVerdict.TRASH
+        val received = f.receivedAtMs ?: return MailJunkVerdict.LEAVE
+        return if (f.nowMs - received >= CLEAR_AFTER_MS) MailJunkVerdict.TRASH else MailJunkVerdict.LEAVE
     }
 
     fun tidyOf(v: MailJunkVerdict): MailTidy = when (v) {
@@ -141,5 +155,90 @@ object MailJunkRules {
             MailTidyBatchFields.DETAIL to detail.fv(),
             MailTidyBatchFields.JUNK to true.fv(),
         )
+    }
+}
+
+/**
+ * Inbox fixes, slice 3: **Empty Junk**, once per account (Meka, 2026-10-15 21:06: "Junk 322" untouched in Outlook). The
+ * daily review only looks at the last few days, so the folder's older mail waits for one Needs you card per account,
+ * "Empty Junk · Outlook" · "322 emails your provider called spam → Trash …", → **Approve** (the same synced approval as
+ * the backlog clean-up, on the same `mail_backlog` entity: [MailBacklogFields.JUNK_APPROVED_AT]). Then the server moves
+ * a couple of hundred a check, each by [MailJunkRules.verdict] (people he knows rescued, banks, public bodies and schools
+ * left), as one `mail_tidy` batch flagged junk whose Undo puts them back in Junk. Never deleted for good.
+ */
+object MailJunkClearRules {
+    /** The card's id: the account's `mail_backlog` id behind this prefix, so the apps' Approve reaches core unchanged. */
+    const val CARD_PREFIX = "junk:"
+    /** Emails looked at per check (Gmail reads each header; Outlook's listing caps at 100). */
+    const val PER_CHECK_GMAIL = 200
+    const val PER_CHECK_OUTLOOK = 100
+    /** The folder is counted again at most this often while the card waits. */
+    const val RECOUNT_EVERY_MS = 6 * 3_600_000L
+
+    fun cardId(backlogId: String): String = CARD_PREFIX + backlogId
+    fun isCard(id: String): Boolean = id.startsWith(CARD_PREFIX)
+    fun backlogIdOf(cardId: String): String = cardId.removePrefix(CARD_PREFIX)
+
+    /** The clean-out's one tidy per account (so its Undo is one tap). */
+    fun batchId(accountId: String): String = "mt" + ActivityRules.fnv64("mailjunkclear:$accountId")
+
+    /** Offered while Junk holds something and he hasn't approved (or it already ran). */
+    fun canApprove(b: MailBacklog): Boolean = b.junkFolder > 0 && b.junkApprovedAtMs == null && b.junkFinishedAtMs == null
+    /** The bar's Undo after Approve only stands while nothing has moved. */
+    fun canUnapprove(b: MailBacklog): Boolean = b.junkApprovedAtMs != null && b.junkCleared == 0 && b.junkFinishedAtMs == null
+
+    /** Whether the server moves more this check: approved, not finished, Navilife not paused, no Undo asked. */
+    fun shouldClear(b: MailBacklog, paused: Boolean, batch: MailTidyBatch?): Boolean {
+        if (b.junkApprovedAtMs == null || b.junkFinishedAtMs != null || paused) return false
+        return batch == null || (batch.undoAskedAtMs == null && batch.undoneAtMs == null)
+    }
+
+    /** Whether the server counts the folder again: not approved or done, and never counted or [RECOUNT_EVERY_MS] ago. */
+    fun countDue(b: MailBacklog?, nowMs: Long): Boolean {
+        if (b == null || b.junkApprovedAtMs != null || b.junkFinishedAtMs != null) return false
+        val at = b.junkCountedAtMs ?: return true
+        return nowMs - at >= RECOUNT_EVERY_MS
+    }
+
+    fun countFields(count: Int, atMs: Long): Map<String, FieldValue> =
+        mapOf(MailBacklogFields.JUNK_FOLDER to count.toLong().fv(), MailBacklogFields.JUNK_COUNTED_AT to atMs.fv())
+    fun approveFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailBacklogFields.JUNK_APPROVED_AT to nowMs.fv())
+    fun unapproveFields(): Map<String, FieldValue> = mapOf(MailBacklogFields.JUNK_APPROVED_AT to 0L.fv())
+    fun progressFields(cleared: Int, finishedAtMs: Long?): Map<String, FieldValue> =
+        mapOf(MailBacklogFields.JUNK_CLEARED to cleared.toLong().fv()) +
+            (finishedAtMs?.let { mapOf(MailBacklogFields.JUNK_FINISHED_AT to it.fv()) } ?: emptyMap())
+
+    const val CARD_YES = "Approve"
+    const val CARD_LATER = "Later"
+    const val CARD_OPEN = "Review"
+
+    /**
+     * "Empty Junk · Outlook" · "322 emails your provider called spam → Trash, recoverable for 30 days · people you know
+     * go back to the inbox · banks, schools and public bodies stay for you to check · nothing moves until you approve".
+     */
+    fun card(b: MailBacklog): DecisionCard? {
+        if (!canApprove(b)) return null
+        val n = b.junkFolder
+        val why = listOf(
+            "${SpeechRules.grouped(n.toLong())} ${if (n == 1) "email" else "emails"} your provider called spam → Trash, recoverable for 30 days",
+            "people you know go back to the inbox",
+            "banks, schools and public bodies stay for you to check",
+            "nothing moves until you approve",
+        ).joinToString(" · ")
+        return DecisionCard(
+            id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Empty Junk · ${b.account}", why = why, taskId = null,
+            yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
+            yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_MAIL,
+            urgent = false,
+        )
+    }
+
+    /** The clean-out's tidy: "Junk emptied · 318 to Trash · 2 rescued · Outlook" over what went where (cumulative). */
+    fun batchFields(atMs: Long, account: String, counts: Map<MailTidy, Int>): Map<String, FieldValue> {
+        val trashed = counts[MailTidy.JUNK_TRASH] ?: 0
+        val rescued = counts[MailTidy.RESCUE] ?: 0
+        val summary = listOfNotNull("Junk emptied", trashed.takeIf { it > 0 }?.let { "${SpeechRules.grouped(it.toLong())} to Trash" },
+            rescued.takeIf { it > 0 }?.let { "$it rescued" }, account).joinToString(" · ")
+        return MailJunkRules.batchFields(atMs, account, counts) + mapOf(MailTidyBatchFields.SUMMARY to summary.fv())
     }
 }

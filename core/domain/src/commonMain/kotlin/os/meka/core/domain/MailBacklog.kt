@@ -73,6 +73,17 @@ object MailBacklogFields {
      */
     const val PLAN_VERSION = "planVersion"
 
+    /**
+     * Inbox fixes, slice 3 (the Junk clean-out, [MailJunkClearRules]): emails in the account's Junk folder when last
+     * counted, and when; Meka's Approve on "Empty Junk" (0 = not approved, an app writes it); how many the server has
+     * moved since, and when it finished. Counts only, never an email id, subject or address.
+     */
+    const val JUNK_FOLDER = "junkFolder"
+    const val JUNK_COUNTED_AT = "junkCountedAtMs"
+    const val JUNK_APPROVED_AT = "junkApprovedAtMs"
+    const val JUNK_CLEARED = "junkCleared"
+    const val JUNK_FINISHED_AT = "junkFinishedAtMs"
+
     fun countField(k: MailBacklogKind): String = when (k) {
         MailBacklogKind.KEEP -> KEPT
         MailBacklogKind.NEWSLETTER -> NEWSLETTERS
@@ -100,6 +111,12 @@ data class MailBacklog(
     val putBack: Int = 0,
     /** Inbox fixes, slice 2: the planning rules' version (1 before it was written). */
     val planVersion: Int = 1,
+    /** Inbox fixes, slice 3: the Junk folder's clean-out ([MailJunkClearRules]). */
+    val junkFolder: Int = 0,
+    val junkCountedAtMs: Long? = null,
+    val junkApprovedAtMs: Long? = null,
+    val junkCleared: Int = 0,
+    val junkFinishedAtMs: Long? = null,
 ) {
     val ready: Boolean get() = readyAtMs != null
     val approved: Boolean get() = approvedAtMs != null
@@ -278,6 +295,11 @@ object MailBacklogRules {
             finishedAtMs = long(MailBacklogFields.FINISHED_AT)?.takeIf { it > 0 },
             putBack = long(MailBacklogFields.PUT_BACK)?.toInt() ?: 0,
             planVersion = long(MailBacklogFields.PLAN_VERSION)?.toInt() ?: 1,
+            junkFolder = long(MailBacklogFields.JUNK_FOLDER)?.toInt() ?: 0,
+            junkCountedAtMs = long(MailBacklogFields.JUNK_COUNTED_AT)?.takeIf { it > 0 },
+            junkApprovedAtMs = long(MailBacklogFields.JUNK_APPROVED_AT)?.takeIf { it > 0 },
+            junkCleared = long(MailBacklogFields.JUNK_CLEARED)?.toInt() ?: 0,
+            junkFinishedAtMs = long(MailBacklogFields.JUNK_FINISHED_AT)?.takeIf { it > 0 },
         )
     }
 
@@ -371,9 +393,14 @@ object MailBacklogRules {
      */
     fun cards(backlogs: List<MailBacklog>, paused: Boolean = false): List<DecisionCard> {
         if (paused) return emptyList()
-        return backlogs.groupBy { it.account }.values.mapNotNull { list -> list.maxByOrNull { it.startedAtMs } }
-            .filter { canApprove(it) }
-            .map { b ->
+        val newest = backlogs.groupBy { it.account }.values.mapNotNull { list -> list.maxByOrNull { it.startedAtMs } }
+        // Inbox fixes, slice 3: each account's "Empty Junk" follows its clean-up card.
+        return newest.flatMap { b -> listOfNotNull(planCard(b), MailJunkClearRules.card(b)) }
+    }
+
+    private fun planCard(b: MailBacklog): DecisionCard? {
+        if (!canApprove(b)) return null
+        return run {
                 val archive = listOf(MailBacklogKind.NEWSLETTER, MailBacklogKind.RECEIPT, MailBacklogKind.ARCHIVE).sumOf { b.counts[it] ?: 0 }
                 val junk = b.counts[MailBacklogKind.JUNK] ?: 0
                 val kept = b.counts[MailBacklogKind.KEEP] ?: 0

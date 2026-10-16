@@ -62,6 +62,7 @@ import os.meka.backend.integrations.BacklogItem
 import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailBacklogFields
+import os.meka.core.domain.MailJunkClearRules
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
@@ -321,6 +322,15 @@ class MailSyncTest {
         override fun junk(accessToken: String, sinceMs: Long, limit: Int): List<MailHeader> {
             junkAsked++
             return junkBox.values.filter { it.receivedAtMs >= sinceMs }.take(limit)
+        }
+        // Inbox fixes, slice 3: "Empty Junk": the folder's count (null: can't say) and its older mail.
+        var junkCountAnswer: Int? = null
+        var junkCounts = 0
+        override fun junkCount(accessToken: String): Int? { junkCounts++; return junkCountAnswer }
+        val junkOlderAsked = mutableListOf<Pair<Long, Int>>()
+        override fun junkOlder(accessToken: String, beforeMs: Long, limit: Int): List<MailHeader> {
+            junkOlderAsked += beforeMs to limit
+            return junkBox.values.filter { it.receivedAtMs < beforeMs }.sortedByDescending { it.receivedAtMs }.take(limit)
         }
 
         // Slice 6b-2a: replies sent.
@@ -976,6 +986,72 @@ class MailSyncTest {
         i.syncAccount(id)
         assertEquals(2, gmail.junkAsked)
         assertEquals(1, gmail.tidyCalls.size)
+    }
+
+    @Test
+    fun theDailyReviewTrashesJunkOlderThanTwoDays() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        now += 2 * day
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        gmail.junkBox["old"] = junkMsg("old", "hello@random.example", "Meeting notes").copy(receivedAtMs = now - 3 * day)
+        gmail.junkBox["new"] = junkMsg("new", "hello@random.example", "Meeting notes")
+        gmail.junkBox["bank"] = junkMsg("bank", "alerts@barclays.co.uk", "Statement").copy(receivedAtMs = now - 3 * day)
+        i.syncAccount(id)
+        assertEquals(mapOf("old" to MailTidy.JUNK_TRASH), gmail.tidyCalls.single())
+        assertEquals(setOf("new", "bank"), gmail.junkBox.keys)
+    }
+
+    @Test
+    fun emptyJunkIsCountedForItsCardThenClearedOnlyAfterApprove() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.backlogPages = mapOf(null to MailBacklogPage(next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        gmail.junkCountAnswer = 4
+        for (n in 1..3) gmail.junkBox["j$n"] = junkMsg("j$n", "deals$n@spam.example", "Hot offer $n").copy(receivedAtMs = now - (10 + n) * day)
+        gmail.junkBox["fresh"] = junkMsg("fresh", "deals@spam.example", "Hot offer")
+        gmail.junkBox["bank"] = junkMsg("bank", "alerts@barclays.co.uk", "Statement").copy(receivedAtMs = now - 20 * day)
+        val id = connect(i)
+        autopilotOn(ops, on = false) // the card needs no Autopilot: his Approve is the yes
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        val counted = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        assertEquals(4, counted.junkFolder)
+        assertEquals("junk:$entityId", MailBacklogRules.cards(listOf(counted)).single().id)
+        // Not approved: nothing listed or moved, and not counted again within hours.
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(1, gmail.junkCounts)
+        assertTrue(gmail.junkOlderAsked.isEmpty())
+        assertTrue(gmail.tidyCalls.isEmpty())
+        // Approve: the older junk goes to Trash (the bank's stays for him, today's for the daily review).
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.JUNK_APPROVED_AT, FieldValue.Int64(now))
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(mapOf("j1" to MailTidy.JUNK_TRASH, "j2" to MailTidy.JUNK_TRASH, "j3" to MailTidy.JUNK_TRASH), gmail.tidyCalls.single())
+        assertEquals(setOf("fresh", "bank"), gmail.junkBox.keys)
+        val batchId = MailJunkClearRules.batchId(id)
+        assertEquals(FieldValue.Text("Junk emptied · 3 to Trash · Personal"), tidies(ops).getValue(batchId)[MailTidyBatchFields.SUMMARY])
+        assertEquals(3, MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!.junkCleared)
+        // Marked read as it went.
+        assertTrue(gmail.marked.any { (ids, read) -> read && ids == setOf("j1", "j2", "j3") })
+        // The next check finds nothing more it may move: finished.
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(1, gmail.tidyCalls.size)
+        val done = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        assertNotNull(done.junkFinishedAtMs)
+        assertTrue(MailBacklogRules.cards(listOf(done)).isEmpty())
+        // Undo: back in Junk.
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        now += 60_000
+        i.syncAccount(id)
+        assertEquals(setOf("fresh", "bank", "j1", "j2", "j3"), gmail.junkBox.keys)
     }
 
     @Test

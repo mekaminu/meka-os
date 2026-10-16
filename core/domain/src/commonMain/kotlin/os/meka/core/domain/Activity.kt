@@ -614,6 +614,14 @@ class ActivityLog(
      * few hundred emails a check, as one tidy with Undo. The line the bar shows; nothing written when it can't be approved.
      */
     fun approveBacklog(id: String): String {
+        // Inbox fixes, slice 3: "Empty Junk" carries its account's backlog id behind a prefix.
+        if (MailJunkClearRules.isCard(id)) {
+            val entity = MailJunkClearRules.backlogIdOf(id)
+            val b = mailBacklogs().firstOrNull { it.id == entity } ?: return MailBacklogRules.NOT_APPROVED
+            if (!MailJunkClearRules.canApprove(b)) return if (b.junkApprovedAtMs != null) MailBacklogRules.APPROVED_BAR else MailBacklogRules.NOT_APPROVED
+            replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailJunkClearRules.approveFields(nowMs()))
+            return MailBacklogRules.APPROVED_BAR
+        }
         val b = mailBacklogs().firstOrNull { it.id == id } ?: return MailBacklogRules.NOT_APPROVED
         if (!MailBacklogRules.canApprove(b)) return if (b.approved) MailBacklogRules.APPROVED_BAR else MailBacklogRules.NOT_APPROVED
         replica.commitLocal(EntityTypes.MAIL_BACKLOG, id, MailBacklogRules.approveFields(nowMs()))
@@ -622,6 +630,13 @@ class ActivityLog(
 
     /** Slice 8b: the bar's Undo after Approve: withdrawn while nothing has moved; after that the tidy's Undo puts it back. */
     fun unapproveBacklog(id: String): Boolean {
+        if (MailJunkClearRules.isCard(id)) {
+            val entity = MailJunkClearRules.backlogIdOf(id)
+            val b = mailBacklogs().firstOrNull { it.id == entity } ?: return false
+            if (!MailJunkClearRules.canUnapprove(b)) return false
+            replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailJunkClearRules.unapproveFields())
+            return true
+        }
         val b = mailBacklogs().firstOrNull { it.id == id } ?: return false
         if (!MailBacklogRules.canUnapprove(b)) return false
         replica.commitLocal(EntityTypes.MAIL_BACKLOG, id, MailBacklogRules.unapproveFields())
