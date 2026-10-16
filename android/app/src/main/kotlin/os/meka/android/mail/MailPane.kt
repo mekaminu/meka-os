@@ -664,7 +664,7 @@ private fun LifeAuditCard(review: LifeAuditReview, open: Boolean, modifier: Modi
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text("Read: " + review.read, style = MekaType.caption, color = Meka.colors.textTertiary,
                     modifier = Modifier.appear(rememberAppearance(0)))
                 review.lines.forEachIndexed { i, l -> key(l.key) { AuditLine(l, Modifier.appear(rememberAppearance(i + 1))) } }

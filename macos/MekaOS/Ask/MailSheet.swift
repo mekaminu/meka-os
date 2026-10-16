@@ -221,7 +221,7 @@ private struct LifeAuditPanelView: View {
                 .accessibilityLabel(expanded ? "Hide the life audit" : "Review the life audit")
             }
             if expanded {
-                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     Text("Read: " + review.read).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         .staggeredAppear(0)
