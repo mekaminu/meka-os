@@ -1248,12 +1248,22 @@ class MailSyncTest {
         val entityId = MailBacklogRules.entityId(id)
         val counted = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
         assertEquals(4, counted.junkFolder)
-        assertEquals("junk:$entityId", MailBacklogRules.cards(listOf(counted)).single().id)
+        // Inbox fixes, slice 9: the count looked at the older junk: the bank's stays for him, nobody he knows.
+        assertEquals(1, counted.junkKeep)
+        assertEquals(0, counted.junkRescue)
+        assertEquals(4, counted.junkLooked)
+        assertTrue(counted.junkLookFull)
+        val card = MailBacklogRules.cards(listOf(counted)).single()
+        assertEquals("junk:$entityId", card.id)
+        assertTrue(card.why.startsWith("3 emails your provider called spam → Trash"), card.why)
+        assertTrue("keep 1 to check: banks, schools and public bodies" in card.why, card.why)
+        assertTrue(gmail.tidyCalls.isEmpty())
+        val looks = gmail.junkOlderAsked.size
         // Not approved: nothing listed or moved, and not counted again within hours.
         now += 300_000
         i.syncAccount(id)
         assertEquals(1, gmail.junkCounts)
-        assertTrue(gmail.junkOlderAsked.isEmpty())
+        assertEquals(looks, gmail.junkOlderAsked.size)
         assertTrue(gmail.tidyCalls.isEmpty())
         // Approve: the older junk goes to Trash (the bank's stays for him, today's for the daily review).
         device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.JUNK_APPROVED_AT, FieldValue.Int64(now))

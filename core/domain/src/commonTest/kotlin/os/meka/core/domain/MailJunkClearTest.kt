@@ -68,6 +68,32 @@ class MailJunkClearTest {
     }
 
     @Test
+    fun theCardSaysExactlyWhatStaysOnceTheCountHasLooked() {
+        fun t(n: Int, k: MailTidy) = List(n) { k }
+        val looked = plan(MailJunkClearRules.countFields(322, now) +
+            MailJunkClearRules.lookFields(t(314, MailTidy.JUNK_TRASH) + t(6, MailTidy.KEEP) + t(2, MailTidy.RESCUE), full = true))
+        assertEquals(6, looked.junkKeep); assertEquals(2, looked.junkRescue); assertEquals(322, looked.junkLooked)
+        val why = MailBacklogRules.cards(listOf(looked)).single().why
+        assertEquals("314 emails your provider called spam → Trash, recoverable for 30 days · keep 6 to check: banks, schools and " +
+            "public bodies · 2 from people you know go back to the inbox · nothing moves until you approve", why)
+        // Nothing for him to check and nobody he knows.
+        val clean = plan(MailJunkClearRules.countFields(40, now) + MailJunkClearRules.lookFields(t(40, MailTidy.JUNK_TRASH), full = true))
+        assertEquals("40 emails your provider called spam → Trash, recoverable for 30 days · nothing for you to check · " +
+            "nothing moves until you approve", MailBacklogRules.cards(listOf(clean)).single().why)
+        // The look stopped short of the end: the folder's count and "at least".
+        val part = plan(MailJunkClearRules.countFields(1204, now) +
+            MailJunkClearRules.lookFields(t(490, MailTidy.JUNK_TRASH) + t(9, MailTidy.KEEP) + t(1, MailTidy.RESCUE), full = false))
+        val partWhy = MailBacklogRules.cards(listOf(part)).single().why
+        assertTrue(partWhy.startsWith("1,204 emails"), partWhy)
+        assertTrue("keep at least 9 to check" in partWhy && "at least 1 from people you know" in partWhy, partWhy)
+        // All that's older stays for him (or is newer than two days): no card.
+        val onlyKeep = plan(MailJunkClearRules.countFields(3, now) + MailJunkClearRules.lookFields(t(3, MailTidy.KEEP), full = true))
+        assertTrue(MailBacklogRules.cards(listOf(onlyKeep)).isEmpty())
+        // Not looked yet: the kinds, as before.
+        assertTrue("banks, schools and public bodies stay for you to check" in MailBacklogRules.cards(listOf(plan(MailJunkClearRules.countFields(5, now)))).single().why)
+    }
+
+    @Test
     fun theFolderIsCountedAgainNowAndThen() {
         assertFalse(MailJunkClearRules.countDue(null, now))
         assertTrue(MailJunkClearRules.countDue(plan(), now))

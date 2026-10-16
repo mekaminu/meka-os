@@ -200,6 +200,21 @@ object MailJunkClearRules {
         return nowMs - at >= RECOUNT_EVERY_MS
     }
 
+    /** Slice 9: older Junk the count looks at to say exactly what stays (Gmail reads each header; Outlook lists 100 a page). */
+    const val LOOK_MAX_GMAIL = 200
+    const val LOOK_MAX_OUTLOOK = 500
+
+    /**
+     * Slice 9: what the count's look found, from each looked-at email's tidy ([MailJunkRules.tidyOf]): KEEP stays for him
+     * to check, RESCUE goes back to the inbox. [full] when the look reached the end of the folder's older mail.
+     */
+    fun lookFields(tidies: List<MailTidy>, full: Boolean): Map<String, FieldValue> = mapOf(
+        MailBacklogFields.JUNK_KEEP to tidies.count { it == MailTidy.KEEP }.toLong().fv(),
+        MailBacklogFields.JUNK_RESCUE to tidies.count { it == MailTidy.RESCUE }.toLong().fv(),
+        MailBacklogFields.JUNK_LOOKED to tidies.size.toLong().fv(),
+        MailBacklogFields.JUNK_LOOK_FULL to full.fv(),
+    )
+
     fun countFields(count: Int, atMs: Long): Map<String, FieldValue> =
         mapOf(MailBacklogFields.JUNK_FOLDER to count.toLong().fv(), MailBacklogFields.JUNK_COUNTED_AT to atMs.fv())
     fun approveFields(nowMs: Long): Map<String, FieldValue> = mapOf(MailBacklogFields.JUNK_APPROVED_AT to nowMs.fv())
@@ -213,16 +228,35 @@ object MailJunkClearRules {
     const val CARD_OPEN = "Review"
 
     /**
-     * "Empty Junk · Outlook" · "322 emails your provider called spam → Trash, recoverable for 30 days · people you know
-     * go back to the inbox · banks, schools and public bodies stay for you to check · nothing moves until you approve".
+     * "Empty Junk · Outlook" · "316 emails your provider called spam → Trash, recoverable for 30 days · keep 6 to check:
+     * banks, schools and public bodies · 2 from people you know go back to the inbox · nothing moves until you approve".
+     * Before the count has looked at the folder (slice 9), the kinds without numbers; when the look stopped short of the
+     * end, "at least" what it found.
      */
     fun card(b: MailBacklog): DecisionCard? {
         if (!canApprove(b)) return null
-        val n = b.junkFolder
-        val why = listOf(
-            "${SpeechRules.grouped(n.toLong())} ${if (n == 1) "email" else "emails"} your provider called spam → Trash, recoverable for 30 days",
-            "people you know go back to the inbox",
-            "banks, schools and public bodies stay for you to check",
+        fun g(v: Int) = SpeechRules.grouped(v.toLong())
+        val looked = b.junkLooked
+        val n = if (looked != null && b.junkLookFull) (b.junkFolder - b.junkKeep - b.junkRescue).coerceAtLeast(0) else b.junkFolder
+        val atLeast = if (b.junkLookFull) "" else "at least "
+        val keep = when {
+            looked == null -> "banks, schools and public bodies stay for you to check"
+            b.junkKeep == 0 && b.junkLookFull -> "nothing for you to check"
+            b.junkKeep == 0 -> "banks, schools and public bodies stay for you to check"
+            else -> "keep $atLeast${g(b.junkKeep)} to check: banks, schools and public bodies"
+        }
+        val rescue = when {
+            looked == null -> "people you know go back to the inbox"
+            b.junkRescue == 0 && b.junkLookFull -> null
+            b.junkRescue == 0 -> "people you know go back to the inbox"
+            else -> "$atLeast${g(b.junkRescue)} from people you know go back to the inbox"
+        }
+        // Everything older is for him to check (or too new for the clean-out): nothing to approve.
+        if (looked != null && b.junkLookFull && n == 0 && b.junkRescue == 0) return null
+        val why = listOfNotNull(
+            if (n == 0) null else "${g(n)} ${if (n == 1) "email" else "emails"} your provider called spam → Trash, recoverable for 30 days",
+            keep,
+            rescue,
             "nothing moves until you approve",
         ).joinToString(" · ")
         return DecisionCard(

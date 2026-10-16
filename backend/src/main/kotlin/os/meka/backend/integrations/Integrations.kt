@@ -1446,7 +1446,9 @@ class Integrations(
         val b = reader.entity(hh, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
         if (MailJunkClearRules.countDue(b, nowMs)) {
             val count = m.junkCount(token) ?: return
-            writeMail(a, entityId, MailJunkClearRules.countFields(count, nowMs), EntityTypes.MAIL_BACKLOG)
+            // Inbox fixes, slice 9: look at the folder's older mail so the card can say exactly what stays (best effort).
+            val look = if (count > 0) runCatching { junkLook(a, m, token, ms, nowMs) }.getOrElse { if (it is ReconnectRequired) throw it else null } else null
+            writeMail(a, entityId, MailJunkClearRules.countFields(count, nowMs) + (look ?: emptyMap()), EntityTypes.MAIL_BACKLOG)
             return
         }
         val batchId = MailJunkClearRules.batchId(a.id)
@@ -1459,23 +1461,7 @@ class Integrations(
         val junk = listed.filter { it.id !in never }
         val before = ms.tidied(a.id, batchId)
         val account = MailLabel.of(a.label)?.label ?: "Mail"
-        val plan = if (junk.isEmpty()) emptyList() else {
-            val oldest = junk.minOf { it.receivedAtMs }
-            val replied = m.repliedThreads(token, oldest - MAIL_WINDOW_MS)
-            val keep = keepAddresses(hh)
-            val known = ms.inboxSorted(a.id)
-                .filter { (h, s) -> h.inInbox && (s.sort == MailSort.NEEDS_YOU || s.sort == MailSort.FYI) }
-                .mapNotNull { it.first.fromAddress?.lowercase() }.toSet()
-            junk.mapNotNull { h ->
-                val t = MailJunkRules.tidyOf(MailJunkRules.verdict(MailJunkFacts(
-                    h.fromAddress, h.fromName, h.subject, keep,
-                    replied = h.threadId?.let { it in replied } == true,
-                    knownSender = h.fromAddress?.lowercase()?.let { it in known } == true,
-                    receivedAtMs = h.receivedAtMs, nowMs = nowMs,
-                )))
-                if (t == MailTidy.KEEP) null else h to t
-            }
-        }
+        val plan = junkTidies(a, m, token, ms, junk, nowMs).filter { it.second != MailTidy.KEEP }
         if (plan.isEmpty()) {
             // Nothing more it may move (what's left is for him to check, or too new): finished.
             writeMail(a, entityId, MailJunkClearRules.progressFields(before.size, nowMs), EntityTypes.MAIL_BACKLOG)
@@ -1491,6 +1477,52 @@ class Integrations(
         val all = ms.tidied(a.id, batchId)
         writeTidy(a, batchId, MailJunkClearRules.batchFields(batch?.atMs ?: nowMs, account, all.groupingBy { it.tidy }.eachCount()))
         writeMail(a, entityId, MailJunkClearRules.progressFields(all.size, null), EntityTypes.MAIL_BACKLOG)
+    }
+
+    /**
+     * Where each of [junk] would go by [MailJunkRules.verdict] (KEEP: stays for him to check). Reads which threads he
+     * wrote in once; the people he knows are his keep list and the senders the sort calls his.
+     */
+    private fun junkTidies(a: AccountRow, m: MailProvider, token: String, ms: MailStore, junk: List<MailHeader>, nowMs: Long): List<Pair<MailHeader, MailTidy>> {
+        if (junk.isEmpty()) return emptyList()
+        val oldest = junk.minOf { it.receivedAtMs }
+        val replied = m.repliedThreads(token, oldest - MAIL_WINDOW_MS)
+        val keep = keepAddresses(a.householdId)
+        val known = ms.inboxSorted(a.id)
+            .filter { (h, s) -> h.inInbox && (s.sort == MailSort.NEEDS_YOU || s.sort == MailSort.FYI) }
+            .mapNotNull { it.first.fromAddress?.lowercase() }.toSet()
+        return junk.map { h ->
+            h to MailJunkRules.tidyOf(MailJunkRules.verdict(MailJunkFacts(
+                h.fromAddress, h.fromName, h.subject, keep,
+                replied = h.threadId?.let { it in replied } == true,
+                knownSender = h.fromAddress?.lowercase()?.let { it in known } == true,
+                receivedAtMs = h.receivedAtMs, nowMs = nowMs,
+            )))
+        }
+    }
+
+    /**
+     * Inbox fixes, slice 9: the Empty Junk card's exact counts. Pages through the folder's mail older than
+     * [MailJunkRules.CLEAR_AFTER_MS] (headers only, at most [MailJunkClearRules.LOOK_MAX_GMAIL] / `LOOK_MAX_OUTLOOK`) and
+     * counts where each would go; nothing in the mailbox moves. Null when this provider can't list it.
+     */
+    private fun junkLook(a: AccountRow, m: MailProvider, token: String, ms: MailStore, nowMs: Long): Map<String, FieldValue>? {
+        val outlook = m.id == MailProviders.OUTLOOK
+        val max = if (outlook) MailJunkClearRules.LOOK_MAX_OUTLOOK else MailJunkClearRules.LOOK_MAX_GMAIL
+        val page = if (outlook) MailJunkClearRules.PER_CHECK_OUTLOOK else MailJunkClearRules.PER_CHECK_GMAIL
+        val never = ms.neverTidied(a.id)
+        val seen = LinkedHashMap<String, MailHeader>()
+        var before = nowMs - MailJunkRules.CLEAR_AFTER_MS
+        var full = false
+        while (seen.size < max) {
+            val got = m.junkOlder(token, before, minOf(page, max - seen.size)) ?: return null
+            val fresh = got.filter { it.id !in seen }
+            fresh.forEach { seen[it.id] = it }
+            if (got.size < minOf(page, max - seen.size + fresh.size) || fresh.isEmpty()) { full = true; break }
+            before = fresh.minOf { it.receivedAtMs }
+        }
+        val junk = seen.values.filter { it.id !in never }
+        return MailJunkClearRules.lookFields(junkTidies(a, m, token, ms, junk, nowMs).map { it.second }, full)
     }
 
     /**

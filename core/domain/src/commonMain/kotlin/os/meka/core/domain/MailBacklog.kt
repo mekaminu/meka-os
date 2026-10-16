@@ -85,6 +85,17 @@ object MailBacklogFields {
     const val JUNK_FINISHED_AT = "junkFinishedAtMs"
 
     /**
+     * Inbox fixes, slice 9 (the Empty Junk card's exact counts, [MailJunkClearRules.lookFields]): of the Junk folder's
+     * emails older than two days that the server looked at when it counted, how many stay for him to check (banks,
+     * schools, public bodies), how many go back to the inbox (people he knows), how many it looked at, and whether that
+     * was all of them. Counts only.
+     */
+    const val JUNK_KEEP = "junkKeep"
+    const val JUNK_RESCUE = "junkRescue"
+    const val JUNK_LOOKED = "junkLooked"
+    const val JUNK_LOOK_FULL = "junkLookFull"
+
+    /**
      * Inbox fixes, slice 7 (Today's unread line, [MailUnreadRules]): the inbox's unread count as the provider gives it,
      * how many of those unread ones Navilife's rules would tidy (newsletters, promos, notifications, receipts), and when
      * they were counted. Counts only.
@@ -134,6 +145,11 @@ data class MailBacklog(
     val junkApprovedAtMs: Long? = null,
     val junkCleared: Int = 0,
     val junkFinishedAtMs: Long? = null,
+    /** Inbox fixes, slice 9: what the count's look found (null [junkLooked]: not looked yet). */
+    val junkKeep: Int = 0,
+    val junkRescue: Int = 0,
+    val junkLooked: Int? = null,
+    val junkLookFull: Boolean = false,
     /** Inbox fixes, slice 7: the inbox's unread count, the unread ones Navilife can tidy, and when ([MailUnreadRules]). */
     val inboxUnread: Int? = null,
     val tidyUnread: Int = 0,
@@ -325,6 +341,10 @@ object MailBacklogRules {
             junkApprovedAtMs = long(MailBacklogFields.JUNK_APPROVED_AT)?.takeIf { it > 0 },
             junkCleared = long(MailBacklogFields.JUNK_CLEARED)?.toInt() ?: 0,
             junkFinishedAtMs = long(MailBacklogFields.JUNK_FINISHED_AT)?.takeIf { it > 0 },
+            junkKeep = long(MailBacklogFields.JUNK_KEEP)?.toInt()?.coerceAtLeast(0) ?: 0,
+            junkRescue = long(MailBacklogFields.JUNK_RESCUE)?.toInt()?.coerceAtLeast(0) ?: 0,
+            junkLooked = long(MailBacklogFields.JUNK_LOOKED)?.toInt()?.takeIf { it >= 0 },
+            junkLookFull = (f[MailBacklogFields.JUNK_LOOK_FULL] as? FieldValue.Bool)?.value == true,
             inboxUnread = long(MailBacklogFields.INBOX_UNREAD)?.toInt()?.takeIf { it >= 0 },
             tidyUnread = long(MailBacklogFields.TIDY_UNREAD)?.toInt()?.coerceAtLeast(0) ?: 0,
             unreadCountedAtMs = long(MailBacklogFields.UNREAD_COUNTED_AT)?.takeIf { it > 0 },
