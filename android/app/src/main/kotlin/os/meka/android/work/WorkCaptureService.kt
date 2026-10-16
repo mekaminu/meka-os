@@ -62,7 +62,7 @@ class WorkCaptureService : NotificationListenerService() {
         val n = sbn.notification ?: return
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return
         // Discord channel watch (slice 1): its own path — noted and kept for the channels he follows, never triaged,
-        // never held for after work, never sent to the AI, and never answered or cleared.
+        // never held for after work, never answered or cleared. Slice 3: a busy channel's words go to the AI for its card's line.
         if (DiscordRules.isDiscord(sbn.packageName)) {
             val posts = runCatching { readDiscord(sbn, n) }.getOrDefault(emptyList())
             if (posts.isNotEmpty()) {
@@ -71,6 +71,8 @@ class WorkCaptureService : NotificationListenerService() {
                     // Slice 2: a fresh post from a person or with a word he picked alerts straight away.
                     val noted = runCatching { meka.core.noteDiscord(posts) }.getOrNull() ?: return@launch
                     noted.alerts.forEach { DiscordAlerts.post(this@WorkCaptureService, it) }
+                    // Slice 3: a channel with three or more new posts gets its one-line summary.
+                    if (noted.fresh > 0) ChatSummarise.discord(meka)
                 }
             }
             return

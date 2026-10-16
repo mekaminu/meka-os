@@ -58,6 +58,11 @@ internal fun DiscordSection(
     val context = androidx.compose.ui.platform.LocalContext.current
     var open by rememberSaveable { mutableStateOf(true) }
     val reduced = Meka.reducedMotion
+    // Slice 3: a busy channel's one-line summary, asked for when the cards change (nothing due costs nothing).
+    val app = context.applicationContext as? os.meka.android.MekaApplication
+    androidx.compose.runtime.LaunchedEffect(cards.cards.map { it.key to it.ids.size }) {
+        app?.let { os.meka.android.work.ChatSummarise.discord(it) }
+    }
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
             .padding(MekaSpace.m).testTag("discord"),
@@ -106,6 +111,13 @@ private fun DiscordChannelCardView(card: DiscordChannelCard, onDone: () -> Unit)
             MailNeedsPill("Done", spoken = "Done with ${card.title}", onClick = onDone)
         }
         Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        // Slice 3: Navilife's AI's one line on what was said; fades in when it arrives (reduced motion: no fade).
+        AnimatedVisibility(card.summary != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut()) {
+            Text(
+                card.summary.orEmpty(), style = MekaType.body, color = Meka.colors.textPrimary,
+                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = "In short: ${card.summary.orEmpty()}" },
+            )
+        }
         // Slice 2: posts from a person or with a word he picked: "2 alerts · latest 14:02" in brass.
         card.alertLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
         card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }

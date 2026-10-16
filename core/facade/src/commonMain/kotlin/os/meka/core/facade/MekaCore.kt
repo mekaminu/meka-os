@@ -4771,7 +4771,7 @@ class MekaCore(
         _discordWatch.value = os.meka.core.domain.DiscordRules.view(
             discordStore.seen(), watched, nowMs(), cal, discordStore.people(), discordStore.words(), posts,
         )
-        _discord.value = os.meka.core.domain.DiscordRules.cards(posts, watched, nowMs(), cal)
+        _discord.value = os.meka.core.domain.DiscordRules.cards(posts, watched, nowMs(), cal, summaries = chatSummaryStore.all())
     }
 
     /**
@@ -4794,6 +4794,49 @@ class MekaCore(
         val line = discordStore.setAlert(text, person, add, nowMs())
         discordChanged()
         line
+    }
+
+    /**
+     * Discord channel watch, slice 3: the AI's one line on each followed channel's card. The Fold calls this after its
+     * listener keeps new posts and when Needs you shows; the channels with three or more open posts and no summary for
+     * them (or news and a summary older than ten minutes) go in **one** call to `POST /v1/ai/chat-summary` — each
+     * channel's label and its posts' author, time and words as the card shows them — and come back as one line each,
+     * checked again ([os.meka.core.domain.DiscordSummaryRules.check]) and synced so the Mac's card shows it. Nothing is
+     * posted to Discord, traded or acted on. Nothing due → [ChatSummaryRead.NotDue]; offline, AI off or a failed call
+     * writes nothing, so the next call tries again, and the card keeps its posts.
+     */
+    suspend fun summariseDiscord(settings: os.meka.core.domain.TriageSettings = os.meka.core.domain.TriageSettings()): ChatSummaryRead {
+        val cal = ZoneCalendar(timeZone)
+        val due = onCore { os.meka.core.domain.DiscordSummaryRules.due(discordStore, chatSummaryStore.all(), settings, nowMs(), cal) }
+        if (due.isEmpty()) return ChatSummaryRead.NotDue
+        val api = aiApi ?: return ChatSummaryRead.Unavailable(os.meka.core.domain.AskRules.NOT_CONNECTED_LINE)
+        val codec = os.meka.core.wire.ChatSummaryCodec
+        val request = onCore {
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            codec.Request(
+                date = os.meka.core.domain.AskRules.isoDate(today),
+                now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
+                chats = due.map { c ->
+                    codec.Chat(
+                        c.name.take(codec.MAX_NAME), c.isGroup,
+                        c.lines.map { codec.Line(it.from.take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER), it.at, it.text.take(codec.MAX_LINE)) },
+                    )
+                },
+            )
+        }
+        val reply = try { api.chatSummary(request) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            return ChatSummaryRead.Unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) {
+            return ChatSummaryRead.Unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
+        }
+        return onCore {
+            val checked = os.meka.core.domain.DiscordSummaryRules.check(due, reply.chats.map { os.meka.core.domain.ChatSummaryRules.Raw(it.name, it.summary) })
+            due.forEach { c -> chatSummaryStore.save(c, checked[c.chatKey]) }
+            discordChanged()
+            ChatSummaryRead.Read(checked.filterValues { it != null }.keys.toList())
+        }
     }
 
     /** Work mode → Discord: Follow (or Stop) a channel Discord notified about; synced. Returns the line for the bar. */

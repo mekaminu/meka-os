@@ -15,7 +15,7 @@ import os.meka.core.sync.fv
  * 13) so he can pick it in Work mode → Discord; posts from channels he hasn't picked are dropped where they arrive.
  * A picked channel's posts are kept (synced, so the Mac shows them) and become one Needs you card per channel with
  * Done. Discord's text is untrusted (ADR-006): it is only displayed, never read by rules into actions, and nothing
- * from it reaches the AI in this slice.
+ * from it reaches the AI in slice 1 (slice 3 sends a busy channel's words for its card's one line: DiscordSummaryRules).
  */
 data class DiscordChannel(
     /** Folded "server#channel" (or "#channel" when Discord named no server): the same on every device. */
@@ -97,6 +97,11 @@ data class DiscordChannelCard(
     val latestMs: Long,
     /** Slice 2: "2 alerts · latest 14:02" when posts on it matched a watched person or word. */
     val alertLine: String? = null,
+    /**
+     * Slice 3: Navilife's AI's one line on what was said since he last looked ("Admin's BTC long above 68k, stop
+     * 66.5k; two chart images"), or null (fewer than three posts, AI off, offline). Display text only (ADR-006).
+     */
+    val summary: String? = null,
 )
 
 /** Needs you's Discord block: every watched channel with new posts. */
@@ -146,6 +151,7 @@ object DiscordRules {
         "Navilife sees what Discord's notification shows: an image reads \"sent an image\", and a long post may be cut.",
         "Nothing from before you picked a channel, and nothing from channels you haven't picked.",
         "Information only: a trade idea stays text. Navilife never trades and holds no exchange keys.",
+        DiscordSummaryRules.LIMIT_LINE,
     )
     const val EMPTY = "No Discord channels yet · once Discord shows a notification from a channel, it's listed here to pick."
     const val NOT_SEEN = "That channel isn't listed any more"
@@ -434,7 +440,11 @@ object DiscordRules {
     )
 
     /** One card per watched channel with posts not yet Done (newest channel first); null when there are none. */
-    fun cards(posts: List<Post>, watched: Set<String>, nowMs: Long, cal: LocalCalendar, hidden: Set<String> = emptySet()): DiscordCards? {
+    fun cards(
+        posts: List<Post>, watched: Set<String>, nowMs: Long, cal: LocalCalendar, hidden: Set<String> = emptySet(),
+        summaries: List<ChatSummary> = emptyList(),
+    ): DiscordCards? {
+        val summaryByKey = summaries.associateBy { it.chatKey }
         val open = posts.filter { !it.done && it.id !in hidden && it.channel.key in watched && nowMs - it.atMs < KEEP_MS && it.text.isNotBlank() }
         if (open.isEmpty()) return null
         val cards = open.groupBy { it.channel.key }.map { (k, ps) ->
@@ -457,6 +467,7 @@ object DiscordRules {
                 alertLine = alerts.lastOrNull()?.let { a ->
                     "${alerts.size} alert${if (alerts.size == 1) "" else "s"} · latest " + whenLine(a.atMs, nowMs, cal)
                 },
+                summary = DiscordSummaryRules.summaryFor(summaryByKey[DiscordSummaryRules.chatKey(k)], sorted),
             )
         }.sortedWith(compareByDescending<DiscordChannelCard> { it.alertLine != null }.thenByDescending { it.latestMs })
         val total = cards.sumOf { it.ids.size }
@@ -472,6 +483,86 @@ object DiscordRules {
     }
 
     fun doneLine(title: String, n: Int): String = "Done · $title · $n post${if (n == 1) "" else "s"}"
+}
+
+/**
+ * Discord channel watch, slice 3: Navilife's AI's one line on each channel's card. A followed channel with
+ * [MIN_POSTS] or more posts not yet Done goes, with the other due channels, in **one** call to the same
+ * `POST /v1/ai/chat-summary` busy chats use: the channel's label and each post's author, time and words (as the card
+ * shows them: an image is "sent an image", a long post is already cut). Never a number, a contact or anything else of
+ * the phone's; a channel or server named under Messages → "Kept from Navilife's AI" is never sent. The answer is kept in
+ * the same synced `chat_summary` (keyed "discord:" + the channel), so the Mac's card shows it too. Discord's words are
+ * untrusted (ADR-006): the summary is display text only, checked again here (one line, no links or addresses), and
+ * nothing is posted, traded or acted on. Pure and non-AI.
+ */
+object DiscordSummaryRules {
+    const val MIN_POSTS = 3
+    const val PREFIX = "discord:"
+    const val LIMIT_LINE = "With Navilife's AI on, a channel with $MIN_POSTS or more new posts gets a one-line summary on its card: " +
+        "the posts' words go to the AI for that line only, and channels named under Messages → \"Kept from Navilife's AI\" never do."
+
+    private val LINKISH = Regex("""(https?://|www\.|\S+@\S+\.\S+|discord\.gg)""", RegexOption.IGNORE_CASE)
+
+    fun chatKey(channelKey: String): String = PREFIX + channelKey
+
+    private fun open(posts: List<DiscordRules.Post>, watched: Set<String>, nowMs: Long) =
+        posts.filter { !it.done && it.channel.key in watched && nowMs - it.atMs < DiscordRules.KEEP_MS && it.text.isNotBlank() }
+
+    /** A summary belongs to the card when it was made after the oldest open post arrived. */
+    private fun belongs(s: ChatSummary, sorted: List<DiscordRules.Post>): Boolean =
+        sorted.isNotEmpty() && s.upToMs >= sorted.first().atMs
+
+    /**
+     * The channels the call carries: followed channels with at least [MIN_POSTS] open posts that have no summary for
+     * them, or new posts and a summary older than [ChatSummaryRules.REFRESH_MS]; most recent first, at most
+     * [ChatSummaryRules.MAX_CHATS], names unique in the batch.
+     */
+    fun toSummarise(
+        posts: List<DiscordRules.Post>, watched: Set<String>, have: List<ChatSummary>, settings: TriageSettings,
+        nowMs: Long, cal: LocalCalendar,
+    ): List<ChatSummaryRules.Chat> {
+        val byKey = have.associateBy { it.chatKey }
+        val names = mutableSetOf<String>()
+        return open(posts, watched, nowMs).groupBy { it.channel.key }.mapNotNull { (k, ps) ->
+            val sorted = ps.sortedBy { it.atMs }
+            val ch = sorted.last().channel
+            if (sorted.size < MIN_POSTS) return@mapNotNull null
+            if (listOfNotNull(ch.label, "#" + ch.channel, ch.channel, ch.server).any { settings.isPrivate(it) }) return@mapNotNull null
+            val s = byKey[chatKey(k)]
+            val latest = sorted.last().atMs
+            val due = when {
+                s == null || !belongs(s, sorted) -> true
+                s.upToMs >= latest -> false
+                else -> nowMs - s.madeAtMs >= ChatSummaryRules.REFRESH_MS
+            }
+            if (!due) return@mapNotNull null
+            ChatSummaryRules.Chat(
+                chatKey(k), ch.label.take(60), true,
+                sorted.takeLast(ChatSummaryRules.MAX_LINES).map { p ->
+                    ChatSummaryRules.Line(
+                        (p.author.ifBlank { "Someone" }).take(60),
+                        LocalClock.formatMinute(cal.minuteOfDay(p.atMs)),
+                        GroupGistRules.clean(p.text, ChatSummaryRules.MAX_LINE_CHARS) ?: "sent an image",
+                    )
+                },
+                latest, sorted.size,
+            )
+        }.sortedByDescending { it.upToMs }
+            .filter { names.add(People.key(it.name)) }
+            .take(ChatSummaryRules.MAX_CHATS)
+    }
+
+    /** The model's answer checked: one clean line per channel sent, dropped whole with a link, invite or address. */
+    fun check(sent: List<ChatSummaryRules.Chat>, raw: List<ChatSummaryRules.Raw>): Map<String, String?> =
+        ChatSummaryRules.check(sent, raw).mapValues { (_, v) -> v?.takeUnless { LINKISH.containsMatchIn(it) } }
+
+    /** The card's line: the channel's summary when it belongs to its open posts and there are enough of them. */
+    fun summaryFor(s: ChatSummary?, sorted: List<DiscordRules.Post>): String? =
+        s?.takeIf { sorted.size >= MIN_POSTS && belongs(it, sorted) }?.summary
+
+    /** The due channels, from the store's posts and setting. */
+    fun due(store: DiscordStore, have: List<ChatSummary>, settings: TriageSettings, nowMs: Long, cal: LocalCalendar) =
+        toSummarise(store.posts(), store.watched(), have, settings, nowMs, cal)
 }
 
 /** The synced setting and the kept posts on a replica (both apps write; only the Fold captures). */

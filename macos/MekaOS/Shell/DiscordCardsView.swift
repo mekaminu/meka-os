@@ -49,6 +49,7 @@ struct DiscordCardsView: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.discord == nil)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.discord?.cards.map(\.key) ?? [])
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.discord?.cards.map { $0.summary ?? "" } ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
     }
 }
@@ -75,6 +76,14 @@ private struct DiscordChannelCardRow: View {
             }
             Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Slice 3: Navilife's AI's one line on what was said (synced from the Fold); fades in when it arrives.
+            if let summary = card.summary {
+                Text(summary).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, MekaSpace.xxs)
+                    .transition(.opacity)
+                    .accessibilityLabel("In short: \(summary)")
+            }
             // Slice 2: posts from a person or with a word he picked.
             if let alerts = card.alertLine {
                 Text(alerts).font(MekaType.itemMeta).foregroundStyle(palette.accent)

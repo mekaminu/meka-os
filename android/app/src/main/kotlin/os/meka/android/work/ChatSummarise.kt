@@ -18,4 +18,13 @@ object ChatSummarise {
     suspend fun run(meka: MekaApplication): ChatSummaryRead? = lock.withLock {
         runCatching { meka.core.summariseChats(meka.captures.triageSettings.value) }.getOrNull()
     }
+
+    /**
+     * Discord channel watch, slice 3: the followed channels with three or more new posts and no line for them yet go to
+     * Navilife's AI in one call ([os.meka.core.facade.MekaCore.summariseDiscord]); the line syncs to the Mac's card.
+     * Same lock, so it never races the chats' call. Costs nothing when nothing is due.
+     */
+    suspend fun discord(meka: MekaApplication): ChatSummaryRead? = lock.withLock {
+        runCatching { meka.core.summariseDiscord(meka.captures.triageSettings.value) }.getOrNull()
+    }
 }
