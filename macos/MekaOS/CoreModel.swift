@@ -3258,6 +3258,28 @@ final class CoreModel {
         }
     }
 
+    /// Slice 2: hides every tip of that kind ("habit", "over", "rise") on both devices; Undo with `undoMoneyCategory`.
+    func hideMoneyTips(kind: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.hideMoneyTips(kind: kind))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 2: every hidden kind of tip shown again.
+    func showMoneyTips() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.showMoneyTips())
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func undoMoneyCategory(token: String) async -> Bool {
         guard let core else { return false }
         let ok = (try? await core.undoMoneyCategory(token: token))?.boolValue ?? false

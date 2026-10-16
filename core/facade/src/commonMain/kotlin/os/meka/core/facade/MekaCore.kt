@@ -661,10 +661,20 @@ class MekaCore(
         if (!moneyOpen) moneyLocked() else money.deleteAll().also { moneyOffset = 0; refreshMoney() }
     }
 
+    /** Slice 2: hides every tip of [kind] ("habit", "over", "rise") on both devices; Undo by [undoMoneyCategory]. */
+    suspend fun hideMoneyTips(kind: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.hideTips(kind).also { refreshMoney() }
+    }
+
+    /** Slice 2: every hidden kind of tip shown again. */
+    suspend fun showMoneyTips(): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.showTips().also { refreshMoney() }
+    }
+
     private fun refreshMoney() {
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
-            money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset,
+            money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(),
         )
     }
 

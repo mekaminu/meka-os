@@ -10,6 +10,9 @@ import UniformTypeIdentifiers
 /// Import: name the account, choose the CSV file from the bank. Remove an account (click twice), Delete all money data
 /// (asks first). Read-only; Navilife never pays or moves anything. Only Strings cross to the core.
 ///
+/// Slice 2: this month also shows tips from his own numbers (each with Hide tips like this, Undo, Show them again)
+/// and his regular payments with their monthly total.
+///
 /// Locking: the core holds no figures for the screen until `openMoney()` after Touch ID's yes; the sheet closing, the
 /// screen sleeping or the session locking calls `closeMoney()`.
 ///
@@ -87,6 +90,23 @@ struct MoneySheet: View {
             if let vs = m.vsLine {
                 Text(vs).font(MekaType.caption).foregroundStyle(m.vsLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
             }
+            if !v.tips.isEmpty {
+                Text("TIPS FROM YOUR NUMBERS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                ForEach(v.tips, id: \.id) { t in tip(t).transition(.opacity) }
+            }
+            if let h = v.hiddenTips {
+                HStack {
+                    Text(h).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity)
+                    Spacer()
+                    Button(MoneyTips.shared.SHOW_AGAIN) { Task { said = await model.showMoneyTips() } }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+            }
+            if let r = v.regular {
+                Text("REGULAR PAYMENTS").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
+            }
             if !m.categories.isEmpty {
                 Text("BY CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(m.categories, id: \.key) { c in category(c).transition(.opacity) }
@@ -100,6 +120,40 @@ struct MoneySheet: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: m.label)
+    }
+
+    /// Slice 2: one tip from his own numbers, with Hide tips like this (Undo in the line below).
+    private func tip(_ t: MoneyTip) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(t.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(t.line).font(MekaType.caption).foregroundStyle(t.lit ? palette.accent : palette.textSecondary)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(t.spoken)
+            Button(MoneyTips.shared.HIDE) {
+                let kind = t.kind
+                Task { said = await model.hideMoneyTips(kind: kind) }
+            }
+            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+    }
+
+    /// Slice 2: one regular payment, lit when it went up.
+    private func regular(_ r: MoneyRegularRow) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(r.merchant).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(r.line).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textSecondary)
+            }
+            Spacer()
+            Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(r.spoken)
     }
 
     private func category(_ c: MoneyCategoryRow) -> some View {

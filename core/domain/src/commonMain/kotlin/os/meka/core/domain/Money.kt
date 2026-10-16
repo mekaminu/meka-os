@@ -41,6 +41,12 @@ object MoneyTxnFields {
     const val TEXT = "text"
 }
 
+/** Slice 2: one kind of tip, id its [MoneyTipKind.key]. */
+object MoneyTipsFields {
+    /** True while he has that kind hidden. */
+    const val HIDDEN = "hidden"
+}
+
 object MoneyRuleFields {
     const val MERCHANT = "merchant"
     /** A [MoneyCategory.key]; Null when the correction was taken back. */
@@ -370,6 +376,12 @@ data class MoneyMonth(
 data class MoneyView(
     val locked: Boolean, val summary: String, val empty: String?, val month: MoneyMonth?, val accounts: List<MoneyAccountRow>,
     val earlier: Boolean, val later: Boolean,
+    /** Slice 2: tips from his own numbers ([MoneyTips]), shown with this month only. */
+    val tips: List<MoneyTip> = emptyList(),
+    /** Slice 2: his regular payments and their monthly total, shown with this month only. */
+    val regular: MoneyRegular? = null,
+    /** Slice 2: "Hidden: tips on habits" with Show them again; null when nothing is hidden. */
+    val hiddenTips: String? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -461,6 +473,7 @@ object MoneyRules {
      */
     fun view(
         accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>, today: Long, cal: LocalCalendar, offset: Int,
+        hiddenTips: Set<String> = emptySet(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
@@ -535,7 +548,15 @@ object MoneyRules {
             categories = catRows, txns = rows, more = (sorted.size - rows.size).coerceAtLeast(0),
         )
         val summary = "${accounts.size} account${if (accounts.size == 1) "" else "s"} · ${mine.size} transactions"
-        return MoneyView(false, summary, null, month, accountRows, earlier = shown > firstMonth, later = shown < thisMonth)
+        // Slice 2: tips and regular payments go with this month (they're about now, not the month shown).
+        val lines = if (partial) mine.map { MoneyLine(it.day, it.pence, keyOf(it), cat(it)) } else emptyList()
+        val regular = if (partial) MoneyTips.regular(lines, today) else emptyList()
+        return MoneyView(
+            false, summary, null, month, accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
+            tips = if (partial) MoneyTips.tips(lines, today, hiddenTips, regular) else emptyList(),
+            regular = MoneyTips.regularView(regular),
+            hiddenTips = MoneyTips.hiddenLine(hiddenTips),
+        )
     }
 
     fun movedLine(merchant: String, category: MoneyCategory, count: Int): String =
@@ -547,6 +568,8 @@ object MoneyRules {
 /** Money on a replica (both apps). Keeps the lines in memory between changes, so the screen doesn't re-read them all. */
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
+
+    private companion object { const val TIPS_UNDO = "tips|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -570,6 +593,25 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         val c = MoneyCategory.of(e[MoneyRuleFields.CATEGORY].textOrNull) ?: return@mapNotNull null
         m to c
     }.toMap()
+
+    /** Slice 2: the kinds of tip he hid ([MoneyTipKind.key]). */
+    fun hiddenTips(): Set<String> = replica.entities(EntityTypes.MONEY_TIPS)
+        .filter { it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId }.toSet()
+
+    /** Hides every tip of [kindKey] on both devices; Undo (by [undoCategory] with the token) shows them again. */
+    fun hideTips(kindKey: String): MoneySaved {
+        val kind = MoneyTipKind.of(kindKey) ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        replica.commitLocal(EntityTypes.MONEY_TIPS, kind.key, mapOf(MoneyTipsFields.HIDDEN to true.fv()))
+        return MoneySaved(MoneyTips.hiddenSaid(kind), undo = TIPS_UNDO + kind.key)
+    }
+
+    /** Shows every hidden kind of tip again. */
+    fun showTips(): MoneySaved {
+        val hidden = hiddenTips()
+        if (hidden.isEmpty()) return MoneySaved(MoneyTips.SHOWN_AGAIN)
+        replica.batched { hidden.forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to false.fv())) } }
+        return MoneySaved(MoneyTips.SHOWN_AGAIN)
+    }
 
     /** Imports a statement file's [text] into [accountName] (made if new); lines already there are left alone. */
     fun import(accountName: String, text: String): MoneySaved {
@@ -619,6 +661,11 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(TIPS_UNDO)) {
+            val kind = MoneyTipKind.of(token.removePrefix(TIPS_UNDO)) ?: return false
+            replica.commitLocal(EntityTypes.MONEY_TIPS, kind.key, mapOf(MoneyTipsFields.HIDDEN to false.fv()))
+            return true
+        }
         val rid = token.substringBefore('|')
         val before = token.substringAfter('|', "").ifEmpty { null }
         if (replica.entity(EntityTypes.MONEY_RULE, rid) == null) return false
@@ -652,6 +699,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                     os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.NAME to FieldValue.Null, MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
                 ))
             }
+            hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
             rules.forEach {
                 replica.commitLocal(EntityTypes.MONEY_RULE, it.ref.entityId, mapOf(
                     MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null,

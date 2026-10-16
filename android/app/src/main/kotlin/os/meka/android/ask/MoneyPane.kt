@@ -59,7 +59,10 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.MoneyCategoryRow
 import os.meka.core.domain.MoneyRules
+import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneySaved
+import os.meka.core.domain.MoneyTip
+import os.meka.core.domain.MoneyTips
 import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.facade.MekaCore
 
@@ -72,6 +75,10 @@ import os.meka.core.facade.MekaCore
  *
  * Locking: the core holds no figures for the screen until [MekaCore.openMoney] after the prompt's yes, and closing the
  * pane (or leaving it) calls [MekaCore.closeMoney].
+ *
+ * Slice 2: this month also shows **tips from his own numbers** (a habit and what halving it saves, a category well over its
+ * 6-month average, a regular payment that went up), each with "Hide tips like this" (Undo; Show them again), and his
+ * **regular payments** with their monthly total.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the month's lines cross-fade, its sections
  * stagger in 40 ms apart, each bar grows to its share (snaps with reduced motion), a refused line blends to the accent
@@ -167,6 +174,46 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                             Text(l, style = MekaType.caption, color = c)
                         }
                     }
+                }
+            }
+            // Slice 2: tips from his own numbers, then his regular payments (this month only).
+            if (v.tips.isNotEmpty()) {
+                item(key = "tips-head") {
+                    Text("TIPS FROM YOUR NUMBERS", style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                v.tips.forEachIndexed { i, t ->
+                    item(key = "tip-${t.id}") {
+                        TipCard(t, Modifier.animateItem().appear(rememberAppearance(4 + i))) {
+                            scope.launch { runCatching { core.hideMoneyTips(t.kind) }.getOrNull()?.let(say) }
+                        }
+                    }
+                }
+            }
+            v.hiddenTips?.let { h ->
+                item(key = "tips-hidden") {
+                    Row(Modifier.animateItem(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Crossfade(h, animationSpec = MekaMotion.appear(reduced), label = "money-tips-hidden", modifier = Modifier.weight(1f)) { l ->
+                            Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        }
+                        Text(MoneyTips.SHOW_AGAIN, style = MekaType.caption, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                                scope.launch { runCatching { core.showMoneyTips() }.getOrNull()?.let(say) }
+                            }.minTouch().padding(MekaSpace.xs))
+                    }
+                }
+            }
+            v.regular?.let { r ->
+                item(key = "regular-head") {
+                    Column(Modifier.animateItem().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text("REGULAR PAYMENTS", style = MekaType.caption, color = Meka.colors.textTertiary)
+                        Crossfade(r.head, animationSpec = MekaMotion.appear(reduced), label = "money-regular-head") { l ->
+                            Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
+                        }
+                    }
+                }
+                r.rows.forEach { row ->
+                    item(key = "regular-${row.key}") { RegularRow(row, Modifier.animateItem()) }
                 }
             }
             if (m.categories.isNotEmpty()) {
@@ -343,5 +390,34 @@ private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onCategory: (String) -> U
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun TipCard(t: MoneyTip, modifier: Modifier, onHide: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (t.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-tip-${t.id}")
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = t.spoken }) {
+            Text(t.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(t.line, style = MekaType.caption, color = c)
+        }
+        Text(MoneyTips.HIDE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onHide).minTouch())
+    }
+}
+
+@Composable
+private fun RegularRow(r: MoneyRegularRow, modifier: Modifier) {
+    Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken }.padding(vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(r.merchant, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(r.line, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
+        }
+        Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
     }
 }

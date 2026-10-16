@@ -80,4 +80,34 @@ class MoneyFacadeTest {
         assertEquals(MoneyRules.EMPTY, mac.moneyView.value.empty)
         assertTrue(mac.lifeLines.value.needsSetUp(LifeTile.MONEY))
     }
+    @Test
+    fun tipsHiddenOnTheFoldStayHiddenOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Ten coffees in the last ten days (£40) and three monthly gym payments.
+        val csv = "Date,Description,Amount\n" +
+            (7..16).joinToString("") { "$it/10/2026,COSTA COFFEE,-4.00\n" } +
+            "01/08/2026,PUREGYM,-35.00\n01/09/2026,PUREGYM,-35.00\n01/10/2026,PUREGYM,-35.00\n"
+        assertTrue(fold.hideMoneyTips("habit").refused) // locked
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        val v = fold.moneyView.value
+        assertEquals(listOf("Coffee 10× · £40 in the last 30 days"), v.tips.filter { it.kind == "habit" }.map { it.title })
+        assertEquals("1 regular payment · about £35 a month · £420 a year", v.regular?.head)
+        val hid = fold.hideMoneyTips("habit")
+        assertEquals("Tips on habits hidden · on both devices", hid.line)
+        assertTrue(fold.moneyView.value.tips.none { it.kind == "habit" })
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertTrue(mac.moneyView.value.tips.none { it.kind == "habit" })
+        assertEquals("Hidden: tips on habits", mac.moneyView.value.hiddenTips)
+        // Show them again on the Mac; the Fold follows.
+        mac.showMoneyTips()
+        mac.syncNow(); fold.syncNow()
+        assertEquals(1, fold.moneyView.value.tips.count { it.kind == "habit" })
+        // Undo of a hide works through the same Undo as a category change.
+        val again = fold.hideMoneyTips("habit")
+        assertTrue(fold.undoMoneyCategory(again.undo!!))
+        assertEquals(1, fold.moneyView.value.tips.count { it.kind == "habit" })
+    }
 }

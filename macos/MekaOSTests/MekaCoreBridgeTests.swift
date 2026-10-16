@@ -1780,6 +1780,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyRules.shared.CHOICES.first?.label, "Groceries")
     }
 
+    func testMoneyTipsReachSwift() {
+        // Money manager, slice 2: the tip kinds and their words cross to Swift; nothing hidden says nothing.
+        XCTAssertEqual(MoneyTipKind.habit.key, "habit")
+        XCTAssertEqual(MoneyTips.shared.HIDE, "Hide tips like this")
+        XCTAssertNil(MoneyTips.shared.hiddenLine(hidden: Set<String>()))
+        XCTAssertEqual(MoneyTips.shared.hiddenLine(hidden: ["rise"]), "Hidden: tips on price rises")
+        XCTAssertTrue(MoneyView.companion.LOCKED.tips.isEmpty)
+    }
+
     func testKidsRulesReachSwift() {
         // Kids' admin, slice 1: a size is tidied, both apps write the same child, no children → About you first.
         let rules = KidsRules.shared
