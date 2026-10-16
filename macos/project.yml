@@ -131,6 +131,7 @@ targets:
         SWIFT_DEFAULT_ACTOR_ISOLATION: nonisolated   # XCTestCase initialisers are nonisolated
         TEST_TARGET_NAME: MekaOS
         PRODUCT_BUNDLE_IDENTIFIER: os.meka.mac.uitests
+        GENERATE_INFOPLIST_FILE: YES                 # signed (ad hoc) in ci, so it needs an Info.plist
   MekaOSTests:
     type: bundle.unit-test
     platform: macOS
