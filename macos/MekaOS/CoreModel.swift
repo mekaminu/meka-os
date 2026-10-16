@@ -3283,6 +3283,17 @@ final class CoreModel {
         }
     }
 
+    /// Slice 6: the pay account's balance as he typed it (blank clears it); Undo with `undoMoneyCategory`.
+    func moneyBalance(accountId: String, text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyBalance(accountId: accountId, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 3: That's fine on one watchdog alert, on both devices; Undo with `undoMoneyCategory`.
     func moneyAlertFine(alertId: String) async -> MoneySaid? {
         guard let core else { return nil }

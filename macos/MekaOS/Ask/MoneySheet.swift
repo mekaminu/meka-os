@@ -16,6 +16,9 @@ import UniformTypeIdentifiers
 /// Slice 3: this month leads with WORTH A LOOK (a possible double charge, a payment much bigger than usual or a first big
 /// one, fees), each with That's fine (both devices, Undo); Navilife never acts on them.
 ///
+/// Slice 6: UNTIL PAYDAY — payday from his pay, what's still to go out before it and, with the pay account's balance,
+/// what's safe to spend a day (lit when it's tight).
+///
 /// Slice 5: REFUNDS ON THE WAY — each refund on Waiting for, back in his statement (Close it, Undo) or not yet, and after
 /// two weeks a chase to copy (Copy the chase marks it chased; he sends it himself).
 ///
@@ -35,6 +38,7 @@ struct MoneySheet: View {
     @State private var deleting = false
     @State private var busy = false
     @State private var extra = ""
+    @State private var balance = ""
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -103,6 +107,7 @@ struct MoneySheet: View {
                 ForEach(v.alerts, id: \.id) { a in alert(a).transition(.opacity) }
                 Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
+            if let p = v.payday { payday(p).transition(.opacity) }
             if let r = v.refunds {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -140,6 +145,53 @@ struct MoneySheet: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: m.label)
+    }
+
+    /// Slice 6: payday, what's still to go out before it, the pay account's balance (typed here or from a statement)
+    /// and what's safe to spend, lit when it's tight.
+    private func payday(_ p: MoneyPaydayView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(p.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let n = p.notReady {
+                Text(n).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if let l = p.payLine { Text(l).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
+            if let f = p.fromLine { Text(f).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            if let s = p.sinceLine { Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+            if let g = p.goingOut { Text(g).font(MekaType.caption).foregroundStyle(palette.textTertiary).contentTransition(.opacity) }
+            ForEach(p.rows, id: \.key) { r in
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(r.day).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    Spacer()
+                    Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(r.spoken)
+            }
+            if p.more > 0 { Text("+ \(p.more) more").font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            if let b = p.balanceLine {
+                Text(b).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let id = p.account {
+                TextField(MoneyPayday.shared.BALANCE_HINT, text: $balance)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        let text = balance
+                        balance = ""
+                        Task { said = await model.moneyBalance(accountId: id, text: text) }
+                    }
+            }
+            if let s = p.safe {
+                Text(s).font(MekaType.body).foregroundStyle(p.safeLit ? palette.accent : palette.textPrimary).contentTransition(.opacity)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(p.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: p.safe)
     }
 
     /// Slice 4: the forecast at his pace, with what-ifs on this Mac only (they go when Money locks).

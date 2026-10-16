@@ -747,8 +747,21 @@ class MekaCore(
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf, lists.waitingItems(),
+            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(),
         )
+    }
+
+    /** Slice 6: the radar's bills, subscriptions and club fees with a cost, for what's still to go out before payday. */
+    private fun moneyBills(): List<os.meka.core.domain.MoneyBill> = renewals.items()
+        .filter { it.costPence != null && (it.kind == os.meka.core.domain.ObligationKind.BILL || it.kind == os.meka.core.domain.ObligationKind.SUBSCRIPTION || it.forChild != null) }
+        .map { os.meka.core.domain.MoneyBill(it.title, it.dueDay, it.costPence!!) }
+
+    /**
+     * Slice 6: the pay account's balance as he typed it ("£1,240", "−£50"; blank clears it), on both devices, so the
+     * payday view can say what's safe to spend; Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneyBalance(accountId: String, text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setBalance(accountId, text, todayEpochDay()).also { refreshMoney() }
     }
 
     private val _kids = MutableStateFlow(os.meka.core.domain.KidsView.EMPTY)

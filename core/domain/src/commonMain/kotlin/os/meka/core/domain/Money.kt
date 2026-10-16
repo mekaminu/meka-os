@@ -29,6 +29,12 @@ object MoneyAccountFields {
     /** "csv" (a statement file); "bank" once Enable Banking lands. */
     const val SOURCE = "source"
     const val IMPORTED_AT = "importedAtMs"
+    /** Slice 6: the balance in signed pence (overdrawn is negative), from a statement's Balance column or typed; Null when unknown. */
+    const val BALANCE = "balancePence"
+    /** Slice 6: the epoch day the balance is as of. */
+    const val BALANCE_DAY = "balanceDay"
+    /** Slice 6: true when he typed it, false when a statement file gave it. */
+    const val BALANCE_TYPED = "balanceTyped"
 }
 
 object MoneyTxnFields {
@@ -96,12 +102,16 @@ data class MoneyRow(val day: Long, val pence: Long, val text: String)
  * What [MoneyCsv.read] made of a file: the [rows] it could read, how many lines it [skipped] (no date or amount), whether
  * it [flipped] the signs (a card statement listing purchases as positive), or why it read nothing ([problem]).
  */
-data class MoneyCsvRead(val rows: List<MoneyRow>, val skipped: Int = 0, val flipped: Boolean = false, val problem: String? = null)
+data class MoneyCsvRead(
+    val rows: List<MoneyRow>, val skipped: Int = 0, val flipped: Boolean = false, val problem: String? = null,
+    /** Slice 6: the balance after the statement's latest line, when the file has a Balance column (never for a card read the other way round). */
+    val balancePence: Long? = null, val balanceDay: Long? = null,
+)
 
 /** One stored statement line. */
 data class MoneyTxn(val id: String, val account: String, val day: Long, val pence: Long, val text: String)
 
-data class MoneyAccount(val id: String, val name: String, val source: String, val importedAtMs: Long?)
+data class MoneyAccount(val id: String, val name: String, val source: String, val importedAtMs: Long?, val balance: MoneyBalance? = null)
 
 /**
  * Reads a bank or card statement saved as CSV. Finds the header row (in the first 15 lines), then the date column
@@ -123,6 +133,7 @@ object MoneyCsv {
     private val AMOUNT_HEADS = listOf("amount", "amount (gbp)", "amount(gbp)", "value", "transaction amount", "amount gbp", "billing amount")
     private val OUT_HEADS = listOf("paid out", "money out", "debit", "debit amount", "out", "withdrawals", "spent")
     private val IN_HEADS = listOf("paid in", "money in", "credit", "credit amount", "in", "deposits", "received")
+    private val BALANCE_HEADS = listOf("balance", "running balance", "balance (gbp)", "balance(gbp)", "balance gbp", "account balance", "closing balance")
 
     /** Splits one CSV line, honouring quotes ("a, b" stays one field; "" is a quote). */
     fun split(line: String, sep: Char = ','): List<String> {
@@ -189,6 +200,8 @@ object MoneyCsv {
         val inCol = if (amountCol == null) col(heads, IN_HEADS) else null
         val textCols = TEXT_HEADS.mapNotNull { n -> heads.indexOf(n).takeIf { it >= 0 } }.distinct().take(2)
         val typeCol = heads.indexOf("type").takeIf { it >= 0 }
+        val balanceCol = col(heads, BALANCE_HEADS)
+        val balances = mutableListOf<Pair<Long, Long>>()
         val rows = mutableListOf<MoneyRow>()
         var skipped = 0
         for (l in all.drop(headAt + 1)) {
@@ -211,6 +224,7 @@ object MoneyCsv {
                 .ifEmpty { typeCol?.let { f.getOrNull(it) }.orEmpty() }
             if (day == null || pence == null || pence == 0L) { skipped++; continue }
             rows += MoneyRow(day, pence, words.ifEmpty { "Payment" }.take(140))
+            balanceCol?.let { f.getOrNull(it) }?.let(::pence)?.let { balances += day to it }
         }
         if (rows.isEmpty()) return MoneyCsvRead(emptyList(), skipped, problem = NO_ROWS)
         // A card statement: purchases positive, its payments negative and called a payment.
@@ -219,7 +233,13 @@ object MoneyCsv {
         val flip = amountCol != null && positive * 10 >= rows.size * 7 && payments.isNotEmpty() &&
             payments.all { PAYMENT.containsMatchIn(it.text) || REFUND.containsMatchIn(it.text) } && payments.any { PAYMENT.containsMatchIn(it.text) }
         val kept = if (flip) rows.map { it.copy(pence = -it.pence) } else rows
-        return MoneyCsvRead(kept, skipped, flipped = flip)
+        // The balance after the latest day: newest-first files list it first on that day, oldest-first last.
+        val bal = if (flip || balances.isEmpty()) null else {
+            val latest = balances.maxOf { it.first }
+            val onLatest = balances.filter { it.first == latest }
+            if (balances.first().first > balances.last().first) onLatest.first() else onLatest.last()
+        }
+        return MoneyCsvRead(kept, skipped, flipped = flip, balancePence = bal?.second, balanceDay = bal?.first)
     }
 
     private val PAYMENT = Regex("""\b(payment|thank you|paid|direct debit)\b""", RegexOption.IGNORE_CASE)
@@ -394,6 +414,8 @@ data class MoneyView(
     val forecast: MoneyForecastView? = null,
     /** Slice 5: refunds on Waiting for checked against his statements ([MoneyRefunds]), shown with this month only. */
     val refunds: MoneyRefundsView? = null,
+    /** Slice 6: payday, what's still to go out before it and what's safe to spend ([MoneyPayday]), shown with this month only. */
+    val payday: MoneyPaydayView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -443,6 +465,9 @@ object MoneyRules {
     /** "−£23.40" out, "+£2,500" in. */
     fun signed(pence: Long): String = if (pence < 0) "−" + fmt(-pence) else "+" + fmt(pence)
 
+    /** "£1,240" in credit, "−£50" overdrawn. */
+    fun signedPlain(pence: Long): String = if (pence < 0) "−" + fmt(-pence) else fmt(pence)
+
     /** A month as an index (year × 12 + month − 1) and back. */
     fun monthOf(day: Long): Int = CivilDate.fromEpochDay(day).let { it.year * 12 + it.month - 1 }
 
@@ -486,7 +511,7 @@ object MoneyRules {
     fun view(
         accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>, today: Long, cal: LocalCalendar, offset: Int,
         hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(), whatIf: MoneyWhatIf = MoneyWhatIf(),
-        refundWaits: List<WaitingItem> = emptyList(),
+        refundWaits: List<WaitingItem> = emptyList(), bills: List<MoneyBill> = emptyList(), holidays: HolidayCalendar = HolidayCalendar(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
@@ -573,6 +598,10 @@ object MoneyRules {
             alerts = if (partial) MoneyWatch.alerts(watch, today, names, fineAlerts) else emptyList(),
             forecast = if (partial) MoneyForecast.view(lines, today, whatIf) else null,
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
+            payday = if (partial) MoneyPayday.view(
+                mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
+                accounts.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(), bills, holidays,
+            ) else null,
         )
     }
 
@@ -586,7 +615,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -595,7 +624,31 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     fun accounts(): List<MoneyAccount> = replica.entities(EntityTypes.MONEY_ACCOUNT).mapNotNull { e ->
         val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
-        MoneyAccount(e.ref.entityId, name, e[MoneyAccountFields.SOURCE].textOrNull ?: "csv", e[MoneyAccountFields.IMPORTED_AT].longOrNull)
+        val bp = e[MoneyAccountFields.BALANCE].longOrNull
+        val bd = e[MoneyAccountFields.BALANCE_DAY].longOrNull
+        MoneyAccount(e.ref.entityId, name, e[MoneyAccountFields.SOURCE].textOrNull ?: "csv", e[MoneyAccountFields.IMPORTED_AT].longOrNull,
+            if (bp != null && bd != null) MoneyBalance(bp, bd, e[MoneyAccountFields.BALANCE_TYPED].boolOrNull == true) else null)
+    }
+
+    /**
+     * Slice 6: [accountId]'s balance as he typed it ([text]: "£1,240", "−£50"; blank clears it), as of [today], on both
+     * devices; Undo (by [undoCategory] with the token) puts the one before back.
+     */
+    fun setBalance(accountId: String, text: String, today: Long): MoneySaved {
+        val a = accounts().firstOrNull { it.id == accountId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val p = if (text.isBlank()) null else MoneyPayday.parseBalance(text) ?: return MoneySaved(MoneyPayday.BALANCE_BAD, refused = true)
+        val b = a.balance
+        val undo = BALANCE_UNDO + listOf(accountId, b?.pence?.toString().orEmpty(), b?.day?.toString().orEmpty(), if (b?.typed == true) "1" else "").joinToString("|")
+        writeBalance(accountId, p?.let { MoneyBalance(it, today, typed = true) })
+        return MoneySaved(if (p == null) MoneyPayday.BALANCE_CLEARED else MoneyPayday.balanceSaid(a.name, p), undo = undo)
+    }
+
+    private fun writeBalance(accountId: String, b: MoneyBalance?) {
+        replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(
+            MoneyAccountFields.BALANCE to (b?.pence?.fv() ?: FieldValue.Null),
+            MoneyAccountFields.BALANCE_DAY to (b?.day?.fv() ?: FieldValue.Null),
+            MoneyAccountFields.BALANCE_TYPED to (b?.typed?.fv() ?: FieldValue.Null),
+        ))
     }
 
     fun txns(): List<MoneyTxn> = cache ?: replica.entities(EntityTypes.MONEY_TXN).mapNotNull { e ->
@@ -671,6 +724,13 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 added++
             }
         }
+        // Slice 6: the file's balance, unless the account already holds a newer one.
+        val bp = read.balancePence
+        val bd = read.balanceDay
+        if (bp != null && bd != null) {
+            val had = accounts().firstOrNull { it.id == id }?.balance
+            if (had == null || bd >= had.day) writeBalance(id, MoneyBalance(bp, bd, typed = false))
+        }
         cache = null
         return MoneySaved(MoneyRules.importedLine(name, added, already, read))
     }
@@ -689,6 +749,15 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(BALANCE_UNDO)) {
+            val parts = token.removePrefix(BALANCE_UNDO).split('|')
+            val id = parts.getOrNull(0) ?: return false
+            if (accounts().none { it.id == id }) return false
+            val p = parts.getOrNull(1)?.toLongOrNull()
+            val d = parts.getOrNull(2)?.toLongOrNull()
+            writeBalance(id, if (p != null && d != null) MoneyBalance(p, d, parts.getOrNull(3) == "1") else null)
+            return true
+        }
         if (token.startsWith(ALERT_UNDO)) {
             val id = token.removePrefix(ALERT_UNDO)
             if (replica.entity(EntityTypes.MONEY_ALERT, id) == null) return false
@@ -715,6 +784,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             ts.forEach { clear(it.id) }
             replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(
                 os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
+                MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
             ))
         }
         cache = null
@@ -731,6 +801,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             accounts.forEach {
                 replica.commitLocal(EntityTypes.MONEY_ACCOUNT, it.id, mapOf(
                     os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.NAME to FieldValue.Null, MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
+                    MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
                 ))
             }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }

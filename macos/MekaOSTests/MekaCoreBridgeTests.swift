@@ -1806,6 +1806,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MoneyView.companion.LOCKED.forecast)
     }
 
+    func testMoneyPaydayReachesSwift() {
+        // Money manager, slice 6: the payday block's words cross to Swift, a typed balance parses; a locked screen has none.
+        XCTAssertEqual(MoneyPayday.shared.HEAD, "UNTIL PAYDAY")
+        XCTAssertEqual(MoneyPayday.shared.parseBalance(text: "-£50")?.int64Value, -5000)
+        XCTAssertNil(MoneyView.companion.LOCKED.payday)
+    }
+
     func testMoneyRefundsReachSwift() {
         // Money manager, slice 5: the refunds section's words cross to Swift; a locked screen has none.
         XCTAssertEqual(MoneyRefunds.shared.HEAD, "REFUNDS ON THE WAY")

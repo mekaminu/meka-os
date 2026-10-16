@@ -62,6 +62,8 @@ import os.meka.core.domain.MoneyCategoryRow
 import os.meka.core.domain.MoneyForecast
 import os.meka.core.domain.MoneyForecastRow
 import os.meka.core.domain.MoneyForecastView
+import os.meka.core.domain.MoneyPayday
+import os.meka.core.domain.MoneyPaydayView
 import os.meka.core.domain.MoneyRefundRow
 import os.meka.core.domain.MoneyRefunds
 import os.meka.core.domain.MoneyRules
@@ -82,6 +84,10 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 3: this month leads with **WORTH A LOOK**: a possible double charge, a payment much bigger than usual or a first big
  * one, and fees (foreign, late, interest), each with "That's fine" (on both devices, Undo); Navilife never acts on them.
+ *
+ * Slice 6: **UNTIL PAYDAY** — payday from his pay, what he's spent since, what's still to go out before it (regular
+ * payments and the radar's bills) and, with the pay account's balance (a statement's Balance column, or typed here),
+ * what's safe to spend a day; lit when it's tight (the low-balance warning).
  *
  * Slice 5: **REFUNDS ON THE WAY** — each refund on Waiting for, back in his statement (Close it, Undo) or not yet, and after
  * two weeks a chase to copy (Copy the chase marks it chased; he sends it himself, Navilife sends nothing).
@@ -210,6 +216,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 item(key = "alerts-foot") {
                     Text(MoneyWatch.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
+                }
+            }
+            // Slice 6: payday, what's still to go out before it and what's safe to spend (this month only).
+            v.payday?.let { p ->
+                item(key = "payday-head") {
+                    Text(p.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "payday") {
+                    PaydayBlock(p, Modifier.animateItem().appear(rememberAppearance(4))) { text ->
+                        val id = p.account ?: return@PaydayBlock
+                        scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) }
+                    }
                 }
             }
             // Slice 5: refunds on Waiting for, checked against his statements (this month only).
@@ -542,6 +561,59 @@ private fun RefundCard(r: MoneyRefundRow, modifier: Modifier, onClose: () -> Uni
                 Text(MoneyRefunds.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
+    }
+}
+
+/** Slice 6: payday, since payday, what's still to go out (each payment), the pay account's balance and safe to spend. */
+@Composable
+private fun PaydayBlock(p: MoneyPaydayView, modifier: Modifier, onBalance: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    var balance by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        p.notReady?.let { n -> Text(n, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        p.payLine?.let { l ->
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-payday") { t ->
+                    Text(t, style = MekaType.body, color = Meka.colors.textPrimary)
+                }
+                p.fromLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                p.sinceLine?.let { s ->
+                    Crossfade(s, animationSpec = MekaMotion.appear(reduced), label = "money-payday-since") { t ->
+                        Text(t, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+            }
+        }
+        p.goingOut?.let { g ->
+            Crossfade(g, animationSpec = MekaMotion.appear(reduced), label = "money-payday-out") { t ->
+                Text(t, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
+        p.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken }, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(r.day, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+                Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+            }
+        }
+        if (p.more > 0) Text("+ ${p.more} more", style = MekaType.caption, color = Meka.colors.textTertiary)
+        p.balanceLine?.let { b ->
+            Crossfade(b, animationSpec = MekaMotion.appear(reduced), label = "money-payday-balance") { t ->
+                Text(t, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        if (p.account != null) {
+            Field(MoneyPayday.BALANCE_HINT, value = balance, onValue = { balance = it }) { balance = ""; onBalance(it) }
+        }
+        p.safe?.let { s ->
+            val c by animateColorAsState(if (p.safeLit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "money-safe")
+            Crossfade(s, animationSpec = MekaMotion.appear(reduced), label = "money-safe-line") { t ->
+                Text(t, style = MekaType.body, color = c)
+            }
+        }
+        Text(p.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

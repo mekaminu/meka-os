@@ -137,6 +137,39 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun paydayAndSafeToSpendFollowTheStatementsBalanceAndATypedOneOnBothDevices() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Paid on the 30th; a Water bill on the radar before payday; the file's Balance column ends at £640 on Thu 15 Oct.
+        val csv = "Date,Description,Amount,Balance\n" +
+            "15/10/2026,TESCO STORES 2041,-60.00,640.00\n" +
+            "30/09/2026,ACME PAYROLL,2500.00,700.00\n" +
+            "28/08/2026,ACME PAYROLL,2500.00,900.00\n" +
+            "30/07/2026,ACME PAYROLL,2500.00,800.00\n"
+        fold.addRenewal("Water bill", os.meka.core.domain.ObligationKind.BILL, os.meka.core.domain.CivilDate.toEpochDay(2026, 10, 25), os.meka.core.domain.RenewalRepeat.NONE, "£40", null)
+        assertTrue(fold.moneyBalance("a-current-account", "£300").refused) // locked
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        val p = fold.moneyView.value.payday!!
+        assertEquals("Payday Fri 30 Oct · in 14 days", p.payLine)
+        assertEquals(listOf("Water bill"), p.rows.map { it.title })
+        assertEquals("Current account · £640 · from your statement, Thu 15 Oct", p.balanceLine)
+        assertEquals("Safe to spend until payday · about £600 · about £43 a day", p.safe)
+        // He types today's balance: tight, so it's lit; the Mac sees it after a sync.
+        val typed = fold.moneyBalance("a-current-account", "£120")
+        assertEquals("Current account's balance is £120 · safe to spend follows it", typed.line)
+        assertEquals("After the bills before payday you'd have about £80 · about £6 a day", fold.moneyView.value.payday!!.safe)
+        assertTrue(fold.moneyView.value.payday!!.safeLit)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals("Current account · £120 · you typed it today", mac.moneyView.value.payday!!.balanceLine)
+        // Undo puts the statement's balance back; nonsense is refused with its words kept.
+        assertTrue(fold.undoMoneyCategory(typed.undo!!))
+        assertEquals("Current account · £640 · from your statement, Thu 15 Oct", fold.moneyView.value.payday!!.balanceLine)
+        assertEquals(os.meka.core.domain.MoneyPayday.BALANCE_BAD, fold.moneyBalance("a-current-account", "loads").line)
+    }
+
+    @Test
     fun aRefundBackInTheStatementClosesOnBothDevicesWithUndo() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

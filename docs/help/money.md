@@ -1,7 +1,7 @@
 ---
 id: money
 title: Money
-keywords: money, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
+keywords: money, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
 data: yes
 fold: MONEY
 fold_where: Ask → Life → Money
@@ -23,3 +23,5 @@ tip: Not you? Your bank's app can stop or dispute it; Navilife never acts on you
 tip: Forecast at your pace takes your average whole month (what comes in, what goes out, what's left over) and says where that leaves you in 6 and 12 months. It needs two whole months of statements; it's an average, not a promise, and not financial advice.
 tip: What if: tap Halve on one of your biggest everyday categories, or type an extra amount a month (£200, £50 a week, £1,200 a year), and the 6- and 12-month lines say how much more it would leave you. What-ifs stay on the device you're using and go when Money locks.
 tip: Refunds on the way lists each refund on Waiting for and checks your statements for it: when the shop's money is back, Close it takes it off Waiting for (Undo). Two weeks on with nothing back, it lights and drafts a chase; Copy the chase puts it on the clipboard for you to send in the shop's chat or email, and marks it chased. Navilife never sends it.
+tip: Until payday finds your payday from your pay coming in (two months or more of the account it goes into) and says what you've spent since and what's still to go out before it: regular payments, and the bills, subscriptions and club fees with a cost on Lists → Renewals.
+tip: With that account's balance it says what's safe to spend until payday, and a day, and lights when it's tight. A statement file with a Balance column gives it, or type it under Until payday (−£50 if overdrawn).
