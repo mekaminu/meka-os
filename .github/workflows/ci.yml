@@ -91,8 +91,9 @@ jobs:
     # (ADR-011). Build runs dispatch it once a night when the day's commits touched Mac or core code (build plan rule 10).
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: macos-26
-    # The Kotlin/Native tests alone took 35 min on 2026-10-12 (the whole job 44): leave room.
-    timeout-minutes: 75
+    # The Kotlin/Native tests alone took 35 min on 2026-10-12 (the whole job 44) and 65 min on 2026-10-16, when run 747
+    # was cancelled at 75 min while building the Swift app (about 10 more for it and the UI checks): leave room.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
