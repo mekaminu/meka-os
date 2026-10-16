@@ -47,4 +47,24 @@ object FoldBiometric {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = once(null)
         })
     }
+
+    /**
+     * Money manager, slice 1: opens Money (seeing his own figures, not approving anything), so his fingerprint, or the
+     * phone's PIN when no fingerprint is set up. [done] true only on a yes; cancel and errors are false.
+     */
+    fun unlock(context: Context, title: String, subtitle: String, done: (Boolean) -> Unit) {
+        var answered = false
+        val once: (Boolean) -> Unit = { ok -> if (!answered) { answered = true; done(ok) } }
+        val prompt = runCatching {
+            BiometricPrompt.Builder(context)
+                .setTitle(title)
+                .setSubtitle(subtitle)
+                .setAllowedAuthenticators(STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                .build()
+        }.getOrNull() ?: return once(false)
+        prompt.authenticate(CancellationSignal(), context.mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = once(true)
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) = once(false)
+        })
+    }
 }

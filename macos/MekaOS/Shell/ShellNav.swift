@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -82,6 +82,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trips: "Trips"
         case .errands: "Errands"
         case .car: ParkingRules.shared.TITLE
+        case .money: MoneyRules.shared.TITLE
         case .emergency: "Emergency card"
         case .facts: "What Navilife knows"
         case .brief: "Morning brief"
@@ -132,6 +133,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .errands: "Things to get or do when you're at a place"
         // Car and parking, slice 1: where the car is parked stays on the phone; the Mac's tile has the cars' dates.
         case .car: "The parking timer, and each car's MOT, tax, insurance and service"
+        case .money: MoneyRules.shared.ROW_LINE
         case .emergency: "Who to call and where things are"
         case .facts: "Car reg, GP, sizes · the facts Navilife answers from"
         case .brief: "Your day, who you're waiting on and headlines"
@@ -167,7 +169,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
 
     var group: MoreGroup {
         switch self {
-        case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .kids, .appointments, .leave, .gifts, .trips, .errands, .car, .emergency, .facts: .life
+        case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .kids, .appointments, .leave, .gifts, .trips, .errands, .car, .money, .emergency, .facts: .life
         case .brief, .weekAhead, .news, .shutdown, .trainQueue, .voiceNotes, .lifeAdmin, .review: .daily
         case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
@@ -200,6 +202,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trips: .trips
         case .errands: .errands
         case .car: .car
+        case .money: .money
         case .emergency: .emergency
         case .facts: .facts
         default: nil
@@ -223,6 +226,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .trips: "suitcase"
         case .errands: "mappin.and.ellipse"
         case .car: "car"
+        case .money: "creditcard"
         case .emergency: "cross.case"
         case .facts: "book"
         default: nil

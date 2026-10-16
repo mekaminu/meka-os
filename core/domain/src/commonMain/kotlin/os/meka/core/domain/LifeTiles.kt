@@ -16,6 +16,9 @@ enum class LifeTile {
 
     /** Car and parking, slice 1: where the car is parked (the Fold), else the next of the cars' dates. */
     CAR,
+
+    /** Money manager, slice 1: the accounts and when a statement last came in; never an amount (it's outside the fingerprint). */
+    MONEY,
     EMERGENCY, FACTS,
 }
 
@@ -71,6 +74,8 @@ data class LifeTileInputs(
     val errandsSummary: String? = null,
     /** The next of the cars' dates ([ParkingRules.carLine]); null with nothing entered. */
     val carLine: LifeTileLine? = null,
+    /** Money manager ([MoneyRules.tile]): "2 accounts · updated Fri 16 Oct"; null before anything is imported. */
+    val moneyLine: LifeTileLine? = null,
     val emergencySummary: String? = null,
     val factsSummary: String? = null,
     val peopleSummary: String? = null,
@@ -104,6 +109,7 @@ object LifeTileRules {
         LifeTile.TRIPS -> "No trips planned"
         LifeTile.ERRANDS -> "No errands waiting"
         LifeTile.CAR -> "Add your car's dates"
+        LifeTile.MONEY -> "Import a statement"
         LifeTile.EMERGENCY -> "Not filled in yet"
         LifeTile.FACTS -> "Tell Navilife your car reg"
     }
@@ -207,6 +213,7 @@ object LifeTileRules {
         if (i.tripToday != null) put(LifeTile.TRIPS, i.tripToday, lit = i.tripLit) else put(LifeTile.TRIPS, i.tripsSummary)
         put(LifeTile.ERRANDS, i.errandsSummary)
         i.carLine?.let { put(LifeTile.CAR, it.text, lit = it.lit) }
+        i.moneyLine?.let { put(LifeTile.MONEY, it.text, lit = it.lit) }
         put(LifeTile.EMERGENCY, i.emergencySummary)
         put(LifeTile.FACTS, i.factsSummary)
         // Nothing in the place yet: a short prompt, unlit; the ones that ask for setting up sink under "To set up".

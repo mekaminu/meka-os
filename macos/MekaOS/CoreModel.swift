@@ -81,6 +81,9 @@ final class CoreModel {
     /// Kids' admin (slice 1): a card per child from About you with their sizes and when they were checked. Synced.
     private(set) var kids: KidsView?
     var showKids = false
+    /// Money manager (slice 1): locked until Touch ID opens it; the month's spending by category. Synced.
+    private(set) var money: MoneyView?
+    var showMoney = false
     /// About you (rule 13, slice 1): the household profile, synced with the Fold; kept in his data, not in code.
     private(set) var aboutYou: AboutYouView?
     /// Ask → Settings → About you.
@@ -555,6 +558,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await k in core.kidsView { self?.kids = k }
+        })
+        observers.append(Task { [weak self] in
+            for await m in core.moneyView { self?.money = m }
         })
         observers.append(Task { [weak self] in
             for await a in core.aboutYouView { self?.aboutYou = a }
@@ -3206,6 +3212,78 @@ final class CoreModel {
     func setAboutYouPartnerWatch(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setAboutYouPartnerWatch(on: on) } }
 
     // MARK: Emergency card (slice 1)
+
+    // MARK: Money manager (slice 1)
+
+    /// What an import, a category change or a removal said, and the token Undo hands back.
+    struct MoneySaid: Equatable {
+        let line: String
+        let refused: Bool
+        let undo: String?
+    }
+
+    private func moneySaid(_ r: MoneySaved) -> MoneySaid {
+        if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+        return MoneySaid(line: r.line, refused: r.refused, undo: r.undo)
+    }
+
+    /// After Touch ID's yes (MoneySheet asks): the core works out this month's figures. Nothing but the call crosses.
+    func openMoney() { run { try await $0.openMoney() } }
+
+    /// Locks Money again (the sheet closed or the app went to the background).
+    func closeMoney() { run { try await $0.closeMoney() } }
+
+    /// ‹ (−1) or › (+1) a month.
+    func moneyStep(_ step: Int32) { MekaHaptics.tick(); run { try await $0.moneyStep(step: step) } }
+
+    /// Imports a statement file's text (CSV) into the named account. Only Strings cross.
+    func importMoneyStatement(account: String, text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.importMoneyStatement(account: account, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Puts every payment to that line's shop in another category from now on (Undo with `undoMoneyCategory`).
+    func setMoneyCategory(txnId: String, category: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.setMoneyCategory(txnId: txnId, category: category))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func undoMoneyCategory(token: String) async -> Bool {
+        guard let core else { return false }
+        let ok = (try? await core.undoMoneyCategory(token: token))?.boolValue ?? false
+        MekaHaptics.light()
+        return ok
+    }
+
+    func removeMoneyAccount(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.removeMoneyAccount(accountId: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func deleteAllMoney() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.deleteAllMoney())
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
 
     // MARK: Kids' admin (slice 1)
 

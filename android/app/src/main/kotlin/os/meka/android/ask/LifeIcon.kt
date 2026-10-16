@@ -130,6 +130,10 @@ private fun DrawScope.drawLifeGlyph(tile: LifeTile, color: Color) {
             line(0.36f, 0.66f, 0.64f, 0.66f); line(0.26f, 0.48f, 0.78f, 0.48f)
             ring(0.27f, 0.68f, 0.08f); ring(0.73f, 0.68f, 0.08f)
         }
+        LifeTile.MONEY -> {
+            // A bank card: its outline, the stripe and the number line (the Mac's "creditcard").
+            box(0.1f, 0.24f, 0.8f, 0.52f, 0.08f); line(0.1f, 0.38f, 0.9f, 0.38f); line(0.2f, 0.62f, 0.42f, 0.62f)
+        }
         LifeTile.EMERGENCY -> {
             // A cross in a rounded square.
             box(0.12f, 0.12f, 0.76f, 0.76f, 0.16f); line(0.5f, 0.3f, 0.5f, 0.7f); line(0.3f, 0.5f, 0.7f, 0.5f)

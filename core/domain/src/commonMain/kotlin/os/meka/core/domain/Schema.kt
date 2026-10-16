@@ -129,6 +129,12 @@ object EntityTypes {
     const val FOLLOW_UP_WAIT = "follow_up_wait"
     /** Discord channel watch, slice 1 (2026-10-16): one post from a channel he follows, kept by the Fold, with Done (see [DiscordStore]). */
     const val DISCORD_POST = "discord_post"
+    /** Money manager, slice 1 (2026-10-16): one bank or card account he imports statements into, id `a-<name folded>` (see [Money]). */
+    const val MONEY_ACCOUNT = "money_account"
+    /** Money manager, slice 1 (2026-10-16): one statement line, id from its account, day, amount and words (see [MoneyRules.txnId]). */
+    const val MONEY_TXN = "money_txn"
+    /** Money manager, slice 1 (2026-10-16): his category for one merchant ("Tesco is Groceries"), id `m<hash>` (see [Money.setCategory]). */
+    const val MONEY_RULE = "money_rule"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -139,7 +145,7 @@ object EntityTypes {
         CHECKLIST_TEMPLATE, GOAL_MILESTONE, GOAL_ENTRY, BIN, BIN_MOVE, OCCASION, GIFT_IDEA, TRIP, TRIP_BOOKING, CHAT_SUMMARY,
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
-        FOLLOW_UP_WAIT, DISCORD_POST,
+        FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE,
     )
 }
 
@@ -514,6 +520,10 @@ object MekaSchema : SchemaRegistry {
         // Vault documents: one removed on any device is gone for good; the title and date, the latest edit wins.
         entityType == EntityTypes.VAULT_DOC && field == VaultDocFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.VAULT_DOC -> MergePolicy.Lww
+        // Money: imported lines, accounts and his categories; a removal and a re-import (or an Undo), the latest wins.
+        entityType == EntityTypes.MONEY_ACCOUNT -> MergePolicy.Lww
+        entityType == EntityTypes.MONEY_TXN -> MergePolicy.Lww
+        entityType == EntityTypes.MONEY_RULE -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal
         entityType == EntityTypes.CHECKLIST_ITEM && field == ChecklistFields.CHECKED -> MergePolicy.TrueWins

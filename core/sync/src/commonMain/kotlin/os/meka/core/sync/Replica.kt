@@ -70,6 +70,31 @@ class Replica(
         }
     }
 
+    /** While [batched] runs: the entities its commits changed, told to listeners once at its end. */
+    private var batchRefs: MutableSet<EntityRef>? = null
+
+    /**
+     * Runs [block]'s local commits as one store transaction and tells listeners once, at the end, about every entity
+     * they changed (Money manager, slice 1: a statement of 2,000 lines is one refresh, not 2,000). Nested calls join the
+     * outer one. Each commit is still its own ops, exactly as [commitLocal] alone makes them.
+     */
+    fun <T> batched(block: () -> T): T {
+        if (batchRefs != null) return block()
+        val refs = mutableSetOf<EntityRef>()
+        batchRefs = refs
+        val result = try {
+            store.transaction { block() }
+        } finally {
+            batchRefs = null
+        }
+        if (refs.isNotEmpty()) {
+            val rec = recorder
+            recorder = null
+            try { notify(refs) } finally { recorder = rec }
+        }
+        return result
+    }
+
     fun addListener(l: ReplicaListener) { listeners += l }
     fun removeListener(l: ReplicaListener) { listeners -= l }
 
@@ -114,7 +139,10 @@ class Replica(
             rec?.addAll(recorded)
             out
         }
-        if (ops.isNotEmpty()) {
+        val batch = batchRefs
+        if (ops.isNotEmpty() && batch != null) {
+            batch += EntityRef(entityType, entityId)
+        } else if (ops.isNotEmpty()) {
             // What listeners write in answer to this change is theirs, not part of the recorded action.
             recorder = null
             try { notify(setOf(EntityRef(entityType, entityId))) } finally { recorder = rec }

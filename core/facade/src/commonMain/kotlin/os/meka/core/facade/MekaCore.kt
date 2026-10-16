@@ -168,6 +168,8 @@ class MekaCore(
     // About you (rule 13, slice 1): the household profile, synced.
     private val aboutYou = os.meka.core.domain.AboutYouStore(replica, nowMs)
     private val kids = os.meka.core.domain.Kids(replica, nowMs)
+    // Money manager, slice 1: its lines are kept in memory between changes; this listener (before refresh's) drops them.
+    private val money = os.meka.core.domain.Money(replica, nowMs).also { m -> replica.addListener { refs -> m.changed(refs) } }
     private val kidChores = os.meka.core.domain.KidChores(replica)
     private val discordStore = os.meka.core.domain.DiscordStore(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
@@ -607,6 +609,64 @@ class MekaCore(
         home = weatherPlace.wanted(),
         work = workPlace.wanted(),
     )
+
+    // ---- Money manager (V1, slice 1) ----
+
+    private val _money = MutableStateFlow(os.meka.core.domain.MoneyView.LOCKED)
+    /**
+     * Ask → Life → Money on both apps: locked ([os.meka.core.domain.MoneyView.LOCKED]) until the app's fingerprint
+     * (Touch ID) prompt says yes and calls [openMoney]; [closeMoney] locks it again and drops the figures from the view.
+     */
+    val moneyView: StateFlow<os.meka.core.domain.MoneyView> = _money.asStateFlow()
+    private var moneyOpen = false
+    private var moneyOffset = 0
+
+    /** After the app's own biometric yes: the Money screen for this month. */
+    suspend fun openMoney() = onCore { moneyOpen = true; moneyOffset = 0; refreshMoney() }
+
+    /** Locks Money again (the pane closed or the app went away). */
+    suspend fun closeMoney() = onCore { moneyOpen = false; moneyOffset = 0; _money.value = os.meka.core.domain.MoneyView.LOCKED }
+
+    /** ‹ / ›: [step] −1 a month earlier, +1 a month later (never past this month). */
+    suspend fun moneyStep(step: Int) = onCore {
+        if (!moneyOpen) return@onCore
+        val m = _money.value.month
+        moneyOffset = ((m?.offset ?: moneyOffset) - step).coerceAtLeast(0)
+        refreshMoney()
+    }
+
+    private fun moneyLocked() = os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.LOCKED, refused = true)
+
+    /** Imports a statement file's [text] (CSV) into [account]; only while Money is open. */
+    suspend fun importMoneyStatement(account: String, text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.import(account, text).also { if (!it.refused) moneyOffset = 0; refreshMoney() }
+    }
+
+    /** Every payment to [txnId]'s merchant goes in [category] from now on; Undo by [undoMoneyCategory]. */
+    suspend fun setMoneyCategory(txnId: String, category: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setCategory(txnId, category).also { refreshMoney() }
+    }
+
+    suspend fun undoMoneyCategory(token: String): Boolean = onCore {
+        moneyOpen && money.undoCategory(token).also { refreshMoney() }
+    }
+
+    /** Takes [accountId] and its transactions off every device. */
+    suspend fun removeMoneyAccount(accountId: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.removeAccount(accountId).also { refreshMoney() }
+    }
+
+    /** Delete all money data: every account, transaction and category choice, on every device (after his yes). */
+    suspend fun deleteAllMoney(): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.deleteAll().also { moneyOffset = 0; refreshMoney() }
+    }
+
+    private fun refreshMoney() {
+        if (!moneyOpen) return
+        _money.value = os.meka.core.domain.MoneyRules.view(
+            money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset,
+        )
+    }
 
     private val _kids = MutableStateFlow(os.meka.core.domain.KidsView.EMPTY)
     /**
@@ -7611,6 +7671,7 @@ class MekaCore(
             ))
         }
         _facts.value = lifeFacts.view()
+        refreshMoney()
         _queue.value = trainQueue.view()
         _errands.value = errands.view()
         _appointments.value = appointments.view()
@@ -7716,6 +7777,8 @@ class MekaCore(
         ).copy(
             // Kids' admin, slice 1: a due size check (lit), else the first child's shoe size.
             kidsLine = _kids.value.tile,
+            // Money manager, slice 1: the accounts and the last import, never an amount.
+            moneyLine = os.meka.core.domain.MoneyRules.tile(money.accounts(), ZoneCalendar(timeZone)),
             // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
             // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
             // Two cars (2026-10-14): each car on its own line, its timer or next date.

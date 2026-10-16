@@ -362,6 +362,7 @@ fun AskRoute(
             WeekAheadPane(core, onClose = { pane = null }, listenNow = listenWeek, onListened = { healthApp?.listenWeekAhead?.value = false })
         }
         MekaPane(visible = pane == MoreItem.SCHOOL) { SchoolPane(core, onClose = { pane = null }) }
+        MekaPane(visible = pane == MoreItem.MONEY) { MoneyPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.KIDS) { KidsPane(core, onClose = { pane = null }, onAboutYou = { pane = MoreItem.ABOUT_YOU }) }
         MekaPane(visible = pane == MoreItem.DINNERS) { MealsPane(core, onClose = { pane = null }) }
         MekaPane(visible = pane == MoreItem.DATE_NIGHT) { DateNightPane(core, onClose = { pane = null }) }

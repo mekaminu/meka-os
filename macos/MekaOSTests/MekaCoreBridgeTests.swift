@@ -1768,6 +1768,18 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(CallLogRules.shared.dayLabel(day: 10, today: 11), "Yesterday")
     }
 
+    func testMoneyRulesReachSwift() {
+        // Money manager, slice 1: a statement file is read, a shop categorised, Money starts locked, the tile has no amount.
+        let read = MoneyCsv.shared.read(text: "Date,Description,Amount\n02/10/2026,TESCO STORES 2041,-40.00\n")
+        XCTAssertNil(read.problem)
+        XCTAssertEqual(read.rows.first?.pence, -4000)
+        XCTAssertEqual(MoneyCategoryRules.shared.merchantKey(text: "CARD PAYMENT TO TESCO STORES 2041"), "TESCO STORES")
+        XCTAssertEqual(MoneyCategoryRules.shared.categoryOf(text: "COSTA COFFEE", pence: -320), MoneyCategory.coffee)
+        XCTAssertTrue(MoneyView.companion.LOCKED.locked)
+        XCTAssertEqual(MoneyRules.shared.signed(pence: -2340), "−£23.40")
+        XCTAssertEqual(MoneyRules.shared.CHOICES.first?.label, "Groceries")
+    }
+
     func testKidsRulesReachSwift() {
         // Kids' admin, slice 1: a size is tidied, both apps write the same child, no children → About you first.
         let rules = KidsRules.shared

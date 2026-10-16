@@ -30,4 +30,22 @@ enum MacBiometric {
             }
         }
     }
+
+    /// Money manager, slice 1: opens Money (seeing his own figures, not approving anything), so Touch ID, or the Mac's
+    /// password on a Mac without it. Only a Bool comes back, on the main actor.
+    static func unlock(reason: String, done: @escaping @MainActor @Sendable (Bool) -> Void) {
+        let ctx = LAContext()
+        var error: NSError?
+        let policy: LAPolicy = ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
+            ? .deviceOwnerAuthenticationWithBiometrics : .deviceOwnerAuthentication
+        unlockContext = ctx // kept alive while the system asks
+        ctx.evaluatePolicy(policy, localizedReason: reason) { @Sendable (ok, _) in
+            Task { @MainActor in
+                unlockContext = nil
+                done(ok)
+            }
+        }
+    }
+
+    private static var unlockContext: LAContext?
 }

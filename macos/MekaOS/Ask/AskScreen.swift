@@ -184,6 +184,7 @@ struct AskScreen: View {
         case .appointments: model.showAppointments = true
         case .bins: model.showBins = true
         case .car: model.showCar = true
+        case .money: model.showMoney = true
         case .gifts: model.showGifts = true
         case .people: model.showPeople = true
         case .trips: model.showTrips = true

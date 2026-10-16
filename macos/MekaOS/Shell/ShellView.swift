@@ -331,6 +331,7 @@ private struct ShellSheetsC: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showBins }, set: { model.showBins = $0 })) { BinsSheet(palette: palette) }
             // Car (Ask → Life): the parking timer; the cars' dates open Lists → Renewals.
             .sheet(isPresented: Binding(get: { model.showCar }, set: { model.showCar = $0 })) { CarSheet(palette: palette) }
+            .sheet(isPresented: Binding(get: { model.showMoney }, set: { model.showMoney = $0 })) { MoneySheet(palette: palette) }
             // Gifts (Ask → More): birthdays and anniversaries, gift ideas and the order-by days.
             .sheet(isPresented: Binding(get: { model.showGifts }, set: { model.showGifts = $0 })) { GiftsSheet(palette: palette) }
             // People (Ask → More): promises both ways, birthdays and last contact, by person.
