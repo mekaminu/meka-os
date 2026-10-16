@@ -4,10 +4,12 @@ import XCTest
 
 /// View → Text Size (Mac text is too big, Meka 2026-10-15): the Mac's own type scale and the multiplier on it.
 final class TextSizeSettingTests: XCTestCase {
-    @MainActor
     override func tearDown() {
-        UserDefaults.standard.removeObject(forKey: TextSizeSetting.key)
-        TextSizeSetting.apply("")
+        // XCTest calls tearDown on the main thread; the override itself stays nonisolated like XCTestCase's.
+        MainActor.assumeIsolated {
+            UserDefaults.standard.removeObject(forKey: TextSizeSetting.key)
+            TextSizeSetting.apply("")
+        }
         super.tearDown()
     }
 

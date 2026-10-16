@@ -98,7 +98,8 @@ struct ShellView: View {
     /// Animates the switch; nil or the screen already showing does nothing.
     private func go(_ picked: ShellDestination?, via: String) {
         guard let to = ShellNav.sidebarPick(picked, current: model.destination) else { return }
-        ShellView.log.debug("sidebar \(via, privacy: .public) → \(to.label, privacy: .public)")
+        let name = to.label // read here, on the main actor, not inside the log's autoclosure
+        ShellView.log.debug("sidebar \(via, privacy: .public) → \(name, privacy: .public)")
         model.go(to: to, reduced: reduceMotion)
     }
 

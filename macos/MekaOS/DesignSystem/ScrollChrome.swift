@@ -9,8 +9,9 @@ private struct EdgeFadesModifier: ViewModifier {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var fades = Fades(top: false, bottom: false)
 
-    private struct Fades: Equatable { var top: Bool; var bottom: Bool }
-    private struct Geo: Equatable { var offset: CGFloat; var content: CGFloat; var viewport: CGFloat }
+    private nonisolated struct Fades: Equatable { var top: Bool; var bottom: Bool }
+    // Built in the scroll-geometry transform, which may run off the main actor.
+    private nonisolated struct Geo: Equatable { var offset: CGFloat; var content: CGFloat; var viewport: CGFloat }
 
     func body(content: Content) -> some View {
         content
