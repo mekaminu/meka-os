@@ -108,7 +108,7 @@ function swift() {
   // when the size changes. A token with no macSize (the clock) keeps its size, unscaled.
   s += '/// View → Text Size on this Mac (⌘− · ⌘0 · ⌘+, and Settings → Appearance): the multiplier on every MekaType token.\n';
   s += '/// Set on the main thread by the app (TextSizeSetting.swift); views read it through MekaType, so they redraw when it changes.\n';
-  s += '@Observable final class MekaTextScale {\n    // nonisolated(unsafe): the widget target compiles this file nonisolated, where the class isn\'t Sendable; the app\n    // only changes `factor` on the main thread (TextSizeSetting).\n    nonisolated(unsafe) static let shared = MekaTextScale()\n    var factor: CGFloat = 1\n\n';
+  s += '// @unchecked Sendable: the widget target compiles this file nonisolated, where `shared` needs a Sendable type (the app\n// target makes it main-actor isolated, so its init can\'t sit behind nonisolated(unsafe)); `factor` is only changed on the\n// main thread (TextSizeSetting).\n@Observable final class MekaTextScale: @unchecked Sendable {\n    static let shared = MekaTextScale()\n    var factor: CGFloat = 1\n\n';
   s += '    /// A size at the current text size, to the half point so text stays crisp.\n';
   s += '    static func size(_ base: CGFloat) -> CGFloat { (base * shared.factor * 2).rounded() / 2 }\n}\n\n';
   s += 'enum MekaType {\n';

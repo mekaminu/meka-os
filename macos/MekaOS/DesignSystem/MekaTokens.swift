@@ -77,10 +77,11 @@ extension MekaPalette {
 
 /// View → Text Size on this Mac (⌘− · ⌘0 · ⌘+, and Settings → Appearance): the multiplier on every MekaType token.
 /// Set on the main thread by the app (TextSizeSetting.swift); views read it through MekaType, so they redraw when it changes.
-@Observable final class MekaTextScale {
-    // nonisolated(unsafe): the widget target compiles this file nonisolated, where the class isn't Sendable; the app
-    // only changes `factor` on the main thread (TextSizeSetting).
-    nonisolated(unsafe) static let shared = MekaTextScale()
+// @unchecked Sendable: the widget target compiles this file nonisolated, where `shared` needs a Sendable type (the app
+// target makes it main-actor isolated, so its init can't sit behind nonisolated(unsafe)); `factor` is only changed on the
+// main thread (TextSizeSetting).
+@Observable final class MekaTextScale: @unchecked Sendable {
+    static let shared = MekaTextScale()
     var factor: CGFloat = 1
 
     /// A size at the current text size, to the half point so text stays crisp.
