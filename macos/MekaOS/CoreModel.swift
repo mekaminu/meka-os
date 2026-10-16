@@ -3109,6 +3109,7 @@ final class CoreModel {
         case .mailChase: run { try await $0.undoMailChase() }
         case .mailFind: run { try await $0.undoMailFind() }
         case .discord: run { try await $0.undoDiscord() }
+        case .discordIdea(let postId): run { try await $0.undoKeepDiscordIdea(postId: postId) }
         case .mailMoment: run { try await $0.undoMailMoment() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
@@ -4499,6 +4500,19 @@ final class CoreModel {
         }
     }
 
+    /// Keep as idea on a Discord post (Discord channel watch, slice 4): a note in Lists → Someday → Trading ideas on
+    /// both apps, never an order. Only the post's id crosses; Undo on the bar takes the note out again.
+    func keepDiscordIdea(_ postId: String) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                let line = try await core.keepDiscordIdea(postId: postId)
+                offerEventUndo(line, line == DiscordRules.shared.KEPT_LINE ? .discordIdea(postId) : nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Follow / Stop on Work → Discord: synced, so the Fold keeps (or drops) that channel's posts. Returns via the bar.
     func setDiscordWatched(_ key: String, on: Bool) {
         guard let core else { return }
@@ -4988,6 +5002,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case mailFind
         /// Done on a Discord channel's card: its posts come back on both apps.
         case discord
+        /// Keep as idea on a Discord post (slice 4): the note leaves Trading ideas on both apps.
+        case discordIdea(String)
         /// Not today on the ten-minute inbox: its card comes back on both apps.
         case mailMoment
         /// Went, Booked… or Not yet on an appointment: its visit, booking and set-aside day go back.

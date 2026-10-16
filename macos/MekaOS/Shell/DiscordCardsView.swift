@@ -32,7 +32,7 @@ struct DiscordCardsView: View {
                     if open {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
                             ForEach(block.cards, id: \.key) { card in
-                                DiscordChannelCardRow(card: card, palette: palette) { model.discordDone(card.key) }
+                                DiscordChannelCardRow(card: card, palette: palette, keep: { model.keepDiscordIdea($0) }) { model.discordDone(card.key) }
                             }
                         }
                         .padding(.top, MekaSpace.xs)
@@ -57,7 +57,9 @@ struct DiscordCardsView: View {
 private struct DiscordChannelCardRow: View {
     let card: DiscordChannelCard
     let palette: MekaPalette
+    let keep: (String) -> Void
     let done: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -104,8 +106,21 @@ private struct DiscordChannelCardRow: View {
                         Text(post.text).font(MekaType.body).foregroundStyle(palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
+                        // Slice 4: a note in Lists → Someday → Trading ideas, never an order; cross-fades once kept.
+                        Group {
+                            if post.kept {
+                                Text("✓ " + DiscordRules.shared.KEPT_CHIP).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                                    .accessibilityLabel("Kept in Trading ideas")
+                            } else {
+                                Button(DiscordRules.shared.KEEP_ACTION) { keep(post.id) }
+                                    .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                                    .accessibilityLabel("Keep as a trade idea in Lists. A note only, nothing is traded")
+                            }
+                        }
+                        .transition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: post.kept)
                     }
-                    .accessibilityElement(children: .combine)
+                    .accessibilityElement(children: .contain)
                 }
             }
             .padding(.top, MekaSpace.xs)

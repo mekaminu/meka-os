@@ -187,4 +187,23 @@ class DiscordRulesTest {
         assertEquals("No longer alerting for “stop”", store.setAlert("STOP", person = false, add = false, nowMs = now))
         assertEquals(emptyList(), store.words())
     }
+
+    @Test
+    fun aKeptIdeaReadsAsOneLineWithWhereItCameFrom() {
+        assertEquals("Admin in #trade-ideas: BTC long above 68k, stop 66.5k",
+            DiscordRules.ideaTitle("Admin", "#trade-ideas", "BTC long above 68k,\n  stop 66.5k"))
+        assertEquals("Someone in #x: hi", DiscordRules.ideaTitle(" ", "x", "hi"))
+        val long = DiscordRules.ideaTitle("Admin", "trade-ideas", List(60) { "word$it" }.joinToString(" "))
+        assertTrue(long.length <= DiscordRules.IDEA_MAX, long)
+        assertTrue(long.endsWith("…"), long)
+        assertFalse(long.contains("word5 …"), long)
+        val p = DiscordRules.Post("p1", DiscordChannel("example traders#trade-ideas", "Example Traders", "trade-ideas"),
+            "Admin", "BTC long above 68k", now, done = false)
+        assertEquals("BTC long above 68k\n\nFrom Discord · #trade-ideas · Example Traders · Admin · Mon 12 Oct 09:00\n" +
+            "Information only · Navilife never trades", DiscordRules.ideaNotes(p, cal))
+        // The card says which posts are already kept.
+        val cards = DiscordRules.cards(listOf(p, p.copy(id = "p2", atMs = now + 1, kept = "t1")), setOf(p.channel.key), now + 60_000, cal)!!
+        assertEquals(listOf(false, true), cards.cards.single().posts.map { it.kept })
+        assertEquals("Trading ideas", ListRules.kindLabel(SomedayKind.TRADING))
+    }
 }

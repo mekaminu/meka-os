@@ -102,4 +102,34 @@ class DiscordFacadeTest {
         assertEquals(listOf("Sam"), mac.discordWatch.value.suggestedPeople)
         assertEquals("No longer alerting for Admin", fold.setDiscordAlert("admin", person = true, add = false))
     }
+
+    @Test
+    fun aPostKeptAsAnIdeaLandsInTradingIdeasOnBothAppsAndUndoTakesItOut() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "first idea", now)))
+        fold.setDiscordWatched(ideas.key, true)
+        now += 60_000
+        fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "BTC long above 68k, stop 66.5k", now)))
+        fold.syncNow(); mac.syncNow()
+        val post = mac.discord.value!!.cards.single().posts.single()
+        assertEquals(false, post.kept)
+
+        assertEquals(os.meka.core.domain.DiscordRules.KEPT_LINE, mac.keepDiscordIdea(post.id))
+        assertEquals(os.meka.core.domain.DiscordRules.ALREADY_KEPT, mac.keepDiscordIdea(post.id))
+        mac.syncNow(); fold.syncNow()
+        assertEquals(true, fold.discord.value!!.cards.single().posts.single().kept)
+        val group = fold.listsView.value.someday.single { it.kind == os.meka.core.domain.SomedayKind.TRADING }
+        assertEquals("Trading ideas", group.label)
+        val task = group.items.single()
+        assertEquals("Admin in #trade-ideas: BTC long above 68k, stop 66.5k", task.title)
+        assertTrue(task.notes!!.contains("Information only"))
+
+        // Undo on the Mac: the note goes and the post can be kept again.
+        mac.undoKeepDiscordIdea(post.id)
+        mac.syncNow(); fold.syncNow()
+        assertTrue(fold.listsView.value.someday.none { it.kind == os.meka.core.domain.SomedayKind.TRADING })
+        assertEquals(false, fold.discord.value!!.cards.single().posts.single().kept)
+        assertEquals("That post's words are gone · nothing to keep", fold.keepDiscordIdea("nope"))
+    }
 }

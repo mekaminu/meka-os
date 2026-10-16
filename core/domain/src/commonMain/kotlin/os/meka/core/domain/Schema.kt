@@ -149,7 +149,8 @@ enum class Lifecycle { INBOX, ACTIVE, SOMEDAY, WAITING, DONE, CANCELLED;
     val consumesCapacity: Boolean get() = this == INBOX || this == ACTIVE || this == WAITING
 }
 
-enum class SomedayKind { IDEA, PURCHASE, PROJECT, TRIP, BOOK, RESEARCH, APPLICATION, HOME_IMPROVEMENT, OTHER }
+/** [TRADING]: a trade idea kept from a followed Discord post (Discord channel watch, slice 4): a note, never an order. */
+enum class SomedayKind { IDEA, PURCHASE, PROJECT, TRIP, BOOK, RESEARCH, APPLICATION, HOME_IMPROVEMENT, TRADING, OTHER }
 enum class CommitmentDirection { OWED_BY_ME, OWED_TO_ME }
 /** [HOME]: a home upkeep job (smoke alarm test, gutters, filters; Home upkeep, V1), nothing to pay or renew. */
 enum class ObligationKind { MOT, CAR_TAX, CAR_SERVICE, INSURANCE, BOILER, SUBSCRIPTION, BILL, LICENCE, WARRANTY, HOME, OTHER }

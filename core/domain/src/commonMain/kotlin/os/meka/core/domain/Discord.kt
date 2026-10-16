@@ -59,6 +59,8 @@ data class DiscordPostRow(
     val timeLine: String,
     /** Slice 2: why this post alerted ("From Admin · says “stop”"), or null. */
     val alert: String? = null,
+    /** Slice 4: kept as a note in Lists → Someday → Trading ideas ("Kept" on the post instead of "Keep as idea"). */
+    val kept: Boolean = false,
 )
 
 /**
@@ -130,6 +132,8 @@ object DiscordPostFields {
     const val DONE_AT = "doneAtMs"
     /** Slice 2: why the post alerted when it arrived ("From Admin · says “stop”"); absent = it didn't. */
     const val ALERT = "alert"
+    /** Slice 4: the Someday task this post was kept as (Trading ideas); absent or null = not kept. */
+    const val KEPT = "keptAs"
 }
 
 object DiscordRules {
@@ -437,6 +441,8 @@ object DiscordRules {
         val done: Boolean,
         /** Slice 2: why it alerted when it arrived, or null. */
         val alert: String? = null,
+        /** Slice 4: the Trading ideas task it was kept as, or null. */
+        val kept: String? = null,
     )
 
     /** One card per watched channel with posts not yet Done (newest channel first); null when there are none. */
@@ -460,7 +466,7 @@ object DiscordRules {
                 server = latest.channel.server,
                 line = "${sorted.size} post${if (sorted.size == 1) "" else "s"} since you last looked · latest " +
                     whenLine(latest.atMs, nowMs, cal) + " · " + authorsLine(authors),
-                posts = shown.map { DiscordPostRow(it.id, it.author, it.text, whenLine(it.atMs, nowMs, cal), it.alert) },
+                posts = shown.map { DiscordPostRow(it.id, it.author, it.text, whenLine(it.atMs, nowMs, cal), it.alert, it.kept != null) },
                 moreLine = if (earlier > 0) "+ $earlier earlier post${if (earlier == 1) "" else "s"}" else null,
                 ids = sorted.map { it.id },
                 latestMs = latest.atMs,
@@ -483,6 +489,42 @@ object DiscordRules {
     }
 
     fun doneLine(title: String, n: Int): String = "Done · $title · $n post${if (n == 1) "" else "s"}"
+
+    // ---- Slice 4: keep a post as a trade idea (a note in Lists, never an order) ----
+
+    const val IDEA_MAX = 160
+    const val KEEP_ACTION = "Keep as idea"
+    const val KEPT_CHIP = "In Trading ideas"
+    const val KEPT_LINE = "Kept in Lists → Someday → Trading ideas · a note, nothing is traded"
+    const val ALREADY_KEPT = "Already in Trading ideas"
+    const val CANT_KEEP = "That post's words are gone · nothing to keep"
+    const val UNKEPT_LINE = "Taken out of Trading ideas"
+
+    /**
+     * The idea's title: "Admin in #signals: BTC long above 68k, stop 66.5k", cut at a word to [IDEA_MAX] with "…".
+     * The words are Discord's (untrusted, ADR-006): one line, kept as text, never acted on.
+     */
+    fun ideaTitle(author: String, channel: String, text: String): String {
+        val flat = text.split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        val who = author.trim().ifEmpty { "Someone" }
+        val head = "$who in #${channel.trim().removePrefix("#")}: "
+        val room = (IDEA_MAX - head.length).coerceAtLeast(20)
+        val body = if (flat.length <= room) flat else {
+            val cut = flat.take(room - 1)
+            val sp = cut.lastIndexOf(' ')
+            (if (sp >= room / 2) cut.take(sp) else cut).trimEnd(',', ';', ':', '.', ' ') + "…"
+        }
+        return head + body
+    }
+
+    /** The idea's notes: the whole post and where it came from, and that it's information only. */
+    fun ideaNotes(p: Post, cal: LocalCalendar): String {
+        val epochDay = cal.epochDayOf(p.atMs)
+        val date = CivilDate.fromEpochDay(epochDay)
+        val day = "${FastingRules.dayLabel(epochDay)} ${date.day} ${MONTHS[date.month - 1]} " + LocalClock.formatMinute(cal.minuteOfDay(p.atMs))
+        return p.text + "\n\nFrom Discord · " + label(p.channel.channel, p.channel.server) + " · ${p.author} · $day\n" +
+            "Information only · Navilife never trades"
+    }
 }
 
 /**
@@ -585,7 +627,16 @@ class DiscordStore(private val replica: Replica) {
             e[DiscordPostFields.AT].longOrNull ?: 0L,
             e[DiscordPostFields.DONE].boolOrNull == true,
             e[DiscordPostFields.ALERT].textOrNull?.takeIf { it.isNotBlank() },
+            e[DiscordPostFields.KEPT].textOrNull?.takeIf { it.isNotBlank() },
         )
+    }
+
+    fun post(id: String): DiscordRules.Post? = posts().firstOrNull { it.id == id }
+
+    /** Slice 4: mark [id] as kept as task [taskId] (null = no longer kept); synced so the Mac's card shows it. */
+    fun setKept(id: String, taskId: String?) {
+        if (replica.entity(EntityTypes.DISCORD_POST, id) == null) return
+        replica.commitLocal(EntityTypes.DISCORD_POST, id, mapOf(DiscordPostFields.KEPT to taskId.fv()))
     }
 
     /**

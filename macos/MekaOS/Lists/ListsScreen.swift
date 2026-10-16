@@ -31,7 +31,7 @@ struct ListsScreen: View {
     @State private var tab: ListTab = .waiting
     @State private var open: String?
 
-    static let kinds: [SomedayKind] = [.idea, .purchase, .project, .trip, .book, .research, .application, .homeImprovement, .other]
+    static let kinds: [SomedayKind] = [.idea, .purchase, .project, .trip, .book, .research, .application, .homeImprovement, .trading, .other]
 
     var body: some View {
         ScrollView {

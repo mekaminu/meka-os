@@ -4863,6 +4863,41 @@ class MekaCore(
         discordChanged()
     }
 
+    private fun liveTask(id: String?): Boolean {
+        val e = id?.let { replica.entity(os.meka.core.domain.EntityTypes.TASK, it) } ?: return false
+        return !e.deleted
+    }
+
+    /**
+     * Discord channel watch, slice 4: "Keep as idea" on a post — a note in Lists → Someday → Trading ideas with the
+     * post's words, who said it, the channel and when. Information only: nothing is traded, posted or acted on; the note
+     * carries Discord's words as untrusted text (ADR-006). Kept once per post; Undo takes it out again.
+     */
+    suspend fun keepDiscordIdea(postId: String): String = onCore {
+        val p = discordStore.post(postId) ?: return@onCore os.meka.core.domain.DiscordRules.CANT_KEEP
+        if (liveTask(p.kept)) return@onCore os.meka.core.domain.DiscordRules.ALREADY_KEPT
+        if (p.text.isBlank()) return@onCore os.meka.core.domain.DiscordRules.CANT_KEEP
+        val id = lists.addSomeday(
+            os.meka.core.domain.DiscordRules.ideaTitle(p.author, p.channel.channel, p.text), SomedayKind.TRADING,
+        )
+        replica.commitLocal(os.meka.core.domain.EntityTypes.TASK, id, mapOf(
+            os.meka.core.domain.ActionableFields.NOTES to os.meka.core.domain.DiscordRules.ideaNotes(p, ZoneCalendar(timeZone)).fv(),
+            os.meka.core.domain.ActionableFields.PROVENANCE_SOURCE to "discord".fv(),
+            os.meka.core.domain.ActionableFields.PROVENANCE_TRUST to os.meka.core.domain.Trust.UNTRUSTED_EXTERNAL.name.fv(),
+        ))
+        discordStore.setKept(postId, id)
+        discordChanged()
+        os.meka.core.domain.DiscordRules.KEPT_LINE
+    }
+
+    /** Undo after Keep as idea: the note leaves Trading ideas and the post reads "Keep as idea" again. */
+    suspend fun undoKeepDiscordIdea(postId: String) = onCore {
+        val p = discordStore.post(postId) ?: return@onCore
+        p.kept?.takeIf { liveTask(it) }?.let { tasks.delete(it) }
+        discordStore.setKept(postId, null)
+        discordChanged()
+    }
+
     suspend fun undoMailFind() = onCore {
         val undo = mailFindUndo ?: return@onCore
         mailFindUndo = null

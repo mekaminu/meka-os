@@ -11,6 +11,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -84,7 +87,14 @@ internal fun DiscordSection(
             Column(Modifier.padding(top = MekaSpace.xs).animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 cards.cards.forEach { card ->
                     androidx.compose.runtime.key(card.key) {
-                        DiscordChannelCardView(card) {
+                        DiscordChannelCardView(card, onKeep = { postId ->
+                            haptics.tick()
+                            scope.launch {
+                                val said = runCatching { core.keepDiscordIdea(postId) }.getOrNull() ?: return@launch
+                                if (said == DiscordRules.KEPT_LINE) undo(said) { runCatching { core.undoKeepDiscordIdea(postId) } }
+                                else undo(said, null)
+                            }
+                        }) {
                             haptics.medium()
                             // Slice 2: the channel's alert notification has done its job.
                             os.meka.android.work.DiscordAlerts.cancel(context, card.key)
@@ -101,7 +111,7 @@ internal fun DiscordSection(
 }
 
 @Composable
-private fun DiscordChannelCardView(card: DiscordChannelCard, onDone: () -> Unit) {
+private fun DiscordChannelCardView(card: DiscordChannelCard, onKeep: (String) -> Unit, onDone: () -> Unit) {
     Column(Modifier.fillMaxWidth().testTag("discord-${card.key}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = "${card.title}, ${card.server.orEmpty()}. ${card.line}" }) {
@@ -127,6 +137,7 @@ private fun DiscordChannelCardView(card: DiscordChannelCard, onDone: () -> Unit)
                     Text("${post.author} · ${post.timeLine}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                     post.alert?.let { DiscordAlertChip(it) }
                     Text(post.text, style = MekaType.body, color = Meka.colors.textPrimary)
+                    DiscordKeep(post.kept) { onKeep(post.id) }
                 }
             }
         }
@@ -142,4 +153,28 @@ private fun DiscordAlertChip(why: String) {
             .background(Meka.colors.accent).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs)
             .semantics { contentDescription = "Alert: $why" },
     )
+}
+
+/**
+ * Slice 4: "Keep as idea" under a post — a note in Lists → Someday → Trading ideas (never an order; nothing is traded).
+ * Once kept it reads "In Trading ideas" (cross-fade; reduced motion: instant). Undo is on the bar.
+ */
+@Composable
+private fun DiscordKeep(kept: Boolean, onKeep: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    AnimatedContent(kept, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "discord-keep") { k ->
+        if (k) {
+            Text(
+                "✓ " + DiscordRules.KEPT_CHIP, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(vertical = MekaSpace.xs).semantics { contentDescription = "Kept in Trading ideas" },
+            )
+        } else {
+            Text(
+                DiscordRules.KEEP_ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.defaultMinSize(minHeight = 48.dp).clickable(role = Role.Button, onClick = onKeep)
+                    .padding(vertical = MekaSpace.xs).wrapContentHeight(Alignment.CenterVertically)
+                    .semantics { contentDescription = "Keep as a trade idea in Lists. A note only, nothing is traded" },
+            )
+        }
+    }
 }

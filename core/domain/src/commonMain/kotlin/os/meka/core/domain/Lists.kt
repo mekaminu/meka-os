@@ -145,6 +145,7 @@ object ListRules {
         SomedayKind.RESEARCH -> "To look into"
         SomedayKind.APPLICATION -> "Applications"
         SomedayKind.HOME_IMPROVEMENT -> "Home"
+        SomedayKind.TRADING -> "Trading ideas"
         SomedayKind.OTHER -> "Other"
     }
 
