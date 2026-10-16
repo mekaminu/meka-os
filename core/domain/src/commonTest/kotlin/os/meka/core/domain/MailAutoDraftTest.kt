@@ -113,6 +113,29 @@ class MailAutoDraftTest {
         assertFalse(MailAutoDraftRules.draftShowing(sent))
     }
 
+    @Test
+    fun todayAndMailSayHowManyWaitOnHim() {
+        val drafted = item("a", extra = MailAutoDraftRules.draftedFields("Yes, I can take them.", now))
+        val plain = item("b", agoMs = 2 * hour, subject = "Quote", preview = "Could you send the quote? Thanks", name = "Alex Reed", from = "alex@example.com")
+        val fyi = item("c", agoMs = 3 * hour, subject = "Photos", preview = "Here are the photos.", name = "Jo Park", from = "jo@example.com")
+
+        val line = MailAutoDraftRules.todayLine(listOf(drafted, plain, fyi), now)!!
+        assertEquals("2 emails need a reply · 1 drafted", line.text)
+        assertTrue(line.lit)
+        assertEquals("2 emails need your reply. Navilife has drafted 1; nothing goes until you tap Send.", line.spoken)
+        assertEquals("1 email needs your reply. Navilife has drafted it; nothing goes until you tap Send.", MailAutoDraftRules.todayLine(listOf(drafted), now)!!.spoken)
+        assertEquals("1 email needs a reply", MailAutoDraftRules.todayLine(listOf(plain, fyi), now)!!.text)
+        // None waiting: Today stays quiet; Mail says so while an account is connected.
+        assertNull(MailAutoDraftRules.todayLine(listOf(fyi), now))
+        assertNull(MailAutoDraftRules.todayLine(emptyList(), now))
+        assertEquals(MailAutoDraftRules.NONE_WAITING, MailAutoDraftRules.paneLine(listOf(fyi), now, connected = true))
+        assertEquals("2 emails need a reply · 1 drafted", MailAutoDraftRules.paneLine(listOf(drafted, plain, fyi), now, connected = true))
+        assertNull(MailAutoDraftRules.paneLine(listOf(drafted), now, connected = false))
+        // Not needed takes it off the count.
+        val away = MailNeedsRules.read("a", fieldsOf(drafted) + MailAutoDraftRules.dismissFields(now))!!
+        assertEquals("1 email needs a reply", MailAutoDraftRules.todayLine(listOf(away, plain), now)!!.text)
+    }
+
     private fun fieldsOf(i: MailItem): Map<String, FieldValue> =
         MailNeedsRules.serverFields(i.account, i.from, "sam@example.com", i.subject, i.preview, i.receivedAtMs, i.threadCount) +
             MailAutoDraftRules.serverFields(i.replyNeeded, i.wants) +

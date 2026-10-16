@@ -109,6 +109,8 @@ data class MailAccountsView(
     val rules: List<MailRuleRow> = emptyList(),
     /** "Your rules · 20 senders", or null with none. */
     val rulesLine: String? = null,
+    /** Drafted replies, slice 2: "3 emails need a reply · 2 drafted" or "No emails waiting on you ✓"; null with nothing connected. */
+    val repliesLine: String? = null,
 )
 
 object MailAccountRules {

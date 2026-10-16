@@ -34,6 +34,9 @@ object MailAutoDraftFields {
     const val DISMISSED_AT = "draftDismissedAtMs"
 }
 
+/** Today's "3 emails need a reply · 2 drafted" (drafted replies, slice 2); lit, since each one waits on him. */
+data class MailRepliesLine(val text: String, val spoken: String, val lit: Boolean)
+
 object MailAutoDraftRules {
     const val DAILY_CAP = 10
     const val PER_CHECK = 3
@@ -136,6 +139,28 @@ object MailAutoDraftRules {
     /** For Mail and Today: the same line, or [NONE_WAITING] when no email on the card needs a reply. */
     fun waitingLine(items: List<MailItem>, nowMs: Long): String =
         replyLine(MailNeedsRules.showingSorted(items, nowMs)) ?: NONE_WAITING
+
+    /**
+     * Slice 2: Today's line under the header on both apps, so he can see Navilife has found the emails waiting on him:
+     * "3 emails need a reply · 2 drafted" over the emails on From your mail (snoozed and done ones aren't counted).
+     * Null when none needs a reply (Today stays quiet; Mail says [NONE_WAITING]).
+     */
+    fun todayLine(items: List<MailItem>, nowMs: Long): MailRepliesLine? {
+        val showing = MailNeedsRules.showingSorted(items, nowMs)
+        val text = replyLine(showing) ?: return null
+        val n = showing.count { needsReply(it) }
+        val d = showing.count { draftShowing(it) }
+        val head = if (n == 1) "1 email needs your reply" else "$n emails need your reply"
+        val spoken = when (d) {
+            0 -> "$head."
+            n -> "$head. Navilife has drafted ${if (n == 1) "it" else "each one"}; nothing goes until you tap Send."
+            else -> "$head. Navilife has drafted $d; nothing goes until you tap Send."
+        }
+        return MailRepliesLine(text, spoken, lit = true)
+    }
+
+    /** Slice 2: the Mail pane's line while an account is connected: the count, or [NONE_WAITING]; null with none connected. */
+    fun paneLine(items: List<MailItem>, nowMs: Long, connected: Boolean): String? = if (connected) waitingLine(items, nowMs) else null
 
     private fun hasAsk(text: String): Boolean = ASKS.any { w ->
         var i = text.indexOf(w)

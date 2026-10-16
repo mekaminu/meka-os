@@ -937,6 +937,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
+                    // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
+                    today.mailReplies?.let { replies ->
+                        Crossfade(replies, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-replies-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Meeting prep, slice 1: from 15 min before a meeting with other people, "Prep · Quote review at 14:00 ·
                     // in 12 min" lit in the accent, who's coming, then each guest's last email and what's open between you
                     // (at most four lines). Cross-fades as it comes, counts down and goes ten minutes after the start.

@@ -4435,6 +4435,9 @@ class MekaCore(
     private fun mailNeedsChanged() {
         val items = activity.mailItems()
         _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), ZoneCalendar(timeZone))
+        // Drafted replies, slice 2: Today's count follows Send, Not needed, Done and Snooze at once on this app.
+        val replies = os.meka.core.domain.MailAutoDraftRules.todayLine(items, nowMs())
+        if (_today.value.mailReplies != replies) _today.value = _today.value.copy(mailReplies = replies)
         mailMomentChanged(items)
         _mailChases.value = os.meka.core.domain.MailChaseRules.card(
             items, lists.waitingItems(), aboutYou.profile().shownName, nowMs(), ZoneCalendar(timeZone), activity.mailFinds(),
@@ -5243,7 +5246,10 @@ class MekaCore(
             os.meka.core.domain.MailAccountRules.view(
                 list, nowMs(), signIns.all(), mailAutopilotSetting(), autonomy.paused(), activity.mailTidyBatches(), ZoneCalendar(timeZone),
                 activity.mailSenders(), activity.mailBacklogs(),
-            )
+            ).let { v ->
+                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
+                v.copy(repliesLine = os.meka.core.domain.MailAutoDraftRules.paneLine(activity.mailItems(), nowMs(), v.rows.isNotEmpty()))
+            }
         }
     }
 
@@ -7243,6 +7249,8 @@ class MekaCore(
             parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
             // Inbox fixes, slice 7: each account's unread mail and how much of it Navilife can tidy, counted by the server.
             mailUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs()),
+            // Drafted replies, slice 2: the emails from people waiting on his reply, and how many Navilife has drafted.
+            mailReplies = os.meka.core.domain.MailAutoDraftRules.todayLine(activity.mailItems(), nowMs()),
             // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.
             reflection = os.meka.core.domain.ReflectionRules.weekLine(reflections.all(), todayDay, cal.minuteOfDay(nowMs()), review.startMinute()),
             comingUp = os.meka.core.domain.NeedsYouMeanwhileRules.comingUp(all, nowMs(), cal),

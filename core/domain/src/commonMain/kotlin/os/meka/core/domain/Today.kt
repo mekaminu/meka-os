@@ -56,6 +56,8 @@ data class Today(
     val parcels: ParcelLine? = null,
     /** Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can tidy" ([MailUnreadRules.todayLine]); set by the facade. */
     val mailUnread: MailUnreadLine? = null,
+    /** Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while any does ([MailAutoDraftRules.todayLine]); set by the facade. */
+    val mailReplies: MailRepliesLine? = null,
     /** Weekly reflection, slice 2: "This week's one thing · Run 5k" through the week (lit on Monday, [ReflectionRules.weekLine]); set by the facade. */
     val reflection: ReflectionWeekLine? = null,
     /**

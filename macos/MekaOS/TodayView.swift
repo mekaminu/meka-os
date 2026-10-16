@@ -267,6 +267,16 @@ struct TodayView: View {
                             .accessibilityLabel(unread.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Drafted replies, slice 2: "3 emails need a reply · 2 drafted" while people wait on him (lit in the
+                    // accent; the drafts are on Needs you's From your mail); cross-fades as the count changes.
+                    if let replies = model.today?.mailReplies {
+                        Text(replies.text).font(MekaType.caption)
+                            .foregroundStyle(replies.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: replies.text)
+                            .accessibilityLabel(replies.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Meeting prep, slice 1: from 15 min before a meeting with other people, the countdown lit in the
                     // accent, who's coming, then each guest's last email and what's open between you; cross-fades.
                     if let prep = model.today?.meetingPrep {

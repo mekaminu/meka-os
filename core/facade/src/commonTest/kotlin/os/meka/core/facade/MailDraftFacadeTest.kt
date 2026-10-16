@@ -230,6 +230,8 @@ class MailDraftFacadeTest {
         assertTrue(fold.syncNow())
         val card = fold.mailNeeds.value!!
         assertEquals("1 email needs a reply · 1 drafted", card.replyLine)
+        // Slice 2: Today says so too, and Not needed takes it off at once.
+        assertEquals("1 email needs a reply · 1 drafted", fold.today.value.mailReplies?.text)
         val row = card.rows.single()
         assertEquals("Yes, still fine. See you at 9.", row.autoDraft)
         assertEquals("Are you still OK to drive on Saturday?", row.wants)
@@ -237,6 +239,7 @@ class MailDraftFacadeTest {
         assertEquals(os.meka.core.domain.MailAutoDraftRules.NOT_NEEDED_LINE, fold.dismissMailDraft(a))
         assertNull(fold.mailNeeds.value!!.rows.single().autoDraft)
         assertNull(fold.mailNeeds.value!!.replyLine)
+        assertNull(fold.today.value.mailReplies)
         now += 1_000
         fold.undoMailItem()
         assertEquals("Yes, still fine. See you at 9.", fold.mailNeeds.value!!.rows.single().autoDraft)

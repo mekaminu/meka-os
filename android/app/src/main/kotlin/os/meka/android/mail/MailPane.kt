@@ -69,6 +69,7 @@ import os.meka.core.domain.FollowUpWaitsPanel
 import os.meka.core.domain.MailAccountRow
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailAccountRules
+import os.meka.core.domain.MailAutoDraftRules
 import os.meka.core.domain.MailAccountsView
 import os.meka.core.domain.MailAutopilotPanel
 import os.meka.core.domain.MailAutopilotPanelRules
@@ -273,6 +274,14 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             else -> {
                 val v = current.getOrThrow()
                 v.emptyLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
+                v.repliesLine?.let { line ->
+                    Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-replies") { t ->
+                        Text(t, style = MekaType.itemMeta,
+                            color = if (t == MailAutoDraftRules.NONE_WAITING) Meka.colors.textSecondary else Meka.colors.accent,
+                            modifier = Modifier.appear(rememberAppearance(0)))
+                    }
+                }
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
                 v.autopilot?.let { MarkReadCard(it, Modifier.appear(rememberAppearance(0))) { switchMarkRead(!it.markRead) } }
                 if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }

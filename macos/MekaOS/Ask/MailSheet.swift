@@ -35,6 +35,14 @@ struct MailSheet: View {
                     Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
+                if let line = view.repliesLine {
+                    Text(line).font(MekaType.itemMeta)
+                        .foregroundStyle(line == MailAutoDraftRules.shared.NONE_WAITING ? palette.textSecondary : palette.accent)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                        .staggeredAppear(2)
+                }
                 if let panel = view.autopilot {
                     AutopilotPanelView(panel: panel, palette: palette) {
                         let on = !panel.on
