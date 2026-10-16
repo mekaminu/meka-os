@@ -324,4 +324,32 @@ class MailFindFacadeTest {
         assertTrue(fold.syncNow())
         assertEquals(listOf(idc), fold.mailFinds.value!!.rows.map { it.id })
     }
+
+    @Test
+    fun aSubscriptionFromTheLifeAuditAddsToRenewalsOnBothApps() = runTest {
+        val L = os.meka.core.domain.LifeAuditRules
+        val ps = listOfNotNull(
+            L.payment("Streamco", null, "Your receipt from Streamco", "Total: £10.99", CivilDate.toEpochDay(2026, 9, 8)),
+            L.payment("Streamco", null, "Your receipt from Streamco", "Total: £10.99", CivilDate.toEpochDay(2026, 10, 8)),
+        )
+        val sub = L.subscriptions(ps, received).single()
+        val id = L.findId("acc1", sub.merchant)
+        serverWrite(id, L.serverFields(sub, "Personal"))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(L.TITLE, mac.mailFinds.value!!.title)
+        assertEquals("On Renewals: Streamco · next payment about Sun 8 Nov", fold.addMailFind(id))
+        val onRadar = fold.listsView.value.renewals.let { it.attention + it.upcoming + it.later }
+        assertEquals(1, onRadar.count { it.title == "Streamco" })
+        assertNull(fold.mailFinds.value)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertNull(mac.mailFinds.value)
+        // The server's next check rewrites its own fields: the Add stands.
+        serverWrite(id, L.serverFields(sub.copy(seen = 3), "Personal"))
+        assertTrue(mac.syncNow())
+        assertNull(mac.mailFinds.value)
+        fold.undoMailFind()
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+    }
 }

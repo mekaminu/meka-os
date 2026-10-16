@@ -67,6 +67,8 @@ data class MailFind(
     val schoolKind: String? = null,
     /** School logistics: the one child it names, else "" / null for all of them. */
     val who: String? = null,
+    /** Life audit ([LifeAuditRules]): how many payments the 60 days of mail showed; null otherwise. */
+    val seen: Int? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -106,6 +108,8 @@ object MailFindFields {
     const val END_DAY = "endDay"
     const val SCHOOL_KIND = "schoolKind"
     const val WHO = "who"
+    /** Life audit, slice 1 (server-written, rewritten each check): payments seen in the 60 days ([LifeAuditRules]). */
+    const val SEEN = "seen"
 }
 
 data class MailFindRow(
@@ -324,6 +328,7 @@ object MailRenewalRules {
             endDay = f[MailFindFields.END_DAY]?.longOrNull,
             schoolKind = f[MailFindFields.SCHOOL_KIND]?.textOrNull,
             who = f[MailFindFields.WHO]?.textOrNull,
+            seen = f[MailFindFields.SEEN]?.longOrNull?.toInt(),
         )
     }
 
@@ -393,8 +398,8 @@ object MailRenewalRules {
         else -> "To add from your mail"
     }
 
-    /** The bar's line after Add: "On Renewals: Netflix · renews Tue 3 Nov". */
-    fun addedLine(f: MailFind, today: Long): String = "On Renewals: ${title(f)} · renews ${RenewalRules.dayWord(f.renewDay, today)}"
+    /** The bar's line after Add: "On Renewals: Netflix · renews Tue 3 Nov" (a subscription: [LifeAuditRules.addedLine]). */
+    fun addedLine(f: MailFind, today: Long): String = if (LifeAuditRules.isSubscription(f)) LifeAuditRules.addedLine(f, today) else "On Renewals: ${title(f)} · renews ${RenewalRules.dayWord(f.renewDay, today)}"
 
     /**
      * The card: open renewal finds still to come (renewing today or later), not already on the radar (his own entry or
@@ -415,12 +420,15 @@ object MailRenewalRules {
         val promises = finds.filter { MailPromiseRules.showable(it, waiting, today) }
         val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today, waits) }
         val school = finds.filter { SchoolMailRules.showable(it, schoolItems, today) }
-        val open = (renewals + promises + followUps + school).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
+        // Life audit, slice 1: subscriptions the 60 days of mail show.
+        val subs = finds.filter { LifeAuditRules.showable(it, finds, obligations, today, cal) }
+        val open = (renewals + promises + followUps + school + subs).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
         if (open.isEmpty()) return null
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
             if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today, waits)
             if (f.kind == SchoolMailRules.KIND_SCHOOL) return@map SchoolMailRules.row(f, today)
+            if (LifeAuditRules.isSubscription(f)) return@map LifeAuditRules.row(f, today)
             val title = title(f)
             val line = line(f, today)
             MailFindRow(
@@ -430,8 +438,19 @@ object MailRenewalRules {
             )
         }
         val more = open.size - rows.size
+        val others = renewals.size + promises.size + followUps.size + school.size
+        val cardTitle = when {
+            subs.isEmpty() -> title(renewals.size, promises.size, followUps.size, school.size)
+            others == 0 -> LifeAuditRules.TITLE
+            else -> "To add from your mail"
+        }
+        val cardHeadline = when {
+            subs.isEmpty() -> headline(renewals.size, promises.size, followUps.size, school.size, school.count(SchoolMailRules::isAsk))
+            others == 0 -> LifeAuditRules.headline(subs)
+            else -> "${others + subs.size} to add · subscriptions ${LifeAuditRules.monthlyLabel(subs)} · nothing goes on until you tap Add"
+        }
         return MailFindCard(
-            title(renewals.size, promises.size, followUps.size, school.size), headline(renewals.size, promises.size, followUps.size, school.size, school.count(SchoolMailRules::isAsk)), rows,
+            cardTitle, cardHeadline, rows,
             if (more > 0) "+ $more more · answer these first" else null,
         )
     }
@@ -447,6 +466,7 @@ object MailRenewalRules {
             ObligationFields.KIND to f.obligationKind.name.fv(),
             ObligationFields.SUBJECT_LABEL to "${f.account} mail".fv(),
             ActionableFields.NOTES to (
+                if (LifeAuditRules.isSubscription(f)) LifeAuditRules.notes(f) else
                 "From a renewal email in your ${f.account} mail on ${CivilDate.shortLabel(f.receivedDay)}, added on your tap. " +
                     "Navilife never pays or cancels: do that on the company's own site or app."
                 ).fv(),

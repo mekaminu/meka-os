@@ -1017,6 +1017,34 @@ class MailSyncTest {
     }
 
     @Test
+    fun repeatingPaymentsPublishOneSubscriptionFindAndNothingOnTheRadar() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        gmail.mailbox["s1"] = msg("s1", 40, "billing@streamco.example").copy(subject = "Your receipt from Streamco", preview = "Total: £10.99")
+        gmail.mailbox["s2"] = msg("s2", 10, "billing@streamco.example").copy(subject = "Your receipt from Streamco", preview = "Total: £10.99")
+        gmail.mailbox["o1"] = msg("o1", 30, "orders@shopco.example").copy(subject = "Your order confirmation", preview = "Order total: £32.10")
+        gmail.mailbox["c1"] = msg("c1", 40, "billing@gymco.example").copy(subject = "Your receipt", preview = "Total: £24.00")
+        gmail.mailbox["c2"] = msg("c2", 10, "billing@gymco.example").copy(subject = "Your receipt", preview = "Total: £24.00")
+        gmail.mailbox["c3"] = msg("c3", 5, "billing@gymco.example").copy(subject = "Your membership was cancelled", preview = "Sorry to see you go")
+        gmail.nextRound = { MailChanges(fetch = listOf("s1", "s2", "o1", "c1", "c2", "c3"), cursor = "h2") }
+        i.syncAccount(id)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND)
+        val (_, f) = finds.entries.single()
+        assertEquals(FieldValue.Text(os.meka.core.domain.LifeAuditRules.KIND_SUBSCRIPTION), f[os.meka.core.domain.MailFindFields.KIND])
+        assertEquals(FieldValue.Text("Streamco"), f[os.meka.core.domain.MailFindFields.MERCHANT])
+        assertEquals(FieldValue.Int64(1099), f[os.meka.core.domain.MailFindFields.PENCE])
+        assertEquals(FieldValue.Int64(2), f[os.meka.core.domain.MailFindFields.SEEN])
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.OBLIGATION).size)
+        // The next check keeps the same one find.
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
+    }
+
+    @Test
     fun aPromiseEmailPublishesOneFindAndNothingOnWaitingFor() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

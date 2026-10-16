@@ -15,6 +15,7 @@ import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailPromiseRules
 import os.meka.core.domain.SchoolMailRules
+import os.meka.core.domain.LifeAuditRules
 import os.meka.core.domain.MailFollowUpRules
 import os.meka.core.domain.MailSentFacts
 import os.meka.core.domain.MailFindFields
@@ -627,6 +628,8 @@ class Integrations(
         stage(a, "promises") { promises(a, ms) }
         // School and family logistics, slice 1: the school's dates, payments, forms and trips (on his tap in the apps).
         stage(a, "schoolMail") { schoolMail(a, ms) }
+        // Life audit, slice 1: the subscriptions 60 days of mail show (on his tap in the apps).
+        stage(a, "subscriptions") { subscriptions(a, ms) }
     }
 
     /** Follow-up radar: when each account's sent mail was last read (in memory; a restart just reads it again). */
@@ -840,6 +843,51 @@ class Integrations(
             if (id in written || mirror.containsKey(id) || MailRenewalRules.alreadyOnRadar(r.merchant, r.renewDay, radar, LONDON)) continue
             writeMail(a, id, MailRenewalRules.serverFields(r, account, h.subject, day), EntityTypes.MAIL_FIND)
             written += id
+        }
+    }
+
+    /**
+     * Life audit, slice 1: the emails of the last [LifeAuditRules.WINDOW_DAYS] days that the rules didn't sort as
+     * newsletters, promos or junk (and not the school's) are read by [LifeAuditRules.payment] from the sender, subject and
+     * kept preview; the payments that repeat ([LifeAuditRules.subscriptions]) become one `mail_find` (kind SUBSCRIPTION)
+     * per account and company, rewritten each check so the next payment moves its day (his Add or Not needed is the
+     * apps' field and stands). None when the radar already has that company near the next payment. Read-only: nothing
+     * in the mailbox changes, and nothing goes on the radar here.
+     */
+    internal fun subscriptions(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val school = schoolSenders(a.householdId)
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= LifeAuditRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                !SchoolMailRules.fromSchool(h.fromAddress, school) &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val payments = mutableListOf<os.meka.core.domain.AuditPayment>()
+        val stops = mutableMapOf<String, Long>()
+        for (h in candidates) {
+            val day = LONDON.epochDayOf(h.receivedAtMs)
+            val preview = previews[h.id] ?: h.preview
+            LifeAuditRules.payment(h.fromName, h.fromAddress, h.subject, preview, day)?.let { payments += it }
+            if (LifeAuditRules.stopped(h.subject, preview)) {
+                os.meka.core.domain.MailReceiptRules.merchant(h.fromName, h.fromAddress)?.lowercase()?.let { k ->
+                    stops[k] = maxOf(stops[k] ?: Long.MIN_VALUE, day)
+                }
+            }
+        }
+        if (payments.isEmpty()) return
+        val subs = LifeAuditRules.subscriptions(payments, LONDON.epochDayOf(nowMs), stops)
+        if (subs.isEmpty()) return
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val radar = reader.entities(a.householdId, EntityTypes.OBLIGATION).values
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        for (sub in subs) {
+            val id = LifeAuditRules.findId(a.id, sub.merchant)
+            // Already on the radar (his own, or an earlier Add): a find already published is still kept current.
+            if (!mirror.containsKey(id) && MailRenewalRules.alreadyOnRadar(sub.merchant, sub.nextDay, radar, LONDON)) continue
+            writeMail(a, id, LifeAuditRules.serverFields(sub, account), EntityTypes.MAIL_FIND)
         }
     }
 
