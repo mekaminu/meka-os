@@ -4814,13 +4814,13 @@ class MekaCore(
         val request = onCore {
             val now = nowMs()
             val today = cal.epochDayOf(now)
-            codec.Request(
+            os.meka.core.wire.ChatSummaryCodec.Request(
                 date = os.meka.core.domain.AskRules.isoDate(today),
                 now = "${os.meka.core.domain.CivilDate.longLabel(today)} ${os.meka.core.domain.CivilDate.fromEpochDay(today).year} · ${LocalClock.formatMinute(cal.minuteOfDay(now))}",
                 chats = due.map { c ->
-                    codec.Chat(
+                    os.meka.core.wire.ChatSummaryCodec.Chat(
                         c.name.take(codec.MAX_NAME), c.isGroup,
-                        c.lines.map { codec.Line(it.from.take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER), it.at, it.text.take(codec.MAX_LINE)) },
+                        c.lines.map { os.meka.core.wire.ChatSummaryCodec.Line(it.from.take(os.meka.core.wire.MessageRequestCodec.MAX_SENDER), it.at, it.text.take(codec.MAX_LINE)) },
                     )
                 },
             )
