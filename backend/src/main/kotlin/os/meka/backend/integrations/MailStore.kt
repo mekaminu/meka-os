@@ -21,6 +21,8 @@ interface MailStore {
     /** Ids still waiting for their headers, the most recently listed first (inbox fixes, slice 1). */
     fun pending(accountId: String, limit: Int): List<String>
     fun put(householdId: String, accountId: String, header: MailHeader)
+    /** Inbox fixes, slice 8: these emails were marked read in the mailbox (their sort is kept). */
+    fun markSeen(accountId: String, ids: Collection<String>)
     fun remove(accountId: String, id: String)
     /** Drops what was received before [beforeMs] (pending rows stay until read). */
     fun prune(accountId: String, beforeMs: Long)
@@ -142,6 +144,10 @@ class InMemoryMailStore : MailStore {
     @Synchronized override fun pending(accountId: String, limit: Int) = of(accountId).filterValues { it == null }.keys.reversed().take(limit)
     @Synchronized override fun put(householdId: String, accountId: String, header: MailHeader) { of(accountId)[header.id] = header; sorts[accountId]?.remove(header.id) }
     @Synchronized override fun remove(accountId: String, id: String) { of(accountId).remove(id); sorts[accountId]?.remove(id) }
+    @Synchronized override fun markSeen(accountId: String, ids: Collection<String>) {
+        val r = of(accountId)
+        ids.forEach { id -> r[id]?.let { r[id] = it.copy(unread = false) } }
+    }
     @Synchronized override fun prune(accountId: String, beforeMs: Long) {
         of(accountId).entries.removeIf { (id, h) -> (h != null && h.receivedAtMs < beforeMs).also { if (it) sorts[accountId]?.remove(id) } }
     }
@@ -452,6 +458,17 @@ class PostgresMailStore(private val ops: PostgresOpStore) : MailStore {
             st.executeQuery().use { rs ->
                 buildList { while (rs.next()) MailTidy.of(rs.getString(3))?.let { add(MailMoved(rs.getString(1), rs.getString(2), it)) } }
             }
+        }
+    }
+
+    override fun markSeen(accountId: String, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        c { c ->
+            c.prepareStatement("UPDATE mail_message SET unread = false WHERE account_id = ? AND message_id = ?").use { st ->
+                ids.toSet().forEach { id -> st.setString(1, accountId); st.setString(2, id); st.addBatch() }
+                st.executeBatch()
+            }
+            Unit
         }
     }
 

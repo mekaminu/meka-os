@@ -5371,7 +5371,12 @@ class MekaCore(
     suspend fun unapproveMailBacklog(id: String): MailSwitched {
         val undone = onCore { activity.unapproveBacklog(id).also { if (it) refresh() } }
         return MailSwitched(
-            if (undone) os.meka.core.domain.MailBacklogRules.UNAPPROVED_BAR else os.meka.core.domain.MailBacklogRules.ALREADY_STARTED,
+            when {
+                os.meka.core.domain.MailMarkReadRules.isCard(id) ->
+                    if (undone) os.meka.core.domain.MailMarkReadRules.UNAPPROVED_BAR else os.meka.core.domain.MailMarkReadRules.ALREADY_STARTED
+                undone -> os.meka.core.domain.MailBacklogRules.UNAPPROVED_BAR
+                else -> os.meka.core.domain.MailBacklogRules.ALREADY_STARTED
+            },
             lastMailFacts?.let { mailView(it) },
         )
     }
@@ -7263,7 +7268,7 @@ class MekaCore(
             _today.value, _lists.value.dueLine, nowMs(), ZoneCalendar(timeZone),
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),
             // Inbox fixes, slice 2: each account's backlog clean-up ready for his Approve.
-            mail = os.meka.core.domain.MailBacklogRules.cards(activity.mailBacklogs(), autonomy.paused()),
+            mail = os.meka.core.domain.MailBacklogRules.cards(activity.mailBacklogs(), autonomy.paused(), nowMs()),
         )
         _fasting.value = fastingNow
         _goals.value = goalsNow

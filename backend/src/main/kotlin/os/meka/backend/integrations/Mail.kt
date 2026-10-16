@@ -90,6 +90,12 @@ interface MailProvider {
     fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) {}
 
     /**
+     * Inbox fixes, slice 8 ("Mark N read"): marks these inbox emails read and returns the ids the provider accepted, so
+     * only those are counted. Default: none (a provider without it marks nothing).
+     */
+    fun markReadDone(accessToken: String, ids: Collection<String>): Set<String> = emptySet()
+
+    /**
      * Slice 5a: the list's unsubscribe email, sent from this account only because Meka tapped Unsubscribe. True when
      * the provider accepted it.
      */
@@ -456,6 +462,20 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         }
     }
 
+    /** Inbox fixes, slice 8: UNREAD off a thousand a batchModify; a refused call ends it (the rest wait for the next check). */
+    override fun markReadDone(accessToken: String, ids: Collection<String>): Set<String> {
+        val done = LinkedHashSet<String>()
+        for (chunk in ids.distinct().chunked(1000)) {
+            val r = http.call("POST", "$API/messages/batchModify", accessToken, buildJsonObject {
+                putJsonArray("ids") { chunk.forEach { add(it) } }
+                putJsonArray("removeLabelIds") { add("UNREAD") }
+            })
+            if (r.status !in 200..299) break
+            done += chunk
+        }
+        return done
+    }
+
     /** Slice 5a: messages.send with the RFC 822 text; Gmail fills in From with this account. */
     override fun sendUnsubscribe(accessToken: String, mail: UnsubscribeMailto): Boolean {
         val raw = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(UnsubscribeMessage.rfc822(mail).toByteArray())
@@ -705,6 +725,20 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
         for (id in ids.distinct()) {
             http.call("PATCH", "$GRAPH/me/messages/${Http.enc(id)}", accessToken, buildJsonObject { put("isRead", read) })
         }
+    }
+
+    /** Inbox fixes, slice 8: isRead on each; a refusal (429, 5xx) ends this check's run, a gone email is skipped. */
+    override fun markReadDone(accessToken: String, ids: Collection<String>): Set<String> {
+        val done = LinkedHashSet<String>()
+        for (id in ids.distinct()) {
+            val r = http.call("PATCH", "$GRAPH/me/messages/${Http.enc(id)}", accessToken, buildJsonObject { put("isRead", true) })
+            when {
+                r.status in 200..299 -> done += id
+                r.status == 404 -> continue
+                else -> break
+            }
+        }
+        return done
     }
 
     /** Slice 5a: sendMail from this account (kept in Sent Items, so he can see it went). */

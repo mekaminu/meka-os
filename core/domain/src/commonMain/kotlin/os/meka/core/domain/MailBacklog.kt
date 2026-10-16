@@ -93,6 +93,14 @@ object MailBacklogFields {
     const val TIDY_UNREAD = "tidyUnread"
     const val UNREAD_COUNTED_AT = "unreadCountedAtMs"
 
+    /**
+     * Inbox fixes, slice 8 ([MailMarkReadRules]): Meka's tap on "Mark N read" (an app writes it; 0 = withdrawn), how many
+     * unread newsletters, promos and receipts the server has marked read since, and when it found none left. Counts only.
+     */
+    const val MARK_READ_APPROVED_AT = "markReadApprovedAtMs"
+    const val MARKED_READ = "markedRead"
+    const val MARK_READ_FINISHED_AT = "markReadFinishedAtMs"
+
     fun countField(k: MailBacklogKind): String = when (k) {
         MailBacklogKind.KEEP -> KEPT
         MailBacklogKind.NEWSLETTER -> NEWSLETTERS
@@ -130,6 +138,10 @@ data class MailBacklog(
     val inboxUnread: Int? = null,
     val tidyUnread: Int = 0,
     val unreadCountedAtMs: Long? = null,
+    /** Inbox fixes, slice 8: "Mark N read" ([MailMarkReadRules]). */
+    val markReadApprovedAtMs: Long? = null,
+    val markedRead: Int = 0,
+    val markReadFinishedAtMs: Long? = null,
 ) {
     val ready: Boolean get() = readyAtMs != null
     val approved: Boolean get() = approvedAtMs != null
@@ -316,6 +328,9 @@ object MailBacklogRules {
             inboxUnread = long(MailBacklogFields.INBOX_UNREAD)?.toInt()?.takeIf { it >= 0 },
             tidyUnread = long(MailBacklogFields.TIDY_UNREAD)?.toInt()?.coerceAtLeast(0) ?: 0,
             unreadCountedAtMs = long(MailBacklogFields.UNREAD_COUNTED_AT)?.takeIf { it > 0 },
+            markReadApprovedAtMs = long(MailBacklogFields.MARK_READ_APPROVED_AT)?.takeIf { it > 0 },
+            markedRead = long(MailBacklogFields.MARKED_READ)?.toInt()?.coerceAtLeast(0) ?: 0,
+            markReadFinishedAtMs = long(MailBacklogFields.MARK_READ_FINISHED_AT)?.takeIf { it > 0 },
         )
     }
 
@@ -326,6 +341,13 @@ object MailBacklogRules {
      * moving, done with Undo, and put back. [batch] the clean-up's tidy once the server started it.
      */
     fun row(b: MailBacklog, batch: MailTidyBatch? = null, paused: Boolean = false, nowMs: Long = 0L): MailBacklogRow {
+        val r = planRow(b, batch, paused, nowMs)
+        // Inbox fixes, slice 8: what "Mark N read" did (or is doing) sits under the plan.
+        val marked = MailMarkReadRules.line(b) ?: return r
+        return r.copy(detail = listOfNotNull(r.detail, marked).joinToString("\n"))
+    }
+
+    private fun planRow(b: MailBacklog, batch: MailTidyBatch?, paused: Boolean, nowMs: Long): MailBacklogRow {
         if (b.approved || b.applied > 0) applying(b, batch, paused, nowMs)?.let { return it }
         if (!b.ready) {
             val so = if (b.scanned > 0) " · ${n(b.scanned)} so far" else ""
@@ -407,11 +429,12 @@ object MailBacklogRules {
      * nothing has moved), ← Later (set aside on this screen), ↑ Review (Mail, where the plan lists what goes where).
      * Newest plan per account; accounts in the order given (Mail's order). Not while Navilife is paused.
      */
-    fun cards(backlogs: List<MailBacklog>, paused: Boolean = false): List<DecisionCard> {
+    fun cards(backlogs: List<MailBacklog>, paused: Boolean = false, nowMs: Long = 0L): List<DecisionCard> {
         if (paused) return emptyList()
         val newest = backlogs.groupBy { it.account }.values.mapNotNull { list -> list.maxByOrNull { it.startedAtMs } }
         // Inbox fixes, slice 3: each account's "Empty Junk" follows its clean-up card.
-        return newest.flatMap { b -> listOfNotNull(planCard(b), MailJunkClearRules.card(b)) }
+        // Inbox fixes, slice 8: then "Mark N read" for the unread newsletters and promos still in the inbox.
+        return newest.flatMap { b -> listOfNotNull(planCard(b), MailMarkReadRules.card(b, nowMs), MailJunkClearRules.card(b)) }
     }
 
     private fun planCard(b: MailBacklog): DecisionCard? {

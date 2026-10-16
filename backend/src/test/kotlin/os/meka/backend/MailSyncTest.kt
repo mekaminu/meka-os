@@ -311,6 +311,14 @@ class MailSyncTest {
         var headerFailsAfter: Int? = null
         val marked = mutableListOf<Pair<Set<String>, Boolean>>()
         override fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) { marked += ids.toSet() to read }
+        /** Inbox fixes, slice 8: "Mark N read" (the provider accepts all, or refuses past [markReadRefusedAfter]). */
+        val markedDone = mutableListOf<Set<String>>()
+        var markReadRefusedAfter: Int? = null
+        override fun markReadDone(accessToken: String, ids: Collection<String>): Set<String> {
+            val ok = markReadRefusedAfter?.let { ids.take(it) } ?: ids
+            ok.forEach { id -> mailbox[id]?.let { mailbox[id] = it.copy(unread = false) } }
+            return ok.toSet().also { markedDone += it }
+        }
 
         // Slice 8a: the backlog's pages (by page token; null: can't list), and what was asked.
         var backlogPages: Map<String?, MailBacklogPage>? = null
@@ -895,6 +903,47 @@ class MailSyncTest {
         gmail.unreadInInbox = 380
         i.syncAccount(id)
         assertEquals(380, backlog().inboxUnread)
+    }
+
+    @Test
+    fun markNReadMarksOnlyTheUnreadTidyKindAfterHisTapAndFinishes() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        gmail.unreadInInbox = 40
+        gmail.mailbox["n1"] = msg("n1", 0, "news@weekly.example").copy(listId = "<weekly.example>", listUnsubscribe = "<mailto:off@weekly.example>")
+        gmail.mailbox["n2"] = msg("n2", 0, "deals@shop.example").copy(listId = "<shop.example>", listUnsubscribe = "<mailto:off@shop.example>")
+        gmail.mailbox["p1"] = msg("p1", 0, "sam@example.com")
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        fun backlog() = MailBacklogRules.read(entityId, mapOf(MailBacklogFields.STARTED_AT to FieldValue.Int64(1L)) +
+            EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_BACKLOG).getValue(entityId))!!
+        // Nothing is marked before his tap.
+        assertTrue(gmail.markedDone.isEmpty())
+        assertEquals(2, backlog().tidyUnread)
+        now += 60_000L
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.MARK_READ_APPROVED_AT, FieldValue.Int64(now))
+        gmail.markReadRefusedAfter = 1
+        i.syncAccount(id)
+        // The provider took one; only that one is counted, and the person's email is never in the list.
+        assertEquals(1, gmail.markedDone.size)
+        assertEquals(1, gmail.markedDone.single().size)
+        assertTrue(gmail.markedDone.flatten().none { it == "p1" })
+        assertEquals(1, backlog().markedRead)
+        assertNull(backlog().markReadFinishedAtMs)
+        // The next check marks the other, then one more finds none left and finishes the run.
+        gmail.markReadRefusedAfter = null
+        now += 60_000L
+        i.syncAccount(id)
+        assertEquals(setOf("n1", "n2"), gmail.markedDone.flatten().toSet())
+        assertEquals(2, backlog().markedRead)
+        now += 60_000L
+        i.syncAccount(id)
+        assertEquals(2, backlog().markedRead)
+        assertEquals(now, backlog().markReadFinishedAtMs)
+        assertTrue(ms.messages(id).filter { it.id != "p1" }.none { it.unread })
+        assertTrue(ms.messages(id).single { it.id == "p1" }.unread)
     }
 
     @Test

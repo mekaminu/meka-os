@@ -35,6 +35,7 @@ import os.meka.core.domain.MailCheckRules
 import os.meka.core.domain.MailTidy
 import os.meka.core.domain.MailJunkClearRules
 import os.meka.core.domain.MailUnreadRules
+import os.meka.core.domain.MailMarkReadRules
 import os.meka.core.domain.MailJunkFacts
 import os.meka.core.domain.MailJunkRules
 import os.meka.core.domain.MailTidyBatchFields
@@ -595,6 +596,8 @@ class Integrations(
         stage(a, "backlog") { backlog(a, m, token, ms) }
         // Inbox fixes, slice 7: the inbox's unread count and how many of those Navilife can tidy, for Today's line.
         stage(a, "unreadCounts") { unreadCounts(a, ms) }
+        // Inbox fixes, slice 8: "Mark N read" (only after his tap on the card).
+        stage(a, "markInboxRead") { markInboxRead(a, m, token, ms) }
         // Inbox fixes, slice 3: "Empty Junk" (counted for its card; cleared out only after his Approve).
         stage(a, "junkClearOut") { junkClearOut(a, m, token, ms) }
         // Slice 6a: the emails that need Meka, as cards in Needs you.
@@ -1005,16 +1008,47 @@ class Integrations(
      */
     internal fun unreadCounts(a: AccountRow, ms: MailStore) {
         val unread = mailChecks[a.id]?.inboxUnread?.toInt() ?: return
-        val keep = keepAddresses(a.householdId)
-        val inbox = ms.inboxSorted(a.id).filter { (h, _) -> h.inInbox && h.unread }
-        val rules = senderRules(a.householdId, a.id, inbox.map { it.first.fromAddress })
-        val tidy = inbox.count { (h, s) ->
-            MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] })) != MailTidy.KEEP
-        }.coerceAtMost(unread)
+        val tidy = unreadTidyKind(a, ms).size.coerceAtMost(unread)
         val entityId = MailBacklogRules.entityId(a.id)
         val prev = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId) }.getOrNull()
         if (!MailUnreadRules.writeDueFields(prev, unread, tidy, now())) return
         writeMail(a, entityId, MailUnreadRules.fields(unread, tidy, now()), EntityTypes.MAIL_BACKLOG)
+    }
+
+    /** Slice 7/8: the unread emails still in the inbox that the tidy rules would move (newest first), headers only. */
+    private fun unreadTidyKind(a: AccountRow, ms: MailStore): List<MailHeader> {
+        val keep = keepAddresses(a.householdId)
+        val never = ms.neverTidied(a.id)
+        val inbox = ms.inboxSorted(a.id).filter { (h, _) -> h.inInbox && h.unread && h.id !in never }
+        val rules = senderRules(a.householdId, a.id, inbox.map { it.first.fromAddress })
+        return inbox.filter { (h, s) ->
+            MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] })) != MailTidy.KEEP
+        }.map { it.first }
+    }
+
+    /**
+     * Inbox fixes, slice 8: **Mark N read**. Once Meka tapped Mark read on the account's card (and while Navilife isn't
+     * paused), each check marks up to [MailMarkReadRules.PER_CHECK_GMAIL] (Outlook [MailMarkReadRules.PER_CHECK_OUTLOOK])
+     * of the unread tidy-kind emails still in the inbox read, by the same rules Today's line counts them with (so people,
+     * his partner, banks, schools and anything he said to keep are never touched); nothing moves. A check that finds none
+     * left finishes the run. Counts only on the entity.
+     */
+    internal fun markInboxRead(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val hh = a.householdId
+        val entityId = MailBacklogRules.entityId(a.id)
+        val b = reader.entity(hh, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
+        val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        if (!MailMarkReadRules.shouldMark(b, paused)) return
+        val perCheck = if (m.id == MailProviders.OUTLOOK) MailMarkReadRules.PER_CHECK_OUTLOOK else MailMarkReadRules.PER_CHECK_GMAIL
+        val ids = unreadTidyKind(a, ms).take(perCheck).map { it.id }
+        if (ids.isEmpty()) {
+            writeMail(a, entityId, MailMarkReadRules.progressFields(b.markedRead, now()), EntityTypes.MAIL_BACKLOG)
+            return
+        }
+        val done = m.markReadDone(token, ids)
+        if (done.isEmpty()) return
+        ms.markSeen(a.id, done)
+        writeMail(a, entityId, MailMarkReadRules.progressFields(b.markedRead + done.size, null), EntityTypes.MAIL_BACKLOG)
     }
 
     /**
