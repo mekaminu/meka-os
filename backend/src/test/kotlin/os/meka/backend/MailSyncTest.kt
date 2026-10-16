@@ -1073,6 +1073,25 @@ class MailSyncTest {
         assertEquals(1, EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).size)
     }
 
+    @Test
+    fun aSchoolEmailWithTwoPeDaysBecomesTwoWeeklyFinds() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.SCHOOL_WEBSITE, FieldValue.Text("https://www.oakfield.sch.uk"))
+        device(ops, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, AboutYouFields.CHILDREN, FieldValue.Text("Alex|7|Oakfield School\nSam|10|Oakfield School"))
+        gmail.mailbox["w1"] = msg("w1", 0, "office@oakfield.sch.uk").copy(subject = "PE this term", preview = "Alex's class will have PE on Tuesdays and Thursdays this term.")
+        gmail.nextRound = { MailChanges(fetch = listOf("w1"), cursor = "h2") }
+        i.syncAccount(id)
+        val finds = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values
+        assertEquals(2, finds.size)
+        assertTrue(finds.all { it[os.meka.core.domain.MailFindFields.SCHOOL_KIND] == FieldValue.Text("weekly") && it[os.meka.core.domain.MailFindFields.WHAT] == FieldValue.Text("PE") })
+        val weekdays = finds.map { os.meka.core.domain.CivilDate.isoDayOfWeek((it[os.meka.core.domain.MailFindFields.DAY] as FieldValue.Int64).value) }.toSet()
+        assertEquals(setOf(2, 4), weekdays)
+    }
+
     // ---- Follow-up radar, slice 1 ----
 
     private fun sentMsg(id: String, ageDays: Long, preview: String, to: String = "sam@example.com", thread: String = "t-$id") =

@@ -471,7 +471,9 @@ object SchoolRules {
         val weeklyRows = weekly.map { w ->
             val line = "Every ${CivilDate.DAY_LONG[w.weekday - 1]} · ${whoLabel(w.who)}"
             val note = nextWeekly(w, items, today, hours.holidays)?.let { "Next: ${dayWord(it, today)}" }
-            SchoolRow(w.id, w.title, line, note, listOfNotNull(w.title, line, note).joinToString(". "))
+            // School logistics from email, slice 3: a weekly day added from the school's email says so.
+            val source = SchoolTerms.sourceLine(w)
+            SchoolRow(w.id, w.title, line, note, listOfNotNull(w.title, line, note, source).joinToString(". "), source)
         }
         val summary = when {
             items.isEmpty() -> EMPTY_LINE

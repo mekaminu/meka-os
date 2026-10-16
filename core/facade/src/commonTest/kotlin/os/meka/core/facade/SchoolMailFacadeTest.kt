@@ -122,4 +122,31 @@ class SchoolMailFacadeTest {
         assertEquals(FieldValue.Bool(true), serverTask(SchoolMailRules.taskId(id))[os.meka.core.domain.ActionableFields.DELETED])
         assertEquals(listOf(id), mac.mailFinds.value!!.rows.map { it.id })
     }
+
+    @Test
+    fun aWeeklyPeDayGoesIntoSchoolOnBothApps() = runTest {
+        // Slice 3: "PE on Tuesdays" from the school's email: Add makes School's weekly day, marked as from the email.
+        val pe = SchoolMailRules.readAll("PE this term", "Alex's class will have PE on Tuesdays this term.", received, listOf("Alex", "Sam")).single()
+        val id = SchoolMailRules.findId("acc1", pe)
+        serverWrite(id, SchoolMailRules.serverFields(pe, "Oakfield Primary", "Personal", "PE this term", received))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals("PE · every Tuesday · Alex", fold.mailFinds.value!!.rows.single().line)
+
+        assertEquals("In School: PE · every Tuesday · Kids shows “Alex: PE kit” the day before", fold.addMailFind(id))
+        assertNull(fold.mailFinds.value)
+        val row = fold.schoolView.value.weekly.single()
+        assertEquals("PE", row.title)
+        assertEquals("Every Tuesday · Alex", row.line)
+        assertEquals(SchoolMailRules.SOURCE_LINE, row.source)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertNull(mac.mailFinds.value)
+        assertEquals("PE", mac.schoolView.value.weekly.single().title)
+
+        // Undo: out of School, back in the card.
+        fold.undoMailFind()
+        assertTrue(fold.schoolView.value.weekly.isEmpty())
+        assertEquals(listOf(id), fold.mailFinds.value!!.rows.map { it.id })
+    }
 }

@@ -23,6 +23,13 @@ import os.meka.core.sync.fv
  * morning at 08:00, or the morning of the day the email gave) with Undo, never a School line. An undated ask is offered
  * for [SchoolMailRules.ASK_DAYS] days.
  *
+ * Slice 3: **weekly kit days into School, so Kids shows the kit**. "PE will be on Tuesdays and Thursdays this term",
+ * "Alex's class has swimming every Friday", "Forest school days are Wednesday" — a school email naming something that
+ * needs kit on a weekday every week becomes one find per weekday with [SchoolKind.WEEKLY] as its school kind: "PE ·
+ * every Tuesday · Alex" in the same card. **Add** puts it into School's weekly things as he'd have typed "Alex PE Tue",
+ * so Today, the evening before ("Alex: PE kit") and Kids' THIS WEEK follow. A weekly find is offered for
+ * [SchoolMailRules.WEEKLY_OFFER_DAYS] days after its first day, and not at all when School already has it.
+ *
  * Every word of an email is someone else's (ADR-006): a find only proposes a date he can remove; nothing is paid, signed
  * or sent because of it. Codes, passwords and newsletters' unsubscribe noise propose nothing. Rule 13: the school, its
  * senders and the children's names come from his data (About you), never from the code; tests use invented ones.
@@ -64,6 +71,8 @@ object SchoolMailRules {
     /** Its task is due at this minute of the school morning. */
     const val ASK_MINUTE = 8 * 60
     private const val MAX_ASK = 60
+    /** Slice 3: a weekly find is offered until this many days after its first day. */
+    const val WEEKLY_OFFER_DAYS = 14
 
     private val I = setOf(RegexOption.IGNORE_CASE)
 
@@ -119,6 +128,27 @@ object SchoolMailRules {
 
     /** Already over or called off: nothing to add. */
     private val NOT_COMING = Regex("""\b(cancell?ed|postponed\s+indefinitely|thank\s+you\s+for\s+(?:paying|your\s+payment)|payment\s+(?:received|confirmed|successful)|receipt)\b""", I)
+
+    /** Slice 3: weekly things that need kit (or a bag) packed: the regex and School's title. */
+    private val WEEKLY_TOPICS: List<Pair<Regex, String>> = listOf(
+        """\b(?:p\.\s?e\.|pe\b)""" to "PE",
+        """\bswim(?:ming)?\b""" to "Swimming",
+        """\bforest\s+school\b""" to "Forest school",
+        """\bgames\b""" to "Games",
+        """\bgymnastics\b""" to "Gymnastics",
+        """\bdance\b""" to "Dance",
+        """\b(?:library|reading\s+book)s?\b""" to "Library books",
+        """\bcook(?:ing|ery)\b""" to "Cooking",
+    ).map { (re, title) -> Regex(re, I) to title }
+    private const val WEEKDAYS = "monday|tuesday|wednesday|thursday|friday"
+    /** "every Tuesday", "on Tuesdays", "PE days are …", "weekly": it happens each week. */
+    private val EVERY = Regex(
+        """\bevery\s+(?:$WEEKDAYS)\b|\b(?:$WEEKDAYS)s\b|\bdays?\s+(?:this\s+(?:term|half[\s-]term|year)\s+)?(?:is|are|will\s+be)\b|\bweekly\b""", I,
+    )
+    /** A weekday that isn't a one-off date ("Monday 2 November" is a start, not a weekly day). */
+    private val WEEKDAY_WORD = Regex("""\b($WEEKDAYS)s?\b(?!\s+\d)""", I)
+    /** "There will be no swimming on Fridays", "PE is not on Mondays any more". */
+    private val WEEKLY_NOT = Regex("""\b(?:no|not|isn['’]?t|aren['’]?t|won['’]?t|cancell?ed|stopp(?:ed|ing)|instead\s+of|any\s+more|anymore|longer)\b""", I)
 
     // ---- Who is the school ----
 
@@ -177,6 +207,7 @@ object SchoolMailRules {
         if (texts.isEmpty() || texts.any { NOISE.containsMatchIn(it) }) return null
         val all = texts.joinToString(". ")
         if (NOT_COMING.containsMatchIn(all)) return null
+        weeklyFrom(texts, receivedDay, children).firstOrNull()?.let { return it }
         val who = who(all, children)
         val (start, end) = span(texts, receivedDay)
             ?: return ask(all)?.let { SchoolMailFind(SchoolKind.DAY, it, who, receivedDay, receivedDay + ASK_DAYS, null, ask = true) }
@@ -213,6 +244,46 @@ object SchoolMailRules {
         if (isTrip) return SchoolMailFind(SchoolKind.DAY, tripTo?.let { "Trip to $it" } ?: "School trip", who, start, start, amount)
         if (event != null) return SchoolMailFind(SchoolKind.DAY, event, who, start, start, amount)
         return ask(all)?.let { SchoolMailFind(SchoolKind.DAY, it, who, start, start, null, ask = true) }
+    }
+
+    /**
+     * Every find a school email holds: slice 3's weekly days (one per weekday: "PE on Tuesdays and Thursdays" is two),
+     * else [read]'s one. The server writes each.
+     */
+    fun readAll(subject: String?, preview: String?, receivedDay: Long, children: List<String> = emptyList()): List<SchoolMailFind> {
+        val texts = listOfNotNull(subject, preview).map { it.trim() }.filter { it.isNotEmpty() }
+        if (texts.isEmpty() || texts.any { NOISE.containsMatchIn(it) }) return emptyList()
+        if (NOT_COMING.containsMatchIn(texts.joinToString(". "))) return emptyList()
+        return weeklyFrom(texts, receivedDay, children).ifEmpty { listOfNotNull(read(subject, preview, receivedDay, children)) }
+    }
+
+    /**
+     * Slice 3: the weekly kit days in [texts] — a sentence naming a kit topic ([WEEKLY_TOPICS]) as happening each week
+     * ([EVERY]) on one or more weekdays. Each weekday is one find: its first day on or after the email (or after a start
+     * date the sentence gives, "from Monday 2 November"), offered for [WEEKLY_OFFER_DAYS] days after that. A sentence
+     * saying it's not, no longer or cancelled proposes nothing.
+     */
+    private fun weeklyFrom(texts: List<String>, receivedDay: Long, children: List<String>): List<SchoolMailFind> {
+        // "P.E." would split a sentence at its dots.
+        val all = texts.joinToString(". ").replace(Regex("""\bp\.\s?e\.""", I), "PE")
+        val out = mutableListOf<SchoolMailFind>()
+        for (sentence in all.split(Regex("""[.!?\n]+(?:\s|$)"""))) {
+            if (!EVERY.containsMatchIn(sentence) || WEEKLY_NOT.containsMatchIn(sentence)) continue
+            val topic = WEEKLY_TOPICS.firstOrNull { it.first.containsMatchIn(sentence) }?.second ?: continue
+            val days = WEEKDAY_WORD.findAll(sentence).map { CivilDate.DAY_LONG.indexOfFirst { d -> d.equals(it.groupValues[1], ignoreCase = true) } + 1 }
+                .filter { it in 1..5 }.distinct().toList()
+            if (days.isEmpty()) continue
+            val from = (SchoolRules.findSpan(sentence, receivedDay) as? SpanFound.Days)?.startDay
+                ?.takeIf { it >= receivedDay && it - receivedDay <= MAX_DAYS } ?: receivedDay
+            val who = who(sentence, children).ifEmpty { who(all, children) }
+            for (w in days) {
+                val first = from + (w - CivilDate.isoDayOfWeek(from)).mod(7)
+                if (out.none { it.title == topic && CivilDate.isoDayOfWeek(it.startDay) == w && it.who == who }) {
+                    out += SchoolMailFind(SchoolKind.WEEKLY, topic, who, first, first + WEEKLY_OFFER_DAYS, null)
+                }
+            }
+        }
+        return out
     }
 
     /**
@@ -280,12 +351,18 @@ object SchoolMailRules {
             // An undated ask repeated within a fortnight ("Reminder: please send in…") lands on the same find.
             val day = if (s.endDay > s.startDay) "~" + s.startDay / 14 else s.startDay.toString()
             "mf" + ActivityRules.fnv64("mailschool:$accountId:$ASK:${s.title.lowercase()}:${s.who.lowercase()}:$day")
+        } else if (s.kind == SchoolKind.WEEKLY) {
+            // Slice 3: one find per thing, child and weekday, so next week's reminder lands on the same one.
+            "mf" + ActivityRules.fnv64("mailschool:$accountId:${s.kind.wire}:${s.title.lowercase()}:${s.who.lowercase()}:w${CivilDate.isoDayOfWeek(s.startDay)}")
         } else {
             "mf" + ActivityRules.fnv64("mailschool:$accountId:${s.kind.wire}:${s.title.lowercase()}:${s.who.lowercase()}:${s.startDay}")
         }
 
     /** Slice 2: whether [f] is an ask (made a task on Add). */
     fun isAsk(f: MailFind): Boolean = f.kind == KIND_SCHOOL && f.schoolKind == ASK
+
+    /** Slice 3: whether [f] is a weekly kit day (Add puts it into School's weekly things). */
+    fun isWeekly(f: MailFind): Boolean = f.kind == KIND_SCHOOL && f.schoolKind == SchoolKind.WEEKLY.wire
 
     /** Slice 2: an ask with no date of its own (offered for [ASK_DAYS] days from its email). */
     fun undated(f: MailFind): Boolean = (f.endDay ?: f.renewDay) > f.renewDay
@@ -347,6 +424,8 @@ object SchoolMailRules {
     fun entry(f: MailFind): SchoolEntry {
         val kind = SchoolKind.of(f.schoolKind) ?: SchoolKind.DAY
         val title = f.what ?: "From the school"
+        // Slice 3: a weekly thing from its first day, on that weekday (END_DAY is only how long it's offered).
+        if (kind == SchoolKind.WEEKLY) return SchoolEntry(kind, title.take(SchoolRules.MAX_TITLE), f.who.orEmpty(), f.renewDay, f.renewDay, CivilDate.isoDayOfWeek(f.renewDay))
         val withPrice = f.pence?.takeIf { kind == SchoolKind.DAY }?.let { "$title · ${RenewalRules.formatPence(it)}" } ?: title
         return SchoolEntry(kind, withPrice.take(SchoolRules.MAX_TITLE), f.who.orEmpty(), f.renewDay, maxOf(f.renewDay, f.endDay ?: f.renewDay))
     }
@@ -369,6 +448,11 @@ object SchoolMailRules {
         val e = entry(f)
         val who = SchoolRules.whoLabel(e.who).takeIf { it.isNotBlank() }
         val what = f.what ?: "From the school"
+        if (e.kind == SchoolKind.WEEKLY) {
+            // Slice 3: "PE · every Tuesday · Alex", "… · from Mon 2 Nov" when it starts more than a week away.
+            val from = if (e.startDay - today > 6) "from " + RenewalRules.dayWord(e.startDay, today) else null
+            return listOfNotNull(what, "every " + CivilDate.DAY_LONG[e.weekday - 1], from, who).joinToString(" · ")
+        }
         return when (e.kind) {
             SchoolKind.OFF -> listOfNotNull(what, SchoolRules.spanLabel(e.startDay, e.endDay), "no school", who).joinToString(" · ")
             else -> listOfNotNull(
@@ -400,9 +484,23 @@ object SchoolMailRules {
         // Slice 2: an ask stays until its day (an undated one for ASK_DAYS days); answered, it's gone.
         if (isAsk(f)) return (f.endDay ?: f.renewDay) >= today
         val e = entry(f)
+        if (e.kind == SchoolKind.WEEKLY) {
+            // Slice 3: offered for WEEKLY_OFFER_DAYS after its first day, unless School has it (his "Alex PE Tue" too).
+            if ((f.endDay ?: f.renewDay) < today) return false
+            val sid = schoolItemId(f.id)
+            return items.none { it.id == sid || sameWeekly(it, e) }
+        }
         if (e.endDay < today) return false
         val sid = schoolItemId(f.id)
         return items.none { it.id == sid || sameThing(it, e) }
+    }
+
+    private fun sameWeekly(it: SchoolItem, e: SchoolEntry): Boolean {
+        if (it.kind != SchoolKind.WEEKLY || it.weekday != e.weekday) return false
+        if (e.who.isNotEmpty() && it.who.isNotEmpty() && it.who != e.who) return false
+        val a = it.title.lowercase().removeSuffix(" kit")
+        val b = e.title.lowercase()
+        return a == b || a.startsWith(b) || b.startsWith(a) || (b == "swimming" && a.startsWith("swim"))
     }
 
     private fun sameThing(it: SchoolItem, e: SchoolEntry): Boolean {
@@ -418,6 +516,13 @@ object SchoolMailRules {
     fun addedLine(f: MailFind, today: Long): String {
         val e = entry(f)
         val what = f.what ?: "it"
+        if (e.kind == SchoolKind.WEEKLY) {
+            // Slice 3: "In School: PE · every Tuesday · Kids shows “Alex: PE kit” the day before".
+            val thing = SchoolThing("", e.kind, e.title, e.who)
+            val kit = SchoolRules.thingText(thing, kit = true)
+            val tail = if (kit != SchoolRules.thingText(thing)) "Kids shows “$kit” the day before" else "in Kids' week"
+            return "In School: $what · every ${CivilDate.DAY_LONG[e.weekday - 1]} · $tail"
+        }
         val day = when (e.kind) {
             SchoolKind.OFF -> SchoolRules.spanLabel(e.startDay, e.endDay)
             else -> (if (SchoolRules.isDue(what)) "due " else "") + RenewalRules.dayWord(e.startDay, today)

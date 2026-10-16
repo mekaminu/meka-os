@@ -217,4 +217,63 @@ class SchoolMailTest {
         val again = assertNotNull(SchoolMailRules.read("Reminder", "Please send in a named coat for Alex.", received + 2, kids))
         assertEquals(SchoolMailRules.findId("a", s), SchoolMailRules.findId("a", again))
     }
+
+    // ---- Slice 3: weekly kit days into School ----
+
+    private fun weekly(subject: String?, preview: String? = null) = SchoolMailRules.readAll(subject, preview, received, kids)
+
+    @Test
+    fun weeklyKitDaysAreReadOnePerWeekday() {
+        val pe = weekly("PE this term", "Alex's class will have PE on Tuesdays and Thursdays this term.")
+        assertEquals(2, pe.size)
+        assertTrue(pe.all { it.kind == SchoolKind.WEEKLY && it.title == "PE" && it.who == "Alex" })
+        // Thu 15 Oct: the first Thursday is today, the first Tuesday is the 20th.
+        assertEquals(listOf(CivilDate.toEpochDay(2026, 10, 20), received), pe.map { it.startDay })
+        assertEquals(pe[0].startDay + SchoolMailRules.WEEKLY_OFFER_DAYS, pe[0].endDay)
+        assertEquals("Swimming", assertNotNull(read("Swimming", "Year 3 go swimming every Friday, please send a towel.")).title)
+        assertEquals(SchoolKind.WEEKLY, assertNotNull(read("Forest school", "Forest school days are Wednesday this half term.")).kind)
+        val p = weekly(null, "P.E. will be every Monday.").single()
+        assertEquals("PE", p.title)
+        assertEquals("", p.who)
+        // A start date in the sentence is where it starts; the one-off date isn't a weekly day.
+        val swim = weekly("Swimming lessons", "Swimming lessons start on Monday 2 November and will be every Monday.").single()
+        assertEquals(CivilDate.toEpochDay(2026, 11, 2), swim.startDay)
+        // Not weekly: one-offs, cancellations, no kit topic.
+        assertTrue(weekly("PE", "There is PE on Tuesday 20 October.").none { it.kind == SchoolKind.WEEKLY })
+        assertTrue(weekly("PE", "There will be no PE on Fridays any more.").none { it.kind == SchoolKind.WEEKLY })
+        assertTrue(weekly("Clubs", "Chess club is every Tuesday.").none { it.kind == SchoolKind.WEEKLY })
+        // Still read the other kinds: one find from readAll.
+        assertEquals("Trip payment", weekly("Trip payment", "Please pay £12 for the trip by 20 Nov.").single().title)
+    }
+
+    @Test
+    fun aWeeklyFindShowsAddsToSchoolAndStopsWhenSchoolHasIt() {
+        val s = weekly("PE this term", "Alex's class will have PE on Tuesdays.").single()
+        val f = find(s)
+        assertTrue(SchoolMailRules.isWeekly(f))
+        assertFalse(SchoolMailRules.isAsk(f))
+        assertEquals("PE · every Tuesday · Alex", SchoolMailRules.row(f, received).line)
+        val e = SchoolMailRules.entry(f)
+        assertEquals(SchoolKind.WEEKLY, e.kind)
+        assertEquals(2, e.weekday)
+        assertEquals("Alex", e.who)
+        assertEquals("In School: PE · every Tuesday · Kids shows “Alex: PE kit” the day before", SchoolMailRules.addedLine(f, received))
+        // Add's line makes School's weekly item; on Monday evening it reads "Alex: PE kit".
+        val added = SchoolRules.items(mapOf(SchoolMailRules.schoolItemId(f.id) to SchoolMailRules.schoolFields(f, 0L)))
+        assertEquals(SchoolKind.WEEKLY, added.single().kind)
+        assertFalse(SchoolMailRules.showable(f, added, received))
+        // His own "Alex PE Tue" counts as having it; a different day or child doesn't.
+        fun mine(title: String, who: String, weekday: Int) = SchoolItem("x", SchoolKind.WEEKLY, title, who, received - 30, received - 30, weekday, null, emptyList(), 0L)
+        assertFalse(SchoolMailRules.showable(f, listOf(mine("PE kit", "Alex", 2)), received))
+        assertTrue(SchoolMailRules.showable(f, listOf(mine("PE", "Sam", 2)), received))
+        assertTrue(SchoolMailRules.showable(f, listOf(mine("PE", "Alex", 3)), received))
+        // Offered until two weeks after its first day; next week's reminder lands on the same find.
+        assertTrue(SchoolMailRules.showable(f, emptyList(), s.startDay + SchoolMailRules.WEEKLY_OFFER_DAYS))
+        assertFalse(SchoolMailRules.showable(f, emptyList(), s.startDay + SchoolMailRules.WEEKLY_OFFER_DAYS + 1))
+        val again = SchoolMailRules.readAll("Reminder", "Alex's class will have PE on Tuesdays.", received + 7, kids).single()
+        assertEquals(SchoolMailRules.findId("a", s), SchoolMailRules.findId("a", again))
+        // A thing with no kit says so plainly.
+        val lib = find(weekly(null, "Library books go back every Wednesday.").single())
+        assertEquals("In School: Library books · every Wednesday · in Kids' week", SchoolMailRules.addedLine(lib, received))
+    }
 }

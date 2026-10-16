@@ -788,10 +788,11 @@ class Integrations(
         val previews = ms.previews(a.id, candidates.map { it.id })
         val today = LONDON.epochDayOf(nowMs)
         val children = profile.children.map { it.name }
-        val reads = candidates.mapNotNull { h ->
+        // Slice 3: an email can hold more than one find ("PE on Tuesdays and Thursdays" is two weekly days).
+        val reads = candidates.flatMap { h ->
             val day = LONDON.epochDayOf(h.receivedAtMs)
-            SchoolMailRules.read(h.subject, previews[h.id] ?: h.preview, day, children)
-                ?.takeIf { it.endDay >= today }?.let { Triple(h, day, it) }
+            SchoolMailRules.readAll(h.subject, previews[h.id] ?: h.preview, day, children)
+                .filter { it.endDay >= today }.map { Triple(h, day, it) }
         }
         if (reads.isEmpty()) return
         val account = MailLabel.of(a.label)?.label ?: "Mail"
