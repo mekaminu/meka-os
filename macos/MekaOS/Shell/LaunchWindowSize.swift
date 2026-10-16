@@ -24,6 +24,11 @@ enum LaunchWindowSize {
             for window in NSApp.windows where window.isVisible && window.canBecomeMain {
                 window.setContentSize(size)
                 window.center()
+                // Wider than the screen (ci's runner screen is narrower than 1440 pt): keep the left edge, and with it
+                // the sidebar, on screen; the rest runs off the right.
+                if let visible = window.screen?.visibleFrame, window.frame.minX < visible.minX {
+                    window.setFrameOrigin(NSPoint(x: visible.minX, y: window.frame.minY))
+                }
             }
         }
     }
