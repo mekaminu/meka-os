@@ -40,8 +40,11 @@ struct ArchivedForYouView: View {
                             ForEach(card.lines, id: \.id) { line in
                                 ArchivedLineRow(line: line, palette: palette, openEmail: $openEmail) { model.putBackArchived(line.id) }
                             }
+                            // Slice 3: "+ 4 earlier tidies · in All tidied mail" opens the whole list.
                             if let more = card.moreLine {
-                                Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                                Button(more) { MekaHaptics.light(); model.showArchivedAll = true }
+                                    .buttonStyle(.plain)
+                                    .font(MekaType.itemMeta).foregroundStyle(palette.accent)
                             }
                             Text(card.note).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -56,6 +59,11 @@ struct ArchivedForYouView: View {
                                      palette: palette, quiet: true, spoken: open ? "Hide what was archived" : "Show what was archived") {
                             MekaHaptics.tick()
                             open.toggle()
+                        }
+                        ArchivedPill(label: ArchivedAllRules.shared.OPEN, palette: palette, quiet: true,
+                                     spoken: "All tidied mail, every email tidied in the last 30 days") {
+                            MekaHaptics.light()
+                            model.showArchivedAll = true
                         }
                     }
                     .padding(.top, MekaSpace.m)
@@ -240,5 +248,144 @@ private struct ArchivedPill: View {
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(palette.surface, in: Capsule())
             .accessibilityLabel(spoken)
+    }
+}
+
+/// "Archived for you" shows which emails, slice 3: **All tidied mail** — every email Navilife tidied in the last 30 days,
+/// newest first under its day, with the senders as filter chips ("Deliveroo · 12"; All first). Click an email: its
+/// preview unfolds under it as on the card (Put back, Always keep, Unsubscribe, Undo on the bar inside the sheet).
+/// Motion: the sheet scale-fades (system); the summary cross-fades; a chosen chip blends to the accent with a tick
+/// haptic; days and rows stagger in and move on the expand spring as the filter changes; a preview unfolds on the
+/// expand spring. Reduce Motion: cross-fades. Read again every 20 s while open (the server's answers come by sync).
+struct ArchivedAllSheet: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    @State private var sender: String?
+    @State private var list: ArchivedAllList?
+    @State private var openEmail: String?
+    @State private var reads = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.m) {
+            Text(ArchivedAllRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
+            Text(list?.summary ?? " ")
+                .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                .contentTransition(.opacity)
+                .accessibilityLabel(list?.spoken ?? "")
+                .staggeredAppear(0)
+            if let l = list, !l.senders.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: MekaSpace.xs) {
+                        chip(ArchivedAllRules.shared.ALL, spoken: "Show every sender", selected: l.allSelected) { sender = nil }
+                        ForEach(l.senders, id: \.id) { s in
+                            chip(s.label, spoken: s.spoken, selected: s.selected) { sender = s.selected ? nil : s.id }
+                        }
+                    }
+                }
+                .staggeredAppear(1)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    if let l = list {
+                        ForEach(Array(l.days.enumerated()), id: \.element.id) { i, d in
+                            Text(d.label.uppercased()).font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
+                                .padding(.top, MekaSpace.m)
+                                .staggeredAppear(2 + i)
+                            ForEach(d.rows, id: \.id) { r in
+                                row(r)
+                                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                        ForEach([l.more, l.countsOnly, l.days.isEmpty && l.countsOnly == nil ? l.empty : nil].compactMap { $0 }, id: \.self) { line in
+                            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.m)
+                        }
+                    }
+                    Text(ArchivedAllRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, MekaSpace.l)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 520)
+            if model.eventUndo != nil { EventUndoBar(palette: palette) }
+            HStack {
+                Spacer()
+                Button(ArchivedAllRules.shared.CLOSE) { dismiss() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(MekaSpace.l)
+        .frame(width: 600)
+        .background(palette.surface)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: openEmail)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: sender)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: list?.summary)
+        .task(id: sender) {
+            // Read now, then again every 20 s while the sheet is open: asks and the server's answers arrive by sync.
+            while !Task.isCancelled {
+                list = await model.archivedAll(sender: sender)
+                reads += 1
+                try? await Task.sleep(for: .seconds(20))
+            }
+        }
+        .onChange(of: model.eventUndo != nil) { _, _ in
+            // An ask (or its Undo) changes the rows: read again straight away.
+            Task { list = await model.archivedAll(sender: sender); reads += 1 }
+        }
+    }
+
+    private func chip(_ label: String, spoken: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button {
+            MekaHaptics.tick()
+            openEmail = nil
+            action()
+        } label: {
+            Text(label).font(MekaType.itemMeta).lineLimit(1)
+                .foregroundStyle(selected ? palette.accent : palette.textSecondary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(selected ? palette.surfaceRaised : palette.background, in: Capsule())
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: selected)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(spoken)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    @ViewBuilder
+    private func row(_ r: ArchivedAllRow) -> some View {
+        let id = r.id
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Button {
+                MekaHaptics.tick()
+                openEmail = openEmail == id ? nil : id
+            } label: {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text("\(r.from) · \(r.meta)").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                        Text(r.row.subject).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            .lineLimit(2)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Text(r.row.chip).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(1)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                            .background(palette.background, in: Capsule())
+                        Text(r.row.time).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    }
+                    if let state = r.row.state {
+                        Text(state).font(MekaType.itemMeta).foregroundStyle(palette.accent).transition(.opacity)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(r.spoken)
+            if openEmail == id {
+                ArchivedEmailPreviewView(row: r.row, lineState: "\(reads)", palette: palette)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.vertical, MekaSpace.xxs)
     }
 }

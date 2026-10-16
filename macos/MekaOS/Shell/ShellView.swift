@@ -285,6 +285,8 @@ private struct ShellSheetsB: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showWork }, set: { model.showWork = $0 })) { WorkSheet(palette: palette) }
             // "While you were at work" (synced from the Fold), opened from Needs you's card.
             .sheet(isPresented: Binding(get: { model.showAfterWork }, set: { model.showAfterWork = $0 })) { AfterWorkSheet(palette: palette) }
+            // "Archived for you" shows which emails, slice 3: All tidied mail, opened from the card.
+            .sheet(isPresented: Binding(get: { model.showArchivedAll }, set: { model.showArchivedAll = $0 })) { ArchivedAllSheet(palette: palette) }
             // The brief and the shutdown open from Today's cards and from Ask's More, so they live on the shell too.
             .sheet(isPresented: Binding(get: { model.showBrief }, set: { model.showBrief = $0 })) { BriefSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showShutdown }, set: { model.showShutdown = $0 })) { ShutdownSheet(palette: palette) }

@@ -78,7 +78,7 @@ class ArchivedForYouTest {
         val many = (0 until 11).map { batch("m$it", at(60 + it * 30)) }
         val long = assertNotNull(ArchivedForYouRules.card(many, null, at(13 * 60), cal))
         assertEquals(ArchivedForYouRules.SHOWN, long.lines.size)
-        assertEquals("+ 3 earlier tidies · in Activity", long.moreLine)
+        assertEquals("+ 3 earlier tidies · in All tidied mail", long.moreLine)
     }
 
     @Test

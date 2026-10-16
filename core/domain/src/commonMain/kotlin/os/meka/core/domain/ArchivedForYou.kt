@@ -50,7 +50,7 @@ data class ArchivedForYouCard(
     val note: String,
     /** Newest first, at most [ArchivedForYouRules.SHOWN]. */
     val lines: List<ArchivedForYouLine>,
-    /** "+ 4 earlier tidies · in Activity" when more than [ArchivedForYouRules.SHOWN]; else null. */
+    /** "+ 4 earlier tidies · in All tidied mail" when more than [ArchivedForYouRules.SHOWN]; else null. */
     val moreLine: String?,
     /** What a screen reader says for the card's header. */
     val spoken: String,
@@ -147,7 +147,7 @@ object ArchivedForYouRules {
             headline = head,
             note = NOTE,
             lines = lines,
-            moreLine = if (more > 0) "+ $more earlier ${if (more == 1) "tidy" else "tidies"} · in Activity" else null,
+            moreLine = if (more > 0) "+ $more earlier ${if (more == 1) "tidy" else "tidies"} · in ${ArchivedAllRules.TITLE}" else null,
             spoken = "$TITLE. $head.",
         )
     }

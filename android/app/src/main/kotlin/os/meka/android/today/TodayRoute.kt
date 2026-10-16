@@ -462,6 +462,8 @@ fun TodayRoute(
             }
             // Change on a request card in the open Fold's Needs you column.
             RequestChangePane(core, moves)
+            // "Archived for you" shows which emails, slice 3: All tidied mail from the card in that column.
+            ArchivedAllHost(core, moves)
             EventUndoBar(eventUndo, Modifier.align(Alignment.BottomCenter))
         }
       }

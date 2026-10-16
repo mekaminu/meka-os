@@ -46,6 +46,7 @@ import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.ArchivedForYouCard
 import os.meka.core.domain.ArchivedForYouLine
 import os.meka.core.domain.ArchivedForYouRules
+import os.meka.core.domain.ArchivedAllRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -62,6 +63,7 @@ import os.meka.core.facade.MekaCore
 @Composable
 internal fun ArchivedForYouSection(
     card: ArchivedForYouCard, core: MekaCore, undo: (String, (suspend () -> Unit)?) -> Unit, modifier: Modifier = Modifier,
+    openAll: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -108,7 +110,11 @@ internal fun ArchivedForYouSection(
                         }
                     }
                 }
-                card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                // Slice 3: "+ 4 earlier tidies · in All tidied mail" opens the whole list.
+                card.moreLine?.let {
+                    Text(it, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) { haptics.light(); openAll() })
+                }
                 Text(card.note, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             }
         }
@@ -122,6 +128,9 @@ internal fun ArchivedForYouSection(
             }
             val label = if (open) ArchivedForYouRules.HIDE else ArchivedForYouRules.SHOW
             ArchivedPill(label, quiet = true, spoken = "$label what was archived") { haptics.tick(); open = !open }
+            ArchivedPill(ArchivedAllRules.OPEN, quiet = true, spoken = "${ArchivedAllRules.OPEN}, every email tidied in the last 30 days") {
+                haptics.light(); openAll()
+            }
         }
     }
 }
@@ -178,7 +187,7 @@ private fun ArchivedEmailGroupRow(
             androidx.compose.runtime.key(id) {
                 ArchivedEmailRowView(r, onClick = { onOpen(id) })
                 AnimatedVisibility(openEmail == id, enter = unfold(), exit = fold()) {
-                    ArchivedEmailPreviewPanel(r, line, core, onAsk)
+                    ArchivedEmailPreviewPanel(r, line.state, core, onAsk)
                 }
             }
         }
@@ -187,8 +196,8 @@ private fun ArchivedEmailGroupRow(
 }
 
 @Composable
-private fun ArchivedEmailRowView(r: ArchivedEmailRow, onClick: () -> Unit) {
-    val spoken = listOfNotNull(r.subject, r.chip, r.time, r.state).joinToString(", ") + ". Opens its preview"
+internal fun ArchivedEmailRowView(r: ArchivedEmailRow, spokenAs: String? = null, onClick: () -> Unit) {
+    val spoken = spokenAs ?: (listOfNotNull(r.subject, r.chip, r.time, r.state).joinToString(", ") + ". Opens its preview")
     Column(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button, onClick = onClick)
             .semantics(mergeDescendants = true) { contentDescription = spoken }
@@ -209,12 +218,12 @@ private fun ArchivedEmailRowView(r: ArchivedEmailRow, onClick: () -> Unit) {
 /** Slice 2: the email's preview, read from the synced tidy (it follows the server's answers as they come). */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun ArchivedEmailPreviewPanel(
-    r: ArchivedEmailRow, line: ArchivedForYouLine, core: MekaCore, onAsk: (ArchivedEmailPreview, MailTidiedAction) -> Unit,
+internal fun ArchivedEmailPreviewPanel(
+    r: ArchivedEmailRow, refresh: Any?, core: MekaCore, onAsk: (ArchivedEmailPreview, MailTidiedAction) -> Unit,
 ) {
     var p by remember { mutableStateOf<ArchivedEmailPreview?>(null) }
     // Read again whenever the card changes (an ask, the server's answer).
-    LaunchedEffect(r, line.state) { p = runCatching { core.archivedEmail(r.batchId, r.key) }.getOrNull() }
+    LaunchedEffect(r, refresh) { p = runCatching { core.archivedEmail(r.batchId, r.key) }.getOrNull() }
     val pv = p ?: return
     Column(
         Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
@@ -255,7 +264,7 @@ private fun ReasonChip(label: String) {
 }
 
 @Composable
-private fun ArchivedPill(label: String, spoken: String, quiet: Boolean = false, onClick: () -> Unit) {
+internal fun ArchivedPill(label: String, spoken: String, quiet: Boolean = false, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemMeta,
         color = if (quiet) Meka.colors.textSecondary else Meka.colors.accent,

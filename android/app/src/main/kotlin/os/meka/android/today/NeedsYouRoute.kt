@@ -118,6 +118,7 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
             }
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             RequestChangePane(core, moves)
+            ArchivedAllHost(core, moves)
             EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
         }
       }
@@ -157,6 +158,8 @@ internal class DecisionMoves(
     val onSchoolCover: (SchoolCover, Boolean) -> Unit = { _, _ -> },
     /** Opens a task (a reminder under Coming up, Fold review 2026-10-12 17:56 item 3). */
     val openTask: (String) -> Unit = {},
+    /** "Archived for you" shows which emails, slice 3: All tidied mail open over the screen ([ArchivedAllHost]). */
+    val archivedAll: MutableState<Boolean> = mutableStateOf(false),
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -464,7 +467,8 @@ internal fun NeedsYouColumn(
         archived?.let { a ->
             item(key = "archived-for-you") {
                 ArchivedForYouSection(a, core, moves.undoLine,
-                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)))
+                    Modifier.animateItem().padding(bottom = MekaSpace.m).appear(rememberAppearance(2, play)),
+                    openAll = { moves.archivedAll.value = true })
             }
         }
         // Inbox autopilot, slice 5c: the weekly "Not opened in 30 days", from Saturday 09:00 until answered.

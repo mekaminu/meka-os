@@ -21,6 +21,8 @@ final class CoreModel {
     /// Activity → Calls (call notifications, slice 4): recent calls with their detail, numbers as numbers on the Mac.
     private(set) var callLog: CallLogView?
     var showAfterWork = false
+    /// "Archived for you" shows which emails, slice 3: All tidied mail, opened from the card.
+    var showArchivedAll = false
     /// Requests from people Meka watches (V1, requests slice 4): the Fold read them, the cards sync; Add · Change ·
     /// Not a task here clears them there too.
     private(set) var requests: [RequestCard] = []
@@ -4664,6 +4666,13 @@ final class CoreModel {
     func archivedEmail(batchId: String, key: String) async -> ArchivedEmailPreview? {
         guard let core else { return nil }
         return try? await core.archivedEmail(batchId: batchId, key: key)
+    }
+
+    /// Slice 3: All tidied mail (every email tidied in the last 30 days), filtered to one sender's id when given.
+    /// Only a String crosses to the core.
+    func archivedAll(sender: String?) async -> ArchivedAllList? {
+        guard let core else { return nil }
+        return try? await core.archivedAll(sender: sender)
     }
 
     /// Slice 2: Put back, Always keep or Unsubscribe on one email (an action's name), done at the server's next check;

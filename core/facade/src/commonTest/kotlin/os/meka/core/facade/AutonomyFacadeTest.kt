@@ -170,5 +170,10 @@ class AutonomyFacadeTest {
         mac.undoSeenArchivedForYou()
         mac.syncNow(); fold.syncNow()
         assertNull(fold.archivedForYou.value)
+        // Slice 3: All tidied mail reads empty, and a sender nobody sent from shows the whole (empty) list.
+        val all = fold.archivedAll("nobody")
+        assertEquals(os.meka.core.domain.ArchivedAllRules.EMPTY, all.empty)
+        assertTrue(all.allSelected)
+        assertTrue(all.days.isEmpty())
     }
 }

@@ -904,6 +904,14 @@ class MekaCore(
     /** One sync round at a time: the confined dispatcher alone would interleave rounds at suspension points. */
     private val syncMutex = Mutex()
 
+    private val _archivedTick = MutableStateFlow(0)
+
+    /**
+     * "Archived for you" shows which emails, slice 3: moves on whenever the synced tidies may have changed (a sync, an
+     * ask, Put back), so an open All tidied mail reads [archivedAll] again.
+     */
+    val archivedTick: StateFlow<Int> = _archivedTick.asStateFlow()
+
     private val _archivedForYou = MutableStateFlow<os.meka.core.domain.ArchivedForYouCard?>(null)
     /**
      * Inbox autopilot, slice 4: Needs you's "Archived for you" card, due at the 12:30 and 18:30 digests while Autopilot
@@ -4377,6 +4385,7 @@ class MekaCore(
     )
 
     private fun archivedChanged() {
+        _archivedTick.value = _archivedTick.value + 1
         _archivedForYou.value = os.meka.core.domain.ArchivedForYouRules.card(
             activity.mailTidyBatches(), archivedSeen(), nowMs(), ZoneCalendar(timeZone),
         )
@@ -4431,6 +4440,15 @@ class MekaCore(
         archivedChanged()
         val e = b.emails.first { it.key == key }
         os.meka.core.domain.MailTidiedAskRules.barLine(a, e.from, junk = e.tidy == os.meka.core.domain.MailTidy.JUNK_TRASH || e.tidy == os.meka.core.domain.MailTidy.RESCUE)
+    }
+
+    /**
+     * "Archived for you" shows which emails, slice 3: **All tidied mail** — every email tidied in the last 30 days, newest
+     * first by day, filtered to one sender when [sender] (an [os.meka.core.domain.ArchivedAllSender.id]) is given. Read
+     * again after an ask or as tidies sync; each row opens [archivedEmail].
+     */
+    suspend fun archivedAll(sender: String?): os.meka.core.domain.ArchivedAllList = onCore {
+        os.meka.core.domain.ArchivedAllRules.list(activity.mailTidyBatches(), sender, nowMs(), ZoneCalendar(timeZone))
     }
 
     /** Undo on the bar after [askArchivedEmail]: the ask comes off while the server hasn't acted on it yet. */
