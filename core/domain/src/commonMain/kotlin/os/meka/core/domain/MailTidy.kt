@@ -189,6 +189,12 @@ object MailTidyBatchFields {
     const val RECEIPTS_PENCE = "receiptsPence"
     const val RECEIPTS_PRICED = "receiptsPriced"
     const val MERCHANTS = "merchants"
+    /**
+     * "Archived for you" shows which emails, slice 1 (2026-10-16): the emails the batch moved, one per line
+     * ([MailTidiedRules.encode]: sender's name and domain, subject, when, what was done, a receipt's price; never the
+     * address or the body), Text; absent on older batches and on the backlog and Empty Junk clean-ups.
+     */
+    const val EMAILS = "emails"
 
     /** The count field of each tidy kind. */
     fun kindField(t: MailTidy): String? = when (t) {
@@ -226,6 +232,8 @@ data class MailTidyBatch(
     val merchants: List<String> = emptyList(),
     /** Inbox fixes, slice 5: [MailTidyBatchFields.ACCOUNT_KEY], or null on an older batch. */
     val accountKey: String? = null,
+    /** Slice 1 of "Archived for you shows which emails": what it moved, newest first (empty on an older batch). */
+    val emails: List<MailTidiedEmail> = emptyList(),
 ) {
     val canUndo: Boolean get() = undoneAtMs == null && undoAskedAtMs == null
 }
@@ -338,6 +346,7 @@ object MailAutopilotRules {
             receiptsPriced = (f[MailTidyBatchFields.RECEIPTS_PRICED] as? FieldValue.Int64)?.value?.toInt() ?: 0,
             merchants = text(MailTidyBatchFields.MERCHANTS)?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
             accountKey = text(MailTidyBatchFields.ACCOUNT_KEY),
+            emails = MailTidiedRules.decode(text(MailTidyBatchFields.EMAILS)),
         )
     }
 

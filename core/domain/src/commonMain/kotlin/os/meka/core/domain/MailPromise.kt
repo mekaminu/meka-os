@@ -91,6 +91,8 @@ object MailPromiseRules {
     fun read(fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedDay: Long, automated: Boolean = false): MailPromise? {
         val texts = listOfNotNull(subject, preview).filter { it.isNotBlank() }
         if (texts.isEmpty() || texts.any { NOISE.containsMatchIn(it) }) return null
+        // A parcel on its way is a Parcels item, never Waiting for (a refund promise excepted).
+        val parcel = ParcelRules.isParcelMail(fromAddress, subject, preview)
         for (t in texts) {
             for (m in PROMISE.findAll(t) + RECEIVE.findAll(t)) {
                 val sentence = sentenceFrom(t, m.range.first)
@@ -99,7 +101,7 @@ object MailPromiseRules {
                 val rest = sentence.substring((m.range.last + 1 - m.range.first).coerceAtMost(sentence.length)).trim()
                 if (verb != null && verb in SEND_VERBS && NOTICE_OBJECT.containsMatchIn(rest)) continue
                 val what = what(verb, rest, subject) ?: continue
-                if (automated && !REFUND.containsMatchIn(sentence)) continue
+                if ((automated || parcel) && !REFUND.containsMatchIn(sentence)) continue
                 return MailPromise(
                     who = MailReceiptRules.merchant(fromName, fromAddress),
                     what = what,
@@ -140,7 +142,7 @@ object MailPromiseRules {
             .replace(Regex("""\s+(?:over|across|through|to\s+you|back|for\s+you)$""", RegexOption.IGNORE_CASE), "")
             .replace(Regex("""^(?:the|a|an|your)\s+""", RegexOption.IGNORE_CASE), "")
             .trim().trimEnd('.', ',', '!', ' ')
-        val generic = obj.isEmpty() || obj.lowercase() in setOf("it", "this", "that", "them", "these", "those", "you", "one")
+        val generic = obj.isEmpty() || obj.lowercase() in setOf("it", "this", "that", "them", "these", "those", "you", "one", "again", "now", "soon", "out", "up", "too", "as well")
         val title = when (verb) {
             null -> if (generic) null else obj // "you will receive your refund"
             "get back to you", "come back to you", "reply", "respond" -> "A reply"

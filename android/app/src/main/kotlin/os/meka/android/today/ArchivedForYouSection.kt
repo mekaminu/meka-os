@@ -36,6 +36,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import os.meka.core.domain.ArchivedEmailGroup
 import os.meka.core.domain.ArchivedForYouCard
 import os.meka.core.domain.ArchivedForYouLine
 import os.meka.core.domain.ArchivedForYouRules
@@ -44,6 +45,7 @@ import os.meka.core.facade.MekaCore
 /**
  * Inbox autopilot, slice 4: "Archived for you" in Needs you, from the 12:30 and 18:30 digests while Autopilot tidied
  * something Meka hasn't seen. The headline ("Tidied 14 · 9 newsletters · 3 receipts and orders · …"), then each tidy with
+ * its emails by sender (2026-10-16: "Deliveroo · 4 promos", each subject with a muted reason chip and its time) and
  * Put back (the server returns those emails to the inbox at its next check); Show/Hide unfolds the tidies in place (expand
  * spring; reduced motion: cross-fade). Got it folds the card away on both apps (synced), with Undo.
  */
@@ -103,19 +105,61 @@ internal fun ArchivedForYouSection(
 
 @Composable
 private fun ArchivedLineRow(line: ArchivedForYouLine, onPutBack: () -> Unit) {
-    Row(Modifier.fillMaxWidth().testTag("archived-${line.id}"), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { }) {
-            Text("${line.time} · ${line.account}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
-            Text(line.detail, style = MekaType.body, color = Meka.colors.textPrimary)
-            // "Putting back at the next check…" / "Put back 6 emails in the inbox" fades in once asked.
-            AnimatedVisibility(line.state != null, enter = fadeIn(), exit = fadeOut()) {
-                Text(line.state.orEmpty(), style = MekaType.itemMeta, color = Meka.colors.accent)
+    Column(Modifier.fillMaxWidth().testTag("archived-${line.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { }) {
+                Text("${line.time} · ${line.account}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                Text(line.detail, style = MekaType.body, color = Meka.colors.textPrimary)
+                // "Putting back at the next check…" / "Put back 6 emails in the inbox" fades in once asked.
+                AnimatedVisibility(line.state != null, enter = fadeIn(), exit = fadeOut()) {
+                    Text(line.state.orEmpty(), style = MekaType.itemMeta, color = Meka.colors.accent)
+                }
+            }
+            if (line.canPutBack) {
+                ArchivedPill(ArchivedForYouRules.PUT_BACK, spoken = "${ArchivedForYouRules.PUT_BACK} ${line.detail} in the inbox", onClick = onPutBack)
             }
         }
-        if (line.canPutBack) {
-            ArchivedPill(ArchivedForYouRules.PUT_BACK, spoken = "${ArchivedForYouRules.PUT_BACK} ${line.detail} in the inbox", onClick = onPutBack)
+        // "Archived for you" shows which emails: the tidy's emails by sender, each subject with its reason and time
+        // (the sender's words, shown as plain text only).
+        if (line.emails.isNotEmpty()) {
+            Column(
+                Modifier.fillMaxWidth().padding(start = MekaSpace.s),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.s),
+            ) {
+                line.emails.forEach { g -> androidx.compose.runtime.key(g.id) { ArchivedEmailGroupRow(g) } }
+                line.emailsMore?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+            }
         }
     }
+}
+
+/** One sender in a tidy: "Deliveroo · 4 promos", its domain and account, then each subject with a muted reason chip. */
+@Composable
+private fun ArchivedEmailGroupRow(g: ArchivedEmailGroup) {
+    Column(
+        Modifier.fillMaxWidth().testTag("archived-email-${g.id}").semantics(mergeDescendants = true) { contentDescription = g.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        Text(g.title, style = MekaType.body, color = Meka.colors.textPrimary)
+        Text(g.meta, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+        g.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(r.subject, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2, modifier = Modifier.weight(1f))
+                ReasonChip(r.chip)
+                Text(r.time, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+            }
+        }
+        g.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+    }
+}
+
+@Composable
+private fun ReasonChip(label: String) {
+    Text(
+        label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xxs),
+    )
 }
 
 @Composable

@@ -2984,14 +2984,14 @@ final class MekaCoreBridgeTests: XCTestCase {
                                   detail: "3 newsletters → Navilife/Newsletters · 2 receipts and orders → Navilife/Receipts", count: 5,
                                   undoAskedAtMs: nil, undoneAtMs: nil, undoNote: nil,
                                   kinds: [MailTidy.newsletter: KotlinInt(int: 3), MailTidy.receipt: KotlinInt(int: 2)],
-                                  backlog: false, junk: false, receiptsPence: nil, receiptsPriced: 0, merchants: [])
+                                  backlog: false, junk: false, receiptsPence: nil, receiptsPriced: 0, merchants: [], accountKey: nil, emails: [])
         XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [batch]), "Tidied 5 · 3 newsletters · 2 receipts and orders")
         // Slice 5b: an unsubscribed sender's later mail goes to Trash, counted with the rest.
         let trashed = MailTidyBatch(id: "t2", atMs: 2_000, account: "Personal", summary: "Tidied 2 emails · Personal",
                                     detail: "2 from unsubscribed senders → Trash", count: 2,
                                     undoAskedAtMs: nil, undoneAtMs: nil, undoNote: nil,
                                     kinds: [MailTidy.trash: KotlinInt(int: 2)], backlog: false, junk: false,
-                                    receiptsPence: nil, receiptsPriced: 0, merchants: [])
+                                    receiptsPence: nil, receiptsPriced: 0, merchants: [], accountKey: nil, emails: [])
         XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [trashed]), "Tidied 2 · 2 from unsubscribed senders")
         XCTAssertEqual(MailTidy.trash.destination, "→ Trash")
         // Slice 3c: the daily Junk review's tidy reads the same way.

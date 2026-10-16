@@ -1,0 +1,184 @@
+package os.meka.core.domain
+
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.fv
+
+/*
+ * "Archived for you" shows which emails (Meka, 2026-10-15 20:29: "these emails I can't even look at to decide if
+ * they're good to archive; I don't see the sender etc"), slice 1. Each tidy the server does (Autopilot's and the daily
+ * Junk review's; not the approved backlog or Empty Junk clean-ups, which can run to thousands) now carries the list of
+ * the emails it moved in one Text field on its `mail_tidy` entity ([MailTidyBatchFields.EMAILS], ADR-008 addendum
+ * 2026-10-16): per email the sender's name (else the domain's name), the sender's domain (never the whole address),
+ * the subject, when it came, what was done with it and, for a priced receipt, what it cost. It lives exactly as long
+ * as the tidy record (Delete mail data removes both). Every word of it is the sender's (ADR-006): shown as plain
+ * text, never acted on. Non-AI, pure, unit-tested.
+ */
+
+/** One email a tidy moved, as the apps read it. */
+data class MailTidiedEmail(
+    /** A stable key for the email ("te" + a hash of the account and the provider's id), for Put back per email later. */
+    val key: String,
+    val tidy: MailTidy,
+    /** For a notification or promo, which of the two ([MailSort] name); null otherwise or when not known. */
+    val sort: MailSort?,
+    val receivedAtMs: Long,
+    /** "Amazon": the sender's name, else the domain's name. */
+    val from: String,
+    /** "amazon.co.uk"; null when the sender had no address. */
+    val domain: String?,
+    /** As sent; "(no subject)" when it had none. */
+    val subject: String,
+    /** A priced receipt's amount, else null. */
+    val pence: Long?,
+)
+
+/** One email under a sender in the card. */
+data class ArchivedEmailRow(
+    val key: String,
+    /** "Your order has shipped". */
+    val subject: String,
+    /** "Promo", "Newsletter", "Receipt £12.99", "Junk · Trash", "Rescued from Junk". */
+    val chip: String,
+    /** "14:02" today, else "Mon 12 Oct · 14:02". */
+    val time: String,
+)
+
+/** A sender's emails in one tidy: "Deliveroo · 4 promos" when several, else the sender alone. */
+data class ArchivedEmailGroup(
+    val id: String,
+    /** "Deliveroo · 4 promos" / "Amazon". */
+    val title: String,
+    /** "amazon.co.uk · Personal" (the account always; the domain when known). */
+    val meta: String,
+    /** Newest first, at most [MailTidiedRules.ROWS_SHOWN]. */
+    val rows: List<ArchivedEmailRow>,
+    /** "+ 2 more from Deliveroo" when the sender has more than [MailTidiedRules.ROWS_SHOWN]; else null. */
+    val moreLine: String?,
+    /** What a screen reader says for the group. */
+    val spoken: String,
+)
+
+object MailTidiedRules {
+    /** Fits inside the sync kernel's 20,000-character Text limit with room to spare. */
+    const val MAX_CHARS = 18_000
+    const val MAX_FROM = 60
+    const val MAX_DOMAIN = 80
+    const val MAX_SUBJECT = 140
+    const val NO_SUBJECT = "(no subject)"
+    /** Senders listed under one tidy in the card; the rest are counted. */
+    const val GROUPS_SHOWN = 6
+    /** Emails listed under one sender. */
+    const val ROWS_SHOWN = 3
+
+    fun key(accountId: String, messageId: String): String = "te" + ActivityRules.fnv64("mailtidied:$accountId:$messageId")
+
+    private fun clean(s: String?, max: Int): String =
+        s.orEmpty().map { if (it == '\t' || it == '\n' || it == '\r' || it.code < 0x20) ' ' else it }.joinToString("")
+            .replace(Regex("""\s+"""), " ").trim().let { if (it.length <= max) it else it.take(max - 1).trimEnd() + "…" }
+
+    /** The email as one line of the field (tab-separated, version 1). */
+    fun line(e: MailTidiedEmail): String = listOf(
+        "1", e.key, e.tidy.name, e.sort?.name.orEmpty(), e.receivedAtMs.toString(), clean(e.from, MAX_FROM),
+        clean(e.domain, MAX_DOMAIN), clean(e.subject, MAX_SUBJECT), e.pence?.toString().orEmpty(),
+    ).joinToString("\t")
+
+    /** The field's value: newest first, as many as fit in [MAX_CHARS]; null for none. */
+    fun encode(emails: List<MailTidiedEmail>): String? {
+        val out = StringBuilder()
+        for (e in emails.sortedByDescending { it.receivedAtMs }) {
+            val l = line(e)
+            if (out.length + l.length + 1 > MAX_CHARS) break
+            if (out.isNotEmpty()) out.append('\n')
+            out.append(l)
+        }
+        return out.toString().takeIf { it.isNotEmpty() }
+    }
+
+    fun fields(emails: List<MailTidiedEmail>): Map<String, FieldValue> =
+        encode(emails)?.let { mapOf(MailTidyBatchFields.EMAILS to it.fv()) } ?: emptyMap()
+
+    /** Reads the field back; a line it can't read (a later version) is skipped. */
+    fun decode(text: String?): List<MailTidiedEmail> = text.orEmpty().split('\n').mapNotNull { l ->
+        val p = l.split('\t')
+        if (p.size < 9 || p[0] != "1") return@mapNotNull null
+        val tidy = MailTidy.of(p[2])?.takeIf { it != MailTidy.KEEP } ?: return@mapNotNull null
+        MailTidiedEmail(
+            key = p[1], tidy = tidy, sort = MailSort.entries.firstOrNull { it.name == p[3] },
+            receivedAtMs = p[4].toLongOrNull() ?: return@mapNotNull null,
+            from = p[5].ifBlank { "Unknown sender" }, domain = p[6].ifBlank { null },
+            subject = p[7].ifBlank { NO_SUBJECT }, pence = p[8].toLongOrNull()?.takeIf { it > 0 },
+        )
+    }
+
+    /** The reason chip: "Promo", "Newsletter", "Receipt £12.99", "Junk · Trash", "Rescued from Junk". */
+    fun chip(e: MailTidiedEmail): String = when (e.tidy) {
+        MailTidy.NEWSLETTER -> "Newsletter"
+        MailTidy.RECEIPT -> "Receipt" + (e.pence?.let { " " + MailReceiptRules.format(it) } ?: "")
+        MailTidy.ARCHIVE -> when (e.sort) {
+            MailSort.PROMO -> "Promo"
+            MailSort.NOTIFICATION -> "Notification"
+            else -> "Notification or promo"
+        }
+        MailTidy.TRASH -> "Unsubscribed · Trash"
+        MailTidy.JUNK_TRASH -> "Junk · Trash"
+        MailTidy.RESCUE -> "Rescued from Junk"
+        MailTidy.KEEP -> "Kept"
+    }
+
+    /** "4 promos", "2 receipts", "3 emails" (mixed). */
+    private fun count(es: List<MailTidiedEmail>): String {
+        val n = es.size
+        val kinds = es.map { noun(it) }.distinct()
+        val k = kinds.singleOrNull() ?: ("email" to "emails")
+        return "$n ${if (n == 1) k.first else k.second}"
+    }
+
+    private fun noun(e: MailTidiedEmail): Pair<String, String> = when (e.tidy) {
+        MailTidy.NEWSLETTER -> "newsletter" to "newsletters"
+        MailTidy.RECEIPT -> "receipt" to "receipts"
+        MailTidy.ARCHIVE -> when (e.sort) {
+            MailSort.PROMO -> "promo" to "promos"
+            MailSort.NOTIFICATION -> "notification" to "notifications"
+            else -> "notification or promo" to "notifications and promos"
+        }
+        MailTidy.TRASH -> "email to Trash" to "emails to Trash"
+        MailTidy.JUNK_TRASH -> "junk email" to "junk emails"
+        MailTidy.RESCUE -> "email rescued from Junk" to "emails rescued from Junk"
+        MailTidy.KEEP -> "email" to "emails"
+    }
+
+    private fun time(ms: Long, today: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(ms)
+        val clock = LocalClock.formatMinute(cal.minuteOfDay(ms))
+        return if (day == today) clock else "${CivilDate.shortLabel(day)} · $clock"
+    }
+
+    /**
+     * A tidy's emails as the card shows them: by sender (newest sender first), each sender's emails newest first.
+     * Returns the groups shown (at most [GROUPS_SHOWN]) and, when the tidy moved more than it lists, "+ 12 more in
+     * this tidy" (more senders than shown, or emails the field couldn't hold).
+     */
+    fun groups(batch: MailTidyBatch, emails: List<MailTidiedEmail>, nowMs: Long, cal: LocalCalendar): Pair<List<ArchivedEmailGroup>, String?> {
+        if (emails.isEmpty()) return emptyList<ArchivedEmailGroup>() to null
+        val today = cal.epochDayOf(nowMs)
+        val bySender = emails.groupBy { it.from.lowercase() }.values
+            .map { es -> es.sortedWith(compareByDescending<MailTidiedEmail> { it.receivedAtMs }.thenBy { it.key }) }
+            .sortedWith(compareByDescending<List<MailTidiedEmail>> { it.first().receivedAtMs }.thenBy { it.first().from.lowercase() })
+        val shown = bySender.take(GROUPS_SHOWN).map { es ->
+            val first = es.first()
+            val title = if (es.size == 1) first.from else "${first.from} · ${count(es)}"
+            val meta = listOfNotNull(first.domain, batch.account).joinToString(" · ")
+            val rows = es.take(ROWS_SHOWN).map { e -> ArchivedEmailRow(e.key, e.subject, chip(e), time(e.receivedAtMs, today, cal)) }
+            val more = es.size - rows.size
+            ArchivedEmailGroup(
+                id = batch.id + ":" + first.key,
+                title = title, meta = meta, rows = rows,
+                moreLine = if (more > 0) "+ $more more from ${first.from}" else null,
+                spoken = "$title, $meta. " + rows.joinToString(". ") { "${it.subject}, ${it.chip}, ${it.time}" } + ".",
+            )
+        }
+        val listedInGroups = bySender.take(GROUPS_SHOWN).sumOf { it.size }
+        val more = maxOf(batch.count, emails.size) - listedInGroups
+        return shown to (if (more > 0) "+ $more more in this tidy" else null)
+    }
+}

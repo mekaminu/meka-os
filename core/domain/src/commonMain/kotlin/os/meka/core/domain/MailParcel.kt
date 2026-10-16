@@ -126,6 +126,21 @@ object ParcelRules {
     private val CLOCK_RANGE = Regex("""\b(\d{1,2})[:.](\d{2})\s*(?:-|–|to|and)\s*(\d{1,2})[:.](\d{2})\b""")
     private val AMPM_RANGE = Regex("""\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?\s*(?:-|–|to|and)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b""", RegexOption.IGNORE_CASE)
 
+    /** Words that make an email about a delivery for sure (narrower than [PARCEL_WORDS]: no "order" or "shipping"). */
+    private val DELIVERY_WORDS = Regex(
+        """\b(parcel|package|delivery|delivered|shipped|dispatched|courier|tracking|shipment|out\s+for\s+delivery)\b""",
+        RegexOption.IGNORE_CASE,
+    )
+
+    /**
+     * Whether an email is about a parcel on its way (a carrier sent it or names it, or its words are a delivery's):
+     * such an email is a Parcels item, never a promise for Waiting for (2026-10-16: "Your parcel is with DPD" read as
+     * "Waiting for: Again").
+     */
+    fun isParcelMail(fromAddress: String?, subject: String?, preview: String?): Boolean =
+        carrier(fromAddress, subject, preview) != null ||
+            listOfNotNull(subject, preview).any { DELIVERY_WORDS.containsMatchIn(it) }
+
     /** The carrier the email is from, else one its words name; null for neither. */
     fun carrier(fromAddress: String?, subject: String?, preview: String?): String? {
         val domain = MailSortRules.domain(fromAddress)

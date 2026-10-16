@@ -33,6 +33,8 @@ import os.meka.core.domain.MailTidyRules
 import os.meka.core.domain.MailAutopilotRules
 import os.meka.core.domain.MailCheckRules
 import os.meka.core.domain.MailTidy
+import os.meka.core.domain.MailTidiedEmail
+import os.meka.core.domain.MailTidiedRules
 import os.meka.core.domain.MailJunkClearRules
 import os.meka.core.domain.MailUnreadRules
 import os.meka.core.domain.MailMarkReadRules
@@ -1388,7 +1390,11 @@ class Integrations(
         // Slice 3f: an order at or above his Warranty reminders threshold puts the warranty's end on the Renewals radar.
         val level = if (receiptHeaders.isEmpty()) null else MailWarrantyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailWarrantyRules.ENTITY_ID))
         val warranties = if (level == null) 0 else receiptHeaders.zip(receipts).count { (h, r) -> warrantyReminder(a, account, h, r, previews[h.id] ?: h.preview, level) }
-        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts, returns, warranties))
+        // "Archived for you" shows which emails: the batch lists them (sender's name and domain, subject; never the address).
+        val sorts = candidates.associate { (h, s) -> h.id to s.sort }
+        val pence = receiptHeaders.zip(receipts).associate { (h, r) -> h.id to r.pence }
+        val emails = tidiedEmails(a, done) { h, t -> (if (t == MailTidy.ARCHIVE || t == MailTidy.TRASH) sorts[h.id] else null) to pence[h.id] }
+        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, done.groupingBy { it.second }.eachCount(), receipts, returns, warranties) + emails)
         // Slice 5b: each unsubscribed sender's row in Mail says how many later emails went to Trash.
         done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
             writeSender(a, id, MailUnsubscribeRules.trashedFields(ss.first().trashed, ss.size, at))
@@ -1478,8 +1484,22 @@ class Integrations(
         val rescued = done.filter { it.second == MailTidy.RESCUE }
         if (rescued.isNotEmpty()) ms.neverTidy(a.id, rescued.map { it.first.id } + rescued.map { moved.getValue(it.first.id) })
         val account = MailLabel.of(a.label)?.label ?: "Mail"
-        writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()))
+        writeTidy(a, batchId, MailJunkRules.batchFields(nowMs, account, done.groupingBy { it.second }.eachCount()) + tidiedEmails(a, done))
     }
+
+    /** "Archived for you" shows which emails, slice 1: the [MailTidyBatchFields.EMAILS] field for what a tidy moved. */
+    private fun tidiedEmails(
+        a: AccountRow, done: List<Pair<MailHeader, MailTidy>>,
+        extra: (MailHeader, MailTidy) -> Pair<MailSort?, Long?> = { _, _ -> null to null },
+    ): Map<String, FieldValue> = MailTidiedRules.fields(done.map { (h, t) ->
+        val (sort, pence) = extra(h, t)
+        MailTidiedEmail(
+            key = MailTidiedRules.key(a.id, h.id), tidy = t, sort = sort, receivedAtMs = h.receivedAtMs,
+            from = MailReceiptRules.merchant(h.fromName, h.fromAddress) ?: "Unknown sender",
+            domain = MailSortRules.domain(h.fromAddress), subject = h.subject?.takeIf { it.isNotBlank() } ?: MailTidiedRules.NO_SUBJECT,
+            pence = pence,
+        )
+    })
 
     /**
      * Inbox fixes, slice 3: **Empty Junk**. Until Meka approves, the Junk folder is counted now and then

@@ -783,6 +783,14 @@ class MailSyncTest {
         assertEquals(FieldValue.Int64(1250), f[MailTidyBatchFields.RECEIPTS_PENCE])
         assertEquals(FieldValue.Text("Shop"), f[MailTidyBatchFields.MERCHANTS])
         assertTrue((f[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains("→ Navilife/Receipts · £12.50 · Shop"))
+        // "Archived for you" shows which emails: each one's sender, domain and subject (never the address), and the receipt's price.
+        val emails = os.meka.core.domain.MailTidiedRules.decode((f[MailTidyBatchFields.EMAILS] as FieldValue.Text).value)
+        assertEquals(3, emails.size)
+        val receipt = emails.single { it.tidy == MailTidy.RECEIPT }
+        assertEquals("Your order has shipped", receipt.subject)
+        assertEquals("shop.example", receipt.domain)
+        assertEquals(1250L, receipt.pence)
+        assertFalse((f[MailTidyBatchFields.EMAILS] as FieldValue.Text).value.contains("@"))
         assertEquals(3, ms.tidied(id, batchId).size)
         // The next check plans nothing again.
         gmail.nextRound = { MailChanges(cursor = "h4") }

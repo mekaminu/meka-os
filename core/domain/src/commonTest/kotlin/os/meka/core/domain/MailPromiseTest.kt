@@ -99,4 +99,18 @@ class MailPromiseTest {
         val fl = MailRenewalRules.read("fl", MailPromiseRules.serverFields(loose, "Personal", null, received))!!
         assertEquals("Waiting for: An answer · no day given · chase Sat 17 Oct", MailPromiseRules.line(fl, received))
     }
+
+    @Test
+    fun aParcelOnItsWayIsNeverAPromise() {
+        // 2026-10-16: "John Lewis · Waiting for: Again" from a DPD update; a parcel is a Parcels item.
+        assertNull(read("Your parcel is with DPD", "We'll deliver again tomorrow between 10:00 and 11:00", "John Lewis", "orders@johnlewis.example"))
+        assertNull(read("Your order has been dispatched", "We will send tracking details shortly", "Shopco", "hello@shopco.example"))
+        assertTrue(ParcelRules.isParcelMail("hello@shopco.example", "Your parcel is with DPD", null))
+        assertTrue(!ParcelRules.isParcelMail("sam@example.com", "Re: contract", "I'll send you the signed contract by Friday"))
+        // A refund promised in a parcel's email still counts.
+        assertEquals("Refund", read("Your return parcel arrived", "You will receive your refund within 5 days", "Shopco", "hello@shopco.example")!!.what)
+        // A stray adverb is never the thing awaited.
+        assertEquals("A reply", read("Re: plans", "Sorry, I'll reply again tomorrow")!!.what)
+        assertEquals("Plans", read("Re: plans", "I'll send again tomorrow")!!.what)
+    }
 }

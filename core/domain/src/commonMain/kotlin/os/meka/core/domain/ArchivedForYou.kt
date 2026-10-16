@@ -10,8 +10,10 @@ import os.meka.core.sync.fv
  * then each tidy (time, account, what) with **Put back** (the tidy's Undo: the server returns those emails to the inbox
  * at its next check). **Got it** folds the card away on both apps (synced) until the next digest finds new tidies.
  *
- * Which emails a tidy moved stays on the server (their ids only), so the card lists tidies, not emails; Gmail and Outlook
- * keep them under Navilife/Newsletters, Navilife/Receipts or Archive. Non-AI, pure, unit-tested.
+ * Gmail and Outlook keep them under Navilife/Newsletters, Navilife/Receipts or Archive. Since 2026-10-16 ("Archived for
+ * you shows which emails", slice 1) each tidy also lists its emails by sender ([MailTidiedRules.groups]: "Deliveroo ·
+ * 4 promos", each subject with its reason chip and time); a tidy from before then shows its counts only. Non-AI, pure,
+ * unit-tested.
  *
  * Seen is one `context_mode` entity (id [ENTITY_ID], ADR-008 addendum 2026-10-13): [ArchivedForYouFields.SEEN_AT]
  * (Int64), LWW, written by either app.
@@ -32,6 +34,10 @@ data class ArchivedForYouLine(
     val canPutBack: Boolean,
     /** "Putting back at the next check…" or the server's "Put back 6 emails in the inbox"; null while it stands. */
     val state: String?,
+    /** Its emails by sender (empty on a tidy from before 2026-10-16). */
+    val emails: List<ArchivedEmailGroup> = emptyList(),
+    /** "+ 12 more in this tidy" when it moved more than [emails] shows; else null. */
+    val emailsMore: String? = null,
 )
 
 data class ArchivedForYouCard(
@@ -120,6 +126,7 @@ object ArchivedForYouRules {
         val lines = sorted.take(SHOWN).map { b ->
             val day = cal.epochDayOf(b.atMs)
             val clock = LocalClock.formatMinute(cal.minuteOfDay(b.atMs))
+            val (groups, emailsMore) = MailTidiedRules.groups(b, b.emails, nowMs, cal)
             ArchivedForYouLine(
                 id = b.id,
                 time = if (day == today) clock else "${CivilDate.shortLabel(day)} · $clock",
@@ -127,6 +134,8 @@ object ArchivedForYouRules {
                 detail = b.detail ?: b.summary,
                 canPutBack = b.canUndo && nowMs - b.atMs <= MailAutopilotRules.UNDO_DAYS * 86_400_000L,
                 state = MailAutopilotPanelRules.state(b),
+                emails = groups,
+                emailsMore = emailsMore,
             )
         }
         val more = sorted.size - lines.size
