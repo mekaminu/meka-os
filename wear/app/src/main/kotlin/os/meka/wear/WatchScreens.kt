@@ -323,6 +323,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
 
         ParkingRows(home.parking, reduced) { carId -> scope.launch { runCatching { core.watchParkingExtend(carId) } } }
 
+        DraftRow(core, home.draft, reduced)
+
         InboxRow(home.inbox, reduced)
 
         Spacer(Modifier.height(MekaSpace.m))
@@ -331,6 +333,94 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         if (sync is SyncStatus.Offline) {
             Spacer(Modifier.height(MekaSpace.xs))
             Line(WatchHomeRules.OFFLINE, MekaType.caption.copy(color = C.textTertiary))
+        }
+    }
+}
+
+/** What the draft row says after a tap: the line, whether Undo is offered, and for how long. */
+private data class DraftSaid(val line: String, val undo: Boolean, val ms: Long, val at: Long = System.nanoTime())
+
+/**
+ * Drafted replies, slice 4: Navilife's newest draft on the wrist — "DRAFTED REPLY · 1 OF 2", who asked and what they
+ * want, the draft itself, and **Send** (filled, a confirm buzz) and **Not needed**. Nothing goes without his tap. A
+ * draft too long to read whole here offers only Not needed ("Long draft · send it from your phone"). After Send the row
+ * says "Sending to Sam · Undo stops it" with Undo for 15 s, inside the server's 20-second hold; after Not needed, "Draft
+ * put away" with Undo for 5 s. The row unfolds on the expand spring (reduced motion: a fade), its states cross-fade,
+ * and it folds away when no draft waits.
+ */
+@Composable
+private fun DraftRow(core: MekaCore, draft: os.meka.core.domain.WatchDraft?, reduced: Boolean) {
+    val R = os.meka.core.domain.WatchDraftRules
+    val scope = rememberCoroutineScope()
+    var said by remember { mutableStateOf<DraftSaid?>(null) }
+    LaunchedEffect(said) {
+        val s = said ?: return@LaunchedEffect
+        delay(s.ms)
+        if (said == s) said = null
+    }
+    // The last draft shown, so the row folds away still showing it (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchDraft>(1) }
+    if (draft != null) last[0] = draft
+    AnimatedVisibility(
+        visible = draft != null || said != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "draft",
+    ) {
+        AnimatedContent(
+            targetState = said ?: draft ?: last[0],
+            contentKey = { when (it) { is DraftSaid -> "said" + it.at; is os.meka.core.domain.WatchDraft -> it.mailId; else -> "" } },
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "draftState",
+        ) { state ->
+            Column(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.m),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                when (state) {
+                    is DraftSaid -> {
+                        Line(state.line, MekaType.caption.copy(color = C.textPrimary), maxLines = 3)
+                        if (state.undo) {
+                            WatchButton(R.UNDO, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                                scope.launch {
+                                    runCatching { core.watchDraftUndo() }
+                                    said = DraftSaid(R.TAKEN_BACK, undo = false, ms = R.LINE_MS)
+                                }
+                            }
+                        }
+                    }
+                    is os.meka.core.domain.WatchDraft -> {
+                        Column(
+                            Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = state.spoken },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                        ) {
+                            Line(state.label, MekaType.captionStrong.copy(color = C.accent, fontFeatureSettings = "tnum"), maxLines = 1)
+                            Line(state.from, MekaType.metaStrong.copy(color = C.textPrimary), maxLines = 2)
+                            state.wants?.let { Line(it, MekaType.caption.copy(color = C.textSecondary), maxLines = 3) }
+                            Line(state.draft, MekaType.caption.copy(color = C.textPrimary), maxLines = 14)
+                            Line(state.note, MekaType.caption.copy(color = C.textTertiary), maxLines = 2)
+                        }
+                        Spacer(Modifier.height(MekaSpace.xxs))
+                        if (state.canSend) {
+                            WatchButton(R.SEND, primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) {
+                                scope.launch {
+                                    val (line, sending) = runCatching { core.watchSendDraft(state.mailId) }.getOrElse { R.GONE to false }
+                                    said = DraftSaid(line, undo = sending, ms = if (sending) R.UNDO_MS else R.LINE_MS)
+                                }
+                            }
+                        }
+                        WatchButton(R.NOT_NEEDED, primary = !state.canSend, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                            scope.launch {
+                                val line = runCatching { core.watchDismissDraft(state.mailId) }.getOrElse { R.GONE }
+                                said = DraftSaid(line, undo = line == R.PUT_AWAY, ms = R.LINE_MS)
+                            }
+                        }
+                        state.more?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 1) }
+                    }
+                }
+            }
         }
     }
 }

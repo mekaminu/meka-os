@@ -28,6 +28,8 @@ data class WatchHomeView(
     val match: WatchMatch? = null,
     /** Meeting prep, slice 3: who's coming and what's open, from his lead time until 10 min after the start ([WatchPrepRules]). */
     val prep: WatchPrep? = null,
+    /** Drafted replies, slice 4: the newest of Navilife's drafts with Send and Not needed ([WatchDraftRules]). */
+    val draft: WatchDraft? = null,
 )
 
 /**
@@ -58,8 +60,9 @@ data class WatchParking(
 )
 
 /**
- * The watch's inbox count (Inbox autopilot, slice 7b-2): the wrist only shows how many emails need him, never what they
- * say; going through them stays on the phone and the Mac (the ten-minute inbox).
+ * The watch's inbox count (Inbox autopilot, slice 7b-2): the wrist shows how many emails need him; going through them
+ * stays on the phone and the Mac (the ten-minute inbox). The one exception is Navilife's drafted reply ([WatchDraft],
+ * drafted replies slice 4), which shows who asked, what they want and the draft, so he can send it or put it away.
  */
 data class WatchInbox(
     /** "INBOX" · "TEN-MINUTE INBOX" (from the moment's time until Not today or a clear inbox). */
@@ -205,6 +208,7 @@ object WatchHomeRules {
     fun view(
         now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null,
         parking: List<WatchParking> = emptyList(), match: WatchMatch? = null, prep: WatchPrep? = null,
+        draft: WatchDraft? = null,
     ): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
@@ -229,6 +233,7 @@ object WatchHomeRules {
             parking = parking,
             match = match,
             prep = prep,
+            draft = draft,
         )
     }
 

@@ -250,6 +250,48 @@ class MailDraftFacadeTest {
         assertTrue(server.sent.isEmpty())
     }
 
+    /** Drafted replies, slice 4: the draft on the watch; Send goes through the reply path with Undo; Not needed too. */
+    @Test
+    fun theWatchShowsTheDraftAndSendsItOnlyOnHisTap() = runTest {
+        val W = os.meka.core.domain.WatchDraftRules
+        val a = email("m1", "Sam Taylor", "Saturday")
+        serverWrite(a, os.meka.core.domain.MailAutoDraftRules.serverFields(true, "Are you still OK to drive on Saturday?") +
+            os.meka.core.domain.MailAutoDraftRules.draftedFields("Yes, still fine. See you at 9.", now))
+        val watch = core()
+        assertTrue(watch.syncNow())
+        val d = watch.watchHome().draft!!
+        assertEquals(a, d.mailId)
+        assertEquals("Sam Taylor · Personal", d.from)
+        assertEquals("Yes, still fine. See you at 9.", d.draft)
+        assertTrue(d.canSend)
+        // Showing it sends nothing.
+        assertTrue(server.sent.isEmpty())
+        assertTrue(serverOps.after("hh", 0, 100_000).map { it.op }.none { it.entityId == a && it.deviceId != "server" })
+
+        // Not needed: put away (the email stays); Undo brings it back.
+        assertEquals(W.PUT_AWAY, watch.watchDismissDraft(a))
+        assertNull(watch.watchHome().draft)
+        assertEquals(1, watch.mailNeeds.value!!.rows.size)
+        watch.watchDraftUndo()
+        assertEquals(a, watch.watchHome().draft?.mailId)
+
+        // Send: his tap sends the draft exactly as shown, held 20 s; the draft leaves the wrist; Undo stops it.
+        now += 1_000
+        assertEquals(W.sendingLine("Sam Taylor") to true, watch.watchSendDraft(a))
+        assertNull(watch.watchHome().draft)
+        assertTrue(watch.mailNeeds.value?.rows.isNullOrEmpty())
+        watch.watchDraftUndo()
+        assertEquals(a, watch.watchHome().draft?.mailId)
+        now += 1_000
+        assertEquals(W.sendingLine("Sam Taylor") to true, watch.watchSendDraft(a))
+        assertTrue(watch.syncNow())
+        val written = serverOps.after("hh", 0, 100_000).map { it.op }.filter { it.entityId == a && it.deviceId != "server" }
+        assertTrue(written.any { it.field == os.meka.core.domain.MailItemFields.REPLY_TEXT })
+        // Once it has gone, or for an unknown email, nothing more is written.
+        assertEquals(W.GONE to false, watch.watchSendDraft(a))
+        assertEquals(W.GONE to false, watch.watchSendDraft("nope"))
+    }
+
     private data class MailDraft(val text: String?, val line: String)
 
     /** Scheduling assistant, slice 1: Suggest times writes his free times as a reply; nothing is written, booked or sent. */

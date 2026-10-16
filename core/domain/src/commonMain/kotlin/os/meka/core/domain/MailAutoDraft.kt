@@ -94,9 +94,12 @@ object MailAutoDraftRules {
         MailAutoDraftFields.WANTS to (if (needsReply) wants.orEmpty() else "").fv(),
     )
 
-    /** He hasn't answered it, put the draft away, or sent anything: it still needs a reply. */
+    /**
+     * He hasn't answered it, put the draft away, or sent anything: it still needs a reply. A reply he took back with
+     * Undo before it went (slice 4) leaves it needing one, so the draft comes back with the card.
+     */
     fun needsReply(i: MailItem): Boolean =
-        i.replyNeeded && i.draftDismissedAtMs == null && i.replyAskedAtMs == null && !MailNeedsRules.replySent(i)
+        i.replyNeeded && i.draftDismissedAtMs == null && (i.replyAskedAtMs == null || MailSentActivityRules.stopped(i)) && !MailNeedsRules.replySent(i)
 
     /** Navilife's draft shows on the card. */
     fun draftShowing(i: MailItem): Boolean = needsReply(i) && !i.autoDraft.isNullOrBlank()

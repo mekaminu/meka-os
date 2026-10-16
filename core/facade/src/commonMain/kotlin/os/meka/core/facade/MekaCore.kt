@@ -4042,6 +4042,8 @@ class MekaCore(
             os.meka.core.domain.WatchMatchRules.view(_barcaNear.value, nowMs(), ZoneCalendar(timeZone)),
             // Meeting prep, slice 3: Today's prep (worked out each minute), its countdown at this minute.
             os.meka.core.domain.WatchPrepRules.view(_today.value.meetingPrep, nowMs(), ZoneCalendar(timeZone)),
+            // Drafted replies, slice 4: the newest draft, as last worked out on the core's thread.
+            watchDraftNow,
         )
 
     /**
@@ -4070,6 +4072,37 @@ class MekaCore(
     /** The rows of "From your mail" as last counted on the core's thread (read by [watchHome] from any thread). */
     @kotlin.concurrent.Volatile
     private var mailWaitingRows = 0
+
+    /** Drafted replies, slice 4: the newest draft for the wrist, as last worked out on the core's thread. */
+    @kotlin.concurrent.Volatile
+    private var watchDraftNow: os.meka.core.domain.WatchDraft? = null
+
+    /**
+     * Drafted replies, slice 4: **Send** on the watch's draft. Sends Navilife's draft exactly as it shows whole on the
+     * wrist, through the phone's reply path ([replyToMailItem]: the server holds it 20 s, then sends it in the thread from
+     * the account it came to). Only a draft that is still showing and short enough to have been read whole goes; else
+     * nothing is written. Returns the line to show ("Sending to Sam · Undo stops it") and whether it is sending.
+     */
+    suspend fun watchSendDraft(mailId: String): Pair<String, Boolean> {
+        val R = os.meka.core.domain.WatchDraftRules
+        val found = onCore {
+            val items = activity.mailItems()
+            R.sendable(items, mailId, nowMs())?.let { it to items.first { i -> i.id == mailId }.from }
+        } ?: return R.GONE to false
+        // A sendable draft is never empty or too long, so the only other answer is that the email has just gone.
+        val line = replyToMailItem(mailId, found.first)
+        if (line == os.meka.core.domain.MailNeedsRules.UNKNOWN) return R.GONE to false
+        return R.sendingLine(found.second) to true
+    }
+
+    /** Drafted replies, slice 4: **Not needed** on the watch's draft (the same as the phone's; the email stays). */
+    suspend fun watchDismissDraft(mailId: String): String {
+        val line = dismissMailDraft(mailId)
+        return if (line == os.meka.core.domain.MailAutoDraftRules.NOT_NEEDED_LINE) os.meka.core.domain.WatchDraftRules.PUT_AWAY else line
+    }
+
+    /** Drafted replies, slice 4: Undo on the watch after Send or Not needed (this device's last mail change). */
+    suspend fun watchDraftUndo() = undoMailItem()
 
     /** A watch button: the same change as the Fold's cover screen makes for that tap. */
     suspend fun watchPress(button: os.meka.core.domain.WatchButton) {
@@ -5058,6 +5091,7 @@ class MekaCore(
         val setting = mailMomentSetting()
         val rows = os.meka.core.domain.MailNeedsRules.allRows(items, nowMs(), cal)
         mailWaitingRows = rows.size
+        watchDraftNow = os.meka.core.domain.WatchDraftRules.view(items, nowMs())
         _mailMoment.value = if (mailMomentRunning) null else os.meka.core.domain.MailMomentRules.card(setting, rows.size, nowMs(), cal)
         _mailMomentSession.value = if (!mailMomentRunning) null else
             os.meka.core.domain.MailMomentRules.session(rows, mailMomentSkipped, mailMomentStarted, setting, cal.epochDayOf(nowMs()))
