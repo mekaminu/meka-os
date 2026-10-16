@@ -93,7 +93,7 @@ class AboutYouFacadeTest {
         val mac = core("mac")
         mac.setAboutYou(AboutField.HOME, "Hilltown")
         mac.syncNow()
-        val fold = core("android").apply { seedsAboutYou = true }
+        val fold = core("android").apply { seedsAboutYou = true; releaseOneClubs = "OTFC Oakfield Town" }
         fold.syncNow()
         val copied = assertNotNull(fold.aboutYouView.value.rows.first { it.field == AboutField.CLUBS }.value)
         assertTrue(FootballRules.CLUBS.isNotEmpty())

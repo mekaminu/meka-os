@@ -53,7 +53,7 @@ class FootballTest {
         assertEquals("OTFC", FootballRules.club(event()))
         assertEquals("HRFC", FootballRules.club(event(title = "Match", calendarName = "hrfc u11s")))
         assertEquals("HRFC", FootballRules.club(event(title = "HRFC: away at Wexley")))
-        assertNull(FootballRules.club(event(title = "BUFCX training")))
+        assertNull(FootballRules.club(event(title = "OTFCX training")))
         assertNull(FootballRules.club(event(title = "Training", calendarName = "Club")))
         // The fixtures feed (Barça) never counts.
         assertNull(FootballRules.club(event(title = "OTFC v Barça", provider = "fixtures")))

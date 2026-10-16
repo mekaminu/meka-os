@@ -541,11 +541,15 @@ class MekaCore(
      */
     var seedsAboutYou: Boolean = false
 
-    /** Release 2 slice 5's one-off council table (tests swap in an invented one, or null for none). */
-    internal var releaseOneCouncil: os.meka.core.domain.TermCalendar? = RELEASE_ONE_COUNCIL
-
-    /** Release 2 slice 6's one-off train route (tests swap in an invented one, or null for none). */
-    internal var releaseOneRoute: String? = RELEASE_ONE_ROUTE
+    /**
+     * Release 2's one-off copies into About you (clubs, the council's holidays, the train route). The Fold copied his
+     * on 15–16 Oct (deploy 741's About you notice: "clubs copied · council dates copied · route copied"), so the code no
+     * longer carries them (rule 13): null in the apps, and only tests swap in invented ones to check the copy still
+     * runs once and never over a clear.
+     */
+    internal var releaseOneClubs: String? = null
+    internal var releaseOneCouncil: os.meka.core.domain.TermCalendar? = null
+    internal var releaseOneRoute: String? = null
 
     /**
      * Which app this is (About you, slice 2): after a clean sync with a filled-in profile, it writes once that it holds
@@ -603,8 +607,8 @@ class MekaCore(
     private fun aboutYouBefore(): os.meka.core.domain.AboutYou = os.meka.core.domain.AboutYou(
         partnerName = leavingNow.setting().to.ifBlank { null },
         partnerWatch = true,
-        // The children were copied on 13 Oct and live only in his profile now (both apps hold it).
-        clubs = RELEASE_ONE_CLUBS,
+        // The children were copied on 13 Oct and the clubs on 15 Oct; both live only in his profile now.
+        clubs = releaseOneClubs,
         // Release 2 slice 3: home, work and the assistant's number were copied on 13 Oct and live only in his profile.
         home = weatherPlace.wanted(),
         work = workPlace.wanted(),
@@ -4373,47 +4377,6 @@ class MekaCore(
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
         const val DIGEST_KEY = "meka.digest"
-        // personal-guard: off · release 1's one-off copies into About you, deleted with release 2's final slice
-        /** Release 2 slice 1's one-off copy into About you's new Clubs line ([AboutYouStore.seedClubsOnce]); removed with the final slice. */
-        private const val RELEASE_ONE_CLUBS = "BUFC Biggleswade United, SJFC"
-        /**
-         * Release 2 slice 6's one-off copy into About you's Train route ([AboutYouStore.seedRouteOnce]): the lines and
-         * stations the route rules named before. Removed with the final slice, once a report shows the Fold holds it.
-         */
-        private const val RELEASE_ONE_ROUTE = "Thameslink to Farringdon, then Elizabeth line; or Great Northern to King's Cross"
-
-        private fun day(y: Int, m: Int, d: Int) = os.meka.core.domain.CivilDate.toEpochDay(y, m, d)
-
-        /**
-         * Release 2 slice 5's one-off copy into About you's council holidays ([AboutYouStore.seedCouncilOnce]): the table
-         * the School pane offered before (checked 2026-10-14 against the council's own page; the council names two
-         * training days in 2026–27, every other INSET day is the school's). Removed with the final slice, once a report
-         * shows the Fold holds it.
-         */
-        private val RELEASE_ONE_COUNCIL = os.meka.core.domain.TermCalendar(
-            id = "central-bedfordshire",
-            name = "Central Bedfordshire",
-            sourceUrl = "https://www.centralbedfordshire.gov.uk/info/3/schools_and_education/529/school_term_and_holiday_dates_in_central_bedfordshire",
-            checkedDay = day(2026, 10, 14),
-            years = "2026–27 and 2027–28",
-            periods = listOf(
-                os.meka.core.domain.TermPeriod("October half term", day(2026, 10, 26), day(2026, 10, 30)),
-                os.meka.core.domain.TermPeriod("Christmas holidays", day(2026, 12, 21), day(2027, 1, 4)),
-                os.meka.core.domain.TermPeriod("February half term", day(2027, 2, 15), day(2027, 2, 19)),
-                os.meka.core.domain.TermPeriod("Easter holidays", day(2027, 3, 26), day(2027, 4, 9)),
-                os.meka.core.domain.TermPeriod("Training day", day(2027, 4, 12), day(2027, 4, 12)),
-                os.meka.core.domain.TermPeriod("May half term", day(2027, 5, 31), day(2027, 6, 4)),
-                os.meka.core.domain.TermPeriod("Training day", day(2027, 6, 7), day(2027, 6, 7)),
-                os.meka.core.domain.TermPeriod("Summer holidays", day(2027, 7, 22), day(2027, 8, 31)),
-                os.meka.core.domain.TermPeriod("October half term", day(2027, 10, 25), day(2027, 10, 29)),
-                os.meka.core.domain.TermPeriod("Christmas holidays", day(2027, 12, 20), day(2028, 1, 3)),
-                os.meka.core.domain.TermPeriod("February half term", day(2028, 2, 14), day(2028, 2, 18)),
-                os.meka.core.domain.TermPeriod("Easter holidays", day(2028, 4, 3), day(2028, 4, 17)),
-                os.meka.core.domain.TermPeriod("May half term", day(2028, 5, 29), day(2028, 6, 2)),
-                os.meka.core.domain.TermPeriod("Summer holidays", day(2028, 7, 22), day(2028, 8, 31)),
-            ),
-        )
-        // personal-guard: on
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }

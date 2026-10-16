@@ -1323,6 +1323,10 @@ Item (9), the columns' motion. Core `MacCommandCentreRules.entrance(columns, col
 - The one-off copy: `AboutYouStore.seedRouteOnce`, called by the Fold after a clean sync with the facade's `RELEASE_ONE_ROUTE` (the only place the route is named); the gate's `AboutYouHeld.route`, wire `aboutRoute`, the publish notice's "· route copied".
 - Comments, tests and examples use an invented route (`os.meka.core.testing.InventedRoute`: South Rail to Oakfield Junction, then Metro line; or North Rail to Riverside). Tests: RouteTest (+5: parsing, ids, no route, one-line route, the profile and gate), SetupTest (+1), CommuteDisruptionTest, LeavingNowTest, AboutYouHeldTest, SchoolTermsTest, AskMekaFacadeTest, AboutYouFacadeTest (+1: copied once, a clear sticks), LinesTest (per household's route, none = not asked), NotifyReportsTest, NotifyDiagnosticsCodecTest, the Swift bridge test. ADR-008 addendum; help entry. core-verify 2144 tests OK; Gradle not runnable here, CI runs it.
 
+### Rule 13 release 2 slice 8 (2026-10-16)
+- Deploy run 741's `publish-fold` About you notice: "on the Fold since 2026-10-13 · on the Mac since 2026-10-15 · release 2 can start · clubs copied · council dates copied · route copied". So the facade's `RELEASE_ONE_CLUBS`, `RELEASE_ONE_COUNCIL` (and its `day` helper) and `RELEASE_ONE_ROUTE` are deleted with the `personal-guard: off/on` block round them; the club line, the council's table and the route now exist only in his synced profile.
+- `MekaCore.releaseOneClubs` / `releaseOneCouncil` / `releaseOneRoute` stay as internal hooks defaulting to null, so the Fold's copy calls are no-ops; AboutYouFacadeTest's clubs-copy test swaps in an invented club (the council and route tests already did). FootballTest's look-alike club title invented. tools/check-personal.py keeps its off/on support (generic). core-verify 2300 tests OK; facade tests run in CI.
+
 ## WhatsApp replies that always have a way to send — slice 1 (2026-10-15)
 
 Items (1), (3) and (4) of the item (core + Fold + Mac; core and macos touched, so Mac checked nightly; the Swift was written without a Mac to compile on).
