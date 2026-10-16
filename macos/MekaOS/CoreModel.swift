@@ -4668,6 +4668,19 @@ final class CoreModel {
         return try? await core.archivedEmail(batchId: batchId, key: key)
     }
 
+    /// Slice 4: Open in Gmail / Outlook — the link is made now in the core (the account list asked for if needed), opened in
+    /// the browser and never kept. Returns the line to show under the button. Only Strings cross to the core.
+    func openArchivedEmail(batchId: String, key: String) async -> String {
+        guard let core else { return MailOpenRules.shared.OFFLINE }
+        MekaHaptics.light()
+        guard let r = try? await core.archivedEmailLink(batchId: batchId, key: key) else { return MailOpenRules.shared.OFFLINE }
+        if let link = r.link {
+            if let url = URL(string: link.url) { NSWorkspace.shared.open(url) }
+            return link.hint
+        }
+        return r.problem ?? MailOpenRules.shared.OFFLINE
+    }
+
     /// Slice 3: All tidied mail (every email tidied in the last 30 days), filtered to one sender's id when given.
     /// Only a String crosses to the core.
     func archivedAll(sender: String?) async -> ArchivedAllList? {

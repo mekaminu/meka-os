@@ -42,6 +42,7 @@ import os.meka.core.domain.ArchivedEmailGroup
 import os.meka.core.domain.ArchivedEmailPreview
 import os.meka.core.domain.ArchivedEmailRow
 import os.meka.core.domain.MailTidiedAction
+import os.meka.core.domain.MailOpenRules
 import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.ArchivedForYouCard
 import os.meka.core.domain.ArchivedForYouLine
@@ -241,14 +242,32 @@ internal fun ArchivedEmailPreviewPanel(
             pv.putBack?.let { it to MailTidiedAction.PUT_BACK }, pv.keep?.let { it to MailTidiedAction.KEEP },
             pv.unsubscribe?.let { it to MailTidiedAction.UNSUBSCRIBE },
         )
-        if (actions.isNotEmpty()) {
+        // Slice 4: Open in Gmail / Outlook — the link is made on the tap and handed to the browser, never kept.
+        val uri = androidx.compose.ui.platform.LocalUriHandler.current
+        val scope = androidx.compose.runtime.rememberCoroutineScope()
+        var openLine by remember(r.key) { mutableStateOf<String?>(null) }
+        if (actions.isNotEmpty() || pv.openLabel != null) {
             androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 actions.forEach { (label, action) ->
                     ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = action == MailTidiedAction.UNSUBSCRIBE) { onAsk(pv, action) }
                 }
+                pv.openLabel?.let { label ->
+                    ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = true) {
+                        scope.launch {
+                            val res = runCatching { core.archivedEmailLink(r.batchId, r.key) }.getOrNull()
+                            val link = res?.link
+                            openLine = link?.hint ?: res?.problem ?: MailOpenRules.OFFLINE
+                            if (link != null) runCatching { uri.openUri(link.url) }
+                        }
+                    }
+                }
             }
+        }
+        // The line under the button cross-fades from the account's hint to what the tap found.
+        AnimatedContent(openLine ?: pv.openHint, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "archived-open-line") { l ->
+            if (l != null) Text(l, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
         }
         Text(pv.note, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
     }

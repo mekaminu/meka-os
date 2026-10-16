@@ -57,13 +57,17 @@ data class ArchivedEmailPreview(
     val unsubscribe: String?,
     val note: String,
     val spoken: String,
+    /** Slice 4: "Open in Gmail" / "Open in Outlook" ([MailOpenRules.label]); null where the caller didn't ask. */
+    val openLabel: String? = null,
+    /** Slice 4: the line under it ([MailOpenLink.hint]) once the account is known, else null. */
+    val openHint: String? = null,
 )
 
 object MailTidiedAskRules {
     /** Asks kept on one tidy (newest); far more than one tidy's emails times the three actions ever need. */
     const val MAX_ASKS = 300
     const val MAX_NOTE = 140
-    const val NO_LINES = "No preview kept for this email · open it in Gmail or Outlook to read it"
+    const val NO_LINES = "No preview kept for this email · open it in Gmail or Outlook to read it all"
     const val NOTE = "Shown as the sender wrote it, nothing in it is acted on. Put back returns just this email; " +
         "Always keep also stops Autopilot tidying this sender."
     const val UNKNOWN = "Couldn't find that email"

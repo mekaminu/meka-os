@@ -181,7 +181,9 @@ private struct ArchivedEmailPreviewView: View {
     let row: ArchivedEmailRow
     let lineState: String?
     let palette: MekaPalette
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var preview: ArchivedEmailPreview?
+    @State private var openLine: String?
 
     var body: some View {
         Group {
@@ -217,6 +219,19 @@ private struct ArchivedEmailPreviewView: View {
                                 model.askArchivedEmail(batchId: p.batchId, key: p.key, action: "UNSUBSCRIBE")
                             }
                         }
+                        // Slice 4: Open in Gmail / Outlook (the browser; the link is never kept).
+                        if let label = p.openLabel {
+                            let batchId = p.batchId, key = p.key
+                            ArchivedPill(label: label, palette: palette, quiet: true, spoken: "\(label), \(p.subject)") {
+                                Task { openLine = await model.openArchivedEmail(batchId: batchId, key: key) }
+                            }
+                        }
+                    }
+                    if let hint = openLine ?? p.openHint {
+                        Text(hint).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: hint)
                     }
                     Text(p.note).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)

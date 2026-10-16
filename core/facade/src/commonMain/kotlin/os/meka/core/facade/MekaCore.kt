@@ -4424,7 +4424,37 @@ class MekaCore(
      * tidy or the email isn't there any more.
      */
     suspend fun archivedEmail(batchId: String, key: String): os.meka.core.domain.ArchivedEmailPreview? = onCore {
-        tidyBatch(batchId)?.let { os.meka.core.domain.MailTidiedAskRules.preview(it, key, nowMs(), ZoneCalendar(timeZone)) }
+        val facts = lastMailFacts
+        tidyBatch(batchId)?.let { b ->
+            val cal = ZoneCalendar(timeZone)
+            os.meka.core.domain.MailTidiedAskRules.preview(b, key, nowMs(), cal)?.copy(
+                // Slice 4: the button always; its line once the account list is known (Mail's, or a tap's).
+                openLabel = os.meka.core.domain.MailOpenRules.label(b, facts),
+                openHint = facts?.let { os.meka.core.domain.MailOpenRules.link(b, key, it, cal)?.hint },
+            )
+        }
+    }
+
+    /**
+     * "Archived for you" shows which emails, slice 4: **Open in Gmail / Open in Outlook** on an email's preview. The
+     * link is made now from the tidy and the server's account list (asked for when this device hasn't got it yet), handed
+     * to the browser and never kept; [os.meka.core.domain.MailOpenResult.problem] says why there's none.
+     */
+    suspend fun archivedEmailLink(batchId: String, key: String): os.meka.core.domain.MailOpenResult {
+        val facts = lastMailFacts ?: try {
+            accountsApi?.mailAccounts()?.also { lastMailFacts = it }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return onCore {
+            val unknown = os.meka.core.domain.MailOpenResult(null, os.meka.core.domain.MailTidiedAskRules.UNKNOWN)
+            val b = tidyBatch(batchId)?.takeIf { t -> t.emails.any { it.key == key } } ?: return@onCore unknown
+            when {
+                facts == null && b.account != os.meka.core.domain.MailLabel.OUTLOOK.label ->
+                    os.meka.core.domain.MailOpenResult(null, os.meka.core.domain.MailOpenRules.OFFLINE)
+                else -> os.meka.core.domain.MailOpenRules.link(b, key, facts.orEmpty(), ZoneCalendar(timeZone))
+                    ?.let { os.meka.core.domain.MailOpenResult(it, null) }
+                    ?: os.meka.core.domain.MailOpenResult(null, os.meka.core.domain.MailOpenRules.NO_ACCOUNT)
+            }
+        }
     }
 
     /**

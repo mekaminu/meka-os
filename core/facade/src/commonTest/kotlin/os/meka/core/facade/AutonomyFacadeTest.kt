@@ -175,5 +175,10 @@ class AutonomyFacadeTest {
         assertEquals(os.meka.core.domain.ArchivedAllRules.EMPTY, all.empty)
         assertTrue(all.allSelected)
         assertTrue(all.days.isEmpty())
+        // Slice 4: Open in Gmail/Outlook on an email that isn't there says so, with no link.
+        val open = fold.archivedEmailLink("nothing", "te1")
+        assertNull(open.link)
+        assertEquals(os.meka.core.domain.MailTidiedAskRules.UNKNOWN, open.problem)
+        assertNull(fold.archivedEmail("nothing", "te1"))
     }
 }
