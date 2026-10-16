@@ -31,6 +31,7 @@ object MekaChannels {
             runCatching { app.governor.ensureChannel(tier) }
         }
         runCatching { WorkAlerts.ensureChannel(app) }
+        runCatching { os.meka.android.work.DiscordAlerts.ensureChannel(app) }
         runCatching { app.nudger.ensureChannel() }
         runCatching { app.ongoing.ensureChannel() }
         runCatching { UpdateNotice.ensureChannel(app) }
@@ -58,6 +59,13 @@ object MekaPost {
     @SuppressLint("MissingPermission") // each caller checks WorkAlerts.canPost() or catches the SecurityException
     fun notify(context: Context, id: Int, n: Notification) {
         NotificationManagerCompat.from(context).notify(id, n)
+        NotifyTraceStore.posted(context, n.channelId)
+    }
+
+    /** The same with a [tag] (one notification per Discord channel, updated in place). */
+    @SuppressLint("MissingPermission")
+    fun notify(context: Context, tag: String, id: Int, n: Notification) {
+        NotificationManagerCompat.from(context).notify(tag, id, n)
         NotifyTraceStore.posted(context, n.channelId)
     }
 }

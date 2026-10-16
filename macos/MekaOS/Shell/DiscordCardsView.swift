@@ -75,6 +75,10 @@ private struct DiscordChannelCardRow: View {
             }
             Text(card.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Slice 2: posts from a person or with a word he picked.
+            if let alerts = card.alertLine {
+                Text(alerts).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+            }
             if let more = card.moreLine {
                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
             }
@@ -82,6 +86,12 @@ private struct DiscordChannelCardRow: View {
                 ForEach(card.posts, id: \.id) { post in
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text("\(post.author) · \(post.timeLine)").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                        if let why = post.alert {
+                            Text(why).font(MekaType.caption).foregroundStyle(palette.onAccent)
+                                .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                                .background(palette.accent, in: Capsule())
+                                .accessibilityLabel("Alert: \(why)")
+                        }
                         Text(post.text).font(MekaType.body).foregroundStyle(palette.textPrimary)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)

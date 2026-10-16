@@ -67,7 +67,11 @@ class WorkCaptureService : NotificationListenerService() {
             val posts = runCatching { readDiscord(sbn, n) }.getOrDefault(emptyList())
             if (posts.isNotEmpty()) {
                 val meka = application as MekaApplication
-                scope.launch { runCatching { meka.core.noteDiscord(posts) } }
+                scope.launch {
+                    // Slice 2: a fresh post from a person or with a word he picked alerts straight away.
+                    val noted = runCatching { meka.core.noteDiscord(posts) }.getOrNull() ?: return@launch
+                    noted.alerts.forEach { DiscordAlerts.post(this@WorkCaptureService, it) }
+                }
             }
             return
         }

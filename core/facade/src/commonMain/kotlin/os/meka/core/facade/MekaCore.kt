@@ -4767,19 +4767,33 @@ class MekaCore(
     private fun discordChanged() {
         val cal = ZoneCalendar(timeZone)
         val watched = discordStore.watched()
-        _discordWatch.value = os.meka.core.domain.DiscordRules.view(discordStore.seen(), watched, nowMs(), cal)
-        _discord.value = os.meka.core.domain.DiscordRules.cards(discordStore.posts(), watched, nowMs(), cal)
+        val posts = discordStore.posts()
+        _discordWatch.value = os.meka.core.domain.DiscordRules.view(
+            discordStore.seen(), watched, nowMs(), cal, discordStore.people(), discordStore.words(), posts,
+        )
+        _discord.value = os.meka.core.domain.DiscordRules.cards(posts, watched, nowMs(), cal)
     }
 
     /**
      * The Fold's listener: Discord posts read from Discord's own notifications. Every channel is noted for Work mode →
      * Discord; only posts from channels he follows are kept (synced, so the Mac shows them). Nothing goes to the AI or
-     * back to Discord. Returns how many posts were new.
+     * back to Discord. Returns how many posts were new and (slice 2) the channels whose alert notification the Fold
+     * posts or updates now: a fresh post from a watched person or with a watched word.
      */
-    suspend fun noteDiscord(posts: List<os.meka.core.domain.DiscordCaptured>): Int = onCore {
+    suspend fun noteDiscord(posts: List<os.meka.core.domain.DiscordCaptured>): os.meka.core.domain.DiscordNoted = onCore {
         val n = discordStore.note(posts, nowMs())
         discordChanged()
         n
+    }
+
+    /**
+     * Discord channel watch, slice 2: Work mode → Discord's "Alert me straight away" — add or remove a person ([person])
+     * or a word (a ticker, "entry", "stop"); synced, so the Fold's listener uses it. Returns the line for the bar.
+     */
+    suspend fun setDiscordAlert(text: String, person: Boolean, add: Boolean): String = onCore {
+        val line = discordStore.setAlert(text, person, add, nowMs())
+        discordChanged()
+        line
     }
 
     /** Work mode → Discord: Follow (or Stop) a channel Discord notified about; synced. Returns the line for the bar. */

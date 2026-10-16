@@ -4511,6 +4511,19 @@ final class CoreModel {
         }
     }
 
+    /// Work → Discord's "Alert me straight away" (Discord channel watch, slice 2): add or remove a person or a word;
+    /// synced, so the Fold's listener alerts for them. Only the typed text crosses. Says what changed on the bar.
+    func setDiscordAlert(_ text: String, person: Bool, add: Bool) {
+        guard let core else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                let line = try await core.setDiscordAlert(text: text, person: person, add: add)
+                offerEventUndo(line, nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Not needed on "Renewals from your mail": gone on both apps, Undo on the bar. Only the id crosses.
     func notNeededMailFind(_ id: String) {
         guard let core else { return }

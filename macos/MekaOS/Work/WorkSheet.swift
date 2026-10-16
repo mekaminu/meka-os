@@ -15,6 +15,8 @@ struct WorkSheet: View {
     @State private var end = 17 * 60 + 30
     @State private var enabled = true
     @State private var showMessageDetails = false
+    /// Discord channel watch, slice 2: the person or word being typed under "Alert me straight away".
+    @State private var discordAlertText = ""
     @State private var openDay: Int?
     @State private var commuteDay: Int64?
     @State private var blockNumber = ""
@@ -451,6 +453,7 @@ struct WorkSheet: View {
                         .accessibilityLabel(row.watched ? "Stop following \(row.label)" : "Follow \(row.label)")
                 }
             }
+            discordAlerts(view)
             ForEach(rules.LIMITS, id: \.self) { line in
                 Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -458,6 +461,74 @@ struct WorkSheet: View {
         }
         .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: view?.rows.map(\.watched) ?? [])
+    }
+
+    /// Slice 2: "Alert me straight away" — the people and words whose posts alert on the Fold at once (synced): each a
+    /// chip with ×, the channels' recent posters as "+ Sam", and one field with Add person / Add word.
+    @ViewBuilder private func discordAlerts(_ view: DiscordWatchView?) -> some View {
+        let rules = DiscordRules.shared
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text("Alert me straight away").font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            Text(view?.alertLine ?? rules.NO_ALERTS)
+                .font(MekaType.itemMeta)
+                .foregroundStyle((view?.alertLine ?? rules.NO_ALERTS) == rules.NO_ALERTS ? palette.textSecondary : palette.accent)
+                .contentTransition(.opacity)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(rules.ALERTS_HINT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            let people = view?.people ?? []
+            let words = view?.words ?? []
+            if !people.isEmpty || !words.isEmpty {
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(people, id: \.self) { p in
+                        discordChip(p, spoken: "Stop alerting for posts from \(p)") { model.setDiscordAlert(p, person: true, add: false) }
+                    }
+                    ForEach(words, id: \.self) { w in
+                        discordChip("“\(w)”", spoken: "Stop alerting for posts saying \(w)") { model.setDiscordAlert(w, person: false, add: false) }
+                    }
+                }
+            }
+            if let suggested = view?.suggestedPeople, !suggested.isEmpty {
+                HStack(spacing: MekaSpace.xs) {
+                    Text("Posting lately").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    ForEach(suggested, id: \.self) { p in
+                        Button("+ \(p)") { model.setDiscordAlert(p, person: true, add: true) }
+                            .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.caption)
+                            .accessibilityLabel("Alert for posts from \(p)")
+                    }
+                }
+            }
+            HStack(spacing: MekaSpace.m) {
+                TextField("A name as Discord shows it, or a word", text: $discordAlertText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(MekaType.body)
+                    .frame(maxWidth: 280)
+                Button("Add person") { addDiscordAlert(person: true) }
+                    .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                    .disabled(discordAlertText.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Add word") { addDiscordAlert(person: false) }
+                    .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                    .disabled(discordAlertText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+        .padding(.top, MekaSpace.m)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: (view?.people ?? []) + (view?.words ?? []))
+    }
+
+    private func addDiscordAlert(person: Bool) {
+        let typed = discordAlertText
+        discordAlertText = ""
+        model.setDiscordAlert(typed, person: person, add: true)
+    }
+
+    private func discordChip(_ label: String, spoken: String, remove: @escaping () -> Void) -> some View {
+        Button(action: remove) {
+            Text("\(label)  ×").font(MekaType.caption).foregroundStyle(palette.onAccent)
+                .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                .background(palette.accent, in: Capsule())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(spoken)
     }
 
     /// Hours → each day (Places item 1): one row per work day, lit when it has its own hours; clicking a row unfolds

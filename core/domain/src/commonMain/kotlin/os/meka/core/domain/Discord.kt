@@ -41,10 +41,46 @@ data class DiscordWatchView(
     val rows: List<DiscordChannelRow>,
     val statusLine: String,
     val emptyLine: String?,
+    /** Slice 2: "Alerts straight away for posts from Admin, or saying BTC or stop" (or that none are set). */
+    val alertLine: String = DiscordRules.NO_ALERTS,
+    /** Slice 2: the people whose posts alert at once, as he typed them. */
+    val people: List<String> = emptyList(),
+    /** Slice 2: the words (a ticker, "entry", "stop") that alert at once. */
+    val words: List<String> = emptyList(),
+    /** Slice 2: who has posted in the channels he follows lately, busiest first, to add with one tap. */
+    val suggestedPeople: List<String> = emptyList(),
 )
 
 /** A kept post on its channel's card. */
-data class DiscordPostRow(val id: String, val author: String, val text: String, val timeLine: String)
+data class DiscordPostRow(
+    val id: String,
+    val author: String,
+    val text: String,
+    val timeLine: String,
+    /** Slice 2: why this post alerted ("From Admin · says “stop”"), or null. */
+    val alert: String? = null,
+)
+
+/**
+ * Slice 2: the Fold's one notification for a channel whose post matched a watched person or word, updated in place as
+ * more arrive (tag = [key]). Information only: it opens Needs you; it never posts to Discord and never trades.
+ */
+data class DiscordAlertNotice(
+    val key: String,
+    /** "#trade-ideas · Example Traders". */
+    val title: String,
+    /** The newest alerting post: "Admin: BTC long above 68k, stop 66.5k". */
+    val text: String,
+    /** Why it alerted: "From Admin · says “stop”". */
+    val why: String,
+    /** Up to five alerting posts, oldest first, for the expanded notification. */
+    val lines: List<String>,
+    val count: Int,
+    val latestMs: Long,
+)
+
+/** What the Fold's listener noted: how many posts were new, and the channels whose alert to post or update now. */
+data class DiscordNoted(val fresh: Int, val alerts: List<DiscordAlertNotice>)
 
 /** One watched channel's card in Needs you. */
 data class DiscordChannelCard(
@@ -59,6 +95,8 @@ data class DiscordChannelCard(
     val moreLine: String?,
     val ids: List<String>,
     val latestMs: Long,
+    /** Slice 2: "2 alerts · latest 14:02" when posts on it matched a watched person or word. */
+    val alertLine: String? = null,
 )
 
 /** Needs you's Discord block: every watched channel with new posts. */
@@ -70,6 +108,10 @@ object DiscordWatchFields {
     /** Channels Discord notified about: "key\tserver\tchannel\tlastSeenMs" per line, newest first. */
     const val CHANNELS = "channels"
     const val CHANGED_AT = "changedAtMs"
+    /** Slice 2: people whose posts alert straight away, one per line, as typed. */
+    const val ALERT_PEOPLE = "alertPeople"
+    /** Slice 2: words that alert straight away, one per line, as typed. */
+    const val ALERT_WORDS = "alertWords"
 }
 
 object DiscordPostFields {
@@ -81,6 +123,8 @@ object DiscordPostFields {
     const val AT = "atMs"
     const val DONE = "done"
     const val DONE_AT = "doneAtMs"
+    /** Slice 2: why the post alerted when it arrived ("From Admin · says “stop”"); absent = it didn't. */
+    const val ALERT = "alert"
 }
 
 object DiscordRules {
@@ -106,6 +150,21 @@ object DiscordRules {
     const val EMPTY = "No Discord channels yet · once Discord shows a notification from a channel, it's listed here to pick."
     const val NOT_SEEN = "That channel isn't listed any more"
     const val TOO_MANY = "You can follow up to $MAX_WATCHED channels"
+
+    // ---- Slice 2: watched people and words ----
+    const val MAX_PEOPLE = 20
+    const val MAX_WORDS = 30
+    const val MAX_ENTRY = 40
+    /** A post older than this when the listener sees it is marked on the card but doesn't alert (a replayed notice). */
+    const val ALERT_FRESH_MS = 15 * 60_000L
+    /** The alert notification lists the channel's alerting posts from this long. */
+    const val ALERT_WINDOW_MS = 6 * 60 * 60_000L
+    const val MAX_SUGGESTED = 6
+    const val NO_ALERTS = "No alerts set · posts wait on the channel's card in Needs you"
+    const val ALERTS_HINT = "A post from one of these people, or with one of these words (a ticker, \"entry\", \"stop\"), " +
+        "alerts you straight away as a Discord alert notification. Everything else waits on the channel's card."
+    const val ALERT_CHANNEL_NAME = "Discord alerts"
+    const val ALERT_CHANNEL_WHY = "Posts in the Discord channels you follow from people or with words you chose. Information only."
 
     private val IMAGE_TEXT = Regex(
         "^(sent|uploaded|shared|posted)\\s+(an?\\s+)?(image|photo|picture|gif|sticker|file|attachment|video)s?\\.?$",
@@ -218,7 +277,10 @@ object DiscordRules {
     fun toKeep(incoming: List<DiscordCaptured>, watched: Set<String>): List<DiscordCaptured> =
         incoming.filter { it.channel.key in watched && it.text.isNotBlank() }
 
-    fun view(seen: List<DiscordSeenChannel>, watched: Set<String>, nowMs: Long, cal: LocalCalendar): DiscordWatchView {
+    fun view(
+        seen: List<DiscordSeenChannel>, watched: Set<String>, nowMs: Long, cal: LocalCalendar,
+        people: List<String> = emptyList(), words: List<String> = emptyList(), posts: List<Post> = emptyList(),
+    ): DiscordWatchView {
         val rows = seen.sortedWith(compareByDescending<DiscordSeenChannel> { it.channel.key in watched }.thenByDescending { it.lastSeenMs })
             .map { s ->
                 val on = s.channel.key in watched
@@ -233,7 +295,112 @@ object DiscordRules {
             n == 0 -> "${rows.size} channel${if (rows.size == 1) "" else "s"} seen · pick the ones to follow; the rest is ignored"
             else -> "Following $n channel${if (n == 1) "" else "s"} · their posts come to Needs you · the rest of Discord is ignored"
         }
-        return DiscordWatchView(rows, status, if (rows.isEmpty()) EMPTY else null)
+        return DiscordWatchView(
+            rows, status, if (rows.isEmpty()) EMPTY else null,
+            alertLine(people, words), people, words, suggestedPeople(posts, watched, people, nowMs),
+        )
+    }
+
+    /**
+     * Slice 2: a person or word as he typed it, tidied: spaces squashed, a leading "@" dropped from a person, at most
+     * [MAX_ENTRY] characters; null when nothing is left (or a word is a single character, which would match too much).
+     */
+    fun entry(raw: String, person: Boolean): String? {
+        var t = raw.replace(Regex("\\s+"), " ").trim()
+        if (person) t = t.trimStart('@').trim()
+        t = t.trim('"', '“', '”', '\'').trim().take(MAX_ENTRY).trim()
+        if (t.isEmpty() || (!person && t.length < 2)) return null
+        return t
+    }
+
+    fun entries(fields: Map<String, FieldValue>?, field: String): List<String> =
+        fields?.get(field)?.textOrNull?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinctBy { fold(it) } ?: emptyList()
+
+    /** [list] with [raw] added (no duplicates, case aside); null with the reason when it can't be. */
+    fun added(list: List<String>, raw: String, person: Boolean): Pair<List<String>?, String> {
+        val e = entry(raw, person) ?: return null to (if (person) "Type the name as Discord shows it" else "Type a word of 2 letters or more")
+        if (list.any { fold(it) == fold(e) }) return null to "Already alerting for ${shown(e, person)}"
+        val max = if (person) MAX_PEOPLE else MAX_WORDS
+        if (list.size >= max) return null to "Up to $max ${if (person) "people" else "words"}"
+        return (list + e) to "Alerts straight away for ${if (person) "posts from $e" else "posts saying ${shown(e, false)}"}"
+    }
+
+    fun removed(list: List<String>, raw: String, person: Boolean): Pair<List<String>?, String> {
+        val gone = list.firstOrNull { fold(it) == fold(raw) } ?: return null to "Not on the list"
+        return list.filter { it != gone } to "No longer alerting for ${shown(gone, person)}"
+    }
+
+    private fun shown(e: String, person: Boolean): String = if (person) e else "“$e”"
+
+    /**
+     * Whether [word] appears in [text] as a whole word or phrase (case aside): "stop" matches "Stop 66.5k" but not
+     * "stopped" or "nonstop"; "BTC" matches "$BTC" and "BTC/USDT". Plain string search (no regex built from his words).
+     */
+    fun saysWord(text: String, word: String): Boolean {
+        val t = text.lowercase()
+        val w = word.lowercase().trim()
+        if (w.isEmpty()) return false
+        var from = 0
+        while (true) {
+            val i = t.indexOf(w, from)
+            if (i < 0) return false
+            val before = if (i == 0) ' ' else t[i - 1]
+            val after = if (i + w.length >= t.length) ' ' else t[i + w.length]
+            val edgeStart = !w.first().isLetterOrDigit() || !before.isLetterOrDigit()
+            val edgeEnd = !w.last().isLetterOrDigit() || !after.isLetterOrDigit()
+            if (edgeStart && edgeEnd) return true
+            from = i + 1
+        }
+    }
+
+    /**
+     * Slice 2: why a post alerts — its author is a watched person, or its words include a watched word — or null.
+     * Discord's words are untrusted (ADR-006): matching them against his own list only decides whether he is told
+     * now; nothing is ever acted on.
+     */
+    fun alertWhy(author: String, text: String, people: List<String>, words: List<String>): String? {
+        val who = people.firstOrNull { fold(it) == fold(author.trimStart('@')) }
+        val said = if (text == "sent an image") emptyList() else words.filter { saysWord(text, it) }.take(2)
+        if (who == null && said.isEmpty()) return null
+        val parts = listOfNotNull(who?.let { "From $it" }, said.takeIf { it.isNotEmpty() }?.let { s -> "says " + s.joinToString(", ") { "“$it”" } })
+        return parts.joinToString(" · ").replaceFirstChar { it.uppercase() }
+    }
+
+    fun alertLine(people: List<String>, words: List<String>): String {
+        if (people.isEmpty() && words.isEmpty()) return NO_ALERTS
+        val from = people.takeIf { it.isNotEmpty() }?.let { "posts from " + orList(it) }
+        val saying = words.takeIf { it.isNotEmpty() }?.let { "saying " + orList(it) }
+        return "Alerts straight away for " + listOfNotNull(from, saying).joinToString(", or ")
+    }
+
+    private fun orList(xs: List<String>): String = when (xs.size) {
+        1 -> xs[0]
+        2 -> "${xs[0]} or ${xs[1]}"
+        3 -> "${xs[0]}, ${xs[1]} or ${xs[2]}"
+        else -> "${xs[0]}, ${xs[1]}, ${xs[2]} or ${xs.size - 3} more"
+    }
+
+    /** Who has posted in the channels he follows in the last week, busiest first, not already watched. */
+    fun suggestedPeople(posts: List<Post>, watched: Set<String>, people: List<String>, nowMs: Long): List<String> =
+        posts.filter { it.channel.key in watched && nowMs - it.atMs < KEEP_MS && it.author.isNotBlank() && it.author != "Someone" }
+            .groupBy { fold(it.author) }
+            .filterKeys { k -> people.none { fold(it) == k } }
+            .entries.sortedWith(compareByDescending<Map.Entry<String, List<Post>>> { it.value.size }.thenByDescending { e -> e.value.maxOf { it.atMs } })
+            .take(MAX_SUGGESTED).map { e -> e.value.maxBy { it.atMs }.author }
+
+    /**
+     * The channel's alert notification: its alerting posts not yet Done from the last [ALERT_WINDOW_MS], or null
+     * (nothing left to show: the notification comes down).
+     */
+    fun alertNotice(posts: List<Post>, key: String, nowMs: Long): DiscordAlertNotice? {
+        val hits = posts.filter { it.channel.key == key && !it.done && it.alert != null && it.text.isNotBlank() && nowMs - it.atMs < ALERT_WINDOW_MS }
+            .sortedBy { it.atMs }
+        val latest = hits.lastOrNull() ?: return null
+        fun line(p: Post) = "${p.author}: ${p.text.take(160)}"
+        return DiscordAlertNotice(
+            key = key, title = latest.channel.label, text = line(latest), why = latest.alert!!,
+            lines = hits.takeLast(5).map(::line), count = hits.size, latestMs = latest.atMs,
+        )
     }
 
     fun switchedLine(label: String, on: Boolean): String =
@@ -262,6 +429,8 @@ object DiscordRules {
         val text: String,
         val atMs: Long,
         val done: Boolean,
+        /** Slice 2: why it alerted when it arrived, or null. */
+        val alert: String? = null,
     )
 
     /** One card per watched channel with posts not yet Done (newest channel first); null when there are none. */
@@ -274,18 +443,22 @@ object DiscordRules {
             val shown = sorted.takeLast(SHOWN)
             val earlier = sorted.size - shown.size
             val authors = sorted.map { it.author }.distinct()
+            val alerts = sorted.filter { it.alert != null }
             DiscordChannelCard(
                 key = k,
                 title = "#" + latest.channel.channel,
                 server = latest.channel.server,
                 line = "${sorted.size} post${if (sorted.size == 1) "" else "s"} since you last looked · latest " +
                     whenLine(latest.atMs, nowMs, cal) + " · " + authorsLine(authors),
-                posts = shown.map { DiscordPostRow(it.id, it.author, it.text, whenLine(it.atMs, nowMs, cal)) },
+                posts = shown.map { DiscordPostRow(it.id, it.author, it.text, whenLine(it.atMs, nowMs, cal), it.alert) },
                 moreLine = if (earlier > 0) "+ $earlier earlier post${if (earlier == 1) "" else "s"}" else null,
                 ids = sorted.map { it.id },
                 latestMs = latest.atMs,
+                alertLine = alerts.lastOrNull()?.let { a ->
+                    "${alerts.size} alert${if (alerts.size == 1) "" else "s"} · latest " + whenLine(a.atMs, nowMs, cal)
+                },
             )
-        }.sortedByDescending { it.latestMs }
+        }.sortedWith(compareByDescending<DiscordChannelCard> { it.alertLine != null }.thenByDescending { it.latestMs })
         val total = cards.sumOf { it.ids.size }
         val headline = "${cards.size} channel${if (cards.size == 1) "" else "s"} · $total new post${if (total == 1) "" else "s"} · " +
             "information only, nothing is posted"
@@ -306,6 +479,8 @@ class DiscordStore(private val replica: Replica) {
     private fun setting(): Map<String, FieldValue>? = replica.entity(EntityTypes.CONTEXT_MODE, DiscordRules.ENTITY_ID)?.fields
 
     fun watched(): Set<String> = DiscordRules.watched(setting())
+    fun people(): List<String> = DiscordRules.entries(setting(), DiscordWatchFields.ALERT_PEOPLE)
+    fun words(): List<String> = DiscordRules.entries(setting(), DiscordWatchFields.ALERT_WORDS)
     fun seen(): List<DiscordSeenChannel> = DiscordRules.seen(setting())
 
     fun posts(): List<DiscordRules.Post> = replica.entities(EntityTypes.DISCORD_POST).mapNotNull { e ->
@@ -318,13 +493,20 @@ class DiscordStore(private val replica: Replica) {
             e[DiscordPostFields.TEXT].textOrNull.orEmpty(),
             e[DiscordPostFields.AT].longOrNull ?: 0L,
             e[DiscordPostFields.DONE].boolOrNull == true,
+            e[DiscordPostFields.ALERT].textOrNull?.takeIf { it.isNotBlank() },
         )
     }
 
-    /** Notes the channels and keeps the watched ones' new posts; returns how many posts were new. */
-    fun note(incoming: List<DiscordCaptured>, nowMs: Long): Int {
-        if (incoming.isEmpty()) return 0
+    /**
+     * Notes the channels and keeps the watched ones' new posts, marking any from a watched person or with a watched
+     * word; returns how many were new and the channels whose alert notification to post now (a fresh alerting post).
+     */
+    fun note(incoming: List<DiscordCaptured>, nowMs: Long): DiscordNoted {
+        if (incoming.isEmpty()) return DiscordNoted(0, emptyList())
         val watched = watched()
+        val people = people()
+        val words = words()
+        val alerting = mutableSetOf<String>()
         DiscordRules.noteSeen(seen(), incoming, watched)?.let { list ->
             replica.commitLocal(EntityTypes.CONTEXT_MODE, DiscordRules.ENTITY_ID, mapOf(
                 DiscordWatchFields.CHANNELS to DiscordRules.seenText(list).fv(),
@@ -335,19 +517,38 @@ class DiscordStore(private val replica: Replica) {
             val text = DiscordRules.cleanText(p.text) ?: return@forEach
             val id = DiscordRules.postId(p.channel.key, p.author, p.atMs, text)
             if (replica.entity(EntityTypes.DISCORD_POST, id) != null) return@forEach
+            val author = p.author.trim().take(100)
+            val why = DiscordRules.alertWhy(author, text, people, words)
+            if (why != null && nowMs - p.atMs < DiscordRules.ALERT_FRESH_MS) alerting += p.channel.key
             replica.commitLocal(EntityTypes.DISCORD_POST, id, mapOf(
                 DiscordPostFields.CHANNEL to p.channel.key.fv(),
                 DiscordPostFields.SERVER to p.channel.server.fv(),
                 DiscordPostFields.CHANNEL_NAME to p.channel.channel.fv(),
-                DiscordPostFields.AUTHOR to p.author.trim().take(100).fv(),
+                DiscordPostFields.AUTHOR to author.fv(),
                 DiscordPostFields.TEXT to text.fv(),
                 DiscordPostFields.AT to p.atMs.fv(),
                 DiscordPostFields.DONE to false.fv(),
+                DiscordPostFields.ALERT to why.fv(),
             ))
             fresh++
         }
         prune(nowMs)
-        return fresh
+        val all = if (alerting.isEmpty()) emptyList() else posts()
+        return DiscordNoted(fresh, alerting.mapNotNull { DiscordRules.alertNotice(all, it, nowMs) })
+    }
+
+    /** Slice 2: add or remove a watched person ([person]) or word; synced. Returns the line for the bar. */
+    fun setAlert(raw: String, person: Boolean, add: Boolean, nowMs: Long): String {
+        val field = if (person) DiscordWatchFields.ALERT_PEOPLE else DiscordWatchFields.ALERT_WORDS
+        val list = if (person) people() else words()
+        val (next, line) = if (add) DiscordRules.added(list, raw, person) else DiscordRules.removed(list, raw, person)
+        if (next != null) {
+            replica.commitLocal(EntityTypes.CONTEXT_MODE, DiscordRules.ENTITY_ID, mapOf(
+                field to next.joinToString("\n").fv(),
+                DiscordWatchFields.CHANGED_AT to nowMs.fv(),
+            ))
+        }
+        return line
     }
 
     /** Words of posts that are Done (after the Undo window) or past [DiscordRules.KEEP_MS] are blanked. */

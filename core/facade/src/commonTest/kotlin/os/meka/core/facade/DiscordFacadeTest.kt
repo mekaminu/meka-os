@@ -35,7 +35,7 @@ class DiscordFacadeTest {
         val fold = core("android")
         val mac = core("mac")
         // Before anything is picked: channels are noted, nothing is kept.
-        assertEquals(0, fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "first idea", now), DiscordCaptured(general, "Sam", "gm", now))))
+        assertEquals(0, fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "first idea", now), DiscordCaptured(general, "Sam", "gm", now))).fresh)
         assertNull(fold.discord.value)
         assertEquals(2, fold.discordWatch.value.rows.size)
         fold.syncNow(); mac.syncNow()
@@ -49,7 +49,7 @@ class DiscordFacadeTest {
             DiscordCaptured(ideas, "Admin", "BTC long idea above 68k, stop 66.5k", now),
             DiscordCaptured(ideas, "Admin", "BTC long idea above 68k, stop 66.5k", now), // a re-post
             DiscordCaptured(general, "Sam", "anyone around?", now),
-        ))
+        )).fresh
         assertEquals(1, n)
         val card = fold.discord.value!!.cards.single()
         assertEquals("#trade-ideas", card.title)
@@ -69,6 +69,37 @@ class DiscordFacadeTest {
         // Stop following: new posts from it are no longer kept.
         assertTrue(fold.setDiscordWatched(ideas.key, false).startsWith("Stopped following"))
         now += 60_000
-        assertEquals(0, fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "another", now))))
+        assertEquals(0, fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "another", now))).fresh)
+    }
+
+    @Test
+    fun peopleAndWordsSetOnTheMacAlertOnTheFold() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "first idea", now)))
+        fold.setDiscordWatched(ideas.key, true)
+        fold.syncNow(); mac.syncNow()
+        assertEquals("Alerts straight away for posts from Admin", mac.setDiscordAlert("@Admin", person = true, add = true))
+        assertEquals("Alerts straight away for posts saying “stop”", mac.setDiscordAlert("stop", person = false, add = true))
+        assertEquals("Alerts straight away for posts from Admin, or saying stop", mac.discordWatch.value.alertLine)
+        mac.syncNow(); fold.syncNow()
+        assertEquals(listOf("Admin"), fold.discordWatch.value.people)
+
+        now += 60_000
+        val noted = fold.noteDiscord(listOf(
+            DiscordCaptured(ideas, "Sam", "gm", now),
+            DiscordCaptured(ideas, "Sam", "BTC entry 67.8k, stop 66.5k", now + 1),
+        ))
+        assertEquals(2, noted.fresh)
+        val alert = noted.alerts.single()
+        assertEquals("Sam: BTC entry 67.8k, stop 66.5k", alert.text)
+        assertEquals("Says “stop”", alert.why)
+        fold.syncNow(); mac.syncNow()
+        val card = mac.discord.value!!.cards.single()
+        assertEquals("1 alert · latest 10:01", card.alertLine)
+        assertEquals("Says “stop”", card.posts.last().alert)
+        // Admin is already watched, so only Sam is offered.
+        assertEquals(listOf("Sam"), mac.discordWatch.value.suggestedPeople)
+        assertEquals("No longer alerting for Admin", fold.setDiscordAlert("admin", person = true, add = false))
     }
 }

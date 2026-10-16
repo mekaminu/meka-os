@@ -55,6 +55,7 @@ internal fun DiscordSection(
 ) {
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var open by rememberSaveable { mutableStateOf(true) }
     val reduced = Meka.reducedMotion
     Column(
@@ -80,6 +81,8 @@ internal fun DiscordSection(
                     androidx.compose.runtime.key(card.key) {
                         DiscordChannelCardView(card) {
                             haptics.medium()
+                            // Slice 2: the channel's alert notification has done its job.
+                            os.meka.android.work.DiscordAlerts.cancel(context, card.key)
                             scope.launch {
                                 val said = runCatching { core.discordDone(card.key) }.getOrNull() ?: return@launch
                                 undo(said) { runCatching { core.undoDiscord() } }
@@ -103,14 +106,28 @@ private fun DiscordChannelCardView(card: DiscordChannelCard, onDone: () -> Unit)
             MailNeedsPill("Done", spoken = "Done with ${card.title}", onClick = onDone)
         }
         Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        // Slice 2: posts from a person or with a word he picked: "2 alerts · latest 14:02" in brass.
+        card.alertLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent) }
         card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
         Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             card.posts.forEach { post ->
                 Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { }) {
                     Text("${post.author} · ${post.timeLine}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                    post.alert?.let { DiscordAlertChip(it) }
                     Text(post.text, style = MekaType.body, color = Meka.colors.textPrimary)
                 }
             }
         }
     }
+}
+
+/** Slice 2: why a post alerted ("From Admin · says “stop”"), a small brass chip above its words. */
+@Composable
+private fun DiscordAlertChip(why: String) {
+    Text(
+        why, style = MekaType.caption, color = Meka.colors.onAccent,
+        modifier = Modifier.padding(vertical = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.pill))
+            .background(Meka.colors.accent).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs)
+            .semantics { contentDescription = "Alert: $why" },
+    )
 }
