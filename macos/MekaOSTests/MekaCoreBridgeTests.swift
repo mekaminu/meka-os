@@ -1797,6 +1797,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(MoneyView.companion.LOCKED.alerts.isEmpty)
     }
 
+    func testMoneyForecastReachesSwift() {
+        // Money manager, slice 4: the forecast's words and the extra's reading cross to Swift; a locked screen has none.
+        XCTAssertEqual(MoneyForecast.shared.HEAD, "FORECAST AT YOUR PACE")
+        XCTAssertEqual(MoneyForecast.shared.parseExtra(text: "£50 a week"), KotlinLong(value: 21_666))
+        XCTAssertNil(MoneyForecast.shared.parseExtra(text: "lots"))
+        XCTAssertEqual(MoneyForecast.shared.extraSaid(pence: 20_000), "What if: £200 a month more coming in")
+        XCTAssertNil(MoneyView.companion.LOCKED.forecast)
+    }
+
     func testKidsRulesReachSwift() {
         // Kids' admin, slice 1: a size is tidied, both apps write the same child, no children → About you first.
         let rules = KidsRules.shared

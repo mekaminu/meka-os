@@ -624,12 +624,14 @@ class MekaCore(
     val moneyView: StateFlow<os.meka.core.domain.MoneyView> = _money.asStateFlow()
     private var moneyOpen = false
     private var moneyOffset = 0
+    // Slice 4: the forecast's what-ifs, on this device only, dropped when Money locks.
+    private var moneyWhatIf = os.meka.core.domain.MoneyWhatIf()
 
     /** After the app's own biometric yes: the Money screen for this month. */
     suspend fun openMoney() = onCore { moneyOpen = true; moneyOffset = 0; refreshMoney() }
 
     /** Locks Money again (the pane closed or the app went away). */
-    suspend fun closeMoney() = onCore { moneyOpen = false; moneyOffset = 0; _money.value = os.meka.core.domain.MoneyView.LOCKED }
+    suspend fun closeMoney() = onCore { moneyOpen = false; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
 
     /** ‹ / ›: [step] −1 a month earlier, +1 a month later (never past this month). */
     suspend fun moneyStep(step: Int) = onCore {
@@ -662,7 +664,7 @@ class MekaCore(
 
     /** Delete all money data: every account, transaction and category choice, on every device (after his yes). */
     suspend fun deleteAllMoney(): os.meka.core.domain.MoneySaved = onCore {
-        if (!moneyOpen) moneyLocked() else money.deleteAll().also { moneyOffset = 0; refreshMoney() }
+        if (!moneyOpen) moneyLocked() else money.deleteAll().also { moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); refreshMoney() }
     }
 
     /** Slice 2: hides every tip of [kind] ("habit", "over", "rise") on both devices; Undo by [undoMoneyCategory]. */
@@ -680,10 +682,29 @@ class MekaCore(
         if (!moneyOpen) moneyLocked() else money.alertFine(alertId).also { refreshMoney() }
     }
 
+    /** Slice 4: turns the forecast's "Halve <category>" what-if on or off (this device only, never stored). */
+    suspend fun moneyForecastCut(category: String) = onCore {
+        if (!moneyOpen) return@onCore
+        val c = moneyWhatIf.cuts
+        moneyWhatIf = moneyWhatIf.copy(cuts = if (category in c) c - category else c + category)
+        refreshMoney()
+    }
+
+    /** Slice 4: the forecast's extra a month ("£200", "£50 a week"); blank clears it. This device only, never stored. */
+    suspend fun moneyForecastExtra(text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val p = os.meka.core.domain.MoneyForecast.parseExtra(text)
+            ?: return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyForecast.EXTRA_BAD, refused = true)
+        moneyWhatIf = moneyWhatIf.copy(extraPence = p)
+        refreshMoney()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyForecast.extraSaid(p))
+    }
+
     private fun refreshMoney() {
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
+            moneyWhatIf,
         )
     }
 

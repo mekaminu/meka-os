@@ -3269,6 +3269,20 @@ final class CoreModel {
         }
     }
 
+    /// Slice 4: the forecast's "Halve <category>" what-if on or off (this Mac only, never stored). Only a String crosses.
+    func moneyForecastCut(_ category: String) { MekaHaptics.tick(); run { try await $0.moneyForecastCut(category: category) } }
+
+    /// Slice 4: the forecast's extra a month ("£200", "£50 a week"); blank clears it. This Mac only. Only a String crosses.
+    func moneyForecastExtra(_ text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyForecastExtra(text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 3: That's fine on one watchdog alert, on both devices; Undo with `undoMoneyCategory`.
     func moneyAlertFine(alertId: String) async -> MoneySaid? {
         guard let core else { return nil }

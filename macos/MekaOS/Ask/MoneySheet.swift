@@ -31,6 +31,7 @@ struct MoneySheet: View {
     @State private var removing: String?
     @State private var deleting = false
     @State private var busy = false
+    @State private var extra = ""
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -116,6 +117,7 @@ struct MoneySheet: View {
                 Text(r.head).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
                 ForEach(r.rows, id: \.key) { row in regular(row).transition(.opacity) }
             }
+            if let f = v.forecast { forecast(f).transition(.opacity) }
             if !m.categories.isEmpty {
                 Text("BY CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 ForEach(m.categories, id: \.key) { c in category(c).transition(.opacity) }
@@ -129,6 +131,63 @@ struct MoneySheet: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: m.label)
+    }
+
+    /// Slice 4: the forecast at his pace, with what-ifs on this Mac only (they go when Money locks).
+    private func forecast(_ f: MoneyForecastView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(f.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let n = f.notReady {
+                Text(n).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            } else {
+                if let p = f.pace { Text(p).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
+                if let l = f.left {
+                    Text(l).font(MekaType.caption).foregroundStyle(f.leftLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
+                }
+                ForEach(f.rows, id: \.label) { r in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(r.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                        }
+                        Spacer()
+                        Text(r.amount).font(MekaType.body).foregroundStyle(r.lit ? palette.accent : palette.textPrimary).contentTransition(.opacity)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(r.spoken)
+                }
+                Text(MoneyForecast.shared.WHAT_IF).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                if !f.cuts.isEmpty {
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(f.cuts, id: \.key) { c in
+                            Button {
+                                model.moneyForecastCut(c.key)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
+                                    Text(c.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                }
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .accessibilityLabel(c.spoken)
+                        }
+                    }
+                }
+                TextField(MoneyForecast.shared.EXTRA_HINT, text: $extra)
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        let text = extra
+                        Task { said = await model.moneyForecastExtra(text) }
+                    }
+                if let e = f.extraLine { Text(e).font(MekaType.caption).foregroundStyle(palette.accent) }
+                if let b = f.basis {
+                    Text(b).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: f.rows.map { $0.line })
     }
 
     /// Slice 3: one payment worth a look, with That's fine (Undo in the line below).

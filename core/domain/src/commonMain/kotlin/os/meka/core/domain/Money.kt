@@ -390,6 +390,8 @@ data class MoneyView(
     val hiddenTips: String? = null,
     /** Slice 3: payments worth a second look ([MoneyWatch]), shown with this month only. */
     val alerts: List<MoneyAlert> = emptyList(),
+    /** Slice 4: the forecast at his pace with what-ifs ([MoneyForecast]), shown with this month only. */
+    val forecast: MoneyForecastView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -481,7 +483,7 @@ object MoneyRules {
      */
     fun view(
         accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>, today: Long, cal: LocalCalendar, offset: Int,
-        hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(),
+        hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(), whatIf: MoneyWhatIf = MoneyWhatIf(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
@@ -567,6 +569,7 @@ object MoneyRules {
             alerts = if (partial) MoneyWatch.alerts(
                 mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) }, today, names, fineAlerts,
             ) else emptyList(),
+            forecast = if (partial) MoneyForecast.view(lines, today, whatIf) else null,
         )
     }
 

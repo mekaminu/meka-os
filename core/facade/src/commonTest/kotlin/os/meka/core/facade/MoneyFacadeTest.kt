@@ -135,4 +135,33 @@ class MoneyFacadeTest {
         fold.deleteAllMoney()
         assertTrue(fold.moneyView.value.alerts.isEmpty())
     }
+
+    @Test
+    fun theForecastsWhatIfsStayOnThisDeviceAndGoWhenMoneyLocks() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Jul–Sep: £2,500 in, £300 eating out and £150 groceries out each month.
+        val csv = "Date,Description,Amount\n" + listOf("07", "08", "09").joinToString("") { m ->
+            "01/$m/2026,SALARY OAKFIELD LTD,2500.00\n10/$m/2026,NANDOS,-300.00\n12/$m/2026,TESCO STORES 2041,-150.00\n28/$m/2026,TESCO STORES 2041,-0.50\n"
+        }
+        assertTrue(fold.moneyForecastExtra("£200").refused) // locked
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        val f = fold.moneyView.value.forecast!!
+        assertEquals("About £2,050 a month left over", f.left)
+        assertEquals("Halve Eating out", f.cuts.first().label)
+        fold.moneyForecastCut("eating_out")
+        assertEquals("What if: £200 a month more coming in", fold.moneyForecastExtra("£200").line)
+        assertTrue(fold.moneyForecastExtra("lots").refused)
+        val g = fold.moneyView.value.forecast!!
+        assertTrue(g.cuts.first().on)
+        assertEquals("put by at your pace · +£2,100 with your what-ifs", g.rows[0].line)
+        // Never synced: the Mac sees the plain forecast.
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals("put by at your pace", mac.moneyView.value.forecast!!.rows[0].line)
+        // Locking drops them.
+        fold.closeMoney(); fold.openMoney()
+        assertEquals("put by at your pace", fold.moneyView.value.forecast!!.rows[0].line)
+    }
 }

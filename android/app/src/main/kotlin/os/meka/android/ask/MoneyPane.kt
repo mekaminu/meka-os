@@ -59,6 +59,9 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.MoneyAlert
 import os.meka.core.domain.MoneyCategoryRow
+import os.meka.core.domain.MoneyForecast
+import os.meka.core.domain.MoneyForecastRow
+import os.meka.core.domain.MoneyForecastView
 import os.meka.core.domain.MoneyRules
 import os.meka.core.domain.MoneyRegularRow
 import os.meka.core.domain.MoneySaved
@@ -77,6 +80,10 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 3: this month leads with **WORTH A LOOK**: a possible double charge, a payment much bigger than usual or a first big
  * one, and fees (foreign, late, interest), each with "That's fine" (on both devices, Undo); Navilife never acts on them.
+ *
+ * Slice 4: **FORECAST AT YOUR PACE** — his average whole month (in, out, left over) and where that leaves him in 6 and 12
+ * months; what-ifs (halve one of his three biggest everyday categories, an extra amount a month he types) live on this
+ * phone only and go when Money locks.
  *
  * Locking: the core holds no figures for the screen until [MekaCore.openMoney] after the prompt's yes, and closing the
  * pane (or leaving it) calls [MekaCore.closeMoney].
@@ -238,6 +245,21 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 r.rows.forEach { row ->
                     item(key = "regular-${row.key}") { RegularRow(row, Modifier.animateItem()) }
+                }
+            }
+            // Slice 4: the forecast at his pace, with what-ifs on this phone only (this month only).
+            v.forecast?.let { f ->
+                item(key = "forecast-head") {
+                    Text(f.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                f.notReady?.let { n ->
+                    item(key = "forecast-not-ready") { Text(n, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem()) }
+                }
+                if (f.notReady == null) item(key = "forecast") {
+                    ForecastBlock(f, Modifier.animateItem().appear(rememberAppearance(4)),
+                        onCut = { key -> haptics.tick(); scope.launch { runCatching { core.moneyForecastCut(key) } } },
+                        onExtra = { text -> scope.launch { runCatching { core.moneyForecastExtra(text) }.getOrNull()?.let(say) } })
                 }
             }
             if (m.categories.isNotEmpty()) {
@@ -460,5 +482,64 @@ private fun AlertCard(a: MoneyAlert, modifier: Modifier, onFine: () -> Unit) {
         }
         Text(MoneyWatch.FINE, style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFine).minTouch())
+    }
+}
+
+@Composable
+private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier, onCut: (String) -> Unit, onExtra: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    var extra by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        f.pace?.let { p ->
+            Crossfade(p, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-pace") { l ->
+                Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
+            }
+        }
+        f.left?.let { l ->
+            val c by animateColorAsState(if (f.leftLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-forecast-left")
+            Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-left-line") { t ->
+                Text(t, style = MekaType.caption, color = c)
+            }
+        }
+        f.rows.forEach { r -> ForecastRow(r) }
+        if (f.cuts.isNotEmpty() || f.rows.isNotEmpty()) {
+            Text(MoneyForecast.WHAT_IF, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+        }
+        if (f.cuts.isNotEmpty()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                f.cuts.forEach { c ->
+                    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-cut-${c.key}")
+                    Column(
+                        Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Switch) { onCut(c.key) }.minTouch()
+                            .semantics(mergeDescendants = true) { contentDescription = c.spoken }
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    ) {
+                        Text(c.label, style = MekaType.caption, color = col)
+                        Text(c.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    }
+                }
+            }
+        }
+        Field(MoneyForecast.EXTRA_HINT, value = extra, onValue = { extra = it }) { extra = it; onExtra(it) }
+        f.extraLine?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.accent) }
+        f.basis?.let { b -> Text(b, style = MekaType.caption, color = Meka.colors.textTertiary) }
+    }
+}
+
+@Composable
+private fun ForecastRow(r: MoneyForecastRow) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (r.lit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "money-forecast-${r.label}")
+    Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken }, verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(r.label, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-line-${r.label}") { l ->
+                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+        Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-amount-${r.label}") { a ->
+            Text(a, style = MekaType.body, color = c)
+        }
     }
 }
