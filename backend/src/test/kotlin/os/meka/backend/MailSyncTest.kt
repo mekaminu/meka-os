@@ -1069,6 +1069,29 @@ class MailSyncTest {
     }
 
     @Test
+    fun aRefundEmailPublishesOneRefundFindAndNothingOnWaitingFor() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        gmail.mailbox["r1"] = msg("r1", 0, "no-reply@shopco.example").copy(subject = "Your refund of £40.00 has been processed", preview = "It may take 3-5 days to show.")
+        gmail.mailbox["r2"] = msg("r2", 0, "no-reply@shopco.example").copy(subject = "We've received your refund request", preview = "We'll be in touch.")
+        gmail.nextRound = { MailChanges(fetch = listOf("r1", "r2"), cursor = "h2") }
+        i.syncAccount(id)
+        fun refunds() = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values
+            .filter { it[os.meka.core.domain.MailFindFields.KIND] == FieldValue.Text(os.meka.core.domain.MailRefundRules.KIND_REFUND) }
+        val f = refunds().single()
+        assertEquals(FieldValue.Text("Shopco"), f[os.meka.core.domain.MailFindFields.MERCHANT])
+        assertEquals(FieldValue.Int64(4000), f[os.meka.core.domain.MailFindFields.PENCE])
+        // Nothing on Waiting for changes on the server: his Close it does that.
+        assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.COMMITMENT).size)
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(1, refunds().size)
+    }
+
+    @Test
     fun onlyTheSchoolsEmailsBecomeSchoolFinds() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

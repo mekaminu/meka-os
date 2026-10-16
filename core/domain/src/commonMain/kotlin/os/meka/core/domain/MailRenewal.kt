@@ -131,6 +131,9 @@ data class MailFindRow(
     val waitSpoken: String? = null,
     val waitHeading: String? = null,
     val waits: List<WaitChoice> = emptyList(),
+    /** The two pills' words: "Add" and "Not needed"; a refund's "Close it" and "Not this one" ([MailRefundRules]). */
+    val addLabel: String = MailRenewalRules.ADD,
+    val notNeededLabel: String = MailRenewalRules.NOT_NEEDED,
 )
 
 data class MailFindCard(
@@ -417,18 +420,24 @@ object MailRenewalRules {
             f.kind == KIND_RENEWAL && f.state == MailFindState.OPEN && f.renewDay >= today &&
                 !alreadyOnRadar(f.merchant, f.renewDay, obligations, cal)
         }
-        val promises = finds.filter { MailPromiseRules.showable(it, waiting, today) }
+        val promisesAll = finds.filter { MailPromiseRules.showable(it, waiting, today) }
         val followUps = finds.filter { MailFollowUpRules.showable(it, waiting, today, waits) }
         val school = finds.filter { SchoolMailRules.showable(it, schoolItems, today) }
         // Life audit, slice 1: subscriptions the 60 days of mail show.
         val subs = finds.filter { LifeAuditRules.showable(it, finds, obligations, today, cal) }
-        val open = (renewals + promises + followUps + school + subs).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
+        // Returns and warranties, completeness slice 2: a refund email that closes a refund row on Waiting for.
+        val refunds = finds.filter { MailRefundRules.showable(it, waiting, today, cal) }
+        // A refund promise in the same shop's email is covered while its refund is offered or once he answered it.
+        val answeredRefunds = refunds + finds.filter { it.kind == MailRefundRules.KIND_REFUND && it.state != MailFindState.OPEN }
+        val promises = promisesAll.filterNot { MailRefundRules.covers(answeredRefunds, it) }
+        val open = (renewals + promises + followUps + school + subs + refunds).sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id })
         if (open.isEmpty()) return null
         val rows = open.take(SHOWN).map { f ->
             if (f.kind == MailPromiseRules.KIND_PROMISE) return@map MailPromiseRules.row(f, today)
             if (f.kind == MailFollowUpRules.KIND_FOLLOW_UP) return@map MailFollowUpRules.row(f, today, waits)
             if (f.kind == SchoolMailRules.KIND_SCHOOL) return@map SchoolMailRules.row(f, today)
             if (LifeAuditRules.isSubscription(f)) return@map LifeAuditRules.row(f, today)
+            if (f.kind == MailRefundRules.KIND_REFUND) return@map MailRefundRules.row(f, MailRefundRules.match(f, waiting, cal)!!, today)
             val title = title(f)
             val line = line(f, today)
             MailFindRow(
@@ -440,11 +449,14 @@ object MailRenewalRules {
         val more = open.size - rows.size
         val others = renewals.size + promises.size + followUps.size + school.size
         val cardTitle = when {
+            refunds.isNotEmpty() -> if (others + subs.size == 0) MailRefundRules.TITLE else "To add from your mail"
             subs.isEmpty() -> title(renewals.size, promises.size, followUps.size, school.size)
             others == 0 -> LifeAuditRules.TITLE
             else -> "To add from your mail"
         }
         val cardHeadline = when {
+            refunds.isNotEmpty() -> if (others + subs.size == 0) MailRefundRules.headline(refunds.size)
+                else "${others + subs.size} to add · ${MailRefundRules.headline(refunds.size).substringBefore(" · ")} · nothing changes until you tap"
             subs.isEmpty() -> headline(renewals.size, promises.size, followUps.size, school.size, school.count(SchoolMailRules::isAsk))
             others == 0 -> LifeAuditRules.headline(subs)
             else -> "${others + subs.size} to add · subscriptions ${LifeAuditRules.monthlyLabel(subs)} · nothing goes on until you tap Add"

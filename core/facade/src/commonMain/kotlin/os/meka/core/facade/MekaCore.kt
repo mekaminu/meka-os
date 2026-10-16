@@ -4694,6 +4694,7 @@ class MekaCore(
         if (f.kind == os.meka.core.domain.MailPromiseRules.KIND_PROMISE) return@onCore addMailPromise(f, cal)
         if (f.kind == os.meka.core.domain.MailFollowUpRules.KIND_FOLLOW_UP) return@onCore addMailFollowUp(f)
         if (f.kind == os.meka.core.domain.SchoolMailRules.KIND_SCHOOL) return@onCore addMailSchool(f, cal)
+        if (f.kind == os.meka.core.domain.MailRefundRules.KIND_REFUND) return@onCore closeMailRefund(f, cal)
         val oid = R.obligationId(id)
         val before = replica.entity(os.meka.core.domain.EntityTypes.OBLIGATION, oid)
         // Slice 3: a renewal added on its own and undone (its item deleted) comes back on this tap.
@@ -4735,6 +4736,25 @@ class MekaCore(
         }
         refresh()
         return P.addedLine(f, today)
+    }
+
+    /**
+     * Returns and warranties, completeness slice 2: **Close it** on a refund from the shop's email — the refund row it
+     * matches on Waiting for ([os.meka.core.domain.MailRefundRules.match]) leaves the list as received, and the find is
+     * answered on both apps. Undo puts the row back as it was and brings the find back. Nothing is sent to anyone.
+     */
+    private fun closeMailRefund(f: os.meka.core.domain.MailFind, cal: ZoneCalendar): String {
+        val F = os.meka.core.domain.MailRefundRules
+        val w = F.match(f, lists.waitingItems(), cal) ?: return F.GONE
+        val before = chaseState(w.id)
+        lists.received(w.id)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.ADDED, nowMs()))
+        mailFindUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.COMMITMENT, w.id, before)
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, f.id, os.meka.core.domain.MailRenewalRules.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs()))
+        }
+        refresh()
+        return F.closedLine(f, w, cal.epochDayOf(nowMs()))
     }
 
     /**
@@ -4790,11 +4810,11 @@ class MekaCore(
     /** **Not needed** on a renewal in "Renewals from your mail": gone on both apps, never offered again (with Undo). */
     suspend fun notNeededMailFind(id: String): String = onCore {
         val R = os.meka.core.domain.MailRenewalRules
-        activity.mailFinds().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val f = activity.mailFinds().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.DISMISSED, nowMs()))
         mailFindUndo = { replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_FIND, id, R.stateFields(os.meka.core.domain.MailFindState.OPEN, nowMs())) }
         mailFindsChanged()
-        R.NOT_NEEDED_LINE
+        if (f.kind == os.meka.core.domain.MailRefundRules.KIND_REFUND) os.meka.core.domain.MailRefundRules.NOT_THIS_LINE else R.NOT_NEEDED_LINE
     }
 
     /** Undo on the bar after Add or Not needed: the find comes back (and an added reminder comes off). */

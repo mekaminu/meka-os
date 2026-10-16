@@ -733,9 +733,9 @@ private struct MailFindRowView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(row.spoken)
             HStack(spacing: MekaSpace.xs) {
-                MailNeedsPill(label: MailRenewalRules.shared.ADD, palette: palette,
+                MailNeedsPill(label: row.addLabel, palette: palette,
                               spoken: row.addSpoken, action: add)
-                MailNeedsPill(label: MailRenewalRules.shared.NOT_NEEDED, palette: palette, quiet: true,
+                MailNeedsPill(label: row.notNeededLabel, palette: palette, quiet: true,
                               spoken: row.notNeededSpoken, action: notNeeded)
                 if let pill = row.waitPill {
                     MailNeedsPill(label: pill, palette: palette, quiet: true,

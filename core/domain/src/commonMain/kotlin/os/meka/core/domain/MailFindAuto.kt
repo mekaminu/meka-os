@@ -75,7 +75,8 @@ object MailFindAutoRules {
             f.autoAtMs == null && f.merchant != null && when (f.kind) {
                 MailRenewalRules.KIND_RENEWAL -> f.state == MailFindState.OPEN && f.renewDay >= today &&
                     !MailRenewalRules.alreadyOnRadar(f.merchant, f.renewDay, obligations, cal)
-                MailPromiseRules.KIND_PROMISE -> f.what != null && MailPromiseRules.showable(f, waiting, today)
+                MailPromiseRules.KIND_PROMISE -> f.what != null && MailPromiseRules.showable(f, waiting, today) &&
+                    !MailRefundRules.covers(finds, f)
                 else -> false
             }
         }.sortedWith(compareBy<MailFind> { it.renewDay }.thenBy { it.id }).take(room)

@@ -10,6 +10,7 @@ import os.meka.core.domain.MailSortReason
 import os.meka.core.domain.MailSorted
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
+import os.meka.core.domain.MailRefundRules
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
 import os.meka.core.domain.MailRenewalRules
@@ -630,6 +631,38 @@ class Integrations(
         stage(a, "schoolMail") { schoolMail(a, ms) }
         // Life audit, slice 1: the subscriptions 60 days of mail show (on his tap in the apps).
         stage(a, "subscriptions") { subscriptions(a, ms) }
+        // Returns and warranties, completeness slice 2: refunds made, to close a refund row on Waiting for (on his tap).
+        stage(a, "refunds") { refunds(a, ms) }
+    }
+
+    /**
+     * Returns and warranties, completeness slice 2: the emails of the last [MailRefundRules.WINDOW_DAYS] days that the
+     * rules didn't sort as newsletters, promos or junk (no-reply senders included: shops send refunds from them), and
+     * not from one of his own addresses, are read by [MailRefundRules.read] from the sender, subject and kept preview;
+     * each that says a refund was made becomes one `mail_find` (kind REFUND) under an id from the account and the email,
+     * written once. Nothing on Waiting for changes here: the apps show it only when a refund row from that shop is
+     * open, and his Close it closes that row.
+     */
+    internal fun refunds(a: AccountRow, ms: MailStore) {
+        val nowMs = now()
+        val own = store.accounts(a.householdId).map { it.email.lowercase() }.toSet() + a.email.lowercase()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= MailRefundRules.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                (h.fromAddress?.lowercase() ?: "") !in own &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
+        }
+        if (candidates.isEmpty()) return
+        val previews = ms.previews(a.id, candidates.map { it.id })
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        for (h in candidates.sortedBy { it.receivedAtMs }) {
+            val id = MailRefundRules.findId(a.id, h.id)
+            if (mirror.containsKey(id)) continue
+            val r = MailRefundRules.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview) ?: continue
+            if (r.merchant == null) continue
+            writeMail(a, id, MailRefundRules.serverFields(r, account, h.subject, LONDON.epochDayOf(h.receivedAtMs)), EntityTypes.MAIL_FIND)
+        }
     }
 
     /** Follow-up radar: when each account's sent mail was last read (in memory; a restart just reads it again). */

@@ -56,7 +56,6 @@ import os.meka.core.domain.MailChaseRules
 import os.meka.core.domain.MailDraft
 import os.meka.core.domain.MailFindCard
 import os.meka.core.domain.MailFindRow
-import os.meka.core.domain.MailRenewalRules
 import os.meka.core.domain.MailDraftRules
 import os.meka.core.domain.MailAutoDraftRules
 import os.meka.core.domain.MailNeedsCard
@@ -706,8 +705,8 @@ private fun MailFindRowView(row: MailFindRow, onAdd: () -> Unit, onNotNeeded: ()
             Modifier.padding(top = MekaSpace.xxs),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            MailNeedsPill(MailRenewalRules.ADD, spoken = row.addSpoken, onClick = onAdd)
-            MailNeedsPill(MailRenewalRules.NOT_NEEDED, spoken = row.notNeededSpoken, quiet = true, onClick = onNotNeeded)
+            MailNeedsPill(row.addLabel, spoken = row.addSpoken, onClick = onAdd)
+            MailNeedsPill(row.notNeededLabel, spoken = row.notNeededSpoken, quiet = true, onClick = onNotNeeded)
             row.waitPill?.let { pill ->
                 MailNeedsPill(pill, spoken = row.waitSpoken ?: pill, quiet = true, onClick = { waitOpen = !waitOpen })
             }
