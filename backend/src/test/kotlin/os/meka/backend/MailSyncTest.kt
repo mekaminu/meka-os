@@ -1708,8 +1708,8 @@ class MailSyncTest {
         gmail.mailbox["f"] = msg("f", 0, from = "jo@example.com").copy(fromName = "Jo Park", subject = "Photos", preview = "Here are the photos from the weekend.")
         gmail.mailbox["u"] = msg("u", 0, from = "ali@example.com").copy(fromName = "Ali Khan", subject = "Quote", preview = "Could you send the quote?")
         val id = connect(i)
-        gmail.nextRound = { MailChanges(cursor = "h2") }
         i.syncAccount(id)
+        gmail.nextRound = { MailChanges(cursor = "h2") }
         val q = MailNeedsRules.read(MailNeedsRules.itemId(id, "q"), items(ops).getValue(MailNeedsRules.itemId(id, "q")))!!
         val f = MailNeedsRules.read(MailNeedsRules.itemId(id, "f"), items(ops).getValue(MailNeedsRules.itemId(id, "f")))!!
         val u = MailNeedsRules.read(MailNeedsRules.itemId(id, "u"), items(ops).getValue(MailNeedsRules.itemId(id, "u")))!!
@@ -1746,8 +1746,8 @@ class MailSyncTest {
         val (gmail, _, i) = world(ms, ops = ops, mailDrafter = MailDrafter { calls++; answer })
         gmail.mailbox["q"] = msg("q", 0).copy(fromName = "Sam Taylor", subject = "Saturday?", preview = "Are you free?")
         val id = connect(i)
-        gmail.nextRound = { MailChanges(cursor = "h2") }
         i.syncAccount(id)
+        gmail.nextRound = { MailChanges(cursor = "h2") }
         val qid = MailNeedsRules.itemId(id, "q")
         assertEquals(1, calls)
         assertNull(MailNeedsRules.read(qid, items(ops).getValue(qid))!!.autoDraftTriedAtMs)
