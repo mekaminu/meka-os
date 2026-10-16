@@ -369,7 +369,9 @@ internal fun NeedsYouColumn(
     // Busy groups' chatter, kept on this phone (V1, messages slice 4): open at the top from 12:30 and 18:30, else a line.
     val captures = (LocalContext.current.applicationContext as MekaApplication).captures
     // A group with a chat card here carries its digest chatter in that card (slice 3b): the digest leaves it out.
-    val chatGroups = remember(grouped) { TriageChatRules.groupKeys(grouped) }
+    // A group with a card in "While you were at work" is shown there, never twice (Meka, 2026-10-15 20:28).
+    val heldGroups = core.afterWork.collectAsState().value.groupKeys
+    val chatGroups = remember(grouped, heldGroups) { (TriageChatRules.groupKeys(grouped) + heldGroups).distinct() }
     val digestNow = rememberGroupDigest(captures, core, chatGroups)
     val digest = digestNow.view
     val archived by core.archivedForYou.collectAsState()

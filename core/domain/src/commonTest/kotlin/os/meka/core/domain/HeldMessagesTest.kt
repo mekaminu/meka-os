@@ -42,11 +42,13 @@ class HeldMessagesTest {
         syncBoth()
         val onMac = mac.summary()
         // Urgent first, then family (the Mac has no lists: family travels with each item), then the rest.
-        assertEquals(listOf("Ada", "Mum", "Tom"), onMac.people.map { it.personName })
+        // Ada wrote in a group: the group is the card, with her name on its line.
+        assertEquals(listOf("Flat 4", "Mum", "Tom"), onMac.people.map { it.personName })
+        assertEquals("Ada · 1 message", onMac.people[0].line)
         assertTrue(onMac.people[1].isFamily)
         assertEquals("1 message · 1 missed call", onMac.people[1].line)
         assertEquals("Flat 4", onMac.people[0].items.single().conversation)
-        assertEquals("3 people · 3 messages · 1 missed call", onMac.headline)
+        assertEquals("3 chats · 3 messages · 1 missed call", onMac.headline)
         // The same summary the Fold builds from its own copy.
         assertEquals(AfterWorkSummaries.build(items, lists).headline, onMac.headline)
         assertEquals(fold.summary().people.map { it.personName }, onMac.people.map { it.personName })

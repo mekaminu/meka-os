@@ -85,7 +85,7 @@ object HeldPreviewRules {
      * by number reads as the listed name), at most [MAX_ROWS], with [workLine] heading the label.
      */
     fun build(summary: AfterWorkSummary, workLine: String, nowMs: Long, cal: LocalCalendar): HeldPreview {
-        val items = summary.people.flatMap { p -> p.items.map { it to p.personName } }
+        val items = summary.people.flatMap { p -> p.shownItems.map { it to (p.itemLabel(it) ?: p.personName) } }
             .sortedWith(compareByDescending<Pair<CapturedItem, String>> { it.first.atMs }.thenBy { it.first.id })
         val rows = items.take(MAX_ROWS).map { (item, name) -> row(item, name, nowMs, cal) }
         return HeldPreview(label(workLine, items.size), rows, (items.size - rows.size).coerceAtLeast(0))

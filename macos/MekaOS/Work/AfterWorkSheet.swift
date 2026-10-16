@@ -38,7 +38,7 @@ struct AfterWorkSheet: View {
             if let summary, !summary.isEmpty {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
-                        ForEach(Array(summary.people.enumerated()), id: \.element.personName) { i, p in
+                        ForEach(Array(summary.people.enumerated()), id: \.element.cardKey) { i, p in
                             person(p).staggeredAppear(i + 1)
                                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .trailing)))
                         }
@@ -77,7 +77,8 @@ struct AfterWorkSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: summary?.people.map { Self.key($0) } ?? [])
     }
 
-    private static func key(_ p: PersonSummary) -> String { p.items.first?.personKey ?? p.personName }
+    // A group chat is one card (Meka, 2026-10-15 20:28), keyed apart from a one-to-one chat with any of its senders.
+    private static func key(_ p: PersonSummary) -> String { p.cardKey }
 
     private func done(_ p: PersonSummary) {
         if selected == Self.key(p) { selected = nil }
@@ -96,6 +97,9 @@ struct AfterWorkSheet: View {
                 if p.isFamily {
                     Text("Family").font(MekaType.caption).foregroundStyle(palette.accent)
                 }
+                if p.mentioned {
+                    Text(GroupChatRules.shared.MENTIONED).font(MekaType.captionStrong).foregroundStyle(palette.accent)
+                }
                 Spacer()
                 Text(Self.time(p.latestAtMs)).font(MekaType.caption).foregroundStyle(palette.textTertiary).monospacedDigit()
                 // Its own Done (Meka, 2026-10-15 20:28): clears just this card, Undo on the bar.
@@ -109,13 +113,14 @@ struct AfterWorkSheet: View {
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
             if expanded {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
-                    ForEach(p.items, id: \.id) { item in
+                    ForEach(p.shownItems, id: \.id) { item in
                         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                             Text(Self.time(item.atMs)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                 .monospacedDigit().frame(width: 44, alignment: .leading)
                             VStack(alignment: .leading, spacing: 0) {
-                                if let group = item.conversation {
-                                    Text("in \(group)").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                // In a group's card each line names who wrote it.
+                                if let who = p.itemLabel(item: item) {
+                                    Text(who).font(MekaType.captionStrong).foregroundStyle(palette.textSecondary)
                                 }
                                 Text(item.displayLine)
                                     .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)

@@ -73,6 +73,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.MekaHaptics
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AfterWorkDone
+import os.meka.core.domain.GroupChatRules
 import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BlockedCallersView
@@ -304,9 +305,9 @@ fun AfterWorkPane(
     onDoneOne: (PersonSummary) -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
-    var open by rememberSaveable { mutableStateOf<String?>(CallAssistantRules.personWith(summary, autoPlay)?.items?.first()?.personKey) }
+    var open by rememberSaveable { mutableStateOf<String?>(CallAssistantRules.personWith(summary, autoPlay)?.cardKey) }
     LaunchedEffect(autoPlay) {
-        CallAssistantRules.personWith(summary, autoPlay)?.let { open = it.items.first().personKey }
+        CallAssistantRules.personWith(summary, autoPlay)?.let { open = it.cardKey }
     }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
@@ -328,7 +329,8 @@ fun AfterWorkPane(
         Spacer(Modifier.height(MekaSpace.xs))
         // Email-triage style: people sort into place with a stagger; a card cleared folds away and the rest close up.
         summary.people.forEachIndexed { i, p ->
-            val key = p.items.first().personKey
+            // A group chat is one card (Meka, 2026-10-15 20:28), keyed apart from any one-to-one chat with a sender.
+            val key = p.cardKey
             androidx.compose.runtime.key(key) {
                 SwipeToDone(AfterWorkDone.doneLabel(p), onDone = { onDoneOne(p) }, modifier = Modifier.appear(rememberAppearance(i + 1))) {
                     PersonCard(p, expanded = open == key, Modifier, blocked.has(p.blockNumber), onBlock, onReport, audio, autoPlay, onAutoPlayed,
@@ -507,6 +509,7 @@ private fun PersonCard(
             Text(p.personName, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f, fill = false))
             if (p.urgent) Text("Urgent", style = MekaType.captionStrong, color = Meka.colors.critical)
             if (p.isFamily) Text("Family", style = MekaType.caption, color = Meka.colors.accent)
+            if (p.mentioned) Text(GroupChatRules.MENTIONED, style = MekaType.captionStrong, color = Meka.colors.accent)
             Spacer(Modifier.weight(1f))
             Text(time(p.latestAtMs), style = MekaType.caption, color = Meka.colors.textTertiary)
             // Its own Done (Meka, 2026-10-15 20:28): clears just this card, Undo on the bar.
@@ -524,12 +527,13 @@ private fun PersonCard(
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
             Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                p.items.forEach { item ->
+                p.shownItems.forEach { item ->
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text(time(item.atMs), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.width(44.dp))
                         val body = item.displayLine
                         Column(Modifier.weight(1f)) {
-                            item.conversation?.let { Text("in $it", style = MekaType.caption, color = Meka.colors.textTertiary) }
+                            // In a group's card each line names who wrote it.
+                            p.itemLabel(item)?.let { Text(it, style = MekaType.captionStrong, color = Meka.colors.textSecondary) }
                             Text(body, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
                             if (item.hasAudio) {
                                 VoiceMessagePlayer(item.id, audio, autoStart = item.id == autoPlay, onAutoStarted = onAutoPlayed)

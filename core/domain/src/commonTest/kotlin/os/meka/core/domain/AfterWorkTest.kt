@@ -63,13 +63,14 @@ class AfterWorkTest {
             msg("Friend", "match tonight?", 40, group = "Five-a-side"),
         )
         val s = AfterWorkSummaries.build(items, lists)
-        assertEquals(listOf("School", "Wife", "Friend", "Colleague"), s.people.map { it.personName })
+        // The group message is its group's card, not the sender's (Meka, 2026-10-15 20:28).
+        assertEquals(listOf("School", "Wife", "Five-a-side", "Colleague"), s.people.map { it.personName })
         val wife = s.people[1]
         assertTrue(wife.isFamily)
         assertEquals("2 messages · 1 missed call", wife.line)
         assertEquals(listOf(CaptureApp.WHATSAPP, CaptureApp.SMS, CaptureApp.PHONE), wife.apps)
         assertEquals("and bread", wife.latestText)
-        assertEquals("4 people · 5 messages · 1 missed call", s.headline)
+        assertEquals("4 chats · 5 messages · 1 missed call", s.headline)
         assertEquals(1, s.urgentPeople)
     }
 

@@ -235,6 +235,7 @@ object Capture {
 }
 
 data class PersonSummary(
+    /** The person, or for a group chat's card ([isGroup]) the group's name. */
     val personName: String,
     val isFamily: Boolean,
     val urgent: Boolean,
@@ -243,27 +244,54 @@ data class PersonSummary(
     val apps: List<CaptureApp>,
     val firstAtMs: Long,
     val latestAtMs: Long,
-    /** The most recent message text, for a one-line preview. */
+    /** The most recent message text, for a one-line preview ("Alex: Some more feedback" on a group's card). */
     val latestText: String?,
-    /** Everything from this person, oldest first. */
+    /** Everything from this person (or in this group), oldest first; a group's "Mentioned you" notices included. */
     val items: List<CapturedItem>,
     /** Messages left with the call assistant. */
     val voiceMessages: Int = 0,
+    /**
+     * The group chat this card is (Meka, 2026-10-15 20:28: "messages from the same group show as different messages"):
+     * one card per group, not one per sender. Null for a one-to-one chat or a caller.
+     */
+    val conversation: String? = null,
+    /** A group card's senders, the most recent first ("Alex", "Sam", "Jordan"); empty for a person. */
+    val senders: List<String> = emptyList(),
+    /** WhatsApp said he was mentioned in this group ([GroupChatRules.isMention]): a "Mentioned you" chip, ranked first. */
+    val mentioned: Boolean = false,
 ) {
+    val isGroup: Boolean get() = conversation != null
+
+    /** Stable per card: "group:whatsapp|tete 21 testing" or the person's key, never the same for a group and a person. */
+    val cardKey: String get() =
+        if (conversation != null) "group:" + (items.firstOrNull()?.app?.name ?: "") + "|" + People.key(conversation)
+        else items.firstOrNull()?.personKey ?: People.key(personName)
+
+    /** What the card shows when opened: its messages, without the "Mentioned you" notices (the chip says that). */
+    val shownItems: List<CapturedItem> get() = if (isGroup) items.filterNot(GroupChatRules::isMention) else items
+
+    /** Who wrote [item], over its line in an opened group card ("Alex"); null on a person's card. */
+    fun itemLabel(item: CapturedItem): String? = if (isGroup) item.personName.trim() else null
+
     /**
      * The number "Block" and "Report to 7726" act on (call assistant polish 8b b, e): only for a caller nobody knows —
      * not family, not on a list, not a contact, not this phone (still shown as a number after [CallerNames]) — so a
      * known person never gets a Block button. Null otherwise.
      */
     val blockNumber: String? get() {
-        if (isFamily) return null
+        if (isFamily || isGroup) return null
         val number = items.lastOrNull { it.callerNumber != null }?.callerNumber ?: return null
         if (BlockedCallerRules.keyOf(number) == null) return null
         return number.takeIf { personName == BlockedCallerRules.display(it) }
     }
 
-    /** "3 messages · 1 voice message · 1 missed call", plain counts until the AI layer writes one line per person. */
+    /**
+     * "3 messages · 1 voice message · 1 missed call", plain counts until the AI layer writes one line per person; a
+     * group's card leads with who wrote: "Alex, Sam and Jordan · 9 messages".
+     */
     val line: String get() = listOfNotNull(
+        GroupChatRules.sendersLine(senders).takeIf { isGroup && senders.isNotEmpty() },
+        GroupChatRules.MENTIONED.takeIf { isGroup && mentioned && messages == 0 && voiceMessages == 0 },
         plural(messages, "message").takeIf { messages > 0 },
         plural(voiceMessages, "voice message").takeIf { voiceMessages > 0 },
         plural(missedCalls, "missed call").takeIf { missedCalls > 0 },
@@ -276,18 +304,57 @@ data class PersonSummary(
     fun keeping(kept: List<CapturedItem>): PersonSummary? {
         if (kept.isEmpty()) return null
         if (kept.size == items.size) return this
+        // A group left with only its "Mentioned you" notice has nothing left to read.
+        if (isGroup && kept.all(GroupChatRules::isMention)) return null
         val sorted = kept.sortedBy { it.atMs }
+        val shown = if (isGroup) sorted.filterNot(GroupChatRules::isMention) else sorted
         return copy(
-            urgent = sorted.any { it.isUrgent },
-            messages = sorted.count { it.kind == CaptureKind.MESSAGE },
-            voiceMessages = sorted.count { it.kind == CaptureKind.VOICE_MESSAGE },
-            missedCalls = sorted.count { it.kind == CaptureKind.MISSED_CALL },
+            urgent = shown.any { it.isUrgent },
+            messages = shown.count { it.kind == CaptureKind.MESSAGE },
+            voiceMessages = shown.count { it.kind == CaptureKind.VOICE_MESSAGE },
+            missedCalls = shown.count { it.kind == CaptureKind.MISSED_CALL },
             apps = sorted.map { it.app }.distinct(),
             firstAtMs = sorted.first().atMs,
             latestAtMs = sorted.last().atMs,
-            latestText = sorted.lastOrNull { it.text != null }?.text,
+            latestText = AfterWorkSummaries.latestText(shown, isGroup),
             items = sorted,
+            senders = if (isGroup) GroupChatRules.senders(shown) else senders,
+            mentioned = isGroup && sorted.any(GroupChatRules::isMention),
         )
+    }
+}
+
+/**
+ * Group chats in the after-work summary (Meka, 2026-10-15 20:28): one card per group, its senders named, and WhatsApp's
+ * "Mentioned you" notice folded into its group as a chip rather than a card of its own. No AI; display only (ADR-006).
+ */
+object GroupChatRules {
+    const val MENTIONED = "Mentioned you"
+
+    private val mention = Regex("""^@?\s*(you were |you've been |you have been )?mentioned( you)?( \(\d+\))?[.!]?$""")
+
+    /** WhatsApp's "Mentioned you" summary notice (as its sender or its whole text): not a person, not a message. */
+    fun isMention(item: CapturedItem): Boolean =
+        item.kind == CaptureKind.MESSAGE && (isMentionText(item.personName) || isMentionText(item.text))
+
+    internal fun isMentionText(s: String?): Boolean = s != null && mention.matches(People.key(s))
+
+    /** The group's key for an item ([GroupDigestRules.groupKey]: its cleaned name), or null for a one-to-one chat. */
+    fun groupOf(item: CapturedItem): String? =
+        item.conversation?.let { ChatTitleRules.clean(it) }?.takeIf { it.isNotBlank() }
+
+    /** Distinct senders, most recent first (the notice excluded). */
+    fun senders(items: List<CapturedItem>): List<String> =
+        items.filterNot(::isMention).sortedByDescending { it.atMs }.map { it.personName.trim() }
+            .filter { it.isNotEmpty() }.distinctBy(People::key)
+
+    /** "Alex", "Alex and Sam", "Alex, Sam and Jordan", "Alex, Sam and 3 others". */
+    fun sendersLine(senders: List<String>): String = when (senders.size) {
+        0 -> ""
+        1 -> senders[0]
+        2 -> "${senders[0]} and ${senders[1]}"
+        3 -> "${senders[0]}, ${senders[1]} and ${senders[2]}"
+        else -> "${senders[0]}, ${senders[1]} and ${senders.size - 2} others"
     }
 }
 
@@ -298,7 +365,13 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     val voiceMessages: Int get() = people.sumOf { it.voiceMessages }
     val urgentPeople: Int get() = people.count { it.urgent }
     /** Everything held, for "12 held for later" during work. */
-    val itemCount: Int get() = people.sumOf { it.items.size }
+    val itemCount: Int get() = people.sumOf { it.shownItems.size }
+
+    /**
+     * The groups with a card here ([GroupDigestRules.groupKey]), so Needs you's group digest leaves them out: a group is
+     * never shown twice (Meka, 2026-10-15 20:28).
+     */
+    val groupKeys: List<String> get() = people.mapNotNull { p -> p.conversation?.let { People.key(ChatTitleRules.clean(it)) } }.distinct()
 
     /**
      * The summary's title on both apps and in its notification: "Messages MEKA took" when everything in it is voice
@@ -344,9 +417,9 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
     /** Messages and voice messages waiting to be caught up on (Needs you's empty line counts them). */
     val toCatchUp: Int get() = messages + voiceMessages
 
-        /** "4 people · 9 messages · 2 missed calls" */
+    /** "4 people · 9 messages · 2 missed calls"; "6 chats · 34 messages" once a group chat has a card. */
     val headline: String get() = if (isEmpty) "Nothing came in." else listOfNotNull(
-        plural(people.size, "person", "people"),
+        if (people.any { it.isGroup }) plural(people.size, "chat") else plural(people.size, "person", "people"),
         plural(messages, "message").takeIf { messages > 0 },
         plural(voiceMessages, "voice message").takeIf { voiceMessages > 0 },
         plural(missedCalls, "missed call").takeIf { missedCalls > 0 },
@@ -354,8 +427,12 @@ data class AfterWorkSummary(val people: List<PersonSummary>) {
 }
 
 object AfterWorkSummaries {
+    /** How far from a group's messages a "Mentioned you" notice that names no group is matched to it. */
+    const val MENTION_MATCH_MS = 10 * 60_000L
+
     /**
-     * Grouped by person. Urgent people first (latest first), then family, then everyone else by latest. A caller known
+     * Grouped by person, and a group chat's messages by group (one card per group, not one per sender). Urgent cards
+     * first (latest first), then family, then groups that mentioned him, then everyone else by latest. A caller known
      * only by number (the call assistant hears numbers) is shown by their listed name when the lists know the number.
      */
     fun build(items: List<CapturedItem>, lists: PeopleLists, names: CallerNames = CallerNames.NONE): AfterWorkSummary {
@@ -368,9 +445,25 @@ object AfterWorkSummaries {
                 i.copy(personName = resolved.getOrPut(key) { names.nameOf(number, lists) }, callerNumber = number)
             }
         }
-        val people = named.groupBy { it.personKey }.values.map { group ->
+        fun cardOf(i: CapturedItem): String =
+            GroupChatRules.groupOf(i)?.let { "g|" + i.app.name + "|" + People.key(it) } ?: ("p|" + i.personKey)
+        val (notices, rest) = named.partition { GroupChatRules.isMention(it) && GroupChatRules.groupOf(it) == null }
+        val byCard = LinkedHashMap<String, MutableList<CapturedItem>>()
+        rest.forEach { byCard.getOrPut(cardOf(it)) { mutableListOf() }.add(it) }
+        // A "Mentioned you" notice with no group: the group it names (as its sender), else the group nearest in time.
+        notices.forEach { n ->
+            val groups = byCard.filterKeys { it.startsWith("g|") }
+            val byName = groups.entries.firstOrNull { (k, _) -> k.endsWith("|" + People.key(ChatTitleRules.clean(n.personName))) }
+            val near = byName ?: groups.entries
+                .map { e -> e to e.value.minOf { kotlin.math.abs(it.atMs - n.atMs) } }
+                .filter { it.second <= MENTION_MATCH_MS }.minByOrNull { it.second }?.first
+            near?.value?.add(n)
+        }
+        val people = byCard.values.map { group ->
             val sorted = group.sortedBy { it.atMs }
-            PersonSummary(
+            // The group's name as its newest notification gave it.
+            val conversation = sorted.lastOrNull { GroupChatRules.groupOf(it) != null }?.let(GroupChatRules::groupOf)
+            if (conversation != null) groupCard(conversation, sorted, lists) else PersonSummary(
                 personName = sorted.last().personName,
                 isFamily = lists.isFamily(sorted.last().personName) || sorted.any { it.family },
                 urgent = sorted.any { it.isUrgent },
@@ -380,14 +473,42 @@ object AfterWorkSummaries {
                 apps = sorted.map { it.app }.distinct(),
                 firstAtMs = sorted.first().atMs,
                 latestAtMs = sorted.last().atMs,
-                latestText = sorted.lastOrNull { it.text != null }?.text,
+                latestText = latestText(sorted, false),
                 items = sorted,
             )
         }
-        val rank = compareBy<PersonSummary> { if (it.urgent) 0 else if (it.isFamily) 1 else 2 }
+        val rank = compareBy<PersonSummary> { if (it.urgent) 0 else if (it.isFamily) 1 else if (it.mentioned) 2 else 3 }
             .thenByDescending { it.latestAtMs }
             .thenBy { it.personName.lowercase() }
         return AfterWorkSummary(people.sortedWith(rank))
+    }
+
+    private fun groupCard(name: String, sorted: List<CapturedItem>, lists: PeopleLists): PersonSummary {
+        val shown = sorted.filterNot(GroupChatRules::isMention)
+        val senders = GroupChatRules.senders(shown)
+        return PersonSummary(
+            personName = name,
+            // A family group (every sender family, or the group itself on the list) ranks with family.
+            isFamily = lists.isFamily(name) || (shown.isNotEmpty() && shown.all { it.family || lists.isFamily(it.personName) }),
+            urgent = shown.any { it.isUrgent },
+            messages = shown.count { it.kind == CaptureKind.MESSAGE },
+            voiceMessages = shown.count { it.kind == CaptureKind.VOICE_MESSAGE },
+            missedCalls = shown.count { it.kind == CaptureKind.MISSED_CALL },
+            apps = sorted.map { it.app }.distinct(),
+            firstAtMs = sorted.first().atMs,
+            latestAtMs = sorted.last().atMs,
+            latestText = latestText(shown, true),
+            items = sorted,
+            conversation = name,
+            senders = senders,
+            mentioned = sorted.any(GroupChatRules::isMention),
+        )
+    }
+
+    /** The newest message's words; on a group's card with its sender: "Alex: Some more feedback to follow". */
+    internal fun latestText(sorted: List<CapturedItem>, group: Boolean): String? {
+        val last = sorted.lastOrNull { it.text != null } ?: return null
+        return if (group) "${last.personName.trim()}: ${last.text}" else last.text
     }
 }
 
