@@ -42,6 +42,18 @@ object MailUnreadRules {
         return nowMs - at >= REWRITE_EVERY_MS
     }
 
+    /** The same, from the entity's raw fields (the server's view; the backlog's plan fields may not be written yet). */
+    fun writeDueFields(prev: Map<String, FieldValue>?, unread: Int, tidyUnread: Int, nowMs: Long): Boolean {
+        fun long(k: String) = (prev?.get(k) as? FieldValue.Int64)?.value
+        val was = long(MailBacklogFields.INBOX_UNREAD)?.toInt()
+        val at = long(MailBacklogFields.UNREAD_COUNTED_AT)?.takeIf { it > 0 }
+        val b = if (was == null || at == null) null else MailBacklog(
+            id = "", account = "", startedAtMs = 0, scanned = 0, readyAtMs = null, counts = emptyMap(), top = null, approvedAtMs = null,
+            inboxUnread = was, tidyUnread = long(MailBacklogFields.TIDY_UNREAD)?.toInt() ?: 0, unreadCountedAtMs = at,
+        )
+        return writeDue(b, unread, tidyUnread, nowMs)
+    }
+
     private fun n(v: Int) = SpeechRules.grouped(v.toLong())
 
     private fun order(account: String): Int = MailLabel.entries.indexOfFirst { it.label == account }.let { if (it < 0) MailLabel.entries.size else it }

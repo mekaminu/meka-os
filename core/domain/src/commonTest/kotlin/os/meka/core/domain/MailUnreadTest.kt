@@ -60,6 +60,11 @@ class MailUnreadTest {
         assertTrue(MailUnreadRules.writeDue(prev, 412, 370, now))
         assertTrue(MailUnreadRules.writeDue(prev, 415, 380, now + 30 * min))
         assertTrue(MailUnreadRules.writeDue(b("Personal", 3, at = now - min), 0, 0, now))
+        // From the raw fields, before the backlog's own plan fields exist.
+        assertTrue(MailUnreadRules.writeDueFields(null, 10, 0, now))
+        val raw = MailUnreadRules.fields(412, 380, now - 5 * min)
+        assertFalse(MailUnreadRules.writeDueFields(raw, 415, 380, now))
+        assertTrue(MailUnreadRules.writeDueFields(raw, 380, 380, now))
     }
 
     @Test

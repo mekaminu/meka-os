@@ -1012,8 +1012,8 @@ class Integrations(
             MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] })) != MailTidy.KEEP
         }.coerceAtMost(unread)
         val entityId = MailBacklogRules.entityId(a.id)
-        val prev = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId) }.getOrNull()?.let { MailBacklogRules.read(entityId, it) }
-        if (!MailUnreadRules.writeDue(prev, unread, tidy, now())) return
+        val prev = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId) }.getOrNull()
+        if (!MailUnreadRules.writeDueFields(prev, unread, tidy, now())) return
         writeMail(a, entityId, MailUnreadRules.fields(unread, tidy, now()), EntityTypes.MAIL_BACKLOG)
     }
 
