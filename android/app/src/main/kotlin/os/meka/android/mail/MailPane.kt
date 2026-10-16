@@ -66,6 +66,9 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.FollowUpWaitRow
 import os.meka.core.domain.FollowUpWaitsPanel
+import os.meka.core.domain.LifeAuditReview
+import os.meka.core.domain.LifeAuditReviewLine
+import os.meka.core.domain.LifeAuditReviewRules
 import os.meka.core.domain.MailAccountRow
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailAccountRules
@@ -126,10 +129,14 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
     var waits by remember { mutableStateOf<FollowUpWaitsPanel?>(null) }
     var waitUndo by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { waits = runCatching { core.followUpWaitsPanel() }.getOrNull() }
+    // Life audit, slice 2: the review, counted from the synced data once the accounts are listed (on demand: Review).
+    var audit by remember { mutableStateOf<LifeAuditReview?>(null) }
+    var auditOpen by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(reload) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
             view = core.mailAccounts()?.let { Result.success(it) } ?: Result.failure(IllegalStateException())
+            audit = runCatching { core.lifeAuditReview() }.getOrNull()
         }
     }
 
@@ -280,6 +287,13 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                         Text(t, style = MekaType.itemMeta,
                             color = if (t == MailAutoDraftRules.NONE_WAITING) Meka.colors.textSecondary else Meka.colors.accent,
                             modifier = Modifier.appear(rememberAppearance(0)))
+                    }
+                }
+                // Life audit, slice 2: what 60 days of mail turned up, as one review.
+                if (v.rows.isNotEmpty()) audit?.let { a ->
+                    LifeAuditCard(a, auditOpen, Modifier.appear(rememberAppearance(0))) {
+                        haptics.tick()
+                        auditOpen = !auditOpen
                     }
                 }
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
@@ -611,6 +625,65 @@ private fun WaitRow(r: FollowUpWaitRow, onPick: (String, Int) -> Unit) {
                     .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
         }
+    }
+}
+
+/**
+ * Life audit, slice 2: **Life audit** — the closed card says what the mail turned up in one line ("3 subscriptions · 4
+ * emails waiting on you · 2 bills due") with **Review**; open, what was read, then one line per finding (subscriptions,
+ * waiting on you, waiting on others, warranties, bills), each saying where it lives, staggering in on the expand spring;
+ * clear lines sit quieter. Read-only: nothing here acts. Reduced motion: fades.
+ */
+@Composable
+private fun LifeAuditCard(review: LifeAuditReview, open: Boolean, modifier: Modifier, onToggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
+            .animateContentSize(MekaMotion.expand(reduced)),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = review.title + ". " + review.summary }) {
+                Text(review.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Crossfade(review.summary, animationSpec = MekaMotion.appear(reduced), label = "audit-summary") {
+                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+            Crossfade(if (open) LifeAuditReviewRules.CLOSE else LifeAuditReviewRules.OPEN, animationSpec = MekaMotion.appear(reduced), label = "audit-toggle") { label ->
+                Text(
+                    label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
+                        .clickable(role = Role.Button) { onToggle() }
+                        .semantics { contentDescription = if (open) "Hide the life audit" else "Review the life audit" }
+                        .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
+            }
+        }
+        AnimatedVisibility(
+            open,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                Text("Read: " + review.read, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.appear(rememberAppearance(0)))
+                review.lines.forEachIndexed { i, l -> key(l.key) { AuditLine(l, Modifier.appear(rememberAppearance(i + 1))) } }
+                Text(review.foot, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.appear(rememberAppearance(review.lines.size + 1)))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuditLine(l: LifeAuditReviewLine, modifier: Modifier) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = l.spoken }) {
+        Text(l.title, style = MekaType.body, color = if (l.clear) Meka.colors.textSecondary else Meka.colors.textPrimary)
+        Crossfade(l.line, animationSpec = MekaMotion.appear(reduced), label = "audit-line") {
+            Text(it, style = MekaType.caption, color = if (l.clear) Meka.colors.textTertiary else Meka.colors.textSecondary)
+        }
+        Text(l.place, style = MekaType.caption, color = Meka.colors.accent)
     }
 }
 

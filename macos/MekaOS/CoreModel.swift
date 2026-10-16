@@ -219,6 +219,8 @@ final class CoreModel {
     private(set) var meetingPrepLeadKey: String?
     /// Follow-up radar, slice 4: Mail → Chase waits (the people he set his own chase wait for); nil until read.
     private(set) var followUpWaits: FollowUpWaitsPanel?
+    /// Life audit, slice 2: Mail → Life audit, counted from the synced data (nil while no mail is connected).
+    private(set) var lifeAudit: LifeAuditReview?
     /// Slice 4: whether the Mail sheet offers Undo on the last Chase waits change.
     private(set) var followUpWaitUndo = false
     /// Waiting for, Someday and Decisions, with what is due to chase or review today. Synced with the Fold.
@@ -4639,6 +4641,12 @@ final class CoreModel {
     func loadMailWarrantyKey() async {
         guard let core else { return }
         mailWarrantyKey = try? await core.mailWarrantyKey()
+    }
+
+    /// Life audit, slice 2: the Mail sheet reads the review (after loadMail, so the accounts are listed).
+    func loadLifeAudit() async {
+        guard let core else { return }
+        lifeAudit = try? await core.lifeAuditReview()
     }
 
     /// Follow-up radar, slice 4: the Mail sheet reads Chase waits.

@@ -4630,6 +4630,20 @@ class MekaCore(
     }
 
     /**
+     * Life audit, slice 2: Mail → Life audit on both apps — what 60 days of mail turned up as one review (subscriptions
+     * and their monthly cost, emails waiting on him, waiting on others, warranties, bills due), counted from the synced
+     * data; null while no mail is connected. Read-only: nothing is fetched, changed or sent.
+     */
+    suspend fun lifeAuditReview(): os.meka.core.domain.LifeAuditReview? = onCore {
+        val items = activity.mailItems()
+        val finds = activity.mailFinds()
+        val accounts = os.meka.core.domain.LifeAuditReviewRules.accounts(lastMailFacts, items.map { it.account } + finds.map { it.account })
+        os.meka.core.domain.LifeAuditReviewRules.review(
+            accounts, items, finds, renewals.items(), lists.waitingItems(), radarFields(), followUpWaits(), nowMs(), ZoneCalendar(timeZone),
+        )
+    }
+
+    /**
      * Mail → Chase waits: a chip on one person's row ([days] one of [os.meka.core.domain.MailFollowUpRules.WAIT_CHOICES])
      * or **Back to usual** ([days] 0). Synced, so both apps' rows and Needs you follow; [undoFollowUpWaitChange] puts it
      * back. Nothing is sent. Returns the line to show.

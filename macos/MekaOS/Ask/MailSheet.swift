@@ -43,6 +43,11 @@ struct MailSheet: View {
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
                         .staggeredAppear(2)
                 }
+                // Life audit, slice 2: what 60 days of mail turned up, as one review (Review / Hide).
+                if !view.rows.isEmpty, let audit = model.lifeAudit {
+                    LifeAuditPanelView(review: audit, palette: palette)
+                        .staggeredAppear(2)
+                }
                 if let panel = view.autopilot {
                     AutopilotPanelView(panel: panel, palette: palette) {
                         let on = !panel.on
@@ -176,10 +181,73 @@ struct MailSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.mail?.autopilot?.markRead)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.followUpWaits?.rows.map(\.id) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.followUpWaitUndo)
-        .task { await model.loadMail(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey(); await model.loadMeetingPrepLeadKey(); await model.loadFollowUpWaits() }
+        .task { await model.loadMail(); await model.loadLifeAudit(); await model.loadMailMomentKey(); await model.loadMailWarrantyKey(); await model.loadMeetingPrepLeadKey(); await model.loadFollowUpWaits() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            Task { await model.loadMail() }
+            Task { await model.loadMail(); await model.loadLifeAudit() }
         }
+    }
+}
+
+/// Life audit, slice 2: the closed card says what the mail turned up in one line with Review; open, what was read, then
+/// one line per finding (each saying where it lives) staggering in on the expand spring, clear lines quieter, and the
+/// foot. Read-only: nothing here acts. Reduce Motion: cross-fades.
+private struct LifeAuditPanelView: View {
+    let review: LifeAuditReview
+    let palette: MekaPalette
+    @State private var expanded = false
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(alignment: .center, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(review.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(review.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: MekaSpace.xs)
+                Button(expanded ? LifeAuditReviewRules.shared.CLOSE : LifeAuditReviewRules.shared.OPEN) {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.expand(reduced: reduceMotion)) { expanded.toggle() }
+                }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.horizontal, MekaSpace.xs)
+                .padding(.vertical, MekaSpace.xxs)
+                .background(Capsule().fill(palette.hairline))
+                .accessibilityLabel(expanded ? "Hide the life audit" : "Review the life audit")
+            }
+            if expanded {
+                VStack(alignment: .leading, spacing: MekaSpace.s) {
+                    Text("Read: " + review.read).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .staggeredAppear(0)
+                    ForEach(Array(review.lines.enumerated()), id: \.element.key) { i, l in
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(l.title).font(MekaType.body).foregroundStyle(l.clear ? palette.textSecondary : palette.textPrimary)
+                            Text(l.line).font(MekaType.caption).foregroundStyle(l.clear ? palette.textTertiary : palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .contentTransition(.opacity)
+                            Text(l.place).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(l.spoken)
+                        .staggeredAppear(i + 1)
+                    }
+                    Text(review.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .staggeredAppear(review.lines.count + 1)
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: review.summary)
     }
 }
 

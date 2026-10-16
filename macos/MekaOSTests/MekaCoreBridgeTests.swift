@@ -3105,6 +3105,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(unknownWait, MailRenewalRules.shared.UNKNOWN)
         let noWaitUndo = try await core.undoFollowUpWaitChange()
         XCTAssertNil(noWaitUndo)
+        // Life audit, slice 2: the review reads (nil until mail is connected); the closed card's words.
+        let audit = try await core.lifeAuditReview()
+        XCTAssertEqual(audit?.lines.count ?? 5, 5)
+        XCTAssertEqual(LifeAuditReviewRules.shared.OPEN, "Review")
+        XCTAssertEqual(LifeAuditReviewRules.shared.summary(subs: 0, onYou: 0, bills: 0, toAdd: 0), "Nothing needs you from 60 days of mail ✓")
         // Slice 7: the ten-minute inbox — no email, no card; a session over nothing ends "Inbox clear"; the time's key.
         XCTAssertNil(core.mailMoment.value)
         try await core.startMailMoment()

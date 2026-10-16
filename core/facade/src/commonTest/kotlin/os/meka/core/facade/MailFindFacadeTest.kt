@@ -339,12 +339,15 @@ class MailFindFacadeTest {
         val mac = core("mac")
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertEquals(L.TITLE, mac.mailFinds.value!!.title)
+        // Slice 2: Mail → Life audit adds it up on both apps.
+        assertEquals("1 found to add · about £10.99 a month", mac.lifeAuditReview()!!.lines.first().line)
         assertEquals("On Renewals: Streamco · next payment about Sun 8 Nov", fold.addMailFind(id))
         val onRadar = fold.listsView.value.renewals.let { it.attention + it.upcoming + it.later }
         assertEquals(1, onRadar.count { it.title == "Streamco" })
         assertNull(fold.mailFinds.value)
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertNull(mac.mailFinds.value)
+        assertEquals("1 on Renewals · about £10.99 a month", mac.lifeAuditReview()!!.lines.first().line)
         // The server's next check rewrites its own fields: the Add stands.
         serverWrite(id, L.serverFields(sub.copy(seen = 3), "Personal"))
         assertTrue(mac.syncNow())

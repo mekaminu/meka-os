@@ -15,6 +15,7 @@ tip: In Needs you, Draft replies drafts a reply to each email for you to read; S
 tip: A renewal email (a subscription or policy about to renew) shows in Needs you under Renewals from your mail; Add puts it on Lists → Renewals with its day and price, Not needed clears it.
 tip: A promise in an email (“I'll send it by Friday”) shows there too; Add puts it on Waiting for, chased the day after the day they gave.
 tip: The life audit reads the last 60 days of your mail for payments that repeat: each subscription shows in Needs you with its price, how often you paid and the next payment, and the card adds up what they cost a month; Add puts one on Lists → Renewals, Not needed clears it for good.
+tip: Mail → Life audit → Review shows what 60 days of your mail turned up as one review: what was read, your subscriptions and what they cost a month, emails waiting on you and who needs a reply, what others owe you, warranties and bills due in the next 30 days, each saying where it lives. It only counts: nothing is paid, cancelled or sent.
 tip: An email you sent asking something that's had no reply for 3 days shows there as No reply yet; Add puts it on Waiting for to chase, and it goes by itself once they answer.
 tip: Some people take longer to answer: tap Wait 3 days on a No reply yet row and pick 1 day to 2 weeks for that person; their emails wait that long before Navilife offers a chase, on both apps.
 tip: To see or change everyone you've set a wait for, open Mail settings: Chase waits lists each person with the same chips and Back to usual (3 days), with Undo.
