@@ -77,7 +77,9 @@ struct ShellView: View {
     private func openSidebarIfWide(_ width: CGFloat) {
         guard !sidebarDecided, width > 0 else { return }
         sidebarDecided = true
-        guard MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: Float(width)), columns != .all else { return }
+        // A launch that asks for its window size (the UI checks) is judged at that size, not the default it opens at.
+        let opening = LaunchWindowSize.requested()?.width ?? width
+        guard MacHeaderRules.shared.sidebarOnOpen(windowWidthPt: Float(opening)), columns != .all else { return }
         if reduceMotion { columns = .all } else { withAnimation(MekaMotion.expand(reduced: false)) { columns = .all } }
     }
 

@@ -56,6 +56,8 @@ struct MekaOSApp: App {
         }
         .windowToolbarStyle(.unifiedCompact(showsTitle: false))
         .commands {
+            // View → Show/Hide Sidebar (⌃⌘S), which the UI checks use too.
+            SidebarCommands()
             CommandGroup(replacing: .newItem) {
                 Button("Capture") { model.focusCapture.toggle() }
                     .keyboardShortcut("n", modifiers: .command)

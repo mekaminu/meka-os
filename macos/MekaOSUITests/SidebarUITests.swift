@@ -25,7 +25,9 @@ final class SidebarUITests: XCTestCase {
         let first = app.descendants(matching: .any)["sidebar-today"]
         if first.waitForExistence(timeout: 5), first.isHittable { return }
         app.typeKey("s", modifierFlags: [.command, .control])
-        XCTAssertTrue(first.waitForExistence(timeout: 5), "The sidebar didn't show")
+        // A collapsed sidebar's rows still exist off-window, so wait until the first one can be clicked.
+        let hittable = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: first)
+        wait(for: [hittable], timeout: 5)
     }
 
     @MainActor
