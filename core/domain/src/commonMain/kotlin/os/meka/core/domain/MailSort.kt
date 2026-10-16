@@ -46,7 +46,9 @@ enum class MailSortReason(val line: String) {
     AI_NEEDS_YOU("Navilife's AI read the sender and subject · it needs you"),
     AI_FYI("Navilife's AI read the sender and subject · just so you know"),
     /** The AI was asked but gave no clear answer: kept as Needs you (the safe side), not asked again. */
-    AI_UNCLEAR("Navilife's AI couldn't tell · kept for you");
+    AI_UNCLEAR("Navilife's AI couldn't tell · kept for you"),
+    /** Inbox fixes, slice 4: from someone Meka has written to (his sent mail): his, never asked about, never tidied. */
+    KNOWN_PERSON("Someone you've written to · always yours");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }
@@ -190,6 +192,28 @@ object MailSortRules {
         AI_FYI -> MailSorted(MailSort.FYI, MailSortReason.AI_FYI, true)
         AI_NEEDS_YOU -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_NEEDS_YOU, true)
         else -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_UNCLEAR, true)
+    }
+
+    /**
+     * Inbox fixes, slice 4: the people Meka has written to, from his sent mail's To and Cc (lower case): never his own
+     * addresses, never a no-reply style address (a reply to a form or a ticket isn't a person he knows). Addresses are
+     * untrusted text: anything without one @ and a dot after it is left out.
+     */
+    fun correspondents(recipients: Iterable<String?>, own: Set<String>): Set<String> = recipients.mapNotNull { r ->
+        val a = r?.trim()?.trimStart('<')?.trimEnd('>')?.lowercase() ?: return@mapNotNull null
+        val at = a.indexOf('@')
+        if (at <= 0 || at != a.lastIndexOf('@') || '.' !in a.substring(at + 1) || a.any { it.isWhitespace() }) return@mapNotNull null
+        a.takeIf { it !in own && !isAutomated(it) }
+    }.toSet()
+
+    /**
+     * Inbox fixes, slice 4: an email the rules left unsure (a person seems to have written it) from someone he has
+     * written to is his for sure: Needs you, not asked about (the AI's look is saved for strangers). Anything the rules
+     * were sure of (a mailing list, a no-reply) and anything the AI already answered is left as it is.
+     */
+    fun known(s: MailSorted, fromAddress: String?, correspondents: Set<String>): MailSorted {
+        val a = fromAddress?.trim()?.trimStart('<')?.trimEnd('>')?.lowercase() ?: return s
+        return if (wantsAi(s) && a in correspondents) MailSorted(MailSort.NEEDS_YOU, MailSortReason.KNOWN_PERSON, true) else s
     }
 
     /** True for a sort the AI should look at: the rules leaned the safe way (a person, or no sender). */

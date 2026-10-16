@@ -6,6 +6,8 @@ import os.meka.core.domain.BankHoliday
 import os.meka.core.domain.GuestMail
 import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
+import os.meka.core.domain.MailSortReason
+import os.meka.core.domain.MailSorted
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailReturnRules
@@ -290,7 +292,32 @@ class Integrations(
      */
     internal fun keepAddresses(householdId: String): Set<String> =
         runCatching { AboutYouRules.keepAddresses(reader.entity(householdId, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)) }
-            .getOrDefault(emptySet())
+            .getOrDefault(emptySet()) + knownPeople(householdId)
+
+    /** Inbox fixes, slice 4: each mail account's people he has written to ([readCorrespondents]); memory only, never logged. */
+    private val correspondents = java.util.concurrent.ConcurrentHashMap<String, Set<String>>()
+    private val correspondentsReadAt = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** Inbox fixes, slice 4: everyone the household's mail accounts have written to (empty until their sent mail is read). */
+    internal fun knownPeople(householdId: String): Set<String> =
+        runCatching { store.accounts(householdId).flatMap { correspondents[it.id].orEmpty() }.toSet() }.getOrDefault(emptySet())
+
+    /**
+     * Inbox fixes, slice 4 (Meka, 2026-10-15: "the sort calls almost everything needs you"; never-touch for people he's
+     * written to): once a day, the To and Cc of the account's newest [CORRESPONDENTS_LIMIT] sent emails of the last
+     * [CORRESPONDENTS_WINDOW_MS] ([MailProvider.sent]: headers only, never a body), kept in memory (a restart reads them
+     * again). Their mail is never tidied, rescued from Junk, and sorted Needs you without the AI's look
+     * ([MailSortRules.known]). A failed read is tried again in an hour.
+     */
+    internal fun readCorrespondents(a: AccountRow, m: MailProvider, token: String) {
+        val nowMs = now()
+        correspondentsReadAt[a.id]?.let { if (nowMs - it < CORRESPONDENTS_EVERY_MS) return }
+        correspondentsReadAt[a.id] = nowMs - CORRESPONDENTS_EVERY_MS + CORRESPONDENTS_RETRY_MS
+        val sent = m.sent(token, nowMs - CORRESPONDENTS_WINDOW_MS, CORRESPONDENTS_LIMIT) ?: return
+        val own = store.accounts(a.householdId).map { it.email.lowercase() }.toSet() + a.email.lowercase()
+        correspondents[a.id] = MailSortRules.correspondents(sent.flatMap { it.addresses }, own)
+        correspondentsReadAt[a.id] = nowMs
+    }
 
     /**
      * Slice 2a: a mail account's inbox counts per sort, or null while there's nothing sorted yet and its first
@@ -504,6 +531,8 @@ class Integrations(
         runCatching { followUpChases(a, m, token) }
         // Inbox fixes, slice 1: Outlook's emails that only look like a person's have their own list and bulk headers read.
         runCatching { bulkLook(a, m, token, ms) }
+        // Inbox fixes, slice 4: the people he has written to (once a day), so their mail is his before it's sorted.
+        runCatching { readCorrespondents(a, m, token) }
         sortHeaders(a, ms)
         // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
         runCatching { mailSenders(a, m, token, ms) }
@@ -1545,11 +1574,12 @@ class Integrations(
      * nothing in the mailbox changes). Unsure ones (a person seems to have written) then get the AI's look ([askAi]).
      */
     private fun sortHeaders(a: AccountRow, ms: MailStore) {
+        val known = knownPeople(a.householdId)
         for (round in 0 until SORT_ROUNDS) {
             val batch = ms.unsorted(a.id, SORT_BATCH)
             if (batch.isEmpty()) break
             val sorts = batch.associate { h ->
-                h.id to MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId))
+                h.id to MailSortRules.known(MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)), h.fromAddress, known)
             }
             ms.setSorts(a.id, sorts)
             // Slice 5a: who sends the newsletters and promos (oldest first, so the newest one's headers win).
@@ -1557,7 +1587,7 @@ class Integrations(
                 .forEach { h -> ms.noteSender(a.householdId, a.id, h) }
             if (batch.size < SORT_BATCH) break
         }
-        askAi(a, ms)
+        askAi(a, ms, known)
     }
 
     /**
@@ -1565,12 +1595,22 @@ class Integrations(
      * The answer can only keep an email in Needs you or make it FYI ([MailSortRules.afterAi]); an email the answer
      * leaves out stays Needs you and isn't asked about again. AI off, over budget or failing: they wait, unchanged.
      */
-    private fun askAi(a: AccountRow, ms: MailStore) {
+    private fun askAi(a: AccountRow, ms: MailStore, known: Set<String>) {
+        // Inbox fixes, slice 4: unsure ones from people he has written to (sorted before their sent mail was read) are his.
+        if (known.isNotEmpty()) {
+            val mine = ms.unsure(a.id, KNOWN_RESORT_LIMIT).filter { h -> h.fromAddress?.lowercase() in known }
+            if (mine.isNotEmpty()) ms.setSorts(a.id, mine.associate { h -> h.id to MailSortRules.known(MailSorted(MailSort.NEEDS_YOU, MailSortReason.PERSON, false), h.fromAddress, known) })
+        }
         val ai = mailAi ?: return
-        val batch = ms.unsure(a.id, AI_BATCH)
-        if (batch.isEmpty()) return
-        val lanes = runCatching { ai.lanes(batch) }.getOrNull() ?: return
-        ms.setSorts(a.id, batch.associate { h -> h.id to MailSortRules.afterAi(lanes[h.id]) })
+        // Inbox fixes, slice 4: up to [AI_ROUNDS] calls a check while many wait (a big first listing is looked at in hours,
+        // not a day); a call that's off, over budget or failing ends this check's asking.
+        for (round in 0 until AI_ROUNDS) {
+            val batch = ms.unsure(a.id, AI_BATCH)
+            if (batch.isEmpty()) return
+            val lanes = runCatching { ai.lanes(batch) }.getOrNull() ?: return
+            ms.setSorts(a.id, batch.associate { h -> h.id to MailSortRules.afterAi(lanes[h.id]) })
+            if (batch.size < AI_BATCH) return
+        }
     }
 
     /**
@@ -2229,6 +2269,15 @@ class Integrations(
         const val SENDER_HEADER_CHECKS = 10
         /** Slice 2b: the most unsure emails one AI call looks at (one call per account per check). */
         const val AI_BATCH = 25
+        /** Inbox fixes, slice 4: the most AI calls one check makes for one account (100 emails). */
+        const val AI_ROUNDS = 4
+        /** Inbox fixes, slice 4: the people he has written to: read once a day (again in an hour after a failure). */
+        const val CORRESPONDENTS_EVERY_MS = 24 * 3_600_000L
+        const val CORRESPONDENTS_RETRY_MS = 3_600_000L
+        const val CORRESPONDENTS_WINDOW_MS = 365 * 24 * 3_600_000L
+        const val CORRESPONDENTS_LIMIT = 200
+        /** Inbox fixes, slice 4: unsure emails looked over a check for a sender he has written to. */
+        const val KNOWN_RESORT_LIMIT = 5_000
         /** Gmail headers read per 5-minute check (one call each; Gmail allows far more): a big first listing fills in over a few checks. */
         const val HEADERS_PER_CHECK = 300
         /** Inbox fixes, slice 1: Outlook emails whose own headers are read a check ([bulkLook]). */

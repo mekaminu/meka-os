@@ -518,6 +518,43 @@ class MailSyncTest {
     }
 
     @Test
+    fun mailFromPeopleHeHasWrittenToIsHisWithoutTheAisLookAndManyUnsureAreAskedInRounds() {
+        val ms = InMemoryMailStore()
+        val ai = FakeAi { e -> e.associate { it.id to "fyi" } }
+        val (gmail, _, i) = world(ms, mailAi = ai)
+        gmail.sentMail += MailSent("s1", "t-s1", "jo@example.com", "Jo", 2, "Plans", now - 30 * day, null,
+            addresses = listOf("jo@example.com", "noreply@forms.example", "alex@example.com"))
+        gmail.mailbox["j"] = msg("j", 1, "jo@example.com")
+        (1..60).forEach { n -> gmail.mailbox["p$n"] = msg("p$n", 2, "stranger$n@example.com") }
+        val id = connect(i)
+        i.syncAccount(id)
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.KNOWN_PERSON, true), ms.sortOf(id, "j"))
+        assertTrue(ai.asked.none { "j" in it })
+        // 60 strangers: three calls in one check (25 + 25 + 10), all looked at.
+        assertEquals(listOf(25, 25, 10), ai.asked.map { it.size })
+        assertTrue((1..60).all { n -> ms.sortOf(id, "p$n")!!.sure })
+        // His own address and a no-reply he wrote to aren't people he knows; Jo is kept from every tidy.
+        assertEquals(setOf("jo@example.com"), i.knownPeople("home"))
+        assertTrue("jo@example.com" in i.keepAddresses("home"))
+    }
+
+    @Test
+    fun anUnsureEmailSortedBeforeHisSentMailWasReadBecomesHisOnceItIs() {
+        val ms = InMemoryMailStore()
+        val ai = FakeAi { null } // off
+        val (gmail, _, i) = world(ms, mailAi = ai)
+        gmail.mailbox["j"] = msg("j", 1, "jo@example.com")
+        val id = connect(i)
+        i.syncAccount(id)
+        assertFalse(ms.sortOf(id, "j")!!.sure)
+        gmail.sentMail += MailSent("s1", "t-s1", "jo@example.com", "Jo", 1, "Plans", now - day, null, addresses = listOf("jo@example.com"))
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        now += Integrations.CORRESPONDENTS_EVERY_MS
+        i.syncAccount(id)
+        assertEquals(MailSortReason.KNOWN_PERSON, ms.sortOf(id, "j")!!.reason)
+    }
+
+    @Test
     fun theUnsureOnesGetOneLookAndOnlyNeedsYouOrFyiComesBack() {
         val ms = InMemoryMailStore()
         val ai = FakeAi { null } // AI off first
@@ -862,7 +899,8 @@ class MailSyncTest {
         assertEquals(0, EntityReader.scanning(ops).entities("home", EntityTypes.COMMITMENT).size)
         // The next check within six hours doesn't read Sent again.
         i.syncAccount(id)
-        assertEquals(1, gmail.sentReads)
+        // (one read for the follow-ups, one for the people he has written to: inbox fixes, slice 4)
+        assertEquals(2, gmail.sentReads)
         // Sam replies in the conversation; at the next read the find is marked answered.
         gmail.mailbox["r1"] = msg("r1", 0, "sam@example.com").copy(threadId = "t-s1")
         gmail.nextRound = { MailChanges(fetch = listOf("r1"), cursor = "h2") }

@@ -147,4 +147,23 @@ class MailSortTest {
         assertFalse(MailSortRules.wantsHeaderLook(person.copy(fromAddress = "noreply@x.example"), inInbox = true))
         assertFalse(MailSortRules.wantsHeaderLook(person.copy(labels = listOf("INBOX", MailSortRules.BULK_LABEL)), inInbox = true))
     }
+
+    @Test
+    fun peopleHeHasWrittenToAreHisWithoutTheAisLook() {
+        val known = MailSortRules.correspondents(
+            listOf("Sam@Example.com", "<jo@example.org>", "noreply@shop.example", "me@example.com", "not an address", "a@b", null, "x@@y.com"),
+            own = setOf("me@example.com"),
+        )
+        assertEquals(setOf("sam@example.com", "jo@example.org"), known)
+        val unsure = MailSortRules.sort(MailSortFacts("sam@example.com", "Sam", "Saturday?", listOf("INBOX"), null, null))
+        assertEquals(MailSorted(MailSort.NEEDS_YOU, MailSortReason.KNOWN_PERSON, true), MailSortRules.known(unsure, "SAM@example.com", known))
+        assertFalse(MailSortRules.wantsAi(MailSortRules.known(unsure, "sam@example.com", known)))
+        // A stranger stays unsure (the AI looks); a sure sort (his own newsletter) and an AI answer are left alone.
+        assertEquals(unsure, MailSortRules.known(unsure, "kim@example.com", known))
+        val list = MailSortRules.sort(MailSortFacts("sam@example.com", "Sam", "Weekly", listOf("INBOX"), "<mailto:u@example.com>", null))
+        assertEquals(list, MailSortRules.known(list, "sam@example.com", known))
+        val fyi = MailSortRules.afterAi(MailSortRules.AI_FYI)
+        assertEquals(fyi, MailSortRules.known(fyi, "sam@example.com", known))
+        assertEquals(unsure, MailSortRules.known(unsure, null, known))
+    }
 }

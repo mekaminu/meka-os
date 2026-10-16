@@ -152,6 +152,8 @@ data class MailSent(
     val subject: String?,
     val sentAtMs: Long,
     val preview: String?,
+    /** Inbox fixes, slice 4: every To and Cc address (for the people he has written to; held in memory only). */
+    val addresses: List<String> = emptyList(),
 )
 
 /** Slice 8a: one page of the inbox's older mail; [next] null once the listing is done. */
@@ -875,6 +877,7 @@ internal fun GmailHistory.sent(m: JsonObject): MailSent? {
         subject = hs["subject"]?.take(MailAddress.MAX_SUBJECT),
         sentAtMs = m["internalDate"].str()?.toLongOrNull() ?: return null,
         preview = m["snippet"].str()?.take(MailAddress.MAX_PREVIEW)?.takeIf { it.isNotBlank() },
+        addresses = (to + cc).map { it.second },
     )
 }
 
@@ -897,6 +900,7 @@ internal fun GraphDelta.sent(body: JsonObject): List<MailSent> =
             subject = m["subject"].str()?.take(MailAddress.MAX_SUBJECT),
             sentAtMs = m["sentDateTime"].str()?.let { runCatching { java.time.Instant.parse(it).toEpochMilli() }.getOrNull() } ?: return@mapNotNull null,
             preview = m["bodyPreview"].str()?.take(MailAddress.MAX_PREVIEW)?.takeIf { it.isNotBlank() },
+            addresses = (to + people("ccRecipients")).map { it.second },
         )
     }
 
