@@ -89,6 +89,8 @@ import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
 import os.meka.core.domain.TradingAlertsView
 import os.meka.core.domain.TradingCurveView
+import os.meka.core.domain.TradingExportRules
+import os.meka.core.domain.TradingExportView
 import os.meka.core.domain.TradingTradesView
 import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
@@ -184,6 +186,33 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
     }
 
+    // Trading tracker, slice 8: EXPORT FOR TAX — the server reads the year, then he picks where the CSV goes.
+    var exportCsv by remember { mutableStateOf<String?>(null) }
+    var exporting by remember { mutableStateOf(false) }
+    val saveCsv = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(TradingExportRules.MIME)) { uri: Uri? ->
+        val csv = exportCsv
+        exportCsv = null
+        if (uri == null || csv == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(csv.encodeToByteArray()) } != null }.getOrDefault(false)
+            }
+            say(if (ok) MoneySaved("Saved the spreadsheet · open it in Sheets or Excel, or send it to your accountant")
+                else MoneySaved("Couldn't save the spreadsheet there · try another place", refused = true))
+        }
+    }
+    val export: (String) -> Unit = { key ->
+        if (!exporting) scope.launch {
+            exporting = true
+            said = MoneySaved(TradingExportRules.WORKING)
+            val r = runCatching { core.tradingExport(key) }.getOrNull()
+            exporting = false
+            if (r == null) return@launch
+            say(r.said)
+            if (r.csv != null && r.fileName != null) { exportCsv = r.csv; runCatching { saveCsv.launch(r.fileName!!) } }
+        }
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(MekaSpace.gutter),
@@ -240,7 +269,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } },
                     onAlert = { kind, key ->
                         scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
-                    })
+                    }, exporting = exporting, onExport = export)
             }
         }
         v.month?.let { m ->
@@ -573,7 +602,10 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
  * positions nearest liquidation first (lit within 10%), each address with Remove, and a field for a public address.
  */
 @Composable
-private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit, onAlert: (String, String) -> Unit) {
+private fun TradingBlock(
+    t: TradingView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit, onAlert: (String, String) -> Unit,
+    exporting: Boolean = false, onExport: (String) -> Unit = {},
+) {
     val reduced = Meka.reducedMotion
     var adding by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -622,6 +654,7 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
         }
         Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
         t.alerts?.let { a -> AlertsBlock(a, onAlert) }
+        t.export?.let { e -> ExportBlock(e, exporting, onExport) }
         Text(t.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
@@ -651,6 +684,31 @@ private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit)
                             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
                 } }
             }
+        }
+    }
+}
+
+/**
+ * Trading tracker, slice 8: EXPORT FOR TAX — a chip per UK tax year; while the server reads the year the chips dim and
+ * the line says so, then the system's save sheet asks where the CSV goes.
+ */
+@Composable
+private fun ExportBlock(e: TradingExportView, exporting: Boolean, onExport: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(e.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Crossfade(if (exporting) TradingExportRules.WORKING else e.line, animationSpec = MekaMotion.appear(reduced), label = "trading-export-line") { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            e.chips.forEach { c -> key(c.key) {
+                val col by animateColorAsState(if (exporting) Meka.colors.textTertiary else Meka.colors.accent, MekaMotion.appear(reduced), label = "trading-export-${c.key}")
+                Text(c.label, style = MekaType.caption, color = col,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                        .clickable(role = Role.Button, enabled = !exporting) { onExport(c.key) }
+                        .semantics { contentDescription = c.spoken }.minTouch()
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+            } }
         }
     }
 }

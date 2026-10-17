@@ -47,6 +47,7 @@ struct MoneySheet: View {
     @State private var cardTexts: [String: String] = [:]
     @State private var worthText = ""
     @State private var tradingText = ""
+    @State private var exporting = false
     @State private var worthBalances: [String: String] = [:]
 
     var body: some View {
@@ -675,6 +676,7 @@ struct MoneySheet: View {
                     Task { said = await model.tradingWalletAdd(text: text) }
                 }
             if let a = t.alerts { tradingAlerts(a) }
+            if let e = t.export { tradingExport(e) }
             Text(t.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
@@ -695,6 +697,59 @@ struct MoneySheet: View {
         }
         .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: a.line)
+    }
+
+    /// Trading tracker, slice 8: EXPORT FOR TAX — a button per UK tax year; while the server reads the year they dim and
+    /// the line says so, then a save panel asks where the CSV goes.
+    private func tradingExport(_ e: TradingExportView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(e.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(exporting ? TradingExportRules.shared.WORKING : e.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(e.chips, id: \.key) { c in
+                    Button {
+                        let key = c.key
+                        exportYear(key)
+                    } label: {
+                        Text(c.label).font(MekaType.caption).foregroundStyle(exporting ? palette.textTertiary : palette.accent)
+                            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .disabled(exporting)
+                    .accessibilityLabel(c.spoken)
+                }
+            }
+        }
+        .padding(.top, MekaSpace.m)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: exporting)
+    }
+
+    private func exportYear(_ key: String) {
+        guard !exporting else { return }
+        exporting = true
+        Task {
+            let file = await model.tradingExport(key: key)
+            exporting = false
+            guard let file else { return }
+            said = file.said
+            guard let csv = file.csv, let name = file.fileName else { return }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.commaSeparatedText]
+            panel.nameFieldStringValue = name
+            panel.message = "Where to save the spreadsheet of your trades · for your accountant"
+            panel.prompt = "Save"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do {
+                try csv.write(to: url, atomically: true, encoding: .utf8)
+                MekaHaptics.light()
+                said = CoreModel.MoneySaid(line: "Saved the spreadsheet · open it in Numbers or Excel, or send it to your accountant", refused: false, undo: nil)
+            } catch {
+                MekaHaptics.tick()
+                said = CoreModel.MoneySaid(line: "Couldn't save the spreadsheet there · try another place", refused: true, undo: nil)
+            }
+        }
     }
 
     private func alertChips(_ label: String, _ chips: [TradingAlertChip]) -> some View {

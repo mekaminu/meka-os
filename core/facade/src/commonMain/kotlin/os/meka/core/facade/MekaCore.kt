@@ -237,6 +237,7 @@ class MekaCore(
     private var hereApi: HereApi? = transport as? HereApi
     private var fuelApi: FuelApi? = transport as? FuelApi
     private var numberLookupApi: NumberLookupApi? = transport as? NumberLookupApi
+    private var tradingExportApi: TradingExportApi? = transport as? TradingExportApi
     private var healthApi: HealthApi? = transport as? HealthApi
     private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
     private var foldPostureApi: FoldPostureApi? = transport as? FoldPostureApi
@@ -799,6 +800,60 @@ class MekaCore(
     /** Trading tracker: stops following [id] on every device, its figures cleared; Undo by [undoMoneyCategory]. Only while Money is open. */
     suspend fun tradingWalletRemove(id: String): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else trading.remove(id).also { refreshMoney() }
+    }
+
+    /**
+     * Trading tracker, slice 8: EXPORT FOR TAX — the tax year [yearKey] ("2025-26") of every followed account's perp
+     * orders and daily funding, read by Navilife's server from Hyperliquid's public data, as a CSV to save. Asks again
+     * while the server is still reading (up to about two minutes). Only while Money is open (and still open when the
+     * answer comes); never throws for the network.
+     */
+    suspend fun tradingExport(yearKey: String): os.meka.core.domain.TradingExportResult {
+        val R = os.meka.core.domain.TradingExportRules
+        val start = onCore {
+            if (!moneyOpen) null else Triple(os.meka.core.domain.TradingTaxYear.parse(yearKey), trading.wallets(), ZoneCalendar(timeZone))
+        } ?: return os.meka.core.domain.TradingExportResult(moneyLocked())
+        val (year, wallets, cal) = start
+        if (year == null) return os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved("That isn't a tax year", refused = true))
+        if (wallets.isEmpty()) return os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(R.NONE, refused = true))
+        val api = tradingExportApi ?: return os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(R.OFFLINE, refused = true))
+        val codec = os.meka.core.wire.TradingExportCodec
+        var answer: os.meka.core.wire.TradingExportCodec.Response? = null
+        for (attempt in 0 until EXPORT_ASKS) {
+            val r = try {
+                api.tradingExport(year.fromMs(cal), year.toMs(cal), codec.MAX_WAIT_MS)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(R.OFFLINE, refused = true))
+            }
+            if (r.state != os.meka.core.wire.TradingExportCodec.Response.PENDING) { answer = r; break }
+        }
+        val said = when (answer?.state) {
+            null -> R.SLOW
+            os.meka.core.wire.TradingExportCodec.Response.OFF -> R.OFF
+            os.meka.core.wire.TradingExportCodec.Response.FAILED -> R.FAILED
+            else -> null
+        }
+        if (said != null) return os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(said, refused = true))
+        val ids = wallets.map { it.id }.toSet()
+        val accounts = answer!!.accounts.filter { it.id in ids }.map { a ->
+            os.meka.core.domain.TradingExportAccount(
+                a.id,
+                a.orders.map { o -> os.meka.core.domain.TradingExportOrder(o.atMs, o.coin, o.direction, o.size, o.price, o.valueCents, o.closedCents, o.feeCents) },
+                a.funding.map { f -> os.meka.core.domain.TradingExportFunding(f.day, f.coin, f.cents) },
+                a.partial, a.failed,
+            )
+        }
+        return onCore {
+            when {
+                !moneyOpen -> os.meka.core.domain.TradingExportResult(moneyLocked())
+                accounts.isEmpty() || accounts.all { it.failed } -> os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(R.FAILED, refused = true))
+                accounts.all { it.failed || (it.orders.isEmpty() && it.funding.isEmpty()) } -> os.meka.core.domain.TradingExportResult(R.saidEmpty(year))
+                else -> os.meka.core.domain.TradingExportResult(R.saidReady(year, accounts),
+                    R.csv(year, accounts, wallets.associate { it.id to it.label }), R.fileName(year))
+            }
+        }
     }
 
     /**
@@ -4653,6 +4708,8 @@ class MekaCore(
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
         const val DIGEST_KEY = "meka.digest"
+        /** Trading export: how many times to ask while the server is still reading (each waits up to 20 s). */
+        const val EXPORT_ASKS = 6
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
@@ -4663,7 +4720,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
-            numberLookupApi = transport as? NumberLookupApi
+            numberLookupApi = transport as? NumberLookupApi; tradingExportApi = transport as? TradingExportApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
             notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi

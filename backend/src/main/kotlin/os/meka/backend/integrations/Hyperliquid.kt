@@ -6,6 +6,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import os.meka.core.domain.TradingCoinStats
+import os.meka.core.domain.TradingExportFunding
+import os.meka.core.domain.TradingExportOrder
 import os.meka.core.domain.TradingFill
 import os.meka.core.domain.TradingPosition
 import java.math.BigDecimal
@@ -33,6 +35,11 @@ data class TradingRecentRead(val fills: List<TradingFill>, val fundingCents: Lon
     override fun toString() = "TradingRecentRead(${fills.size} orders)"
 }
 
+/** Slice 8: a window's perp orders and daily funding for the tax export; [partial] when Hyperliquid had more than it gave. */
+data class TradingExportRead(val orders: List<TradingExportOrder>, val funding: List<TradingExportFunding>, val partial: Boolean) {
+    override fun toString() = "TradingExportRead(${orders.size} orders)"
+}
+
 /** Hyperliquid asked us to slow down (429). */
 class TradingRateLimited : RuntimeException("hyperliquid rate limited")
 
@@ -45,6 +52,9 @@ fun interface TradingFeed {
 
     /** Slice 7: the orders and funding between [fromMs] and [toMs] (the last day), for the big-order and funding alerts; null where not offered. */
     fun recent(address: String, fromMs: Long, toMs: Long): TradingRecentRead? = null
+
+    /** Slice 8: every perp order and each day's funding between [fromMs] and [toMs] (a tax year), for the export; null where not offered. */
+    fun export(address: String, fromMs: Long, toMs: Long): TradingExportRead? = null
 }
 
 /**
@@ -119,6 +129,46 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
         return recentFrom(fills, funding)
     }
 
+    /**
+     * Slice 8: `userFillsByTime` (aggregated by time, up to [EXPORT_FILL_PAGES] pages) and `userFunding` (up to
+     * [EXPORT_FUNDING_PAGES]) over the window, made into orders and daily funding by [exportFrom]. Partial when either
+     * ran out of pages or Hyperliquid's fill history (its most recent [FILL_HISTORY] fills) may not reach the start.
+     * Still only the public address is sent.
+     */
+    override fun export(address: String, fromMs: Long, toMs: Long): TradingExportRead {
+        require(os.meka.core.domain.TradingTracker.isAddress(address)) { "not an address" }
+        val a = address.lowercase()
+        val (fills, fillsAll) = pagedAll(EXPORT_FILL_PAGES, fromMs, toMs) { start ->
+            """{"type":"userFillsByTime","user":"$a","startTime":$start,"endTime":$toMs,"aggregateByTime":true}"""
+        }
+        val (funding, fundingAll) = pagedAll(EXPORT_FUNDING_PAGES, fromMs, toMs) { start ->
+            """{"type":"userFunding","user":"$a","startTime":$start,"endTime":$toMs}"""
+        }
+        val f = fills.distinctBy { x -> text(x["tid"]) ?: (text(x["hash"]) + text(x["time"]) + text(x["coin"])) }
+        val g = funding.distinctBy { x -> text(x["hash"]) + "|" + text(x["time"]) + "|" + text((x["delta"] as? JsonObject)?.get("coin")) }
+        return exportFrom(f, g, partial = !fillsAll || !fundingAll || f.size >= FILL_HISTORY)
+    }
+
+    private fun pagedAll(pages: Int, fromMs: Long, toMs: Long, body: (Long) -> String): Pair<List<JsonObject>, Boolean> {
+        val out = mutableListOf<JsonObject>()
+        var start = fromMs
+        repeat(pages) {
+            val (status, answer) = http.post(URL, body(start))
+            when {
+                status == 429 -> throw TradingRateLimited()
+                status != 200 -> error("hyperliquid $status")
+            }
+            if (answer.length > MAX_BYTES) error("hyperliquid answer too big")
+            val list = (runCatching { Json.parseToJsonElement(answer) }.getOrNull() as? JsonArray ?: error("hyperliquid unreadable"))
+                .mapNotNull { it as? JsonObject }
+            out += list
+            val latest = list.mapNotNull { text(it["time"])?.toLongOrNull() }.maxOrNull()
+            if (list.size < PAGE_FULL_AT || latest == null || latest >= toMs) return out to true
+            start = latest + 1
+        }
+        return out to false
+    }
+
     /** Pages a time-ordered list: when a page comes back full, the next starts just after its latest item. */
     private fun paged(pages: Int, fromMs: Long, toMs: Long, body: (Long) -> String): List<JsonObject> {
         val out = mutableListOf<JsonObject>()
@@ -144,6 +194,10 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
         const val URL = "https://api.hyperliquid.xyz/info"
         private const val FILL_PAGES = 5
         private const val FUNDING_PAGES = 10
+        private const val EXPORT_FILL_PAGES = 10
+        private const val EXPORT_FUNDING_PAGES = 40
+        /** Hyperliquid keeps only an account's most recent 10,000 fills readable by time. */
+        private const val FILL_HISTORY = 10_000
         /** A page this long or longer may have more after it (fills come 2,000 a page, funding 500). */
         private const val PAGE_FULL_AT = 500
 
@@ -220,6 +274,52 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
             val list = orders.values.map { TradingFill(it.at, it.coin, it.dir, c(it.value), c(it.closed)) }
                 .sortedByDescending { it.valueCents }.take(os.meka.core.domain.TradingTracker.MAX_FILLS).sortedBy { it.atMs }
             return TradingRecentRead(list, c(paid))
+        }
+
+        /**
+         * Slice 8: perp fills grouped by order (`oid`; a fill without one stands alone) into [TradingExportOrder]s — the
+         * last fill's time, the coin, the first fill's `dir`, Σ size, the size-weighted average price, Σ size × price,
+         * Σ closed P&L and Σ USDC fees — and perp funding added up per UTC day and coin. Spot left out. BigDecimal,
+         * cents at the end (half up).
+         */
+        fun exportFrom(fills: List<JsonObject>, funding: List<JsonObject>, partial: Boolean = false): TradingExportRead {
+            class Order(val coin: String, val dir: String) { var at = 0L; var size = BigDecimal.ZERO; var value = BigDecimal.ZERO; var closed = BigDecimal.ZERO; var fee = BigDecimal.ZERO }
+            fun perp(coin: String) = !coin.startsWith("@") && '/' !in coin
+            val orders = linkedMapOf<String, Order>()
+            for (f in fills) {
+                val coin = text(f["coin"])?.take(20) ?: continue
+                val dir = text(f["dir"]).orEmpty()
+                if (!perp(coin) || dir == "Buy" || dir == "Sell") continue
+                val sz = text(f["sz"])?.toBigDecimalOrNull()?.abs() ?: continue
+                val px = text(f["px"])?.toBigDecimalOrNull()?.takeIf { it.signum() > 0 } ?: continue
+                val at = text(f["time"])?.toLongOrNull() ?: continue
+                val key = text(f["oid"])?.let { "o$it" } ?: ("t" + (text(f["tid"]) ?: (text(f["hash"]) + at + coin)))
+                val o = orders.getOrPut(key) { Order(coin, dir.take(30)) }
+                o.at = maxOf(o.at, at)
+                o.size += sz
+                o.value += sz * px
+                text(f["closedPnl"])?.toBigDecimalOrNull()?.let { o.closed += it }
+                val token = text(f["feeToken"])
+                if (token == null || token == "USDC") text(f["fee"])?.toBigDecimalOrNull()?.let { o.fee += it }
+            }
+            val days = linkedMapOf<Pair<Long, String>, BigDecimal>()
+            for (f in funding) {
+                val d = f["delta"] as? JsonObject ?: continue
+                if (text(d["type"]) != "funding") continue
+                val coin = text(d["coin"])?.take(20)?.takeIf { perp(it) } ?: continue
+                val at = text(f["time"])?.toLongOrNull() ?: continue
+                val usdc = text(d["usdc"])?.toBigDecimalOrNull() ?: continue
+                val k = Math.floorDiv(at, 86_400_000L) to coin
+                days[k] = (days[k] ?: BigDecimal.ZERO) + usdc
+            }
+            fun c(b: BigDecimal): Long = b.movePointRight(2).setScale(0, RoundingMode.HALF_UP).toLong()
+            val list = orders.values.map { o ->
+                val avg = if (o.size.signum() == 0) BigDecimal.ZERO else o.value.divide(o.size, 8, RoundingMode.HALF_UP)
+                TradingExportOrder(o.at, o.coin, o.dir, o.size.stripTrailingZeros().toPlainString(), avg.stripTrailingZeros().toPlainString(),
+                    c(o.value), c(o.closed), c(o.fee))
+            }.sortedBy { it.atMs }
+            val daily = days.map { (k, v) -> TradingExportFunding(k.first, k.second, c(v)) }.sortedWith(compareBy({ it.day }, { it.coin }))
+            return TradingExportRead(list, daily, partial)
         }
 
         private fun text(e: JsonElement?): String? = (e as? JsonPrimitive)?.content?.trim()?.takeIf { it.isNotEmpty() && it != "null" }

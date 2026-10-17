@@ -3377,6 +3377,26 @@ final class CoreModel {
         }
     }
 
+    /// Trading tracker, slice 8: what EXPORT FOR TAX came to — the line, and the CSV with its file name when there's one to save.
+    struct TradingExportFile {
+        let said: MoneySaid
+        let csv: String?
+        let fileName: String?
+    }
+
+    /// Trading tracker, slice 8: a UK tax year ("2025-26") of his followed accounts' trades and funding as a CSV, read by
+    /// Navilife's server from Hyperliquid's public data (this can take a minute). Only while Money is open.
+    func tradingExport(key: String) async -> TradingExportFile? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.tradingExport(yearKey: key)
+            return TradingExportFile(said: moneySaid(r.said), csv: r.csv, fileName: r.fileName)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Trading tracker: stops following an address on every device; Undo with `undoMoneyCategory`.
     func tradingWalletRemove(id: String) async -> MoneySaid? {
         guard let core else { return nil }

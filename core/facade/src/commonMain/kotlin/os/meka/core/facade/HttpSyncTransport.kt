@@ -357,6 +357,14 @@ interface NumberLookupApi {
 }
 
 /**
+ * Trading tracker, slice 8: a tax year's Hyperliquid orders and daily funding for the CSV export, from Navilife's
+ * server (`POST /v1/trading/export`), waiting at most [waitMs]; "pending" means ask again.
+ */
+interface TradingExportApi {
+    suspend fun tradingExport(fromMs: Long, toMs: Long, waitMs: Long): os.meka.core.wire.TradingExportCodec.Response
+}
+
+/**
  * The Health screen's server half (Reliability first, item 3): `POST /v1/health/household`. Null from an older server
  * without the route (the screen then says "Couldn't check" for what only the server knows).
  */
@@ -474,7 +482,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -866,6 +874,21 @@ class HttpSyncTransport(
             // A server without the route (older, or no search key): no lookup.
             resp.status.value == 404 -> return os.meka.core.wire.NumberLookupCodec.Response(os.meka.core.wire.NumberLookupCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.NumberLookupCodec.Response(os.meka.core.wire.NumberLookupCodec.Response.FAILED)
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun tradingExport(fromMs: Long, toMs: Long, waitMs: Long): os.meka.core.wire.TradingExportCodec.Response {
+        val codec = os.meka.core.wire.TradingExportCodec
+        val body = codec.encodeRequest(os.meka.core.wire.TradingExportCodec.Request(fromMs, toMs, waitMs))
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.PATH, body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.PATH}")
+            // A server without the route (older, or the tracker off): the export says so.
+            resp.status.value == 404 -> return os.meka.core.wire.TradingExportCodec.Response(os.meka.core.wire.TradingExportCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.TradingExportCodec.Response(os.meka.core.wire.TradingExportCodec.Response.FAILED)
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
         }
         return codec.decodeResponse(resp.bodyAsText())

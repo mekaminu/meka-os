@@ -73,6 +73,7 @@ import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.FuelCodec
 import os.meka.core.wire.NumberLookupCodec
+import os.meka.core.wire.TradingExportCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.FoldPostureCodec
@@ -123,6 +124,8 @@ fun Application.mekaSync(
     fuel: FuelFinder? = null,
     /** Spam-call lookup (2026-10-17): what the web says about an unknown caller's number; null leaves the route out. */
     numberLookup: NumberLookup? = null,
+    /** Trading tracker, slice 8: a tax year's trades from Hyperliquid's public data for the export; null leaves the route out. */
+    tradingExports: TradingExports? = null,
     /** The family page (family sharing with his wife, slice 2); null leaves its routes out. */
     family: FamilyShare? = null,
     /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
@@ -738,6 +741,20 @@ fun Application.mekaSync(
             }
         }
 
+        if (tradingExports != null) {
+            // Trading tracker, slice 8: a tax year's perp orders and daily funding for every followed account, read from
+            // Hyperliquid's public data (public address only) in the background and kept in memory a few minutes.
+            // Keyed devices only, never the publisher. No address or figure is logged.
+            post(TradingExportCodec.PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                if (who.deviceId == ReleasePublisher.ID) throw Forbidden()
+                val request = TradingExportCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { tradingExports.export(who.householdId, request) }
+                call.respondText(TradingExportCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+        }
+
         if (push != null) {
             // A device's push address (an FCM token), or an empty token to stop waking it. Keyed devices only.
             post("/v1/push/token") {
@@ -1075,6 +1092,8 @@ fun main(args: Array<String>) {
                 ).also { startBankSync(it) }
             }
             // Trading tracker: his Hyperliquid accounts by public address only, read-only (no key exists to hold).
+            val tradingExports = if (System.getenv("MEKA_TRADING_TRACKER") == "off") null
+                else TradingExports({ hh, type -> opStore.latestFieldOps(hh, type) }, os.meka.backend.integrations.HyperliquidInfo.network())
             if (System.getenv("MEKA_TRADING_TRACKER") != "off") {
                 val devices = PostgresDeviceRegistry(ds)
                 startTradingSync(TradingSync(
@@ -1116,6 +1135,7 @@ fun main(args: Array<String>) {
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
                     fuel = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) },
                     numberLookup = numberLookup,
+                    tradingExports = tradingExports,
                 )
             }.start(wait = true)
         }

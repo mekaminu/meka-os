@@ -191,6 +191,8 @@ data class TradingView(
     val alerts: TradingAlertsView? = null,
     /** Slice 4: the P&L line over the last month, once there are two points to draw. */
     val curve: TradingCurveView? = null,
+    /** Slice 8: EXPORT FOR TAX — a tax year's trades as a spreadsheet; null with no address. */
+    val export: TradingExportView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -611,6 +613,6 @@ object TradingTracker {
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
         return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal),
-            TradingAlerts.view(alerts), curveView(wallets, nowMs))
+            TradingAlerts.view(alerts), curveView(wallets, nowMs), TradingExportRules.view(wallets, nowMs, cal))
     }
 }
