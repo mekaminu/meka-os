@@ -101,6 +101,10 @@ object NotifyDiagnosticsCodec {
         val bank: String? = null,
         /** Live trains: the rail key's probe and the household's board, counts only; null from a server before it. */
         val trains: String? = null,
+        /** The Google key (2026-10-17): the Routes probe and the travel feed, counts only; null from a server before it. */
+        val travel: String? = null,
+        /** The Google key: Navilife's voice (Google's Chirp 3 HD voices, the probe clip, the month's characters, Polly). */
+        val voice: String? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -149,6 +153,8 @@ object NotifyDiagnosticsCodec {
         }
         l.bank?.let { put("bank", clean(it, MAIL_DETAIL_MAX)) }
         l.trains?.let { put("trains", clean(it, MAIL_DETAIL_MAX)) }
+        l.travel?.let { put("travel", clean(it, MAIL_DETAIL_MAX)) }
+        l.voice?.let { put("voice", clean(it, MAIL_DETAIL_MAX)) }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -171,6 +177,8 @@ object NotifyDiagnosticsCodec {
             mail = (o["mail"] as? JsonArray)?.let { a -> entries(a, MAIL_MAX, MAIL_DETAIL_MAX) },
             bank = o.str("bank")?.let { clean(it, MAIL_DETAIL_MAX) },
             trains = o.str("trains")?.let { clean(it, MAIL_DETAIL_MAX) },
+            travel = o.str("travel")?.let { clean(it, MAIL_DETAIL_MAX) },
+            voice = o.str("voice")?.let { clean(it, MAIL_DETAIL_MAX) },
         )
     }
 

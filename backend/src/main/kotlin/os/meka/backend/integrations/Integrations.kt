@@ -2454,6 +2454,26 @@ class Integrations(
         return "$probe · $own"
     }
 
+    /**
+     * The deploy report's "Travel times" line (the Google key, 2026-10-17; counts only, never a place of his): a probe
+     * drive between two public landmarks ([PROBE_FROM_LAT]/[PROBE_FROM_LON] → [PROBE_TO]) proving the key and the
+     * Routes API, counted against the day's lookups, then the household's travel feed and how many drives it holds.
+     */
+    fun travelReport(hh: String): String {
+        val source = travel.values.firstOrNull() ?: return "off · server has no Google key secret set"
+        if (!runCatching { source.configured() }.getOrDefault(false)) return "off · the Google secret holds no key"
+        val probe = if (!takeTravelLookup()) "probe skipped · today's lookups used" else runCatching {
+            source.driveMinutes(PROBE_FROM_LAT, PROBE_FROM_LON, PROBE_TO, now() + 3_600_000L)
+        }.fold({ "probe OK · a public drive of $it min" }, { e -> "probe failed (${e::class.simpleName}: ${e.message?.take(60)})" })
+        val feed = store.accounts(hh).firstOrNull { it.provider == source.id }
+        val feedLine = feed?.let { a ->
+            "feed ${a.status}" + (a.lastSyncAtMs?.let { " · last ok ${java.time.Instant.ofEpochMilli(it).toString().take(16).replace('T', ' ')} UTC" } ?: "") +
+                (a.lastError?.takeIf { a.status != "ok" }?.let { " · ${it.take(40)}" } ?: "")
+        } ?: "no travel feed for this household"
+        val drives = runCatching { reader.entities(hh, EntityTypes.TRAVEL_TIME).size }.getOrDefault(0)
+        return "$probe · $feedLine · $drives drive${if (drives == 1) "" else "s"} kept"
+    }
+
     /** The TfL ids of the household's Train route (About you); empty without one. */
     internal fun routeLines(hh: String): List<String> = runCatching {
         RouteRules.lines(RouteRules.parse(AboutYouRules.read(reader.entity(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)).route))
@@ -3013,6 +3033,10 @@ class Integrations(
         const val BOARD_IDLE_MS = 30 * 60_000L
         /** A big public terminus whose board the deploy report reads to prove the rail key (never his own station). */
         const val PROBE_CRS = "EUS"
+        /** The travel probe: Trafalgar Square to Wembley Stadium (public landmarks; nothing of the household). */
+        const val PROBE_FROM_LAT = 51.5080
+        const val PROBE_FROM_LON = -0.1281
+        const val PROBE_TO = "Wembley Stadium, London"
         const val LINES_FROM_HOUR = 5
         const val LINES_TO_HOUR = 23
         /** From 17:00 London the line feed also reads tomorrow morning's plans, at most every half hour. */

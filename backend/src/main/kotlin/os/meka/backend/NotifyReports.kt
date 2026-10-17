@@ -38,6 +38,10 @@ class NotifyReports(
     private val bank: ((householdId: String) -> String)? = null,
     /** Live trains: the rail key's probe and the household's board, counts only, never a station. */
     private val trains: ((householdId: String) -> String)? = null,
+    /** The Google key (2026-10-17): the Routes probe and the household's travel feed, counts only. */
+    private val travel: ((householdId: String) -> String)? = null,
+    /** The Google key: Navilife's voice (Google's voices and the probe clip, Polly), counts only. */
+    private val voice: (() -> String)? = null,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
@@ -60,6 +64,8 @@ class NotifyReports(
             aboutClubs = held?.clubs, aboutCouncil = held?.council, aboutRoute = held?.route, assistant = calls, mail = mail,
             bank = bank?.let { read -> runCatching { read(who.householdId) }.getOrNull() },
             trains = trains?.let { read -> runCatching { read(who.householdId) }.getOrNull() },
+            travel = travel?.let { read -> runCatching { read(who.householdId) }.getOrNull() },
+            voice = voice?.let { read -> runCatching { read() }.getOrNull() },
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)

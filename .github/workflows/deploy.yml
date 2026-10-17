@@ -266,6 +266,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-trains "${{ steps.decide.outputs.url }}"
 
+      # The Google key (2026-10-17): a public probe drive through the Routes API and a short probe clip in a Chirp 3 HD
+      # voice, then the travel feed and the month's characters; counts only, never a place of his.
+      - name: Google key
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-google "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

@@ -256,7 +256,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -322,6 +322,12 @@ object ReleasePublisherCli {
                     println(trainsLine(l.trains))
                     0
                 }
+                "publisher-google" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Google key::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    googleLines(l).forEach(::println)
+                    0
+                }
                 "publisher-mail" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -352,6 +358,20 @@ object ReleasePublisherCli {
     }
 
     /** Live trains: one notice (a warning unless the probe read a board); counts only, never a station. */
+    /**
+     * The Google key (2026-10-17): "Travel times" (the Routes probe and the feed) and "Navilife's voice" (Google's
+     * voices and the probe clip), each a notice when working and a warning otherwise; counts only.
+     */
+    fun googleLines(l: NotifyDiagnosticsCodec.Latest): List<String> = listOf(
+        googleLine("Travel times", l.travel, l.travel?.startsWith("probe OK") == true),
+        googleLine("Navilife's voice", l.voice, l.voice?.startsWith("Google voice on") == true && l.voice?.contains("probe clip failed") == false),
+    )
+
+    private fun googleLine(title: String, line: String?, ok: Boolean): String {
+        if (line == null) return "::notice title=$title::the server doesn't report it yet"
+        return "::${if (ok) "notice" else "warning"} title=$title::$line".replace("%", "%25")
+    }
+
     fun trainsLine(line: String?): String {
         if (line == null) return "::notice title=Live trains::the server doesn't report it yet"
         val ok = line.startsWith("probe OK")

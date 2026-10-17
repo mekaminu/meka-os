@@ -1077,7 +1077,9 @@ fun main(args: Array<String>) {
                             os.meka.core.domain.MoneyBank.reportLine(f?.let { m -> os.meka.core.domain.MoneyBank.read { m[it] } }) { NotifyReports.utc(it) } +
                                 (if (bankSync == null) " · server has no Lunch Flow secret set" else "")
                         },
-                        trains = { hh -> integrations?.trainsReport(hh) ?: "off · integrations not running" }),
+                        trains = { hh -> integrations?.trainsReport(hh) ?: "off · integrations not running" },
+                        travel = { hh -> integrations?.travelReport(hh) ?: "off · integrations not running" },
+                        voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.

@@ -383,4 +383,22 @@ class SpeechTest {
         val down = FakePolly(chirp).apply { fail = true }
         assertEquals(SpeechCodec.Google.FAILED, SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).googleState())
     }
+
+    @Test
+    fun theDeployReportSaysWhetherGoogleSpeaksWithCountsOnly() {
+        val google = FakePolly(chirp)
+        val googleUsage = InMemorySpeechUsageStore()
+        val s = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = google, googleUsage = googleUsage)
+        val line = s.report()
+        assertTrue(line.startsWith("Google voice on · 3 Chirp 3 HD voices (2 British) · probe clip 1 KB · 1k of 1M characters in 2026-10"), line)
+        assertTrue(line.endsWith("Polly ${SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }).offered().size} voices"), line)
+        assertEquals(Triple(SpeechService.PROBE_LINE, "Aoede", "chirp3hd"), google.said.single())
+        assertEquals(SpeechService.PROBE_LINE.length.toLong(), googleUsage.used("2026-10"))
+        // No key: says so, nothing sent to Google.
+        val noKey = object : SpeechEngine by FakePolly(chirp) { override fun configured() = false }
+        assertTrue(SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = noKey).report().startsWith("Google voice off · no key"))
+        // A key Google won't answer for: no voices listed.
+        val down = FakePolly(chirp).apply { fail = true }
+        assertTrue(SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).report().startsWith("Google voice: key read but no voices listed"))
+    }
 }

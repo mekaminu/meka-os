@@ -379,6 +379,26 @@ class SpeechService(
     /** Google's state for Health: [SpeechCodec.Google.ON] · [SpeechCodec.Google.FAILED] · null (no key). Never throws. */
     fun googleState(): String? = runCatching { runCatching { offered() }; googleInfo(month()).state }.getOrNull()?.takeIf { it != SpeechCodec.Google.NO_KEY }
 
+    /**
+     * The deploy report's "Navilife's voice" line (the Google key, 2026-10-17; counts only): whether Google's voices are
+     * listed and how many, a probe clip of [PROBE_LINE] in the first British one (a few metered characters on Google's
+     * free tier, skipped past [googleFallbackAt]), this month's Google characters, and Polly's state. Never throws.
+     */
+    fun report(): String {
+        val polly = if (engine == null) "Polly off" else runCatching { pollyOffered().size }.fold({ "Polly $it voices" }, { "Polly unreachable" })
+        val g = google
+        if (g == null || !runCatching { g.configured() }.getOrDefault(false)) return "Google voice off · no key · $polly"
+        refreshVoices()
+        val list = runCatching { googleOffered() }.getOrDefault(emptyList())
+        if (list.isEmpty()) return "Google voice: key read but no voices listed (API off or not allowed on the key?) · $polly"
+        val british = list.count { !it.id.endsWith("-US") }
+        val m = month()
+        val clip = list.firstOrNull { !it.id.endsWith("-US") }?.let { v -> googleClip(PROBE_LINE, v.id) }
+        val probe = if (clip != null) "probe clip ${(clip.size + 1023) / 1024} KB" else "probe clip failed"
+        val used = runCatching { googleUsage.used(m) }.getOrDefault(0)
+        return "Google voice on · ${list.size} Chirp 3 HD voices ($british British) · $probe · ${(used + 999) / 1000}k of 1M characters in $m · $polly"
+    }
+
     /** [say] as the JSON answer (audio as base64), for devices that didn't ask for raw MP3. */
     fun speak(r: SpeechCodec.Request): SpeechCodec.Response {
         val said = say(r)
@@ -417,6 +437,8 @@ class SpeechService(
         /** Google's free tier for Chirp 3 HD (1M characters a month); Navilife stops at [GOOGLE_FALLBACK_AT]. */
         const val GOOGLE_FREE = 1_000_000L
         const val GOOGLE_FALLBACK_AT = 900_000L
+        /** What the deploy report's probe clip says (sent only to Google, never played). */
+        const val PROBE_LINE = "Navilife voice check."
         const val GENERATIVE = "generative"
         const val NEURAL = "neural"
         /** Meka's shortlist (build plan): these lead the list on the same engine. */
