@@ -241,13 +241,11 @@ class NumberLookup(
         val running = inFlight.putIfAbsent(hash, mine)
         if (running == null) {
             pool.execute {
-                try {
-                    mine.complete(run(householdId, hash, number))
-                } catch (e: Throwable) {
-                    mine.completeExceptionally(e)
-                } finally {
-                    inFlight.remove(hash, mine)
-                }
+                // Out of inFlight before anyone can see the answer, so an ask that comes after it (a day later, say)
+                // reads the store instead of being handed this finished search (CI run 778's race).
+                val result = runCatching { run(householdId, hash, number) }
+                inFlight.remove(hash, mine)
+                result.fold({ mine.complete(it) }, { mine.completeExceptionally(it) })
             }
         }
         val f = running ?: mine
