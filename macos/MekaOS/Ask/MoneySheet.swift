@@ -250,6 +250,22 @@ struct MoneySheet: View {
     }
 
     /// Slice 7: one card — due with Paid, statement, limit used, 0% ending, fees; Edit details for the typed fields.
+    /// One of a card's typed fields (split out of `card` so the type checker keeps up, 2026-10-17 nightly).
+    private func cardField(cardId: String, _ f: MoneyCardField) -> some View {
+        let key: String = cardId + "|" + f.key
+        let prompt: String = f.value.isEmpty ? f.hint : f.label + " · now " + f.value
+        let text: Binding<String> = Binding(get: { cardTexts[key] ?? "" }, set: { cardTexts[key] = $0 })
+        return TextField(prompt, text: text)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                let typed: String = cardTexts[key] ?? ""
+                cardTexts[key] = nil
+                let id: String = cardId
+                let field: String = f.key
+                Task { said = await model.moneyCardField(accountId: id, field: field, text: typed) }
+            }
+    }
+
     private func card(_ c: MoneyCardRow) -> some View {
         let open = editingCard == c.id || c.statementLine == nil
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -277,21 +293,7 @@ struct MoneySheet: View {
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
             if open {
-                ForEach(c.fields, id: \.key) { f in
-                    TextField(f.value.isEmpty ? f.hint : "\(f.label) · now \(f.value)", text: Binding(
-                        get: { cardTexts[c.id + "|" + f.key] ?? "" },
-                        set: { cardTexts[c.id + "|" + f.key] = $0 }
-                    ))
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit {
-                        let key = c.id + "|" + f.key
-                        let text = cardTexts[key] ?? ""
-                        cardTexts[key] = nil
-                        let id = c.id
-                        let field = f.key
-                        Task { said = await model.moneyCardField(accountId: id, field: field, text: text) }
-                    }
-                }
+                ForEach(c.fields, id: \.key) { f in cardField(cardId: c.id, f) }
                 HStack(spacing: MekaSpace.m) {
                     Button(MoneyCards.shared.CHARGE_SWITCH + (c.charge ? " ✓" : "")) {
                         let id = c.id
