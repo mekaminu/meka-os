@@ -77,6 +77,8 @@ data class JunkReview(
     val canApprove: Boolean,
     /** "Nothing moves until you approve · Trash keeps them 30 days". */
     val note: String,
+    /** Slice 4: the list's heading ("TO TRASH · 41 SENDERS", "TO MOVE · 63 SENDERS", "TO MARK READ · 22 SENDERS"). */
+    val sendersLabel: String = "",
 )
 
 object MailJunkReviewRules {
@@ -180,12 +182,12 @@ object MailJunkReviewRules {
     fun fields(senders: List<MailJunkSender>): Map<String, FieldValue> = mapOf(MailBacklogFields.JUNK_SENDERS to encode(senders).fv())
 
     /** The list back; null when the server hasn't written one yet. Lines it can't read are skipped. */
-    fun decode(text: String?): List<MailJunkSender>? {
+    fun decode(text: String?, allowed: Set<MailTidy> = JUNK_TIDIES): List<MailJunkSender>? {
         val lines = text?.takeIf { it.startsWith("v1") }?.split('\n') ?: return null
         return lines.drop(1).mapNotNull { l ->
             val p = l.split('\t')
             if (p.size < 8 || p[0] != "1") return@mapNotNull null
-            val tidy = MailTidy.of(p[2])?.takeIf { it == MailTidy.JUNK_TRASH || it == MailTidy.RESCUE || it == MailTidy.KEEP } ?: return@mapNotNull null
+            val tidy = MailTidy.of(p[2])?.takeIf { it in allowed } ?: return@mapNotNull null
             MailJunkSender(
                 key = p[1], tidy = tidy, count = p[3].toIntOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null,
                 name = p[4].ifBlank { "Unknown sender" }, domain = p[5].ifBlank { null }, scam = p[6].ifBlank { null },
@@ -193,6 +195,9 @@ object MailJunkReviewRules {
             )
         }
     }
+
+    /** Where an Empty Junk sender's mail can go. */
+    val JUNK_TIDIES = setOf(MailTidy.JUNK_TRASH, MailTidy.RESCUE, MailTidy.KEEP)
 
     /** Senders the server left off the list for room (the "v1" line's count). */
     fun leftOut(text: String?): Int = text?.takeIf { it.startsWith("v1") }?.substringBefore('\n')?.substringAfter('\t', "")?.toIntOrNull() ?: 0
@@ -288,6 +293,7 @@ object MailJunkReviewRules {
             approveLabel = if (going > 0) "Approve · ${g(going)} to Trash" else MailJunkClearRules.CARD_YES,
             canApprove = going > 0 || rescued > 0,
             note = NOTE,
+            sendersLabel = "TO TRASH · ${g(trash.size)} ${if (trash.size == 1) "SENDER" else "SENDERS"}",
         )
     }
 }

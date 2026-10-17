@@ -69,6 +69,7 @@ import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailBacklogFields
 import os.meka.core.domain.MailJunkClearRules
 import os.meka.core.domain.MailJunkReviewRules
+import os.meka.core.domain.MailCleanupReviewRules
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
@@ -2564,6 +2565,65 @@ class MailSyncTest {
         assertTrue(ms.neverTidied(id).containsAll(ids))
         i.syncAccount(id)
         assertEquals(2, gmail.tidyCalls.size)
+    }
+
+    @Test
+    fun theCleanUpListsItsSendersAndNeverMovesOneHeUnticked() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.mailbox["n1"] = msg("n1", 45, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["n2"] = msg("n2", 40, "editor@weekly.example").copy(listId = "<weekly.example>")
+        gmail.mailbox["d1"] = msg("d1", 45, "deals@shop.example").copy(listId = "<shop.example>")
+        gmail.backlogPages = mapOf(null to MailBacklogPage(ids = listOf("n1", "n2", "d1"), next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        val id = connect(i)
+        val entityId = MailBacklogRules.entityId(id)
+        fun plan() = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        repeat(2) { i.syncAccount(id); now += 300_000 }
+        assertTrue(plan().ready)
+        // Review opens its own list, slice 4: who'd move, by sender, never an address.
+        val review = MailCleanupReviewRules.planReview(plan())!!
+        assertEquals(2, review.senders.size)
+        assertEquals(2, review.senders.first().count)
+        assertFalse("editor@" in plan().planSenders!!)
+        // He unticks the newsletter, then approves: only the shop's email moves, and the clean-up still finishes.
+        val key = review.senders.first().key
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.PLAN_KEEP_SENDERS, FieldValue.Text(key))
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.APPROVED_AT, FieldValue.Int64(now))
+        i.syncAccount(id); now += 300_000
+        assertEquals(setOf("d1"), gmail.tidyCalls.flatMap { it.keys }.toSet())
+        assertTrue(gmail.mailbox.getValue("n1").inInbox && gmail.mailbox.getValue("n2").inInbox)
+        assertNotNull(plan().finishedAtMs)
+    }
+
+    @Test
+    fun markReadListsItsSendersAndLeavesOneHeUntickedUnread() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        gmail.unreadInInbox = 40
+        gmail.mailbox["n1"] = msg("n1", 0, "news@weekly.example").copy(listId = "<weekly.example>", listUnsubscribe = "<mailto:off@weekly.example>")
+        gmail.mailbox["n2"] = msg("n2", 0, "deals@shop.example").copy(listId = "<shop.example>", listUnsubscribe = "<mailto:off@shop.example>")
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        fun backlog() = MailBacklogRules.read(entityId, mapOf(MailBacklogFields.STARTED_AT to FieldValue.Int64(1L)) +
+            EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_BACKLOG).getValue(entityId))!!
+        val senders = MailJunkReviewRules.decode(backlog().readSenders, MailCleanupReviewRules.READ_TIDIES)!!
+        assertEquals(2, senders.size)
+        assertFalse("news@" in backlog().readSenders!!)
+        val shop = MailJunkReviewRules.senderKey("deals@shop.example", null)
+        now += 60_000L
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.STARTED_AT, FieldValue.Int64(1L))
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.READ_KEEP_SENDERS, FieldValue.Text(shop))
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.MARK_READ_APPROVED_AT, FieldValue.Int64(now))
+        i.syncAccount(id)
+        assertEquals(setOf("n1"), gmail.markedDone.flatten().toSet())
+        now += 60_000L
+        i.syncAccount(id)
+        assertEquals(setOf("n1"), gmail.markedDone.flatten().toSet())
+        assertNotNull(backlog().markReadFinishedAtMs)
     }
 
     @Test

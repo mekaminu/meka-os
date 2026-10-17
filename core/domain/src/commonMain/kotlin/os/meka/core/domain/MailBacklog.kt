@@ -120,6 +120,16 @@ object MailBacklogFields {
     const val MARKED_READ = "markedRead"
     const val MARK_READ_FINISHED_AT = "markReadFinishedAtMs"
 
+    /**
+     * Review opens its own list, slice 4 ([MailCleanupReviewRules]): who the backlog clean-up would move and who "Mark N
+     * read" would mark, grouped by sender (the server writes them; a key per sender, never an address), and the senders
+     * Meka took the tick off (comma-separated keys; the apps write them, the server leaves their mail alone).
+     */
+    const val PLAN_SENDERS = "planSenders"
+    const val PLAN_KEEP_SENDERS = "planKeepSenders"
+    const val READ_SENDERS = "readSenders"
+    const val READ_KEEP_SENDERS = "readKeepSenders"
+
     fun countField(k: MailBacklogKind): String = when (k) {
         MailBacklogKind.KEEP -> KEPT
         MailBacklogKind.NEWSLETTER -> NEWSLETTERS
@@ -169,6 +179,11 @@ data class MailBacklog(
     val markReadApprovedAtMs: Long? = null,
     val markedRead: Int = 0,
     val markReadFinishedAtMs: Long? = null,
+    /** Review opens its own list, slice 4: the clean-up's and Mark read's senders (encoded) and his kept ones. */
+    val planSenders: String? = null,
+    val planKeepSenders: Set<String> = emptySet(),
+    val readSenders: String? = null,
+    val readKeepSenders: Set<String> = emptySet(),
 ) {
     val ready: Boolean get() = readyAtMs != null
     val approved: Boolean get() = approvedAtMs != null
@@ -364,6 +379,10 @@ object MailBacklogRules {
             markReadApprovedAtMs = long(MailBacklogFields.MARK_READ_APPROVED_AT)?.takeIf { it > 0 },
             markedRead = long(MailBacklogFields.MARKED_READ)?.toInt()?.coerceAtLeast(0) ?: 0,
             markReadFinishedAtMs = long(MailBacklogFields.MARK_READ_FINISHED_AT)?.takeIf { it > 0 },
+            planSenders = text(MailBacklogFields.PLAN_SENDERS),
+            planKeepSenders = MailJunkReviewRules.decodeKept(text(MailBacklogFields.PLAN_KEEP_SENDERS)),
+            readSenders = text(MailBacklogFields.READ_SENDERS),
+            readKeepSenders = MailJunkReviewRules.decodeKept(text(MailBacklogFields.READ_KEEP_SENDERS)),
         )
     }
 
@@ -470,24 +489,24 @@ object MailBacklogRules {
         return newest.flatMap { b -> listOfNotNull(planCard(b), MailMarkReadRules.card(b, nowMs), MailJunkClearRules.card(b)) }
     }
 
-    private fun planCard(b: MailBacklog): DecisionCard? {
+    /** Review opens its own list, slice 4: the Needs you card (null when there's nothing to approve). */
+    fun planCard(b: MailBacklog): DecisionCard? {
         if (!canApprove(b)) return null
-        return run {
-                val archive = listOf(MailBacklogKind.NEWSLETTER, MailBacklogKind.RECEIPT, MailBacklogKind.ARCHIVE).sumOf { b.counts[it] ?: 0 }
-                val junk = b.counts[MailBacklogKind.JUNK] ?: 0
-                val kept = b.counts[MailBacklogKind.KEEP] ?: 0
-                val why = listOfNotNull(
-                    archive.takeIf { it > 0 }?.let { "Archive ${n(it)} ${if (it == 1) "newsletter or promo" else "newsletters and promos"} older than a week" },
-                    junk.takeIf { it > 0 }?.let { "Trash ${n(it)} junk" },
-                    kept.takeIf { it > 0 }?.let { "keep ${n(it)} that may need you" },
-                    "nothing moves until you approve",
-                ).joinToString(" · ")
-                DecisionCard(
-                    id = b.id, kind = DecisionKind.MAIL_CLEANUP, title = "Clean up ${b.account}", why = why, taskId = null,
-                    yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
-                    yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_MAIL,
-                    urgent = false,
-                )
-            }
+        val (archive, junk) = MailCleanupReviewRules.planMoving(b)
+        if (archive + junk == 0) return null
+        val kept = (b.counts[MailBacklogKind.KEEP] ?: 0) + MailCleanupReviewRules.planKeptCount(b)
+        val why = listOfNotNull(
+            archive.takeIf { it > 0 }?.let { "Archive ${n(it)} ${if (it == 1) "newsletter or promo" else "newsletters and promos"} older than a week" },
+            junk.takeIf { it > 0 }?.let { "Trash ${n(it)} junk" },
+            kept.takeIf { it > 0 }?.let { "keep ${n(it)} that may need you" },
+            "nothing moves until you approve",
+        ).joinToString(" · ")
+        // Review opens its own list, slice 4: ↑ Review opens the list of who'd move, not Mail.
+        return DecisionCard(
+            id = b.id, kind = DecisionKind.MAIL_CLEANUP, title = "Clean up ${b.account}", why = why, taskId = null,
+            yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
+            yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_REVIEW,
+            urgent = false,
+        )
     }
 }

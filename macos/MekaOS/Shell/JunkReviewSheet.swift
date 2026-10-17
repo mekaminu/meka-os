@@ -1,7 +1,8 @@
 import SwiftUI
 @preconcurrency import MekaKit
 
-/// Review opens its own list (Meka, 2026-10-17 04:03), slice 1, on the Mac: ↑ Review on an "Empty Junk" card opens this
+/// Review opens its own list (Meka, 2026-10-17 04:03), slice 1, on the Mac (slice 4: the backlog clean-up's and Mark N
+/// read's lists use the same sheet, with their own heading, ticks and button): ↑ Review on an "Empty Junk" card opens this
 /// sheet instead of Mail. The people going back to the inbox first (who and why), then every sender going to Trash, the
 /// most first (name, domain, how many, two subjects, a "Looks like a scam" chip), each with a tick; clicking a row takes
 /// the tick off (their mail stays in Junk; synced with the Fold, Undo on the bar). Approve at the foot counts only what's
@@ -44,7 +45,7 @@ struct JunkReviewSheet: View {
                             }
                         }
                         if !r.senders.isEmpty {
-                            Text("TO TRASH · \(r.senders.count) SENDERS").font(MekaType.captionStrong)
+                            Text(r.sendersLabel).font(MekaType.captionStrong)
                                 .foregroundStyle(palette.textSecondary).padding(.top, MekaSpace.m)
                             ForEach(Array(r.senders.enumerated()), id: \.element.key) { i, row in
                                 JunkSenderRowView(row: row, palette: palette) {
@@ -79,8 +80,8 @@ struct JunkReviewSheet: View {
                 .padding(.top, MekaSpace.m)
                 Text(r.note).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
             } else {
-                Text("Empty Junk").font(MekaType.upNextTitle)
-                Text("Nothing left to approve here · the clean-out has started or the folder is empty.")
+                Text("Review").font(MekaType.upNextTitle)
+                Text("Nothing left to approve here · it has started, or there's nothing left to move.")
                     .font(MekaType.body).foregroundStyle(palette.textSecondary)
                 Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
             }

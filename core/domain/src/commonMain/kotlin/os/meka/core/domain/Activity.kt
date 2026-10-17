@@ -672,26 +672,46 @@ class ActivityLog(
         return true
     }
 
-    /** Review opens its own list, slice 1: the Empty Junk card's review sheet ([cardId] the card's id); null when there's nothing to approve. */
-    fun junkReview(cardId: String): JunkReview? {
-        if (!MailJunkClearRules.isCard(cardId)) return null
-        val entity = MailJunkClearRules.backlogIdOf(cardId)
-        return mailBacklogs().firstOrNull { it.id == entity }?.let { MailJunkReviewRules.review(it) }
+    /**
+     * Review opens its own list: the card's review sheet ([cardId] the card's id) — Empty Junk (slice 1), Mark N read and
+     * the backlog clean-up (slice 4); null when there's nothing to approve.
+     */
+    fun junkReview(cardId: String): JunkReview? = when {
+        MailJunkClearRules.isCard(cardId) -> {
+            val entity = MailJunkClearRules.backlogIdOf(cardId)
+            mailBacklogs().firstOrNull { it.id == entity }?.let { MailJunkReviewRules.review(it) }
+        }
+        MailMarkReadRules.isCard(cardId) -> {
+            val entity = MailMarkReadRules.backlogIdOf(cardId)
+            mailBacklogs().firstOrNull { it.id == entity }?.let { MailCleanupReviewRules.readReview(it, nowMs()) }
+        }
+        else -> mailBacklogs().firstOrNull { it.id == cardId }?.let { MailCleanupReviewRules.planReview(it) }
     }
 
     /**
-     * Review opens its own list, slice 1: the tick on one sender in the Empty Junk review. [keep] true takes it off (their
-     * mail stays in Junk; the server never trashes it), false puts it back. Synced; the bar's line, or null when nothing
-     * was written (the clean-out already started, or an unknown card).
+     * Review opens its own list: the tick on one sender in a card's review. [keep] true takes it off — Empty Junk: their
+     * mail stays in Junk; the clean-up: their older mail stays in the inbox; Mark read: their mail stays unread — false
+     * puts it back. Synced; the bar's line, or null when nothing was written (already started, or an unknown card).
      */
     fun keepJunkSender(cardId: String, key: String, keep: Boolean): String? {
-        if (!MailJunkClearRules.isCard(cardId)) return null
-        val entity = MailJunkClearRules.backlogIdOf(cardId)
-        val b = mailBacklogs().firstOrNull { it.id == entity } ?: return null
-        if (b.junkApprovedAtMs != null || b.junkFinishedAtMs != null) return null
-        if ((key in b.junkKeepSenders) == keep) return if (keep) MailJunkReviewRules.KEPT_BAR else MailJunkReviewRules.UNKEPT_BAR
-        replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailJunkReviewRules.keptFields(b.junkKeepSenders, key, keep))
-        return if (keep) MailJunkReviewRules.KEPT_BAR else MailJunkReviewRules.UNKEPT_BAR
+        if (MailJunkClearRules.isCard(cardId)) {
+            val entity = MailJunkClearRules.backlogIdOf(cardId)
+            val b = mailBacklogs().firstOrNull { it.id == entity } ?: return null
+            if (b.junkApprovedAtMs != null || b.junkFinishedAtMs != null) return null
+            if ((key in b.junkKeepSenders) != keep) replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailJunkReviewRules.keptFields(b.junkKeepSenders, key, keep))
+            return if (keep) MailJunkReviewRules.KEPT_BAR else MailJunkReviewRules.UNKEPT_BAR
+        }
+        if (MailMarkReadRules.isCard(cardId)) {
+            val entity = MailMarkReadRules.backlogIdOf(cardId)
+            val b = mailBacklogs().firstOrNull { it.id == entity } ?: return null
+            if (MailMarkReadRules.running(b)) return null
+            if ((key in b.readKeepSenders) != keep) replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailCleanupReviewRules.readKeptFields(b.readKeepSenders, key, keep))
+            return if (keep) MailCleanupReviewRules.READ_KEPT_BAR else MailCleanupReviewRules.READ_UNKEPT_BAR
+        }
+        val b = mailBacklogs().firstOrNull { it.id == cardId } ?: return null
+        if (b.approved || b.applied > 0) return null
+        if ((key in b.planKeepSenders) != keep) replica.commitLocal(EntityTypes.MAIL_BACKLOG, cardId, MailCleanupReviewRules.planKeptFields(b.planKeepSenders, key, keep))
+        return if (keep) MailCleanupReviewRules.PLAN_KEPT_BAR else MailCleanupReviewRules.PLAN_UNKEPT_BAR
     }
 
     private fun calendarEdits(): List<ActivityItem> {

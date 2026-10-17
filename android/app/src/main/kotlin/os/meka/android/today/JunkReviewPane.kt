@@ -50,7 +50,7 @@ import os.meka.core.domain.JunkReview
 import os.meka.core.domain.JunkReviewRow
 import os.meka.core.facade.MekaCore
 
-/** Hosts the Empty Junk review over Needs you (or the command centre): springs up on ↑ Review, drops away on Close. */
+/** Hosts a card's review (Empty Junk, the backlog clean-up, Mark N read) over Needs you (or the command centre): springs up on ↑ Review, drops away on Close. */
 @Composable
 internal fun JunkReviewHost(core: MekaCore, moves: DecisionMoves) {
     var shown by remember { mutableStateOf<String?>(null) }
@@ -62,7 +62,8 @@ internal fun JunkReviewHost(core: MekaCore, moves: DecisionMoves) {
 }
 
 /**
- * Review opens its own list (Meka, 2026-10-17 04:03), slice 1: **the Empty Junk review**. What Approve would move:
+ * Review opens its own list (Meka, 2026-10-17 04:03), slice 1: **the Empty Junk review**; slice 4: the same pane shows the
+ * backlog clean-up's list (who'd be archived or trashed, untick to keep in the inbox) and Mark N read's (untick to leave unread). What Approve would move:
  * the people going back to the inbox first (who and why), then every sender going to Trash, the most first (name,
  * domain, how many, two subjects, a "Looks like a scam" chip), each with a tick; taking it off keeps that sender's mail
  * in Junk (synced, Undo on the bar). Approve at the foot counts only what's still ticked.
@@ -101,12 +102,12 @@ internal fun JunkReviewPane(core: MekaCore, cardId: String, undo: (String, (susp
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); onClose() }.minTouch())
         }
         item(key = "title") {
-            Text(r?.title ?: "Empty Junk", style = MekaType.greeting, color = Meka.colors.textPrimary,
+            Text(r?.title ?: "Review", style = MekaType.greeting, color = Meka.colors.textPrimary,
                 modifier = Modifier.appear(rememberAppearance(0)))
         }
         if (r == null) {
             if (loaded) item(key = "gone") {
-                Text("Nothing left to approve here · the clean-out has started or the folder is empty.", style = MekaType.body,
+                Text("Nothing left to approve here · it has started, or there's nothing left to move.", style = MekaType.body,
                     color = Meka.colors.textSecondary)
             }
             return@LazyColumn
@@ -131,7 +132,7 @@ internal fun JunkReviewPane(core: MekaCore, cardId: String, undo: (String, (susp
             }
         }
         if (r.senders.isNotEmpty()) {
-            item(key = "trash-label") { SectionLabel("TO TRASH · ${r.senders.size} SENDERS", Modifier.padding(top = MekaSpace.m)) }
+            item(key = "trash-label") { SectionLabel(r.sendersLabel, Modifier.padding(top = MekaSpace.m)) }
             items(r.senders, key = { "sender-${it.key}" }) { s -> SenderRow(s, Modifier.animateItem()) { keep(s, !s.kept) } }
         }
         r.staysLine?.let { line ->

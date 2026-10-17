@@ -25,7 +25,7 @@ class MailMarkReadTest {
         assertEquals("380 unread newsletters, promos and receipts in your inbox · they stay where they are, just marked read · people, banks and schools are never touched", card.why)
         assertEquals("Mark read", card.yesLabel)
         assertEquals(DecisionEffect.APPROVE_BACKLOG, card.yes)
-        assertEquals(DecisionEffect.OPEN_MAIL, card.open)
+        assertEquals(DecisionEffect.OPEN_REVIEW, card.open)
         // Too few, never counted, or a stale count: no card.
         assertNull(MailMarkReadRules.card(b(MailMarkReadRules.MIN - 1), now))
         assertNull(MailMarkReadRules.card(b(380, at = null), now))

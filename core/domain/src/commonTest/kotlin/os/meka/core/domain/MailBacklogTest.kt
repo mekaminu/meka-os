@@ -271,7 +271,7 @@ class MailBacklogTest {
         )
         assertEquals(DecisionEffect.APPROVE_BACKLOG, c.effect(DecisionMove.YES))
         assertEquals(DecisionEffect.SET_ASIDE, c.effect(DecisionMove.LATER))
-        assertEquals(DecisionEffect.OPEN_MAIL, c.effect(DecisionMove.OPEN))
+        assertEquals(DecisionEffect.OPEN_REVIEW, c.effect(DecisionMove.OPEN))
         assertEquals("→ Approve · ← Later · ↑ Review", NeedsYouStackRules.hint(c))
         assertEquals(MailBacklogRules.APPROVED_BAR, NeedsYouStackRules.message(c, DecisionMove.YES))
         // Approved, nothing to move, or paused: no card.

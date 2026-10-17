@@ -49,6 +49,7 @@ import os.meka.core.domain.MailMarkReadRules
 import os.meka.core.domain.MailJunkFacts
 import os.meka.core.domain.MailJunkRules
 import os.meka.core.domain.MailJunkReviewRules
+import os.meka.core.domain.MailCleanupReviewRules
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSender
@@ -1093,7 +1094,10 @@ class Integrations(
         val top = MailBacklogRules.topSenders(items.filter { it.kind != MailBacklogKind.KEEP && it.kind != MailBacklogKind.JUNK }.map { it.fromName to it.fromAddress })
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         val entityId = MailBacklogRules.entityId(a.id)
-        writeMail(a, entityId, MailBacklogRules.fields(account, s.startedMs, items.size, counts, top, s.readyMs), EntityTypes.MAIL_BACKLOG)
+        // Review opens its own list, slice 4: once the plan is final, who it would move (by sender, never an address).
+        val senderList = if (s.readyMs != null) MailCleanupReviewRules.planFields(MailCleanupReviewRules.planSenders(
+            items.map { MailCleanupReviewRules.PlanLooked(it.fromAddress, it.fromName, it.receivedAtMs, it.kind) })) else emptyMap()
+        writeMail(a, entityId, MailBacklogRules.fields(account, s.startedMs, items.size, counts, top, s.readyMs) + senderList, EntityTypes.MAIL_BACKLOG)
         // Slice 8b: once Meka approved the final plan, apply it (or put it back after an Undo).
         val plan = reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) } ?: return
         if (plan.approved || plan.applied > 0) applyBacklog(a, m, token, ms, plan, items, account)
@@ -1107,22 +1111,32 @@ class Integrations(
      */
     internal fun unreadCounts(a: AccountRow, ms: MailStore) {
         val unread = mailChecks[a.id]?.inboxUnread?.toInt() ?: return
-        val tidy = unreadTidyKind(a, ms).size.coerceAtMost(unread)
+        val kinds = unreadTidyKinds(a, ms)
+        val tidy = kinds.size.coerceAtMost(unread)
         val entityId = MailBacklogRules.entityId(a.id)
         val prev = runCatching { reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId) }.getOrNull()
-        if (!MailUnreadRules.writeDueFields(prev, unread, tidy, now())) return
-        writeMail(a, entityId, MailUnreadRules.fields(unread, tidy, now()), EntityTypes.MAIL_BACKLOG)
+        // Review opens its own list, slice 4: the first count after the update also writes who they're from.
+        val noList = prev != null && prev[MailBacklogFields.READ_SENDERS] == null
+        if (!MailUnreadRules.writeDueFields(prev, unread, tidy, now()) && !noList) return
+        val senders = MailCleanupReviewRules.readSenders(kinds.map { (h, t) ->
+            MailJunkReviewRules.Looked(h.fromAddress, h.fromName, h.subject, h.receivedAtMs, t, null)
+        })
+        writeMail(a, entityId, MailUnreadRules.fields(unread, tidy, now()) + MailCleanupReviewRules.readFields(senders), EntityTypes.MAIL_BACKLOG)
     }
 
     /** Slice 7/8: the unread emails still in the inbox that the tidy rules would move (newest first), headers only. */
-    private fun unreadTidyKind(a: AccountRow, ms: MailStore): List<MailHeader> {
+    private fun unreadTidyKind(a: AccountRow, ms: MailStore): List<MailHeader> = unreadTidyKinds(a, ms).map { it.first }
+
+    /** [unreadTidyKind] with where each would go (Review opens its own list, slice 4: Mark read's sender list). */
+    private fun unreadTidyKinds(a: AccountRow, ms: MailStore): List<Pair<MailHeader, MailTidy>> {
         val keep = keepAddresses(a.householdId)
         val never = ms.neverTidied(a.id)
         val inbox = ms.inboxSorted(a.id).filter { (h, _) -> h.inInbox && h.unread && h.id !in never }
         val rules = senderRules(a.householdId, a.id, inbox.map { it.first.fromAddress })
-        return inbox.filter { (h, s) ->
-            MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] })) != MailTidy.KEEP
-        }.map { it.first }
+        return inbox.mapNotNull { (h, s) ->
+            val t = MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, rule = h.fromAddress?.lowercase()?.let { rules[it] }))
+            if (t == MailTidy.KEEP) null else h to t
+        }
     }
 
     /**
@@ -1139,7 +1153,8 @@ class Integrations(
         val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
         if (!MailMarkReadRules.shouldMark(b, paused)) return
         val perCheck = if (m.id == MailProviders.OUTLOOK) MailMarkReadRules.PER_CHECK_OUTLOOK else MailMarkReadRules.PER_CHECK_GMAIL
-        val ids = unreadTidyKind(a, ms).take(perCheck).map { it.id }
+        // Review opens its own list, slice 4: a sender he unticked in Mark read's review stays unread.
+        val ids = unreadTidyKind(a, ms).filter { !MailCleanupReviewRules.keptUnread(b, it.fromAddress, it.fromName) }.take(perCheck).map { it.id }
         if (ids.isEmpty()) {
             writeMail(a, entityId, MailMarkReadRules.progressFields(b.markedRead, now()), EntityTypes.MAIL_BACKLOG)
             return
@@ -1193,7 +1208,9 @@ class Integrations(
         val perCheck = if (m.id == MailProviders.OUTLOOK) MailBacklogRules.APPLY_PER_CHECK_OUTLOOK else MailBacklogRules.APPLY_PER_CHECK_GMAIL
         // Completeness: a sender Meka chose to keep in the inbox after the plan was made is still left alone.
         val keptNow = senderRules(hh, a.id, items.map { it.fromAddress }).filterValues { it == MailSenderRule.KEEP }.keys
-        val next = items.filter { it.kind != MailBacklogKind.KEEP && it.id !in done && it.fromAddress?.lowercase() !in keptNow }
+        // Review opens its own list, slice 4: a sender he unticked in the clean-up's review stays in the inbox.
+        fun keptByReview(item: BacklogItem) = MailCleanupReviewRules.keptInInbox(plan, item.fromAddress, item.fromName)
+        val next = items.filter { it.kind != MailBacklogKind.KEEP && it.id !in done && it.fromAddress?.lowercase() !in keptNow && !keptByReview(it) }
         val chunk = next.take(perCheck)
         val nowMs = now()
         val startedAt = plan.applyStartedAtMs ?: nowMs
@@ -1213,7 +1230,7 @@ class Integrations(
             }
         }
         val doneIds = all.map { it.id }.toSet()
-        val finished = ms.backlogItems(a.id).none { it.kind != MailBacklogKind.KEEP && it.id !in doneIds && it.fromAddress?.lowercase() !in keptNow }
+        val finished = ms.backlogItems(a.id).none { it.kind != MailBacklogKind.KEEP && it.id !in doneIds && it.fromAddress?.lowercase() !in keptNow && !keptByReview(it) }
         if (all.isNotEmpty()) {
             writeTidy(a, batchId, MailBacklogRules.batchFields(startedAt, account, all.groupingBy { it.tidy }.eachCount()))
         }

@@ -78,7 +78,7 @@ object MailMarkReadRules {
 
     /** The bar's line after his tap. */
     fun approvedBar(b: MailBacklog): String =
-        "Marking ${n(b.tidyUnread)} read from Navilife's next check · they stay in the inbox"
+        "Marking ${n(MailCleanupReviewRules.readMarking(b))} read from Navilife's next check · they stay in the inbox"
 
     /**
      * "Mark 380 read · Personal" · "380 unread newsletters, promos and receipts in your inbox · they stay where they
@@ -86,7 +86,9 @@ object MailMarkReadRules {
      */
     fun card(b: MailBacklog, nowMs: Long = 0L): DecisionCard? {
         if (!canApprove(b, nowMs)) return null
-        val c = b.tidyUnread
+        // Review opens its own list, slice 4: senders he kept unread aren't counted.
+        val c = MailCleanupReviewRules.readMarking(b)
+        if (c < MIN) return null
         val why = listOf(
             "${n(c)} unread ${if (c == 1) "newsletter, promo or receipt" else "newsletters, promos and receipts"} in your inbox",
             "they stay where they are, just marked read",
@@ -95,7 +97,7 @@ object MailMarkReadRules {
         return DecisionCard(
             id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Mark ${n(c)} read · ${b.account}", why = why, taskId = null,
             yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
-            yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_MAIL,
+            yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_REVIEW,
             urgent = false,
         )
     }
