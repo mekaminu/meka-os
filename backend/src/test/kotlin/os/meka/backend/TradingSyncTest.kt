@@ -1,5 +1,7 @@
 package os.meka.backend
 
+import os.meka.backend.integrations.DollarRateRead
+import os.meka.backend.integrations.EcbDollarRate
 import os.meka.backend.integrations.HyperliquidInfo
 import os.meka.backend.integrations.TradingAccountRead
 import os.meka.backend.integrations.TradingFeed
@@ -245,6 +247,40 @@ class TradingSyncTest {
         val full = (1..500).joinToString(",", "[", "]") { i -> """{"coin":"ETH","dir":"Open Long","closedPnl":"0","fee":"0.01","feeToken":"USDC","oid":$i,"tid":$i,"time":${1000 + i}}""" }
         HyperliquidInfo { _, body -> pages += body; 200 to if (body.contains("userFillsByTime") && pages.size == 1) full else "[]" }.trades(address, 1_000L, 9_000_000L)
         assertTrue(pages[1].contains(""""startTime":1501"""))
+    }
+
+    @Test
+    fun theEcbsDollarRateIsReadSparinglyAndWrittenOnTheAccount() {
+        val xml = """<?xml version="1.0"?><gesmes:Envelope><Cube><Cube time='2026-10-16'>
+            <Cube currency='USD' rate='1.0800'/><Cube currency='JPY' rate='160.1'/><Cube currency='GBP' rate='0.8640'/></Cube></Cube></gesmes:Envelope>"""
+        assertEquals(DollarRateRead(800_000, java.time.LocalDate.of(2026, 10, 16).toEpochDay()), EcbDollarRate.parse(xml))
+        assertNull(EcbDollarRate.parse("<Cube time='2026-10-16'><Cube currency='USD' rate='1.08'/></Cube>"))
+        assertNull(EcbDollarRate.parse(xml.replace("0.8640", "9.9")))
+        var gets = 0
+        var down = false
+        val ecb = EcbDollarRate({ url ->
+            assertEquals(EcbDollarRate.URL, url)
+            gets++
+            if (down) 503 to "" else 200 to xml
+        }, { nowMs })
+        val withRate = TradingSync(ops, BankSync.scanning(ops), { "hh" }, feed, { nowMs }, onWritten = { woken += it }, rate = ecb)
+        TradingStore(fold).add("Main $address")
+        push()
+        assertTrue(withRate.tick())
+        pull()
+        val w = TradingStore(fold).wallets().single()
+        assertEquals(800_000L, w.gbpPerUsdMicros)
+        assertEquals(987_654L, w.equityPence)
+        // Within six hours it isn't fetched again; after, a failed fetch keeps the last rate.
+        nowMs += TradingTracker.OPEN_MS
+        withRate.tick()
+        assertEquals(1, gets)
+        nowMs += EcbDollarRate.EVERY_MS
+        down = true
+        withRate.tick()
+        assertEquals(2, gets)
+        pull()
+        assertEquals(800_000L, TradingStore(fold).wallets().single().gbpPerUsdMicros)
     }
 
     private companion object {

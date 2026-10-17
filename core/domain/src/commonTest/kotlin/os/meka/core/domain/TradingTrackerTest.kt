@@ -105,6 +105,12 @@ class TradingTrackerTest {
         v = TradingTracker.view(store.wallets(), now, cal)
         assertEquals("$12,345.67", v.total)
         assertEquals("Equity · updated 13:59", v.totalLine)
+        // Slice 5: once the server writes the ECB's rate, the equity also reads in pounds (and Remove would clear it).
+        r.commitLocal(EntityTypes.TRADING_WALLET, id, mapOf(TradingWalletFields.GBP_PER_USD to 750_000L.fv(), TradingWalletFields.FX_DAY to 1L.fv()))
+        assertEquals("Equity · about £9,259.25 · updated 13:59", TradingTracker.view(store.wallets(), now, cal).totalLine)
+        assertTrue(TradingWalletFields.GBP_PER_USD in TradingWalletFields.SERVER)
+        r.commitLocal(EntityTypes.TRADING_WALLET, id, mapOf(TradingWalletFields.GBP_PER_USD to FieldValue.Null))
+        v = TradingTracker.view(store.wallets(), now, cal)
         assertEquals(listOf("Today" to "+$120.50", "This week" to "−$40.00", "All time" to "+$2,500.00"), v.pnl.map { it.label to it.amount })
         assertEquals("2 open positions · +$340.00 not yet taken", v.unrealisedLine)
         // The one nearest liquidation first, lit.

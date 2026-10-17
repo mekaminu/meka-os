@@ -11,8 +11,13 @@ import kotlin.math.abs
  *  - a month-by-month line over up to the last 12 months: each account's balance worked back through its statements
  *    (balance then = balance now less what came in and went out since), with cards and what he typed held at today's
  *    figures, so the line shows how his accounts moved.
- * Accounts with no balance yet aren't counted and say so, with a field to type it. Trading value from Kestrel joins with
- * the trading tracker. Rules only, no AI; facts on his own numbers, never advice.
+ * Accounts with no balance yet aren't counted and say so, with a field to type it. Rules only, no AI; facts on his own
+ * numbers, never advice.
+ *
+ * Trading tracker, slice 5 (2026-10-17): each Hyperliquid account he follows in Money counts too, its account value in
+ * pounds at the European Central Bank's reference rate the server reads once a day ([TradingWalletFields.GBP_PER_USD]);
+ * held at today's figure on the line, like cards and what he types. Until the rate is in, the row says so and isn't
+ * counted.
  *
  * Stored as a new synced entity `money_worth` ([MoneyWorthFields], LWW, ADR-008 addendum, no migration); the history
  * is worked out on the device and never stored.
@@ -36,7 +41,7 @@ data class MoneyWorthItem(val id: String, val name: String, val owes: Boolean, v
 data class MoneyWorthParse(val name: String, val owes: Boolean, val pence: Long)
 
 /**
- * One line under NET WORTH. [kind] is [MoneyWorth.ACCOUNT], [MoneyWorth.CARD] or [MoneyWorth.TYPED]; [amount] is signed
+ * One line under NET WORTH. [kind] is [MoneyWorth.ACCOUNT], [MoneyWorth.CARD], [MoneyWorth.TYPED] or [MoneyWorth.TRADING]; [amount] is signed
  * ("£1,840", "−£640"), blank with [needsBalance] for an account with no balance yet; [removable] for a typed one.
  */
 data class MoneyWorthRow(
@@ -66,9 +71,12 @@ object MoneyWorth {
     const val ACCOUNT = "account"
     const val CARD = "card"
     const val TYPED = "typed"
+    const val TRADING = "trading"
     const val HINT = "Add what's outside these accounts: Pension £42,000 · Car £8,500 · Car loan £3,200"
     const val EMPTY = "Type what you have and owe outside these accounts (a pension, savings elsewhere, the car, a loan), and each account's balance, to see one total."
     const val FOOT = "Past months work each account's balance back through its statements; cards and what you type stay at today's figures · not financial advice"
+    const val FOOT_TRADING = "Past months work each account's balance back through its statements; cards, trading and what you type stay at today's figures · trading in pounds at the European Central Bank's rate · not financial advice"
+    const val NO_RATE = "Hyperliquid · counted once today's dollar rate is in"
     const val CHART_ONE = "The line starts once a second month is in your statements."
     const val BAD = "Type a name and an amount, e.g. Pension £42,000, Car 8.5k or Car loan £3,200."
     const val NO_NAME = "Say what it is first, e.g. Pension £42,000."
@@ -145,7 +153,7 @@ object MoneyWorth {
      */
     fun view(
         accounts: List<MoneyAccount>, cards: List<MoneyCard>, items: List<MoneyWorthItem>,
-        lines: List<Triple<String, Long, Long>>, today: Long,
+        lines: List<Triple<String, Long, Long>>, today: Long, trading: List<TradingWallet> = emptyList(),
     ): MoneyWorthView {
         val cardById = cards.associateBy { it.id }
         val byAccount = lines.groupBy({ it.first }, { it.second to it.third })
@@ -187,9 +195,26 @@ object MoneyWorth {
                 owes = i.owes, needsBalance = false, removable = true,
                 spoken = "${i.name}, ${if (i.owes) "owed ${fmt(i.pence)}" else fmt(i.pence)}")
         }
+        // Slice 5 of the trading tracker: each Hyperliquid account read so far, in pounds at the ECB's rate.
+        var tradingPence = 0L
+        for (w in trading.filter { it.equityCents != null }) {
+            val p = w.equityPence
+            val usd = TradingTracker.usd(w.equityCents!!)
+            if (p == null) {
+                rows += MoneyWorthRow(w.id, w.label, TRADING, "", "$usd · " + NO_RATE.removePrefix("Hyperliquid · "), owes = false,
+                    needsBalance = false, removable = false, spoken = "${w.label}, Hyperliquid, $usd, not counted until the dollar rate is in")
+                continue
+            }
+            tradingPence += p
+            flat += p
+            val rateDay = w.fxDay?.let { if (it == today) "today's rate" else "the rate of ${CivilDate.shortLabel(it)}" } ?: "the latest rate"
+            rows += MoneyWorthRow(w.id, w.label, TRADING, signed(p),
+                "Hyperliquid · $usd at ${TradingTracker.rateLine(w.gbpPerUsdMicros!!)} · $rateDay",
+                owes = p < 0, needsBalance = false, removable = false, spoken = "${w.label}, Hyperliquid, ${signed(p)}")
+        }
         val counted = history.isNotEmpty() || rows.any { it.amount.isNotEmpty() }
-        val have = history.filter { it.balance > 0 }.sumOf { it.balance } + items.filter { !it.owes }.sumOf { it.pence }
-        val owe = -history.filter { it.balance < 0 }.sumOf { it.balance } + items.filter { it.owes }.sumOf { it.pence } +
+        val have = history.filter { it.balance > 0 }.sumOf { it.balance } + items.filter { !it.owes }.sumOf { it.pence } + tradingPence.coerceAtLeast(0)
+        val owe = -history.filter { it.balance < 0 }.sumOf { it.balance } + items.filter { it.owes }.sumOf { it.pence } - tradingPence.coerceAtMost(0) +
             cards.filter { c -> accounts.any { it.id == c.id } }.sumOf { it.statementPence ?: 0L }
         val total = have - owe
         val points = points(history, flat, today)
@@ -217,7 +242,8 @@ object MoneyWorth {
         val spoken = if (counted) "Net worth ${signed(total)}. ${split.orEmpty()}. ${change.orEmpty()}" else EMPTY
         return MoneyWorthView(
             HEAD, if (counted) signed(total) else null, total < 0, split, change, rows, missingLine,
-            if (points.size >= 2) points else emptyList(), chartLine, if (counted) null else EMPTY, HINT, FOOT, spoken,
+            if (points.size >= 2) points else emptyList(), chartLine, if (counted) null else EMPTY, HINT,
+            if (tradingPence != 0L) FOOT_TRADING else FOOT, spoken,
         )
     }
 }

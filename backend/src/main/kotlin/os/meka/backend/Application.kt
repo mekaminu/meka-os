@@ -1080,6 +1080,7 @@ fun main(args: Array<String>) {
                 startTradingSync(TradingSync(
                     opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
                     feed = os.meka.backend.integrations.HyperliquidInfo.network(), onWritten = { hh -> push?.serverChanged(hh) },
+                    rate = os.meka.backend.integrations.EcbDollarRate.network(),
                 ))
             }
             val verifier = RequestVerifier()

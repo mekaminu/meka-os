@@ -55,9 +55,15 @@ object TradingWalletFields {
      */
     const val CURVE = "curve"
     const val CURVE_NOW = "curveNowCents"
+    /**
+     * Server (slice 5): the European Central Bank's reference rate for that day, as pounds per US dollar × 1,000,000
+     * ("0.791234" → 791234), and the day it is for (epoch day), so the devices can count the account in pounds.
+     */
+    const val GBP_PER_USD = "gbpPerUsdMicros"
+    const val FX_DAY = "fxDay"
 
     val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM,
-        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW)
+        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW, GBP_PER_USD, FX_DAY)
 }
 
 /** One open position as the server wrote it: prices as Hyperliquid's decimal text; [size] signed (short negative). */
@@ -120,8 +126,13 @@ data class TradingWallet(
     val drawdownCents: Long? = null, val drawdownBaseCents: Long? = null,
     /** Slice 4: the curve's day ends and the P&L from its start to now; empty/null until read. */
     val curve: List<TradingCurvePoint> = emptyList(), val curveNowCents: Long? = null,
+    /** Slice 5: the ECB's pounds per dollar (× 1,000,000) and its day; null until the server has read it. */
+    val gbpPerUsdMicros: Long? = null, val fxDay: Long? = null,
 ) {
     override fun toString() = "TradingWallet($id)"
+
+    /** Slice 5: the account value in pence at the ECB's rate; null without both. */
+    val equityPence: Long? get() = equityCents?.let { c -> gbpPerUsdMicros?.let { TradingTracker.pence(c, it) } }
 
     /** How far below this month's high, as a share of the account at that high (0 at the high); null without both. */
     val drawdownShare: Double? get() {
@@ -182,6 +193,7 @@ class TradingStore(private val replica: Replica) {
             e[TradingWalletFields.TRADES_FROM].longOrNull,
             e[TradingWalletFields.DRAWDOWN].longOrNull, e[TradingWalletFields.DRAWDOWN_BASE].longOrNull,
             TradingTracker.decodeCurve(e[TradingWalletFields.CURVE].textOrNull), e[TradingWalletFields.CURVE_NOW].longOrNull,
+            e[TradingWalletFields.GBP_PER_USD].longOrNull?.takeIf { TradingTracker.rateOk(it) }, e[TradingWalletFields.FX_DAY].longOrNull,
         )
     }.sortedBy { it.label.lowercase() }
 
@@ -454,6 +466,15 @@ object TradingTracker {
     }
 
     /** "+$120.50", "−$40.00", "$0.00". */
+    /** Slice 5: [cents] in pence at [gbpPerUsdMicros] (pounds per dollar × 1,000,000), rounded to the penny. */
+    fun pence(cents: Long, gbpPerUsdMicros: Long): Long = (cents.toDouble() * gbpPerUsdMicros / 1_000_000.0).roundToLong()
+
+    /** A believable pounds-per-dollar rate (0.3–2.0): anything else is ignored rather than counted. */
+    fun rateOk(micros: Long): Boolean = micros in 300_000L..2_000_000L
+
+    /** "£0.79 to the dollar" from 791234. */
+    fun rateLine(micros: Long): String = "£" + ((micros + 5_000) / 1_000_000).toString() + "." + (((micros + 5_000) / 10_000) % 100).toString().padStart(2, '0') + " to the dollar"
+
     fun signedUsd(cents: Long): String = when {
         cents > 0 -> "+" + usd(cents)
         else -> usd(cents)
@@ -511,8 +532,11 @@ object TradingTracker {
         val equity = sum { it.equityCents }
         val last = read.mapNotNull { it.readAtMs }.maxOrNull()
         val n = wallets.size
+        // Slice 5: about how much in pounds, at the ECB's rate, once every read account has one.
+        val pounds = read.map { it.equityPence }.takeIf { l -> l.isNotEmpty() && l.all { it != null } }?.sumOf { it!! }
         val totalLine = if (equity == null) null else listOfNotNull(
             if (n == 1) "Equity" else "Equity across $n accounts",
+            pounds?.let { "about ${MoneyRules.signedPlain(it)}" },
             last?.let { "updated ${HealthRules.at(it, nowMs, cal)}" },
         ).joinToString(" · ")
         val pnl = listOf("Today" to sum { it.pnlDayCents }, "This week" to sum { it.pnlWeekCents },

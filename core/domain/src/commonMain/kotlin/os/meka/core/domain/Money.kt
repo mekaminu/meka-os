@@ -529,6 +529,8 @@ object MoneyRules {
         cards: List<MoneyCard> = emptyList(), worthItems: List<MoneyWorthItem> = emptyList(),
         /** Bank sync: what the server last did, accounts he removed, his Refresh, and the moment (for "updated 06:10"). */
         bankSync: MoneyBankSync? = null, bankRemoved: Int = 0, bankAskedAtMs: Long? = null, nowMs: Long? = null,
+        /** Trading tracker, slice 5: his Hyperliquid accounts, counted in net worth in pounds. */
+        trading: List<TradingWallet> = emptyList(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -552,7 +554,7 @@ object MoneyRules {
         }
         // Slice 8: net worth from balances, cards and what he typed (also before any statement is in).
         val liveCards = cards.filter { it.id in names }
-        val worth = MoneyWorth.view(counted, liveCards, worthItems, mine.map { Triple(it.account, it.day, it.pence) }, today)
+        val worth = MoneyWorth.view(counted, liveCards, worthItems, mine.map { Triple(it.account, it.day, it.pence) }, today, trading)
         if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank)
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })

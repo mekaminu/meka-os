@@ -1,5 +1,6 @@
 package os.meka.backend
 
+import os.meka.backend.integrations.DollarRate
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.TradingFeed
 import os.meka.backend.integrations.TradingRateLimited
@@ -28,6 +29,8 @@ class TradingSync(
     private val feed: TradingFeed,
     private val now: () -> Long = System::currentTimeMillis,
     private val onWritten: (householdId: String) -> Unit = {},
+    /** Slice 5: the ECB's pounds per dollar, so the devices count the accounts in pounds; null = not read. */
+    private val rate: DollarRate? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
     private val rng = SecureRandom()
@@ -66,6 +69,11 @@ class TradingSync(
                 TradingTracker.curveFrom(a.month, t)?.let { (curve, nowPnl) ->
                     fields[TradingWalletFields.CURVE] = FieldValue.Text(TradingTracker.encodeCurve(curve))
                     fields[TradingWalletFields.CURVE_NOW] = FieldValue.Int64(nowPnl)
+                }
+                // Slice 5: the day's pounds-per-dollar rate (a failed read keeps what the devices have).
+                runCatching { rate?.read() }.getOrNull()?.let { r ->
+                    fields[TradingWalletFields.GBP_PER_USD] = FieldValue.Int64(r.gbpPerUsdMicros)
+                    fields[TradingWalletFields.FX_DAY] = FieldValue.Int64(r.day)
                 }
                 // Slice 2: the window's trades, hourly; a failure here keeps the last ones and tries at the next read.
                 if (TradingTracker.tradesDue(w, t)) {

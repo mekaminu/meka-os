@@ -85,4 +85,36 @@ class MoneyWorthTest {
         assertEquals(MoneyWorth.EMPTY, v.empty)
         assertTrue(v.points.isEmpty())
     }
+
+    private fun wallet(id: String, label: String, equity: Long?, rate: Long?, day: Long? = today) = TradingWallet(
+        id, "0x" + "ab12".repeat(10), label, TradingTracker.OK, 1L, 1L, equity, null, null, null, null, null, emptyList(),
+        gbpPerUsdMicros = rate, fxDay = day,
+    )
+
+    @Test
+    fun hyperliquidAccountsCountInPoundsAtTheEcbRate() {
+        assertEquals(79_123L, TradingTracker.pence(100_000, 791_234))
+        assertEquals("£0.79 to the dollar", TradingTracker.rateLine(791_234))
+        assertEquals("£1.00 to the dollar", TradingTracker.rateLine(999_999))
+        assertTrue(!TradingTracker.rateOk(5_000_000))
+        val items = listOf(MoneyWorthItem("n-pension", "Pension", false, 1_000_000, today))
+        // $2,000.00 at £0.75 = £1,500; a second account not read with a rate yet isn't counted.
+        val v = MoneyWorth.view(emptyList(), emptyList(), items, emptyList(), today,
+            listOf(wallet("w1", "Main", 200_000, 750_000), wallet("w2", "Bot", 50_000, null), wallet("w3", "New", null, null)))
+        assertEquals("£11,500", v.total)
+        assertEquals("You have £11,500 · you owe £0", v.splitLine)
+        val main = v.rows.single { it.id == "w1" }
+        assertEquals(MoneyWorth.TRADING, main.kind)
+        assertEquals("£1,500", main.amount)
+        assertEquals("Hyperliquid · $2,000.00 at £0.75 to the dollar · today's rate", main.line)
+        val bot = v.rows.single { it.id == "w2" }
+        assertEquals("", bot.amount)
+        assertEquals("$500.00 · counted once today's dollar rate is in", bot.line)
+        assertTrue(v.rows.none { it.id == "w3" })
+        assertEquals(MoneyWorth.FOOT_TRADING, v.foot)
+        // Trading alone is enough for a total; an older rate says its day.
+        val alone = MoneyWorth.view(emptyList(), emptyList(), emptyList(), emptyList(), today, listOf(wallet("w1", "Main", 200_000, 750_000, d(10, 16))))
+        assertEquals("£1,500", alone.total)
+        assertTrue(alone.rows.single().line.endsWith("the rate of Fri 16 Oct"), alone.rows.single().line)
+    }
 }

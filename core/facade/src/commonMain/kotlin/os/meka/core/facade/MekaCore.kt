@@ -752,11 +752,12 @@ class MekaCore(
 
     private fun refreshMoney() {
         if (!moneyOpen) return
+        val wallets = trading.wallets()
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
             moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
-            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(),
-        ).copy(trading = os.meka.core.domain.TradingTracker.view(trading.wallets(), nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
+            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(), wallets,
+        ).copy(trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
     }
 
     // ---- Trading tracker, slice 3: the alerts ----
