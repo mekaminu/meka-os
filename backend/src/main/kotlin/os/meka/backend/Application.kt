@@ -158,6 +158,10 @@ fun Application.mekaSync(
             call.respondText(resultPage("Navilife", "A private, single-household personal operating system. It is not a public service and has no sign-ups."), ContentType.Text.Html)
         }
         get("/privacy") { call.respondText(resultPage("Navilife privacy policy", PRIVACY_TEXT), ContentType.Text.Html) }
+        // Enable Banking's production application form asks for a terms URL too (2026-10-17).
+        get("/terms") {
+            call.respondText(resultPage("Navilife terms", "Navilife is a private, single-household app used only by its owner for his own accounts. It is not offered to the public, has no sign-ups and no other users. Bank data is read-only and is never shared or sold."), ContentType.Text.Html)
+        }
 
         // One-time device enrolment (ADR-005 M0). Disabled unless MEKA_ENROL_TOKEN is configured.
         post("/v1/enrol") {
