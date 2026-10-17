@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
@@ -69,6 +70,9 @@ import os.meka.core.domain.MoneyCardRow
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyCardsView
 import os.meka.core.domain.MoneyCategoryRow
+import os.meka.core.domain.MoneyChallengeBar
+import os.meka.core.domain.MoneyChallenges
+import os.meka.core.domain.MoneyChallengesView
 import os.meka.core.domain.MoneyCutChip
 import os.meka.core.domain.MoneyForecast
 import os.meka.core.domain.MoneyForecastRow
@@ -440,6 +444,20 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     ForecastBlock(f, Modifier.animateItem().appear(rememberAppearance(4)),
                         onCut = { key -> haptics.tick(); scope.launch { runCatching { core.moneyForecastCut(key) } } },
                         onExtra = { text -> scope.launch { runCatching { core.moneyForecastExtra(text) }.getOrNull()?.let(say) } })
+                }
+            }
+            // Slice 15: challenges he set himself — no-spend days, fun money for the week, category caps (this month only).
+            v.challenges?.let { ch ->
+                item(key = "challenges-head") {
+                    Text(ch.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "challenges") {
+                    ChallengesBlock(ch, Modifier.animateItem().appear(rememberAppearance(4)),
+                        onNoSpend = { on -> scope.launch { runCatching { core.moneyNoSpend(on) }.getOrNull()?.let(say) } },
+                        onFun = { text -> scope.launch { runCatching { core.moneyFunMoney(text) }.getOrNull()?.let(say) } },
+                        onCap = { text -> scope.launch { runCatching { core.moneyCap(text) }.getOrNull()?.let(say) } },
+                        onRemove = { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } })
                 }
             }
             if (m.categories.isNotEmpty()) {
@@ -1017,6 +1035,87 @@ private fun BusinessBlock(
             }
         }
         Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Slice 15: CHALLENGES — the No-spend days switch and, when on, the month's days as dots (brass = no spending) with the
+ * count and the streak; fun money for the week and each category cap as a bar (brass from 90%) with what's left and the
+ * run; fields to set them. Bars grow on the appear spring and lines cross-fade (MekaMotion.appear honours reduced motion).
+ */
+@Composable
+private fun ChallengesBlock(
+    ch: MoneyChallengesView, modifier: Modifier, onNoSpend: (Boolean) -> Unit, onFun: (String) -> Unit, onCap: (String) -> Unit,
+    onRemove: (String) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    var funText by rememberSaveable { mutableStateOf("") }
+    var capText by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        ch.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(MoneyChallenges.SWITCH, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(if (ch.noSpendOn) "On ✓" else "Count them", style = MekaType.caption,
+                color = if (ch.noSpendOn) Meka.colors.accent else Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onNoSpend(!ch.noSpendOn) }
+                    .semantics { contentDescription = MoneyChallenges.SWITCH + if (ch.noSpendOn) ", on" else ", off" }
+                    .minTouch().padding(MekaSpace.xs))
+        }
+        ch.noSpend?.let { ns ->
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = ns.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                if (ns.days.isNotEmpty()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) { // rhythm: ok (the month's day dots are one mark)
+                        ns.days.forEachIndexed { i, free ->
+                            val c by animateColorAsState(if (free) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "money-nospend-$i")
+                            Box(Modifier.size(7.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(c))
+                        }
+                    }
+                }
+                Crossfade(ns.line, animationSpec = MekaMotion.appear(reduced), label = "money-nospend-line") { l ->
+                    Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
+                }
+                ns.streakLine?.let { st ->
+                    Crossfade(st, animationSpec = MekaMotion.appear(reduced), label = "money-nospend-streak") { l ->
+                        Text(l, style = MekaType.caption, color = if (ns.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                    }
+                }
+            }
+        }
+        ch.funMoney?.let { ChallengeBar(it, onRemove) }
+        ch.caps.forEach { ChallengeBar(it, onRemove) }
+        ch.throughLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Field(ch.funHint, value = funText, onValue = { funText = it }) { funText = ""; onFun(it) }
+        Field(ch.capHint, value = capText, onValue = { capText = it }) { capText = ""; onCap(it) }
+        Text(ch.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/** Slice 15: one allowance or cap — its title and amount, a bar that grows to its share (brass from 90%), what's left and Remove. */
+@Composable
+private fun ChallengeBar(b: MoneyChallengeBar, onRemove: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    var shown by remember { mutableStateOf(if (reduced) b.share else 0f) }
+    LaunchedEffect(b.share) { shown = b.share }
+    val share by animateFloatAsState(shown, MekaMotion.appear(reduced), label = "money-chal-bar-${b.key}")
+    val bar by animateColorAsState(if (b.lit) Meka.colors.accent else Meka.colors.textTertiary, MekaMotion.appear(reduced), label = "money-chal-c-${b.key}")
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(Modifier.semantics(mergeDescendants = true) { contentDescription = b.spoken }, verticalAlignment = Alignment.CenterVertically) {
+            Text(b.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Crossfade(b.amount, animationSpec = MekaMotion.appear(reduced), label = "money-chal-amount-${b.key}") { a ->
+                Text(a, style = MekaType.body, color = Meka.colors.textPrimary)
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
+            Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(bar))
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(b.line, animationSpec = MekaMotion.appear(reduced), label = "money-chal-line-${b.key}", modifier = Modifier.weight(1f)) { l ->
+                Text(l, style = MekaType.caption, color = if (b.lit) Meka.colors.accent else Meka.colors.textSecondary)
+            }
+            Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(b.key) }
+                    .semantics { contentDescription = "Remove ${b.title}" }.minTouch().padding(MekaSpace.xs))
+        }
     }
 }
 

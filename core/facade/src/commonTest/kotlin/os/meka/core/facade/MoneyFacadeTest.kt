@@ -365,6 +365,51 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun challengesSetOnTheFoldShowOnTheMacWithUndoAndGoWithDeleteAll() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        val c0 = fold.moneyView.value.challenges!!
+        assertEquals(os.meka.core.domain.MoneyChallenges.INTRO, c0.intro)
+        assertEquals("Counting no-spend days · on both devices", fold.moneyNoSpend(true).line)
+        val ns = fold.moneyView.value.challenges!!.noSpend!!
+        assertEquals("3 no-spend days in October · of 5 days so far", ns.line)
+        assertEquals("2 days in a row · your best this month", ns.streakLine)
+        assertEquals("Your statements reach Mon 5 Oct, so that's as far as these count", fold.moneyView.value.challenges!!.throughLine)
+        assertTrue(fold.moneyFunMoney("lots").refused)
+        fold.moneyFunMoney("£50")
+        assertEquals("£0 of £50", fold.moneyView.value.challenges!!.funMoney!!.amount)
+        assertEquals("Coffee capped at £10 a month · on both devices", fold.moneyCap("Coffee £10").line)
+        val g = fold.moneyCap("groceries £30")
+        val caps = fold.moneyView.value.challenges!!.caps
+        assertEquals(listOf("Groceries this month", "Coffee this month"), caps.map { it.title })
+        assertEquals("£10 over", caps[0].line)
+        assertTrue(caps[0].lit)
+        assertEquals("£6.80 left · within it last month", caps[1].line)
+        assertTrue(fold.undoMoneyCategory(g.undo!!))
+        assertEquals(1, fold.moneyView.value.challenges!!.caps.size)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        val m = mac.moneyView.value.challenges!!
+        assertTrue(m.noSpendOn)
+        assertEquals("£3.20 of £10", m.caps.single().amount)
+        val r = mac.moneyChallengeRemove("coffee")
+        assertEquals("Coffee cap removed", r.line)
+        assertTrue(mac.moneyView.value.challenges!!.caps.isEmpty())
+        assertTrue(mac.undoMoneyCategory(r.undo!!))
+        mac.moneyChallengeRemove("fun")
+        assertNull(mac.moneyView.value.challenges!!.funMoney)
+        mac.syncNow(); fold.syncNow()
+        assertNull(fold.moneyView.value.challenges!!.funMoney)
+        assertEquals(1, fold.moneyView.value.challenges!!.caps.size)
+        fold.deleteAllMoney()
+        assertNull(fold.moneyView.value.challenges)
+        fold.importMoneyStatement("Card", "Date,Description,Amount\n06/10/2026,PRET A MANGER,-5.00\n")
+        assertEquals(os.meka.core.domain.MoneyChallenges.INTRO, fold.moneyView.value.challenges!!.intro)
+    }
+
+    @Test
     fun sharedCostsMarkedOnTheFoldAddUpWithWhatSheTypedOnTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

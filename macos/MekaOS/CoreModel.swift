@@ -3454,6 +3454,50 @@ final class CoreModel {
         }
     }
 
+    /// Money slice 15: counting no-spend days on or off (synced; Undo through undoMoneyCategory).
+    func moneyNoSpend(on: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyNoSpend(on: on))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 15: fun money a week ("£50"; blank stops it), synced.
+    func moneyFunMoney(text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyFunMoney(text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 15: a monthly cap on a category ("Eating out £150"), synced.
+    func moneyCap(text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyCap(text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 15: takes a cap (its category's key) or fun money ("fun") off.
+    func moneyChallengeRemove(key: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyChallengeRemove(key: key))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Money slice 14: Shared on one payment (synced; Undo through undoMoneyCategory).
     func moneySharedTxn(txnId: String, on: Bool) async -> MoneySaid? {
         guard let core else { return nil }

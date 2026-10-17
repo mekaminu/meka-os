@@ -437,6 +437,8 @@ data class MoneyView(
     val business: MoneyBusinessView? = null,
     /** Slice 14: SHARED WITH <PARTNER> — shared costs and who paid what ([MoneyShared]); shown whatever month. */
     val shared: MoneySharedView? = null,
+    /** Slice 15: CHALLENGES — no-spend days, fun money for the week, category caps ([MoneyChallenges]); shown with this month only. */
+    val challenges: MoneyChallengesView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -545,6 +547,8 @@ object MoneyRules {
         /** Slice 14: payments and payers he marked shared, what his partner paid, his share and the last settle-up, and her name. */
         sharedTxns: Map<String, Boolean> = emptyMap(), sharedMerchants: Map<String, Boolean> = emptyMap(),
         sharedEntries: List<MoneySharedEntry> = emptyList(), sharedSetting: MoneySharedSetting = MoneySharedSetting(), partner: String? = null,
+        /** Slice 15: the challenges he set. */
+        challenges: MoneyChallengeSetting = MoneyChallengeSetting(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -667,6 +671,7 @@ object MoneyRules {
             bank = bank,
             business = business,
             shared = shared,
+            challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
         )
     }
 
@@ -680,7 +685,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|"; const val CHALLENGE_UNDO = "chal|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -986,6 +991,44 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         ))
     }
 
+    /** Slice 15: the challenges he set. */
+    fun challenges(): MoneyChallengeSetting = MoneyChallenges.setting(replica.entity(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID)?.fields)
+
+    private fun challengeField(name: String): FieldValue? = replica.entity(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID)?.get(name)
+
+    /** Slice 15: counting no-spend days on or off, on both devices; Undo by [undoCategory]. */
+    fun setNoSpend(on: Boolean): MoneySaved {
+        val before = challenges().noSpend
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.noSpendFields(on, nowMs()))
+        return MoneySaved(MoneyChallenges.noSpendSaid(on), undo = CHALLENGE_UNDO + "n|" + before)
+    }
+
+    /** Slice 15: fun money a week ([text] "£50"; blank or null stops it), on both devices; Undo by [undoCategory]. */
+    fun setFunMoney(text: String?): MoneySaved {
+        val pence = if (text.isNullOrBlank()) null else MoneyChallenges.parseFun(text) ?: return MoneySaved(MoneyChallenges.BAD_FUN, refused = true)
+        val before = challengeField(MoneyChallengeFields.FUN)?.longOrNull
+        if (pence == null && before == null) return MoneySaved(MoneyRules.GONE, refused = true)
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.funFields(pence, nowMs()))
+        return MoneySaved(MoneyChallenges.funSaid(pence), undo = CHALLENGE_UNDO + "f|" + (before?.toString() ?: ""))
+    }
+
+    /** Slice 15: a category's cap a month ([text] "Eating out £150"), on both devices; Undo by [undoCategory]. */
+    fun setCap(text: String): MoneySaved {
+        val (c, pence) = MoneyChallenges.parseCap(text) ?: return MoneySaved(MoneyChallenges.BAD_CAP, refused = true)
+        val before = challengeField(MoneyChallengeFields.cap(c))?.longOrNull
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.capFields(c, pence, nowMs()))
+        return MoneySaved(MoneyChallenges.capSaid(c, pence), undo = CHALLENGE_UNDO + "c|" + c.key + "|" + (before?.toString() ?: ""))
+    }
+
+    /** Slice 15: takes a cap ([key] the category's) or fun money ([MoneyChallenges.FUN_KEY]) off; Undo by [undoCategory]. */
+    fun removeChallenge(key: String): MoneySaved {
+        if (key == MoneyChallenges.FUN_KEY) return setFunMoney(null)
+        val c = MoneyCategory.of(key)?.takeIf { it.spend } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val before = challengeField(MoneyChallengeFields.cap(c))?.longOrNull ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.capFields(c, null, nowMs()))
+        return MoneySaved(MoneyChallenges.capSaid(c, null), undo = CHALLENGE_UNDO + "c|" + c.key + "|" + before)
+    }
+
     /** Slice 2: the kinds of tip he hid ([MoneyTipKind.key]). */
     fun hiddenTips(): Set<String> = replica.entities(EntityTypes.MONEY_TIPS)
         .filter { it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId }.toSet()
@@ -1071,6 +1114,20 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(CHALLENGE_UNDO)) {
+            val parts = token.removePrefix(CHALLENGE_UNDO).split('|')
+            val fields = when (parts.getOrNull(0)) {
+                "n" -> MoneyChallenges.noSpendFields(parts.getOrNull(1) == "true", nowMs())
+                "f" -> MoneyChallenges.funFields(parts.getOrNull(1)?.toLongOrNull(), nowMs())
+                "c" -> {
+                    val c = MoneyCategory.of(parts.getOrNull(1))?.takeIf { it.spend } ?: return false
+                    MoneyChallenges.capFields(c, parts.getOrNull(2)?.toLongOrNull(), nowMs())
+                }
+                else -> return false
+            }
+            replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, fields)
+            return true
+        }
         if (token.startsWith(SHARED_UNDO)) {
             val parts = token.removePrefix(SHARED_UNDO).split('|')
             fun bool(v: String?): FieldValue = when (v) { "true" -> true.fv(); "false" -> false.fv(); else -> FieldValue.Null }
@@ -1203,6 +1260,9 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             sharedEntries().forEach { writeShared(it.id, null, null, null, null) }
             if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID) != null) {
                 replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID, mapOf(MoneySharedFields.MY_PCT to FieldValue.Null) + MoneyShared.settleFields(null, null, nowMs()))
+            }
+            if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID) != null) {
+                replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyChallenges.ENTITY_ID, MoneyChallenges.clearFields(nowMs()))
             }
             if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID) != null) {
                 replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, mapOf(MoneyBusinessFields.SET_ASIDE to FieldValue.Null))

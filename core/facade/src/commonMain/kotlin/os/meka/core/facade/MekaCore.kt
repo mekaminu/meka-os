@@ -760,6 +760,7 @@ class MekaCore(
             moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(), wallets,
             money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
             money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
+            money.challenges(),
         ).copy(trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
     }
 
@@ -985,6 +986,26 @@ class MekaCore(
     /** Slice 14: Settled up — the running who-paid-what starts again from tomorrow's payments; Undo by [undoMoneyCategory]. */
     suspend fun moneySharedSettle(): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else money.settleShared(todayEpochDay(), moneyPartner()).also { refreshMoney() }
+    }
+
+    /** Slice 15: counting no-spend days on or off, synced; Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun moneyNoSpend(on: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setNoSpend(on).also { refreshMoney() }
+    }
+
+    /** Slice 15: fun money a week ([text] "£50"; blank stops it), synced; Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun moneyFunMoney(text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setFunMoney(text).also { refreshMoney() }
+    }
+
+    /** Slice 15: a monthly cap on a category ([text] "Eating out £150"), synced; Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun moneyCap(text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setCap(text).also { refreshMoney() }
+    }
+
+    /** Slice 15: takes a cap ([key] its category's) or fun money ("fun") off; Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun moneyChallengeRemove(key: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.removeChallenge(key).also { refreshMoney() }
     }
 
     /** Slice 6: the radar's bills, subscriptions and club fees with a cost, for what's still to go out before payday. */

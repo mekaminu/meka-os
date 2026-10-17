@@ -47,6 +47,8 @@ struct MoneySheet: View {
     @State private var cardTexts: [String: String] = [:]
     @State private var worthText = ""
     @State private var sharedText = ""
+    @State private var funText = ""
+    @State private var capText = ""
     @State private var tradingText = ""
     @State private var exporting = false
     @State private var worthBalances: [String: String] = [:]
@@ -70,6 +72,7 @@ struct MoneySheet: View {
                         if let b = v.bank { bank(b).staggeredAppear(2) }
                         if let t = v.trading { trading(t).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
+                        if let ch = v.challenges { challenges(ch).staggeredAppear(3) }
                         if let b = v.business { business(b).staggeredAppear(3) }
                         if let sh = v.shared { shared(sh).staggeredAppear(3) }
                         if let w = v.worth { worth(w).staggeredAppear(3) }
@@ -300,6 +303,90 @@ struct MoneySheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: open)
+    }
+
+    /// Slice 15: CHALLENGES — the No-spend days switch and, when on, the month's days as dots (brass = no spending) with
+    /// the count and the streak; fun money for the week and each category cap as a bar (brass from 90%) with what's left
+    /// and the run (Remove); fields to set them.
+    private func challenges(_ ch: MoneyChallengesView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(ch.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let i = ch.intro {
+                Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Text(MoneyChallenges.shared.SWITCH).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Spacer()
+                Button(ch.noSpendOn ? "On ✓" : "Count them") {
+                    let on = !ch.noSpendOn
+                    Task { said = await model.moneyNoSpend(on: on) }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption)
+                .foregroundStyle(ch.noSpendOn ? palette.accent : palette.textSecondary)
+                .accessibilityLabel("\(MoneyChallenges.shared.SWITCH)\(ch.noSpendOn ? ", on" : ", off")")
+            }
+            if let ns = ch.noSpend {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    if ns.days.count > 0 {
+                        HStack(spacing: 3) { // rhythm: ok (the month's day dots are one mark)
+                            ForEach(0..<ns.days.count, id: \.self) { i in
+                                Circle().fill(ns.dayAt(i: Int32(i)) ? palette.accent : palette.surfaceRaised).frame(width: 6, height: 6)
+                            }
+                        }
+                    }
+                    Text(ns.line).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    if let st = ns.streakLine {
+                        Text(st).font(MekaType.caption).foregroundStyle(ns.lit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(ns.spoken)
+            }
+            if let f = ch.funMoney { challengeBar(f) }
+            ForEach(ch.caps, id: \.key) { c in challengeBar(c).transition(.opacity) }
+            if let t = ch.throughLine { Text(t).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            TextField(ch.funHint, text: $funText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let text = funText
+                    funText = ""
+                    Task { said = await model.moneyFunMoney(text: text) }
+                }
+            TextField(ch.capHint, text: $capText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let text = capText
+                    capText = ""
+                    Task { said = await model.moneyCap(text: text) }
+                }
+            Text(ch.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
+    }
+
+    /// Slice 15: one allowance or cap — its title and amount, a bar to its share (brass from 90%), what's left and Remove.
+    private func challengeBar(_ b: MoneyChallengeBar) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            HStack {
+                Text(b.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Spacer()
+                Text(b.amount).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(b.spoken)
+            MoneyBar(share: min(Double(b.share), 1), lit: b.lit, palette: palette, reduced: reduceMotion)
+            HStack {
+                Text(b.line).font(MekaType.caption).foregroundStyle(b.lit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
+                Spacer()
+                Button("Remove") {
+                    let key = b.key
+                    Task { said = await model.moneyChallengeRemove(key: key) }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .accessibilityLabel("Remove \(b.title)")
+            }
+        }
+        .padding(.top, MekaSpace.xs)
     }
 
     /// Slice 14: SHARED WITH <PARTNER> — since when, what each paid, the split with its chips, who owes whom (in brass
