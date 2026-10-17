@@ -111,6 +111,23 @@ class TradingSyncTest {
     }
 
     @Test
+    fun theFallFromTheMonthsHighReachesTheFoldForTheDropAlert() {
+        // P&L 0 → +500 (the high, the account then $10,000) → +100: $4.00 below it, 4% of $10,000.
+        assertEquals(40_000L to 1_000_000L, HyperliquidInfo.drawdown(listOf(950_000, 1_000_000, 960_000), listOf(0, 50_000, 10_000)))
+        assertEquals(0L to 1_000_000L, HyperliquidInfo.drawdown(listOf(950_000, 1_000_000), listOf(0, 50_000)))
+        assertNull(HyperliquidInfo.drawdown(listOf(1), listOf(0, 1)))
+        assertNull(HyperliquidInfo.drawdown(listOf(0, 0), listOf(0, 0)))
+        answer = answer.copy(drawdownCents = 250_000, drawdownBaseCents = 1_000_000)
+        TradingStore(fold).add("Main $address")
+        push()
+        assertTrue(sync.tick())
+        pull()
+        val w = TradingStore(fold).wallets().single()
+        assertEquals(250_000L, w.drawdownCents)
+        assertEquals(0.25, w.drawdownShare)
+    }
+
+    @Test
     fun hyperliquidsAnswersAreReadFromTheirDecimals() {
         val sent = mutableListOf<String>()
         val info = HyperliquidInfo { url, body ->

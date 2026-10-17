@@ -673,10 +673,47 @@ struct MoneySheet: View {
                     tradingText = ""
                     Task { said = await model.tradingWalletAdd(text: text) }
                 }
+            if let a = t.alerts { tradingAlerts(a) }
             Text(t.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
+    }
+
+    /// Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
+    /// month's high), with a row of choices for each; the chosen one in brass.
+    private func tradingAlerts(_ a: TradingAlertsView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(a.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(a.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
+            alertChips(a.liqLabel, a.liqChips)
+            alertChips(a.dropLabel, a.dropChips)
+        }
+        .padding(.top, MekaSpace.m)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: a.line)
+    }
+
+    private func alertChips(_ label: String, _ chips: [TradingAlertChip]) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(label).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(chips, id: \.key) { c in
+                    Button {
+                        guard !c.on else { return }
+                        let kind = c.kind
+                        let key = c.key
+                        Task { said = await model.setTradingAlert(kind: kind, key: key) }
+                    } label: {
+                        Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
+                            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .accessibilityLabel(c.spoken)
+                }
+            }
+        }
     }
 
     /// Trading tracker, slice 2: YOUR TRADES · LAST 30 DAYS — trades closed and won, closed P&L, fees, funding and

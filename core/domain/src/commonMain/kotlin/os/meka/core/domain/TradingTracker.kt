@@ -43,8 +43,15 @@ object TradingWalletFields {
     const val TRADES = "trades"
     const val TRADES_AT = "tradesAtMs"
     const val TRADES_FROM = "tradesFromMs"
+    /**
+     * Server (slice 3): how far the account's P&L has fallen from its high this month (US cents, 0 at the high), and the
+     * account value at that high, so the device can say "22% below this month's high" ([TradingWallet.drawdownShare]).
+     */
+    const val DRAWDOWN = "drawdownCents"
+    const val DRAWDOWN_BASE = "drawdownBaseCents"
 
-    val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM)
+    val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM,
+        DRAWDOWN, DRAWDOWN_BASE)
 }
 
 /** One open position as the server wrote it: prices as Hyperliquid's decimal text; [size] signed (short negative). */
@@ -91,8 +98,17 @@ data class TradingWallet(
     val unrealisedCents: Long?, val positions: List<TradingPosition>,
     /** Slice 2: the window's trades per coin (empty until the server has read them), when they were read and from when. */
     val trades: List<TradingCoinStats> = emptyList(), val tradesAtMs: Long? = null, val tradesFromMs: Long? = null,
+    /** Slice 3: the fall from this month's P&L high and the account value at that high (US cents); null until read. */
+    val drawdownCents: Long? = null, val drawdownBaseCents: Long? = null,
 ) {
     override fun toString() = "TradingWallet($id)"
+
+    /** How far below this month's high, as a share of the account at that high (0 at the high); null without both. */
+    val drawdownShare: Double? get() {
+        val d = drawdownCents?.takeIf { it >= 0 } ?: return null
+        val b = drawdownBaseCents?.takeIf { it > 0 } ?: return null
+        return d.toDouble() / b
+    }
 }
 
 /** One P&L line: "Today" · "+$120.50", [up] true/false, null when flat. */
@@ -124,6 +140,8 @@ data class TradingView(
     val spoken: String,
     /** Slice 2: the window's trades, once the server has read them for at least one address. */
     val trades: TradingTradesView? = null,
+    /** Slice 3: ALERTS — when he's told (near liquidation, a drop from the month's high), with his choices; null with no address. */
+    val alerts: TradingAlertsView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -140,6 +158,7 @@ class TradingStore(private val replica: Replica) {
             TradingTracker.decode(e[TradingWalletFields.POSITIONS].textOrNull),
             TradingTracker.decodeTrades(e[TradingWalletFields.TRADES].textOrNull), e[TradingWalletFields.TRADES_AT].longOrNull,
             e[TradingWalletFields.TRADES_FROM].longOrNull,
+            e[TradingWalletFields.DRAWDOWN].longOrNull, e[TradingWalletFields.DRAWDOWN_BASE].longOrNull,
         )
     }.sortedBy { it.label.lowercase() }
 
@@ -376,16 +395,16 @@ object TradingTracker {
     /** "0.25" from "-0.2500". */
     private fun size(text: String): String = trimZeros(text.trim().removePrefix("-").removePrefix("+"))
 
-    private fun pct(share: Double): String = "${(share * 100).roundToLong()}%"
+    internal fun pct(share: Double): String = "${(share * 100).roundToLong()}%"
 
-    fun positionRow(walletId: String, p: TradingPosition): TradingPositionRow {
+    fun positionRow(walletId: String, p: TradingPosition, near: Double = LIQ_NEAR): TradingPositionRow {
         val side = if (p.long) "long" else "short"
         val title = "${p.coin} · $side ${size(p.size)}"
         val line = listOfNotNull(
             price(p.entry)?.let { "entry $it" }, price(p.mark)?.let { "now $it" }, p.leverage?.takeIf { it > 0 }?.let { "$it×" },
         ).joinToString(" · ").replaceFirstChar { it.uppercase() }
         val dist = p.liquidationDistance
-        val lit = dist != null && dist < LIQ_NEAR
+        val lit = dist != null && dist < near
         val liq = price(p.liquidation)?.let { l -> "Liquidation at $l" + (dist?.let { " · ${pct(it)} away" } ?: "") }
         val up = when { p.unrealisedCents > 0 -> true; p.unrealisedCents < 0 -> false; else -> null }
         val amount = signedUsd(p.unrealisedCents)
@@ -396,7 +415,7 @@ object TradingTracker {
     }
 
     /** TRADING on the Money screen; [wallets] as [TradingStore.wallets] gives them. */
-    fun view(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar): TradingView {
+    fun view(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar, alerts: TradingAlertSetting = TradingAlertSetting.DEFAULT): TradingView {
         if (wallets.isEmpty()) return TradingView(HEAD, null, null, emptyList(), null, emptyList(), emptyList(), EMPTY, HINT, FOOT, EMPTY)
         val read = wallets.filter { it.equityCents != null }
         fun sum(f: (TradingWallet) -> Long?): Long? = read.mapNotNull(f).takeIf { it.isNotEmpty() }?.sum()
@@ -412,7 +431,8 @@ object TradingTracker {
             .mapNotNull { (label, c) -> c?.let { TradingPnlRow(label, signedUsd(it), when { it > 0 -> true; it < 0 -> false; else -> null }) } }
         val open = read.flatMap { w -> w.positions.map { w to it } }
             .sortedWith(compareBy<Pair<TradingWallet, TradingPosition>> { it.second.liquidationDistance ?: 9.0 }.thenByDescending { abs(it.second.unrealisedCents) })
-        val rows = open.map { (w, p) -> positionRow(w.id, p).let { r -> if (n > 1) r.copy(line = r.line + " · " + w.label) else r } }
+        val near = alerts.liquidation.share.takeIf { it > 0 } ?: LIQ_NEAR
+        val rows = open.map { (w, p) -> positionRow(w.id, p, near).let { r -> if (n > 1) r.copy(line = r.line + " · " + w.label) else r } }
         val unrealised = sum { it.unrealisedCents }
         val unrealisedLine = when {
             open.isEmpty() && equity != null -> "No open positions"
@@ -420,14 +440,18 @@ object TradingTracker {
             else -> "${open.size} open position${if (open.size == 1) "" else "s"} · ${signedUsd(unrealised ?: 0L)} not yet taken"
         }
         val walletRows = wallets.map { w ->
+            // Slice 3: how far below this month's high, lit at his drop alert's level.
+            val drop = w.drawdownShare?.takeIf { w.equityCents != null && it >= TradingAlerts.DROP_SHOWN }
+            val dropLit = drop != null && alerts.drop != TradingDropAlert.OFF && drop >= alerts.drop.share
             val line = when {
                 w.state == ERROR -> "${short(w.address)} · couldn't read it from Hyperliquid" +
                     (w.triedAtMs?.let { " at ${HealthRules.at(it, nowMs, cal)}" } ?: "") + " · trying again soon" +
                     (w.readAtMs?.let { " · last ${HealthRules.at(it, nowMs, cal)}" } ?: "")
                 w.equityCents == null -> "${short(w.address)} · " + WAITING.replaceFirstChar { it.lowercase() }
-                else -> "${short(w.address)} · ${usd(w.equityCents)}" + (w.readAtMs?.let { " · updated ${HealthRules.at(it, nowMs, cal)}" } ?: "")
+                else -> "${short(w.address)} · ${usd(w.equityCents)}" + (drop?.let { " · ${pct(it)} below this month's high" } ?: "") +
+                    (w.readAtMs?.let { " · updated ${HealthRules.at(it, nowMs, cal)}" } ?: "")
             }
-            TradingWalletRow(w.id, w.label, line, w.state == ERROR)
+            TradingWalletRow(w.id, w.label, line, w.state == ERROR || dropLit)
         }
         val total = equity?.let { usd(it) }
         val spoken = listOfNotNull(
@@ -436,6 +460,7 @@ object TradingTracker {
             unrealisedLine,
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
-        return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal))
+        return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal),
+            TradingAlerts.view(alerts))
     }
 }

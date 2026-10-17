@@ -19,6 +19,8 @@ import java.time.Duration
 data class TradingAccountRead(
     val equityCents: Long, val pnlDayCents: Long?, val pnlWeekCents: Long?, val pnlMonthCents: Long?, val pnlAllCents: Long?,
     val unrealisedCents: Long, val positions: List<TradingPosition>,
+    /** Slice 3: how far the P&L is below this month's high, and the account value at that high (null without a month's history). */
+    val drawdownCents: Long? = null, val drawdownBaseCents: Long? = null,
 ) {
     override fun toString() = "TradingAccountRead(${positions.size} positions)"
 }
@@ -70,7 +72,7 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
             equity, pnl("day"), pnl("week"), pnl("month"),
             periods["allTime"]?.second?.lastOrNull(),
             positions.sumOf { it.unrealisedCents }, positions,
-        )
+        ).let { r -> periods["month"]?.let { (values, pnl) -> drawdown(values, pnl) }?.let { (d, b) -> r.copy(drawdownCents = d, drawdownBaseCents = b) } ?: r }
     }
 
     /**
@@ -178,6 +180,18 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
             val lev = ((p["leverage"] as? JsonObject)?.get("value") as? JsonPrimitive)?.content?.toBigDecimalOrNull()?.toInt()
             return TradingPosition(coin, size.stripTrailingZeros().toPlainString(), decimal(p["entryPx"]), mark, decimal(p["liquidationPx"]),
                 cents(p["unrealizedPnl"]) ?: 0L, lev)
+        }
+
+        /**
+         * Slice 3: from one period's account values and P&L (oldest first, the same points), how far the P&L now sits
+         * below its high in the period and the account value at that high; null when the two don't line up or the
+         * account was empty then. P&L, not the account value, so a withdrawal never reads as a drop.
+         */
+        fun drawdown(values: List<Long>, pnl: List<Long>): Pair<Long, Long>? {
+            if (pnl.isEmpty() || values.size != pnl.size) return null
+            val peak = pnl.indices.maxByOrNull { pnl[it] } ?: return null
+            val base = values[peak].takeIf { it > 0 } ?: return null
+            return (pnl[peak] - pnl.last()).coerceAtLeast(0L) to base
         }
 
         /** The portfolio's periods: name → (account values, P&L values), each oldest first, in cents. */

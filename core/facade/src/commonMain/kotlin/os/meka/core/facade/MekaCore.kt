@@ -756,7 +756,33 @@ class MekaCore(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
             moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
             moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(),
-        ).copy(trading = os.meka.core.domain.TradingTracker.view(trading.wallets(), nowMs(), ZoneCalendar(timeZone)))
+        ).copy(trading = os.meka.core.domain.TradingTracker.view(trading.wallets(), nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
+    }
+
+    // ---- Trading tracker, slice 3: the alerts ----
+
+    private fun tradingAlertSetting(): os.meka.core.domain.TradingAlertSetting = os.meka.core.domain.TradingAlerts.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.TradingAlerts.ENTITY_ID)?.fields,
+    )
+
+    /**
+     * Money → TRADING → ALERTS: [kind] is [os.meka.core.domain.TradingAlerts.LIQ] or [os.meka.core.domain.TradingAlerts.DROP],
+     * [key] a chip's key ("off", "5", "10", "20", "30"). Synced; the notices follow at once. Returns what the pane says
+     * (an unknown kind or key changes nothing). Strings only, so the Mac calls it as is.
+     */
+    suspend fun setTradingAlert(kind: String, key: String): String = onCore {
+        val now = tradingAlertSetting()
+        val next = os.meka.core.domain.TradingAlerts.with(now, kind, key)
+            ?: return@onCore os.meka.core.domain.TradingAlerts.line(now)
+        if (next != now || replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.TradingAlerts.ENTITY_ID) == null) {
+            replica.commitLocal(
+                os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.TradingAlerts.ENTITY_ID,
+                os.meka.core.domain.TradingAlerts.settingFields(next, nowMs()),
+            )
+        }
+        refresh()
+        refreshMoney()
+        os.meka.core.domain.TradingAlerts.switchedLine(kind, next)
     }
 
     /**
@@ -8293,6 +8319,8 @@ class MekaCore(
             prepLeadMin = meetingPrepLead().minutes,
             // Money manager, slice 7: card payments three days before (until Paid) and 0% periods ending.
             cards = money.cards(),
+            // Trading tracker, slice 3: near liquidation (even in quiet hours) and a drop from the month's high.
+            trading = trading.wallets(), tradingAlerts = tradingAlertSetting(),
         )
 
     /**

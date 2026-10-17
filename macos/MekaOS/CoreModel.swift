@@ -3364,6 +3364,19 @@ final class CoreModel {
         }
     }
 
+    /// Trading tracker, slice 3: one of the ALERTS choices (kind "liq" or "drop", key "off", "5", "10", "20", "30").
+    func setTradingAlert(kind: String, key: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            let line = try await core.setTradingAlert(kind: kind, key: key)
+            MekaHaptics.light()
+            return MoneySaid(line: line, refused: false, undo: nil)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Trading tracker: stops following an address on every device; Undo with `undoMoneyCategory`.
     func tradingWalletRemove(id: String) async -> MoneySaid? {
         guard let core else { return nil }

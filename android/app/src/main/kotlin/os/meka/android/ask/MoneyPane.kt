@@ -87,6 +87,7 @@ import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
+import os.meka.core.domain.TradingAlertsView
 import os.meka.core.domain.TradingTradesView
 import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
@@ -235,7 +236,10 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             item(key = "trading") {
                 TradingBlock(t, Modifier.animateItem().appear(rememberAppearance(2)),
                     onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
-                    onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } })
+                    onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } },
+                    onAlert = { kind, key ->
+                        scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
+                    })
             }
         }
         v.month?.let { m ->
@@ -568,7 +572,7 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
  * positions nearest liquidation first (lit within 10%), each address with Remove, and a field for a public address.
  */
 @Composable
-private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit) {
+private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit, onAlert: (String, String) -> Unit) {
     val reduced = Meka.reducedMotion
     var adding by rememberSaveable { mutableStateOf("") }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -615,7 +619,36 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
             }
         }
         Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        t.alerts?.let { a -> AlertsBlock(a, onAlert) }
         Text(t.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
+ * month's high), with a row of choices for each; the chosen one in brass.
+ */
+@Composable
+private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(a.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Crossfade(a.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-line") { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        listOf(a.liqLabel to a.liqChips, a.dropLabel to a.dropChips).forEach { (label, chips) ->
+            Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                chips.forEach { c -> key(c.kind + c.key) {
+                    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-alert-${c.kind}-${c.key}")
+                    Text(c.label, style = MekaType.caption, color = col,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.RadioButton) { if (!c.on) onAlert(c.kind, c.key) }
+                            .semantics { contentDescription = c.spoken }.minTouch()
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                } }
+            }
+        }
     }
 }
 

@@ -170,6 +170,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      */
     CARDS("Cards: payments due and 0% ending", NoticeTier.HEADS_UP),
     /**
+     * Trading tracker, slice 3 ([TradingAlerts.notices]): a position near liquidation (Critical: it comes in quiet hours)
+     * and an account well below this month's high (a heads-up), at his levels — "ETH long near liquidation" · "8% from
+     * liquidation · Main account · …". No amounts. Lowering it here lowers both.
+     */
+    TRADING("Trading: near liquidation and drops", NoticeTier.HEADS_UP),
+    /**
      * Life admin hour ([LifeAdminRules.notices]): at the week's hour, "Life admin hour · 4 jobs" · "Renew passport · Call
      * the GP · and 2 more". None when skipped or nothing is waiting.
      */
@@ -660,6 +666,7 @@ object Governor {
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
         NoticeSource.BILLS -> plural(n, "bill") + " due"
         NoticeSource.CARDS -> plural(n, "card reminder")
+        NoticeSource.TRADING -> plural(n, "trading alert")
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
@@ -779,6 +786,9 @@ object NoticeSources {
         prepLeadMin: Int = MeetingPrepRules.LEAD_MIN,
         /** Money manager, slice 7: his cards, for the payment and 0% heads-ups ([MoneyCards.notices]). */
         cards: List<MoneyCard> = emptyList(),
+        /** Trading tracker, slice 3: his public addresses as last read, and his alert levels ([TradingAlerts.notices]). */
+        trading: List<TradingWallet> = emptyList(),
+        tradingAlerts: TradingAlertSetting = TradingAlertSetting.DEFAULT,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -918,6 +928,7 @@ object NoticeSources {
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
         out += MoneyCards.notices(cards, nowMs, cal)
+        out += TradingAlerts.notices(trading, tradingAlerts, nowMs, cal)
         out += MailReturnRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)
         out += DocumentRules.notices(documents, nowMs, cal)

@@ -392,4 +392,24 @@ class MoneyFacadeTest {
         mac.syncNow(); fold.syncNow()
         assertEquals(os.meka.core.domain.TradingTracker.EMPTY, fold.moneyView.value.trading!!.empty)
     }
+
+    @Test
+    fun tradingAlertLevelsChosenOnTheFoldReachTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.openMoney(); mac.openMoney()
+        fold.tradingWalletAdd("Main 0x" + "ab12".repeat(10))
+        val alerts = fold.moneyView.value.trading!!.alerts!!
+        assertEquals(listOf("10"), alerts.liqChips.filter { it.on }.map { it.key })
+        assertEquals(listOf("20"), alerts.dropChips.filter { it.on }.map { it.key })
+        assertEquals("Alert within 5% of liquidation · on both devices", fold.setTradingAlert(os.meka.core.domain.TradingAlerts.LIQ, "5"))
+        assertEquals("Drop alert off", fold.setTradingAlert(os.meka.core.domain.TradingAlerts.DROP, "off"))
+        // An unknown choice changes nothing.
+        fold.setTradingAlert(os.meka.core.domain.TradingAlerts.DROP, "15")
+        assertEquals(listOf("5"), fold.moneyView.value.trading!!.alerts!!.liqChips.filter { it.on }.map { it.key })
+        fold.syncNow(); mac.syncNow()
+        val m = mac.moneyView.value.trading!!.alerts!!
+        assertEquals(listOf("5"), m.liqChips.filter { it.on }.map { it.key })
+        assertEquals(listOf("off"), m.dropChips.filter { it.on }.map { it.key })
+    }
 }
