@@ -61,7 +61,7 @@ object TradingReviewRules {
     private fun plural(n: Int, one: String) = "$n $one${if (n == 1) "" else "s"}"
 
     /** The review of the last finished month across [wallets]; null until the server has written it for any of them. */
-    fun view(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar): TradingReviewView? {
+    fun view(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar, ccy: TradingCcy = TradingCcy.USD): TradingReviewView? {
         val month = TradingMonth.lastFinished(nowMs, cal)
         val read = wallets.filter { it.reviewMonth == month.key }
         if (read.isEmpty()) return null
@@ -79,11 +79,11 @@ object TradingReviewRules {
         else if (all.wins == 0) "You closed ${plural(all.trades, "trade")} in ${month.name} and won none of them."
         else "You closed ${plural(all.trades, "trade")} in ${month.name} and won ${all.wins} of them (${(all.wins * 100.0 / all.trades).roundToLong()}%)."
         val parts = listOfNotNull(
-            "closed trades ${TradingTracker.signedUsd(all.realisedCents)}",
-            all.feesCents.takeIf { it != 0L }?.let { "fees ${TradingTracker.signedUsd(-it)}" },
-            all.fundingCents.takeIf { it != 0L }?.let { "funding ${TradingTracker.signedUsd(it)}" },
+            "closed trades ${ccy.signed(all.realisedCents)}",
+            all.feesCents.takeIf { it != 0L }?.let { "fees ${ccy.signed(-it)}" },
+            all.fundingCents.takeIf { it != 0L }?.let { "funding ${ccy.signed(it)}" },
         )
-        sentences += parts.joinToString(", ").replaceFirstChar { it.uppercase() } + ": ${TradingTracker.signedUsd(net)} after fees and funding."
+        sentences += parts.joinToString(", ").replaceFirstChar { it.uppercase() } + ": ${ccy.signed(net)} after fees and funding."
         // Against the month before, only when every account counted has the month before read too.
         if (read.all { it.reviewPrev != null }) {
             val prev = sum(read.flatMap { it.reviewPrev.orEmpty() })
@@ -92,33 +92,33 @@ object TradingReviewRules {
             val diff = net - prevNet
             sentences += when {
                 prev.isEmpty() -> "There were no trades in $prevName to compare with."
-                diff == 0L -> "The same as $prevName (${TradingTracker.signedUsd(prevNet)})."
-                else -> "${TradingTracker.usd(abs(diff))} ${if (diff > 0) "better" else "worse"} than $prevName (${TradingTracker.signedUsd(prevNet)})."
+                diff == 0L -> "The same as $prevName (${ccy.signed(prevNet)})."
+                else -> "${ccy.amt(abs(diff))} ${if (diff > 0) "better" else "worse"} than $prevName (${ccy.signed(prevNet)})."
             }
         }
         val traded = coins.filter { it.trades > 0 }
         if (traded.size >= 2) {
             val best = traded.maxBy { it.netCents }
             val worst = traded.minBy { it.netCents }
-            sentences += "${best.coin} did best (${TradingTracker.signedUsd(best.netCents)} over ${plural(best.trades, "trade")}); " +
-                "${worst.coin} did worst (${TradingTracker.signedUsd(worst.netCents)} over ${plural(worst.trades, "trade")})."
+            sentences += "${best.coin} did best (${ccy.signed(best.netCents)} over ${plural(best.trades, "trade")}); " +
+                "${worst.coin} did worst (${ccy.signed(worst.netCents)} over ${plural(worst.trades, "trade")})."
         } else if (traded.size == 1) {
             sentences += "All of it on ${traded[0].coin}."
         }
         val bestTrade = traded.maxByOrNull { it.bestCents }?.takeIf { it.bestCents > 0 }
         val worstTrade = traded.minByOrNull { it.worstCents }?.takeIf { it.worstCents < 0 }
         listOfNotNull(
-            bestTrade?.let { "your biggest win was ${TradingTracker.signedUsd(it.bestCents)} on ${it.coin}" },
-            worstTrade?.let { "your biggest loss ${TradingTracker.signedUsd(it.worstCents)} on ${it.coin}" },
+            bestTrade?.let { "your biggest win was ${ccy.signed(it.bestCents)} on ${it.coin}" },
+            worstTrade?.let { "your biggest loss ${ccy.signed(it.worstCents)} on ${it.coin}" },
         ).takeIf { it.isNotEmpty() }?.let { sentences += it.joinToString(", ").replaceFirstChar { c -> c.uppercase() } + "." }
         if (all.wins > 0 && all.losses > 0) {
-            sentences += "Wins averaged ${TradingTracker.signedUsd(all.winSumCents / all.wins)} and losses ${TradingTracker.signedUsd(all.lossSumCents / all.losses)}."
+            sentences += "Wins averaged ${ccy.signed(all.winSumCents / all.wins)} and losses ${ccy.signed(all.lossSumCents / all.losses)}."
         }
         if (all.feesCents > 0 && all.realisedCents > 0) {
             sentences += "Fees came to ${TradingAlerts.share(all.feesCents.toDouble() / all.realisedCents)} of what the closed trades made."
         }
-        val summary = "${month.name} · ${TradingTracker.signedUsd(net)} after fees and funding"
-        return TradingReviewView(head, summary, TradingTracker.signedUsd(net), up(net), sentences, foot,
+        val summary = "${month.name} · ${ccy.signed(net)} after fees and funding"
+        return TradingReviewView(head, summary, ccy.signed(net), up(net), sentences, foot,
             "${month.name} in review. " + sentences.joinToString(" "))
     }
 

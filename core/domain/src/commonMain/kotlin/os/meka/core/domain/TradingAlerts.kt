@@ -93,6 +93,8 @@ enum class TradingFundingAlert(val key: String, val label: String, val bp: Long)
 data class TradingAlertSetting(
     val liquidation: TradingLiqAlert = TradingLiqAlert.TEN, val drop: TradingDropAlert = TradingDropAlert.TWENTY,
     val fill: TradingFillAlert = TradingFillAlert.FIVE, val funding: TradingFundingAlert = TradingFundingAlert.ONE,
+    /** Slice 12: TRADING read in pounds rather than US dollars (a display choice, kept on the same entity). */
+    val pounds: Boolean = false,
 ) {
     companion object {
         val DEFAULT = TradingAlertSetting()
@@ -104,6 +106,8 @@ object TradingAlertFields {
     const val DROP_PCT = "dropPct"
     const val FILL_X = "fillX"
     const val FUNDING_BP = "fundingBp"
+    /** Slice 12: "gbp" or "usd"; absent = dollars. */
+    const val CURRENCY = "currency"
     const val CHANGED_AT = "changedAtMs"
 }
 
@@ -149,11 +153,13 @@ object TradingAlerts {
         fields?.get(TradingAlertFields.DROP_PCT)?.longOrNull?.let { TradingDropAlert.ofPercent(it) } ?: TradingAlertSetting.DEFAULT.drop,
         fields?.get(TradingAlertFields.FILL_X)?.longOrNull?.let { TradingFillAlert.ofTimes(it) } ?: TradingAlertSetting.DEFAULT.fill,
         fields?.get(TradingAlertFields.FUNDING_BP)?.longOrNull?.let { TradingFundingAlert.ofBp(it) } ?: TradingAlertSetting.DEFAULT.funding,
+        fields?.get(TradingAlertFields.CURRENCY)?.textOrNull?.trim()?.lowercase() == TradingCurrencyRules.GBP,
     )
 
     fun settingFields(s: TradingAlertSetting, nowMs: Long): Map<String, FieldValue> = mapOf(
         TradingAlertFields.LIQ_PCT to s.liquidation.percent.fv(), TradingAlertFields.DROP_PCT to s.drop.percent.fv(),
         TradingAlertFields.FILL_X to s.fill.times.fv(), TradingAlertFields.FUNDING_BP to s.funding.bp.fv(),
+        TradingAlertFields.CURRENCY to (if (s.pounds) TradingCurrencyRules.GBP else TradingCurrencyRules.USD).fv(),
         TradingAlertFields.CHANGED_AT to nowMs.fv(),
     )
 
@@ -163,6 +169,7 @@ object TradingAlerts {
         DROP -> TradingDropAlert.of(key)?.let { s.copy(drop = it) }
         FILL -> TradingFillAlert.of(key)?.let { s.copy(fill = it) }
         FUNDING -> TradingFundingAlert.of(key)?.let { s.copy(funding = it) }
+        TradingCurrencyRules.KIND -> when (key) { TradingCurrencyRules.GBP -> s.copy(pounds = true); TradingCurrencyRules.USD -> s.copy(pounds = false); else -> null }
         else -> null
     }
 
@@ -179,6 +186,7 @@ object TradingAlerts {
 
     /** What the pane says after a change. */
     fun switchedLine(kind: String, s: TradingAlertSetting): String = when (kind) {
+        TradingCurrencyRules.KIND -> TradingCurrencyRules.switched(s.pounds)
         LIQ -> if (s.liquidation == TradingLiqAlert.OFF) "Near-liquidation alert off" else "Alert within ${s.liquidation.label} of liquidation · on both devices"
         FILL -> if (s.fill == TradingFillAlert.OFF) "Big-order alert off" else "Heads-up for an order worth ${s.fill.label} the account · on both devices"
         FUNDING -> if (s.funding == TradingFundingAlert.OFF) "Funding alert off" else "Heads-up when a day's funding costs ${s.funding.label} of the account · on both devices"

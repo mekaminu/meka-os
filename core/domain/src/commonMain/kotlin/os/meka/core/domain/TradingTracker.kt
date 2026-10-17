@@ -206,6 +206,8 @@ data class TradingView(
     val export: TradingExportView? = null,
     /** Slice 9: the last finished month in review, once the server has added it up. */
     val review: TradingReviewView? = null,
+    /** Slice 12: SHOW IN · Dollars · Pounds. */
+    val currency: TradingCurrencyView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -302,6 +304,8 @@ object TradingTracker {
     const val BAD = "That isn't a Hyperliquid address · it's 0x and 40 letters and digits (your public address, never a key)"
     const val EMPTY = "Add your Hyperliquid public address to see your equity, profit and loss and open positions. Read-only: only the public address, never a key."
     const val FOOT = "Read from Hyperliquid's public data with your public address only · no keys, nothing here can trade · US dollars · deposits and withdrawals aren't counted as profit · not trading advice"
+    /** Slice 12: the foot while he reads TRADING in pounds. */
+    const val FOOT_GBP = "Read from Hyperliquid's public data with your public address only · no keys, nothing here can trade · in pounds at the European Central Bank's dollar rate, prices in dollars · deposits and withdrawals aren't counted as profit · not trading advice"
     const val WAITING = "Reading it from Hyperliquid · within a minute or two"
 
     /** Slice 2: trades are added up over the last [TRADES_DAYS] days, read again hourly. */
@@ -420,7 +424,7 @@ object TradingTracker {
      * P&L · LAST 30 DAYS across [wallets]: each day's end (an account counts from its own first day, carried forward
      * over a missing day) and "Now" from the latest read; null until there are two points.
      */
-    fun curveView(wallets: List<TradingWallet>, nowMs: Long): TradingCurveView? {
+    fun curveView(wallets: List<TradingWallet>, nowMs: Long, ccy: TradingCcy = TradingCcy.USD): TradingCurveView? {
         val withCurve = wallets.filter { it.curve.isNotEmpty() }
         if (withCurve.isEmpty()) return null
         val today = nowMs.floorDiv(DAY_MS)
@@ -437,16 +441,16 @@ object TradingTracker {
         val since = CivilDate.shortLabel(start)
         val points = sums.map { (d, pnl, value) ->
             val label = CivilDate.shortLabel(d)
-            MoneyWorthPoint(label, pnl, "$label · ${signedUsd(pnl)} since $since · account ${usd(value)}")
-        } + MoneyWorthPoint("Now", nowPnl, "Now · ${signedUsd(nowPnl)} since $since" + (nowValue?.let { " · account ${usd(it)}" } ?: ""))
+            MoneyWorthPoint(label, pnl, "$label · ${ccy.signed(pnl)} since $since · account ${ccy.amt(value)}")
+        } + MoneyWorthPoint("Now", nowPnl, "Now · ${ccy.signed(nowPnl)} since $since" + (nowValue?.let { " · account ${ccy.amt(it)}" } ?: ""))
         if (points.size < 2) return null
         val up = when { nowPnl > 0 -> true; nowPnl < 0 -> false; else -> null }
-        val summary = "${signedUsd(nowPnl)} since $since"
+        val summary = "${ccy.signed(nowPnl)} since $since"
         val hi = points.withIndex().maxByOrNull { it.value.pence }!!
         val lo = points.withIndex().minByOrNull { it.value.pence }!!
         fun on(i: IndexedValue<MoneyWorthPoint>) = if (i.index == points.size - 1) "now" else "on ${i.value.label}"
         val range = if (hi.value.pence == lo.value.pence) null else
-            "High ${signedUsd(hi.value.pence)} ${on(hi)} · low ${signedUsd(lo.value.pence)} ${on(lo)}"
+            "High ${ccy.signed(hi.value.pence)} ${on(hi)} · low ${ccy.signed(lo.value.pence)} ${on(lo)}"
         return TradingCurveView(CURVE_HEAD, summary, up, range, points, CURVE_FOOT,
             listOfNotNull("Profit and loss over the last month: $summary", range).joinToString(". "))
     }
@@ -455,7 +459,7 @@ object TradingTracker {
     fun tradesDue(w: TradingWallet, nowMs: Long): Boolean = w.tradesAtMs.let { it == null || nowMs - it >= TRADES_MS }
 
     /** YOUR TRADES across [wallets] (the same coin in two accounts counts together); null until any has been read. */
-    fun tradesView(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar): TradingTradesView? {
+    fun tradesView(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar, ccy: TradingCcy = TradingCcy.USD): TradingTradesView? {
         val read = wallets.filter { it.tradesAtMs != null }
         if (read.isEmpty()) return null
         val coins = read.flatMap { it.trades }.groupBy { it.coin }.map { (_, l) -> l.reduce { a, b -> a + b } }
@@ -469,32 +473,32 @@ object TradingTracker {
         val summary = if (all.trades == 0) "No trades closed" else
             "${all.trades} trade${if (all.trades == 1) "" else "s"} closed · ${all.wins} won (${(all.wins * 100.0 / all.trades).roundToLong()}%)"
         val lines = listOfNotNull(
-            TradingPnlRow("Closed trades", signedUsd(all.realisedCents), up(all.realisedCents)),
-            all.feesCents.takeIf { it != 0L }?.let { TradingPnlRow("Fees", signedUsd(-it), up(-it)) },
-            all.fundingCents.takeIf { it != 0L }?.let { TradingPnlRow("Funding", signedUsd(it), up(it)) },
-            TradingPnlRow("After fees and funding", signedUsd(all.netCents), up(all.netCents)),
+            TradingPnlRow("Closed trades", ccy.signed(all.realisedCents), up(all.realisedCents)),
+            all.feesCents.takeIf { it != 0L }?.let { TradingPnlRow("Fees", ccy.signed(-it), up(-it)) },
+            all.fundingCents.takeIf { it != 0L }?.let { TradingPnlRow("Funding", ccy.signed(it), up(it)) },
+            TradingPnlRow("After fees and funding", ccy.signed(all.netCents), up(all.netCents)),
         )
         val average = listOfNotNull(
-            all.wins.takeIf { it > 0 }?.let { "Average win ${signedUsd(all.winSumCents / it)}" },
-            all.losses.takeIf { it > 0 }?.let { "average loss ${signedUsd(all.lossSumCents / it)}" },
+            all.wins.takeIf { it > 0 }?.let { "Average win ${ccy.signed(all.winSumCents / it)}" },
+            all.losses.takeIf { it > 0 }?.let { "average loss ${ccy.signed(all.lossSumCents / it)}" },
         ).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
         val traded = coins.filter { it.trades > 0 }
         val best = traded.maxByOrNull { it.bestCents }?.takeIf { it.bestCents > 0 }
         val worst = traded.minByOrNull { it.worstCents }?.takeIf { it.worstCents < 0 }
         val bestLine = listOfNotNull(
-            best?.let { "Best ${signedUsd(it.bestCents)} on ${it.coin}" }, worst?.let { "worst ${signedUsd(it.worstCents)} on ${it.coin}" },
+            best?.let { "Best ${ccy.signed(it.bestCents)} on ${it.coin}" }, worst?.let { "worst ${ccy.signed(it.worstCents)} on ${it.coin}" },
         ).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
         val rows = coins.take(SHOWN_COINS).map { c ->
             val line = listOfNotNull(
                 if (c.trades == 0) "no trades closed" else "${c.trades} trade${if (c.trades == 1) "" else "s"} · ${c.wins} won",
-                c.feesCents.takeIf { it != 0L }?.let { "fees ${signedUsd(-it)}" },
-                c.fundingCents.takeIf { it != 0L }?.let { "funding ${signedUsd(it)}" },
+                c.feesCents.takeIf { it != 0L }?.let { "fees ${ccy.signed(-it)}" },
+                c.fundingCents.takeIf { it != 0L }?.let { "funding ${ccy.signed(it)}" },
             ).joinToString(" · ").replaceFirstChar { it.uppercase() }
-            TradingCoinRow("coin:${c.coin}", c.coin, signedUsd(c.netCents), up(c.netCents), line, "${c.coin}, ${signedUsd(c.netCents)} after fees and funding, ${line.lowercase()}")
+            TradingCoinRow("coin:${c.coin}", c.coin, ccy.signed(c.netCents), up(c.netCents), line, "${c.coin}, ${ccy.signed(c.netCents)} after fees and funding, ${line.lowercase()}")
         }
         val more = (coins.size - rows.size).takeIf { it > 0 }?.let { "+$it more coin${if (it == 1) "" else "s"}" }
         val spoken = listOfNotNull(
-            "Last $TRADES_DAYS days: $summary", "${signedUsd(all.netCents)} after fees and funding", average, bestLine,
+            "Last $TRADES_DAYS days: $summary", "${ccy.signed(all.netCents)} after fees and funding", average, bestLine,
         ).joinToString(". ")
         return TradingTradesView(TRADES_HEAD, summary, lines, average, bestLine, rows, more, null, foot, spoken)
     }
@@ -561,7 +565,7 @@ object TradingTracker {
 
     internal fun pct(share: Double): String = "${(share * 100).roundToLong()}%"
 
-    fun positionRow(walletId: String, p: TradingPosition, near: Double = LIQ_NEAR): TradingPositionRow {
+    fun positionRow(walletId: String, p: TradingPosition, near: Double = LIQ_NEAR, ccy: TradingCcy = TradingCcy.USD): TradingPositionRow {
         val side = if (p.long) "long" else "short"
         val title = "${p.coin} · $side ${size(p.size)}"
         val line = listOfNotNull(
@@ -571,7 +575,7 @@ object TradingTracker {
         val lit = dist != null && dist < near
         val liq = price(p.liquidation)?.let { l -> "Liquidation at $l" + (dist?.let { " · ${pct(it)} away" } ?: "") }
         val up = when { p.unrealisedCents > 0 -> true; p.unrealisedCents < 0 -> false; else -> null }
-        val amount = signedUsd(p.unrealisedCents)
+        val amount = ccy.signed(p.unrealisedCents)
         return TradingPositionRow(
             "$walletId:${p.coin}", title, line, amount, up, liq, lit,
             listOfNotNull("${p.coin} $side ${size(p.size)}", "$amount not yet taken", liq).joinToString(", "),
@@ -586,25 +590,27 @@ object TradingTracker {
         val equity = sum { it.equityCents }
         val last = read.mapNotNull { it.readAtMs }.maxOrNull()
         val n = wallets.size
-        // Slice 5: about how much in pounds, at the ECB's rate, once every read account has one.
+        // Slice 12: his dollars-or-pounds choice; pounds only once every read account carries the ECB's rate.
+        val ccy = TradingCcy.of(wallets, alerts.pounds)
+        // Slice 5: about how much in pounds, at the ECB's rate, once every read account has one (in pounds: the dollars).
         val pounds = read.map { it.equityPence }.takeIf { l -> l.isNotEmpty() && l.all { it != null } }?.sumOf { it!! }
         val totalLine = if (equity == null) null else listOfNotNull(
             if (n == 1) "Equity" else "Equity across $n accounts",
-            pounds?.let { "about ${MoneyRules.signedPlain(it)}" },
+            if (ccy.pounds) usd(equity) else pounds?.let { "about ${MoneyRules.signedPlain(it)}" },
             last?.let { "updated ${HealthRules.at(it, nowMs, cal)}" },
         ).joinToString(" · ")
         val pnl = listOf("Today" to sum { it.pnlDayCents }, "This week" to sum { it.pnlWeekCents },
             "This month" to sum { it.pnlMonthCents }, "All time" to sum { it.pnlAllCents })
-            .mapNotNull { (label, c) -> c?.let { TradingPnlRow(label, signedUsd(it), when { it > 0 -> true; it < 0 -> false; else -> null }) } }
+            .mapNotNull { (label, c) -> c?.let { TradingPnlRow(label, ccy.signed(it), when { it > 0 -> true; it < 0 -> false; else -> null }) } }
         val open = read.flatMap { w -> w.positions.map { w to it } }
             .sortedWith(compareBy<Pair<TradingWallet, TradingPosition>> { it.second.liquidationDistance ?: 9.0 }.thenByDescending { abs(it.second.unrealisedCents) })
         val near = alerts.liquidation.share.takeIf { it > 0 } ?: LIQ_NEAR
-        val rows = open.map { (w, p) -> positionRow(w.id, p, near).let { r -> if (n > 1) r.copy(line = r.line + " · " + w.label) else r } }
+        val rows = open.map { (w, p) -> positionRow(w.id, p, near, ccy).let { r -> if (n > 1) r.copy(line = r.line + " · " + w.label) else r } }
         val unrealised = sum { it.unrealisedCents }
         val unrealisedLine = when {
             open.isEmpty() && equity != null -> "No open positions"
             open.isEmpty() -> null
-            else -> "${open.size} open position${if (open.size == 1) "" else "s"} · ${signedUsd(unrealised ?: 0L)} not yet taken"
+            else -> "${open.size} open position${if (open.size == 1) "" else "s"} · ${ccy.signed(unrealised ?: 0L)} not yet taken"
         }
         val walletRows = wallets.map { w ->
             // Slice 3: how far below this month's high, lit at his drop alert's level.
@@ -615,20 +621,20 @@ object TradingTracker {
                     (w.triedAtMs?.let { " at ${HealthRules.at(it, nowMs, cal)}" } ?: "") + " · trying again soon" +
                     (w.readAtMs?.let { " · last ${HealthRules.at(it, nowMs, cal)}" } ?: "")
                 w.equityCents == null -> "${short(w.address)} · " + WAITING.replaceFirstChar { it.lowercase() }
-                else -> "${short(w.address)} · ${usd(w.equityCents)}" + (drop?.let { " · ${pct(it)} below this month's high" } ?: "") +
+                else -> "${short(w.address)} · ${ccy.amt(w.equityCents)}" + (drop?.let { " · ${pct(it)} below this month's high" } ?: "") +
                     (w.readAtMs?.let { " · updated ${HealthRules.at(it, nowMs, cal)}" } ?: "")
             }
             TradingWalletRow(w.id, w.label, line, w.state == ERROR || dropLit)
         }
-        val total = equity?.let { usd(it) }
+        val total = equity?.let { ccy.amt(it) }
         val spoken = listOfNotNull(
             total?.let { "Trading equity $it" },
             pnl.joinToString(", ") { "${it.label.lowercase()} ${it.amount}" }.takeIf { it.isNotEmpty() },
             unrealisedLine,
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
-        return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal),
-            TradingAlerts.view(alerts), curveView(wallets, nowMs), TradingExportRules.view(wallets, nowMs, cal),
-            TradingReviewRules.view(wallets, nowMs, cal))
+        return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, if (ccy.pounds) FOOT_GBP else FOOT, spoken,
+            tradesView(wallets, nowMs, cal, ccy), TradingAlerts.view(alerts), curveView(wallets, nowMs, ccy), TradingExportRules.view(wallets, nowMs, cal),
+            TradingReviewRules.view(wallets, nowMs, cal, ccy), TradingCurrencyRules.view(wallets, alerts.pounds, ccy))
     }
 }

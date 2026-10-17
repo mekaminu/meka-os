@@ -418,5 +418,12 @@ class MoneyFacadeTest {
         assertEquals(listOf("off"), m.dropChips.filter { it.on }.map { it.key })
         assertEquals(listOf("2"), m.fillChips.filter { it.on }.map { it.key })
         assertEquals(listOf("off"), m.fundingChips.filter { it.on }.map { it.key })
+        // Slice 12: dollars or pounds, on the same setting, both devices; the alerts stay as they were.
+        assertEquals(listOf("usd"), mac.moneyView.value.trading!!.currency!!.chips.filter { it.on }.map { it.key })
+        assertTrue(mac.setTradingAlert(os.meka.core.domain.TradingCurrencyRules.KIND, "gbp").startsWith("Trading in pounds"))
+        mac.syncNow(); fold.syncNow()
+        val f = fold.moneyView.value.trading!!
+        assertEquals(listOf("gbp"), f.currency!!.chips.filter { it.on }.map { it.key })
+        assertEquals(listOf("5"), f.alerts!!.liqChips.filter { it.on }.map { it.key })
     }
 }

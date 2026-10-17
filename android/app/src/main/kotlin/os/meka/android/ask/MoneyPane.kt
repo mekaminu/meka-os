@@ -94,6 +94,7 @@ import os.meka.core.domain.TradingExportRules
 import os.meka.core.domain.TradingExportView
 import os.meka.core.domain.TradingReviewView
 import os.meka.core.domain.TradingTradesView
+import os.meka.core.domain.TradingCurrencyView
 import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
 
@@ -620,6 +621,7 @@ private fun TradingBlock(
             }
         }
         t.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        t.currency?.let { c -> CurrencyRow(c, onAlert) }
         t.pnl.forEach { r ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(r.label, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
@@ -659,6 +661,31 @@ private fun TradingBlock(
         t.alerts?.let { a -> AlertsBlock(a, onAlert) }
         t.export?.let { e -> ExportBlock(e, exporting, onExport) }
         Text(t.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Trading tracker, slice 12: SHOW IN · Dollars · Pounds (synced through the alerts setting), with a line saying what it
+ * means; the chosen chip in brass, the line cross-fading when it changes.
+ */
+@Composable
+private fun CurrencyRow(c: TradingCurrencyView, onPick: (String, String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(c.label, style = MekaType.caption, color = Meka.colors.textSecondary)
+            c.chips.forEach { ch -> key(ch.kind + ch.key) {
+                val col by animateColorAsState(if (ch.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-ccy-${ch.key}")
+                Text(ch.label, style = MekaType.caption, color = col,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                        .clickable(role = Role.RadioButton) { if (!ch.on) onPick(ch.kind, ch.key) }
+                        .semantics { contentDescription = ch.spoken }.minTouch()
+                        .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+            } }
+        }
+        Crossfade(c.line, animationSpec = MekaMotion.appear(reduced), label = "trading-ccy-line") { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
+        }
     }
 }
 
