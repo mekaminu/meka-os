@@ -9,6 +9,7 @@ import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailSortReason
 import os.meka.core.domain.MailSorted
 import os.meka.core.domain.MailSecurityRules
+import os.meka.core.domain.MailScamRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailRefundRules
@@ -1370,6 +1371,7 @@ class Integrations(
                 account, h.fromName, h.fromAddress, h.subject, preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
                 threadKey = MailNeedsRules.threadKey(a.id, h.threadId ?: h.id),
                 security = MailSecurityRules.itemProvider(reasons[h.id], h.fromAddress),
+                warning = MailScamRules.itemWarning(reasons[h.id], h.fromAddress, h.fromName, h.subject),
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
@@ -2009,12 +2011,11 @@ class Integrations(
      */
     private fun sortHeaders(a: AccountRow, ms: MailStore) {
         val known = knownPeople(a.householdId)
+        val own = ownAddresses(a)
         for (round in 0 until SORT_ROUNDS) {
             val batch = ms.unsorted(a.id, SORT_BATCH)
             if (batch.isEmpty()) break
-            val sorts = batch.associate { h ->
-                h.id to MailSortRules.known(MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)), h.fromAddress, known)
-            }
+            val sorts = batch.associate { h -> h.id to sortOne(h, known, own) }
             ms.setSorts(a.id, sorts)
             // Slice 5a: who sends the newsletters and promos (oldest first, so the newest one's headers win).
             batch.asReversed().filter { h -> sorts[h.id]?.let { it.sure && (it.sort == MailSort.NEWSLETTER || it.sort == MailSort.PROMO) } == true }
@@ -2022,7 +2023,27 @@ class Integrations(
             if (batch.size < SORT_BATCH) break
         }
         resortSecurity(a, ms)
+        resortNeedsYou(a, ms, known, own)
         askAi(a, ms, known)
+    }
+
+    /** The household's own mail addresses (lower case): his mail from them is a note to himself. */
+    private fun ownAddresses(a: AccountRow): Set<String> =
+        runCatching { store.accounts(a.householdId).map { it.email.lowercase() }.toSet() }.getOrDefault(emptySet()) + a.email.lowercase()
+
+    /** One header's sort: the rules, then his correspondents ([MailSortRules.known]) and his own addresses ([MailSortRules.mine]). */
+    private fun sortOne(h: MailHeader, known: Set<String>, own: Set<String>): MailSorted =
+        MailSortRules.mine(MailSortRules.known(MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)), h.fromAddress, known), h.fromAddress, own)
+
+    /**
+     * Inbox junk fix (Meka, 2026-10-17: "13 emails need you" was mostly junk): inbox mail sorted Needs you before the
+     * prize-draw, digest, own-address and scam rules ([MailScamRules]) is sorted again, the AI's answers included, when
+     * the rules now say something sure and different ([MailScamRules.resort]). Headers only; nothing in the mailbox moves
+     * (Autopilot then plans the new Promos and Notifications as usual).
+     */
+    internal fun resortNeedsYou(a: AccountRow, ms: MailStore, known: Set<String>, own: Set<String>) {
+        val again = ms.inboxSorted(a.id).mapNotNull { (h, s) -> MailScamRules.resort(s, sortOne(h, known, own))?.let { h.id to it } }.toMap()
+        if (again.isNotEmpty()) ms.setSorts(a.id, again)
     }
 
     /**

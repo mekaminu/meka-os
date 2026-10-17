@@ -202,6 +202,10 @@ struct MailNeedsRowView: View {
                 if let security = row.security {
                     Text(security).font(MekaType.itemMeta).foregroundStyle(palette.critical)
                 }
+                // A possible scam (critical) or a real company's "log in yourself" (brass).
+                if let warning = row.warning {
+                    Text(warning).font(MekaType.itemMeta).foregroundStyle(row.scam ? palette.critical : palette.accent)
+                }
                 HStack(spacing: MekaSpace.xs) {
                     Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                     if row.business {

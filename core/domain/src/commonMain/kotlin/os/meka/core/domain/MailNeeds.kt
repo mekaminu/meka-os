@@ -80,6 +80,11 @@ object MailItemFields {
      * server-written, Text; "" or absent for any other email.
      */
     const val SECURITY = "security"
+    /**
+     * Inbox junk fix ([MailScamRules], 2026-10-17): "⚠ Possible scam · sent from mail-x.com, not paypal.com" or a real
+     * company's "log in yourself" line, server-written, Text; "" or absent for any other email.
+     */
+    const val WARNING = "warning"
     const val MEETING_EDIT_ID = "meetingEditId"
     const val MEETING_AT = "meetingAtMs"
 }
@@ -135,6 +140,8 @@ data class MailItem(
     val draftDismissedAtMs: Long? = null,
     /** The provider whose account-security alert this is ("Google"), or null. */
     val security: String? = null,
+    /** [MailScamRules.line]: a possible scam's warning, or a real company's "log in yourself", or null. */
+    val warning: String? = null,
 )
 
 /** One email on the card. */
@@ -180,6 +187,10 @@ data class MailNeedsRow(
     val autoDraft: String? = null,
     /** "Security alert from Google · check it was you" for account-security mail, else null. */
     val security: String? = null,
+    /** "⚠ Possible scam · sent from mail-x.com, not paypal.com" (or a real company's "log in yourself"), else null. */
+    val warning: String? = null,
+    /** True when [warning] is a possible scam (the critical colour); false for a real company's line. */
+    val scam: Boolean = false,
 )
 
 data class MailNeedsCard(
@@ -294,10 +305,11 @@ object MailNeedsRules {
     /** What the server publishes for one email (Needs you, in the inbox, inside the window). */
     fun serverFields(
         account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
-        threadKey: String? = null, security: String = "",
+        threadKey: String? = null, security: String = "", warning: String = "",
     ): Map<String, FieldValue> =
         (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) +
-            (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) + mapOf(
+            (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) +
+            (if (warning.isNotEmpty()) mapOf(MailItemFields.WARNING to warning.fv()) else emptyMap()) + mapOf(
             MailItemFields.ACCOUNT to account.fv(),
             MailItemFields.FROM to MailUnsubscribeRules.displayName(fromName, fromAddress).take(MAX_FROM).fv(),
             MailItemFields.SUBJECT to (subject?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_SUBJECT) ?: "(no subject)").fv(),
@@ -354,6 +366,7 @@ object MailNeedsRules {
             autoDraftTriedAtMs = ms(MailAutoDraftFields.AUTO_DRAFT_TRIED_AT),
             draftDismissedAtMs = ms(MailAutoDraftFields.DISMISSED_AT),
             security = text(MailItemFields.SECURITY),
+            warning = text(MailItemFields.WARNING),
         )
     }
 
@@ -495,10 +508,11 @@ object MailNeedsRules {
                 ?: MeetingPickRules.declinedLine(i.from).takeIf { declined }
             val meet = !replySent(i) && pick == null && (declined || MeetingRequestRules.asks(i.subject, i.preview))
             val security = i.security?.let(MailSecurityRules::line)
+            val warning = i.warning?.takeIf { it.isNotBlank() }
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull(security, "${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
+                spoken = listOfNotNull(security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
                     i.wants?.let { "Needs a reply: $it" }?.takeIf { MailAutoDraftRules.needsReply(i) },
                     "Navilife drafted a reply".takeIf { MailAutoDraftRules.draftShowing(i) && notice == null }).joinToString(". "),
                 notice = notice,
@@ -512,6 +526,8 @@ object MailNeedsRules {
                 wants = if (MailAutoDraftRules.needsReply(i)) i.wants ?: MailAutoDraftRules.NEEDS_REPLY else null,
                 autoDraft = i.autoDraft?.takeIf { MailAutoDraftRules.draftShowing(i) && notice == null },
                 security = security,
+                warning = warning,
+                scam = MailScamRules.scamLine(warning),
             )
         }
 

@@ -832,6 +832,37 @@ class MailSyncTest {
     }
 
     @Test
+    fun junkLeavesNeedsYouAndAPossibleScamCarriesItsWarning() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, store, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        val me = store.accounts("home").single().email
+        // Sorted "needs you" before the junk rules (the AI said so): sorted again once the check runs.
+        val prize = msg("p1", 0, "hello@prizes.example").copy(fromName = "Prize Club", subject = "4 HOURS LEFT to enter the draw")
+        ms.put("home", id, prize)
+        ms.setSorts(id, mapOf("p1" to MailSorted(MailSort.NEEDS_YOU, MailSortReason.AI_NEEDS_YOU, true)))
+        gmail.mailbox["p1"] = prize
+        gmail.mailbox["n1"] = msg("n1", 0, me).copy(fromName = "Me", subject = "https://example.com/article")
+        gmail.mailbox["d1"] = msg("d1", 0, "team@clubfees.example").copy(fromName = "Club Fees", subject = "Your weekly activity digest")
+        gmail.mailbox["x1"] = msg("x1", 0, "service@mail-notify.example").copy(fromName = "Notification via PayPal", subject = "Your account will be closed")
+        gmail.mailbox["s1"] = msg("s1", 0, "sam@example.com").copy(fromName = "Sam", subject = "Are you free Saturday?")
+        gmail.nextRound = { MailChanges(fetch = listOf("n1", "d1", "x1", "s1"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(MailSorted(MailSort.PROMO, MailSortReason.PRIZE, true), ms.sortOf(id, "p1"))
+        assertEquals(MailSorted(MailSort.FYI, MailSortReason.OWN, true), ms.sortOf(id, "n1"))
+        assertEquals(MailSortReason.DIGEST, ms.sortOf(id, "d1")!!.reason)
+        assertEquals(MailSortReason.SCAM, ms.sortOf(id, "x1")!!.reason)
+        // Needs you holds the scam (with its warning) and Sam's email, nothing else.
+        val shown = items(ops).values.filter { (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L }
+        assertEquals(setOf("Your account will be closed", "Are you free Saturday?"), shown.map { (it[MailItemFields.SUBJECT] as FieldValue.Text).value }.toSet())
+        val scam = shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("Your account will be closed") }
+        assertEquals(FieldValue.Text("⚠ Possible scam · sent from mail-notify.example, not paypal.com"), scam[MailItemFields.WARNING])
+        assertNull(shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("Are you free Saturday?") }[MailItemFields.WARNING])
+    }
+
+    @Test
     fun securityMailATidyMovedEarlierGoesBackToTheInbox() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

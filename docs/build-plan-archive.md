@@ -1586,3 +1586,13 @@ Core MoneyWorth.kt (rules only, no AI): **NET WORTH** on this month's Money scre
 - Server: `backlog` writes `planSenders` once the plan is final; `applyBacklog` never moves (and finishes without) a sender he unticked; `unreadCounts` writes `readSenders` with each count (and once after the update); `markInboxRead` leaves an unticked sender's mail unread.
 - Fold `JunkReviewPane` and Mac `JunkReviewSheet` take the heading from the core; their empty line reads for any card.
 - Tests: MailCleanupReviewTest (5), MailBacklogTest/MailMarkReadTest open effect, MailSyncTest `theCleanUpListsItsSendersAndNeverMovesOneHeUnticked`, `markReadListsItsSendersAndLeavesOneHeUntickedUnread`. Mac checked nightly.
+
+## "From your mail · 13 emails need you" is mostly junk — slice 1 (2026-10-17): junk out of "need you", possible scams flagged
+
+- Core `MailScamRules` (new, MailScam.kt; headers only, pure): `check` (a company named in the display name or subject with a threat or promise from `THREATS`: from a domain that isn't the company's → SCAM, from its real domain → REAL; companies from `MailJunkRules.CLAIMED_SENDERS` + `MailSecurityRules.SENDERS`, free-mailbox domains never "real"), `line` ("⚠ Possible scam · sent from mail-x.com, not paypal.com" / "From PayPal's real address · log in at paypal.com yourself, not through the email's link"), `itemWarning`, `prize` (`PRIZE_WORDS`), `digest` (`DIGEST_WORDS`), `resort` (an inbox Needs you sorted again only for something sure and different; KNOWN_PERSON, PUBLIC_BODY, security left alone).
+- `MailSortRules.sort`: SCAM and BRAND_NOTICE (not for a list or Gmail Promotions) after public bodies, PRIZE → Promo before the list rules, DIGEST → Notification just before the person fallback; `known` also turns a prize/digest subject from a correspondent back into KNOWN_PERSON; new `mine` (his own addresses → FYI, OWN). New `MailSortReason`s SCAM, BRAND_NOTICE, PRIZE, DIGEST, OWN. Backlog `PLAN_VERSION` 4.
+- `mail_item.warning` (ADR-008 addendum, no migration); `MailItem.warning`, `MailNeedsRow.warning`/`scam`; spoken line leads with it.
+- Server: `sortOne` (rules → known → mine) for new headers; `resortNeedsYou` each check; `publishMailNeeds` writes the warning.
+- Fold `MailNeedsSection` and Mac `MailNeedsView`: the warning above the sender (critical for a scam, brass for a real company).
+- Tests: MailScamTest (8), MailSyncTest `junkLeavesNeedsYouAndAPossibleScamCarriesItsWarning`. Mac checked nightly.
+- Deviation from the item's wording: the real company's "log in yourself" email stays in Needs you (with the line) rather than FYI, so a real "payment failed" is never hidden.

@@ -53,7 +53,17 @@ enum class MailSortReason(val line: String) {
     /** [MailSecurityRules]: an account-security email from the provider's real domain: never tidied. */
     SECURITY("About your account's security, from the provider's real address · always kept in your inbox"),
     /** [MailSecurityRules]: a sign-in or verification code from the provider's real domain: kept in the inbox. */
-    SECURITY_CODE("A sign-in or verification code · kept in your inbox");
+    SECURITY_CODE("A sign-in or verification code · kept in your inbox"),
+    /** [MailScamRules]: names a company and threatens or promises something, but isn't from the company's domain. */
+    SCAM("Possible scam · it names a company but isn't sent from the company's address"),
+    /** [MailScamRules]: the same kind of warning from the company's real domain. */
+    BRAND_NOTICE("From the company's real address · log in yourself, not through the email's link"),
+    /** [MailScamRules.prize]: a prize draw, lottery or competition. */
+    PRIZE("A prize draw or competition · marketing"),
+    /** [MailScamRules.digest]: an account digest or activity summary. */
+    DIGEST("An account digest or activity summary · nothing to answer"),
+    /** [MailSortRules.mine]: sent from one of his own addresses. */
+    OWN("From you · a note to yourself");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }
@@ -153,23 +163,30 @@ object MailSortRules {
         val domain = domain(f.fromAddress)
         val subject = f.subject?.lowercase().orEmpty()
         val list = !f.listId.isNullOrBlank() || !f.listUnsubscribe.isNullOrBlank()
+        val scam = MailScamRules.check(f.fromAddress, f.fromName, f.subject)
         fun sure(s: MailSort, r: MailSortReason) = MailSorted(s, r, true)
         return when {
             "SPAM" in labels -> sure(MailSort.JUNK, MailSortReason.SPAM)
             // Account-security mail from the provider's real domain: kept, whatever its other headers say.
             MailSecurityRules.sorted(f.fromAddress, f.subject) != null -> MailSecurityRules.sorted(f.fromAddress, f.subject)!!
             domain != null && PUBLIC_SUFFIXES.any { endsWithDomain(domain, it) } -> sure(MailSort.NEEDS_YOU, MailSortReason.PUBLIC_BODY)
+            // A company named with a threat or a promise from a domain that isn't the company's: a possible scam, kept.
+            scam?.kind == MailScamKind.SCAM -> sure(MailSort.NEEDS_YOU, MailSortReason.SCAM)
+            // The same from the company's real domain (not its marketing): kept, with "log in yourself".
+            scam?.kind == MailScamKind.REAL && !list && "CATEGORY_PROMOTIONS" !in labels -> sure(MailSort.NEEDS_YOU, MailSortReason.BRAND_NOTICE)
             domain != null && CARRIERS.any { endsWithDomain(domain, it) } -> sure(MailSort.RECEIPT, MailSortReason.CARRIER)
             hasWord(subject, ORDER_WORDS) && (list || isAutomated(f.fromAddress) || "CATEGORY_UPDATES" in labels || "CATEGORY_PURCHASES" in labels) ->
                 sure(MailSort.RECEIPT, MailSortReason.ORDER_WORDS)
             "CATEGORY_PROMOTIONS" in labels -> sure(MailSort.PROMO, MailSortReason.GMAIL_PROMOTIONS)
             list && hasWord(subject, PROMO_WORDS) -> sure(MailSort.PROMO, MailSortReason.PROMO_WORDS)
+            MailScamRules.prize(f.subject) -> sure(MailSort.PROMO, MailSortReason.PRIZE)
             "CATEGORY_FORUMS" in labels -> sure(MailSort.NEWSLETTER, MailSortReason.GMAIL_FORUMS)
             "CATEGORY_SOCIAL" in labels -> sure(MailSort.NOTIFICATION, MailSortReason.GMAIL_SOCIAL)
             list -> sure(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST)
             BULK_LABEL in labels -> sure(MailSort.NOTIFICATION, MailSortReason.BULK)
             "CATEGORY_UPDATES" in labels -> sure(MailSort.NOTIFICATION, MailSortReason.GMAIL_UPDATES)
             isAutomated(f.fromAddress) -> sure(MailSort.NOTIFICATION, MailSortReason.NO_REPLY)
+            MailScamRules.digest(f.subject) -> sure(MailSort.NOTIFICATION, MailSortReason.DIGEST)
             domain == null -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.NO_SENDER, false)
             else -> MailSorted(MailSort.NEEDS_YOU, MailSortReason.PERSON, false)
         }
@@ -220,7 +237,19 @@ object MailSortRules {
      */
     fun known(s: MailSorted, fromAddress: String?, correspondents: Set<String>): MailSorted {
         val a = fromAddress?.trim()?.trimStart('<')?.trimEnd('>')?.lowercase() ?: return s
-        return if (wantsAi(s) && a in correspondents) MailSorted(MailSort.NEEDS_YOU, MailSortReason.KNOWN_PERSON, true) else s
+        // A prize or digest subject from someone he writes to is still a person writing (the junk fix's word rules).
+        val words = s.reason == MailSortReason.PRIZE || s.reason == MailSortReason.DIGEST
+        return if ((wantsAi(s) || words) && a in correspondents) MailSorted(MailSort.NEEDS_YOU, MailSortReason.KNOWN_PERSON, true) else s
+    }
+
+    /**
+     * Inbox junk fix (Meka, 2026-10-17): an email from one of his own addresses ([own], lower case) is a note to
+     * himself: FYI, sure, never "needs you". Spam and account-security sorts are left as they are.
+     */
+    fun mine(s: MailSorted, fromAddress: String?, own: Set<String>): MailSorted {
+        val a = fromAddress?.trim()?.trimStart('<')?.trimEnd('>')?.lowercase() ?: return s
+        if (a !in own || s.reason == MailSortReason.SPAM || MailSecurityRules.kept(s.reason)) return s
+        return MailSorted(MailSort.FYI, MailSortReason.OWN, true)
     }
 
     /** True for a sort the AI should look at: the rules leaned the safe way (a person, or no sender). */
