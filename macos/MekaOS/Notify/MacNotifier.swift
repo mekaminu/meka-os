@@ -114,6 +114,8 @@ enum MacNotifier {
     static let payAction = "PAY"
     /// Wake 10 min earlier on tomorrow's trains heads-up: the core's `NoticeAction.WAKE_EARLIER` name.
     static let wakeEarlierAction = "WAKE_EARLIER"
+    /// Wake earlier on this morning's train heads-up (live trains, slice 5): the core's `NoticeAction.WAKE_FOR_TRAIN` name.
+    static let wakeForTrainAction = "WAKE_FOR_TRAIN"
     /// Later tonight on Sunday's weekly review: the core's `NoticeAction.LATER_TONIGHT` name (weekly reflection, slice 4).
     static let laterTonightAction = "LATER_TONIGHT"
     /// All still fit on "Time to check Alex's sizes": the core's `NoticeAction.ALL_STILL_FIT` name (kids' admin, slice 6).

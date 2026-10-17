@@ -375,9 +375,11 @@ class Alarms(
      * Sets the wake alarm for the next morning at [minute] (local), noting what it's for. Returns false for a time
      * that has already passed (just after midnight, a time before now this morning).
      */
-    fun setWake(minute: Int, note: String?): Boolean {
+    fun setWake(minute: Int, note: String?): Boolean = setWakeOn(wakeDay(), minute, note)
+
+    /** [setWake] for [day]'s morning (live trains, slice 5: this morning's alarm, moved earlier for the train). */
+    fun setWakeOn(day: Long, minute: Int, note: String?): Boolean {
         if (minute !in 0 until LocalClock.MINUTES_PER_DAY) return false
-        val day = wakeDay()
         if (calendar.toEpochMs(day, minute) <= nowMs()) return false
         replica.commitLocal(
             EntityTypes.ALARM, AlarmRules.wakeId(day),

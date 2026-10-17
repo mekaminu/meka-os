@@ -371,8 +371,9 @@ class NoticeActionReceiver : BroadcastReceiver() {
                 when (intent.action) {
                     ACTION_ANSWER -> {
                         val action = NotifyRules.actionFromName(intent.getStringExtra(EXTRA_ACTION))
-                        if (action == NoticeAction.WAKE_EARLIER) {
-                            // Tomorrow's trains (the commute counts everywhere, slice 7): only this tap moves the alarm.
+                        if (action == NoticeAction.WAKE_EARLIER || action == NoticeAction.WAKE_FOR_TRAIN) {
+                            // Tomorrow's trains (the commute counts everywhere, slice 7), or this morning's train in
+                            // trouble before the alarm (live trains, slice 5): only this tap moves the alarm.
                             val line = runCatching { app.core.wakeEarlierForTrains(key) }.getOrNull()
                             if (line != null) app.governor.postSent(key, "Wake alarm moved", line) else app.governor.cancel(key)
                         } else if (action == NoticeAction.LATER_TONIGHT) {

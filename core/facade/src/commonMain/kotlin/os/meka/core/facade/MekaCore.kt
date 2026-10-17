@@ -3707,6 +3707,14 @@ class MekaCore(
      * for the trains", or null when the offer no longer stands (moved already, or the trains came good).
      */
     suspend fun wakeEarlierForTrains(key: String?): String? = onCore {
+        // Live trains, slice 5: this morning's usual train in trouble ("Wake at 06:20 instead of 06:40?").
+        if (key != null && os.meka.core.domain.TrainWakeRules.isKey(key)) {
+            val tw = currentTrainWake() ?: return@onCore null
+            val m = tw.wakeMinute ?: return@onCore null
+            if (key != os.meka.core.domain.TrainWakeRules.key(tw.epochDay, tw.leave.train.depMin)) return@onCore null
+            if (!alarms.setWakeOn(tw.epochDay, m, os.meka.core.domain.TrainWakeRules.note(tw))) return@onCore null
+            return@onCore os.meka.core.domain.TrainWakeRules.movedLine(tw)
+        }
         val w = _wake.value
         val t = w.trains ?: return@onCore null
         if (key != null && key != os.meka.core.domain.CommuteDisruptionRules.key(t.epochDay)) return@onCore null
@@ -7867,7 +7875,8 @@ class MekaCore(
         _wake.value = alarms.wakeView(dayEvents, hoursOf(workState, todayEpochDay())).let {
             it.copy(trains = os.meka.core.domain.CommuteDisruptionRules.offer(lineStatus.snapshot(), it, nowMs(), ZoneCalendar(timeZone)))
         }
-        _nextAlarm.value = alarms.next()
+        // Live trains, slice 5: this morning's wake alarm rings with the train to leave for.
+        _nextAlarm.value = os.meka.core.domain.TrainWakeRules.ring(alarms.next(), currentTrainWake())
         _quickAlarms.value = alarms.quickItems()
         val notifySettings = notifyPrefs.settings()
         _notifySettings.value = notifySettings
@@ -8059,6 +8068,8 @@ class MekaCore(
             documents = documents.items(),
             sessionAskGraceMin = if (workoutsInBackground) os.meka.core.domain.WorkoutRules.ASK_GRACE_MIN else 0,
             wake = currentWake(),
+            trainWake = currentTrainWake(),
+            trainWakeAlarmMinute = alarms.alarm(os.meka.core.domain.AlarmRules.wakeId(todayEpochDay()))?.minute,
             mailMoment = mailMomentSetting(),
             mailWaiting = os.meka.core.domain.MailNeedsRules.allRows(activity.mailItems(), nowMs(), ZoneCalendar(timeZone)).size,
             protectedFromMin = protectedFromToday(),
@@ -8100,6 +8111,12 @@ class MekaCore(
         os.meka.core.domain.LeavingRules.withCommute(leavingNow.setting(), work.commute().forDay(todayEpochDay()))
 
     /** Today's office window (Places item 2): a work day that isn't a work-from-home day, or null. */
+    /** Live trains, slice 5: this morning's wake alarm anchored on the live board's train, or null. */
+    private fun currentTrainWake(): os.meka.core.domain.TrainWake? = os.meka.core.domain.TrainWakeRules.view(
+        lineStatus.snapshot(), alarms.alarm(os.meka.core.domain.AlarmRules.wakeId(todayEpochDay())), officeToday(),
+        alarms.bufferMin(), nowMs(), ZoneCalendar(timeZone),
+    )
+
     private fun officeToday(): os.meka.core.domain.OfficeWindow? {
         val day = todayEpochDay()
         val hours = work.hours(localClock(), day)

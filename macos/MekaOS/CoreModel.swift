@@ -2376,8 +2376,9 @@ final class CoreModel {
         guard let core else { return }
         let key = a.key
         let name = a.action
-        // Tomorrow's trains: only this click moves the wake alarm (the commute counts everywhere, slice 7).
-        if name == MacNotifier.wakeEarlierAction {
+        // Tomorrow's trains (the commute counts everywhere, slice 7), or this morning's train in trouble before the
+        // alarm (live trains, slice 5): only this click moves the wake alarm.
+        if name == MacNotifier.wakeEarlierAction || name == MacNotifier.wakeForTrainAction {
             Task {
                 _ = try? await core.wakeEarlierForTrains(key: key)
                 MacNotifier.remove(key: key)

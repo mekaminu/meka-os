@@ -68,6 +68,11 @@ enum class NoticeAction(val label: String) {
      */
     WAKE_EARLIER("Wake 10 min earlier"),
     /**
+     * Live trains, slice 5 ([TrainWakeRules.notices]): this morning's usual train is cancelled or late, so the wake
+     * alarm moves to the earlier time the heads-up names, on Meka's tap only. Both apps.
+     */
+    WAKE_FOR_TRAIN("Wake earlier"),
+    /**
      * Weekly reflection, slice 4 ([ReviewRules.laterMinute]): Sunday's weekly review heads-up comes back in two hours
      * (never after 22:00), on both devices. Both apps.
      */
@@ -750,6 +755,9 @@ object NoticeSources {
         sessionAskGraceMin: Int = 0,
         /** The next morning's wake alarm, for the trains' "wake 10 min earlier?" ([CommuteDisruptionRules.notices]). */
         wake: WakeView? = null,
+        /** Live trains, slice 5: this morning's wake alarm anchored on the train ([TrainWakeRules.notices]). */
+        trainWake: TrainWake? = null,
+        trainWakeAlarmMinute: Int? = null,
         /**
          * The ten-minute inbox ([MailMomentRules.notices]): its setting, how many emails need him, and when today's
          * protected time starts (local minutes; 0 for a wholly protected day, null for none).
@@ -925,6 +933,8 @@ object NoticeSources {
         out += RouteRules.notices(lines, office, settings.quiet, nowMs, cal)
         // Tomorrow morning's trains in trouble: offer to wake ten minutes earlier, never moving the alarm itself.
         out += CommuteDisruptionRules.notices(lines, wake, settings.quiet, nowMs, cal)
+        // This morning's usual train in trouble before the alarm: offer to wake in time for the earlier one.
+        out += TrainWakeRules.notices(trainWake, lines, trainWakeAlarmMinute, settings.quiet, nowMs, cal)
         // Request cards from people Meka watches: in the digest, or a heads-up straight away for those he chose.
         out += requestNotices(requests, settings)
         // The approvals inbox: Needs a decision when a request arrives, Critical in its last 15 minutes.

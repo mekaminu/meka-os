@@ -325,6 +325,42 @@ class AskMekaFacadeTest {
     }
 
     @Test
+    fun thisMorningsTrainCancelledMovesTheWakeAlarmOnlyOnATap() = runTest {
+        now = 1_791_493_200_000L // Thu 8 Oct 2026, 22:00 in London; Friday is an office day
+        val c = core()
+        val fri = 20_735L
+        c.setAboutYouField(os.meka.core.domain.AboutYouFields.ROUTE, os.meka.core.testing.InventedRoute.TYPED)
+        c.setAboutYouField(os.meka.core.domain.AboutYouFields.STATION_WALK, "10, 15")
+        assertTrue(c.setWake(6 * 60 + 40))
+        now = 1_791_522_300_000L // Fri 9 Oct, 06:05
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        fun server(id: String, field: String, v: os.meka.core.sync.FieldValue) = serverOps.append(os.meka.core.sync.Op(id, "hh",
+            os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.LineStatusStore.ENTITY_ID, field, v, clock.now(), emptyList(), "server"))
+        // The server's 06:05 read of the morning board (live trains): the 07:42 cancelled.
+        val board = listOf(
+            os.meka.core.domain.TrainDeparture(7 * 60 + 30, 7 * 60 + 30),
+            os.meka.core.domain.TrainDeparture(7 * 60 + 42, null, cancelled = true),
+            os.meka.core.domain.TrainDeparture(7 * 60 + 54, 7 * 60 + 54),
+        )
+        server("srvbd0", os.meka.core.domain.LineStatusFields.DEPARTURES, os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TrainBoardCodec.encode(board)))
+        server("srvbd1", os.meka.core.domain.LineStatusFields.DEPARTURES_DIR, os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TrainBoard.AM))
+        server("srvbd2", os.meka.core.domain.LineStatusFields.DEPARTURES_CHECKED, os.meka.core.sync.FieldValue.Int64(now))
+        server("srvbd3", os.meka.core.domain.LineStatusFields.BOARD_STATE, os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TrainBoard.OK))
+        server("srvbd4", os.meka.core.domain.LineStatusFields.BOARD_OK_AT, os.meka.core.sync.FieldValue.Int64(now))
+        c.syncNow()
+        // The alarm still rings at 06:40 (nothing moved by itself), saying the train to leave for.
+        assertEquals("Leave by 07:20 for the 07:30 · 07:42 cancelled", c.nextAlarm.value?.line)
+        // The wrong morning's key does nothing; the right one moves this morning's alarm to 06:20.
+        assertEquals(null, c.wakeEarlierForTrains(os.meka.core.domain.TrainWakeRules.key(fri + 1, 7 * 60 + 30)))
+        val key = os.meka.core.domain.TrainWakeRules.key(fri, 7 * 60 + 30)
+        assertEquals("Wake alarm 06:20 · for the 07:30", c.wakeEarlierForTrains(key))
+        assertEquals("06:20", c.nextAlarm.value?.timeLabel)
+        assertEquals("Leave by 07:20 for the 07:30 · 07:42 cancelled", c.nextAlarm.value?.line)
+        // Once moved: a second tap does nothing.
+        assertEquals(null, c.wakeEarlierForTrains(key))
+    }
+
+    @Test
     fun theWeatherPlaceIsSetFromTheAppAndReachesTheServer() = runTest {
         val c = core()
         // No home in About you: the generic place, and where to add home (rule 13: no home in the code).

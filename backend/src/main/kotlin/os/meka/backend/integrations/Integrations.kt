@@ -2358,7 +2358,7 @@ class Integrations(
      * Live trains (Needs Meka #16, 2026-10-17): the next departures from About you's Home station to the route's change
      * station before noon London ([TrainBoard.AM]), from there home after ([TrainBoard.PM]), into the same
      * `context_mode/line_status` entity ([LineStatusFields.DEPARTURES] …). Read every line-status pass (4 minutes) on
-     * weekdays 06:00–10:00 and 15:00–20:00, otherwise at most every [BOARD_IDLE_MS]. A station not on National Rail's
+     * weekdays 05:30–10:00 and 15:00–20:00, otherwise at most every [BOARD_IDLE_MS]. A station not on National Rail's
      * list, a refused key or a failed read are written as the board's state (Health says what to do); the departures
      * stay as last read, and the apps stop showing them once they're 20 minutes old. Returns whether the devices
      * should be woken (the departures, their direction or the state changed).
@@ -2376,7 +2376,8 @@ class Integrations(
         val at = java.time.Instant.ofEpochMilli(now()).atZone(zone)
         val min = at.hour * 60 + at.minute
         val weekday = at.dayOfWeek.value <= 5
-        val busy = weekday && (min in 6 * 60 until 10 * 60 || min in 15 * 60 until 20 * 60)
+        // From 05:30 so the board is fresh before an early wake alarm (live trains, slice 5: the train-anchored wake).
+        val busy = weekday && (min in 5 * 60 + 30 until 10 * 60 || min in 15 * 60 until 20 * 60)
         val last = synchronized(boardAt) { boardAt[a.id] }
         if (!busy && last != null && now() - last < BOARD_IDLE_MS) return false
         synchronized(boardAt) { boardAt[a.id] = now() }
