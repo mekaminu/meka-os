@@ -75,6 +75,11 @@ class TradingSync(
                     fields[TradingWalletFields.GBP_PER_USD] = FieldValue.Int64(r.gbpPerUsdMicros)
                     fields[TradingWalletFields.FX_DAY] = FieldValue.Int64(r.day)
                 }
+                // Slice 7: the last day's biggest orders and its funding, each read (a failure keeps what the devices have).
+                runCatching { feed.recent(w.address, t - TradingTracker.FILLS_WINDOW_MS, t) }.getOrNull()?.let { r ->
+                    fields[TradingWalletFields.FILLS] = FieldValue.Text(TradingTracker.encodeFills(r.fills))
+                    fields[TradingWalletFields.FUNDING_DAY] = FieldValue.Int64(r.fundingCents)
+                }
                 // Slice 2: the window's trades, hourly; a failure here keeps the last ones and tries at the next read.
                 if (TradingTracker.tradesDue(w, t)) {
                     val from = t - TradingTracker.TRADES_DAYS * 86_400_000L

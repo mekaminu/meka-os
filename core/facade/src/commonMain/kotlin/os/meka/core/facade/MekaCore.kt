@@ -767,8 +767,9 @@ class MekaCore(
     )
 
     /**
-     * Money → TRADING → ALERTS: [kind] is [os.meka.core.domain.TradingAlerts.LIQ] or [os.meka.core.domain.TradingAlerts.DROP],
-     * [key] a chip's key ("off", "5", "10", "20", "30"). Synced; the notices follow at once. Returns what the pane says
+     * Money → TRADING → ALERTS: [kind] is [os.meka.core.domain.TradingAlerts.LIQ], [os.meka.core.domain.TradingAlerts.DROP],
+     * or (slice 7) [os.meka.core.domain.TradingAlerts.FILL] / [os.meka.core.domain.TradingAlerts.FUNDING], [key] a chip's key
+     * ("off", "0.5", "1", "2", "5", "10", "20", "30"). Synced; the notices follow at once. Returns what the pane says
      * (an unknown kind or key changes nothing). Strings only, so the Mac calls it as is.
      */
     suspend fun setTradingAlert(kind: String, key: String): String = onCore {

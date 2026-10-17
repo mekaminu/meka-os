@@ -404,6 +404,11 @@ class MoneyFacadeTest {
         assertEquals(listOf("20"), alerts.dropChips.filter { it.on }.map { it.key })
         assertEquals("Alert within 5% of liquidation · on both devices", fold.setTradingAlert(os.meka.core.domain.TradingAlerts.LIQ, "5"))
         assertEquals("Drop alert off", fold.setTradingAlert(os.meka.core.domain.TradingAlerts.DROP, "off"))
+        // Slice 7: a big order and a day's funding.
+        assertEquals(listOf("5"), alerts.fillChips.filter { it.on }.map { it.key })
+        assertEquals(listOf("1"), alerts.fundingChips.filter { it.on }.map { it.key })
+        assertEquals("Heads-up for an order worth 2× the account · on both devices", fold.setTradingAlert(os.meka.core.domain.TradingAlerts.FILL, "2"))
+        assertEquals("Funding alert off", fold.setTradingAlert(os.meka.core.domain.TradingAlerts.FUNDING, "off"))
         // An unknown choice changes nothing.
         fold.setTradingAlert(os.meka.core.domain.TradingAlerts.DROP, "15")
         assertEquals(listOf("5"), fold.moneyView.value.trading!!.alerts!!.liqChips.filter { it.on }.map { it.key })
@@ -411,5 +416,7 @@ class MoneyFacadeTest {
         val m = mac.moneyView.value.trading!!.alerts!!
         assertEquals(listOf("5"), m.liqChips.filter { it.on }.map { it.key })
         assertEquals(listOf("off"), m.dropChips.filter { it.on }.map { it.key })
+        assertEquals(listOf("2"), m.fillChips.filter { it.on }.map { it.key })
+        assertEquals(listOf("off"), m.fundingChips.filter { it.on }.map { it.key })
     }
 }

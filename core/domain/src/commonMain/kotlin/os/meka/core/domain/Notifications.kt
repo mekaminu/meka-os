@@ -172,9 +172,10 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     /**
      * Trading tracker, slice 3 ([TradingAlerts.notices]): a position near liquidation (Critical: it comes in quiet hours)
      * and an account well below this month's high (a heads-up), at his levels — "ETH long near liquidation" · "8% from
-     * liquidation · Main account · …". No amounts. Lowering it here lowers both.
+     * liquidation · Main account · …". No amounts. Lowering it here lowers both. Slice 7 adds a big order and a day's
+     * high funding (heads-ups, measured against the account, no amounts).
      */
-    TRADING("Trading: near liquidation and drops", NoticeTier.HEADS_UP),
+    TRADING("Trading: liquidation, drops, big orders, funding", NoticeTier.HEADS_UP),
     /**
      * Life admin hour ([LifeAdminRules.notices]): at the week's hour, "Life admin hour · 4 jobs" · "Renew passport · Call
      * the GP · and 2 more". None when skipped or nothing is waiting.

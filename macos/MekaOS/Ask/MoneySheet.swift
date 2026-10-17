@@ -682,7 +682,7 @@ struct MoneySheet: View {
     }
 
     /// Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
-    /// month's high), with a row of choices for each; the chosen one in brass.
+    /// month's high; slice 7: a big order and a day's high funding), with a row of choices for each; the chosen one in brass.
     private func tradingAlerts(_ a: TradingAlertsView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(a.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -690,6 +690,8 @@ struct MoneySheet: View {
                 .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
             alertChips(a.liqLabel, a.liqChips)
             alertChips(a.dropLabel, a.dropChips)
+            if !a.fillChips.isEmpty { alertChips(a.fillLabel, a.fillChips) }
+            if !a.fundingChips.isEmpty { alertChips(a.fundingLabel, a.fundingChips) }
         }
         .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: a.line)

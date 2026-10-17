@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import os.meka.core.domain.TradingCoinStats
+import os.meka.core.domain.TradingFill
 import os.meka.core.domain.TradingPosition
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -27,6 +28,11 @@ data class TradingAccountRead(
     override fun toString() = "TradingAccountRead(${positions.size} positions)"
 }
 
+/** Slice 7: the last day's perp orders (their fills together) and the funding over it, received + / paid −, US cents. */
+data class TradingRecentRead(val fills: List<TradingFill>, val fundingCents: Long) {
+    override fun toString() = "TradingRecentRead(${fills.size} orders)"
+}
+
 /** Hyperliquid asked us to slow down (429). */
 class TradingRateLimited : RuntimeException("hyperliquid rate limited")
 
@@ -36,6 +42,9 @@ fun interface TradingFeed {
 
     /** Slice 2: the address's perp trades between [fromMs] and [toMs] added up per coin; null where not offered. */
     fun trades(address: String, fromMs: Long, toMs: Long): List<TradingCoinStats>? = null
+
+    /** Slice 7: the orders and funding between [fromMs] and [toMs] (the last day), for the big-order and funding alerts; null where not offered. */
+    fun recent(address: String, fromMs: Long, toMs: Long): TradingRecentRead? = null
 }
 
 /**
@@ -93,6 +102,21 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
             """{"type":"userFunding","user":"$a","startTime":$start,"endTime":$toMs}"""
         }.distinctBy { f -> text(f["hash"]) + "|" + text(f["time"]) + "|" + text((f["delta"] as? JsonObject)?.get("coin")) }
         return stats(fills, funding)
+    }
+
+    /**
+     * Slice 7: one page each of `userFillsByTime` (aggregated by time) and `userFunding` over the last day, made into
+     * orders and the day's funding by [recentFrom]. Still only the public address is sent.
+     */
+    override fun recent(address: String, fromMs: Long, toMs: Long): TradingRecentRead {
+        require(os.meka.core.domain.TradingTracker.isAddress(address)) { "not an address" }
+        val a = address.lowercase()
+        val fills = paged(1, fromMs, toMs) { start ->
+            """{"type":"userFillsByTime","user":"$a","startTime":$start,"endTime":$toMs,"aggregateByTime":true}"""
+        }.distinctBy { f -> text(f["tid"]) ?: (text(f["hash"]) + text(f["time"]) + text(f["coin"])) }
+        val funding = paged(1, fromMs, toMs) { start -> """{"type":"userFunding","user":"$a","startTime":$start,"endTime":$toMs}""" }
+            .distinctBy { f -> text(f["hash"]) + "|" + text(f["time"]) + "|" + text((f["delta"] as? JsonObject)?.get("coin")) }
+        return recentFrom(fills, funding)
     }
 
     /** Pages a time-ordered list: when a page comes back full, the next starts just after its latest item. */
@@ -163,6 +187,40 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
             }.sortedBy { it.coin }
         }
         private const val MAX_BYTES = 5_000_000
+
+        /**
+         * Slice 7: perp fills grouped by order (`oid`; a fill without one stands alone): when its last fill came, the coin,
+         * the first fill's `dir`, what it was worth (Σ size × price) and its closed P&L; the [TradingTracker.MAX_FILLS]
+         * biggest kept. Funding is Σ `delta.usdc` of the perp funding entries. BigDecimal, cents at the end.
+         */
+        fun recentFrom(fills: List<JsonObject>, funding: List<JsonObject>): TradingRecentRead {
+            class Order(val coin: String, val dir: String) { var at = 0L; var value = BigDecimal.ZERO; var closed = BigDecimal.ZERO }
+            fun perp(coin: String) = !coin.startsWith("@") && '/' !in coin
+            val orders = linkedMapOf<String, Order>()
+            for (f in fills) {
+                val coin = text(f["coin"])?.take(20) ?: continue
+                val dir = text(f["dir"]).orEmpty()
+                if (!perp(coin) || dir == "Buy" || dir == "Sell") continue
+                val sz = text(f["sz"])?.toBigDecimalOrNull()?.abs() ?: continue
+                val px = text(f["px"])?.toBigDecimalOrNull()?.takeIf { it.signum() > 0 } ?: continue
+                val at = text(f["time"])?.toLongOrNull() ?: continue
+                val key = text(f["oid"])?.let { "o$it" } ?: ("t" + (text(f["tid"]) ?: (text(f["hash"]) + at + coin)))
+                val o = orders.getOrPut(key) { Order(coin, dir.take(30)) }
+                o.at = maxOf(o.at, at)
+                o.value += sz * px
+                text(f["closedPnl"])?.toBigDecimalOrNull()?.let { o.closed += it }
+            }
+            var paid = BigDecimal.ZERO
+            for (f in funding) {
+                val d = f["delta"] as? JsonObject ?: continue
+                if (text(d["type"]) != "funding" || text(d["coin"])?.let { perp(it) } != true) continue
+                text(d["usdc"])?.toBigDecimalOrNull()?.let { paid += it }
+            }
+            fun c(b: BigDecimal): Long = b.movePointRight(2).setScale(0, RoundingMode.HALF_UP).toLong()
+            val list = orders.values.map { TradingFill(it.at, it.coin, it.dir, c(it.value), c(it.closed)) }
+                .sortedByDescending { it.valueCents }.take(os.meka.core.domain.TradingTracker.MAX_FILLS).sortedBy { it.atMs }
+            return TradingRecentRead(list, c(paid))
+        }
 
         private fun text(e: JsonElement?): String? = (e as? JsonPrimitive)?.content?.trim()?.takeIf { it.isNotEmpty() && it != "null" }
 

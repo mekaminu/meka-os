@@ -96,4 +96,68 @@ class TradingAlertsTest {
         assertTrue(!TradingTracker.view(listOf(wallet(drawdown = 220_000, base = 1_000_000)), now, cal, TradingAlertSetting(drop = TradingDropAlert.THIRTY)).wallets.single().lit)
         assertNull(TradingTracker.view(emptyList(), now, cal).alerts)
     }
+
+    // ---- Slice 7: a big order and high funding ----
+
+    private fun walletWith(fills: List<TradingFill> = emptyList(), funding: Long? = null, readAt: Long? = now - 60_000) =
+        wallet(readAt = readAt).copy(recentFills = fills, fundingDayCents = funding)
+
+    @Test
+    fun aBigOrderIsAHeadsUpOncePerOrderMeasuredAgainstTheAccount() {
+        // The account is $10,000; 5× is $50,000.
+        val big = TradingFill(now - 10 * 60_000, "ETH", "Open Long", 6_000_000, 0)
+        val small = TradingFill(now - 5 * 60_000, "BTC", "Close Short", 2_000_000, 12_000)
+        val n = TradingAlerts.notices(listOf(walletWith(listOf(big, small))), TradingAlertSetting.DEFAULT, now, cal).single()
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals("Big ETH order · Main", n.title)
+        assertEquals("Open long worth 6× the account · 01:50 · the figures are in Money · Navilife can't trade", n.text)
+        assertTrue('$' !in n.title + n.text)
+        // A second big order replaces it in the same place with its own key.
+        val next = TradingAlerts.notices(listOf(walletWith(listOf(big, big.copy(atMs = now - 60_000, coin = "SOL")))), TradingAlertSetting.DEFAULT, now, cal)
+        assertEquals(2, next.size)
+        assertEquals(1, next.map { it.postId }.toSet().size)
+        // His level decides; an old order never alerts; Off is off.
+        assertEquals(2, TradingAlerts.notices(listOf(walletWith(listOf(big, small))), TradingAlertSetting(fill = TradingFillAlert.TWO), now, cal).size)
+        assertTrue(TradingAlerts.notices(listOf(walletWith(listOf(big))), TradingAlertSetting(fill = TradingFillAlert.TEN), now, cal).isEmpty())
+        assertTrue(TradingAlerts.notices(listOf(walletWith(listOf(big.copy(atMs = now - TradingAlerts.FILL_FRESH_MS - 1)))), TradingAlertSetting.DEFAULT, now, cal).isEmpty())
+        assertTrue(TradingAlerts.notices(listOf(walletWith(listOf(big))), TradingAlertSetting(fill = TradingFillAlert.OFF), now, cal).isEmpty())
+        assertEquals("2.5×", TradingAlerts.times(2_500_000, 1_000_000))
+        // The server's text round-trips, biggest kept.
+        val many = (1..15).map { i -> TradingFill(now - i * 60_000L, "C$i", "Open Short", i * 100_000L, -i.toLong()) }
+        val back = TradingTracker.decodeFills(TradingTracker.encodeFills(many))
+        assertEquals(TradingTracker.MAX_FILLS, back.size)
+        assertEquals((6..15).map { "C$it" }.toSet(), back.map { it.coin }.toSet())
+    }
+
+    @Test
+    fun highFundingIsAHeadsUpOnceADay() {
+        // 1% of $10,000 is $100 paid in a day.
+        assertTrue(TradingAlerts.notices(listOf(walletWith(funding = -9_000)), TradingAlertSetting.DEFAULT, now, cal).isEmpty())
+        assertTrue(TradingAlerts.notices(listOf(walletWith(funding = 50_000)), TradingAlertSetting.DEFAULT, now, cal).isEmpty())
+        val n = TradingAlerts.notices(listOf(walletWith(funding = -12_000)), TradingAlertSetting.DEFAULT, now, cal).single()
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals("Funding costs high · Main", n.title)
+        assertEquals("Paid 1.2% of the account in funding over the last day · the figures are in Money", n.text)
+        assertEquals(n.key, TradingAlerts.notices(listOf(walletWith(funding = -30_000)), TradingAlertSetting.DEFAULT, now + 60_000, cal).single().key)
+        assertEquals(1, TradingAlerts.notices(listOf(walletWith(funding = -6_000)), TradingAlertSetting(funding = TradingFundingAlert.HALF), now, cal).size)
+        assertTrue(TradingAlerts.notices(listOf(walletWith(funding = -12_000, readAt = now - TradingAlerts.FRESH_MS - 1)), TradingAlertSetting.DEFAULT, now, cal).isEmpty())
+        assertEquals("0.6%", TradingAlerts.share(0.006))
+        assertEquals("12%", TradingAlerts.share(0.123))
+    }
+
+    @Test
+    fun theTwoNewChoicesAreSyncedAndShown() {
+        val s = TradingAlerts.with(TradingAlerts.with(TradingAlertSetting.DEFAULT, TradingAlerts.FILL, "2")!!, TradingAlerts.FUNDING, "off")!!
+        assertEquals(TradingFillAlert.TWO, s.fill)
+        assertEquals(TradingFundingAlert.OFF, s.funding)
+        assertEquals(s, TradingAlerts.read(TradingAlerts.settingFields(s, now)))
+        assertNull(TradingAlerts.with(s, TradingAlerts.FILL, "3"))
+        // Slice 3's stored setting (no new fields) keeps the defaults.
+        assertEquals(TradingAlertSetting.DEFAULT.fill, TradingAlerts.read(mapOf(TradingAlertFields.LIQ_PCT to 10L.fv())).fill)
+        val v = TradingAlerts.view(s)
+        assertEquals(listOf("2"), v.fillChips.filter { it.on }.map { it.key })
+        assertEquals(listOf("off"), v.fundingChips.filter { it.on }.map { it.key })
+        assertTrue(v.line.contains("one for an order worth 2× the account · none for funding"))
+        assertEquals("Heads-up for an order worth 2× the account · on both devices", TradingAlerts.switchedLine(TradingAlerts.FILL, s))
+    }
 }

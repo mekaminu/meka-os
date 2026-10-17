@@ -5,10 +5,12 @@ import os.meka.backend.integrations.EcbDollarRate
 import os.meka.backend.integrations.HyperliquidInfo
 import os.meka.backend.integrations.TradingAccountRead
 import os.meka.backend.integrations.TradingFeed
+import os.meka.backend.integrations.TradingRecentRead
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.TradingCoinStats
 import os.meka.core.domain.TradingCurvePoint
+import os.meka.core.domain.TradingFill
 import os.meka.core.domain.TradingPosition
 import os.meka.core.domain.TradingStore
 import os.meka.core.domain.TradingTracker
@@ -48,7 +50,13 @@ class TradingSyncTest {
             tradesFrom = fromMs
             return listOf(TradingCoinStats("ETH", 2, 1, 1, 5_000, 300, -100, 8_000, -3_000, 8_000, -3_000))
         }
+
+        override fun recent(address: String, fromMs: Long, toMs: Long): TradingRecentRead {
+            recentFrom = fromMs
+            return TradingRecentRead(listOf(TradingFill(FILLED_AT, "ETH", "Open Long", 7_000_000, 0)), -15_000)
+        }
     }
+    private var recentFrom = 0L
     private val sync = TradingSync(ops, BankSync.scanning(ops), { "hh" }, feed, { nowMs }, onWritten = { woken += it })
 
     private val store = InMemoryReplicaStore()
@@ -219,6 +227,34 @@ class TradingSyncTest {
     }
 
     @Test
+    fun theLastDaysBigOrdersAndFundingReachTheFoldEachRead() {
+        TradingStore(fold).add("Main $address")
+        push()
+        assertTrue(sync.tick())
+        pull()
+        val w = TradingStore(fold).wallets().single()
+        assertEquals(nowMs - TradingTracker.FILLS_WINDOW_MS, recentFrom)
+        assertEquals(listOf(TradingFill(FILLED_AT, "ETH", "Open Long", 7_000_000, 0)), w.recentFills)
+        assertEquals(-15_000L, w.fundingDayCents)
+    }
+
+    @Test
+    fun ordersAreTheirFillsTogetherAndFundingIsTheDaysSum() {
+        val sent = mutableListOf<String>()
+        val r = HyperliquidInfo { _, body ->
+            sent += body
+            200 to if (body.contains("userFillsByTime")) FILLS else FUNDING
+        }.recent(address, 1_000L, 9_000_000L)
+        assertEquals(2, sent.size)
+        // Spot left out; order 11's two fills are one order; the doubled fill counted once.
+        assertEquals(listOf(10L to 300_000L, 11L to 308_000L, 12L to 31_000L).map { it.second }, r.fills.map { it.valueCents })
+        assertEquals(listOf(2000L, 3001L, 4000L), r.fills.map { it.atMs })
+        assertEquals(12_000L, r.fills[1].closedPnlCents)
+        assertEquals("Close Long", r.fills[1].direction)
+        assertEquals(-78L, r.fundingCents) // −1.2345 + 0.45
+    }
+
+    @Test
     fun fillsAndFundingAddUpPerCoin() {
         val sent = mutableListOf<String>()
         val info = HyperliquidInfo { _, body ->
@@ -284,6 +320,8 @@ class TradingSyncTest {
     }
 
     private companion object {
+        /** A fixed time for the fake's order, so repeated reads change nothing. */
+        const val FILLED_AT = 1_792_223_940_000L
         const val FILLS = """[
             {"coin":"ETH","dir":"Open Long","px":"3000","sz":"1","side":"B","closedPnl":"0.0","fee":"0.5","feeToken":"USDC","oid":10,"tid":1,"time":2000},
             {"coin":"ETH","dir":"Close Long","px":"3080","sz":"0.5","side":"A","closedPnl":"80.0","fee":"0.5","feeToken":"USDC","oid":11,"tid":2,"time":3000},

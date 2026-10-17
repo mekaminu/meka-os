@@ -628,7 +628,7 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
 
 /**
  * Trading tracker, slice 3: ALERTS — what he's told and when (near liquidation, even in quiet hours; a drop from the
- * month's high), with a row of choices for each; the chosen one in brass.
+ * month's high; slice 7: a big order and a day's high funding), with a row of choices for each; the chosen one in brass.
  */
 @Composable
 private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit) {
@@ -638,7 +638,8 @@ private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit)
         Crossfade(a.line, animationSpec = MekaMotion.appear(reduced), label = "trading-alerts-line") { l ->
             Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
-        listOf(a.liqLabel to a.liqChips, a.dropLabel to a.dropChips).forEach { (label, chips) ->
+        listOf(a.liqLabel to a.liqChips, a.dropLabel to a.dropChips, a.fillLabel to a.fillChips, a.fundingLabel to a.fundingChips)
+            .filter { it.second.isNotEmpty() }.forEach { (label, chips) ->
             Text(label, style = MekaType.body, color = Meka.colors.textPrimary)
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 chips.forEach { c -> key(c.kind + c.key) {

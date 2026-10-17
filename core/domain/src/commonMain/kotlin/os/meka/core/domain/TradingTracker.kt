@@ -61,9 +61,16 @@ object TradingWalletFields {
      */
     const val GBP_PER_USD = "gbpPerUsdMicros"
     const val FX_DAY = "fxDay"
+    /**
+     * Server (slice 7): the last day's biggest perp orders, [TradingTracker.encodeFills]d (at most
+     * [TradingTracker.MAX_FILLS], one line per order: `timeMs|coin|direction|valueCents|closedPnlCents`), and the funding
+     * over the last 24 hours (US cents, received +, paid −), each read; for the big-order and funding alerts.
+     */
+    const val FILLS = "recentFills"
+    const val FUNDING_DAY = "fundingDayCents"
 
     val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM,
-        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW, GBP_PER_USD, FX_DAY)
+        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW, GBP_PER_USD, FX_DAY, FILLS, FUNDING_DAY)
 }
 
 /** One open position as the server wrote it: prices as Hyperliquid's decimal text; [size] signed (short negative). */
@@ -105,6 +112,13 @@ data class TradingCoinStats(
 }
 
 /**
+ * Trading tracker, slice 7: one order filled in the last day, its fills together — when the last of them filled, the
+ * coin, Hyperliquid's direction ("Open Long", "Close Short", …), what it was worth (size × price) and its closed P&L
+ * (US cents). Perps only.
+ */
+data class TradingFill(val atMs: Long, val coin: String, val direction: String, val valueCents: Long, val closedPnlCents: Long)
+
+/**
  * Trading tracker, slice 4: one day's end on the curve — the UTC [day] (epoch day), the account value then and the
  * P&L since the curve's first day ended (US cents; deposits and withdrawals aren't P&L).
  */
@@ -128,6 +142,8 @@ data class TradingWallet(
     val curve: List<TradingCurvePoint> = emptyList(), val curveNowCents: Long? = null,
     /** Slice 5: the ECB's pounds per dollar (× 1,000,000) and its day; null until the server has read it. */
     val gbpPerUsdMicros: Long? = null, val fxDay: Long? = null,
+    /** Slice 7: the last day's biggest orders and its funding (received +, paid −); empty/null until read. */
+    val recentFills: List<TradingFill> = emptyList(), val fundingDayCents: Long? = null,
 ) {
     override fun toString() = "TradingWallet($id)"
 
@@ -194,6 +210,7 @@ class TradingStore(private val replica: Replica) {
             e[TradingWalletFields.DRAWDOWN].longOrNull, e[TradingWalletFields.DRAWDOWN_BASE].longOrNull,
             TradingTracker.decodeCurve(e[TradingWalletFields.CURVE].textOrNull), e[TradingWalletFields.CURVE_NOW].longOrNull,
             e[TradingWalletFields.GBP_PER_USD].longOrNull?.takeIf { TradingTracker.rateOk(it) }, e[TradingWalletFields.FX_DAY].longOrNull,
+            TradingTracker.decodeFills(e[TradingWalletFields.FILLS].textOrNull), e[TradingWalletFields.FUNDING_DAY].longOrNull,
         )
     }.sortedBy { it.label.lowercase() }
 
@@ -335,6 +352,26 @@ object TradingTracker {
         if (n[0] < 0 || n[1] < 0 || n[2] < 0) return@mapNotNull null
         TradingCoinStats(coin, n[0].toInt(), n[1].toInt(), n[2].toInt(), n[3], n[4], n[5], n[6], n[7], n[8], n[9])
     }
+
+    /** Slice 7: the last day's orders kept for the big-order alert (the biggest by value). */
+    const val MAX_FILLS = 10
+    const val FILLS_WINDOW_MS = 24 * 60 * 60_000L
+
+    /** Slice 7: orders as lines of `timeMs|coin|direction|valueCents|closedPnlCents` (the [MAX_FILLS] biggest by value). */
+    fun encodeFills(fills: List<TradingFill>): String = fills.sortedWith(compareByDescending<TradingFill> { it.valueCents }.thenByDescending { it.atMs })
+        .take(MAX_FILLS).sortedBy { it.atMs }.joinToString("\n") { f ->
+            listOf(f.atMs.toString(), f.coin, f.direction, f.valueCents.toString(), f.closedPnlCents.toString())
+                .joinToString("|") { it.replace(Regex("[|\\n\\r]"), " ").trim().take(30) }
+        }
+
+    fun decodeFills(text: String?): List<TradingFill> = text.orEmpty().lines().mapNotNull { line ->
+        val f = line.split("|")
+        if (f.size < 5) return@mapNotNull null
+        val at = f[0].trim().toLongOrNull() ?: return@mapNotNull null
+        val coin = f[1].trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val value = f[3].trim().toLongOrNull()?.takeIf { it >= 0 } ?: return@mapNotNull null
+        TradingFill(at, coin, f[2].trim(), value, f[4].trim().toLongOrNull() ?: 0L)
+    }.take(MAX_FILLS)
 
     /** Slice 4: the curve as lines of `day|valueCents|pnlCents` (at most [MAX_CURVE], the newest kept). */
     fun encodeCurve(points: List<TradingCurvePoint>): String = points.sortedBy { it.day }.takeLast(MAX_CURVE)
