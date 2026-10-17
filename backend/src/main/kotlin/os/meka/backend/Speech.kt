@@ -411,7 +411,11 @@ class SpeechService(
         val british = list.count { !it.id.endsWith("-US") }
         val m = month()
         val voice = list.firstOrNull { !it.id.endsWith("-US") } ?: list.first()
-        val probe = if (runCatching { googleUsage.used(m) }.getOrDefault(Long.MAX_VALUE / 2) + PROBE_LINE.length > googleFallbackAt) {
+        val meter = runCatching { googleUsage.used(m) }
+        val probe = if (meter.isFailure) {
+            // Without the meter Navilife never uses Google (it can't prove the free tier isn't passed).
+            "probe clip skipped · Google's meter can't be read (${meter.exceptionOrNull()?.let { it::class.simpleName }})"
+        } else if (meter.getOrThrow() + PROBE_LINE.length > googleFallbackAt) {
             "probe clip skipped · past the free tier's limit"
         } else {
             // Straight to Google (not googleClip) so a refusal's reason reaches the report.
@@ -424,7 +428,7 @@ class SpeechService(
                 { e -> googleFailedAtMs = nowMs(); "probe clip failed (${e::class.simpleName}: ${e.message?.take(80)})" },
             )
         }
-        val used = runCatching { googleUsage.used(m) }.getOrDefault(0)
+        val used = runCatching { googleUsage.used(m) }.getOrNull() ?: return "Google voice: ${list.size} Chirp 3 HD voices ($british British) · $probe · $polly"
         return "Google voice on · ${list.size} Chirp 3 HD voices ($british British) · $probe · ${(used + 999) / 1000}k of 1M characters in $m · $polly"
     }
 

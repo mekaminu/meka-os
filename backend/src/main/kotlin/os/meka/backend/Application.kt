@@ -1245,7 +1245,8 @@ fun startCalendarSync(integrations: Integrations, periodMs: Long = 5 * 60_000L) 
 }
 
 object Migrations {
-    private val all = listOf(
+    /** Every migration, in order; MigrationsListTest checks each `db/V*.sql` file is here (V26 once wasn't). */
+    internal val all = listOf(
         1 to "/db/V1__sync.sql", 2 to "/db/V2__integrations.sql", 3 to "/db/V3__device_keys.sql", 4 to "/db/V4__event_mirror_end.sql",
         5 to "/db/V5__app_release.sql", 6 to "/db/V6__push_token.sql", 7 to "/db/V7__news_image.sql",
         8 to "/db/V8__calendar_editing.sql", 9 to "/db/V9__event_edits.sql", 10 to "/db/V10__ai_usage.sql",
@@ -1258,6 +1259,7 @@ object Migrations {
         23 to "/db/V23__mail_sender.sql",
         24 to "/db/V24__mail_preview.sql",
         25 to "/db/V25__mail_backlog.sql",
+        26 to "/db/V26__speech_usage_google.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

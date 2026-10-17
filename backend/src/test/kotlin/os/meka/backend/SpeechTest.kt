@@ -405,6 +405,13 @@ class SpeechTest {
         val r = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = refusing).report()
         assertTrue(r.contains("probe clip failed (IllegalStateException: synthesize 403 PERMISSION_DENIED API_KEY_SERVICE_BLOCKED)"), r)
         assertFalse(r.contains("123"), r)
+        // The meter can't be read (its table missing): no clip, and the line says why.
+        val broken = object : SpeechUsageStore {
+            override fun add(month: String, chars: Long) = error("no table")
+            override fun used(month: String): Long = error("no table")
+        }
+        val nb = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = FakePolly(chirp), googleUsage = broken).report()
+        assertTrue(nb.startsWith("Google voice: 3 Chirp 3 HD voices (2 British) · probe clip skipped · Google's meter can't be read (IllegalStateException)"), nb)
         // A key Google won't answer for: no voices listed.
         val down = FakePolly(chirp).apply { fail = true }
         assertTrue(SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).report().startsWith("Google voice: key read but no voices listed"))
