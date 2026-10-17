@@ -59,6 +59,15 @@ class TradingSync(
                 fields[TradingWalletFields.PNL_ALL] = a.pnlAllCents?.let { FieldValue.Int64(it) } ?: FieldValue.Null
                 fields[TradingWalletFields.UNREALISED] = FieldValue.Int64(a.unrealisedCents)
                 fields[TradingWalletFields.POSITIONS] = FieldValue.Text(TradingTracker.encode(a.positions))
+                // Slice 2: the window's trades, hourly; a failure here keeps the last ones and tries at the next read.
+                if (TradingTracker.tradesDue(w, t)) {
+                    val from = t - TradingTracker.TRADES_DAYS * 86_400_000L
+                    runCatching { feed.trades(w.address, from, t) }.getOrNull()?.let { stats ->
+                        fields[TradingWalletFields.TRADES] = FieldValue.Text(TradingTracker.encodeTrades(stats))
+                        fields[TradingWalletFields.TRADES_AT] = FieldValue.Int64(t)
+                        fields[TradingWalletFields.TRADES_FROM] = FieldValue.Int64(from)
+                    }
+                }
                 ok++
             } catch (e: TradingRateLimited) {
                 // Not a failure: the try time alone, so it waits its usual pace.
@@ -86,6 +95,7 @@ class TradingSync(
             id, address, "", (f[TradingWalletFields.STATE]?.value as? FieldValue.Text)?.value, long(TradingWalletFields.READ_AT),
             long(TradingWalletFields.TRIED_AT), long(TradingWalletFields.EQUITY), null, null, null, null, null,
             TradingTracker.decode((f[TradingWalletFields.POSITIONS]?.value as? FieldValue.Text)?.value),
+            tradesAtMs = long(TradingWalletFields.TRADES_AT),
         )
     }
 
@@ -103,7 +113,7 @@ class TradingSync(
                 opId = "srvtrade" + hex(12), householdId = hh, entityType = EntityTypes.TRADING_WALLET, entityId = id, field = field,
                 value = value, hlc = hlc, baseOpIds = listOfNotNull(last?.opId), deviceId = Integrations.SERVER_DEVICE,
             ))
-            if (field != TradingWalletFields.TRIED_AT && field != TradingWalletFields.READ_AT) news = true
+            if (field !in QUIET) news = true
         }
         return news
     }
@@ -113,6 +123,9 @@ class TradingSync(
     companion object {
         /** How often the loop looks for an address that's due (a newly added one is read within this). */
         const val LOOK_MS = 30_000L
+
+        /** Fields that move on every read and alone don't wake the devices. */
+        private val QUIET = setOf(TradingWalletFields.TRIED_AT, TradingWalletFields.READ_AT, TradingWalletFields.TRADES_AT, TradingWalletFields.TRADES_FROM)
     }
 }
 

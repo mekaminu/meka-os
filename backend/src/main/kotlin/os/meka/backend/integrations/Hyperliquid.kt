@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import os.meka.core.domain.TradingCoinStats
 import os.meka.core.domain.TradingPosition
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -28,6 +29,9 @@ class TradingRateLimited : RuntimeException("hyperliquid rate limited")
 /** Reads a public address's account; read-only. */
 fun interface TradingFeed {
     fun read(address: String): TradingAccountRead
+
+    /** Slice 2: the address's perp trades between [fromMs] and [toMs] added up per coin; null where not offered. */
+    fun trades(address: String, fromMs: Long, toMs: Long): List<TradingCoinStats>? = null
 }
 
 /**
@@ -69,8 +73,89 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
         )
     }
 
+    /**
+     * Slice 2: `userFillsByTime` (aggregated by time, 2,000 a page, up to [FILL_PAGES] pages) and `userFunding` (500 a
+     * page, up to [FUNDING_PAGES]) for the window, added up per coin by [stats]. Still only the public address is sent.
+     */
+    override fun trades(address: String, fromMs: Long, toMs: Long): List<TradingCoinStats> {
+        require(os.meka.core.domain.TradingTracker.isAddress(address)) { "not an address" }
+        val a = address.lowercase()
+        val fills = paged(FILL_PAGES, fromMs, toMs) { start ->
+            """{"type":"userFillsByTime","user":"$a","startTime":$start,"endTime":$toMs,"aggregateByTime":true}"""
+        }.distinctBy { f -> text(f["tid"]) ?: (text(f["hash"]) + text(f["time"]) + text(f["coin"])) }
+        val funding = paged(FUNDING_PAGES, fromMs, toMs) { start ->
+            """{"type":"userFunding","user":"$a","startTime":$start,"endTime":$toMs}"""
+        }.distinctBy { f -> text(f["hash"]) + "|" + text(f["time"]) + "|" + text((f["delta"] as? JsonObject)?.get("coin")) }
+        return stats(fills, funding)
+    }
+
+    /** Pages a time-ordered list: when a page comes back full, the next starts just after its latest item. */
+    private fun paged(pages: Int, fromMs: Long, toMs: Long, body: (Long) -> String): List<JsonObject> {
+        val out = mutableListOf<JsonObject>()
+        var start = fromMs
+        repeat(pages) {
+            val (status, answer) = http.post(URL, body(start))
+            when {
+                status == 429 -> throw TradingRateLimited()
+                status != 200 -> error("hyperliquid $status")
+            }
+            if (answer.length > MAX_BYTES) error("hyperliquid answer too big")
+            val list = (runCatching { Json.parseToJsonElement(answer) }.getOrNull() as? JsonArray ?: error("hyperliquid unreadable"))
+                .mapNotNull { it as? JsonObject }
+            out += list
+            val latest = list.mapNotNull { text(it["time"])?.toLongOrNull() }.maxOrNull()
+            if (list.size < PAGE_FULL_AT || latest == null || latest >= toMs) return out
+            start = latest + 1
+        }
+        return out
+    }
+
     companion object {
         const val URL = "https://api.hyperliquid.xyz/info"
+        private const val FILL_PAGES = 5
+        private const val FUNDING_PAGES = 10
+        /** A page this long or longer may have more after it (fills come 2,000 a page, funding 500). */
+        private const val PAGE_FULL_AT = 500
+
+        /**
+         * Fills and funding added up per coin. Spot fills (`dir` Buy/Sell, coins like `@107` or `PURR/USDC`) are left
+         * out. A **trade** is one closing order: the fills with a closed P&L that share an order id, together. Fees
+         * count only in USDC (perp fees); funding is `delta.usdc` (received +, paid −). BigDecimal throughout, cents
+         * at the end (half up).
+         */
+        fun stats(fills: List<JsonObject>, funding: List<JsonObject>): List<TradingCoinStats> {
+            class Acc { var realised = BigDecimal.ZERO; var fees = BigDecimal.ZERO; var funding = BigDecimal.ZERO; val trades = linkedMapOf<String, BigDecimal>() }
+            val by = linkedMapOf<String, Acc>()
+            fun perp(coin: String) = !coin.startsWith("@") && '/' !in coin
+            for (f in fills) {
+                val coin = text(f["coin"])?.take(20) ?: continue
+                val dir = text(f["dir"]).orEmpty()
+                if (!perp(coin) || dir == "Buy" || dir == "Sell") continue
+                val acc = by.getOrPut(coin) { Acc() }
+                val token = text(f["feeToken"])
+                if (token == null || token == "USDC") text(f["fee"])?.toBigDecimalOrNull()?.let { acc.fees += it }
+                val closed = text(f["closedPnl"])?.toBigDecimalOrNull() ?: BigDecimal.ZERO
+                if (closed.signum() != 0) {
+                    acc.realised += closed
+                    val order = text(f["oid"]) ?: text(f["tid"]) ?: text(f["hash"]) ?: text(f["time"]).orEmpty()
+                    acc.trades[order] = (acc.trades[order] ?: BigDecimal.ZERO) + closed
+                }
+            }
+            for (f in funding) {
+                val d = f["delta"] as? JsonObject ?: continue
+                if (text(d["type"]) != "funding") continue
+                val coin = text(d["coin"])?.take(20)?.takeIf { perp(it) } ?: continue
+                text(d["usdc"])?.toBigDecimalOrNull()?.let { by.getOrPut(coin) { Acc() }.funding += it }
+            }
+            fun c(b: BigDecimal): Long = b.movePointRight(2).setScale(0, RoundingMode.HALF_UP).toLong()
+            return by.map { (coin, a) ->
+                val results = a.trades.values.map { c(it) }
+                val wins = results.filter { it > 0 }
+                val losses = results.filter { it < 0 }
+                TradingCoinStats(coin, results.size, wins.size, losses.size, c(a.realised), c(a.fees), c(a.funding),
+                    wins.sum(), losses.sum(), results.maxOrNull() ?: 0L, results.minOrNull() ?: 0L)
+            }.sortedBy { it.coin }
+        }
         private const val MAX_BYTES = 5_000_000
 
         private fun text(e: JsonElement?): String? = (e as? JsonPrimitive)?.content?.trim()?.takeIf { it.isNotEmpty() && it != "null" }

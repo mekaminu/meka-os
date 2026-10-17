@@ -87,6 +87,7 @@ import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
+import os.meka.core.domain.TradingTradesView
 import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
 
@@ -601,6 +602,7 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
                 p.liquidationLine?.let { l -> Text(l, style = MekaType.caption, color = c) }
             }
         } }
+        t.trades?.let { tr -> TradesBlock(tr) }
         t.wallets.forEach { w ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
@@ -614,6 +616,49 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
         }
         Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
         Text(t.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Trading tracker, slice 2: YOUR TRADES · LAST 30 DAYS — trades closed and won, closed P&L, fees, funding and what's left
+ * after them (up in brass), the average win and loss, the best and worst trade, and each coin (biggest result first).
+ */
+@Composable
+private fun TradesBlock(tr: TradingTradesView) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(tr.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        tr.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        tr.summary?.let { s ->
+            Crossfade(s, animationSpec = MekaMotion.appear(reduced), label = "trades-summary") { l ->
+                Text(l, style = MekaType.body, color = Meka.colors.textPrimary,
+                    modifier = Modifier.semantics { contentDescription = tr.spoken })
+            }
+        }
+        tr.lines.forEach { r -> key("trades-${r.label}") {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(r.label, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "trades-line-${r.label}") { a ->
+                    Text(a, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textPrimary)
+                }
+            }
+        } }
+        tr.averageLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        tr.bestLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        tr.coins.forEach { c -> key(c.id) {
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = c.spoken },
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(c.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                    Crossfade(c.amount, animationSpec = MekaMotion.appear(reduced), label = "trades-coin-${c.id}") { a ->
+                        Text(a, style = MekaType.body, color = if (c.up == true) Meka.colors.accent else Meka.colors.textPrimary)
+                    }
+                }
+                Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        } }
+        tr.moreLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Text(tr.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

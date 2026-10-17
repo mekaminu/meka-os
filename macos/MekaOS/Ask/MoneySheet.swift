@@ -649,6 +649,7 @@ struct MoneySheet: View {
                 .accessibilityLabel(p.spoken)
                 .transition(.opacity)
             }
+            if let tr = t.trades { trades(tr) }
             ForEach(t.wallets, id: \.id) { w in
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
@@ -676,6 +677,50 @@ struct MoneySheet: View {
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
+    }
+
+    /// Trading tracker, slice 2: YOUR TRADES · LAST 30 DAYS — trades closed and won, closed P&L, fees, funding and
+    /// what's left after them (up in brass), the average win and loss, the best and worst trade, and each coin.
+    private func trades(_ tr: TradingTradesView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(tr.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            if let e = tr.empty { Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            if let s = tr.summary {
+                Text(s).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    .accessibilityLabel(tr.spoken)
+            }
+            ForEach(tr.lines, id: \.label) { r in
+                HStack {
+                    Text(r.label).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                    Spacer()
+                    Text(r.amount).font(MekaType.body)
+                        .foregroundStyle(r.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                        .contentTransition(.opacity)
+                }
+            }
+            if let l = tr.averageLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            if let l = tr.bestLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            ForEach(tr.coins, id: \.id) { c in
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text(c.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Spacer()
+                        Text(c.amount).font(MekaType.body)
+                            .foregroundStyle(c.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                            .contentTransition(.opacity)
+                    }
+                    Text(c.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(c.spoken)
+                .transition(.opacity)
+            }
+            if let m = tr.moreLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            Text(tr.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, MekaSpace.s)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.summary)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.coins.count)
     }
 
     private func importer(_ v: MoneyView) -> some View {

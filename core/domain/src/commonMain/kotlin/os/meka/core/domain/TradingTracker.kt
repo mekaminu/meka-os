@@ -39,8 +39,12 @@ object TradingWalletFields {
     const val UNREALISED = "unrealisedCents"
     /** Server: the open positions, [TradingTracker.encode]d. */
     const val POSITIONS = "positions"
+    /** Server (slice 2): the last [TradingTracker.TRADES_DAYS] days' trades per coin, [TradingTracker.encodeTrades]d; when read, and from when. */
+    const val TRADES = "trades"
+    const val TRADES_AT = "tradesAtMs"
+    const val TRADES_FROM = "tradesFromMs"
 
-    val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS)
+    val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM)
 }
 
 /** One open position as the server wrote it: prices as Hyperliquid's decimal text; [size] signed (short negative). */
@@ -58,10 +62,35 @@ data class TradingPosition(
     }
 }
 
+/**
+ * Trading tracker, slice 2: one coin's perp trades over the window, as the server added them up from Hyperliquid's
+ * public fills and funding. A **trade** is one closing order (its fills together); [realisedCents] is Hyperliquid's
+ * closed P&L (before fees), [feesCents] what was paid in fees (a rebate is negative), [fundingCents] funding received
+ * (paid is negative). [winSumCents]/[lossSumCents] add up the winning and losing trades; [bestCents]/[worstCents] are
+ * the single best and worst (0 with no trades). All US cents.
+ */
+data class TradingCoinStats(
+    val coin: String, val trades: Int, val wins: Int, val losses: Int, val realisedCents: Long, val feesCents: Long, val fundingCents: Long,
+    val winSumCents: Long, val lossSumCents: Long, val bestCents: Long, val worstCents: Long,
+) {
+    /** What the coin made after fees and funding. */
+    val netCents: Long get() = realisedCents - feesCents + fundingCents
+
+    /** Two coins' (or two accounts') figures together. */
+    operator fun plus(o: TradingCoinStats): TradingCoinStats = TradingCoinStats(
+        coin, trades + o.trades, wins + o.wins, losses + o.losses, realisedCents + o.realisedCents, feesCents + o.feesCents,
+        fundingCents + o.fundingCents, winSumCents + o.winSumCents, lossSumCents + o.lossSumCents,
+        when { trades == 0 -> o.bestCents; o.trades == 0 -> bestCents; else -> maxOf(bestCents, o.bestCents) },
+        when { trades == 0 -> o.worstCents; o.trades == 0 -> worstCents; else -> minOf(worstCents, o.worstCents) },
+    )
+}
+
 data class TradingWallet(
     val id: String, val address: String, val label: String, val state: String?, val readAtMs: Long?, val triedAtMs: Long?,
     val equityCents: Long?, val pnlDayCents: Long?, val pnlWeekCents: Long?, val pnlMonthCents: Long?, val pnlAllCents: Long?,
     val unrealisedCents: Long?, val positions: List<TradingPosition>,
+    /** Slice 2: the window's trades per coin (empty until the server has read them), when they were read and from when. */
+    val trades: List<TradingCoinStats> = emptyList(), val tradesAtMs: Long? = null, val tradesFromMs: Long? = null,
 ) {
     override fun toString() = "TradingWallet($id)"
 }
@@ -76,11 +105,25 @@ data class TradingPositionRow(
 
 data class TradingWalletRow(val id: String, val name: String, val line: String, val lit: Boolean)
 
+/** One coin under YOUR TRADES: "ETH" · "+$210.00" (after fees and funding) · "7 trades · 4 won · fees −$12.30 · funding +$3.10". */
+data class TradingCoinRow(val id: String, val title: String, val amount: String, val up: Boolean?, val line: String, val spoken: String)
+
+/**
+ * Slice 2: YOUR TRADES · LAST 30 DAYS — how many trades closed and how many won, closed P&L, fees, funding and what's
+ * left after them ([lines]), the average win and loss, the best and worst trade, and each coin (biggest result first).
+ */
+data class TradingTradesView(
+    val head: String, val summary: String?, val lines: List<TradingPnlRow>, val averageLine: String?, val bestLine: String?,
+    val coins: List<TradingCoinRow>, val moreLine: String?, val empty: String?, val foot: String, val spoken: String,
+)
+
 /** Money → TRADING · HYPERLIQUID. */
 data class TradingView(
     val head: String, val total: String?, val totalLine: String?, val pnl: List<TradingPnlRow>, val unrealisedLine: String?,
     val positions: List<TradingPositionRow>, val wallets: List<TradingWalletRow>, val empty: String?, val hint: String, val foot: String,
     val spoken: String,
+    /** Slice 2: the window's trades, once the server has read them for at least one address. */
+    val trades: TradingTradesView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -95,6 +138,8 @@ class TradingStore(private val replica: Replica) {
             e[TradingWalletFields.EQUITY].longOrNull, e[TradingWalletFields.PNL_DAY].longOrNull, e[TradingWalletFields.PNL_WEEK].longOrNull,
             e[TradingWalletFields.PNL_MONTH].longOrNull, e[TradingWalletFields.PNL_ALL].longOrNull, e[TradingWalletFields.UNREALISED].longOrNull,
             TradingTracker.decode(e[TradingWalletFields.POSITIONS].textOrNull),
+            TradingTracker.decodeTrades(e[TradingWalletFields.TRADES].textOrNull), e[TradingWalletFields.TRADES_AT].longOrNull,
+            e[TradingWalletFields.TRADES_FROM].longOrNull,
         )
     }.sortedBy { it.label.lowercase() }
 
@@ -171,6 +216,16 @@ object TradingTracker {
     const val FOOT = "Read from Hyperliquid's public data with your public address only · no keys, nothing here can trade · US dollars · deposits and withdrawals aren't counted as profit · not trading advice"
     const val WAITING = "Reading it from Hyperliquid · within a minute or two"
 
+    /** Slice 2: trades are added up over the last [TRADES_DAYS] days, read again hourly. */
+    const val TRADES_DAYS = 30
+    const val TRADES_MS = 60 * 60_000L
+    const val MAX_COINS = 40
+    /** Coins shown under YOUR TRADES before "+n more". */
+    const val SHOWN_COINS = 8
+    const val TRADES_HEAD = "YOUR TRADES · LAST $TRADES_DAYS DAYS"
+    const val NO_TRADES = "No trades in the last $TRADES_DAYS days."
+    const val TRADES_FOOT = "Perpetuals only · each closing order is one trade · a trade's result is before fees · funding received is +, paid is −"
+
     private val ADDRESS = Regex("0x[0-9a-fA-F]{40}")
 
     fun isAddress(s: String): Boolean = ADDRESS.matches(s.trim())
@@ -205,6 +260,69 @@ object TradingTracker {
         val size = f[1].trim().takeIf { it.toDoubleOrNull() != null } ?: return@mapNotNull null
         TradingPosition(coin, size, f[2].trim().ifEmpty { null }, f[3].trim().ifEmpty { null }, f[4].trim().ifEmpty { null },
             f[5].trim().toLongOrNull() ?: 0L, f.getOrNull(6)?.trim()?.toIntOrNull())
+    }
+
+    /** Coin stats as lines of `coin|trades|wins|losses|realised|fees|funding|winSum|lossSum|best|worst` (at most [MAX_COINS]). */
+    fun encodeTrades(stats: List<TradingCoinStats>): String = stats.take(MAX_COINS).joinToString("\n") { c ->
+        listOf(c.coin.replace(Regex("[|\\n\\r]"), " ").trim(), c.trades, c.wins, c.losses, c.realisedCents, c.feesCents, c.fundingCents,
+            c.winSumCents, c.lossSumCents, c.bestCents, c.worstCents).joinToString("|")
+    }
+
+    fun decodeTrades(text: String?): List<TradingCoinStats> = text.orEmpty().lines().mapNotNull { line ->
+        val f = line.split("|")
+        if (f.size < 11) return@mapNotNull null
+        val coin = f[0].trim().takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val n = f.drop(1).take(10).map { it.trim().toLongOrNull() ?: return@mapNotNull null }
+        if (n[0] < 0 || n[1] < 0 || n[2] < 0) return@mapNotNull null
+        TradingCoinStats(coin, n[0].toInt(), n[1].toInt(), n[2].toInt(), n[3], n[4], n[5], n[6], n[7], n[8], n[9])
+    }
+
+    /** Whether the server should add up [w]'s trades again: never, or [TRADES_MS] since. */
+    fun tradesDue(w: TradingWallet, nowMs: Long): Boolean = w.tradesAtMs.let { it == null || nowMs - it >= TRADES_MS }
+
+    /** YOUR TRADES across [wallets] (the same coin in two accounts counts together); null until any has been read. */
+    fun tradesView(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar): TradingTradesView? {
+        val read = wallets.filter { it.tradesAtMs != null }
+        if (read.isEmpty()) return null
+        val coins = read.flatMap { it.trades }.groupBy { it.coin }.map { (_, l) -> l.reduce { a, b -> a + b } }
+            .filter { it.trades > 0 || it.feesCents != 0L || it.fundingCents != 0L }
+            .sortedWith(compareByDescending<TradingCoinStats> { abs(it.netCents) }.thenBy { it.coin })
+        val at = read.mapNotNull { it.tradesAtMs }.max()
+        val foot = "$TRADES_FOOT · updated ${HealthRules.at(at, nowMs, cal)}"
+        if (coins.isEmpty()) return TradingTradesView(TRADES_HEAD, null, emptyList(), null, null, emptyList(), null, NO_TRADES, foot, NO_TRADES)
+        val all = coins.reduce { a, b -> a + b }
+        fun up(c: Long): Boolean? = when { c > 0 -> true; c < 0 -> false; else -> null }
+        val summary = if (all.trades == 0) "No trades closed" else
+            "${all.trades} trade${if (all.trades == 1) "" else "s"} closed · ${all.wins} won (${(all.wins * 100.0 / all.trades).roundToLong()}%)"
+        val lines = listOfNotNull(
+            TradingPnlRow("Closed trades", signedUsd(all.realisedCents), up(all.realisedCents)),
+            all.feesCents.takeIf { it != 0L }?.let { TradingPnlRow("Fees", signedUsd(-it), up(-it)) },
+            all.fundingCents.takeIf { it != 0L }?.let { TradingPnlRow("Funding", signedUsd(it), up(it)) },
+            TradingPnlRow("After fees and funding", signedUsd(all.netCents), up(all.netCents)),
+        )
+        val average = listOfNotNull(
+            all.wins.takeIf { it > 0 }?.let { "Average win ${signedUsd(all.winSumCents / it)}" },
+            all.losses.takeIf { it > 0 }?.let { "average loss ${signedUsd(all.lossSumCents / it)}" },
+        ).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
+        val traded = coins.filter { it.trades > 0 }
+        val best = traded.maxByOrNull { it.bestCents }?.takeIf { it.bestCents > 0 }
+        val worst = traded.minByOrNull { it.worstCents }?.takeIf { it.worstCents < 0 }
+        val bestLine = listOfNotNull(
+            best?.let { "Best ${signedUsd(it.bestCents)} on ${it.coin}" }, worst?.let { "worst ${signedUsd(it.worstCents)} on ${it.coin}" },
+        ).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
+        val rows = coins.take(SHOWN_COINS).map { c ->
+            val line = listOfNotNull(
+                if (c.trades == 0) "no trades closed" else "${c.trades} trade${if (c.trades == 1) "" else "s"} · ${c.wins} won",
+                c.feesCents.takeIf { it != 0L }?.let { "fees ${signedUsd(-it)}" },
+                c.fundingCents.takeIf { it != 0L }?.let { "funding ${signedUsd(it)}" },
+            ).joinToString(" · ").replaceFirstChar { it.uppercase() }
+            TradingCoinRow("coin:${c.coin}", c.coin, signedUsd(c.netCents), up(c.netCents), line, "${c.coin}, ${signedUsd(c.netCents)} after fees and funding, ${line.lowercase()}")
+        }
+        val more = (coins.size - rows.size).takeIf { it > 0 }?.let { "+$it more coin${if (it == 1) "" else "s"}" }
+        val spoken = listOfNotNull(
+            "Last $TRADES_DAYS days: $summary", "${signedUsd(all.netCents)} after fees and funding", average, bestLine,
+        ).joinToString(". ")
+        return TradingTradesView(TRADES_HEAD, summary, lines, average, bestLine, rows, more, null, foot, spoken)
     }
 
     /** Whether the server should read [w] now: never tried, or its pace since the last try. */
@@ -318,6 +436,6 @@ object TradingTracker {
             unrealisedLine,
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
-        return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken)
+        return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal))
     }
 }

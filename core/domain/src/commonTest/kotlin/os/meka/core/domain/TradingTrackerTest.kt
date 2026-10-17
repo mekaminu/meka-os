@@ -152,4 +152,74 @@ class TradingTrackerTest {
         store.deleteAll()
         assertTrue(store.wallets().isEmpty())
     }
+
+    @Test
+    fun tradesRoundTripAndAddUpAcrossAccounts() {
+        val eth = TradingCoinStats("ETH", 3, 2, 1, 30_000, 1_500, -500, 40_000, -10_000, 25_000, -10_000)
+        val sol = TradingCoinStats("SOL", 1, 0, 1, -5_000, 300, 200, 0, -5_000, -5_000, -5_000)
+        val back = TradingTracker.decodeTrades(TradingTracker.encodeTrades(listOf(eth, sol)))
+        assertEquals(listOf(eth, sol), back)
+        assertEquals(28_000L, eth.netCents)
+        assertEquals(emptyList(), TradingTracker.decodeTrades("ETH|x|1|1|1|1|1|1|1|1|1\nBTC|1|2"))
+        // A coin with funding only doesn't drag the best and worst to zero.
+        val fundingOnly = TradingCoinStats("ETH", 0, 0, 0, 0, 0, 700, 0, 0, 0, 0)
+        val both = eth + fundingOnly
+        assertEquals(25_000L, both.bestCents)
+        assertEquals(-10_000L, both.worstCents)
+        assertEquals(200L, both.fundingCents)
+        val w = TradingWallet("w", a1, "Main", TradingTracker.OK, now, now, 100_000, null, null, null, null, 0, emptyList())
+        assertTrue(TradingTracker.tradesDue(w, now))
+        assertFalse(TradingTracker.tradesDue(w.copy(tradesAtMs = now - 10 * 60_000L), now))
+        assertTrue(TradingTracker.tradesDue(w.copy(tradesAtMs = now - TradingTracker.TRADES_MS), now))
+    }
+
+    @Test
+    fun yourTradesShowWinsFeesFundingAndEachCoin() {
+        val r = replica()
+        val store = TradingStore(r)
+        store.add("Main $a1")
+        store.add("Bot $a2")
+        // Nothing read yet: no YOUR TRADES.
+        assertNull(TradingTracker.view(store.wallets(), now, cal).trades)
+        r.commitLocal(EntityTypes.TRADING_WALLET, TradingTracker.walletId(a1), mapOf(
+            TradingWalletFields.STATE to TradingTracker.OK.fv(), TradingWalletFields.EQUITY to 100_000L.fv(),
+            TradingWalletFields.TRADES_AT to (now - 60_000L).fv(), TradingWalletFields.TRADES_FROM to (now - 30 * 86_400_000L).fv(),
+            TradingWalletFields.TRADES to TradingTracker.encodeTrades(listOf(
+                TradingCoinStats("ETH", 3, 2, 1, 30_000, 1_500, -500, 40_000, -10_000, 25_000, -10_000),
+                TradingCoinStats("SOL", 1, 0, 1, -5_000, 300, 200, 0, -5_000, -5_000, -5_000),
+            )).fv(),
+        ))
+        r.commitLocal(EntityTypes.TRADING_WALLET, TradingTracker.walletId(a2), mapOf(
+            TradingWalletFields.STATE to TradingTracker.OK.fv(), TradingWalletFields.EQUITY to 50_000L.fv(),
+            TradingWalletFields.TRADES_AT to (now - 5 * 60_000L).fv(),
+            TradingWalletFields.TRADES to TradingTracker.encodeTrades(listOf(
+                TradingCoinStats("ETH", 1, 1, 0, 2_000, 200, 0, 2_000, 0, 2_000, 2_000),
+            )).fv(),
+        ))
+        val t = TradingTracker.view(store.wallets(), now, cal).trades!!
+        assertEquals(TradingTracker.TRADES_HEAD, t.head)
+        assertEquals("5 trades closed · 3 won (60%)", t.summary)
+        assertEquals(listOf(
+            "Closed trades" to "+$270.00", "Fees" to "−$20.00", "Funding" to "−$3.00", "After fees and funding" to "+$247.00",
+        ), t.lines.map { it.label to it.amount })
+        assertEquals(false, t.lines[1].up)
+        assertEquals(true, t.lines.last().up)
+        assertEquals("Average win +$140.00 · average loss −$75.00", t.averageLine)
+        assertEquals("Best +$250.00 on ETH · worst −$100.00 on ETH", t.bestLine)
+        assertEquals(listOf("ETH", "SOL"), t.coins.map { it.title })
+        assertEquals("+$298.00", t.coins[0].amount)
+        assertEquals("4 trades · 3 won · fees −$17.00 · funding −$5.00", t.coins[0].line)
+        assertEquals("−$51.00", t.coins[1].amount)
+        assertEquals(false, t.coins[1].up)
+        assertNull(t.moreLine)
+        assertTrue(t.foot.endsWith("updated 13:59"))
+        assertTrue(t.spoken.startsWith("Last 30 days: 5 trades closed"))
+        // Read, but nothing traded in the window.
+        val quiet = TradingTracker.tradesView(listOf(store.wallets().first().copy(trades = emptyList())), now, cal)!!
+        assertEquals(TradingTracker.NO_TRADES, quiet.empty)
+        assertTrue(quiet.coins.isEmpty())
+        // Remove takes the trades with it.
+        store.remove(TradingTracker.walletId(a1))
+        assertEquals("1 trade closed · 1 won (100%)", TradingTracker.view(store.wallets(), now, cal).trades!!.summary)
+    }
 }
