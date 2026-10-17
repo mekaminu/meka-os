@@ -32,6 +32,8 @@ object DirectAddRules {
     const val SOURCE = "direct:add"
     const val WHY = "You asked for it"
     const val DETAIL = "Asked in Navilife"
+    /** Slice 2: said into the capture sheet's 🎙. */
+    const val SPOKEN_DETAIL = "Said into Capture"
 
     const val ROW_TITLE = "Add what you ask for"
     const val ON_LINE = "“Add …”, “remind me to …”, “put … on the shopping” are added at once · Undo on screen and in Activity"

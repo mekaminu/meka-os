@@ -5940,6 +5940,51 @@ class MekaCore(
         }
     }
 
+    /**
+     * "The mic should just add it", slice 2: what Meka said into the capture sheet's 🎙 goes straight in, no ↑ Add tap
+     * and no AI. "Timer 10 min" sets the timer; otherwise a task in his words with its day read from them, or (for
+     * "add milk and eggs to the shopping") the shopping, through the same rule as Ask's direct add, so it is in Activity
+     * and Undo puts it back ([spokenCaptureUndo]). With **Ask first** on, Navilife paused, or only day words said, the
+     * result's `fill` puts the words in the field for his ↑ Add as before. Null when nothing was heard.
+     */
+    suspend fun spokenCapture(heard: String?): os.meka.core.domain.SpokenCaptured? {
+        val rules = os.meka.core.domain.SpokenCaptureRules
+        val text = rules.clean(heard) ?: return null
+        val cal = ZoneCalendar(timeZone)
+        val fill = os.meka.core.domain.SpokenCaptured(line = "", words = text, fill = true)
+        os.meka.core.domain.QuickAlarmRules.parse(text, nowMs(), cal)?.let { q ->
+            return onCore {
+                val id = alarms.setQuick(q) ?: return@onCore fill
+                os.meka.core.domain.SpokenCaptured(os.meka.core.domain.QuickAlarmRules.setLine(q, nowMs(), cal), text, alarmId = id)
+            }
+        }
+        return onCore {
+            val today = cal.epochDayOf(nowMs())
+            val p = rules.proposal(text, today, cal.minuteOfDay(nowMs())) ?: return@onCore fill
+            if (!directAddAllowed(p)) return@onCore fill
+            val card = os.meka.core.domain.AskRules.cardOf(p, today)
+            val line = os.meka.core.domain.DirectAddRules.doneLine(p, today)
+            val id = try {
+                activity.actRecorded(
+                    line, os.meka.core.domain.DirectAddRules.WHY, os.meka.core.domain.DirectAddRules.SOURCE,
+                    AutonomyLevel.AUTO_UNDER_RULE.name, detail = os.meka.core.domain.DirectAddRules.SPOKEN_DETAIL,
+                ) { performAsk(card) }.second
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+            if (id == null) return@onCore fill
+            activityChanged()
+            refresh()
+            os.meka.core.domain.SpokenCaptured(line, text, activityId = id)
+        }
+    }
+
+    /** Undo (or Edit) after [spokenCapture]: the task or shopping is put back, or the alarm cancelled, on every device. */
+    suspend fun spokenCaptureUndo(c: os.meka.core.domain.SpokenCaptured): Boolean {
+        c.alarmId?.let { return cancelAlarm(it) }
+        val id = c.activityId ?: return false
+        undoActivity(id)
+        return true
+    }
+
     private fun mailFindsAutoOn(): Boolean = os.meka.core.domain.MailFindAutoRules.read(
         replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailFindAutoRules.ENTITY_ID)?.fields,
     )

@@ -97,13 +97,16 @@ import os.meka.core.facade.HandleOutcome
 import os.meka.core.facade.VoiceNoteRead
 import os.meka.core.domain.PictureTextRules
 import os.meka.core.domain.QuickCapture
+import os.meka.core.domain.SpokenCaptureRules
+import os.meka.core.domain.SpokenCaptured
 import os.meka.core.domain.VoiceNoteRules
 
 /**
  * The capture sheet over whatever Meka was doing (build plan M1, "Capture from anywhere"). Opened by the share
  * sheet, "Capture in MEKA" on selected text, the home-screen widget and the quick-settings tile. Springs up from the
  * bottom with the field ready; Add saves one task (title + notes, [QuickCapture]) and the sheet drops away.
- * Nothing is saved unless Meka taps Add. Voice uses the phone's speech recogniser, asked to stay on the device.
+ * Typed or shared text is saved only when Meka taps Add; what he says into the 🎙 on an empty field goes straight in
+ * with Undo and Edit ("the mic should just add it", slice 2). Voice uses the phone's speech recogniser.
  */
 class CaptureActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -137,6 +140,9 @@ class CaptureActivity : ComponentActivity() {
                     cameraUri = { PictureReader.cameraUri(this@CaptureActivity) },
                     forgetCameraPhoto = { PictureReader.forgetCameraPhoto(this@CaptureActivity) },
                     save = { text -> core.capture(text, null) != null },
+                    // "The mic should just add it", slice 2: what he says on an empty field goes in without ↑ Add.
+                    spoken = { heard -> core.spokenCapture(heard) },
+                    undoSpoken = { c -> core.spokenCaptureUndo(c) },
                     // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
                     // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
@@ -196,6 +202,8 @@ private fun CaptureSheet(
     cameraUri: () -> android.net.Uri,
     forgetCameraPhoto: () -> Unit,
     save: suspend (String) -> Boolean,
+    spoken: suspend (String?) -> SpokenCaptured?,
+    undoSpoken: suspend (SpokenCaptured) -> Boolean,
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
     tidyNote: suspend (String, String) -> VoiceNoteRead,
@@ -223,6 +231,9 @@ private fun CaptureSheet(
     val notes = initial?.notes
     var captured by rememberSaveable { mutableStateOf(false) }
     var voiceMissing by remember { mutableStateOf(false) }
+    // Slice 2: what the 🎙 just added, shown with Undo and Edit until the sheet drops away.
+    var spokenAdded by remember { mutableStateOf<SpokenCaptured?>(null) }
+    var spokenLine by remember { mutableStateOf<String?>(null) }
     // "Handle this" (V1, slice 1): offered for shared text with words in it (never for the widget or tile).
     val canHandle = remember(shared) { HandleThisRules.worthAsking(shared.text, shared.subject) }
     var handling by remember { mutableStateOf(false) }
@@ -269,8 +280,42 @@ private fun CaptureSheet(
 
     val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
         val heard = CaptureRequests.spoken(r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS))
-        if (heard != null) title = if (title.isBlank()) heard else "$title $heard"
-        runCatching { focus.requestFocus() }
+        when {
+            heard == null -> runCatching { focus.requestFocus() }
+            // Something already in the field (typed or shared): the words join it and ↑ Add saves, as before.
+            title.isNotBlank() -> { title = "$title $heard"; runCatching { focus.requestFocus() } }
+            else -> scope.launch {
+                val c = spoken(heard)
+                if (c == null || c.fill) {
+                    // Ask first (or paused, or only day words): the words wait in the field for ↑ Add.
+                    title = c?.words ?: heard
+                    runCatching { focus.requestFocus() }
+                } else {
+                    keyboard?.hide()
+                    spokenLine = null
+                    spokenAdded = c
+                    haptics.light()
+                }
+            }
+        }
+    }
+
+    fun undoSpokenAdd(edit: Boolean) {
+        val c = spokenAdded ?: return
+        spokenAdded = null
+        haptics.tick()
+        scope.launch {
+            undoSpoken(c)
+            if (edit) { title = c.words; keyboard?.show() } else spokenLine = SpokenCaptureRules.UNDONE
+            runCatching { focus.requestFocus() }
+        }
+    }
+
+    // Slice 2: "Added …" stays a few seconds with Undo and Edit, then the sheet drops away as after ↑ Add.
+    LaunchedEffect(spokenAdded) {
+        val c = spokenAdded ?: return@LaunchedEffect
+        delay(SpokenCaptureRules.SHOW_MS)
+        if (spokenAdded === c) leave(true)
     }
     fun startListening() {
         val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -523,11 +568,11 @@ private fun CaptureSheet(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
             AnimatedContent(
-                // 0 the field, 1 Handle this, 2 the goodbye tick, 3 a voice note recording, 4 reading a picture: each step
-                // cross-fades (the tick also pops in).
-                targetState = when { captured -> 2; handling -> 1; noting -> 3; pictureReading -> 4; else -> 0 },
+                // 0 the field, 1 Handle this, 2 the goodbye tick, 3 a voice note recording, 4 reading a picture, 5 what
+                // the 🎙 added with Undo and Edit: each step cross-fades (the ticks also pop in).
+                targetState = when { captured -> 2; spokenAdded != null -> 5; handling -> 1; noting -> 3; pictureReading -> 4; else -> 0 },
                 transitionSpec = {
-                    if (targetState == 2) {
+                    if (targetState == 2 || targetState == 5) {
                         (fadeIn(MekaMotion.appear(reduced)) + (if (reduced) fadeIn() else scaleIn(MekaMotion.approve(false), 0.6f)))
                             .togetherWith(fadeOut(MekaMotion.appear(reduced)))
                     } else {
@@ -538,7 +583,10 @@ private fun CaptureSheet(
                 },
                 label = "captured",
             ) { step ->
-                if (step == 2) {
+                if (step == 5) {
+                    val c = spokenAdded
+                    if (c != null) SpokenAddedView(c, onUndo = { undoSpokenAdd(edit = false) }, onEdit = { undoSpokenAdd(edit = true) })
+                } else if (step == 2) {
                     Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.m), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Center) {
                         Box(Modifier.size(28.dp).clip(CircleShape).background(Meka.colors.success), contentAlignment = Alignment.Center) {
@@ -600,7 +648,7 @@ private fun CaptureSheet(
                             }
                             Spacer(Modifier.width(MekaSpace.xs))
                             RoundButton(
-                                "🎙", "Speak · hold for a voice note", Meka.colors.surfaceRaised, Meka.colors.textPrimary,
+                                "🎙", SpokenCaptureRules.MIC_LABEL, Meka.colors.surfaceRaised, Meka.colors.textPrimary,
                                 onLongClick = ::holdMic,
                             ) { startListening() }
                             Spacer(Modifier.width(MekaSpace.xs))
@@ -648,11 +696,12 @@ private fun CaptureSheet(
                             Text(it, style = MekaType.caption, color = Meka.colors.textTertiary,
                                 modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         }
-                        val message = noteMessage
+                        val message = noteMessage ?: spokenLine
                         if (message != null) {
-                            Text(message, style = MekaType.caption, color = Meka.colors.textSecondary)
+                            Text(message, style = MekaType.caption, color = Meka.colors.textSecondary,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         } else if (title.isEmpty() && shared.text.isBlank()) {
-                            Text(VoiceNoteRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+                            Text(SpokenCaptureRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
                         }
                         // Photo of a letter: on a sheet opened empty (widget, tile, Today's capture), the camera app
                         // takes a letter, ticket or sign and Navilife reads it here.
@@ -672,6 +721,40 @@ private fun CaptureSheet(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * "The mic should just add it", slice 2: "✓ Added “Buy milk” · Tomorrow" with Undo and Edit (brass pills) for a few
+ * seconds after the 🎙; read out once by a screen reader.
+ */
+@Composable
+private fun SpokenAddedView(c: SpokenCaptured, onUndo: () -> Unit, onEdit: () -> Unit) {
+    Column(
+        Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs)
+            .semantics { liveRegion = LiveRegionMode.Polite; contentDescription = SpokenCaptureRules.spoken(c) },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
+    ) {
+        Text("CAPTURE", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(28.dp).clip(CircleShape).background(Meka.colors.success), contentAlignment = Alignment.Center) {
+                Text("✓", color = Meka.colors.background, style = MekaType.itemMeta)
+            }
+            Spacer(Modifier.width(MekaSpace.xs))
+            Text(c.line, style = MekaType.body, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f))
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            listOf(SpokenCaptureRules.UNDO to onUndo, SpokenCaptureRules.EDIT to onEdit).forEach { (label, tap) ->
+                Text(
+                    label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                        .clickable(role = Role.Button, onClick = tap)
+                        .semantics { contentDescription = if (label == SpokenCaptureRules.EDIT) "Edit: take it back and change the words" else "Undo: take it back" }
+                        .padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
+                )
             }
         }
     }
