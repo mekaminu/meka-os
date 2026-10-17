@@ -32,4 +32,5 @@ tip: Prep also says when you last met each of them ("Last met Tue 6 Oct"); choos
 tip: Prep finds each guest's last email in your connected mailboxes themselves (the last 60 days), not only the emails Navilife has already shown you.
 tip: On an "Empty Junk" card in Needs you, Review lists who the emails going to Trash are from; take the tick off a sender to keep their mail in Junk, then Approve there.
 tip: On an email in Needs you, Block sender sends it and the sender's later emails straight to Trash (recoverable for 30 days), with Undo; Navilife never blocks people you write to, your partner, banks, schools or public bodies. On a possible scam the button reads Bin & block.
+tip: An email shows Reply, Done and Task; tap ⋯ More for Waiting for, Snooze, Unsubscribe, Always tidy and Block sender. A link you email yourself shows as a Note to self with Save as task, which keeps the link in the task's notes.
 tip: Always tidy on an email archives it, and that sender's future emails skip your inbox and go to Archive. Unsubscribe (when the email offers it) unsubscribes you the sender's own way. Change any of these in Mail → Your rules.

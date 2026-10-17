@@ -94,6 +94,11 @@ object MailItemFields {
      * company's "log in yourself" line, server-written, Text; "" or absent for any other email.
      */
     const val WARNING = "warning"
+    /**
+     * Inbox junk fix, slice 3 ([MailNoteRules], 2026-10-17): the site of the link in an email he sent himself
+     * ("bbc.co.uk"), server-written, Text; "" or absent for any other email.
+     */
+    const val NOTE = "note"
     const val MEETING_EDIT_ID = "meetingEditId"
     const val MEETING_AT = "meetingAtMs"
 }
@@ -157,6 +162,8 @@ data class MailItem(
     val security: String? = null,
     /** [MailScamRules.line]: a possible scam's warning, or a real company's "log in yourself", or null. */
     val warning: String? = null,
+    /** [MailNoteRules]: the site of the link in a note he emailed himself, or null. */
+    val note: String? = null,
 )
 
 /** One email on the card. */
@@ -210,6 +217,8 @@ data class MailNeedsRow(
     val canUnsubscribe: Boolean = false,
     /** Junk fix slice 2: Block sender (Bin & block on a scam) is offered ([MailSenderRuleRules.canBlock]). */
     val canBlock: Boolean = false,
+    /** Junk fix slice 3: "Note to self · a link to bbc.co.uk" for a link he emailed himself (Save as task · Done), else null. */
+    val note: String? = null,
 )
 
 data class MailNeedsCard(
@@ -324,9 +333,10 @@ object MailNeedsRules {
     /** What the server publishes for one email (Needs you, in the inbox, inside the window). */
     fun serverFields(
         account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
-        threadKey: String? = null, security: String = "", warning: String = "", canUnsubscribe: Boolean = false,
+        threadKey: String? = null, security: String = "", warning: String = "", canUnsubscribe: Boolean = false, note: String = "",
     ): Map<String, FieldValue> =
         mapOf(MailItemFields.CAN_UNSUB to FieldValue.Bool(canUnsubscribe)) +
+            (if (note.isNotEmpty()) mapOf(MailItemFields.NOTE to note.take(MailNoteRules.MAX_SITE).fv()) else emptyMap()) +
         (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) +
             (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) +
             (if (warning.isNotEmpty()) mapOf(MailItemFields.WARNING to warning.fv()) else emptyMap()) + mapOf(
@@ -392,6 +402,7 @@ object MailNeedsRules {
             draftDismissedAtMs = ms(MailAutoDraftFields.DISMISSED_AT),
             security = text(MailItemFields.SECURITY),
             warning = text(MailItemFields.WARNING),
+            note = text(MailItemFields.NOTE),
         )
     }
 
@@ -468,6 +479,18 @@ object MailNeedsRules {
 
     fun headline(n: Int): String = if (n == 1) "1 email needs you" else "$n emails need you"
 
+    /** Junk fix slice 3: notes to self aren't counted as needing him: "3 emails need you · 1 note to self". */
+    fun headline(items: List<MailItem>): String {
+        val notes = items.count { it.note != null }
+        val needs = items.size - notes
+        val n = if (notes == 1) "1 note to self" else "$notes notes to self"
+        return when {
+            notes == 0 -> headline(needs)
+            needs == 0 -> n
+            else -> "${headline(needs)} · $n"
+        }
+    }
+
     /** "09:12" today, "yesterday 18:40", "Mon 12 Oct" before. */
     fun whenLabel(atMs: Long, nowMs: Long, cal: LocalCalendar): String {
         val today = cal.epochDayOf(nowMs)
@@ -497,7 +520,7 @@ object MailNeedsRules {
         val snoozedCount = items.count { snoozed(it, nowMs) }
         return MailNeedsCard(
             title = TITLE,
-            headline = headline(all.size),
+            headline = headline(all),
             rows = rows,
             moreLine = if (more > 0) "+ $more more · newest shown first" else null,
             snoozedLine = when (snoozedCount) {
@@ -534,10 +557,11 @@ object MailNeedsRules {
             val meet = !replySent(i) && pick == null && (declined || MeetingRequestRules.asks(i.subject, i.preview))
             val security = i.security?.let(MailSecurityRules::line)
             val warning = i.warning?.takeIf { it.isNotBlank() }
+            val note = i.note?.let(MailNoteRules::line)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull(security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
+                spoken = listOfNotNull(note, security, warning?.removePrefix("⚠ "), "${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
                     i.wants?.let { "Needs a reply: $it" }?.takeIf { MailAutoDraftRules.needsReply(i) },
                     "Navilife drafted a reply".takeIf { MailAutoDraftRules.draftShowing(i) && notice == null }).joinToString(". "),
                 notice = notice,
@@ -553,8 +577,9 @@ object MailNeedsRules {
                 security = security,
                 warning = warning,
                 scam = MailScamRules.scamLine(warning),
-                canUnsubscribe = i.canUnsubscribe && security == null,
-            ).let { it.copy(canBlock = MailSenderRuleRules.canBlock(it)) }
+                canUnsubscribe = i.canUnsubscribe && security == null && note == null,
+                note = note,
+            ).let { it.copy(canBlock = note == null && MailSenderRuleRules.canBlock(it)) }
         }
 
     /** Done: the card goes on both apps and the server archives the email at its next check. */
@@ -582,6 +607,7 @@ object MailNeedsRules {
 
     /** The subject without its "Re:", "Fwd:" and "Fw:" (any number, any case); "Email from Sam Taylor" when none is left. */
     fun taskTitle(i: MailItem): String {
+        i.note?.let { return MailNoteRules.taskTitle(i.copy(note = null), it) }
         var t = i.subject.trim()
         while (true) {
             val colon = t.indexOf(':')
@@ -596,6 +622,7 @@ object MailNeedsRules {
 
     /** "Email from Sam Taylor · Personal · Sat 17 Oct" — the task's notes, so he knows where to find it. */
     fun taskNotes(i: MailItem, cal: LocalCalendar): String =
+        i.note?.let { MailNoteRules.taskNotes(i, it, cal) } ?:
         "Email from ${i.from} · ${i.account} · ${CivilDate.shortLabel(cal.epochDayOf(i.receivedAtMs))}"
 
     /** Task: a Done that also records the task made. */

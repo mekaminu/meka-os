@@ -8,6 +8,7 @@ import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailSortReason
 import os.meka.core.domain.MailSorted
+import os.meka.core.domain.MailNoteRules
 import os.meka.core.domain.MailSecurityRules
 import os.meka.core.domain.MailScamRules
 import os.meka.core.domain.MailReceipt
@@ -1388,8 +1389,14 @@ class Integrations(
     internal fun publishMailNeeds(a: AccountRow, ms: MailStore) {
         val nowMs = now()
         val account = MailLabel.of(a.label)?.label ?: "Mail"
-        val needs = ms.inboxSorted(a.id)
-            .filter { (h, s) -> s.sort == MailSort.NEEDS_YOU && h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS }
+        val sorted = ms.inboxSorted(a.id).filter { (h, _) -> h.inInbox && nowMs - h.receivedAtMs <= MailNeedsRules.WINDOW_MS }
+        // Junk fix slice 3: his own emails (FYI) are looked at too; only one holding a link comes as a "Note to self".
+        val own = sorted.filter { (_, s) -> s.reason == MailSortReason.OWN }.map { it.first }
+        val ownPreviews = if (own.isEmpty()) emptyMap() else ms.previews(a.id, own.map { it.id })
+        val notes = own.associate { h -> h.id to MailNoteRules.noteSite(MailSortReason.OWN, h.subject, ownPreviews[h.id] ?: h.preview) }
+            .filterValues { it.isNotEmpty() }
+        val needs = sorted
+            .filter { (h, s) -> s.sort == MailSort.NEEDS_YOU || h.id in notes }
             .map { it.first }
             .sortedByDescending { it.receivedAtMs }
             .take(MailNeedsRules.MAX_PER_ACCOUNT)
@@ -1410,6 +1417,7 @@ class Integrations(
                 warning = MailScamRules.itemWarning(reasons[h.id], h.fromAddress, h.fromName, h.subject),
                 // Junk fix slice 2: Unsubscribe on the card when the email says how (never the link itself).
                 canUnsubscribe = MailUnsubscribeRules.plan(h.listUnsubscribe, h.oneClickUnsubscribe).method != UnsubscribeMethod.NONE,
+                note = notes[h.id] ?: "",
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)

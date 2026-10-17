@@ -62,10 +62,9 @@ import os.meka.core.domain.MailNeedsCard
 import os.meka.core.domain.MailNeedsRow
 import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailSendAllRules
-import os.meka.core.domain.MeetingPickRules
 import os.meka.core.domain.MeetingRequestRules
-import os.meka.core.domain.MailCardUnsubRules
-import os.meka.core.domain.MailSenderRuleRules
+import os.meka.core.domain.MailRowAction
+import os.meka.core.domain.MailRowActionRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -241,6 +240,8 @@ internal fun MailNeedsRowView(
     LaunchedEffect(replying, text) { onEditor?.invoke(if (replying) text else null) }
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
+            // Junk fix slice 3: a link he emailed himself, above the sender.
+            row.note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-note-${row.id}")) }
             // Account-security mail: who it's really from and what to do, above the sender.
             row.security?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical, modifier = Modifier.testTag("mail-security-${row.id}")) }
             // A possible scam (critical) or a real company's "log in yourself" (brass), above the sender.
@@ -304,13 +305,13 @@ internal fun MailNeedsRowView(
                         onClick = { onSend(draft) { } },
                     )
                     MailNeedsPill(
-                        MailAutoDraftRules.EDIT, quiet = true, spoken = "Edit the draft before sending",
+                        MailAutoDraftRules.EDIT, spoken = "Edit the draft before sending",
                         onClick = { haptics.light(); text = draft; lastDraft = draft; draftLine = MailDraftRules.DRAFTED_LINE; replying = true },
                     )
                     if (onNotNeeded != null) {
-                        MailNeedsPill(MailAutoDraftRules.NOT_NEEDED, quiet = true, spoken = "No reply needed to ${row.from}; put the draft away", onClick = onNotNeeded)
+                        MailNeedsPill(MailAutoDraftRules.NOT_NEEDED, spoken = "No reply needed to ${row.from}; put the draft away", onClick = onNotNeeded)
                     }
-                    MailNeedsPill(MailAutoDraftRules.LATER, quiet = true, spoken = "Remind me about ${row.subject} tomorrow at 8", onClick = onSnooze)
+                    MailNeedsPill(MailAutoDraftRules.LATER, spoken = "Remind me about ${row.subject} tomorrow at 8", onClick = onSnooze)
                 }
             }
         }
@@ -390,56 +391,61 @@ internal fun MailNeedsRowView(
                 }
             }
         }
-        // Five answers wrap onto a second line on the narrow cover screen rather than squeezing.
+        // Junk fix slice 3: every answer wears the accent (Bin & block the critical colour); Reply · Done · Task show and the
+        // rest unfold under ⋯ More (expand spring; reduced motion: cross-fade). They wrap on the narrow cover screen.
+        val actions = MailRowActionRules.actions(row, tidy = onAlwaysTidy != null, block = onBlock != null, unsubscribe = onUnsubscribe != null)
+        var more by rememberSaveable(row.id) { mutableStateOf(false) }
+        fun perform(a: MailRowAction) {
+            when (a) {
+                MailRowAction.BOOK -> onBook?.invoke()
+                MailRowAction.SUGGEST -> {
+                    haptics.light()
+                    suggesting = true
+                    scope.launch {
+                        val d = onSuggestTimes?.let { f -> runCatching { f() }.getOrNull() }
+                        suggesting = false
+                        d?.text?.let { if (MailDraftRules.canDraft(text, lastDraft)) { text = it; lastDraft = it } }
+                        draftLine = d?.line ?: MeetingRequestRules.NONE_FREE_LINE
+                        replying = true
+                    }
+                }
+                MailRowAction.REPLY -> replying = true
+                MailRowAction.DONE -> onDone()
+                MailRowAction.TASK -> onTask()
+                MailRowAction.WAITING -> onWaiting()
+                MailRowAction.SNOOZE -> onSnooze()
+                MailRowAction.UNSUBSCRIBE -> onUnsubscribe?.invoke()
+                MailRowAction.ALWAYS_TIDY -> onAlwaysTidy?.invoke()
+                MailRowAction.BIN, MailRowAction.BLOCK -> onBlock?.invoke()
+            }
+        }
+        fun pillLabel(a: MailRowAction): String =
+            if (a == MailRowAction.SUGGEST && suggesting) MeetingRequestRules.FINDING else MailRowActionRules.label(a, row)
+        fun offered(a: MailRowAction): Boolean = when (a) {
+            MailRowAction.BOOK -> onBook != null
+            // Scheduling assistant, slice 1: the editor opens with his free times; never over his own words.
+            MailRowAction.SUGGEST -> onSuggestTimes != null && MailDraftRules.canDraft(text, lastDraft)
+            MailRowAction.REPLY -> !replying
+            else -> true
+        }
         FlowRow(
-            Modifier.padding(top = MekaSpace.xxs),
+            Modifier.padding(top = MekaSpace.xxs).animateContentSize(MekaMotion.expand(reduced)),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            // Scheduling assistant, slice 2: Book it adds their pick to his calendar (five seconds' Undo on the bar).
-            if (row.canBook && onBook != null) {
-                MailNeedsPill(MeetingPickRules.BOOK, spoken = "Book it: ${row.pickedLine ?: ""}, in your calendar", onClick = onBook)
-            }
-            // Scheduling assistant, slice 1: the editor opens (expand spring) with his free times; never over his own words.
-            if (row.asksToMeet && onSuggestTimes != null && MailDraftRules.canDraft(text, lastDraft)) {
+            actions.shown.filter(::offered).forEach { a ->
                 MailNeedsPill(
-                    if (suggesting) MeetingRequestRules.FINDING else MeetingRequestRules.SUGGEST, enabled = !suggesting,
-                    spoken = "Put your free times in a reply to ${row.from}; nothing is sent until you tap Send",
-                    onClick = {
-                        haptics.light()
-                        suggesting = true
-                        scope.launch {
-                            val d = runCatching { onSuggestTimes() }.getOrNull()
-                            suggesting = false
-                            d?.text?.let { if (MailDraftRules.canDraft(text, lastDraft)) { text = it; lastDraft = it } }
-                            draftLine = d?.line ?: MeetingRequestRules.NONE_FREE_LINE
-                            replying = true
-                        }
-                    },
+                    pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a),
+                    enabled = !(a == MailRowAction.SUGGEST && suggesting), onClick = { perform(a) },
                 )
             }
-            if (!replying) MailNeedsPill(MailNeedsRules.REPLY, spoken = "Reply to ${row.from}", onClick = { replying = true })
-            MailNeedsPill(MailNeedsRules.DONE, spoken = "${MailNeedsRules.DONE}: archive ${row.subject}", onClick = onDone)
-            MailNeedsPill(MailNeedsRules.TASK, spoken = "Make a task from ${row.subject} and archive the email", onClick = onTask)
-            MailNeedsPill(MailNeedsRules.WAITING, quiet = true, spoken = "Waiting for ${row.from} on ${row.subject}, chase in 3 days", onClick = onWaiting)
-            MailNeedsPill(MailNeedsRules.SNOOZE, quiet = true, spoken = "${MailNeedsRules.SNOOZE} ${row.subject} till tomorrow 8 o'clock", onClick = onSnooze)
-            if (onUnsubscribe != null && row.canUnsubscribe) {
+            if (actions.more.isNotEmpty()) {
                 MailNeedsPill(
-                    MailCardUnsubRules.UNSUBSCRIBE, quiet = true,
-                    spoken = "Unsubscribe from ${row.from} and archive this email", onClick = onUnsubscribe,
+                    if (more) MailRowActionRules.FEWER else MailRowActionRules.MORE, spoken = MailRowActionRules.moreSpoken(more, row),
+                    onClick = { haptics.tick(); more = !more },
                 )
             }
-            if (onAlwaysTidy != null) {
-                MailNeedsPill(
-                    MailSenderRuleRules.ALWAYS_TIDY, quiet = true,
-                    spoken = "Archive this, and ${row.from}'s future emails skip your inbox and go to Archive", onClick = onAlwaysTidy,
-                )
-            }
-            // Block sender: this email and their later ones to Trash; on a possible scam it reads Bin & block in the critical colour.
-            if (onBlock != null && row.canBlock) {
-                MailNeedsPill(
-                    if (row.scam) MailSenderRuleRules.BIN else MailSenderRuleRules.BLOCK, quiet = !row.scam, critical = row.scam,
-                    spoken = "Block ${row.from}: this email and their later ones go to Trash", onClick = onBlock,
-                )
+            if (more) actions.more.forEach { a ->
+                MailNeedsPill(pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a), onClick = { perform(a) })
             }
         }
     }

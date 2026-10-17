@@ -855,12 +855,30 @@ class MailSyncTest {
         assertEquals(MailSorted(MailSort.FYI, MailSortReason.OWN, true), ms.sortOf(id, "n1"))
         assertEquals(MailSortReason.DIGEST, ms.sortOf(id, "d1")!!.reason)
         assertEquals(MailSortReason.SCAM, ms.sortOf(id, "x1")!!.reason)
-        // Needs you holds the scam (with its warning) and Sam's email, nothing else.
+        // Needs you holds the scam (with its warning) and Sam's email; slice 3: his own email with a link comes as a
+        // note to self (its site only); nothing else.
         val shown = items(ops).values.filter { (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L }
-        assertEquals(setOf("Your account will be closed", "Are you free Saturday?"), shown.map { (it[MailItemFields.SUBJECT] as FieldValue.Text).value }.toSet())
+        assertEquals(setOf("Your account will be closed", "Are you free Saturday?", "https://example.com/article"), shown.map { (it[MailItemFields.SUBJECT] as FieldValue.Text).value }.toSet())
+        assertEquals(FieldValue.Text("example.com"), shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("https://example.com/article") }[MailItemFields.NOTE])
+        assertTrue(shown.filter { it[MailItemFields.SUBJECT] != FieldValue.Text("https://example.com/article") }.none { it.containsKey(MailItemFields.NOTE) })
         val scam = shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("Your account will be closed") }
         assertEquals(FieldValue.Text("⚠ Possible scam · sent from mail-notify.example, not paypal.com"), scam[MailItemFields.WARNING])
         assertNull(shown.single { it[MailItemFields.SUBJECT] == FieldValue.Text("Are you free Saturday?") }[MailItemFields.WARNING])
+    }
+
+    @Test
+    fun anOwnEmailWithoutALinkStaysOffTheCard() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, store, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        val me = store.accounts("home").single().email
+        gmail.mailbox["n2"] = msg("n2", 0, me).copy(fromName = "Me", subject = "Buy milk")
+        gmail.nextRound = { MailChanges(fetch = listOf("n2"), cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(MailSortReason.OWN, ms.sortOf(id, "n2")!!.reason)
+        assertTrue(items(ops).values.none { it[MailItemFields.SUBJECT] == FieldValue.Text("Buy milk") && (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L })
     }
 
     @Test

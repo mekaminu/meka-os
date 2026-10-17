@@ -199,10 +199,50 @@ struct MailNeedsRowView: View {
     @State private var drafting = false
     @State private var suggesting = false
     @State private var showLinked = false
+    @State private var showMore = false
+
+    private var rowActions: MailRowActions {
+        MailRowActionRules.shared.actions(row: row, tidy: alwaysTidy != nil, block: block != nil, unsubscribe: unsubscribe != nil)
+    }
+
+    private func offered(_ a: MailRowAction) -> Bool {
+        if a == MailRowAction.book { return book != nil }
+        // Scheduling assistant, slice 1: the editor opens with his free times; never over his own words.
+        if a == MailRowAction.suggest { return suggestTimes != nil && MailDraftRules.shared.canDraft(editor: text, lastDraft: lastDraft) }
+        if a == MailRowAction.reply { return !replying }
+        return true
+    }
+
+    @ViewBuilder
+    private func actionPill(_ a: MailRowAction) -> some View {
+        let finding = a == MailRowAction.suggest && suggesting
+        MailNeedsPill(label: finding ? MeetingRequestRules.shared.FINDING : MailRowActionRules.shared.label(a: a, row: row),
+                      palette: palette, critical: MailRowActionRules.shared.critical(a: a),
+                      spoken: MailRowActionRules.shared.spoken(a: a, row: row),
+                      action: { perform(a) })
+            .disabled(finding)
+    }
+
+    private func perform(_ a: MailRowAction) {
+        if a == MailRowAction.book { book?() }
+        else if a == MailRowAction.suggest { askTimes() }
+        else if a == MailRowAction.reply { replying = true }
+        else if a == MailRowAction.done { done() }
+        else if a == MailRowAction.task { task() }
+        else if a == MailRowAction.waiting { waiting() }
+        else if a == MailRowAction.snooze { snooze() }
+        else if a == MailRowAction.unsubscribe { unsubscribe?() }
+        else if a == MailRowAction.alwaysTidy { alwaysTidy?() }
+        else if a == MailRowAction.bin || a == MailRowAction.block { block?() }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                // Junk fix slice 3: a link he emailed himself, above the sender.
+                if let note = row.note {
+                    Text(note).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
                 // Account-security mail: who it's really from and what to do, above the sender.
                 if let security = row.security {
                     Text(security).font(MekaType.itemMeta).foregroundStyle(palette.critical)
@@ -288,51 +328,24 @@ struct MailNeedsRowView: View {
                                 cancel: { replying = false })
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
+            // Junk fix slice 3: every answer wears the accent (Bin & block the critical colour); Reply · Done · Task show
+            // and the rest unfold under ⋯ More (expand spring; reduced motion: cross-fade).
             HStack(spacing: MekaSpace.xs) {
-                // Scheduling assistant, slice 2: Book it adds their pick to his calendar (five seconds' Undo on the bar).
-                if row.canBook, let book {
-                    MailNeedsPill(label: MeetingPickRules.shared.BOOK, palette: palette,
-                                  spoken: "Book it: \(row.pickedLine ?? ""), in your calendar",
-                                  action: { book() })
+                ForEach(rowActions.shown.filter { offered($0) }, id: \.self) { a in actionPill(a) }
+                if !rowActions.more.isEmpty {
+                    MailNeedsPill(label: showMore ? MailRowActionRules.shared.FEWER : MailRowActionRules.shared.MORE, palette: palette,
+                                  spoken: MailRowActionRules.shared.moreSpoken(open: showMore, row: row),
+                                  action: { MekaHaptics.tick(); showMore.toggle() })
                 }
-                // Scheduling assistant, slice 1: the editor opens (expand spring) with his free times; never over his words.
-                if row.asksToMeet, suggestTimes != nil, MailDraftRules.shared.canDraft(editor: text, lastDraft: lastDraft) {
-                    MailNeedsPill(label: suggesting ? MeetingRequestRules.shared.FINDING : MeetingRequestRules.shared.SUGGEST,
-                                  palette: palette,
-                                  spoken: "Put your free times in a reply to \(row.from); nothing is sent until you tap Send",
-                                  action: { askTimes() })
-                    .disabled(suggesting)
-                }
-                if !replying {
-                    MailNeedsPill(label: MailNeedsRules.shared.REPLY, palette: palette,
-                                  spoken: "Reply to \(row.from)", action: { replying = true })
-                }
-                MailNeedsPill(label: MailNeedsRules.shared.DONE, palette: palette,
-                              spoken: "Done: archive \(row.subject)", action: done)
-                MailNeedsPill(label: MailNeedsRules.shared.TASK, palette: palette,
-                              spoken: "Make a task from \(row.subject) and archive the email", action: task)
-                MailNeedsPill(label: MailNeedsRules.shared.WAITING, palette: palette, quiet: true,
-                              spoken: "Waiting for \(row.from) on \(row.subject), chase in 3 days", action: waiting)
-                MailNeedsPill(label: MailNeedsRules.shared.SNOOZE, palette: palette, quiet: true,
-                              spoken: "Snooze \(row.subject) till tomorrow 8 o'clock", action: snooze)
-                if let unsubscribe, row.canUnsubscribe {
-                    MailNeedsPill(label: MailCardUnsubRules.shared.UNSUBSCRIBE, palette: palette, quiet: true,
-                                  spoken: "Unsubscribe from \(row.from) and archive this email", action: unsubscribe)
-                }
-                if let alwaysTidy {
-                    MailNeedsPill(label: MailSenderRuleRules.shared.ALWAYS_TIDY, palette: palette, quiet: true,
-                                  spoken: "Archive this, and \(row.from)'s future emails skip your inbox and go to Archive", action: alwaysTidy)
-                }
-                // Block sender: this email and their later ones to Trash; on a possible scam, Bin & block in the critical colour.
-                if let block, row.canBlock {
-                    MailNeedsPill(label: row.scam ? MailSenderRuleRules.shared.BIN : MailSenderRuleRules.shared.BLOCK,
-                                  palette: palette, quiet: !row.scam, critical: row.scam,
-                                  spoken: "Block \(row.from): this email and their later ones go to Trash", action: block)
+                if showMore {
+                    ForEach(rowActions.more, id: \.self) { a in actionPill(a) }
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .leading)))
                 }
             }
             .padding(.top, MekaSpace.xxs)
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: replying)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: showMore)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showLinked)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: row.autoDraft)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: fullDraft)
@@ -371,16 +384,16 @@ extension MailNeedsRowView {
             HStack(spacing: MekaSpace.xs) {
                 MailNeedsPill(label: R.SEND, palette: palette, spoken: "Send Navilife's draft to \(row.from) now",
                               action: { send(auto) {} })
-                MailNeedsPill(label: R.EDIT, palette: palette, quiet: true, spoken: "Edit the draft before sending",
+                MailNeedsPill(label: R.EDIT, palette: palette, spoken: "Edit the draft before sending",
                               action: {
                                   MekaHaptics.light()
                                   text = auto; lastDraft = auto; draftLine = MailDraftRules.shared.DRAFTED_LINE; replying = true
                               })
                 if let notNeeded {
-                    MailNeedsPill(label: R.NOT_NEEDED, palette: palette, quiet: true,
+                    MailNeedsPill(label: R.NOT_NEEDED, palette: palette,
                                   spoken: "No reply needed to \(row.from); put the draft away", action: notNeeded)
                 }
-                MailNeedsPill(label: R.LATER, palette: palette, quiet: true,
+                MailNeedsPill(label: R.LATER, palette: palette,
                               spoken: "Remind me about \(row.subject) tomorrow at 8", action: snooze)
             }
         }
