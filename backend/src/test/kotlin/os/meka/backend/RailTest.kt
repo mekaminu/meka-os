@@ -171,6 +171,7 @@ class RailTest {
         // A route but no home station: no board asked for, and the report says why.
         assertTrue(asked.isEmpty())
         assertTrue(integrations.trainsReport("home").endsWith("no home station in About you"))
+        asked.clear() // the report's probe
 
         profile(ops, mapOf(AboutYouFields.HOME_STATION to FieldValue.Text("Brighton")))
         Household.set(Household.names.copy(homeStation = "Brighton"))
