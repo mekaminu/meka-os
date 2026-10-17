@@ -256,7 +256,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -328,6 +328,12 @@ object ReleasePublisherCli {
                     googleLines(l).forEach(::println)
                     0
                 }
+                "publisher-spam" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Spam-call lookup::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    println(spamLine(l.spam))
+                    0
+                }
                 "publisher-mail" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -357,7 +363,13 @@ object ReleasePublisherCli {
         return "::${if (ok) "notice" else "warning"} title=Bank sync::$line".replace("%", "%25")
     }
 
-    /** Live trains: one notice (a warning unless the probe read a board); counts only, never a station. */
+    /** Spam-call lookup (2026-10-17): one notice (a warning unless the probe searched); counts only, never a number. */
+    fun spamLine(line: String?): String {
+        if (line == null) return "::notice title=Spam-call lookup::the server doesn't report it yet"
+        val ok = line.startsWith("probe OK")
+        return "::${if (ok) "notice" else "warning"} title=Spam-call lookup::$line".replace("%", "%25")
+    }
+
     /**
      * The Google key (2026-10-17): "Travel times" (the Routes probe and the feed) and "Navilife's voice" (Google's
      * voices and the probe clip), each a notice when working and a warning otherwise; counts only.

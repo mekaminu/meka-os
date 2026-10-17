@@ -273,6 +273,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-google "${{ steps.decide.outputs.url }}"
 
+      # Spam-call lookup (2026-10-17): a probe search of a public body's published number through the Brave key (at most
+      # once a day), then how many numbers were looked up and what they were found to be; counts only, never a number.
+      - name: Spam-call lookup
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-spam "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

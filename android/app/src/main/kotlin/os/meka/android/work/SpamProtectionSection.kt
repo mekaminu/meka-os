@@ -103,6 +103,7 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         Text(SpamProtectionRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(os.meka.core.domain.NumberLookupRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
         Text(SpamProtectionRules.SYSTEM_LIST_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
         // Suspected spam (8b c): numbers MEKA's AI flagged from their message, waiting for Block or Not spam.
         AnimatedVisibility(blocked.suspects.isNotEmpty(), enter = enter, exit = exit) {

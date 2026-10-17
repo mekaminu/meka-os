@@ -279,6 +279,9 @@ export class MekaStack extends cdk.Stack {
     // Live trains (Needs Meka #16, 2026-10-17): Meka made this secret himself ({"api_key": "…"}, the Rail Data
     // Marketplace's Live Departure Board consumer key); referred to by name, read at use time.
     const railDarwin = secretsmanager.Secret.fromSecretNameV2(this, 'RailDarwin', `${prefix}/rail/darwin`);
+    // Spam-call lookup (Needs Meka #32, 2026-10-17): Meka made this secret himself ({"api_key": "…"}, his Brave Search
+    // API key, $0 spend cap); referred to by name, read at use time.
+    const searchBrave = secretsmanager.Secret.fromSecretNameV2(this, 'SearchBrave', `${prefix}/search/brave`);
 
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
@@ -312,6 +315,7 @@ export class MekaStack extends cdk.Stack {
         // By name: the secret's ARN carries a suffix the stack doesn't know.
         MEKA_MONEY_LUNCHFLOW_SECRET: `${prefix}/money/lunchflow`,
         MEKA_RAIL_DARWIN_SECRET: `${prefix}/rail/darwin`,
+        MEKA_SEARCH_BRAVE_SECRET: `${prefix}/search/brave`,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
@@ -349,6 +353,7 @@ export class MekaStack extends cdk.Stack {
     approvalsKestrel.grantRead(task.taskRole); // a public key only
     railDarwin.grantRead(task.taskRole); // read-only departure boards; nothing about him is sent but station codes
     moneyLunchFlow.grantRead(task.taskRole); // read-only bank data through Lunch Flow; nothing can move money
+    searchBrave.grantRead(task.taskRole); // web searches for unknown callers' numbers only
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
     task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({

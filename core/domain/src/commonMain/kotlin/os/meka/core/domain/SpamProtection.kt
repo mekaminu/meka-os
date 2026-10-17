@@ -110,6 +110,10 @@ enum class AutoBlockTrigger(val why: String) {
     ASSISTANT_HANGUP("Auto-blocked · hung up on your call assistant without a message"),
     /** Call notifications, slice 5: left the call assistant what reads as an automated message ([CallNoticeRules.automated]). */
     AUTOMATED("Auto-blocked · left your call assistant an automated message"),
+    /** Spam-call lookup (2026-10-17): the web's report sites call it a scam; stopped before it rang. */
+    REPORTED("Auto-blocked · reported online as a scam"),
+    /** Spam-call lookup: the answer came after the call had rung; blocked from the next call on. */
+    REPORTED_AFTER_CALL("Auto-blocked · reported online as a scam"),
 }
 
 object AutoBlockRules {
@@ -134,11 +138,13 @@ object AutoBlockRules {
         "${trigger.why} · ${CivilDate.shortLabel(cal.epochDayOf(atMs))}".take(BlockedCallerRules.MAX_WHY)
 
     /** Activity's detail for the entry. */
-    fun detail(trigger: AutoBlockTrigger, callsInWindow: Int = 0): String = when (trigger) {
+    fun detail(trigger: AutoBlockTrigger, callsInWindow: Int = 0, reported: String? = null): String = when (trigger) {
         AutoBlockTrigger.NETWORK_CHECK -> "Your network couldn't verify the caller's number (often a spoofed one); it didn't ring"
         AutoBlockTrigger.REPEAT_CALLER -> "Called $callsInWindow times in $REPEAT_DAYS days and never left a message"
         AutoBlockTrigger.ASSISTANT_HANGUP -> "Reached your call assistant and hung up without saying who they were or why"
         AutoBlockTrigger.AUTOMATED -> "Reached your call assistant and left what sounds like an automated call: a keypad press, one word or a second or two"
+        AutoBlockTrigger.REPORTED -> "People online have ${reported ?: "reported it as a scam"}; it didn't ring"
+        AutoBlockTrigger.REPORTED_AFTER_CALL -> "People online have ${reported ?: "reported it as a scam"}; it won't ring again"
     }
 }
 

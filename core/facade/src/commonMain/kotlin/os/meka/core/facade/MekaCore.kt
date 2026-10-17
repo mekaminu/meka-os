@@ -235,6 +235,7 @@ class MekaCore(
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var hereApi: HereApi? = transport as? HereApi
     private var fuelApi: FuelApi? = transport as? FuelApi
+    private var numberLookupApi: NumberLookupApi? = transport as? NumberLookupApi
     private var healthApi: HealthApi? = transport as? HealthApi
     private var updateFailureApi: UpdateFailureApi? = transport as? UpdateFailureApi
     private var foldPostureApi: FoldPostureApi? = transport as? FoldPostureApi
@@ -4106,11 +4107,11 @@ class MekaCore(
     }
 
     /** Blocks [number] as an automatic action (Activity, with Undo); the entry's id, or null when nothing changed. */
-    private fun autoBlock(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, calls: Int = 0): String? {
+    private fun autoBlock(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, calls: Int = 0, reported: String? = null): String? {
         val why = os.meka.core.domain.AutoBlockRules.why(trigger, atMs, ZoneCalendar(timeZone))
         val (_, id) = activity.actRecorded(
             os.meka.core.domain.AutoBlockRules.blockedLine(number), os.meka.core.domain.AutoBlockRules.ACTIVITY_WHY,
-            os.meka.core.domain.AutoBlockRules.SOURCE, level = null, detail = os.meka.core.domain.AutoBlockRules.detail(trigger, calls),
+            os.meka.core.domain.AutoBlockRules.SOURCE, level = null, detail = os.meka.core.domain.AutoBlockRules.detail(trigger, calls, reported),
         ) { blockList.block(number, why) }
         refresh()
         activityChanged()
@@ -4131,21 +4132,84 @@ class MekaCore(
         offered: List<os.meka.core.domain.ScreenedCall>,
         /** The name the network sent with the call (read on the phone); a claimed police/bank/NHS/school gets the heads-up. */
         networkName: String? = null,
+        /** Spam-call lookup: what the web's report sites say about the number ([numberReputation]), when known. */
+        reputation: os.meka.core.domain.NumberReputation? = null,
     ): os.meka.core.domain.UnknownCallOffer? = onCore {
         val view = blockList.view()
         os.meka.core.domain.UnknownCallRules.offer(
             number, outcome, durationS, atMs, nowMs(), view.keys, offered, ZoneCalendar(timeZone),
             claim = os.meka.core.domain.OfficialCallerRules.claim(networkName),
             suspected = view.suspectedKeys,
+            reputation = os.meka.core.domain.NumberLookupRules.line(reputation),
         )
+    }
+
+    /**
+     * Spam-call lookup (2026-10-17): what the web's report sites say about [number], from Navilife's server, waiting at
+     * most [waitMs] for a fresh search. Null when the number isn't one to look up, the server has no search key, the
+     * search failed or is still going, or the phone is offline: all "no lookup", never spam. Never throws. The Fold asks
+     * only about callers it doesn't know (never contacts, anyone he called lately or the household).
+     */
+    suspend fun numberReputation(number: String?, waitMs: Long): os.meka.core.domain.NumberReputation? {
+        if (!os.meka.core.domain.NumberLookupRules.lookUpable(number)) return null
+        val api = numberLookupApi ?: return null
+        val r = try {
+            api.lookUpNumber(number!!.trim(), waitMs)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return null
+        }
+        if (r.state != os.meka.core.wire.NumberLookupCodec.Response.OK) return null
+        val verdict = when (r.verdict) {
+            "scam" -> os.meka.core.domain.NumberVerdict.SCAM
+            "nuisance" -> os.meka.core.domain.NumberVerdict.NUISANCE
+            "legit" -> os.meka.core.domain.NumberVerdict.LEGIT
+            "unknown" -> os.meka.core.domain.NumberVerdict.UNKNOWN
+            else -> return null
+        }
+        return os.meka.core.domain.NumberReputation(verdict, r.reports, r.sure, r.why)
+    }
+
+    /**
+     * Spam-call lookup: whether the Fold should ask the server about this caller before it rings. Only a number worth
+     * looking up from someone nobody knows: never a contact, anyone he called lately, a caller claiming an official
+     * body, the family and always-notify lists, About you's numbers or a number already on the block list (so none of
+     * theirs is ever searched for).
+     */
+    suspend fun callerNeedsLookup(
+        number: String?, lists: os.meka.core.domain.PeopleLists, signals: os.meka.core.domain.CallSignals,
+    ): Boolean = onCore {
+        if (!os.meka.core.domain.NumberLookupRules.lookUpable(number)) return@onCore false
+        if (signals.knownContact || signals.calledRecently || signals.household) return@onCore false
+        if (os.meka.core.domain.OfficialCallerRules.claim(signals.networkName) != null) return@onCore false
+        if (lists.nameForNumber(number!!) != null) return@onCore false
+        val key = os.meka.core.domain.CallScreeningRules.callerKey(number)
+        key !in blockList.view().keys && key !in os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())
+    }
+
+    /**
+     * Spam-call lookup, after a call from a number the Fold didn't know (its screening watched it): when the web's
+     * report sites call it a scam, surely, and spam protection is on, it goes on the block list as an automatic action
+     * with Undo ("Rang · 14:02 · reported 23× as a scam"). Never the household's numbers or one already listed; the
+     * Fold has already ruled out contacts, anyone he called lately and a caller claiming an official body. Returns
+     * the Activity entry's id, or null when nothing was blocked.
+     */
+    suspend fun autoBlockReportedCaller(number: String, reputation: os.meka.core.domain.NumberReputation?, atMs: Long): String? = onCore {
+        if (!os.meka.core.domain.NumberLookupRules.shouldBlock(reputation)) return@onCore null
+        val key = os.meka.core.domain.BlockedCallerRules.keyOf(number) ?: return@onCore null
+        if (!work.spamProtection() || key in blockList.view().keys) return@onCore null
+        if (key in os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())) return@onCore null
+        autoBlock(number, os.meka.core.domain.AutoBlockTrigger.REPORTED_AFTER_CALL, atMs,
+            reported = os.meka.core.domain.NumberLookupRules.line(reputation))
     }
 
     /**
      * Call notifications, slice 3: the automatic block in the caller's own notification ("Blocked · and blocked from
      * now on" with Undo), worded in the phone's time zone.
      */
-    fun autoBlockNotice(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, callsInWindow: Int = 0) =
-        os.meka.core.domain.CallNoticeRules.autoBlockNotice(number, trigger, atMs, ZoneCalendar(timeZone), callsInWindow)
+    fun autoBlockNotice(number: String, trigger: os.meka.core.domain.AutoBlockTrigger, atMs: Long, callsInWindow: Int = 0, reported: String? = null) =
+        os.meka.core.domain.CallNoticeRules.autoBlockNotice(number, trigger, atMs, ZoneCalendar(timeZone), callsInWindow, reported)
 
     /**
      * The Fold's call screening asks this about every incoming call: the call assistant's switch, work mode, quiet
@@ -4173,6 +4237,10 @@ class MekaCore(
         // Spam calls still ring, slice 1: a number the network couldn't verify goes on the block list (Undo in Activity).
         val decision = if (decided.reason == os.meka.core.domain.CallReason.AUTO_BLOCKED && number != null) {
             decided.copy(autoBlockId = autoBlock(number, os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK, now))
+        } else if (decided.reason == os.meka.core.domain.CallReason.REPORTED_SCAM && number != null) {
+            // Spam-call lookup: reported online as a scam, surely; blocked before it rang (Undo in Activity).
+            decided.copy(autoBlockId = autoBlock(number, os.meka.core.domain.AutoBlockTrigger.REPORTED, now,
+                reported = os.meka.core.domain.NumberLookupRules.line(signals.reputation)))
         } else decided
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
@@ -4539,6 +4607,7 @@ class MekaCore(
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
+            numberLookupApi = transport as? NumberLookupApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
             notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi

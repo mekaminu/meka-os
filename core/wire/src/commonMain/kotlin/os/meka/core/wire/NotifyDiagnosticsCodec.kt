@@ -105,6 +105,8 @@ object NotifyDiagnosticsCodec {
         val travel: String? = null,
         /** The Google key: Navilife's voice (Google's Chirp 3 HD voices, the probe clip, the month's characters, Polly). */
         val voice: String? = null,
+        /** Spam-call lookup (2026-10-17): the Brave key's probe and the lookups' counts; never a number. */
+        val spam: String? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -155,6 +157,7 @@ object NotifyDiagnosticsCodec {
         l.trains?.let { put("trains", clean(it, MAIL_DETAIL_MAX)) }
         l.travel?.let { put("travel", clean(it, MAIL_DETAIL_MAX)) }
         l.voice?.let { put("voice", clean(it, MAIL_DETAIL_MAX)) }
+        l.spam?.let { put("spam", clean(it, MAIL_DETAIL_MAX)) }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -179,6 +182,7 @@ object NotifyDiagnosticsCodec {
             trains = o.str("trains")?.let { clean(it, MAIL_DETAIL_MAX) },
             travel = o.str("travel")?.let { clean(it, MAIL_DETAIL_MAX) },
             voice = o.str("voice")?.let { clean(it, MAIL_DETAIL_MAX) },
+            spam = o.str("spam")?.let { clean(it, MAIL_DETAIL_MAX) },
         )
     }
 

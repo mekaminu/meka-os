@@ -349,6 +349,14 @@ interface FuelApi {
 }
 
 /**
+ * Spam-call lookup (2026-10-17): what the web's report sites say about a caller's number, from Navilife's server
+ * (`POST /v1/calls/lookup`), waiting at most [waitMs] for a fresh search. The Fold asks only about callers it doesn't know.
+ */
+interface NumberLookupApi {
+    suspend fun lookUpNumber(number: String, waitMs: Long): os.meka.core.wire.NumberLookupCodec.Response
+}
+
+/**
  * The Health screen's server half (Reliability first, item 3): `POST /v1/health/household`. Null from an older server
  * without the route (the screen then says "Couldn't check" for what only the server knows).
  */
@@ -466,7 +474,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -843,6 +851,21 @@ class HttpSyncTransport(
             // A server without the route (older, or no Fuel Finder key): the pane says prices are off.
             resp.status.value == 404 -> return os.meka.core.wire.FuelCodec.Response(os.meka.core.wire.FuelCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.FuelCodec.Response(os.meka.core.wire.FuelCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun lookUpNumber(number: String, waitMs: Long): os.meka.core.wire.NumberLookupCodec.Response {
+        val codec = os.meka.core.wire.NumberLookupCodec
+        val body = codec.encodeRequest(os.meka.core.wire.NumberLookupCodec.Request(number, waitMs))
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.PATH, body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.PATH}")
+            // A server without the route (older, or no search key): no lookup.
+            resp.status.value == 404 -> return os.meka.core.wire.NumberLookupCodec.Response(os.meka.core.wire.NumberLookupCodec.Response.OFF)
+            resp.status.value == 403 -> return os.meka.core.wire.NumberLookupCodec.Response(os.meka.core.wire.NumberLookupCodec.Response.FAILED)
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
         }
         return codec.decodeResponse(resp.bodyAsText())

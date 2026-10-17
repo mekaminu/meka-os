@@ -44,6 +44,13 @@ enum class CallReason(val label: String) {
     OFFICIAL_CLAIM("Claims to be an official body"),
     /** An emergency or NHS number (999, 112, 101, 111…): never screened. Added 2026-10-13. */
     EMERGENCY("Emergency service"),
+    /**
+     * Spam-call lookup (2026-10-17): the web's report sites call the number a scam, surely enough to block
+     * ([NumberLookupRules.shouldBlock]); rejected before it rang and put on the block list (Undo in Activity).
+     */
+    REPORTED_SCAM("Reported online as a scam · blocked"),
+    /** Spam-call lookup: reported as nuisance or sales calls (or a scam, not surely): to the assistant when it's on. */
+    REPORTED_NUISANCE("Reported online as nuisance or sales calls"),
 }
 
 /**
@@ -66,6 +73,11 @@ data class CallSignals(
     val networkName: String? = null,
     /** The number is in the household profile (About you: partner, the assistant, voicemail): never screened as spam. */
     val household: Boolean = false,
+    /**
+     * Spam-call lookup (2026-10-17): what the web's report sites say about the number, when Navilife's server answered
+     * in time ([NumberLookupRules.BEFORE_RING_WAIT_MS]); null when it wasn't asked, didn't know or didn't answer.
+     */
+    val reputation: NumberReputation? = null,
 ) {
     companion object { val NONE = CallSignals() }
 }
@@ -189,8 +201,12 @@ object CallScreeningRules {
             !trusted && key != WITHHELD && official -> CallDecision(CallVerdict.RING, CallReason.OFFICIAL_CLAIM, key)
             spamProtection && !trusted && key != WITHHELD && signals.verificationFailed ->
                 CallDecision(CallVerdict.BLOCK, CallReason.AUTO_BLOCKED, key)
+            spamProtection && !trusted && key != WITHHELD && NumberLookupRules.shouldBlock(signals.reputation) ->
+                CallDecision(CallVerdict.BLOCK, CallReason.REPORTED_SCAM, key)
             !switchedOn -> CallDecision(CallVerdict.RING, CallReason.SWITCHED_OFF, key, listed)
             !trusted && key != WITHHELD && signals.verificationFailed -> CallDecision(CallVerdict.DECLINE, CallReason.LIKELY_SPAM, key)
+            !trusted && key != WITHHELD && NumberLookupRules.toAssistant(signals.reputation) ->
+                CallDecision(CallVerdict.DECLINE, CallReason.REPORTED_NUISANCE, key)
             !trusted && key != WITHHELD && key in suspected -> CallDecision(CallVerdict.DECLINE, CallReason.SUSPECTED_SPAM, key)
             !trusted && key == WITHHELD && signals.quietHours && !repeat -> CallDecision(CallVerdict.DECLINE, CallReason.WITHHELD_QUIET, key)
             !atWork -> CallDecision(CallVerdict.RING, CallReason.OFF_WORK, key, listed)
@@ -239,7 +255,8 @@ object CallScreeningRules {
         return when (decision.reason) {
             CallReason.BLOCKED -> "Blocked a call from $who" to "It is on your block list"
             // Auto-blocked calls are logged by the facade as an action with Undo ([AutoBlockRules.activity]).
-            CallReason.AUTO_BLOCKED -> null
+            CallReason.AUTO_BLOCKED, CallReason.REPORTED_SCAM -> null
+            CallReason.REPORTED_NUISANCE -> "Sent a call from $who to the assistant" to "People online report the number for nuisance or sales calls"
             CallReason.LIKELY_SPAM -> "Sent a likely spam call from $who to the assistant" to "The network couldn't verify the caller's number"
             CallReason.SUSPECTED_SPAM -> "Sent a call from $who to the assistant" to "It is on Suspected spam: Navilife's AI thought their last message sounded like a scam"
             CallReason.WITHHELD_QUIET -> "Sent a withheld call to the assistant" to "Withheld numbers don't ring in quiet hours (a second call within 3 minutes does)"

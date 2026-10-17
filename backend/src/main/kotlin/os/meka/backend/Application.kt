@@ -72,6 +72,7 @@ import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.FuelCodec
+import os.meka.core.wire.NumberLookupCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.FoldPostureCodec
@@ -120,6 +121,8 @@ fun Application.mekaSync(
     here: HereWeather? = integrations?.hereWeather(),
     /** Cheapest fuel nearby (Car and parking, slice 6): Fuel Finder's prices at a rounded point; null leaves the route out. */
     fuel: FuelFinder? = null,
+    /** Spam-call lookup (2026-10-17): what the web says about an unknown caller's number; null leaves the route out. */
+    numberLookup: NumberLookup? = null,
     /** The family page (family sharing with his wife, slice 2); null leaves its routes out. */
     family: FamilyShare? = null,
     /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
@@ -722,6 +725,19 @@ fun Application.mekaSync(
             }
         }
 
+        if (numberLookup != null) {
+            // Spam-call lookup: one number in (a caller the Fold doesn't know), what the web's report sites say about it
+            // out, from the 30-day cache or one search. Keyed devices only, never the publisher. The number is never logged.
+            post(NumberLookupCodec.PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                if (who.deviceId == ReleasePublisher.ID) throw Forbidden()
+                val request = NumberLookupCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { numberLookup.lookUp(who.householdId, request.number, request.waitMs) }
+                call.respondText(NumberLookupCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+        }
+
         if (push != null) {
             // A device's push address (an FCM token), or an empty token to stop waking it. Keyed devices only.
             post("/v1/push/token") {
@@ -1053,6 +1069,10 @@ fun main(args: Array<String>) {
                     feed = os.meka.backend.integrations.LunchFlowFeed.fromSecret(secret), onWritten = { hh -> push?.serverChanged(hh) },
                 ).also { startBankSync(it) }
             }
+            // Spam-call lookup (2026-10-17): unknown callers' numbers searched on the web; off until the Brave key is in.
+            val numberLookup = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let {
+                NumberLookup(BraveSearch.fromSecret(it), PostgresNumberLookupStore(ds))
+            }
             val verifier = RequestVerifier()
             // his wife's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
             // and the dinners, written as server ops, and the emergency card, read only. FamilyShare only ever asks for its
@@ -1079,11 +1099,13 @@ fun main(args: Array<String>) {
                         },
                         trains = { hh -> integrations?.trainsReport(hh) ?: "off · integrations not running" },
                         travel = { hh -> integrations?.travelReport(hh) ?: "off · integrations not running" },
-                        voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" }),
+                        voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" },
+                        spam = { hh -> numberLookup?.report(hh) ?: "off · the server has no Brave secret set" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
                     fuel = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) },
+                    numberLookup = numberLookup,
                 )
             }.start(wait = true)
         }
@@ -1260,6 +1282,7 @@ object Migrations {
         24 to "/db/V24__mail_preview.sql",
         25 to "/db/V25__mail_backlog.sql",
         26 to "/db/V26__speech_usage_google.sql",
+        27 to "/db/V27__number_lookup.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

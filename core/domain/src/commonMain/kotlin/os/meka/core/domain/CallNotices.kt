@@ -245,13 +245,15 @@ object CallNoticeRules {
     }
 
     /** What happened before an automatic block: "Blocked before it rang · 14:05", "Rang · 14:05 · 3rd call in 7 days". */
-    fun autoBlockHappened(trigger: AutoBlockTrigger, atMs: Long, cal: LocalCalendar, callsInWindow: Int = 0): String {
+    fun autoBlockHappened(trigger: AutoBlockTrigger, atMs: Long, cal: LocalCalendar, callsInWindow: Int = 0, reported: String? = null): String {
         val at = LocalClock.formatMinute(cal.minuteOfDay(atMs))
         return when (trigger) {
             AutoBlockTrigger.NETWORK_CHECK -> "Blocked before it rang · $at · your network couldn't verify the number"
             AutoBlockTrigger.REPEAT_CALLER -> "Rang · $at · called $callsInWindow times in ${AutoBlockRules.REPEAT_DAYS} days and never left a message"
             AutoBlockTrigger.ASSISTANT_HANGUP -> "Sent to your call assistant · $at · hung up without saying who they were or why"
             AutoBlockTrigger.AUTOMATED -> "Sent to your call assistant · $at · ${AUTOMATED_LABEL.lowercase()}, no real message"
+            AutoBlockTrigger.REPORTED -> "Blocked before it rang · $at · ${reported ?: "reported online as a scam"}"
+            AutoBlockTrigger.REPORTED_AFTER_CALL -> "Rang · $at · ${reported ?: "reported online as a scam"}"
         }
     }
 
@@ -259,8 +261,8 @@ object CallNoticeRules {
      * The automatic block, in the caller's own notification: who, "Blocked · and blocked from now on" collapsed, and
      * expanded what happened then the block line; Undo and Report to 7726 are the buttons.
      */
-    fun autoBlockNotice(number: String, trigger: AutoBlockTrigger, atMs: Long, cal: LocalCalendar, callsInWindow: Int = 0): Notice {
-        val happened = autoBlockHappened(trigger, atMs, cal, callsInWindow)
+    fun autoBlockNotice(number: String, trigger: AutoBlockTrigger, atMs: Long, cal: LocalCalendar, callsInWindow: Int = 0, reported: String? = null): Notice {
+        val happened = autoBlockHappened(trigger, atMs, cal, callsInWindow, reported)
         return Notice(
             title = UnknownCallRules.title(number),
             text = AUTO_BLOCKED,

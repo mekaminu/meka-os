@@ -190,13 +190,13 @@ object UnknownCallNotice {
     @SuppressLint("MissingPermission") // checked by WorkAlerts.canPost(), and a late revoke is caught below
     fun postAutoBlocked(
         context: Context, number: String, activityId: String, trigger: os.meka.core.domain.AutoBlockTrigger,
-        atMs: Long, calls: Int = 0,
+        atMs: Long, calls: Int = 0, reported: String? = null,
     ) {
         if (!WorkAlerts.canPost(context)) return
         val tag = CallNoticeRules.tag(number) ?: return
         if (!CallNotification.mayPost(context, tag, CallNoticeRules.Kind.AUTO_BLOCKED)) return
         ensureChannel(context)
-        val notice = runCatching { (context.applicationContext as MekaApplication).core.autoBlockNotice(number, trigger, atMs, calls) }
+        val notice = runCatching { (context.applicationContext as MekaApplication).core.autoBlockNotice(number, trigger, atMs, calls, reported) }
             .getOrNull() ?: return
         val b = CallNotification.mark(context, base(context, notice.title, notice.text, notice.big), tag, CallNoticeRules.Kind.AUTO_BLOCKED)
         CallNotification.addActions(context, b, tag, number, notice, activityId = activityId,
@@ -225,6 +225,21 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
         val app = ctx as MekaApplication
         val outcome = UnknownCallRules.outcomeOf(entry?.first, entry?.second ?: 0L, toAssistant)
         val networkName = inputData.getString(UnknownCallNotice.KEY_NAME)
+        // Spam-call lookup (2026-10-17): what the web's report sites say about this stranger's number (the server's
+        // cache answers at once when it was looked up before the call rang; nothing for a claimed official body).
+        val reputation = if (os.meka.core.domain.OfficialCallerRules.claim(networkName) == null) {
+            runCatching { app.core.numberReputation(number, os.meka.core.domain.NumberLookupRules.AFTER_CALL_WAIT_MS) }.getOrNull()
+        } else null
+        if (outcome != os.meka.core.domain.CallOutcome.ANSWERED && reputation != null) {
+            val id = runCatching { app.core.autoBlockReportedCaller(number, reputation, atMs) }.getOrNull()
+            if (id != null) {
+                UnknownCallNotice.postAutoBlocked(
+                    ctx, number, id, os.meka.core.domain.AutoBlockTrigger.REPORTED_AFTER_CALL, atMs,
+                    reported = os.meka.core.domain.NumberLookupRules.line(reputation),
+                )
+                return Result.success()
+            }
+        }
         // Spam calls still ring, slice 1: an unknown number calling again within a week without leaving a message is
         // blocked now (never one he spoke to, never a claimed police/bank/NHS/school: those get the heads-up below).
         if (outcome != os.meka.core.domain.CallOutcome.ANSWERED && os.meka.core.domain.OfficialCallerRules.claim(networkName) == null) {
@@ -237,7 +252,7 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
             }
         }
         val offer = runCatching {
-            app.core.unknownCallOffer(number, outcome, entry?.second ?: 0L, atMs, UnknownCallNotice.offered(ctx), networkName)
+            app.core.unknownCallOffer(number, outcome, entry?.second ?: 0L, atMs, UnknownCallNotice.offered(ctx), networkName, reputation)
         }.getOrNull() ?: return Result.success()
         if (UnknownCallNotice.post(ctx, offer)) UnknownCallNotice.markOffered(ctx, offer.key, System.currentTimeMillis())
         return Result.success()

@@ -595,10 +595,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "spam-calls",
             title = "Spam protection",
-            keywords = listOf("spam calls", "spam call", "spam protection", "block a number", "block number", "blocked calls", "blocked numbers", "unblock", "caller id"),
-            what = "numbers your network couldn't verify, strangers who call twice in a week without a message and strangers who hang up on the call assistant are blocked, so they don't ring.",
+            keywords = listOf("spam calls", "spam call", "reported number", "scam number", "spam protection", "block a number", "block number", "blocked calls", "blocked numbers", "unblock", "caller id"),
+            what = "numbers people online report as a scam, numbers your network couldn't verify, strangers who call twice in a week without a message and strangers who hang up on the call assistant are blocked, so they don't ring.",
             how = "It's always on while Navilife is the phone's Caller ID & spam app. Each block comes with Undo, and Activity → Blocked calls lists them with Unblock.",
-            tips = listOf("Contacts, anyone you called in 90 days and emergency numbers are never blocked.", "Allow Navilife to read contacts and the call log, or repeat callers and hang-ups can't be caught.", "Android's own Blocked numbers list isn't used: Navilife's screening keeps the call from ringing instead."),
+            tips = listOf("Contacts, anyone you called in 90 days and emergency numbers are never blocked.", "Allow Navilife to read contacts and the call log, or repeat callers and hang-ups can't be caught.", "Android's own Blocked numbers list isn't used: Navilife's screening keeps the call from ringing instead.", "An unknown caller's number is looked up on the web: a reported scam is blocked, a sales caller goes to your call assistant, and the notification says what people reported."),
             fold = HelpPlace.WORK,
             foldWhere = "Ask → Settings → Work mode → Spam protection",
             mac = HelpPlace.ACTIVITY,

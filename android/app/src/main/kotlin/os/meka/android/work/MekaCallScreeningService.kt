@@ -21,6 +21,7 @@ import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CallerNames
 import os.meka.core.domain.CallSignals
 import os.meka.core.domain.CallVerdict
+import os.meka.core.domain.NumberLookupRules
 import os.meka.core.domain.People
 import os.meka.core.domain.UnknownCallRules
 
@@ -56,7 +57,7 @@ class MekaCallScreeningService : CallScreeningService() {
                     val number = details.handle?.schemeSpecificPart
                     val now = System.currentTimeMillis()
                     val recent = RecentDeclines.load(ctx)
-                    val signals = CallSignals(
+                    val known = CallSignals(
                         verificationFailed = details.callerNumberVerificationStatus == android.telecom.Connection.VERIFICATION_STATUS_FAILED,
                         knownContact = CallerLookup.isContact(ctx, number),
                         calledRecently = CallerLookup.calledRecently(ctx, number, now),
@@ -64,6 +65,14 @@ class MekaCallScreeningService : CallScreeningService() {
                         // and gets a heads-up afterwards instead of being auto-blocked (spam calls still ring, slice 1).
                         networkName = runCatching { details.callerDisplayName }.getOrNull()?.trim()?.takeIf { it.isNotEmpty() },
                     )
+                    // Spam-call lookup (2026-10-17): a caller nobody knows is looked up on the web through Navilife's
+                    // server, waiting at most 1.5 s (the answer is cached for after the call when it's slower).
+                    val signals = if (!known.verificationFailed && meka.core.callerNeedsLookup(number, meka.captures.lists.value, known)) {
+                        val rep = withTimeoutOrNull(NumberLookupRules.BEFORE_RING_WAIT_MS + 300) {
+                            meka.core.numberReputation(number, NumberLookupRules.BEFORE_RING_WAIT_MS)
+                        }
+                        known.copy(reputation = rep)
+                    } else known
                     val d = meka.core.screenIncomingCall(number, meka.captures.lists.value, recent, signals)
                     RecentDeclines.save(ctx, CallScreeningRules.remember(recent, d, now))
                     Screened(d, number, signals, now)
@@ -105,7 +114,14 @@ class MekaCallScreeningService : CallScreeningService() {
             // and an auto-blocked one the quiet "Blocked … · it won't ring again" with Undo (spam calls still ring, slice 1).
             decision?.let { s ->
                 val autoId = s.decision.autoBlockId
-                if (autoId != null && s.number != null) runCatching { UnknownCallNotice.postAutoBlocked(this@MekaCallScreeningService, s.number, autoId, os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK, System.currentTimeMillis()) }
+                if (autoId != null && s.number != null) runCatching {
+                    val reported = s.decision.reason == os.meka.core.domain.CallReason.REPORTED_SCAM
+                    UnknownCallNotice.postAutoBlocked(
+                        this@MekaCallScreeningService, s.number, autoId,
+                        if (reported) os.meka.core.domain.AutoBlockTrigger.REPORTED else os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK,
+                        System.currentTimeMillis(), reported = if (reported) NumberLookupRules.line(s.signals.reputation) else null,
+                    )
+                }
                 else runCatching { watchUnknown(s) }
             }
         }

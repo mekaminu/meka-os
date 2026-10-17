@@ -70,7 +70,8 @@ object UnknownCallRules {
     fun watch(decision: CallDecision, number: String?, signals: CallSignals, ownNumber: Boolean = false): Boolean {
         if (BlockedCallerRules.keyOf(number) == null || ownNumber) return false
         if (decision.listedName != null || signals.knownContact || signals.calledRecently) return false
-        return decision.verdict == CallVerdict.RING || decision.reason == CallReason.LIKELY_SPAM || decision.reason == CallReason.SUSPECTED_SPAM
+        return decision.verdict == CallVerdict.RING || decision.reason == CallReason.LIKELY_SPAM ||
+            decision.reason == CallReason.SUSPECTED_SPAM || decision.reason == CallReason.REPORTED_NUISANCE
     }
 
     /** How a call ended, from its call-log [type] and [durationS]; null [type] (no entry, no permission) is [CallOutcome.UNKNOWN]. */
@@ -103,6 +104,8 @@ object UnknownCallRules {
         claim: OfficialClaim? = null,
         /** Call notifications, slice 3: numbers on Suspected spam (keys): the line says so and Not spam is offered. */
         suspected: Set<String> = emptySet(),
+        /** Spam-call lookup (2026-10-17): what people report about the number ([NumberLookupRules.line]), beside who rang. */
+        reputation: String? = null,
     ): UnknownCallOffer? {
         val key = BlockedCallerRules.keyOf(number) ?: return null
         if (key in blocked) return null
@@ -115,7 +118,8 @@ object UnknownCallRules {
             CallOutcome.MISSED -> "Rang · you missed it · $day$at"
             CallOutcome.DECLINED -> "You declined it · $day$at"
             CallOutcome.ANSWERED -> "Rang through · you spoke ${length(durationS)} · $day$at"
-            CallOutcome.TO_ASSISTANT -> "Sent to your call assistant · $day$at · the network couldn't verify the number"
+            CallOutcome.TO_ASSISTANT -> if (reputation != null) "Sent to your call assistant · $day$at"
+                else "Sent to your call assistant · $day$at · the network couldn't verify the number"
             CallOutcome.UNKNOWN -> "Rang · $day$at"
         } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) }
             ?: " · " + if (key in suspected) CallNoticeRules.SUSPECTED_STATUS else CallNoticeRules.NOT_BLOCKED)
@@ -130,7 +134,7 @@ object UnknownCallRules {
         return UnknownCallOffer(
             key = key,
             number = number.trim(),
-            title = title(number),
+            title = title(number) + (reputation?.let { " · $it" } ?: ""),
             line = line,
             why = "$what · ${CivilDate.shortLabel(cal.epochDayOf(atMs))}",
             reportText = BlockedCallerRules.reportText(number)!!,
