@@ -257,6 +257,16 @@ struct TodayView: View {
                             .accessibilityLabel(parcels.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Trading tracker, slice 6: "Trading · up today · 2 positions open", never an amount (lit near
+                    // liquidation or at his drop level); cross-fades.
+                    if let trading = model.today?.trading {
+                        Text(trading.text).font(MekaType.caption)
+                            .foregroundStyle(trading.lit ? palette.accent : palette.textSecondary).lineLimit(1)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: trading.text)
+                            .accessibilityLabel(trading.spoken)
+                            .staggeredAppear(0, play: play)
+                    }
                     // Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can
                     // tidy" (several accounts: "Unread mail · Personal 412 · Outlook 82 · …"); quiet, cross-fades.
                     if let unread = model.today?.mailUnread {

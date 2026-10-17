@@ -8070,6 +8070,8 @@ class MekaCore(
             meetingPrep = os.meka.core.domain.MeetingPrepRules.card(
                 dayEvents, marks, activity.mailItems(), listsNow.promised, listsNow.waiting, nowMs(), cal, meetingPrepLead().minutes,
             ),
+            // Trading tracker, slice 6: up or down today and how many positions are open, never an amount.
+            trading = os.meka.core.domain.TradingTodayRules.todayLine(trading.wallets(), tradingAlertSetting(), nowMs()),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
@@ -8141,6 +8143,8 @@ class MekaCore(
                         weekMatters = os.meka.core.domain.ReflectionRules.briefSentence(t.reflection, it.story.length, todayDay),
                         // Barça match day, slice 3: last night's result and scorers, and where today's match is on.
                         barca = os.meka.core.domain.BarcaBriefRules.briefSentences(allEvents, marks, nowMs(), ZoneCalendar(timeZone)),
+                        // Trading tracker, slice 6: up or down on Hyperliquid, no amounts (Short: only when lit).
+                        trading = os.meka.core.domain.TradingTodayRules.briefSentence(t.trading, it.story.length),
                     ),
                 )
             }

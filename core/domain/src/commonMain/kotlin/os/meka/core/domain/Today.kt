@@ -67,6 +67,8 @@ data class Today(
     val comingUp: List<MeanwhileLine> = emptyList(),
     /** Meeting prep, slice 1: from 15 min before a meeting with other people, who's coming and what's open ([MeetingPrepRules.card]); set by the facade. */
     val meetingPrep: MeetingPrep? = null,
+    /** Trading tracker, slice 6: "Trading · up today · 2 positions open", no amounts ([TradingTodayRules.todayLine]); set by the facade. */
+    val trading: TradingTodayLine? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

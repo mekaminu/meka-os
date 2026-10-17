@@ -130,6 +130,11 @@ data class BriefStory(
      * spoken sentence ([BarcaBriefRules.briefSentences]); said after home and family, in every length.
      */
     val barca: List<String> = emptyList(),
+    /**
+     * Trading tracker, slice 6: whether he's up or down on Hyperliquid over the last day and how many positions are
+     * open, never an amount ([TradingTodayRules.briefSentence]); said after habits and goals; null when there's nothing.
+     */
+    val trading: String? = null,
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -208,6 +213,8 @@ object BriefScriptRules {
         if (!s.weekend && len.extras) s.weekGoals?.let { out += sentence(it) }
         if (!s.weekend) s.weekMatters?.let { out += it }
         if (len.extras) v.fastingLine?.let { out += sentence(it) }
+        // Trading tracker, slice 6: up or down on Hyperliquid, no amounts.
+        s.trading?.let { out += sentence(it) }
 
         // Home and family.
         v.school?.let { out += it.spoken }

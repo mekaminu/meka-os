@@ -932,6 +932,15 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Trading tracker, slice 6: "Trading · up today · 2 positions open", never an amount (lit near
+                    // liquidation or at his drop level); cross-fades as it changes.
+                    today.trading?.let { trading ->
+                        Crossfade(trading, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "trading-line") { l ->
+                            Text(l.text, style = MekaType.caption, color = if (l.lit) Meka.colors.accent else Meka.colors.textSecondary,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
+                        }
+                    }
                     // Inbox fixes, slice 7: "Personal · 412 unread · 380 are newsletters, promos or receipts Navilife can
                     // tidy" (several accounts: "Unread mail · Personal 412 · Outlook 82 · …"); quiet, cross-fades as it changes.
                     today.mailUnread?.let { unread ->
