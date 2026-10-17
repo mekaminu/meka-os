@@ -88,6 +88,7 @@ import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
 import os.meka.core.domain.TradingAlertsView
+import os.meka.core.domain.TradingCurveView
 import os.meka.core.domain.TradingTradesView
 import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
@@ -606,6 +607,7 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
                 p.liquidationLine?.let { l -> Text(l, style = MekaType.caption, color = c) }
             }
         } }
+        t.curve?.let { c -> CurveBlock(c) }
         t.trades?.let { tr -> TradesBlock(tr) }
         t.wallets.forEach { w ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -649,6 +651,25 @@ private fun AlertsBlock(a: TradingAlertsView, onAlert: (String, String) -> Unit)
                 } }
             }
         }
+    }
+}
+
+/**
+ * Trading tracker, slice 4: P&L · LAST 30 DAYS — what the month's P&L comes to (up in brass), the high and low, and the
+ * line day by day ending at Now, drawn once left to right; tap a day for its figure.
+ */
+@Composable
+private fun CurveBlock(c: TradingCurveView) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(c.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Crossfade(c.summary, animationSpec = MekaMotion.appear(reduced), label = "trading-curve-summary") { l ->
+            Text(l, style = MekaType.body, color = if (c.up == true) Meka.colors.accent else Meka.colors.textPrimary,
+                modifier = Modifier.semantics { contentDescription = c.spoken })
+        }
+        c.rangeLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        WorthLine(c.points, dots = false)
+        Text(c.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -1085,7 +1106,7 @@ private fun WorthRow(r: MoneyWorthRow, onRemove: () -> Unit, onBalance: (String)
  * baseline, drawn left to right once (snaps with reduced motion); tap near a month for its total under the line.
  */
 @Composable
-private fun WorthLine(points: List<MoneyWorthPoint>) {
+private fun WorthLine(points: List<MoneyWorthPoint>, dots: Boolean = true) {
     val reduced = Meka.reducedMotion
     val accent = Meka.colors.accent
     val hairline = Meka.colors.hairline
@@ -1123,6 +1144,8 @@ private fun WorthLine(points: List<MoneyWorthPoint>) {
                     cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
                 points.indices.forEach { i ->
                     val c = at(i)
+                    // A day-by-day line (the trading curve) shows only the picked day's dot.
+                    if (!dots && i != picked) return@forEach
                     drawCircle(surface, 6.dp.toPx(), c)
                     if (i == picked) drawCircle(accent, 4.dp.toPx(), c)
                     else drawCircle(accent, 4.dp.toPx(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))

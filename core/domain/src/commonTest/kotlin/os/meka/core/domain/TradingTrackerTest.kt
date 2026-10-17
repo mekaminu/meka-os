@@ -222,4 +222,40 @@ class TradingTrackerTest {
         store.remove(TradingTracker.walletId(a1))
         assertEquals("1 trade closed · 1 won (100%)", TradingTracker.view(store.wallets(), now, cal).trades!!.summary)
     }
+
+    @Test
+    fun theCurveAddsAccountsDayByDayAndEndsWithNow() {
+        val today = CivilDate.toEpochDay(2026, 10, 17)
+        val a = TradingWallet("wa", a1, "Main", TradingTracker.OK, now, now, 1_012_000, null, null, null, null, 0, emptyList(),
+            curve = listOf(TradingCurvePoint(today - 2, 1_000_000, 0), TradingCurvePoint(today - 1, 1_005_000, 5_000)), curveNowCents = 12_000)
+        val b = TradingWallet("wb", a2, "Bot", TradingTracker.OK, now, now, 48_000, null, null, null, null, 0, emptyList(),
+            curve = listOf(TradingCurvePoint(today - 1, 50_000, 0)), curveNowCents = -2_000)
+        assertEquals(a.curve, TradingTracker.decodeCurve(TradingTracker.encodeCurve(a.curve.reversed())))
+        assertTrue(TradingTracker.decodeCurve("x|1|2\n3|4").isEmpty())
+        val c = TradingTracker.curveView(listOf(a, b), now)!!
+        assertEquals(TradingTracker.CURVE_HEAD, c.head)
+        assertEquals(listOf("Thu 15 Oct" to 0L, "Fri 16 Oct" to 5_000L, "Now" to 10_000L), c.points.map { it.label to it.pence })
+        assertEquals("Fri 16 Oct · +$50.00 since Thu 15 Oct · account $10,550.00", c.points[1].said)
+        assertEquals("Now · +$100.00 since Thu 15 Oct · account $10,600.00", c.points[2].said)
+        assertEquals("+$100.00 since Thu 15 Oct", c.summary)
+        assertEquals(true, c.up)
+        assertEquals("High +$100.00 now · low $0.00 on Thu 15 Oct", c.rangeLine)
+        // The view carries it; one day alone isn't a line yet (it has "Now" too, so two points).
+        assertNotNull(TradingTracker.view(listOf(a, b), now, cal).curve)
+        assertEquals(2, TradingTracker.curveView(listOf(b), now)!!.points.size)
+        assertNull(TradingTracker.curveView(listOf(b.copy(curve = emptyList())), now))
+        // Through the store: what the server wrote reads back, and Remove clears it.
+        val id = TradingTracker.walletId(a1)
+        val r = replica()
+        val s2 = TradingStore(r)
+        s2.add("Main $a1")
+        r.commitLocal(EntityTypes.TRADING_WALLET, id, mapOf(
+            TradingWalletFields.EQUITY to 1_012_000L.fv(), TradingWalletFields.CURVE to TradingTracker.encodeCurve(a.curve).fv(),
+            TradingWalletFields.CURVE_NOW to 12_000L.fv(),
+        ))
+        assertEquals(a.curve, s2.wallets().single().curve)
+        assertEquals("+$120.00 since Thu 15 Oct", TradingTracker.view(s2.wallets(), now, cal).curve!!.summary)
+        s2.remove(id)
+        assertTrue(s2.wallets().isEmpty())
+    }
 }

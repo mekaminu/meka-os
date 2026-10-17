@@ -6,9 +6,11 @@ import os.meka.backend.integrations.TradingFeed
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MekaSchema
 import os.meka.core.domain.TradingCoinStats
+import os.meka.core.domain.TradingCurvePoint
 import os.meka.core.domain.TradingPosition
 import os.meka.core.domain.TradingStore
 import os.meka.core.domain.TradingTracker
+import os.meka.core.domain.TradingWalletFields
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
@@ -125,6 +127,43 @@ class TradingSyncTest {
         val w = TradingStore(fold).wallets().single()
         assertEquals(250_000L, w.drawdownCents)
         assertEquals(0.25, w.drawdownShare)
+    }
+
+    @Test
+    fun theMonthsCurveIsWrittenAsDayEndsAndReachesTheFold() {
+        val day = 86_400_000L
+        val today = nowMs.floorDiv(day)
+        // Two finished days (their last points count) and today's two points, which only move the "now" figure.
+        val month = listOf(
+            Triple((today - 2) * day + 3_600_000, 1_000_000L, 100L), Triple((today - 2) * day + 80_000_000, 1_010_000L, 10_100L),
+            Triple((today - 1) * day + 80_000_000, 990_000L, -9_900L),
+            Triple(today * day + 1_000, 1_020_000L, 20_100L), Triple(nowMs - 60_000, 1_030_000L, 30_100L),
+        )
+        assertEquals(
+            listOf(TradingCurvePoint(today - 2, 1_010_000, 0), TradingCurvePoint(today - 1, 990_000, -20_000)) to 20_000L,
+            TradingTracker.curveFrom(month.shuffled(), nowMs),
+        )
+        assertNull(TradingTracker.curveFrom(month.takeLast(2), nowMs))
+        answer = answer.copy(month = month)
+        TradingStore(fold).add("Main $address")
+        push()
+        assertTrue(sync.tick())
+        pull()
+        val w = TradingStore(fold).wallets().single()
+        assertEquals(2, w.curve.size)
+        assertEquals(20_000L, w.curveNowCents)
+        // The next read on the same day changes only the "now" figure, not the day ends.
+        val before = ops.after("hh", 0, 100_000).count { it.op.field == TradingWalletFields.CURVE }
+        answer = answer.copy(month = month + Triple(nowMs + 1_000, 1_040_000L, 40_100L))
+        nowMs += TradingTracker.OPEN_MS
+        assertTrue(sync.tick())
+        assertEquals(before, ops.after("hh", 0, 100_000).count { it.op.field == TradingWalletFields.CURVE })
+        pull()
+        assertEquals(30_000L, TradingStore(fold).wallets().single().curveNowCents)
+        // Hyperliquid's month history is read with its times.
+        assertEquals(listOf(Triple(1L, 100_000L, 0L), Triple(3L, 101_050L, 1_050L)), HyperliquidInfo.timed(
+            kotlinx.serialization.json.Json.parseToJsonElement("""[["month",{"accountValueHistory":[[1,"1000"],[2,"1005"],[3,"1010.50"]],
+                "pnlHistory":[[1,"0"],[3,"10.5"]]}]]"""), "month"))
     }
 
     @Test

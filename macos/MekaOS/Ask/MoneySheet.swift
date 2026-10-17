@@ -649,6 +649,7 @@ struct MoneySheet: View {
                 .accessibilityLabel(p.spoken)
                 .transition(.opacity)
             }
+            if let c = t.curve { tradingCurve(c) }
             if let tr = t.trades { trades(tr) }
             ForEach(t.wallets, id: \.id) { w in
                 HStack {
@@ -714,6 +715,23 @@ struct MoneySheet: View {
                 }
             }
         }
+    }
+
+    /// Trading tracker, slice 4: P&L · LAST 30 DAYS — the month's P&L (up in brass), its high and low, and the line day
+    /// by day ending at Now (only the picked day's dot); click a day for its figure.
+    private func tradingCurve(_ c: TradingCurveView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(c.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(c.summary).font(MekaType.body)
+                .foregroundStyle(c.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                .contentTransition(.opacity)
+                .accessibilityLabel(c.spoken)
+            if let r = c.rangeLine { Text(r).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            MoneyWorthLine(points: c.points, palette: palette, reduced: reduceMotion, dots: false)
+            Text(c.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, MekaSpace.m)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: c.summary)
     }
 
     /// Trading tracker, slice 2: YOUR TRADES · LAST 30 DAYS — trades closed and won, closed P&L, fees, funding and
@@ -885,6 +903,8 @@ private struct MoneyWorthLine: View {
     let points: [MoneyWorthPoint]
     let palette: MekaPalette
     let reduced: Bool
+    /// A day-by-day line (the trading curve) shows only the picked point's dot.
+    var dots: Bool = true
     @State private var drawn: CGFloat = 0
     @State private var picked: Int?
 
@@ -913,7 +933,7 @@ private struct MoneyWorthLine: View {
                     }
                     .trim(from: 0, to: drawn)
                     .stroke(palette.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                    ForEach(points.indices, id: \.self) { i in
+                    ForEach(points.indices.filter { dots || $0 == pick }, id: \.self) { i in
                         Circle()
                             .strokeBorder(palette.accent, lineWidth: i == pick ? 4 : 2)
                             .background(Circle().fill(palette.surface))

@@ -21,6 +21,8 @@ data class TradingAccountRead(
     val unrealisedCents: Long, val positions: List<TradingPosition>,
     /** Slice 3: how far the P&L is below this month's high, and the account value at that high (null without a month's history). */
     val drawdownCents: Long? = null, val drawdownBaseCents: Long? = null,
+    /** Slice 4: the month's points as (time ms, account value, P&L) in cents, for the curve; empty without them. */
+    val month: List<Triple<Long, Long, Long>> = emptyList(),
 ) {
     override fun toString() = "TradingAccountRead(${positions.size} positions)"
 }
@@ -65,13 +67,15 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
         val positions = (state["assetPositions"] as? JsonArray).orEmpty().mapNotNull { (it as? JsonObject)?.get("position") as? JsonObject }
             .mapNotNull { p -> position(p) }
         // The portfolio adds spot and the P&L histories; without it the perps' figures still stand.
-        val periods = runCatching { portfolio(call("portfolio", a)) }.getOrNull().orEmpty()
+        val folio = runCatching { call("portfolio", a) }.getOrNull()
+        val periods = folio?.let { f -> runCatching { portfolio(f) }.getOrNull() }.orEmpty()
+        val month = folio?.let { f -> runCatching { timed(f, "month") }.getOrNull() }.orEmpty()
         fun pnl(period: String): Long? = periods[period]?.second?.let { h -> if (h.isEmpty()) null else h.last() - h.first() }
         val equity = periods["day"]?.first?.lastOrNull() ?: perpValue
         return TradingAccountRead(
             equity, pnl("day"), pnl("week"), pnl("month"),
             periods["allTime"]?.second?.lastOrNull(),
-            positions.sumOf { it.unrealisedCents }, positions,
+            positions.sumOf { it.unrealisedCents }, positions, month = month,
         ).let { r -> periods["month"]?.let { (values, pnl) -> drawdown(values, pnl) }?.let { (d, b) -> r.copy(drawdownCents = d, drawdownBaseCents = b) } ?: r }
     }
 
@@ -192,6 +196,23 @@ class HyperliquidInfo internal constructor(private val http: Http) : TradingFeed
             val peak = pnl.indices.maxByOrNull { pnl[it] } ?: return null
             val base = values[peak].takeIf { it > 0 } ?: return null
             return (pnl[peak] - pnl.last()).coerceAtLeast(0L) to base
+        }
+
+        /**
+         * Slice 4: one period's points as (time ms, account value, P&L) in cents, oldest first; only times that carry
+         * both (Hyperliquid gives the two histories at the same times).
+         */
+        fun timed(e: JsonElement, period: String): List<Triple<Long, Long, Long>> {
+            val o = (e as? JsonArray).orEmpty().mapNotNull { it as? JsonArray }
+                .firstOrNull { text(it.getOrNull(0)) == period }?.getOrNull(1) as? JsonObject ?: return emptyList()
+            fun series(k: String): Map<Long, Long> = (o[k] as? JsonArray).orEmpty().mapNotNull { pt ->
+                val p = pt as? JsonArray ?: return@mapNotNull null
+                val ms = text(p.getOrNull(0))?.toLongOrNull() ?: return@mapNotNull null
+                cents(p.getOrNull(1))?.let { ms to it }
+            }.toMap()
+            val values = series("accountValueHistory")
+            val pnl = series("pnlHistory")
+            return values.keys.filter { it in pnl }.sorted().map { Triple(it, values.getValue(it), pnl.getValue(it)) }
         }
 
         /** The portfolio's periods: name → (account values, P&L values), each oldest first, in cents. */

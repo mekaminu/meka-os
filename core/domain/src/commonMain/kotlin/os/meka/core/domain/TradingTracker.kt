@@ -49,9 +49,15 @@ object TradingWalletFields {
      */
     const val DRAWDOWN = "drawdownCents"
     const val DRAWDOWN_BASE = "drawdownBaseCents"
+    /**
+     * Server (slice 4): the curve — one point per finished UTC day over the last month, [TradingTracker.encodeCurve]d,
+     * P&L counted from the first day's end (changes once a day); and the P&L from that same start to now (each read).
+     */
+    const val CURVE = "curve"
+    const val CURVE_NOW = "curveNowCents"
 
     val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM,
-        DRAWDOWN, DRAWDOWN_BASE)
+        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW)
 }
 
 /** One open position as the server wrote it: prices as Hyperliquid's decimal text; [size] signed (short negative). */
@@ -92,6 +98,18 @@ data class TradingCoinStats(
     )
 }
 
+/**
+ * Trading tracker, slice 4: one day's end on the curve — the UTC [day] (epoch day), the account value then and the
+ * P&L since the curve's first day ended (US cents; deposits and withdrawals aren't P&L).
+ */
+data class TradingCurvePoint(val day: Long, val valueCents: Long, val pnlCents: Long)
+
+/** Slice 4: P&L · LAST 30 DAYS — the line ([points], oldest first, "Now" last), what it says and how to read it. */
+data class TradingCurveView(
+    val head: String, val summary: String, val up: Boolean?, val rangeLine: String?, val points: List<MoneyWorthPoint>, val foot: String,
+    val spoken: String,
+)
+
 data class TradingWallet(
     val id: String, val address: String, val label: String, val state: String?, val readAtMs: Long?, val triedAtMs: Long?,
     val equityCents: Long?, val pnlDayCents: Long?, val pnlWeekCents: Long?, val pnlMonthCents: Long?, val pnlAllCents: Long?,
@@ -100,6 +118,8 @@ data class TradingWallet(
     val trades: List<TradingCoinStats> = emptyList(), val tradesAtMs: Long? = null, val tradesFromMs: Long? = null,
     /** Slice 3: the fall from this month's P&L high and the account value at that high (US cents); null until read. */
     val drawdownCents: Long? = null, val drawdownBaseCents: Long? = null,
+    /** Slice 4: the curve's day ends and the P&L from its start to now; empty/null until read. */
+    val curve: List<TradingCurvePoint> = emptyList(), val curveNowCents: Long? = null,
 ) {
     override fun toString() = "TradingWallet($id)"
 
@@ -142,6 +162,8 @@ data class TradingView(
     val trades: TradingTradesView? = null,
     /** Slice 3: ALERTS — when he's told (near liquidation, a drop from the month's high), with his choices; null with no address. */
     val alerts: TradingAlertsView? = null,
+    /** Slice 4: the P&L line over the last month, once there are two points to draw. */
+    val curve: TradingCurveView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -159,6 +181,7 @@ class TradingStore(private val replica: Replica) {
             TradingTracker.decodeTrades(e[TradingWalletFields.TRADES].textOrNull), e[TradingWalletFields.TRADES_AT].longOrNull,
             e[TradingWalletFields.TRADES_FROM].longOrNull,
             e[TradingWalletFields.DRAWDOWN].longOrNull, e[TradingWalletFields.DRAWDOWN_BASE].longOrNull,
+            TradingTracker.decodeCurve(e[TradingWalletFields.CURVE].textOrNull), e[TradingWalletFields.CURVE_NOW].longOrNull,
         )
     }.sortedBy { it.label.lowercase() }
 
@@ -243,6 +266,11 @@ object TradingTracker {
     const val SHOWN_COINS = 8
     const val TRADES_HEAD = "YOUR TRADES · LAST $TRADES_DAYS DAYS"
     const val NO_TRADES = "No trades in the last $TRADES_DAYS days."
+    /** Slice 4: the curve keeps at most this many day ends (a month and a day). */
+    const val MAX_CURVE = 32
+    const val CURVE_HEAD = "P&L · LAST 30 DAYS"
+    const val CURVE_FOOT = "Each point is where the day ended · profit and loss only, so deposits and withdrawals don't move the line · tap a day for its figure"
+    private const val DAY_MS = 86_400_000L
     const val TRADES_FOOT = "Perpetuals only · each closing order is one trade · a trade's result is before fees · funding received is +, paid is −"
 
     private val ADDRESS = Regex("0x[0-9a-fA-F]{40}")
@@ -294,6 +322,67 @@ object TradingTracker {
         val n = f.drop(1).take(10).map { it.trim().toLongOrNull() ?: return@mapNotNull null }
         if (n[0] < 0 || n[1] < 0 || n[2] < 0) return@mapNotNull null
         TradingCoinStats(coin, n[0].toInt(), n[1].toInt(), n[2].toInt(), n[3], n[4], n[5], n[6], n[7], n[8], n[9])
+    }
+
+    /** Slice 4: the curve as lines of `day|valueCents|pnlCents` (at most [MAX_CURVE], the newest kept). */
+    fun encodeCurve(points: List<TradingCurvePoint>): String = points.sortedBy { it.day }.takeLast(MAX_CURVE)
+        .joinToString("\n") { "${it.day}|${it.valueCents}|${it.pnlCents}" }
+
+    fun decodeCurve(text: String?): List<TradingCurvePoint> = text.orEmpty().lines().mapNotNull { line ->
+        val f = line.split("|").map { it.trim().toLongOrNull() }
+        if (f.size < 3 || f.any { it == null }) return@mapNotNull null
+        TradingCurvePoint(f[0]!!, f[1]!!, f[2]!!)
+    }.distinctBy { it.day }.sortedBy { it.day }
+
+    /**
+     * Slice 4: from one period's points (time ms, account value, P&L; any order), the end of each finished UTC day
+     * before [nowMs]'s day, P&L counted from the first of them; and the P&L from that start to the latest point.
+     * Null with fewer than one finished day or no latest point.
+     */
+    fun curveFrom(points: List<Triple<Long, Long, Long>>, nowMs: Long): Pair<List<TradingCurvePoint>, Long>? {
+        if (points.isEmpty()) return null
+        val sorted = points.sortedBy { it.first }
+        val today = nowMs.floorDiv(DAY_MS)
+        val ends = sorted.filter { it.first.floorDiv(DAY_MS) < today }.groupBy { it.first.floorDiv(DAY_MS) }
+            .map { (d, l) -> d to l.last() }.sortedBy { it.first }.takeLast(MAX_CURVE)
+        if (ends.isEmpty()) return null
+        val base = ends.first().second.third
+        return ends.map { (d, p) -> TradingCurvePoint(d, p.second, p.third - base) } to (sorted.last().third - base)
+    }
+
+    /**
+     * P&L · LAST 30 DAYS across [wallets]: each day's end (an account counts from its own first day, carried forward
+     * over a missing day) and "Now" from the latest read; null until there are two points.
+     */
+    fun curveView(wallets: List<TradingWallet>, nowMs: Long): TradingCurveView? {
+        val withCurve = wallets.filter { it.curve.isNotEmpty() }
+        if (withCurve.isEmpty()) return null
+        val today = nowMs.floorDiv(DAY_MS)
+        val days = withCurve.flatMap { w -> w.curve.map { it.day } }.filter { it < today }.distinct().sorted()
+        if (days.isEmpty()) return null
+        fun at(w: TradingWallet, d: Long): TradingCurvePoint? = w.curve.lastOrNull { it.day <= d }
+        val start = days.first()
+        val sums = days.map { d ->
+            val ps = withCurve.mapNotNull { at(it, d) }
+            Triple(d, ps.sumOf { it.pnlCents }, ps.sumOf { it.valueCents })
+        }
+        val nowPnl = withCurve.sumOf { w -> w.curveNowCents ?: (w.curve.lastOrNull()?.pnlCents ?: 0L) }
+        val nowValue = withCurve.mapNotNull { it.equityCents }.takeIf { it.size == withCurve.size }?.sum()
+        val since = CivilDate.shortLabel(start)
+        val points = sums.map { (d, pnl, value) ->
+            val label = CivilDate.shortLabel(d)
+            MoneyWorthPoint(label, pnl, "$label · ${signedUsd(pnl)} since $since · account ${usd(value)}")
+        } + MoneyWorthPoint("Now", nowPnl, "Now · ${signedUsd(nowPnl)} since $since" + (nowValue?.let { " · account ${usd(it)}" } ?: ""))
+        if (points.size < 2) return null
+        val up = when { nowPnl > 0 -> true; nowPnl < 0 -> false; else -> null }
+        val summary = "${signedUsd(nowPnl)} since $since"
+        val hi = points.withIndex().maxByOrNull { it.value.pence }!!
+        val lo = points.withIndex().minByOrNull { it.value.pence }!!
+        fun on(i: IndexedValue<MoneyWorthPoint>) = if (i.index == points.size - 1) "now" else "on ${i.value.label}"
+        val range = if (hi.value.pence == lo.value.pence) null else
+            "High ${signedUsd(hi.value.pence)} ${on(hi)} · low ${signedUsd(lo.value.pence)} ${on(lo)}"
+        return TradingCurveView(CURVE_HEAD, summary, up, range, points, CURVE_FOOT,
+            listOfNotNull("Profit and loss over the last month: $summary", range).joinToString(". "))
     }
 
     /** Whether the server should add up [w]'s trades again: never, or [TRADES_MS] since. */
@@ -461,6 +550,6 @@ object TradingTracker {
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
         return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal),
-            TradingAlerts.view(alerts))
+            TradingAlerts.view(alerts), curveView(wallets, nowMs))
     }
 }

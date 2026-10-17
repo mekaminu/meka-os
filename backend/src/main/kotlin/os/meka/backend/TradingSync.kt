@@ -62,6 +62,11 @@ class TradingSync(
                 // Slice 3: the fall from this month's high, for the drop alert on the devices.
                 fields[TradingWalletFields.DRAWDOWN] = a.drawdownCents?.let { FieldValue.Int64(it) } ?: FieldValue.Null
                 fields[TradingWalletFields.DRAWDOWN_BASE] = a.drawdownBaseCents?.let { FieldValue.Int64(it) } ?: FieldValue.Null
+                // Slice 4: the curve's day ends (the text changes once a day) and the P&L from its start to now.
+                TradingTracker.curveFrom(a.month, t)?.let { (curve, nowPnl) ->
+                    fields[TradingWalletFields.CURVE] = FieldValue.Text(TradingTracker.encodeCurve(curve))
+                    fields[TradingWalletFields.CURVE_NOW] = FieldValue.Int64(nowPnl)
+                }
                 // Slice 2: the window's trades, hourly; a failure here keeps the last ones and tries at the next read.
                 if (TradingTracker.tradesDue(w, t)) {
                     val from = t - TradingTracker.TRADES_DAYS * 86_400_000L
