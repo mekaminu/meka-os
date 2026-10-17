@@ -209,6 +209,8 @@ object TradingAlerts {
     fun notices(wallets: List<TradingWallet>, setting: TradingAlertSetting, nowMs: Long, cal: LocalCalendar): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val out = mutableListOf<Notice>()
+        // Slice 9: the monthly review is ready (no amounts).
+        TradingReviewRules.notice(wallets, nowMs, cal)?.let { out += it }
         for (w in wallets) {
             val readAt = w.readAtMs ?: continue
             if (w.equityCents == null || nowMs - readAt > FRESH_MS || readAt > nowMs + FRESH_MS) continue

@@ -91,6 +91,7 @@ import os.meka.core.domain.TradingAlertsView
 import os.meka.core.domain.TradingCurveView
 import os.meka.core.domain.TradingExportRules
 import os.meka.core.domain.TradingExportView
+import os.meka.core.domain.TradingReviewView
 import os.meka.core.domain.TradingTradesView
 import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
@@ -641,6 +642,7 @@ private fun TradingBlock(
         } }
         t.curve?.let { c -> CurveBlock(c) }
         t.trades?.let { tr -> TradesBlock(tr) }
+        t.review?.let { r -> ReviewBlock(r) }
         t.wallets.forEach { w ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
@@ -772,6 +774,31 @@ private fun TradesBlock(tr: TradingTradesView) {
         } }
         tr.moreLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Text(tr.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/** Trading tracker, slice 9: last month in review, plain sentences; a new month's cross-fades in (MekaMotion.appear honours reduced motion). */
+@Composable
+private fun ReviewBlock(r: TradingReviewView) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m).semantics(mergeDescendants = true) { contentDescription = r.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(r.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(r.summary.substringBefore(" · "), style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            r.amount?.let { a ->
+                Crossfade(a, animationSpec = MekaMotion.appear(reduced), label = "review-amount") { x ->
+                    Text(x, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textPrimary)
+                }
+            }
+        }
+        if (r.sentences.isEmpty()) Text(r.summary, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Crossfade(r.sentences, animationSpec = MekaMotion.appear(reduced), label = "review-sentences") { lines ->
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                lines.forEach { line -> Text(line, style = MekaType.body, color = Meka.colors.textSecondary) }
+            }
+        }
+        Text(r.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

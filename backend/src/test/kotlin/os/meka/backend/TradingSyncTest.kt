@@ -45,7 +45,13 @@ class TradingSyncTest {
             return answer
         }
 
-        override fun trades(address: String, fromMs: Long, toMs: Long): List<TradingCoinStats> {
+        override fun trades(address: String, fromMs: Long, toMs: Long): List<TradingCoinStats>? {
+            if (toMs != nowMs) {
+                // Slice 9: a calendar month for the review.
+                reviewWindows += fromMs to toMs
+                if (reviewFail) error("down")
+                return if (fromMs == SEP_FROM) listOf(TradingCoinStats("SOL", 3, 2, 1, 9_000, 400, 0, 12_000, -3_000, 7_000, -3_000)) else emptyList()
+            }
             tradeReads++
             tradesFrom = fromMs
             return listOf(TradingCoinStats("ETH", 2, 1, 1, 5_000, 300, -100, 8_000, -3_000, 8_000, -3_000))
@@ -57,6 +63,8 @@ class TradingSyncTest {
         }
     }
     private var recentFrom = 0L
+    private val reviewWindows = mutableListOf<Pair<Long, Long>>()
+    private var reviewFail = false
     private val sync = TradingSync(ops, BankSync.scanning(ops), { "hh" }, feed, { nowMs }, onWritten = { woken += it })
 
     private val store = InMemoryReplicaStore()
@@ -319,7 +327,37 @@ class TradingSyncTest {
         assertEquals(800_000L, TradingStore(fold).wallets().single().gbpPerUsdMicros)
     }
 
+    @Test
+    fun lastMonthsReviewIsAddedUpOnceInUkTimeAndReachesTheFold() {
+        TradingStore(fold).add("Main $address")
+        push()
+        reviewFail = true
+        assertTrue(sync.tick())
+        assertEquals(1, reviewWindows.size)
+        // A failure waits an hour before it's tried again.
+        nowMs += TradingTracker.OPEN_MS
+        sync.tick()
+        assertEquals(1, reviewWindows.size)
+        reviewFail = false
+        nowMs += os.meka.core.domain.TradingReviewRules.RETRY_MS
+        assertTrue(sync.tick())
+        // September (UK time: 1 Sep 00:00 BST is 31 Aug 23:00 UTC) and August before it.
+        assertEquals(listOf(SEP_FROM to OCT_FROM, AUG_FROM to SEP_FROM), reviewWindows.drop(1))
+        pull()
+        val w = TradingStore(fold).wallets().single()
+        assertEquals("2026-09", w.reviewMonth)
+        assertEquals("SOL", w.review.single().coin)
+        assertEquals(emptyList(), w.reviewPrev)
+        // Written once: later reads don't add it up again.
+        nowMs += TradingTracker.TRADES_MS
+        sync.tick()
+        assertEquals(3, reviewWindows.size)
+    }
+
     private companion object {
+        const val SEP_FROM = 1_788_217_200_000L // 2026-08-31T23:00Z
+        const val OCT_FROM = 1_790_809_200_000L // 2026-09-30T23:00Z
+        const val AUG_FROM = 1_785_538_800_000L // 2026-07-31T23:00Z
         /** A fixed time for the fake's order, so repeated reads change nothing. */
         const val FILLED_AT = 1_792_223_940_000L
         const val FILLS = """[

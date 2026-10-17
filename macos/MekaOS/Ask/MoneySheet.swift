@@ -652,6 +652,7 @@ struct MoneySheet: View {
             }
             if let c = t.curve { tradingCurve(c) }
             if let tr = t.trades { trades(tr) }
+            if let r = t.review { tradingReview(r) }
             ForEach(t.wallets, id: \.id) { w in
                 HStack {
                     VStack(alignment: .leading, spacing: 0) {
@@ -833,6 +834,33 @@ struct MoneySheet: View {
         .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.summary)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.coins.count)
+    }
+
+    /// Trading tracker, slice 9: last month in review — the month's result after fees and funding (up in brass) and
+    /// plain sentences, facts only; a new month cross-fades in.
+    private func tradingReview(_ r: TradingReviewView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            HStack {
+                Text(r.summary.components(separatedBy: " · ").first ?? r.summary).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Spacer()
+                if let a = r.amount {
+                    Text(a).font(MekaType.body)
+                        .foregroundStyle(r.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                        .contentTransition(.opacity)
+                }
+            }
+            if r.sentences.isEmpty { Text(r.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            ForEach(Array(r.sentences.enumerated()), id: \.offset) { _, line in
+                Text(line).font(MekaType.body).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+            Text(r.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, MekaSpace.m)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(r.spoken)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: r.summary)
     }
 
     private func importer(_ v: MoneyView) -> some View {

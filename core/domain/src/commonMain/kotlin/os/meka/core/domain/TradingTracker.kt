@@ -68,9 +68,17 @@ object TradingWalletFields {
      */
     const val FILLS = "recentFills"
     const val FUNDING_DAY = "fundingDayCents"
+    /**
+     * Server (slice 9): the monthly review — which finished month ("2026-09", UK time), that month's trades per coin and
+     * the month before's ([TradingTracker.encodeTrades]d; empty text = read, nothing traded; absent = not read), and when.
+     */
+    const val REVIEW_MONTH = "reviewMonth"
+    const val REVIEW = "review"
+    const val REVIEW_PREV = "reviewPrev"
+    const val REVIEW_AT = "reviewAtMs"
 
     val SERVER = listOf(STATE, READ_AT, TRIED_AT, EQUITY, PNL_DAY, PNL_WEEK, PNL_MONTH, PNL_ALL, UNREALISED, POSITIONS, TRADES, TRADES_AT, TRADES_FROM,
-        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW, GBP_PER_USD, FX_DAY, FILLS, FUNDING_DAY)
+        DRAWDOWN, DRAWDOWN_BASE, CURVE, CURVE_NOW, GBP_PER_USD, FX_DAY, FILLS, FUNDING_DAY, REVIEW_MONTH, REVIEW, REVIEW_PREV, REVIEW_AT)
 }
 
 /** One open position as the server wrote it: prices as Hyperliquid's decimal text; [size] signed (short negative). */
@@ -144,6 +152,9 @@ data class TradingWallet(
     val gbpPerUsdMicros: Long? = null, val fxDay: Long? = null,
     /** Slice 7: the last day's biggest orders and its funding (received +, paid −); empty/null until read. */
     val recentFills: List<TradingFill> = emptyList(), val fundingDayCents: Long? = null,
+    /** Slice 9: the monthly review's month, its trades per coin, the month before's (null = not read) and when written. */
+    val reviewMonth: String? = null, val review: List<TradingCoinStats> = emptyList(), val reviewPrev: List<TradingCoinStats>? = null,
+    val reviewAtMs: Long? = null,
 ) {
     override fun toString() = "TradingWallet($id)"
 
@@ -193,6 +204,8 @@ data class TradingView(
     val curve: TradingCurveView? = null,
     /** Slice 8: EXPORT FOR TAX — a tax year's trades as a spreadsheet; null with no address. */
     val export: TradingExportView? = null,
+    /** Slice 9: the last finished month in review, once the server has added it up. */
+    val review: TradingReviewView? = null,
 )
 
 /** What an address typed into Money reads as. */
@@ -213,6 +226,8 @@ class TradingStore(private val replica: Replica) {
             TradingTracker.decodeCurve(e[TradingWalletFields.CURVE].textOrNull), e[TradingWalletFields.CURVE_NOW].longOrNull,
             e[TradingWalletFields.GBP_PER_USD].longOrNull?.takeIf { TradingTracker.rateOk(it) }, e[TradingWalletFields.FX_DAY].longOrNull,
             TradingTracker.decodeFills(e[TradingWalletFields.FILLS].textOrNull), e[TradingWalletFields.FUNDING_DAY].longOrNull,
+            e[TradingWalletFields.REVIEW_MONTH].textOrNull, TradingTracker.decodeTrades(e[TradingWalletFields.REVIEW].textOrNull),
+            e[TradingWalletFields.REVIEW_PREV].textOrNull?.let { TradingTracker.decodeTrades(it) }, e[TradingWalletFields.REVIEW_AT].longOrNull,
         )
     }.sortedBy { it.label.lowercase() }
 
@@ -613,6 +628,7 @@ object TradingTracker {
             rows.filter { it.lit }.takeIf { it.isNotEmpty() }?.joinToString(", ") { "${it.title} near liquidation" },
         ).joinToString(". ").ifEmpty { WAITING }
         return TradingView(HEAD, total, totalLine, pnl, unrealisedLine, rows, walletRows, null, HINT, FOOT, spoken, tradesView(wallets, nowMs, cal),
-            TradingAlerts.view(alerts), curveView(wallets, nowMs), TradingExportRules.view(wallets, nowMs, cal))
+            TradingAlerts.view(alerts), curveView(wallets, nowMs), TradingExportRules.view(wallets, nowMs, cal),
+            TradingReviewRules.view(wallets, nowMs, cal))
     }
 }

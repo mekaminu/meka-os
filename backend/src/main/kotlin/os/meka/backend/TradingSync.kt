@@ -5,6 +5,9 @@ import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.TradingFeed
 import os.meka.backend.integrations.TradingRateLimited
 import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.LocalCalendar
+import os.meka.core.domain.TradingMonth
+import os.meka.core.domain.TradingReviewRules
 import os.meka.core.domain.TradingTracker
 import os.meka.core.domain.TradingWallet
 import os.meka.core.domain.TradingWalletFields
@@ -31,7 +34,12 @@ class TradingSync(
     private val onWritten: (householdId: String) -> Unit = {},
     /** Slice 5: the ECB's pounds per dollar, so the devices count the accounts in pounds; null = not read. */
     private val rate: DollarRate? = null,
+    /** Slice 9: the calendar the monthly review's months run on (UK time). */
+    private val cal: LocalCalendar = UK,
 ) {
+    /** Slice 9: when each wallet's review was last tried, so a failure waits [TradingReviewRules.RETRY_MS] (memory only). */
+    private val reviewTried = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
     private val rng = SecureRandom()
 
@@ -89,6 +97,18 @@ class TradingSync(
                         fields[TradingWalletFields.TRADES_FROM] = FieldValue.Int64(from)
                     }
                 }
+                // Slice 9: once a month has finished, its review and the month before's; a failure tries again in an hour.
+                val month = TradingMonth.lastFinished(t, cal)
+                if (TradingReviewRules.due(w, month) && reviewTried[id].let { it == null || t - it >= TradingReviewRules.RETRY_MS }) {
+                    reviewTried[id] = t
+                    runCatching { feed.trades(w.address, month.fromMs(cal), month.toMs(cal)) }.getOrNull()?.let { stats ->
+                        val prev = runCatching { feed.trades(w.address, month.previous.fromMs(cal), month.previous.toMs(cal)) }.getOrNull()
+                        fields[TradingWalletFields.REVIEW_MONTH] = FieldValue.Text(month.key)
+                        fields[TradingWalletFields.REVIEW] = FieldValue.Text(TradingTracker.encodeTrades(stats))
+                        fields[TradingWalletFields.REVIEW_PREV] = prev?.let { FieldValue.Text(TradingTracker.encodeTrades(it)) } ?: FieldValue.Null
+                        fields[TradingWalletFields.REVIEW_AT] = FieldValue.Int64(t)
+                    }
+                }
                 ok++
             } catch (e: TradingRateLimited) {
                 // Not a failure: the try time alone, so it waits its usual pace.
@@ -117,6 +137,7 @@ class TradingSync(
             long(TradingWalletFields.TRIED_AT), long(TradingWalletFields.EQUITY), null, null, null, null, null,
             TradingTracker.decode((f[TradingWalletFields.POSITIONS]?.value as? FieldValue.Text)?.value),
             tradesAtMs = long(TradingWalletFields.TRADES_AT),
+            reviewMonth = (f[TradingWalletFields.REVIEW_MONTH]?.value as? FieldValue.Text)?.value,
         )
     }
 
@@ -146,7 +167,17 @@ class TradingSync(
         const val LOOK_MS = 30_000L
 
         /** Fields that move on every read and alone don't wake the devices. */
-        private val QUIET = setOf(TradingWalletFields.TRIED_AT, TradingWalletFields.READ_AT, TradingWalletFields.TRADES_AT, TradingWalletFields.TRADES_FROM)
+        private val QUIET = setOf(TradingWalletFields.TRIED_AT, TradingWalletFields.READ_AT, TradingWalletFields.TRADES_AT, TradingWalletFields.TRADES_FROM,
+            TradingWalletFields.REVIEW_AT)
+
+        /** Europe/London as a [LocalCalendar], so a month starts at UK midnight (daylight saving included). */
+        val UK: LocalCalendar = object : LocalCalendar {
+            private val zone = java.time.ZoneId.of("Europe/London")
+            override fun epochDayOf(epochMs: Long) = java.time.Instant.ofEpochMilli(epochMs).atZone(zone).toLocalDate().toEpochDay()
+            override fun minuteOfDay(epochMs: Long) = java.time.Instant.ofEpochMilli(epochMs).atZone(zone).toLocalTime().toSecondOfDay() / 60
+            override fun toEpochMs(epochDay: Long, minuteOfDay: Int) =
+                java.time.LocalDate.ofEpochDay(epochDay).atStartOfDay(zone).plusMinutes(minuteOfDay.toLong()).toInstant().toEpochMilli()
+        }
     }
 }
 
