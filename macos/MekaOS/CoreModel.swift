@@ -3419,6 +3419,39 @@ final class CoreModel {
     }
 
     /// Slice 7: marks an account as a card (`card` false: no longer one), a charge card when `charge`; Undo with `undoMoneyCategory`.
+    /// Money slice 13: Side hustle account on an account (synced; Undo through undoMoneyCategory).
+    func moneyBusinessAccount(accountId: String, on: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyBusinessAccount(accountId: accountId, on: on))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 13: Business on a payment's payer, on every account (synced; Undo through undoMoneyCategory).
+    func moneyBusinessMerchant(txnId: String, on: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyBusinessMerchant(txnId: txnId, on: on))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 13: the share of the side hustle's profit to put aside ("20"), synced.
+    func moneySetAside(key: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySetAside(key: key))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func moneyCardKind(accountId: String, card: Bool, charge: Bool) async -> MoneySaid? {
         guard let core else { return nil }
         do {

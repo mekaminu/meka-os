@@ -69,6 +69,7 @@ struct MoneySheet: View {
                         if let b = v.bank { bank(b).staggeredAppear(2) }
                         if let t = v.trading { trading(t).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
+                        if let b = v.business { business(b).staggeredAppear(3) }
                         if let w = v.worth { worth(w).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
                         importer(v).staggeredAppear(3)
@@ -297,6 +298,82 @@ struct MoneySheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: open)
+    }
+
+    /// Slice 13: SIDE HUSTLE AND TAX — the tax year so far (profit in brass), the share to put aside with its chips, the
+    /// trading allowance, the biggest costs, last tax year, the next Self Assessment dates (lit within 30 days) and each
+    /// account's Side hustle account switch.
+    private func business(_ b: MoneyBusinessView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(b.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let i = b.intro {
+                Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if let profit = b.profitLine {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let y = b.yearLine { Text(y).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+                    Text(profit).font(MekaType.itemTitle).foregroundStyle(b.profitUp ? palette.accent : palette.textPrimary).contentTransition(.opacity)
+                    if let i = b.inLine { Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                    if let o = b.outLine { Text(o).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(b.spoken)
+                if let a = b.setAsideLine { Text(a).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(b.chips, id: \.key) { c in
+                        Button {
+                            guard !c.on else { return }
+                            let key = c.key
+                            Task { said = await model.moneySetAside(key: key) }
+                        } label: {
+                            Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel("Put aside \(c.label)\(c.on ? ", chosen" : "")")
+                    }
+                }
+                if let l = b.allowanceLine {
+                    Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                }
+                ForEach(b.costs, id: \.key) { c in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(c.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Text(c.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        }
+                        Spacer()
+                        Text(c.amount).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+                if let l = b.lastYearLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                ForEach(b.dates, id: \.day) { d in
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(d.line).font(MekaType.body).foregroundStyle(d.lit ? palette.accent : palette.textPrimary)
+                        Text(d.title).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+            if let m = b.merchantsLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            ForEach(b.accounts, id: \.id) { a in
+                HStack {
+                    Text(a.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    Button(MoneyBusiness.shared.SWITCH + (a.on ? " ✓" : "")) {
+                        let id = a.id
+                        let on = !a.on
+                        Task { said = await model.moneyBusinessAccount(accountId: id, on: on) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(a.on ? palette.accent : palette.textSecondary)
+                    .accessibilityLabel("\(a.name): \(MoneyBusiness.shared.SWITCH), \(a.on ? "on" : "off")")
+                }
+            }
+            Text(b.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: b.profitLine)
     }
 
     /// Slice 8: net worth — the total, have/owe, the change since last month, the month-by-month line, each account,
@@ -539,6 +616,13 @@ struct MoneySheet: View {
 
     private func txn(_ t: MoneyTxnRow) -> some View {
         Menu {
+            // Slice 13: the payer counts as the side hustle's (or not), on every account.
+            Button(t.business ? MoneyBusiness.shared.MENU_ON : MoneyBusiness.shared.MENU_OFF) {
+                let id = t.id
+                let on = !t.business
+                Task { said = await model.moneyBusinessMerchant(txnId: id, on: on) }
+            }
+            Divider()
             ForEach(MoneyRules.shared.CHOICES, id: \.key) { choice in
                 Button(choice.key == t.category ? "✓ \(choice.label)" : choice.label) {
                     guard choice.key != t.category else { return }
@@ -549,7 +633,7 @@ struct MoneySheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(t.merchant).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text("\(t.day) · \(t.categoryLabel)\(t.taught ? " · yours" : "") · \(t.account)")
+                    Text("\(t.day) · \(t.categoryLabel)\(t.taught ? " · yours" : "")\(t.business ? " · Business" : "") · \(t.account)")
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
                 Spacer()

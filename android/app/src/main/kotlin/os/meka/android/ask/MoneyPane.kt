@@ -84,6 +84,8 @@ import os.meka.core.domain.MoneyTip
 import os.meka.core.domain.MoneyTips
 import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.domain.MoneyWatch
+import os.meka.core.domain.MoneyBusiness
+import os.meka.core.domain.MoneyBusinessView
 import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
@@ -446,7 +448,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
-                        TxnRow(t, Modifier.animateItem()) { key ->
+                        TxnRow(t, Modifier.animateItem(),
+                            onBusiness = { on -> scope.launch { runCatching { core.moneyBusinessMerchant(t.id, on) }.getOrNull()?.let(say) } }) { key ->
                             scope.launch { runCatching { core.setMoneyCategory(t.id, key) }.getOrNull()?.let(say) }
                         }
                     }
@@ -456,6 +459,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         Text("and ${m.more} more this month", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.animateItem())
                     }
                 }
+            }
+        }
+        // Slice 13: the side hustle's tax year, the share to put aside and Self Assessment dates (whatever month).
+        v.business?.let { b ->
+            item(key = "business-head") {
+                Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "business") {
+                BusinessBlock(b, Modifier.animateItem().appear(rememberAppearance(4)),
+                    onAccount = { id, on -> scope.launch { runCatching { core.moneyBusinessAccount(id, on) }.getOrNull()?.let(say) } },
+                    onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } })
             }
         }
         // Slice 8: net worth (this month, and before any statement is in).
@@ -858,7 +873,7 @@ private fun CategoryRow(c: MoneyCategoryRow, modifier: Modifier) {
 }
 
 @Composable
-private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onCategory: (String) -> Unit) {
+private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> Unit = {}, onCategory: (String) -> Unit) {
     var menu by remember { mutableStateOf(false) }
     Box(modifier) {
         Row(
@@ -869,11 +884,18 @@ private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onCategory: (String) -> U
         ) {
             Column(Modifier.weight(1f)) {
                 Text(t.merchant, style = MekaType.body, color = Meka.colors.textPrimary)
-                Text("${t.day} · ${t.categoryLabel}" + (if (t.taught) " · yours" else "") + " · ${t.account}", style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text("${t.day} · ${t.categoryLabel}" + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + " · ${t.account}",
+                    style = MekaType.caption, color = Meka.colors.textSecondary)
             }
             Text(t.amount, style = MekaType.body, color = if (t.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            // Slice 13: the payer counts as the side hustle's (or not), on every account.
+            DropdownMenuItem(
+                text = { Text(if (t.business) MoneyBusiness.MENU_ON else MoneyBusiness.MENU_OFF, style = MekaType.body,
+                    color = if (t.business) Meka.colors.accent else Meka.colors.textPrimary) },
+                onClick = { menu = false; onBusiness(!t.business) },
+            )
             MoneyRules.CHOICES.forEach { c ->
                 DropdownMenuItem(
                     text = { Text(c.label, style = MekaType.body, color = if (c.key == t.category) Meka.colors.accent else Meka.colors.textPrimary) },
@@ -881,6 +903,74 @@ private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onCategory: (String) -> U
                 )
             }
         }
+    }
+}
+
+/**
+ * Slice 13: SIDE HUSTLE AND TAX — the tax year so far (in, out, profit in brass), the share to put aside with its chips,
+ * the trading allowance, the biggest costs, last tax year, the next Self Assessment dates (lit within 30 days) and each
+ * account's Side hustle account switch. Figures cross-fade as they change (MekaMotion.appear honours reduced motion).
+ */
+@Composable
+private fun BusinessBlock(b: MoneyBusinessView, modifier: Modifier, onAccount: (String, Boolean) -> Unit, onSetAside: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        b.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        b.profitLine?.let { profit ->
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = b.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                b.yearLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                Crossfade(profit, animationSpec = MekaMotion.appear(reduced), label = "money-biz-profit") { l ->
+                    Text(l, style = MekaType.itemTitle, color = if (b.profitUp) Meka.colors.accent else Meka.colors.textPrimary)
+                }
+                Crossfade(listOfNotNull(b.inLine, b.outLine).joinToString("\n"), animationSpec = MekaMotion.appear(reduced), label = "money-biz-inout") { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+            b.setAsideLine?.let { l ->
+                Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-biz-aside") { x ->
+                    Text(x, style = MekaType.body, color = Meka.colors.textPrimary)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                b.chips.forEach { c ->
+                    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-biz-chip-${c.key}")
+                    Text(c.label, style = MekaType.caption, color = col,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button) { if (!c.on) onSetAside(c.key) }
+                            .semantics { contentDescription = "Put aside ${c.label}" + if (c.on) ", chosen" else "" }
+                            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                }
+            }
+            b.allowanceLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            b.costs.forEach { c ->
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(c.label, style = MekaType.body, color = Meka.colors.textPrimary)
+                        Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                    Text(c.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+                }
+            }
+            b.lastYearLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            b.dates.forEach { d ->
+                Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+                    Text(d.line, style = MekaType.body, color = if (d.lit) Meka.colors.accent else Meka.colors.textPrimary)
+                    Text(d.title, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+        }
+        b.merchantsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        b.accounts.forEach { a ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(a.name, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                Text(MoneyBusiness.SWITCH + if (a.on) " ✓" else "", style = MekaType.caption,
+                    color = if (a.on) Meka.colors.accent else Meka.colors.textSecondary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onAccount(a.id, !a.on) }
+                        .semantics { contentDescription = "${a.name}: ${MoneyBusiness.SWITCH}" + if (a.on) ", on" else ", off" }
+                        .minTouch().padding(MekaSpace.xs))
+            }
+        }
+        Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

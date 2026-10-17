@@ -328,6 +328,36 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun aSideHustleMarkedOnTheFoldCountsOnTheMacWithUndoAndGoesWithDeleteAll() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        fold.importMoneyStatement("Shop account", "Date,Description,Amount\n01/09/2026,STRIPE PAYOUT,600.00\n03/09/2026,CANVA PRO,-12.00\n")
+        assertEquals(os.meka.core.domain.MoneyBusiness.INTRO, fold.moneyView.value.business!!.intro)
+        val shop = fold.moneyView.value.business!!.accounts.first { it.name == "Shop account" }
+        val r = fold.moneyBusinessAccount(shop.id, true)
+        assertTrue(r.line.startsWith("Shop account is your side hustle's account"))
+        assertEquals("Profit £588", fold.moneyView.value.business!!.profitLine)
+        // A payer on the current account marked Business counts too, on the month's row as well.
+        val costa = fold.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        val m = fold.moneyBusinessMerchant(costa.id, true)
+        assertTrue(fold.moneyView.value.month!!.txns.first { it.id == costa.id }.business)
+        assertEquals("Profit £584.80", fold.moneyView.value.business!!.profitLine)
+        assertTrue(fold.undoMoneyCategory(m.undo!!))
+        assertEquals("Profit £588", fold.moneyView.value.business!!.profitLine)
+        fold.moneySetAside("30")
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        val b = mac.moneyView.value.business!!
+        assertEquals("Profit £588", b.profitLine)
+        assertEquals("At 30%, put aside about £176.40 · your share, not a tax bill", b.setAsideLine)
+        fold.deleteAllMoney()
+        assertEquals(20, os.meka.core.domain.MoneyBusiness.setAside(null))
+        assertNull(fold.moneyView.value.business)
+    }
+
+    @Test
     fun netWorthTypedOnTheFoldShowsOnTheMacWithUndoAndGoesWithDeleteAll() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

@@ -758,6 +758,7 @@ class MekaCore(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
             moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
             moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(), wallets,
+            money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
         ).copy(trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
     }
 
@@ -915,6 +916,27 @@ class MekaCore(
     /** Slice 7: Paid on a card's next payment: its reminder stops until the next one. Undo by [undoMoneyCategory]. */
     suspend fun moneyCardPaid(accountId: String): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else money.cardPaid(accountId, todayEpochDay()).also { refreshMoney() }
+    }
+
+    /**
+     * Slice 13: Side hustle account on [accountId] ([on] false: not any more) — every line on it counts as the side
+     * hustle's, except transfers; on both devices, Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneyBusinessAccount(accountId: String, on: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setBusinessAccount(accountId, on).also { refreshMoney() }
+    }
+
+    /**
+     * Slice 13: Business on a payment — every line to or from [txnId]'s payer counts as the side hustle's ([on]), or is
+     * kept out of it, on every account and both devices; Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneyBusinessMerchant(txnId: String, on: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setBusinessMerchant(txnId, on).also { refreshMoney() }
+    }
+
+    /** Slice 13: the share of the side hustle's profit to put aside ([key] "10" · "20" · "25" · "30" · "40"), synced; Undo by [undoMoneyCategory]. */
+    suspend fun moneySetAside(key: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setSetAside(key).also { refreshMoney() }
     }
 
     /** Slice 6: the radar's bills, subscriptions and club fees with a cost, for what's still to go out before payday. */

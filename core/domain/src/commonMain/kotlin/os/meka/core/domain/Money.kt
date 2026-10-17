@@ -385,6 +385,8 @@ data class MoneyCategoryRow(
 data class MoneyTxnRow(
     val id: String, val day: String, val merchant: String, val amount: String, val moneyIn: Boolean,
     val category: String, val categoryLabel: String, val account: String, val taught: Boolean, val spoken: String,
+    /** Slice 13: counted as the side hustle's ([MoneyBusiness]). */
+    val business: Boolean = false,
 )
 
 data class MoneyAccountRow(val id: String, val name: String, val line: String)
@@ -428,6 +430,8 @@ data class MoneyView(
     val bank: MoneyBankView? = null,
     /** Trading tracker: TRADING · HYPERLIQUID — his public addresses, equity, P&L and open positions ([TradingTracker]); shown whatever month. */
     val trading: TradingView? = null,
+    /** Slice 13: SIDE HUSTLE AND TAX — the side hustle's tax year, the share to put aside, Self Assessment dates ([MoneyBusiness]); shown whatever month. */
+    val business: MoneyBusinessView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -531,6 +535,8 @@ object MoneyRules {
         bankSync: MoneyBankSync? = null, bankRemoved: Int = 0, bankAskedAtMs: Long? = null, nowMs: Long? = null,
         /** Trading tracker, slice 5: his Hyperliquid accounts, counted in net worth in pounds. */
         trading: List<TradingWallet> = emptyList(),
+        /** Slice 13: his side hustle's accounts, the payers he marked (true) or kept out (false), and his set-aside share. */
+        businessAccounts: Set<String> = emptySet(), businessMerchants: Map<String, Boolean> = emptyMap(), setAsidePct: Int = MoneyBusiness.DEFAULT_PCT,
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -555,7 +561,11 @@ object MoneyRules {
         // Slice 8: net worth from balances, cards and what he typed (also before any statement is in).
         val liveCards = cards.filter { it.id in names }
         val worth = MoneyWorth.view(counted, liveCards, worthItems, mine.map { Triple(it.account, it.day, it.pence) }, today, trading)
-        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank)
+        // Slice 13: the side hustle over every line (whatever month is shown).
+        val bizLines = mine.map { MoneyBusinessLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }
+        val business = MoneyBusiness.view(accounts, bizLines, businessAccounts, businessMerchants, setAsidePct, today)
+        fun isBiz(t: MoneyTxn) = MoneyBusiness.counts(MoneyBusinessLine(t.account, t.day, t.pence, keyOf(t), cat(t)), businessAccounts, businessMerchants)
+        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business)
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })
         val shown = (thisMonth - offset.coerceAtLeast(0)).coerceAtLeast(firstMonth)
@@ -605,7 +615,9 @@ object MoneyRules {
             MoneyTxnRow(
                 id = t.id, day = CivilDate.shortLabel(t.day), merchant = merchant, amount = signed(t.pence), moneyIn = t.pence > 0,
                 category = c.key, categoryLabel = c.label, account = names[t.account].orEmpty(), taught = key in rules,
-                spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, ${c.label}",
+                spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, ${c.label}" +
+                    (if (isBiz(t)) ", business" else ""),
+                business = isBiz(t),
             )
         }
         val month = MoneyMonth(
@@ -639,6 +651,7 @@ object MoneyRules {
             ) else null,
             worth = if (partial) worth else null,
             bank = bank,
+            business = business,
         )
     }
 
@@ -652,7 +665,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -826,6 +839,49 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         m to c
     }.toMap()
 
+    /** Slice 13: the accounts he marked as his side hustle's. */
+    fun businessAccounts(): Set<String> = replica.entities(EntityTypes.MONEY_ACCOUNT)
+        .filter { it[MoneyBusinessFields.ACCOUNT].boolOrNull == true }.map { it.ref.entityId }.toSet()
+
+    /** Slice 13: payers he marked Business (true) or kept out of it (false), by merchant key. */
+    fun businessMerchants(): Map<String, Boolean> = replica.entities(EntityTypes.MONEY_RULE).mapNotNull { e ->
+        val m = e[MoneyRuleFields.MERCHANT].textOrNull ?: return@mapNotNull null
+        val b = e[MoneyBusinessFields.MERCHANT].boolOrNull ?: return@mapNotNull null
+        m to b
+    }.toMap()
+
+    /** Slice 13: his share to put aside (percent), from the synced setting. */
+    fun setAsidePct(): Int = MoneyBusiness.setAside(replica.entity(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID)?.fields)
+
+    /** Slice 13: his share to put aside ([key] "20"), on both devices. */
+    fun setSetAside(key: String): MoneySaved {
+        val pct = MoneyBusiness.parseChoice(key) ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val before = setAsidePct()
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, MoneyBusiness.setAsideFields(pct, nowMs()))
+        return MoneySaved(MoneyBusiness.setAsideSaid(pct), undo = BIZ_UNDO + "p|" + MoneyBusiness.ENTITY_ID + "|" + before)
+    }
+
+    /** Slice 13: the whole account [accountId] is (or isn't) the side hustle's, on both devices; Undo by [undoCategory]. */
+    fun setBusinessAccount(accountId: String, on: Boolean): MoneySaved {
+        val a = accounts().firstOrNull { it.id == accountId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val before = replica.entity(EntityTypes.MONEY_ACCOUNT, accountId)?.get(MoneyBusinessFields.ACCOUNT)?.boolOrNull
+        replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(MoneyBusinessFields.ACCOUNT to on.fv()))
+        return MoneySaved(MoneyBusiness.accountSaid(a.name, on), undo = BIZ_UNDO + "a|" + accountId + "|" + (before?.toString() ?: ""))
+    }
+
+    /**
+     * Slice 13: every line to or from [txnId]'s payer counts as the side hustle's ([on]) or is kept out of it, on every
+     * account and both devices; Undo by [undoCategory].
+     */
+    fun setBusinessMerchant(txnId: String, on: Boolean): MoneySaved {
+        val t = txns().firstOrNull { it.id == txnId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val key = MoneyCategoryRules.merchantKey(t.text)
+        val rid = MoneyRules.ruleId(key)
+        val before = replica.entity(EntityTypes.MONEY_RULE, rid)?.get(MoneyBusinessFields.MERCHANT)?.boolOrNull
+        replica.commitLocal(EntityTypes.MONEY_RULE, rid, mapOf(MoneyRuleFields.MERCHANT to key.fv(), MoneyBusinessFields.MERCHANT to on.fv()))
+        return MoneySaved(MoneyBusiness.merchantSaid(MoneyCategoryRules.merchantLabel(key), on), undo = BIZ_UNDO + "m|" + rid + "|" + (before?.toString() ?: ""))
+    }
+
     /** Slice 2: the kinds of tip he hid ([MoneyTipKind.key]). */
     fun hiddenTips(): Set<String> = replica.entities(EntityTypes.MONEY_TIPS)
         .filter { it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId }.toSet()
@@ -911,6 +967,19 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(BIZ_UNDO)) {
+            val parts = token.removePrefix(BIZ_UNDO).split('|')
+            val id = parts.getOrNull(1) ?: return false
+            val v = parts.getOrNull(2).orEmpty()
+            val bool: FieldValue = when (v) { "true" -> true.fv(); "false" -> false.fv(); else -> FieldValue.Null }
+            when (parts.getOrNull(0)) {
+                "a" -> { if (accounts().none { it.id == id }) return false; replica.commitLocal(EntityTypes.MONEY_ACCOUNT, id, mapOf(MoneyBusinessFields.ACCOUNT to bool)) }
+                "m" -> { if (replica.entity(EntityTypes.MONEY_RULE, id) == null) return false; replica.commitLocal(EntityTypes.MONEY_RULE, id, mapOf(MoneyBusinessFields.MERCHANT to bool)) }
+                "p" -> { val pct = v.toIntOrNull() ?: return false; replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, MoneyBusiness.setAsideFields(pct, nowMs())) }
+                else -> return false
+            }
+            return true
+        }
         if (token.startsWith(WORTH_UNDO)) {
             val parts = token.removePrefix(WORTH_UNDO).split('|')
             val id = parts.getOrNull(0)?.takeIf { it.startsWith("n-") } ?: return false
@@ -972,6 +1041,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(
                 os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
                 MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
+                MoneyBusinessFields.ACCOUNT to FieldValue.Null,
             ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
         }
         cache = null
@@ -989,14 +1059,18 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 replica.commitLocal(EntityTypes.MONEY_ACCOUNT, it.id, mapOf(
                     os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.NAME to FieldValue.Null, MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
                     MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
+                    MoneyBusinessFields.ACCOUNT to FieldValue.Null,
                 ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
             }
             worthItems().forEach { writeWorth(it.id, null, null, null, null) }
+            if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID) != null) {
+                replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, mapOf(MoneyBusinessFields.SET_ASIDE to FieldValue.Null))
+            }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
             replica.entities(EntityTypes.MONEY_ALERT).forEach { replica.commitLocal(EntityTypes.MONEY_ALERT, it.ref.entityId, mapOf(MoneyAlertFields.FINE to FieldValue.Null)) }
             rules.forEach {
                 replica.commitLocal(EntityTypes.MONEY_RULE, it.ref.entityId, mapOf(
-                    MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null,
+                    MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null, MoneyBusinessFields.MERCHANT to FieldValue.Null,
                 ))
             }
         }
