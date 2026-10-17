@@ -152,4 +152,26 @@ class NumberLookupTest {
         val toAssistant = UnknownCallRules.offer(n, CallOutcome.TO_ASSISTANT, 0, at, at + 60_000, emptySet(), emptyList(), cal, reputation = "reported 4× as nuisance or sales calls")!!
         assertFalse(toAssistant.line.contains("couldn't verify"))
     }
+
+    @Test
+    fun anUndoneAutomaticBlockCanBeBlockedAgain() {
+        val world = os.meka.core.testing.SyncWorld()
+        val d = world.device("fold")
+        var n = 0
+        val log = ActivityLog(d.replica, { "a${n++}" }, { world.clock.nowMs })
+        val list = BlockedCallers(d.replica, { world.clock.nowMs })
+        val (_, id) = log.actRecorded("Blocked", "Spam protection", AutoBlockRules.SOURCE, null) { list.block(n2, "Auto-blocked") }
+        assertTrue(list.view().has(n2))
+        log.undo(id!!)
+        assertFalse(list.view().has(n2))
+        // Blocking again (an automatic block after a later call, or his Block) brings it back, and Undo works again.
+        val (_, again) = log.actRecorded("Blocked", "Spam protection", AutoBlockRules.SOURCE, null) { list.block(n2, "Auto-blocked") }
+        assertTrue(list.view().has(n2))
+        log.undo(again!!)
+        assertFalse(list.view().has(n2))
+        assertTrue(list.block(n2, "You blocked it"))
+        assertTrue(list.view().has(n2))
+    }
+
+    private val n2 = "01632 960699"
 }

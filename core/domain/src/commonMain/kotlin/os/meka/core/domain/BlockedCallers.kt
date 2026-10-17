@@ -262,9 +262,12 @@ class BlockedCallers(
     /** Blocks [number]; false (nothing saved) when it can't be a phone number. Blocking it again just updates why. */
     fun block(number: String, why: String?): Boolean {
         val key = BlockedCallerRules.keyOf(number) ?: return false
+        // An automatic block that was undone deleted the entity it made: blocking again brings it back.
+        val wasDeleted = replica.entity(EntityTypes.BLOCKED_CALLER, key)?.deleted == true
         replica.commitLocal(
             EntityTypes.BLOCKED_CALLER, key,
             buildMap {
+                if (wasDeleted) put(os.meka.core.sync.DELETED_FIELD, false.fv())
                 put(BlockedCallerFields.NUMBER, number.trim().take(40).fv())
                 put(BlockedCallerFields.BLOCKED, true.fv())
                 put(BlockedCallerFields.AT, nowMs().fv())
