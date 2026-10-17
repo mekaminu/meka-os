@@ -1093,7 +1093,8 @@ fun main(args: Array<String>) {
             }
             // Trading tracker: his Hyperliquid accounts by public address only, read-only (no key exists to hold).
             val tradingExports = if (System.getenv("MEKA_TRADING_TRACKER") == "off") null
-                else TradingExports({ hh, type -> opStore.latestFieldOps(hh, type) }, os.meka.backend.integrations.HyperliquidInfo.network())
+                else TradingExports({ hh, type -> opStore.latestFieldOps(hh, type) }, os.meka.backend.integrations.HyperliquidInfo.network(),
+                    rates = os.meka.backend.integrations.HmrcMonthlyRates.network())
             if (System.getenv("MEKA_TRADING_TRACKER") != "off") {
                 val devices = PostgresDeviceRegistry(ds)
                 startTradingSync(TradingSync(

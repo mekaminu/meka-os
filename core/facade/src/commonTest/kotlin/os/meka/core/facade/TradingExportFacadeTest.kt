@@ -42,7 +42,7 @@ class TradingExportFacadeTest {
                     emptyList(), partial = false, failed = false),
                 TradingExportCodec.Account("someone-else", listOf(TradingExportCodec.Order(fromMs + 2, "BTC", "Close Long", "1", "1", 100, 100, 0)),
                     emptyList(), partial = false, failed = false),
-            ))
+            ), listOf(TradingExportCodec.Rate(202504, 1_250_000)))
         }
     }
 
@@ -71,10 +71,12 @@ class TradingExportFacadeTest {
         val csv = assertNotNull(r.csv)
         assertTrue("Main,Trade,ETH,Close Long" in csv, csv)
         assertFalse("BTC" in csv, "only his followed accounts")
+        // Slice 10: pounds at HMRC's April rate ($200 closed − $1.50 fee at 1.25 = £160.00 − £1.20).
+        assertTrue("Close Long,2,3100,6200.00,200.00,-1.50,,198.50,1.2500,160.00,-1.20,,158.80" in csv, csv)
         // Asked three times (twice pending), from midnight 6 Apr 2025 UK time (BST, so 23:00 UTC the day before).
         assertEquals(3, server.asked.size)
         assertEquals(1_743_894_000_000L, server.asked.first().first)
-        assertTrue(r.said.line.startsWith("2025–26: 1 order"), r.said.line)
+        assertTrue(r.said.line.startsWith("2025–26: 1 order · net +$198.50 (+£158.80 at HMRC's monthly rates)"), r.said.line)
     }
 
     @Test

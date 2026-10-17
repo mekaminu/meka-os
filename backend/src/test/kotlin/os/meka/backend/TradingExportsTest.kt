@@ -4,6 +4,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import os.meka.backend.integrations.HmrcMonthlyRates
 import os.meka.backend.integrations.HyperliquidInfo
 import os.meka.backend.integrations.TradingAccountRead
 import os.meka.backend.integrations.TradingExportRead
@@ -87,6 +88,42 @@ class TradingExportsTest {
         fail = false
         assertEquals(TradingExportCodec.Response.OK, exports.export("hh", TradingExportCodec.Request(from, to - 1, 5_000)).state)
         assertEquals(3, reads)
+    }
+
+    @Test
+    fun hmrcsMonthlyRatesComeWithTheOrdersForEachMonthUpToNow() {
+        follow()
+        val asked = mutableListOf<Int>()
+        val withRates = TradingExports(BankSync.scanning(ops), feed, { nowMs }, Executors.newSingleThreadExecutor(),
+            rates = { m -> asked += m; if (m == 202507) null else 1_300_000L + m % 100 })
+        // The tax year from 6 Apr 2025 (23:00 UTC on the 5th) to 6 Apr 2026: 13 calendar months, each asked once.
+        val r = withRates.export("hh", TradingExportCodec.Request(from, to, 5_000))
+        assertEquals(TradingExportCodec.Response.OK, r.state)
+        assertEquals((202504..202512).toList() + (202601..202603).toList() + listOf(202604), asked)
+        assertTrue(r.rates.none { it.month == 202507 }, "a month that couldn't be read is left out")
+        assertEquals(1_300_004L, r.rates.first { it.month == 202504 }.usdPerGbpMicros)
+        assertEquals("1 read · 0 failed · 1 orders · HMRC rates 12 of 13 months", withRates.lastReport)
+    }
+
+    @Test
+    fun hmrcsMonthlyCsvGivesDollarsToThePound() {
+        val csv = "\uFEFFCountry/Territories,Currency,Currency Code,Currency Units per £1,Start date,End date\r\n" +
+            "Euro Area,Euro,EUR,1.1612,01/09/2026,30/09/2026\r\n" +
+            "\"United States, of America\",Dollar,USD,1.3421,01/09/2026,30/09/2026\r\n"
+        assertEquals(1_342_100L, HmrcMonthlyRates.parse(csv))
+        assertEquals(null, HmrcMonthlyRates.parse("Country,Currency\nUSA,Dollar"))
+        assertEquals(null, HmrcMonthlyRates.parse("Currency Code,Currency Units per £1\nUSD,40"))
+        assertEquals("https://www.trade-tariff.service.gov.uk/api/v2/exchange_rates/files/monthly_csv_2026-09.csv", HmrcMonthlyRates.url(202609))
+        var gets = 0
+        var t = 0L
+        val rates = HmrcMonthlyRates({ gets++; if (gets == 1) 500 to "" else 200 to csv }, { t })
+        assertEquals(null, rates.usdPerGbpMicros(202609))
+        assertEquals(null, rates.usdPerGbpMicros(202609)) // not tried again within the half hour
+        t += HmrcMonthlyRates.RETRY_MS
+        assertEquals(1_342_100L, rates.usdPerGbpMicros(202609))
+        assertEquals(1_342_100L, rates.usdPerGbpMicros(202609)) // kept for good
+        assertEquals(2, gets)
+        assertEquals(null, rates.usdPerGbpMicros(202613))
     }
 
     @Test

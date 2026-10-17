@@ -837,7 +837,9 @@ class MekaCore(
         }
         if (said != null) return os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(said, refused = true))
         val ids = wallets.map { it.id }.toSet()
-        val accounts = answer!!.accounts.filter { it.id in ids }.map { a ->
+        // Slice 10: HMRC's monthly dollars to £1, so the file gives pounds too (none from an older server: left blank).
+        val rates = answer!!.rates.associate { it.month to it.usdPerGbpMicros }
+        val accounts = answer.accounts.filter { it.id in ids }.map { a ->
             os.meka.core.domain.TradingExportAccount(
                 a.id,
                 a.orders.map { o -> os.meka.core.domain.TradingExportOrder(o.atMs, o.coin, o.direction, o.size, o.price, o.valueCents, o.closedCents, o.feeCents) },
@@ -850,8 +852,8 @@ class MekaCore(
                 !moneyOpen -> os.meka.core.domain.TradingExportResult(moneyLocked())
                 accounts.isEmpty() || accounts.all { it.failed } -> os.meka.core.domain.TradingExportResult(os.meka.core.domain.MoneySaved(R.FAILED, refused = true))
                 accounts.all { it.failed || (it.orders.isEmpty() && it.funding.isEmpty()) } -> os.meka.core.domain.TradingExportResult(R.saidEmpty(year))
-                else -> os.meka.core.domain.TradingExportResult(R.saidReady(year, accounts),
-                    R.csv(year, accounts, wallets.associate { it.id to it.label }), R.fileName(year))
+                else -> os.meka.core.domain.TradingExportResult(R.saidReady(year, accounts, rates),
+                    R.csv(year, accounts, wallets.associate { it.id to it.label }, rates), R.fileName(year))
             }
         }
     }

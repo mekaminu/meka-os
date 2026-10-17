@@ -19,6 +19,8 @@ import kotlinx.serialization.json.put
  * year), saying how long it can wait. The server reads them from Hyperliquid's public data (public address only) and
  * keeps the answer in memory for a few minutes; "pending" means it is still reading (ask again), "off" that the server
  * has no trading tracker, "failed" that Hyperliquid couldn't be read. Accounts are named by their entity id only.
+ * Slice 10: an "ok" answer also carries HMRC's monthly US dollars to £1 for each month of the window it could read
+ * (`rates`, [Rate]), so the file can give pounds as well; an older server simply sends none.
  */
 object TradingExportCodec {
     const val PATH = "/v1/trading/export"
@@ -28,6 +30,7 @@ object TradingExportCodec {
     private const val MAX_ORDERS = 20_000
     private const val MAX_FUNDING = 5_000
     private const val MAX_TEXT = 30
+    private const val MAX_RATES = 14
 
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -44,7 +47,10 @@ object TradingExportCodec {
         override fun toString() = "TradingExportCodec.Account(${orders.size} orders)"
     }
 
-    data class Response(val state: String, val accounts: List<Account> = emptyList()) {
+    /** HMRC's US dollars per £1 × 1,000,000 for [month] (yyyymm). */
+    data class Rate(val month: Int, val usdPerGbpMicros: Long)
+
+    data class Response(val state: String, val accounts: List<Account> = emptyList(), val rates: List<Rate> = emptyList()) {
         companion object {
             const val OK = "ok"
             const val PENDING = "pending"
@@ -96,6 +102,9 @@ object TradingExportCodec {
                 })
             }
         })
+        if (r.state == Response.OK && r.rates.isNotEmpty()) put("rates", buildJsonArray {
+            r.rates.take(MAX_RATES).forEach { x -> add(buildJsonArray { add(JsonPrimitive(x.month)); add(JsonPrimitive(x.usdPerGbpMicros)) }) }
+        })
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("export response") {
@@ -121,7 +130,14 @@ object TradingExportCodec {
             }
             Account(id, orders, funding, (a["partial"] as? JsonPrimitive)?.booleanOrNull ?: false, (a["failed"] as? JsonPrimitive)?.booleanOrNull ?: false)
         }
-        Response(state, accounts)
+        val rates = (o["rates"] as? JsonArray).orEmpty().take(MAX_RATES).mapNotNull { r ->
+            val l = r as? JsonArray ?: return@mapNotNull null
+            if (l.size < 2) return@mapNotNull null
+            val month = num(l[0])?.toInt()?.takeIf { it % 100 in 1..12 && it / 100 in 2019..2100 } ?: return@mapNotNull null
+            val micros = num(l[1])?.takeIf { it > 0 } ?: return@mapNotNull null
+            Rate(month, micros)
+        }.distinctBy { it.month }
+        Response(state, accounts, rates)
     }
 
     /** 1 Jan 2019: nothing on Hyperliquid is older. */

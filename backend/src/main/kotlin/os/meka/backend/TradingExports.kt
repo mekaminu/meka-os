@@ -1,5 +1,6 @@
 package os.meka.backend
 
+import os.meka.backend.integrations.MonthlyDollarRates
 import os.meka.backend.integrations.TradingFeed
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.TradingTracker
@@ -21,12 +22,15 @@ import java.util.concurrent.TimeoutException
  * public data ([TradingFeed.export]) one after another in the background; the device waits up to its wait and asks
  * again while it is still going. The answer is kept **in memory only** for [KEEP_MS] (nothing financial is stored or
  * logged: [lastReport] holds counts only), so asking twice reads once. Read-only, no key, nothing that can trade.
+ * Slice 10: with the orders go HMRC's monthly US dollars to £1 for each month of the window up to now ([rates], read
+ * from HMRC's public files and kept), so the file can give pounds; a month that can't be read is simply left out.
  */
 class TradingExports(
     private val read: (householdId: String, entityType: String) -> Map<String, Map<String, Op>>,
     private val feed: TradingFeed,
     private val now: () -> Long = System::currentTimeMillis,
     private val pool: ExecutorService = Executors.newFixedThreadPool(2) { r -> Thread(r, "trading-export").apply { isDaemon = true } },
+    private val rates: MonthlyDollarRates? = null,
 ) {
     private class Job(val startedAt: Long, val future: CompletableFuture<TradingExportCodec.Response>)
 
@@ -72,12 +76,26 @@ class TradingExports(
                 partial = r.partial, failed = false,
             )
         }
-        lastReport = "${accounts.count { !it.failed }} read · ${accounts.count { it.failed }} failed · ${accounts.sumOf { it.orders.size }} orders"
+        val months = if (rates == null || accounts.all { it.failed }) emptyList() else months(fromMs, minOf(toMs, now()))
+        val got = months.mapNotNull { m -> runCatching { rates!!.usdPerGbpMicros(m) }.getOrNull()?.let { TradingExportCodec.Rate(m, it) } }
+        lastReport = "${accounts.count { !it.failed }} read · ${accounts.count { it.failed }} failed · ${accounts.sumOf { it.orders.size }} orders" +
+            (if (rates != null) " · HMRC rates ${got.size} of ${months.size} months" else "")
         return if (accounts.isNotEmpty() && accounts.all { it.failed }) TradingExportCodec.Response(TradingExportCodec.Response.FAILED)
-        else TradingExportCodec.Response(TradingExportCodec.Response.OK, accounts)
+        else TradingExportCodec.Response(TradingExportCodec.Response.OK, accounts, got)
     }
 
     companion object {
+        /** The calendar months (yyyymm, UTC) from [fromMs] up to just before [toMs], at most 14. */
+        fun months(fromMs: Long, toMs: Long): List<Int> {
+            if (toMs <= fromMs) return emptyList()
+            val zone = java.time.ZoneOffset.UTC
+            var m = java.time.Instant.ofEpochMilli(fromMs).atZone(zone).let { java.time.YearMonth.of(it.year, it.month) }
+            val last = java.time.Instant.ofEpochMilli(toMs - 1).atZone(zone).let { java.time.YearMonth.of(it.year, it.month) }
+            val out = mutableListOf<Int>()
+            while (!m.isAfter(last) && out.size < 14) { out += m.year * 100 + m.monthValue; m = m.plusMonths(1) }
+            return out
+        }
+
         /** How long a finished export is kept in memory for the device to collect (or ask again). */
         const val KEEP_MS = 10 * 60_000L
     }
