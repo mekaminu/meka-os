@@ -215,6 +215,18 @@ enum class LineLevel { GOOD, MINOR, MAJOR }
 /** What Today shows on an office day's commute: the line and whether it needs a look (lit in the accent). */
 data class RouteLine(val text: String, val lit: Boolean, val spoken: String)
 
+/**
+ * Live trains, slice 3: when to leave for [train] — [leaveMin] (London minute of the day) is its expected time less
+ * [walkMin], the time to the train from home ([morning]) or from work. [later] when it's later than his usual train
+ * (he's past it, or the ones before it are cancelled or late). [words]: "leave by 07:32 for the 07:42" · "leave work
+ * by 17:37 for the 17:52" · "leave by 07:44 for the 07:54 · later than usual".
+ */
+data class LeaveBy(val leaveMin: Int, val train: TrainDeparture, val walkMin: Int, val morning: Boolean, val later: Boolean = false) {
+    val words: String
+        get() = (if (morning) "leave by " else "leave work by ") + LocalClock.formatMinute(leaveMin) + " for the " +
+            LocalClock.formatMinute(train.depMin) + if (later) " · later than usual" else ""
+}
+
 /** Non-AI, pure. */
 object RouteRules {
     /** The route the rules read: About you's Train route ([Household.names]); null with none typed. */
@@ -467,7 +479,8 @@ object RouteRules {
         val live = liveBoard(s, commute, nowMs)?.let { upcoming(it, nowMs, cal) }?.takeIf { it.isNotEmpty() }
         if (live != null) {
             val notGood = legs.filter { level(it.second) != LineLevel.GOOD }
-            val text = name(r.firstId, r) + " · " + live.joinToString(" · ") { words(it) } +
+            val leave = office?.let { o -> liveBoard(s, commute, nowMs)?.let { leaveBy(it, commute, o, nowMs, cal) } }
+            val text = name(r.firstId, r) + " · " + (leave?.let { it.words + " · " }.orEmpty()) + live.joinToString(" · ") { words(it) } +
                 notGood.joinToString("") { (id, sev) -> " · " + part(id, sev, r) } + fallback
             val lit = live.any(::bad) || notGood.isNotEmpty()
             return RouteLine(text, lit = lit, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — ", ". "))
@@ -492,7 +505,7 @@ object RouteRules {
      * a fresh live board also "next trains from Oakfield to Oakfield Junction (live departures, checked 07:05): 07:12
      * on time, platform 3, arrives 07:41; …". Empty when stale, unknown or without a route.
      */
-    fun askLines(s: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar): List<String> {
+    fun askLines(s: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar, office: OfficeWindow? = null): List<String> {
         val r = route() ?: return emptyList()
         val out = mutableListOf<String>()
         if (fresh(s, nowMs)) {
@@ -511,6 +524,12 @@ object RouteRules {
             if (next.isNotEmpty()) {
                 val at = LocalClock.formatMinute(cal.minuteOfDay(b.checkedMs!!))
                 out += "next trains from $from to $to (live departures, checked $at): " + next.joinToString("; ") { askWords(it) }
+                // Slice 3: when to leave, on an office day's commute with the time to the train in About you.
+                val c = office?.let { commute(it, nowMs, cal) }
+                val leave = if (c != null && b.dir == (if (c == Commute.MORNING) TrainBoard.AM else TrainBoard.PM)) leaveBy(b, c, office!!, nowMs, cal) else null
+                leave?.let { l ->
+                    out += "when Meka should leave (his ${l.walkMin} min to the train from ${if (c == Commute.MORNING) "home" else "work"} in About you): " + l.words
+                }
             }
         }
         return out
@@ -622,7 +641,7 @@ object RouteRules {
         val atMs = quiet.endAfter(maxOf(from, b.checkedMs!!), cal)
         if (atMs >= expires) return emptyList()
         val advice = when {
-            good != null -> "Next good: " + askWords(good)
+            good != null -> "Next good: " + askWords(good) + (leaveFor(good, commute, nowMin)?.let { " · leave ${if (morning) "" else "work "}by " + LocalClock.formatMinute(it) }.orEmpty())
             before != null -> "Or the " + askWords(before)
             else -> fallbackAdvice(r, r.fallbackId?.let { s.severityOf(it) }.takeIf { fresh(s, nowMs) }, morning) ?: "No good train on the board yet · check before you leave"
         }
@@ -636,6 +655,58 @@ object RouteRules {
                 atMs = atMs, target = NoticeTarget.TODAY, expiresAtMs = expires,
             ),
         )
+    }
+
+    // ---- Live trains, slice 3: leave-by times both ways ----
+
+    /** The minutes to the train for [commute] (About you's Time to the train); null with none typed. */
+    fun walkMin(commute: Commute): Int? =
+        if (commute == Commute.MORNING) Household.names.walkHomeMin else Household.names.walkWorkMin
+
+    /** When to leave for [d]: its expected time less the walk, if that's still ahead of [nowMin]; else null. */
+    private fun leaveFor(d: TrainDeparture, commute: Commute, nowMin: Int): Int? {
+        val walk = walkMin(commute) ?: return null
+        if (ahead(leavesMin(d), nowMin) < walk) return null
+        return (leavesMin(d) - walk).mod(1440)
+    }
+
+    /**
+     * Live trains, slice 3 (Places item 4: "leave-by alarms use it"): the train to leave for and when. Only good trains
+     * ([bad] ones never) he can still reach with About you's Time to the train. **Morning**: the latest one that keeps
+     * him on his usual time (leaving home at work's start less the day's commute, [OfficeWindow.toWorkMin]), so a
+     * cancelled train moves the leave-by earlier, never later; when he's past that or none earlier is good, the first
+     * he can still catch ([LeaveBy.later]). While the board doesn't yet reach his usual train, nothing (it would be too
+     * early to say). **Evening**: the first good train he can catch leaving work when it ends (or now, if later).
+     * Null without the time to the train, or with nothing good on the board.
+     */
+    fun leaveBy(b: TrainBoard, commute: Commute, office: OfficeWindow, nowMs: Long, cal: LocalCalendar): LeaveBy? {
+        val walk = walkMin(commute) ?: return null
+        val morning = commute == Commute.MORNING
+        val nowMin = cal.minuteOfDay(nowMs)
+        val all = upcoming(b, nowMs, cal, n = TrainBoardCodec.MAX)
+        val reach = all.filter { !bad(it) && ahead(leavesMin(it), nowMin) >= walk }
+        val pick: TrainDeparture
+        var later = false
+        if (morning) {
+            val usual = office.toWorkMin?.let { ((office.startMs - it * 60_000L + walk * 60_000L - nowMs) / 60_000L).toInt() }
+            if (usual == null) {
+                pick = reach.firstOrNull() ?: return null
+            } else {
+                val onTime = reach.lastOrNull { ahead(leavesMin(it), nowMin) <= usual }
+                val reachesUsual = all.any { ahead(leavesMin(it), nowMin) >= usual }
+                pick = when {
+                    onTime != null && (reachesUsual || usual < walk) -> onTime
+                    onTime != null -> return null
+                    usual < walk || reachesUsual -> reach.firstOrNull()?.also { later = true } ?: return null
+                    else -> return null
+                }
+            }
+        } else {
+            val ends = maxOf(0L, (office.endMs - nowMs) / 60_000L).toInt()
+            pick = reach.firstOrNull { ahead(leavesMin(it), nowMin) >= walk + ends } ?: return null
+        }
+        val leave = (leavesMin(pick) - walk).mod(1440)
+        return LeaveBy(leave, pick, walk, morning, later)
     }
 
     /** The server's checked time, rounded down so a quiet line writes at most twice an hour. */

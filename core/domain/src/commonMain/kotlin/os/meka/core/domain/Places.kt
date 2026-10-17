@@ -19,7 +19,12 @@ object WorkPlaceFields {
 }
 
 /** Today's office hours, as instants: from the start of work until its end (an office day only). */
-data class OfficeWindow(val startMs: Long, val endMs: Long)
+data class OfficeWindow(
+    val startMs: Long,
+    val endMs: Long,
+    /** Live trains, slice 3: the day's door-to-door commute to work ([CommuteRules.toWorkOn]); null when not known. */
+    val toWorkMin: Int? = null,
+)
 
 /** Non-AI, pure. */
 object PlacesRules {
@@ -66,7 +71,7 @@ object PlacesRules {
         if (!hours.isWorkDay(day) || day in hours.homeDays) return null
         val h = hours.hoursOn(day)
         if (h.crossesMidnight || h.startMinute == h.endMinute) return null
-        return OfficeWindow(cal.toEpochMs(day, h.startMinute), cal.toEpochMs(day, h.endMinute))
+        return OfficeWindow(cal.toEpochMs(day, h.startMinute), cal.toEpochMs(day, h.endMinute), CommuteRules.toWorkOn(hours, day))
     }
 
     /** Work's hours from [nowMs] (or the start of work) until work ends. */

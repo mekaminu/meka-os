@@ -32,9 +32,9 @@ class PlacesTest {
 
     @Test
     fun anOfficeDayIsAWorkDayAwayFromHome() {
-        assertEquals(OfficeWindow(at(fri, 9), at(fri, 17, 30)), office)
+        assertEquals(OfficeWindow(at(fri, 9), at(fri, 17, 30), CommuteRules.DEFAULT_MIN), office)
         // Thursday is the short day.
-        assertEquals(OfficeWindow(at(thu, 9), at(thu, 15, 30)), PlacesRules.officeWindow(hoursMeka, thu, cal))
+        assertEquals(OfficeWindow(at(thu, 9), at(thu, 15, 30), CommuteRules.DEFAULT_MIN), PlacesRules.officeWindow(hoursMeka, thu, cal))
         // Not at the weekend, not on a work-from-home day, not when work was switched off for the day.
         assertNull(PlacesRules.officeWindow(hoursMeka, sat, cal))
         assertNull(PlacesRules.officeWindow(hoursMeka.copy(homeDays = setOf(fri)), fri, cal))

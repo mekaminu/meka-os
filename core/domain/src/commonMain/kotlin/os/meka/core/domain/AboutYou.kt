@@ -71,6 +71,12 @@ object AboutYouFields {
      * change station), and back in the evening. Never in the code (rule 13).
      */
     const val HOME_STATION = "homeStation"
+    /**
+     * Live trains, slice 3 (2026-10-17): how long it takes him to reach the train, from the door at home and from his
+     * desk at work, kept as "10 min from home · 15 min from work" ([AboutYouRules.walk]). The leave-by times follow it:
+     * the live train he can still catch, less this. Absent = no leave-by (never guessed).
+     */
+    const val STATION_WALK = "stationWalk"
     /** Int64: when the Fold copied MEKA's earlier values in (release 1); absent when he typed it all. */
     const val SEEDED_AT = "seededAtMs"
     /** Int64: when the Fold first held a filled-in profile after a clean sync (slice 2, release 2's gate). */
@@ -129,13 +135,15 @@ data class AboutYou(
     val route: String? = null,
     /** Live trains: the home station as typed ("Oakfield"). */
     val homeStation: String? = null,
+    /** Live trains, slice 3: the time to the train as kept ("10 min from home · 15 min from work"). */
+    val stationWalk: String? = null,
     val seededAtMs: Long? = null,
     /** The school's council's holidays ([AboutYouFields.COUNCIL_DATES]); not a typed line, so not part of [isEmpty]. */
     val councilDates: TermCalendar? = null,
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, assistantNumber, voicemailNumber, route, homeStation).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, assistantNumber, voicemailNumber, route, homeStation, stationWalk).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -155,6 +163,8 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
         "Add your train route so Today, the brief and Leaving now say how its lines are running"),
     HOME_STATION(AboutYouFields.HOME_STATION, "Home station", "The station you catch the train from: Oakfield",
         "Add your home station for live departures on Today"),
+    STATION_WALK(AboutYouFields.STATION_WALK, "Time to the train", "Minutes from home to the train, then from work: 10, 15",
+        "Add it so Today says when to leave for the next good train"),
     SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
     SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk, parentmail.co.uk",
         "Add the addresses the school writes from so its trips, payments and days off are offered for School"),
@@ -217,6 +227,8 @@ object AboutYouRules {
     const val NOT_SCHOOL_MAIL = "Type the school's email addresses or their domain, up to 6, with commas: “office@oakfield.sch.uk, parentmail.co.uk”."
     const val NOT_CLUBS = "Type each club's short name first, as your calendar writes it: “OFC Oakfield Town, HRFC”."
     const val NOT_ROUTE = "Type the line from home, where you change and the next line: “South Rail to Oakfield Junction, then Metro”, and after a semicolon the line you take instead: “; or North Rail to Riverside”."
+    const val NOT_WALK = "Type the minutes it takes you to reach the train from home, then from work, each up to 90: “10, 15” or “10”."
+    const val MAX_WALK = 90
     const val NOT_STATION = "Type the station's name as the station sign has it, up to 40 letters: “Oakfield”."
     const val MAX_CLUBS = 6
     const val MAX_CLUB_SHORT = 10
@@ -303,6 +315,7 @@ object AboutYouRules {
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
             route = text(AboutYouFields.ROUTE)?.let { RouteRules.parse(it)?.text },
             homeStation = text(AboutYouFields.HOME_STATION)?.let(RouteRules::stationName),
+            stationWalk = text(AboutYouFields.STATION_WALK)?.let(::walkText),
             seededAtMs = fields[AboutYouFields.SEEDED_AT]?.longOrNull,
             councilDates = SchoolTerms.decode(fields[AboutYouFields.COUNCIL_DATES]?.textOrNull),
         )
@@ -322,6 +335,7 @@ object AboutYouRules {
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
         AboutField.ROUTE -> a.route
         AboutField.HOME_STATION -> a.homeStation
+        AboutField.STATION_WALK -> a.stationWalk
     }
 
     /**
@@ -341,6 +355,7 @@ object AboutYouRules {
             AboutField.CLUBS -> clubs(t)
             AboutField.ROUTE -> RouteRules.parse(t)?.text
             AboutField.HOME_STATION -> RouteRules.stationName(t)
+            AboutField.STATION_WALK -> walkText(t)
         }
     }
 
@@ -354,7 +369,42 @@ object AboutYouRules {
         AboutField.CLUBS -> NOT_CLUBS
         AboutField.ROUTE -> NOT_ROUTE
         AboutField.HOME_STATION -> NOT_STATION
+        AboutField.STATION_WALK -> NOT_WALK
     }
+
+    // ---- Live trains, slice 3: the time to the train ----
+
+    /**
+     * The minutes to the train from home and from work, read from what he typed: "10, 15", "10 min from home, 15 from
+     * work", "work 15 home 10" (named the other way round), or one number for both ("10"). Each 1–[MAX_WALK]; null when
+     * it can't be read (no number, more than two, a word other than min/mins/minutes/from/home/work/and). No regex.
+     */
+    fun walk(t: String?): Pair<Int, Int>? {
+        val s = t?.lowercase() ?: return null
+        val nums = mutableListOf<Int>()
+        val words = mutableListOf<String>()
+        var i = 0
+        while (i < s.length) {
+            val c = s[i]
+            when {
+                c.isDigit() -> { var j = i; while (j < s.length && s[j].isDigit()) j++; nums += s.substring(i, j).take(3).toInt(); words += "#"; i = j }
+                c.isLetter() -> { var j = i; while (j < s.length && s[j].isLetter()) j++; words += s.substring(i, j); i = j }
+                c == ' ' || c == ',' || c == '·' || c == ';' || c == '/' || c == '-' || c == '.' -> i++
+                else -> return null
+            }
+        }
+        if (words.any { it != "#" && it !in WALK_WORDS }) return null
+        if (nums.size !in 1..2 || nums.any { it !in 1..MAX_WALK }) return null
+        if (nums.size == 1) return nums[0] to nums[0]
+        val home = words.indexOf("home")
+        val work = words.indexOf("work")
+        return if (home >= 0 && work >= 0 && work < home) nums[1] to nums[0] else nums[0] to nums[1]
+    }
+
+    private val WALK_WORDS = setOf("min", "mins", "minute", "minutes", "m", "from", "home", "work", "and", "the", "to", "train", "station", "office")
+
+    /** As kept: "10 min from home · 15 min from work"; null when [walk] can't read it. */
+    fun walkText(t: String): String? = walk(t)?.let { (h, w) -> "$h min from home · $w min from work" }
 
     /** Spaces collapsed and trimmed; no regex (Kotlin/Native reads some differently). */
     internal fun collapse(s: String): String {
@@ -585,6 +635,7 @@ object AboutYouRules {
             a.work?.let { "work" },
             a.route?.let { "train route" },
             a.homeStation?.let { "home station" },
+            a.stationWalk?.let { "time to the train" },
             a.schoolWebsite?.let { "the school's website" },
             a.schoolMail?.let { "the school's email" },
             a.clubs?.let { "clubs" },

@@ -202,4 +202,83 @@ class TrainBoardTest {
         assertEquals("Oakfield", HouseholdNames.of(a).homeStation)
         assertTrue(!a.isEmpty)
     }
+
+    // ---- Slice 3: leave-by times both ways ----
+
+    private fun walk(typed: String) = Household.set(Household.names.copy(
+        walkHomeMin = AboutYouRules.walk(typed)?.first, walkWorkMin = AboutYouRules.walk(typed)?.second))
+
+    @Test
+    fun aboutYouReadsTheTimeToTheTrain() {
+        assertEquals(10 to 15, AboutYouRules.walk("10, 15"))
+        assertEquals(10 to 15, AboutYouRules.walk("10 min from home, 15 from work"))
+        assertEquals(10 to 15, AboutYouRules.walk("work 15 home 10"))
+        assertEquals(12 to 12, AboutYouRules.walk("12 mins"))
+        assertNull(AboutYouRules.walk("ten"))
+        assertNull(AboutYouRules.walk("10, 15, 20"))
+        assertNull(AboutYouRules.walk("120"))
+        assertNull(AboutYouRules.walk("10 by bike"))
+        assertEquals("10 min from home · 15 min from work", AboutYouRules.clean(AboutField.STATION_WALK, "10,15"))
+        assertNull(AboutYouRules.clean(AboutField.STATION_WALK, "soon"))
+        val a = AboutYouRules.read(mapOf(AboutYouFields.STATION_WALK to os.meka.core.sync.FieldValue.Text("10 min from home · 15 min from work")))
+        assertEquals("10 min from home · 15 min from work", AboutYouRules.walkText(a.stationWalk!!))
+        assertEquals(10, HouseholdNames.of(a).walkHomeMin)
+        assertEquals(15, HouseholdNames.of(a).walkWorkMin)
+        assertTrue(!a.isEmpty)
+    }
+
+    @Test
+    fun leaveByTheLatestGoodTrainThatKeepsHimOnTime() {
+        // Work 09:00, commute 1 h 20 → he usually leaves 07:40 and reaches the train at 07:50 with 10 min to walk.
+        walk("10, 15")
+        val board = listOf(
+            TrainDeparture(7 * 60 + 30, 7 * 60 + 30),
+            TrainDeparture(7 * 60 + 42, 7 * 60 + 42, platform = "3"),
+            TrainDeparture(7 * 60 + 54, 7 * 60 + 54),
+        )
+        val l = RouteRules.leaveBy(live(list = board), RouteRules.Commute.MORNING, office!!, at(7, 10), cal)!!
+        assertEquals("leave by 07:32 for the 07:42", l.words)
+        // Today's line leads with it.
+        assertEquals("South Rail · leave by 07:32 for the 07:42 · 07:30 on time · 07:42 on time · 07:54 on time",
+            RouteRules.todayLine(snap(live(list = board)), office, at(7, 10), cal)!!.text)
+        // The 07:42 cancelled: the 07:30 (leave earlier), never the 07:54.
+        val cancelled = board.toMutableList().also { it[1] = TrainDeparture(7 * 60 + 42, null, cancelled = true) }
+        assertEquals("leave by 07:20 for the 07:30", RouteRules.leaveBy(live(list = cancelled), RouteRules.Commute.MORNING, office, at(7, 10), cal)!!.words)
+        // Past that too: the first he can still catch, said to be later than usual.
+        assertEquals("leave by 07:44 for the 07:54 · later than usual",
+            RouteRules.leaveBy(live(list = cancelled, checked = at(7, 20)), RouteRules.Commute.MORNING, office, at(7, 25), cal)!!.words)
+        // A late (but not bad) train counts from its expected time.
+        val late = listOf(TrainDeparture(7 * 60 + 40, 7 * 60 + 43), TrainDeparture(7 * 60 + 54, 7 * 60 + 54))
+        assertEquals("leave by 07:33 for the 07:40", RouteRules.leaveBy(live(list = late), RouteRules.Commute.MORNING, office, at(7, 10), cal)!!.words)
+        // Early: the board doesn't reach his usual train yet, so nothing.
+        val early = listOf(TrainDeparture(6 * 60 + 30, 6 * 60 + 30), TrainDeparture(6 * 60 + 45, 6 * 60 + 45))
+        assertNull(RouteRules.leaveBy(live(list = early, checked = at(6, 5)), RouteRules.Commute.MORNING, office, at(6, 10), cal))
+        // Ask hears it.
+        assertTrue(RouteRules.askLines(snap(live(list = board)), at(7, 10), cal, office).last()
+            .endsWith("(his 10 min to the train from home in About you): leave by 07:32 for the 07:42"))
+    }
+
+    @Test
+    fun leaveWorkByTheFirstGoodTrainAfterWorkEnds() {
+        walk("10, 15")
+        val pm = listOf(
+            TrainDeparture(17 * 60 + 40, 17 * 60 + 40),
+            TrainDeparture(17 * 60 + 52, null, cancelled = true),
+            TrainDeparture(18 * 60 + 2, 18 * 60 + 4),
+        )
+        val board = live(dir = TrainBoard.PM, checked = at(17, 5), list = pm)
+        // Work ends 17:30, 15 min to the train: the 17:40 is too soon, the 17:52 cancelled, so the 18:02 (expected 18:04).
+        assertEquals("leave work by 17:49 for the 18:02", RouteRules.leaveBy(board, RouteRules.Commute.EVENING, office!!, at(17, 10), cal)!!.words)
+        assertTrue(RouteRules.todayLine(snap(board), office, at(17, 10), cal)!!.text.startsWith("South Rail · leave work by 17:49 for the 18:02 · "))
+        // The late-train heads-up says when to leave for the next good one.
+        val e = RouteRules.liveNotices(snap(board), office, quiet, at(17, 10), cal).single()
+        assertEquals("South Rail 17:52 cancelled", e.title)
+        assertEquals("Next good: 18:02 2 min late · leave work by 17:49 · live 17:05", e.text)
+    }
+
+    @Test
+    fun withoutTheTimeToTheTrainNothingIsGuessed() {
+        assertNull(RouteRules.leaveBy(live(), RouteRules.Commute.MORNING, office!!, at(7, 10), cal))
+        assertEquals("South Rail · 07:12 on time · 07:24 5 min late · 07:42 cancelled", RouteRules.todayLine(snap(live()), office, at(7, 10), cal)!!.text)
+    }
 }
