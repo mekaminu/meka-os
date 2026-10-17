@@ -46,6 +46,7 @@ struct MoneySheet: View {
     @State private var editingCard: String?
     @State private var cardTexts: [String: String] = [:]
     @State private var worthText = ""
+    @State private var sharedText = ""
     @State private var tradingText = ""
     @State private var exporting = false
     @State private var worthBalances: [String: String] = [:]
@@ -70,6 +71,7 @@ struct MoneySheet: View {
                         if let t = v.trading { trading(t).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
                         if let b = v.business { business(b).staggeredAppear(3) }
+                        if let sh = v.shared { shared(sh).staggeredAppear(3) }
                         if let w = v.worth { worth(w).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
                         importer(v).staggeredAppear(3)
@@ -298,6 +300,78 @@ struct MoneySheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: open)
+    }
+
+    /// Slice 14: SHARED WITH <PARTNER> — since when, what each paid, the split with its chips, who owes whom (in brass
+    /// when someone does), this month's shared total, what the partner paid (Remove), a field to type it and Settled up.
+    private func shared(_ sh: MoneySharedView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(sh.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let i = sh.intro {
+                Text(i).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if let bal = sh.balanceLine {
+                VStack(alignment: .leading, spacing: 0) {
+                    if let l = sh.sinceLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+                    Text(bal).font(MekaType.itemTitle).foregroundStyle(sh.balanceLit ? palette.accent : palette.textPrimary).contentTransition(.opacity)
+                    if let l = sh.youLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                    if let l = sh.partnerLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                    if let l = sh.splitLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(sh.spoken)
+                HStack(spacing: MekaSpace.xs) {
+                    ForEach(sh.chips, id: \.key) { c in
+                        Button {
+                            guard !c.on else { return }
+                            let key = c.key
+                            Task { said = await model.moneySharedShare(key: key) }
+                        } label: {
+                            Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel("Your share \(c.label)\(c.on ? ", chosen" : "")")
+                    }
+                }
+                if let label = sh.settle {
+                    Button(label) { Task { said = await model.moneySharedSettle() } }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .accessibilityLabel("\(label) with \(sh.partner)")
+                }
+                if let l = sh.monthLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+            }
+            ForEach(sh.rows, id: \.id) { r in
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(r.spoken)
+                    Spacer()
+                    Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Button("Remove") {
+                        let id = r.id
+                        Task { said = await model.moneySharedRemove(id: id) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .accessibilityLabel("Remove \(r.name) from what was paid")
+                }
+                .transition(.opacity)
+            }
+            if let m = sh.merchantsLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            TextField(sh.hint, text: $sharedText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let text = sharedText
+                    sharedText = ""
+                    Task { said = await model.moneySharedAdd(text: text) }
+                }
+            Text(sh.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: sh.balanceLine)
     }
 
     /// Slice 13: SIDE HUSTLE AND TAX — the tax year so far (profit in brass), the share to put aside with its chips, the
@@ -624,6 +698,17 @@ struct MoneySheet: View {
                 let on = !t.business
                 Task { said = await model.moneyBusinessMerchant(txnId: id, on: on) }
             }
+            // Slice 14: this payment, or every payment to this payer, shared with his partner.
+            Button(t.shared ? MoneyShared.shared.MENU_ON : MoneyShared.shared.MENU_OFF) {
+                let id = t.id
+                let on = !t.shared
+                Task { said = await model.moneySharedTxn(txnId: id, on: on) }
+            }
+            Button(t.sharedAlways ? MoneyShared.shared.MENU_ALWAYS_ON : MoneyShared.shared.MENU_ALWAYS_OFF) {
+                let id = t.id
+                let on = !t.sharedAlways
+                Task { said = await model.moneySharedMerchant(txnId: id, on: on) }
+            }
             Divider()
             ForEach(MoneyRules.shared.CHOICES, id: \.key) { choice in
                 Button(choice.key == t.category ? "✓ \(choice.label)" : choice.label) {
@@ -635,7 +720,7 @@ struct MoneySheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(t.merchant).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text("\(t.day) · \(t.categoryLabel)\(t.taught ? " · yours" : "")\(t.business ? " · Business" : "") · \(t.account)")
+                    Text("\(t.day) · \(t.categoryLabel)\(t.taught ? " · yours" : "")\(t.business ? " · Business" : "")\(t.shared ? " · Shared" : "") · \(t.account)")
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
                 Spacer()

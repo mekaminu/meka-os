@@ -107,6 +107,7 @@ object DataExport {
         EntityTypes.MONEY_TIPS to ("hidden money tip" to "hidden money tips"),
         EntityTypes.MONEY_ALERT to ("money alert put away" to "money alerts put away"),
         EntityTypes.MONEY_WORTH to ("net worth entry" to "net worth entries"),
+        EntityTypes.MONEY_SHARED to ("shared payment" to "shared payments"),
         EntityTypes.TRADING_WALLET to ("trading address" to "trading addresses"),
     )
 
@@ -115,7 +116,7 @@ object DataExport {
         EntityTypes.TASK, EntityTypes.CHECKLIST_ITEM, EntityTypes.EVENT, EntityTypes.COMMITMENT, EntityTypes.DECISION,
         EntityTypes.OBLIGATION, EntityTypes.GOAL, EntityTypes.HABIT, EntityTypes.HABIT_COMPLETION, EntityTypes.FAST,
         EntityTypes.SHOPPING_ITEM, EntityTypes.SCHOOL_ITEM, EntityTypes.MEAL, EntityTypes.MEAL_DAY, EntityTypes.EMERGENCY_ENTRY, EntityTypes.WIN, EntityTypes.REFLECTION, EntityTypes.KID_ADMIN, EntityTypes.KID_CHORE, EntityTypes.KID_CHORE_TICK, EntityTypes.QUEUE_ITEM, EntityTypes.LEAVE, EntityTypes.LIFE_FACT, EntityTypes.ERRAND, EntityTypes.APPOINTMENT, EntityTypes.CHECKLIST_TEMPLATE, EntityTypes.GOAL_MILESTONE, EntityTypes.GOAL_ENTRY, EntityTypes.BIN, EntityTypes.BIN_MOVE, EntityTypes.OCCASION, EntityTypes.GIFT_IDEA, EntityTypes.TRIP, EntityTypes.TRIP_BOOKING, EntityTypes.VAULT_DOC, EntityTypes.AGENT_ACTION,
-        EntityTypes.MONEY_ACCOUNT, EntityTypes.MONEY_TXN, EntityTypes.MONEY_RULE, EntityTypes.MONEY_TIPS, EntityTypes.MONEY_ALERT, EntityTypes.MONEY_WORTH,
+        EntityTypes.MONEY_ACCOUNT, EntityTypes.MONEY_TXN, EntityTypes.MONEY_RULE, EntityTypes.MONEY_TIPS, EntityTypes.MONEY_ALERT, EntityTypes.MONEY_WORTH, EntityTypes.MONEY_SHARED,
         EntityTypes.TRADING_WALLET,
     )
 

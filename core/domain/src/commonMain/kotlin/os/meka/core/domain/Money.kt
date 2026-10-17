@@ -387,6 +387,9 @@ data class MoneyTxnRow(
     val category: String, val categoryLabel: String, val account: String, val taught: Boolean, val spoken: String,
     /** Slice 13: counted as the side hustle's ([MoneyBusiness]). */
     val business: Boolean = false,
+    /** Slice 14: counted in the shared costs with his partner ([MoneyShared]); [sharedAlways] when it's the payer's mark. */
+    val shared: Boolean = false,
+    val sharedAlways: Boolean = false,
 )
 
 data class MoneyAccountRow(val id: String, val name: String, val line: String)
@@ -432,6 +435,8 @@ data class MoneyView(
     val trading: TradingView? = null,
     /** Slice 13: SIDE HUSTLE AND TAX — the side hustle's tax year, the share to put aside, Self Assessment dates ([MoneyBusiness]); shown whatever month. */
     val business: MoneyBusinessView? = null,
+    /** Slice 14: SHARED WITH <PARTNER> — shared costs and who paid what ([MoneyShared]); shown whatever month. */
+    val shared: MoneySharedView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -537,6 +542,9 @@ object MoneyRules {
         trading: List<TradingWallet> = emptyList(),
         /** Slice 13: his side hustle's accounts, the payers he marked (true) or kept out (false), and his set-aside share. */
         businessAccounts: Set<String> = emptySet(), businessMerchants: Map<String, Boolean> = emptyMap(), setAsidePct: Int = MoneyBusiness.DEFAULT_PCT,
+        /** Slice 14: payments and payers he marked shared, what his partner paid, his share and the last settle-up, and her name. */
+        sharedTxns: Map<String, Boolean> = emptyMap(), sharedMerchants: Map<String, Boolean> = emptyMap(),
+        sharedEntries: List<MoneySharedEntry> = emptyList(), sharedSetting: MoneySharedSetting = MoneySharedSetting(), partner: String? = null,
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -565,7 +573,11 @@ object MoneyRules {
         val bizLines = mine.map { MoneyBusinessLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }
         val business = MoneyBusiness.view(accounts, bizLines, businessAccounts, businessMerchants, setAsidePct, today)
         fun isBiz(t: MoneyTxn) = MoneyBusiness.counts(MoneyBusinessLine(t.account, t.day, t.pence, keyOf(t), cat(t)), businessAccounts, businessMerchants)
-        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business)
+        // Slice 14: shared costs over every line (whatever month is shown).
+        fun sharedLine(t: MoneyTxn) = MoneySharedLine(t.id, t.day, t.pence, keyOf(t), cat(t))
+        val shared = MoneyShared.view(accounts.isNotEmpty(), mine.map { sharedLine(it) }, sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner, today)
+        fun isShared(t: MoneyTxn) = MoneyShared.counts(sharedLine(t), sharedTxns, sharedMerchants)
+        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared)
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })
         val shown = (thisMonth - offset.coerceAtLeast(0)).coerceAtLeast(firstMonth)
@@ -616,8 +628,10 @@ object MoneyRules {
                 id = t.id, day = CivilDate.shortLabel(t.day), merchant = merchant, amount = signed(t.pence), moneyIn = t.pence > 0,
                 category = c.key, categoryLabel = c.label, account = names[t.account].orEmpty(), taught = key in rules,
                 spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, ${c.label}" +
-                    (if (isBiz(t)) ", business" else ""),
+                    (if (isBiz(t)) ", business" else "") + (if (isShared(t)) ", shared" else ""),
                 business = isBiz(t),
+                shared = isShared(t),
+                sharedAlways = sharedMerchants[key] == true,
             )
         }
         val month = MoneyMonth(
@@ -652,6 +666,7 @@ object MoneyRules {
             worth = if (partial) worth else null,
             bank = bank,
             business = business,
+            shared = shared,
         )
     }
 
@@ -665,7 +680,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|"; const val WORTH_UNDO = "worth|"; const val BIZ_UNDO = "biz|"; const val SHARED_UNDO = "shared|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -882,6 +897,95 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         return MoneySaved(MoneyBusiness.merchantSaid(MoneyCategoryRules.merchantLabel(key), on), undo = BIZ_UNDO + "m|" + rid + "|" + (before?.toString() ?: ""))
     }
 
+    /** Slice 14: payments he marked shared (true) or kept out (false), by line id. */
+    fun sharedTxns(): Map<String, Boolean> = replica.entities(EntityTypes.MONEY_TXN).mapNotNull { e ->
+        e[MoneySharedFields.TXN].boolOrNull?.let { e.ref.entityId to it }
+    }.toMap()
+
+    /** Slice 14: payers he marked Always shared, by merchant key. */
+    fun sharedMerchants(): Map<String, Boolean> = replica.entities(EntityTypes.MONEY_RULE).mapNotNull { e ->
+        val m = e[MoneyRuleFields.MERCHANT].textOrNull ?: return@mapNotNull null
+        val b = e[MoneySharedFields.MERCHANT].boolOrNull ?: return@mapNotNull null
+        m to b
+    }.toMap()
+
+    /** Slice 14: what his partner paid, as he typed it. */
+    fun sharedEntries(): List<MoneySharedEntry> = replica.entities(EntityTypes.MONEY_SHARED).mapNotNull { e ->
+        val name = e[MoneySharedFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val p = e[MoneySharedFields.PENCE].longOrNull?.takeIf { it > 0 } ?: return@mapNotNull null
+        val d = e[MoneySharedFields.DAY].longOrNull ?: return@mapNotNull null
+        MoneySharedEntry(e.ref.entityId, name, p, d, e[MoneySharedFields.ADDED_AT].longOrNull ?: 0L)
+    }
+
+    /** Slice 14: his share and the last settle-up. */
+    fun sharedSetting(): MoneySharedSetting = MoneyShared.setting(replica.entity(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID)?.fields)
+
+    /** Slice 14: Shared on one payment ([on] false keeps it out even of an always-shared payer), on both devices; Undo by [undoCategory]. */
+    fun setSharedTxn(txnId: String, on: Boolean): MoneySaved {
+        val t = txns().firstOrNull { it.id == txnId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val before = replica.entity(EntityTypes.MONEY_TXN, txnId)?.get(MoneySharedFields.TXN)?.boolOrNull
+        replica.commitLocal(EntityTypes.MONEY_TXN, txnId, mapOf(MoneySharedFields.TXN to on.fv()))
+        val merchant = MoneyCategoryRules.merchantLabel(MoneyCategoryRules.merchantKey(t.text))
+        return MoneySaved(MoneyShared.txnSaid(merchant, on), undo = SHARED_UNDO + "t|" + txnId + "|" + (before?.toString() ?: ""))
+    }
+
+    /** Slice 14: Always shared on [txnId]'s payer (every payment to them, on any account), on both devices; Undo by [undoCategory]. */
+    fun setSharedMerchant(txnId: String, on: Boolean): MoneySaved {
+        val t = txns().firstOrNull { it.id == txnId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val key = MoneyCategoryRules.merchantKey(t.text)
+        val rid = MoneyRules.ruleId(key)
+        val before = replica.entity(EntityTypes.MONEY_RULE, rid)?.get(MoneySharedFields.MERCHANT)?.boolOrNull
+        val writes = mutableMapOf(MoneyRuleFields.MERCHANT to key.fv(), MoneySharedFields.MERCHANT to (if (on) true.fv() else FieldValue.Null))
+        replica.commitLocal(EntityTypes.MONEY_RULE, rid, writes)
+        // A payment he'd taken out of it on its own follows the payer again when the payer is marked.
+        val tBefore = replica.entity(EntityTypes.MONEY_TXN, txnId)?.get(MoneySharedFields.TXN)?.boolOrNull
+        if (on && tBefore == false) replica.commitLocal(EntityTypes.MONEY_TXN, txnId, mapOf(MoneySharedFields.TXN to FieldValue.Null))
+        return MoneySaved(MoneyShared.merchantSaid(MoneyCategoryRules.merchantLabel(key), on),
+            undo = SHARED_UNDO + "m|" + rid + "|" + (before?.toString() ?: "") + "|" + txnId + "|" + (tBefore?.toString() ?: ""))
+    }
+
+    /** Slice 14: his share of the shared costs ([key] "50"), on both devices; Undo by [undoCategory]. */
+    fun setSharedShare(key: String): MoneySaved {
+        val pct = MoneyShared.parseChoice(key) ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val before = sharedSetting().myPct
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID, MoneyShared.shareFields(pct, nowMs()))
+        return MoneySaved(MoneyShared.shareSaid(pct), undo = SHARED_UNDO + "p|" + before)
+    }
+
+    /** Slice 14: what his partner paid ([text] "Tesco £42.50"), on [today], on both devices; Undo by [undoCategory]. */
+    fun addShared(text: String, today: Long, partner: String): MoneySaved {
+        val (name, pence) = MoneyShared.parse(text) ?: return MoneySaved(MoneyShared.BAD, refused = true)
+        if (sharedEntries().size >= MoneyShared.MAX_ENTRIES) return MoneySaved("Up to ${MoneyShared.MAX_ENTRIES} payments here · Settled up and remove old ones first.", refused = true)
+        val now = nowMs()
+        val id = MoneyShared.entryId(name, today, now)
+        writeShared(id, name, pence, today, now)
+        return MoneySaved(MoneyShared.addedSaid(partner, name, pence), undo = SHARED_UNDO + "e|" + id + "|||||")
+    }
+
+    /** Slice 14: takes one of her payments off, on both devices; Undo by [undoCategory]. */
+    fun removeShared(id: String): MoneySaved {
+        val e = sharedEntries().firstOrNull { it.id == id } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        writeShared(id, null, null, null, null)
+        return MoneySaved(MoneyShared.removedSaid(e.name),
+            undo = SHARED_UNDO + "e|" + id + "|" + listOf(e.name.replace("|", " "), e.pence, e.day, e.addedAtMs).joinToString("|"))
+    }
+
+    /** Slice 14: Settled up — from now on only what's paid after today counts; Undo by [undoCategory]. */
+    fun settleShared(today: Long, partner: String): MoneySaved {
+        val s = sharedSetting()
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID, MoneyShared.settleFields(today, nowMs(), nowMs()))
+        return MoneySaved(MoneyShared.settledSaid(partner), undo = SHARED_UNDO + "s|" + (s.settledDay?.toString() ?: "") + "|" + (s.settledAtMs?.toString() ?: ""))
+    }
+
+    private fun writeShared(id: String, name: String?, pence: Long?, day: Long?, addedAt: Long?) {
+        replica.commitLocal(EntityTypes.MONEY_SHARED, id, mapOf(
+            MoneySharedFields.NAME to (name?.fv() ?: FieldValue.Null),
+            MoneySharedFields.PENCE to (pence?.fv() ?: FieldValue.Null),
+            MoneySharedFields.DAY to (day?.fv() ?: FieldValue.Null),
+            MoneySharedFields.ADDED_AT to (addedAt?.fv() ?: FieldValue.Null),
+        ))
+    }
+
     /** Slice 2: the kinds of tip he hid ([MoneyTipKind.key]). */
     fun hiddenTips(): Set<String> = replica.entities(EntityTypes.MONEY_TIPS)
         .filter { it[MoneyTipsFields.HIDDEN].boolOrNull == true }.map { it.ref.entityId }.toSet()
@@ -967,6 +1071,39 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(SHARED_UNDO)) {
+            val parts = token.removePrefix(SHARED_UNDO).split('|')
+            fun bool(v: String?): FieldValue = when (v) { "true" -> true.fv(); "false" -> false.fv(); else -> FieldValue.Null }
+            when (parts.getOrNull(0)) {
+                "t" -> {
+                    val id = parts.getOrNull(1) ?: return false
+                    if (replica.entity(EntityTypes.MONEY_TXN, id) == null) return false
+                    replica.commitLocal(EntityTypes.MONEY_TXN, id, mapOf(MoneySharedFields.TXN to bool(parts.getOrNull(2))))
+                }
+                "m" -> {
+                    val id = parts.getOrNull(1) ?: return false
+                    if (replica.entity(EntityTypes.MONEY_RULE, id) == null) return false
+                    replica.commitLocal(EntityTypes.MONEY_RULE, id, mapOf(MoneySharedFields.MERCHANT to bool(parts.getOrNull(2))))
+                    val tid = parts.getOrNull(3).orEmpty()
+                    if (tid.isNotEmpty() && replica.entity(EntityTypes.MONEY_TXN, tid) != null) {
+                        replica.commitLocal(EntityTypes.MONEY_TXN, tid, mapOf(MoneySharedFields.TXN to bool(parts.getOrNull(4))))
+                    }
+                }
+                "p" -> {
+                    val pct = parts.getOrNull(1)?.toIntOrNull() ?: return false
+                    replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID, MoneyShared.shareFields(pct, nowMs()))
+                }
+                "s" -> replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID,
+                    MoneyShared.settleFields(parts.getOrNull(1)?.toLongOrNull(), parts.getOrNull(2)?.toLongOrNull(), nowMs()))
+                "e" -> {
+                    val id = parts.getOrNull(1)?.takeIf { it.startsWith("s") } ?: return false
+                    writeShared(id, parts.getOrNull(2)?.ifEmpty { null }, parts.getOrNull(3)?.toLongOrNull(),
+                        parts.getOrNull(4)?.toLongOrNull(), parts.getOrNull(5)?.toLongOrNull())
+                }
+                else -> return false
+            }
+            return true
+        }
         if (token.startsWith(BIZ_UNDO)) {
             val parts = token.removePrefix(BIZ_UNDO).split('|')
             val id = parts.getOrNull(1) ?: return false
@@ -1063,6 +1200,10 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
             }
             worthItems().forEach { writeWorth(it.id, null, null, null, null) }
+            sharedEntries().forEach { writeShared(it.id, null, null, null, null) }
+            if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID) != null) {
+                replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyShared.ENTITY_ID, mapOf(MoneySharedFields.MY_PCT to FieldValue.Null) + MoneyShared.settleFields(null, null, nowMs()))
+            }
             if (replica.entity(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID) != null) {
                 replica.commitLocal(EntityTypes.CONTEXT_MODE, MoneyBusiness.ENTITY_ID, mapOf(MoneyBusinessFields.SET_ASIDE to FieldValue.Null))
             }
@@ -1071,6 +1212,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             rules.forEach {
                 replica.commitLocal(EntityTypes.MONEY_RULE, it.ref.entityId, mapOf(
                     MoneyRuleFields.CATEGORY to FieldValue.Null, MoneyRuleFields.MERCHANT to FieldValue.Null, MoneyBusinessFields.MERCHANT to FieldValue.Null,
+                    MoneySharedFields.MERCHANT to FieldValue.Null,
                 ))
             }
         }
@@ -1081,7 +1223,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private fun clear(id: String) {
         replica.commitLocal(EntityTypes.MONEY_TXN, id, mapOf(
             os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyTxnFields.TEXT to FieldValue.Null, MoneyTxnFields.PENCE to FieldValue.Null,
-            MoneyTxnFields.DAY to FieldValue.Null,
+            MoneyTxnFields.DAY to FieldValue.Null, MoneySharedFields.TXN to FieldValue.Null,
         ))
     }
 }

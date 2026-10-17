@@ -141,6 +141,8 @@ object EntityTypes {
     const val MONEY_ALERT = "money_alert"
     /** Money manager, slice 8 (2026-10-17): one thing he typed for his net worth ("Pension", "Car loan"), id `n-<name folded>` (see [MoneyWorth]). */
     const val MONEY_WORTH = "money_worth"
+    /** Money manager, slice 14 (2026-10-17): one shared payment his partner made that he typed ("Tesco £42.50"), id `s<hash>` (see [MoneyShared]). */
+    const val MONEY_SHARED = "money_shared"
     /** Trading tracker, slice 1 (2026-10-17): one Hyperliquid public address he follows, id `w<hash>`, with what the server read (see [TradingTracker]). */
     const val TRADING_WALLET = "trading_wallet"
 
@@ -154,7 +156,7 @@ object EntityTypes {
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
-        TRADING_WALLET,
+        TRADING_WALLET, MONEY_SHARED,
     )
 }
 
@@ -536,6 +538,7 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.MONEY_TIPS -> MergePolicy.Lww
         entityType == EntityTypes.MONEY_ALERT -> MergePolicy.Lww
         entityType == EntityTypes.MONEY_WORTH -> MergePolicy.Lww
+        entityType == EntityTypes.MONEY_SHARED -> MergePolicy.Lww
         entityType == EntityTypes.TRADING_WALLET -> MergePolicy.Lww
         field == ActionableFields.DELETED -> MergePolicy.TrueWins
         field == ActionableFields.LIFECYCLE -> lifecycleTerminal

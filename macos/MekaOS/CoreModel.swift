@@ -3454,6 +3454,72 @@ final class CoreModel {
         }
     }
 
+    /// Money slice 14: Shared on one payment (synced; Undo through undoMoneyCategory).
+    func moneySharedTxn(txnId: String, on: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySharedTxn(txnId: txnId, on: on))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 14: Always shared on a payment's payer, on every account.
+    func moneySharedMerchant(txnId: String, on: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySharedMerchant(txnId: txnId, on: on))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 14: his share of the shared costs ("50"), synced.
+    func moneySharedShare(key: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySharedShare(key: key))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 14: what his partner paid ("Tesco £42.50"), synced.
+    func moneySharedAdd(text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySharedAdd(text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 14: takes one of his partner's payments off.
+    func moneySharedRemove(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySharedRemove(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Money slice 14: Settled up, counting again from today.
+    func moneySharedSettle() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneySharedSettle())
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Money slice 13: the share of the side hustle's profit to put aside ("20"), synced.
     func moneySetAside(key: String) async -> MoneySaid? {
         guard let core else { return nil }

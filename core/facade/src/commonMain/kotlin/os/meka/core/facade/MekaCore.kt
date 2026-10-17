@@ -759,6 +759,7 @@ class MekaCore(
             moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
             moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(), wallets,
             money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
+            money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
         ).copy(trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
     }
 
@@ -949,6 +950,41 @@ class MekaCore(
     /** Slice 13: the share of the side hustle's profit to put aside ([key] "10" · "20" · "25" · "30" · "40"), synced; Undo by [undoMoneyCategory]. */
     suspend fun moneySetAside(key: String): os.meka.core.domain.MoneySaved = onCore {
         if (!moneyOpen) moneyLocked() else money.setSetAside(key).also { refreshMoney() }
+    }
+
+    private fun moneyPartner(): String = os.meka.core.domain.MoneyShared.partnerName(aboutYou.profile().partnerName)
+
+    /**
+     * Slice 14: Shared on one payment ([on] false keeps it out, even of an always-shared payer) — counted in who paid
+     * what with his partner; on both devices, Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneySharedTxn(txnId: String, on: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setSharedTxn(txnId, on).also { refreshMoney() }
+    }
+
+    /** Slice 14: Always shared on [txnId]'s payer (every payment to them, on any account); Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun moneySharedMerchant(txnId: String, on: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setSharedMerchant(txnId, on).also { refreshMoney() }
+    }
+
+    /** Slice 14: his share of the shared costs ([key] "40" · "50" · "60" · "70"), synced; Undo by [undoMoneyCategory]. */
+    suspend fun moneySharedShare(key: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setSharedShare(key).also { refreshMoney() }
+    }
+
+    /** Slice 14: what his partner paid ([text] "Tesco £42.50"), today, synced; Undo by [undoMoneyCategory]. */
+    suspend fun moneySharedAdd(text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.addShared(text, todayEpochDay(), moneyPartner()).also { refreshMoney() }
+    }
+
+    /** Slice 14: takes one of his partner's payments off; Undo by [undoMoneyCategory]. */
+    suspend fun moneySharedRemove(id: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.removeShared(id).also { refreshMoney() }
+    }
+
+    /** Slice 14: Settled up — the running who-paid-what starts again from tomorrow's payments; Undo by [undoMoneyCategory]. */
+    suspend fun moneySharedSettle(): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.settleShared(todayEpochDay(), moneyPartner()).also { refreshMoney() }
     }
 
     /** Slice 6: the radar's bills, subscriptions and club fees with a cost, for what's still to go out before payday. */

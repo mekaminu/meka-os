@@ -365,6 +365,47 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun sharedCostsMarkedOnTheFoldAddUpWithWhatSheTypedOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.setAboutYou(os.meka.core.domain.AboutField.PARTNER_NAME, "Jordan Smith")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        val sh = fold.moneyView.value.shared!!
+        assertEquals("SHARED WITH JORDAN", sh.head)
+        assertTrue(sh.intro!!.contains("what Jordan paid"))
+        // Tesco always shared (both lines), Costa just this once.
+        val tesco = fold.moneyView.value.month!!.txns.first { it.merchant.startsWith("Tesco") }
+        val r = fold.moneySharedMerchant(tesco.id, true)
+        assertTrue(r.line.startsWith("Every Tesco"))
+        assertTrue(fold.moneyView.value.month!!.txns.first { it.id == tesco.id }.sharedAlways)
+        val costa = fold.moneyView.value.month!!.txns.first { it.merchant == "Costa Coffee" }
+        val c = fold.moneySharedTxn(costa.id, true)
+        assertEquals("You paid £103.20 · 3 payments", fold.moneyView.value.shared!!.youLine)
+        assertTrue(fold.undoMoneyCategory(c.undo!!))
+        assertEquals("You paid £100 · 2 payments", fold.moneyView.value.shared!!.youLine)
+        assertEquals("Jordan owes you £50", fold.moneyView.value.shared!!.balanceLine)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals("Jordan paid £80 for Big shop · counted in who paid what", mac.moneySharedAdd("Big shop £80").line)
+        assertEquals("You owe Jordan £10", mac.moneyView.value.shared!!.balanceLine)
+        mac.moneySharedShare("60")
+        assertEquals("You owe Jordan £8", mac.moneyView.value.shared!!.balanceLine)
+        val settle = mac.moneySharedSettle()
+        assertEquals("Settled up with Jordan · counting again from today", settle.line)
+        assertEquals("All square", mac.moneyView.value.shared!!.balanceLine)
+        assertNull(mac.moneyView.value.shared!!.settle)
+        assertTrue(mac.undoMoneyCategory(settle.undo!!))
+        mac.syncNow(); fold.syncNow()
+        val f = fold.moneyView.value.shared!!
+        assertEquals("Jordan paid £80 · 1 payment", f.partnerLine)
+        assertEquals("You owe Jordan £8", f.balanceLine)
+        assertEquals("Split 60/40 · your share £108", f.splitLine)
+        fold.deleteAllMoney()
+        assertNull(fold.moneyView.value.shared)
+    }
+
+    @Test
     fun netWorthTypedOnTheFoldShowsOnTheMacWithUndoAndGoesWithDeleteAll() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

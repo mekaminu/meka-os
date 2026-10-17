@@ -86,6 +86,8 @@ import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.domain.MoneyWatch
 import os.meka.core.domain.MoneyBusiness
 import os.meka.core.domain.MoneyBusinessView
+import os.meka.core.domain.MoneyShared
+import os.meka.core.domain.MoneySharedView
 import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
@@ -457,7 +459,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
                         TxnRow(t, Modifier.animateItem(),
-                            onBusiness = { on -> scope.launch { runCatching { core.moneyBusinessMerchant(t.id, on) }.getOrNull()?.let(say) } }) { key ->
+                            onBusiness = { on -> scope.launch { runCatching { core.moneyBusinessMerchant(t.id, on) }.getOrNull()?.let(say) } },
+                            onShared = { on -> scope.launch { runCatching { core.moneySharedTxn(t.id, on) }.getOrNull()?.let(say) } },
+                            onAlways = { on -> scope.launch { runCatching { core.moneySharedMerchant(t.id, on) }.getOrNull()?.let(say) } }) { key ->
                             scope.launch { runCatching { core.setMoneyCategory(t.id, key) }.getOrNull()?.let(say) }
                         }
                     }
@@ -480,6 +484,20 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     onAccount = { id, on -> scope.launch { runCatching { core.moneyBusinessAccount(id, on) }.getOrNull()?.let(say) } },
                     onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } },
                     onExport = exportBusiness)
+            }
+        }
+        // Slice 14: shared costs with his partner and who paid what (whatever month).
+        v.shared?.let { sh ->
+            item(key = "shared-head") {
+                Text(sh.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "shared") {
+                SharedBlock(sh, Modifier.animateItem().appear(rememberAppearance(4)),
+                    onShare = { key -> haptics.tick(); scope.launch { runCatching { core.moneySharedShare(key) }.getOrNull()?.let(say) } },
+                    onAdd = { text -> scope.launch { runCatching { core.moneySharedAdd(text) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.moneySharedRemove(id) }.getOrNull()?.let(say) } },
+                    onSettle = { scope.launch { runCatching { core.moneySharedSettle() }.getOrNull()?.let(say) } })
             }
         }
         // Slice 8: net worth (this month, and before any statement is in).
@@ -882,7 +900,10 @@ private fun CategoryRow(c: MoneyCategoryRow, modifier: Modifier) {
 }
 
 @Composable
-private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> Unit = {}, onCategory: (String) -> Unit) {
+private fun TxnRow(
+    t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> Unit = {}, onShared: (Boolean) -> Unit = {},
+    onAlways: (Boolean) -> Unit = {}, onCategory: (String) -> Unit,
+) {
     var menu by remember { mutableStateOf(false) }
     Box(modifier) {
         Row(
@@ -893,7 +914,7 @@ private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> 
         ) {
             Column(Modifier.weight(1f)) {
                 Text(t.merchant, style = MekaType.body, color = Meka.colors.textPrimary)
-                Text("${t.day} · ${t.categoryLabel}" + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + " · ${t.account}",
+                Text("${t.day} · ${t.categoryLabel}" + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
                     style = MekaType.caption, color = Meka.colors.textSecondary)
             }
             Text(t.amount, style = MekaType.body, color = if (t.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
@@ -904,6 +925,17 @@ private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> 
                 text = { Text(if (t.business) MoneyBusiness.MENU_ON else MoneyBusiness.MENU_OFF, style = MekaType.body,
                     color = if (t.business) Meka.colors.accent else Meka.colors.textPrimary) },
                 onClick = { menu = false; onBusiness(!t.business) },
+            )
+            // Slice 14: this payment, or every payment to this payer, shared with his partner.
+            DropdownMenuItem(
+                text = { Text(if (t.shared) MoneyShared.MENU_ON else MoneyShared.MENU_OFF, style = MekaType.body,
+                    color = if (t.shared) Meka.colors.accent else Meka.colors.textPrimary) },
+                onClick = { menu = false; onShared(!t.shared) },
+            )
+            DropdownMenuItem(
+                text = { Text(if (t.sharedAlways) MoneyShared.MENU_ALWAYS_ON else MoneyShared.MENU_ALWAYS_OFF, style = MekaType.body,
+                    color = if (t.sharedAlways) Meka.colors.accent else Meka.colors.textPrimary) },
+                onClick = { menu = false; onAlways(!t.sharedAlways) },
             )
             MoneyRules.CHOICES.forEach { c ->
                 DropdownMenuItem(
@@ -985,6 +1017,70 @@ private fun BusinessBlock(
             }
         }
         Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Slice 14: SHARED WITH <PARTNER> — since when, what each paid, the split with its chips, who owes whom (in brass when
+ * someone does), this month's shared total, what the partner paid (Remove), a field to type it and Settled up. Lines
+ * cross-fade as they change (MekaMotion.appear honours reduced motion).
+ */
+@Composable
+private fun SharedBlock(
+    sh: MoneySharedView, modifier: Modifier, onShare: (String) -> Unit, onAdd: (String) -> Unit, onRemove: (String) -> Unit,
+    onSettle: () -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    var adding by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        sh.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        sh.balanceLine?.let { bal ->
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = sh.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                sh.sinceLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                val col by animateColorAsState(if (sh.balanceLit) Meka.colors.accent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "money-shared-bal")
+                Crossfade(bal, animationSpec = MekaMotion.appear(reduced), label = "money-shared-balance") { l ->
+                    Text(l, style = MekaType.itemTitle, color = col)
+                }
+                Crossfade(listOfNotNull(sh.youLine, sh.partnerLine, sh.splitLine).joinToString("\n"), animationSpec = MekaMotion.appear(reduced), label = "money-shared-lines") { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                sh.chips.forEach { c ->
+                    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-shared-chip-${c.key}")
+                    Text(c.label, style = MekaType.caption, color = col,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button) { if (!c.on) onShare(c.key) }
+                            .semantics { contentDescription = "Your share ${c.label}" + if (c.on) ", chosen" else "" }
+                            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                }
+            }
+            sh.settle?.let { label ->
+                Text(label, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onSettle)
+                        .semantics { contentDescription = "$label with ${sh.partner}" }.minTouch().padding(MekaSpace.xs))
+            }
+            sh.monthLine?.let { l ->
+                Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-shared-month") { x ->
+                    Text(x, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+            }
+        }
+        sh.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+                Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+                Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(r.id) }
+                        .semantics { contentDescription = "Remove ${r.name} from what was paid" }.minTouch().padding(MekaSpace.xs))
+            }
+        }
+        sh.merchantsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        Field(sh.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        Text(sh.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
