@@ -151,6 +151,7 @@ object CallLogRules {
         CallReason.REPEAT -> "Called again within 3 minutes"
         CallReason.OFFICIAL_CLAIM -> "Claims to be an official body, so Navilife never blocks it"
         CallReason.EMERGENCY -> "An emergency service is never screened"
+        CallReason.ASSISTANT -> CallReason.ASSISTANT.label
         CallReason.PAUSED -> CallReason.PAUSED.label
         else -> null
     }
@@ -160,6 +161,7 @@ object CallLogRules {
         CallVerdict.RING -> RANG_THROUGH + when (c.reason) {
             CallReason.OFFICIAL_CLAIM -> " · claims to be an official body"
             CallReason.EMERGENCY -> " · emergency service"
+            CallReason.ASSISTANT -> " · your call assistant putting a caller through"
             else -> ""
         }
         CallVerdict.DECLINE -> "$TO_ASSISTANT · ${NO_MESSAGE.lowercase()}"

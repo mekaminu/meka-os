@@ -103,7 +103,7 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         itemsIndexed(v.rows, key = { _, r -> "about-${r.field.key}" }) { i, row ->
-            Column(Modifier.animateItem().padding(top = if (row.field == AboutField.SHOWN_NAME || row.field == AboutField.HOME || row.field == AboutField.ASSISTANT_NUMBER) MekaSpace.l else 0.dp)
+            Column(Modifier.animateItem().padding(top = if (row.field == AboutField.SHOWN_NAME || row.field == AboutField.HOME || row.field == AboutField.MOBILE) MekaSpace.l else 0.dp)
                 .appear(rememberAppearance(2 + i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 AboutLine(row, said[row.field.key],
                     onSave = { typed -> scope.launch { runCatching { core.setAboutYou(row.field, typed) }.getOrNull()?.let { react(row.field.key, it) } } },
@@ -175,7 +175,7 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, keyboardType = when (row.field) {
                 AboutField.PARTNER_EMAIL -> KeyboardType.Email
                 AboutField.SCHOOL_WEBSITE -> KeyboardType.Uri
-                AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> KeyboardType.Phone
+                AboutField.PARTNER_PHONE, AboutField.MOBILE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> KeyboardType.Phone
                 else -> KeyboardType.Text
             }),
             keyboardActions = KeyboardActions(onDone = { onSave(text) }),

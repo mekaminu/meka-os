@@ -133,7 +133,9 @@ object CallNoticeRules {
             item.seconds != null -> "left a ${length(item.seconds)} message"
             else -> "left a message"
         }
-        return "Sent to your call assistant · $at · $left"
+        // Item (c) slice 2: the assistant rang him to put the caller through.
+        val put = PutThroughRules.happened(item.putThrough)?.let { " · $it" } ?: ""
+        return "Sent to your call assistant · $at · $left$put"
     }
 
     /** What it was about: the start of the words, or why there's nothing to read. */

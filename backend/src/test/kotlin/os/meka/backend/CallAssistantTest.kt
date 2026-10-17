@@ -12,6 +12,7 @@ import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import os.meka.core.domain.PutThroughRules
 import os.meka.core.domain.ActivityFields
 import os.meka.core.domain.ActivityKind
 import os.meka.core.domain.BlockedCallerFields
@@ -266,6 +267,90 @@ class CallAssistantTest {
         val before = ops.after("hh", 0, 1_000).size
         hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "This is HMRC, you have unpaid tax and it's urgent you pay today")
         assertEquals(before, ops.after("hh", 0, 1_000).size)
+    }
+
+    private fun aboutYou(field: String, value: String) {
+        ops.append(
+            Op(
+                "a${seq++}", "hh", EntityTypes.HOUSEHOLD_PROFILE, os.meka.core.domain.AboutYouRules.ENTITY_ID, field, FieldValue.Text(value),
+                Hlc(nowMs + seq, 0, "fold"), emptyList(), "fold",
+            ),
+        )
+    }
+
+    @Test
+    fun aGenuineUrgentCallerIsPutThroughWhenMekaPressesOne() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        aboutYou(os.meka.core.domain.AboutYouFields.MOBILE, "07700 900123")
+        val call = arrayOf("CallSid" to "CA400", "From" to "+441632960400", "To" to "+441632960000")
+        hook(VoiceStep.INCOMING, *call)
+        hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "It's Sam from Oakfield School about Alex")
+        hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "12", "RecordingSid" to "RE4")
+        val dial = hook(VoiceStep.ANSWERED, *call, "SpeechResult" to "yes it's urgent").bodyAsText()
+        assertTrue("put you through to Meka now" in dial, dial)
+        assertTrue("""<Dial timeout="15" callerId="+441632960000" action="$base/v1/voice/twilio/dialed" method="POST">""" in dial, dial)
+        assertTrue("""<Number url="$base/v1/voice/twilio/whisper" method="POST">+447700900123</Number></Dial>""" in dial, dial)
+        assertEquals(listOf("hh"), urgent) // still marked urgent and the devices woken
+
+        val leg = arrayOf("CallSid" to "CA401", "ParentCallSid" to "CA400", "From" to "+441632960000", "To" to "+447700900123")
+        val whisper = hook(VoiceStep.WHISPER, *leg).bodyAsText()
+        assertTrue("""<Gather input="dtmf" numDigits="1" timeout="8" action="$base/v1/voice/twilio/whisper-answered"""" in whisper, whisper)
+        assertTrue("They said: It&apos;s Sam from Oakfield School about Alex. Press 1 to take the call" in whisper, whisper)
+        assertTrue(whisper.endsWith("</Gather><Hangup/></Response>"), whisper)
+
+        val connect = hook(VoiceStep.WHISPER_ANSWERED, *leg, "Digits" to "1").bodyAsText()
+        assertTrue("Connecting you now." in connect, connect)
+        assertFalse("<Hangup/>" in connect)
+        assertEquals(PutThroughRules.TAKEN, fold().items().single().putThrough)
+        assertTrue(ops.after("hh", 0, 1_000).map { it.op }.any {
+            it.entityType == EntityTypes.AGENT_ACTION && it.field == ActivityFields.SUMMARY && (it.value as FieldValue.Text).value.startsWith("Put an urgent caller through")
+        })
+        // The call over, the Dial's action says nothing more.
+        val after = hook(VoiceStep.DIALED, *call, "DialCallStatus" to "completed").bodyAsText()
+        assertEquals("<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Hangup/></Response>", after)
+        assertEquals(PutThroughRules.TAKEN, fold().items().single().putThrough)
+    }
+
+    @Test
+    fun notTakenTheCallerHearsMekaHasTheirMessageAndALoopIsTurnedAway() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        aboutYou(os.meka.core.domain.AboutYouFields.MOBILE, "+44 7700 900123")
+        val call = arrayOf("CallSid" to "CA410", "From" to "+441632960410", "To" to "+441632960000")
+        hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "It's Jordan from the garage about your car")
+        hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "9")
+        assertTrue("<Dial" in hook(VoiceStep.ANSWERED, *call, "Digits" to "1").bodyAsText())
+        // His mobile declined it and "forward when busy" sent it back to the assistant: busy, never a loop.
+        val back = hook(VoiceStep.INCOMING, "CallSid" to "CA412", "From" to "+441632960000", "To" to "+441632960000").bodyAsText()
+        assertTrue("""<Reject reason="busy"/>""" in back, back)
+        val leg = arrayOf("CallSid" to "CA411", "ParentCallSid" to "CA410")
+        assertTrue("<Hangup/>" in hook(VoiceStep.WHISPER_ANSWERED, *leg, "Digits" to "2").bodyAsText())
+        val bye = hook(VoiceStep.DIALED, *call, "DialCallStatus" to "busy").bodyAsText()
+        assertTrue("Meka couldn&apos;t take the call just now. He has your message" in bye, bye)
+        assertEquals(PutThroughRules.MISSED_VALUE, fold().items().single().putThrough)
+        assertTrue(os.meka.core.domain.CallNoticeRules.happened(fold().items().single(), os.meka.core.domain.LocalCalendar.UTC).endsWith("put through · you didn't take it"))
+    }
+
+    @Test
+    fun anOfficialClaimOrNoMobileIsNeverPutThrough() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        // No mobile in About you: a goodbye as before.
+        val a = arrayOf("CallSid" to "CA420", "From" to "+441632960420", "To" to "+441632960000")
+        hook(VoiceStep.INTRODUCED, *a, "SpeechResult" to "It's Sam from Oakfield School about Alex")
+        hook(VoiceStep.RECORDED, *a, "RecordingDuration" to "12")
+        assertFalse("<Dial" in hook(VoiceStep.ANSWERED, *a, "Digits" to "1").bodyAsText())
+        aboutYou(os.meka.core.domain.AboutYouFields.MOBILE, "07700 900123")
+        val b = arrayOf("CallSid" to "CA421", "From" to "+441632960421", "To" to "+441632960000")
+        hook(VoiceStep.INTRODUCED, *b, "SpeechResult" to "This is Barclays about your mortgage, please call us back")
+        hook(VoiceStep.RECORDED, *b, "RecordingDuration" to "12")
+        val bye = hook(VoiceStep.ANSWERED, *b, "Digits" to "1").bodyAsText()
+        assertFalse("<Dial" in bye, bye)
+        assertTrue("I&apos;ll let Meka know straight away" in bye, bye)
+        // A whisper for a call the server doesn't know is never connected.
+        assertEquals(VoiceReply.HangUp, assistant.handle("twilio", VoiceEvent.Whisper("CA499", "CA498")))
+        assertEquals(VoiceReply.HangUp, assistant.handle("twilio", VoiceEvent.WhisperAnswered("CA499", null, "1")))
     }
 
     @Test

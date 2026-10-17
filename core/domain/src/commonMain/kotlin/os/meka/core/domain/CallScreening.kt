@@ -51,6 +51,11 @@ enum class CallReason(val label: String) {
     REPORTED_SCAM("Reported online as a scam · blocked"),
     /** Spam-call lookup: reported as nuisance or sales calls (or a scam, not surely): to the assistant when it's on. */
     REPORTED_NUISANCE("Reported online as nuisance or sales calls"),
+    /**
+     * The call assistant's own number ([CallSignals.fromAssistant]): it is putting an urgent caller through
+     * ([PutThroughRules]), so it always rings, at work too. Added 2026-10-17.
+     */
+    ASSISTANT("Your call assistant putting a caller through"),
 }
 
 /**
@@ -78,6 +83,11 @@ data class CallSignals(
      * in time ([NumberLookupRules.BEFORE_RING_WAIT_MS]); null when it wasn't asked, didn't know or didn't answer.
      */
     val reputation: NumberReputation? = null,
+    /**
+     * The call comes from the call assistant's own number (About you): it is putting an urgent caller through, so it
+     * rings ([CallReason.ASSISTANT]). Added 2026-10-17.
+     */
+    val fromAssistant: Boolean = false,
 ) {
     companion object { val NONE = CallSignals() }
 }
@@ -197,6 +207,7 @@ object CallScreeningRules {
         val official = OfficialCallerRules.claim(signals.networkName) != null
         return when {
             OfficialCallerRules.isEmergency(number) -> CallDecision(CallVerdict.RING, CallReason.EMERGENCY, key, listed)
+            signals.fromAssistant && key != WITHHELD -> CallDecision(CallVerdict.RING, CallReason.ASSISTANT, key, listed)
             !trusted && key != WITHHELD && key in blocked -> CallDecision(CallVerdict.BLOCK, CallReason.BLOCKED, key)
             !trusted && key != WITHHELD && official -> CallDecision(CallVerdict.RING, CallReason.OFFICIAL_CLAIM, key)
             spamProtection && !trusted && key != WITHHELD && signals.verificationFailed ->

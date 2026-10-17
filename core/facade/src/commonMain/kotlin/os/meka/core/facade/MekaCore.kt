@@ -4235,11 +4235,14 @@ class MekaCore(
         val now = nowMs()
         val quiet = notifyPrefs.settings().quiet.isQuietAt(now, ZoneCalendar(timeZone))
         val list = blockList.view()
+        val profile = aboutYou.profile()
         val household = os.meka.core.domain.CallScreeningRules.callerKey(number) in
-            os.meka.core.domain.SpamProtectionRules.householdKeys(aboutYou.profile())
+            os.meka.core.domain.SpamProtectionRules.householdKeys(profile)
+        // Item (c) slice 2: the call assistant's own number is putting an urgent caller through, so it rings.
+        val fromAssistant = os.meka.core.domain.PutThroughRules.fromAssistant(number, profile.assistantNumber)
         val decided = os.meka.core.domain.CallScreeningRules.decide(
             state.callAssistant, state.atWork, number, lists, recent, now, list.keys,
-            signals.copy(quietHours = quiet, household = signals.household || household), list.suspectedKeys,
+            signals.copy(quietHours = quiet, household = signals.household || household, fromAssistant = signals.fromAssistant || fromAssistant), list.suspectedKeys,
             paused = callCredit.current()?.paused == true,
             spamProtection = state.spamProtection,
         )

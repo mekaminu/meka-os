@@ -53,6 +53,11 @@ object AboutYouFields {
     const val SCHOOL_MAIL = "schoolMail"
     const val ASSISTANT_NUMBER = "assistantNumber"
     /**
+     * His own mobile number (item (c) slice 2, 2026-10-17): the call assistant rings it to put a genuine urgent caller
+     * through ([PutThroughRules]); empty = urgent callers leave a message as before. Typed on a device only (rule 13).
+     */
+    const val MOBILE = "mobile"
+    /**
      * The school's council's holidays (release 2 slice 5, 2026-10-15): the table the School pane fills in from, as
      * [SchoolTerms.encode] writes it. Not typed: the Fold copied the one Navilife carried once
      * ([AboutYouStore.seedCouncilOnce]), so no council is named in the code.
@@ -130,6 +135,8 @@ data class AboutYou(
     /** The clubs as kept: "OFC Oakfield Town, HRFC" ([AboutYouRules.clubList] reads it). */
     val clubs: String? = null,
     val assistantNumber: String? = null,
+    /** His own mobile, for putting urgent callers through ([AboutYouFields.MOBILE]). */
+    val mobile: String? = null,
     val voicemailNumber: String? = null,
     /** The train route as kept ([RouteRules.parse] reads it). */
     val route: String? = null,
@@ -143,7 +150,7 @@ data class AboutYou(
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, assistantNumber, voicemailNumber, route, homeStation, stationWalk).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, mobile, assistantNumber, voicemailNumber, route, homeStation, stationWalk).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -169,6 +176,7 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk, parentmail.co.uk",
         "Add the addresses the school writes from so its trips, payments and days off are offered for School"),
     CLUBS(AboutYouFields.CLUBS, "Clubs", "Short name first: OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names"),
+    MOBILE(AboutYouFields.MOBILE, "Your mobile", "Your own mobile number", "Add it so the call assistant can put a genuine urgent caller through to you"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
     VOICEMAIL_NUMBER(AboutYouFields.VOICEMAIL_NUMBER, "Voicemail number", "Your network's voicemail", "Not added · only needed for call forwarding"),
 }
@@ -312,6 +320,7 @@ object AboutYouRules {
             schoolMail = text(AboutYouFields.SCHOOL_MAIL)?.let(SchoolMailRules::cleanSenders),
             clubs = text(AboutYouFields.CLUBS)?.let(::clubs),
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
+            mobile = text(AboutYouFields.MOBILE),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
             route = text(AboutYouFields.ROUTE)?.let { RouteRules.parse(it)?.text },
             homeStation = text(AboutYouFields.HOME_STATION)?.let(RouteRules::stationName),
@@ -332,6 +341,7 @@ object AboutYouRules {
         AboutField.SCHOOL_MAIL -> a.schoolMail
         AboutField.CLUBS -> a.clubs
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
+        AboutField.MOBILE -> a.mobile
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
         AboutField.ROUTE -> a.route
         AboutField.HOME_STATION -> a.homeStation
@@ -347,7 +357,7 @@ object AboutYouRules {
         if (t.isEmpty()) return ""
         return when (f) {
             AboutField.SHOWN_NAME, AboutField.PARTNER_NAME -> name(t)
-            AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> phone(t)
+            AboutField.PARTNER_PHONE, AboutField.MOBILE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> phone(t)
             AboutField.PARTNER_EMAIL -> email(t)
             AboutField.HOME, AboutField.WORK -> place(t)
             AboutField.SCHOOL_WEBSITE -> website(t)
@@ -361,7 +371,7 @@ object AboutYouRules {
 
     fun refusal(f: AboutField): String = when (f) {
         AboutField.SHOWN_NAME, AboutField.PARTNER_NAME -> NOT_NAME
-        AboutField.PARTNER_PHONE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> NOT_NUMBER
+        AboutField.PARTNER_PHONE, AboutField.MOBILE, AboutField.ASSISTANT_NUMBER, AboutField.VOICEMAIL_NUMBER -> NOT_NUMBER
         AboutField.PARTNER_EMAIL -> NOT_EMAIL
         AboutField.HOME, AboutField.WORK -> NOT_PLACE
         AboutField.SCHOOL_WEBSITE -> NOT_WEBSITE
@@ -639,7 +649,7 @@ object AboutYouRules {
             a.schoolWebsite?.let { "the school's website" },
             a.schoolMail?.let { "the school's email" },
             a.clubs?.let { "clubs" },
-            (a.assistantNumber ?: a.voicemailNumber)?.let { "numbers" },
+            (a.mobile ?: a.assistantNumber ?: a.voicemailNumber)?.let { "numbers" },
         )
         val s = when (parts.size) {
             0 -> "Nothing yet"

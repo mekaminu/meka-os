@@ -9,8 +9,9 @@ import os.meka.core.sync.FieldValue
  * whether the call goes on to a message or is ended politely as a likely scam ("Meka will contact the organisation
  * directly"). Non-AI and pure, so it answers inside the phone service's wait and the same words show on every device.
  *
- * Untrusted content (ADR-006): the caller's words only ever end a call or flag the number; they never put anyone
- * through, never add anything and never raise an autonomy level. A judged scam puts the number on Suspected spam
+ * Untrusted content (ADR-006): the caller's words only ever end a call, flag the number or lead to an offer Meka
+ * accepts himself ([PutThroughRules]); they never connect anyone on their own,
+ * never add anything and never raise an autonomy level. A judged scam puts the number on Suspected spam
  * (Block or Not spam stays Meka's choice); the assistant never shares any of his details or agrees to anything.
  */
 enum class IntroVerdict {

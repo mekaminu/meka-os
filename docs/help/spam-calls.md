@@ -15,3 +15,4 @@ tip: Allow Navilife to read contacts and the call log, or repeat callers and han
 tip: Android's own Blocked numbers list isn't used: Navilife's screening keeps the call from ringing instead.
 tip: An unknown caller's number is looked up on the web: a reported scam is blocked, a sales caller goes to your call assistant, and the notification says what people reported.
 tip: Your call assistant first asks who's calling: someone who says they're from the police, a bank or HMRC and asks for money or your details is told you'll contact the organisation directly, the call ends, and the number goes on Suspected spam for you to Block.
+tip: When a caller who said who they are tells the assistant it's urgent, it rings your mobile from its own number: you hear who it is and what they said, and press 1 to take the call. Add Your mobile in About you to turn it on; nobody claiming to be the police, a bank or HMRC is ever put through.

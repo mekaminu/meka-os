@@ -66,6 +66,8 @@ data class CapturedItem(
     val intro: String? = null,
     /** How the assistant ended a call without a message ([HeldMessageFields.ENDED]); null = a message was taken. */
     val ended: String? = null,
+    /** Whether the assistant put this urgent caller through and he took it ([HeldMessageFields.PUT_THROUGH]); null = not tried. */
+    val putThrough: String? = null,
 ) {
     /** The call assistant ended this call as a likely scam ([CallIntroRules.judge]); never urgent. */
     val endedAsScam: Boolean get() = fromCallAssistant && ended == CallIntroRules.ENDED_SCAM
@@ -638,6 +640,11 @@ object HeldMessageFields {
      * [CallIntroRules.ENDED_NO_MESSAGE]; written once by the server). Absent = a message was taken. Added 2026-10-17.
      */
     const val ENDED = "ended"
+    /**
+     * The assistant rang Meka's mobile to put this urgent caller through ([PutThroughRules]; Text: [PutThroughRules.TAKEN]
+     * · [PutThroughRules.MISSED_VALUE]; written once by the server). Absent = not tried. Added 2026-10-17.
+     */
+    const val PUT_THROUGH = "putThrough"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -730,6 +737,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             summary = e[HeldMessageFields.SUMMARY].textOrNull?.let(CallNoticeRules::cleanSummary),
             intro = e[HeldMessageFields.INTRO].textOrNull?.let(CallIntroRules::clean),
             ended = e[HeldMessageFields.ENDED].textOrNull,
+            putThrough = e[HeldMessageFields.PUT_THROUGH].textOrNull,
         )
     }
 

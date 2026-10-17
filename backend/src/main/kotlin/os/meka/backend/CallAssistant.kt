@@ -4,7 +4,10 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import os.meka.backend.integrations.Integrations
+import os.meka.core.domain.AboutYouFields
+import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AssistantHangupRules
+import os.meka.core.domain.PutThroughRules
 import os.meka.core.domain.BankHolidayFields
 import os.meka.core.domain.BlockedCallerFields
 import os.meka.core.domain.BlockedCallerRules
@@ -60,7 +63,8 @@ import javax.crypto.spec.SecretKeySpec
 sealed class VoiceEvent {
     abstract val callId: String
 
-    data class Incoming(override val callId: String, val from: String?) : VoiceEvent()
+    /** [to] is the number called (the assistant's own, for a forwarded call); added with item (c) slice 2. */
+    data class Incoming(override val callId: String, val from: String?, val to: String? = null) : VoiceEvent()
     /**
      * The caller's answer to "who's calling, and what's it about?" ([CallIntroRules]; [speech] as recognised, empty or
      * null when they said nothing). Added 2026-10-17 (the call assistant talks to them).
@@ -72,7 +76,20 @@ sealed class VoiceEvent {
      * The answer to "is it urgent?" (keypad [digits] or recognised [speech]; both empty when the caller said nothing).
      * [again] when it answers the second asking ([VoiceStep.ANSWERED_AGAIN]).
      */
-    data class Answered(override val callId: String, val digits: String?, val speech: String?, val again: Boolean = false) : VoiceEvent()
+    data class Answered(
+        override val callId: String, val digits: String?, val speech: String?, val again: Boolean = false,
+        /** The caller's number and the number they called (the assistant's own): for putting them through (item (c) slice 2). */
+        val from: String? = null, val to: String? = null,
+    ) : VoiceEvent()
+    /**
+     * Item (c) slice 2: Meka's mobile answered the put-through ([callId] is that leg, [parent] the caller's call): the
+     * whisper is played to him before the two are connected.
+     */
+    data class Whisper(override val callId: String, val parent: String?) : VoiceEvent()
+    /** His key press after the whisper ([digits]; 1 takes the call). */
+    data class WhisperAnswered(override val callId: String, val parent: String?, val digits: String?) : VoiceEvent()
+    /** The put-through ended (the caller's call, [callId]): taken and finished, or not taken. */
+    data class Dialed(override val callId: String) : VoiceEvent()
     /**
      * The phone service's transcript of the message, or null when transcription failed. [recording] names the
      * recording, which the server then deletes from the phone service (the words live on only in the summary).
@@ -99,6 +116,17 @@ sealed class VoiceReply {
      */
     data class AskUrgent(val atWork: Boolean = true, val again: Boolean = false) : VoiceReply()
     data class Goodbye(val text: String) : VoiceReply()
+    /**
+     * Item (c) slice 2: tell the caller to hold and ring [mobile] from [callerId] (the assistant's own number, so his
+     * Fold lets it ring), playing the whisper when he answers ([VoiceStep.WHISPER]); then [VoiceStep.DIALED].
+     */
+    data class PutThrough(val mobile: String, val callerId: String) : VoiceReply()
+    /** Played to Meka when he answers: who it is and "press 1" ([VoiceStep.WHISPER_ANSWERED]); silence hangs up his leg. */
+    data class Whisper(val text: String) : VoiceReply()
+    /** He pressed 1: say so, then the phone service connects the two. */
+    data object Connect : VoiceReply()
+    /** End this leg without a word. */
+    data object HangUp : VoiceReply()
     /** Turn the call away as busy: the assistant is switched off or nobody is set up to take it. */
     data object Busy : VoiceReply()
     /** A callback that needs no answer. */
@@ -113,6 +141,10 @@ object VoiceStep {
     const val ANSWERED = "answered"
     const val ANSWERED_AGAIN = "answered-again"
     const val TRANSCRIBED = "transcribed"
+    /** Item (c) slice 2: putting an urgent caller through. */
+    const val WHISPER = "whisper"
+    const val WHISPER_ANSWERED = "whisper-answered"
+    const val DIALED = "dialed"
 
     fun path(provider: String, step: String) = "/v1/voice/$provider/$step"
 }
@@ -285,6 +317,7 @@ class CallClips(
             CallAssistantScript.URGENT_QUESTION, CallAssistantScript.URGENT_AGAIN, CallAssistantScript.THANKS_URGENT,
             CallAssistantScript.THANKS, CallAssistantScript.THANKS_AWAY, CallAssistantScript.NO_MESSAGE,
             CallIntroRules.INTRO_QUESTION, CallIntroRules.RECORD_AFTER_INTRO, CallIntroRules.SCAM_CLOSE,
+            PutThroughRules.HOLD, PutThroughRules.MISSED, PutThroughRules.CONNECTING,
         )
         /** A failed or partial warm-up is tried again no sooner than this (each call would otherwise ask Google). */
         const val RETRY_MS = 5 * 60_000L
@@ -369,11 +402,20 @@ class CallAssistant(
     private fun introOf(callId: String): String? = intros[callId]?.takeIf { now() - it.first <= INTRO_KEEP_MS }?.second
 
     fun handle(provider: String, event: VoiceEvent): VoiceReply {
-        val hh = household() ?: return if (event is VoiceEvent.Incoming) VoiceReply.Busy else VoiceReply.Done
+        val hh = household() ?: return when (event) {
+            is VoiceEvent.Incoming -> VoiceReply.Busy
+            // Never connect a put-through nobody can vouch for.
+            is VoiceEvent.Whisper, is VoiceEvent.WhisperAnswered -> VoiceReply.HangUp
+            else -> VoiceReply.Done
+        }
         val id = CallAssistantRules.heldId(provider, event.callId)
         return when (event) {
             is VoiceEvent.Incoming -> {
                 if (!switchedOn(hh)) return VoiceReply.Busy
+                // Item (c) slice 2: a put-through his mobile turned away, sent back by "forward when busy": never a loop.
+                if (PutThroughRules.fromAssistant(event.from, event.to) || PutThroughRules.fromAssistant(event.from, profileText(hh, AboutYouFields.ASSISTANT_NUMBER))) {
+                    return VoiceReply.Busy
+                }
                 // The number's reputation starts now (not waited for), so it's ready when they've said who they are.
                 event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n -> runCatching { reputation?.invoke(hh, n, 0) } }
                 VoiceReply.AskWho(atWork(hh))
@@ -412,8 +454,31 @@ class CallAssistant(
                 val urgent = answer == true
                 if (urgent && known) {
                     if (write(hh, id, mapOf(HeldMessageFields.URGENT to true.fv()))) runCatching { onUrgent(hh) }
+                    // Item (c) slice 2: a genuine urgent caller is offered to Meka on his mobile.
+                    runCatching { putThrough(hh, id, event) }.getOrNull()?.let { return it }
                 }
                 VoiceReply.Goodbye(if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.thanks(!away(hh, id)))
+            }
+            is VoiceEvent.Whisper -> {
+                val parent = event.parent?.takeIf { it.isNotBlank() } ?: return VoiceReply.HangUp
+                val heldId = CallAssistantRules.heldId(provider, parent)
+                if (!exists(hh, heldId)) return VoiceReply.HangUp
+                val intro = introOf(parent) ?: (fields.latest(hh, EntityTypes.HELD_MESSAGE, heldId, HeldMessageFields.INTRO) as? FieldValue.Text)?.value
+                VoiceReply.Whisper(PutThroughRules.whisper(intro))
+            }
+            is VoiceEvent.WhisperAnswered -> {
+                val parent = event.parent?.takeIf { it.isNotBlank() } ?: return VoiceReply.HangUp
+                val heldId = CallAssistantRules.heldId(provider, parent)
+                if (!PutThroughRules.takes(event.digits) || !exists(hh, heldId)) return VoiceReply.HangUp
+                putThroughDone(hh, heldId, taken = true)
+                VoiceReply.Connect
+            }
+            is VoiceEvent.Dialed -> {
+                // Taken (written when he pressed 1): the call has happened, so nothing more to say.
+                val taken = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.PUT_THROUGH) == FieldValue.Text(PutThroughRules.TAKEN)
+                if (taken) return VoiceReply.HangUp
+                if (exists(hh, id)) putThroughDone(hh, id, taken = false)
+                VoiceReply.Goodbye(PutThroughRules.MISSED)
             }
             is VoiceEvent.Transcribed -> {
                 // With Transcribe on, the words wait for it ([transcribeKept], off the request); Twilio's are its fallback.
@@ -422,6 +487,39 @@ class CallAssistant(
             }
         }
     }
+
+    /**
+     * Item (c) slice 2: whether to ring Meka's mobile for this urgent caller ([PutThroughRules.offer]: a real
+     * introduction judged plainly OK, not reported online, a real message, About you's mobile set, and the number they
+     * called usable as the caller ID). The reply that does it, or null to say goodbye as before.
+     */
+    private fun putThrough(hh: String, id: String, event: VoiceEvent.Answered): VoiceReply? {
+        val mobile = profileText(hh, AboutYouFields.MOBILE) ?: return null
+        val intro = introOf(event.callId) ?: (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.INTRO) as? FieldValue.Text)?.value
+        val from = event.from ?: (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.PERSON) as? FieldValue.Text)?.value
+        val rep = from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n -> runCatching { reputation?.invoke(hh, n, 0) }.getOrNull() }
+        val seconds = (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.SECONDS) as? FieldValue.Int64)?.value?.toInt()
+        val assistant = event.to ?: profileText(hh, AboutYouFields.ASSISTANT_NUMBER)
+        val judged = CallIntroRules.judge(CallIntroRules.clean(intro), rep)
+        if (!PutThroughRules.offer(true, intro, judged, rep, seconds, from, mobile, assistant)) return null
+        return VoiceReply.PutThrough(PutThroughRules.dialable(mobile)!!, PutThroughRules.dialable(assistant)!!)
+    }
+
+    /** The put-through's outcome on the message, and an Activity entry; once per call (the first outcome stands). */
+    private fun putThroughDone(hh: String, heldId: String, taken: Boolean) {
+        val value = if (taken) PutThroughRules.TAKEN else PutThroughRules.MISSED_VALUE
+        if (write(hh, heldId, mapOf(HeldMessageFields.PUT_THROUGH to value.fv()))) {
+            val number = (fields.latest(hh, EntityTypes.HELD_MESSAGE, heldId, HeldMessageFields.PERSON) as? FieldValue.Text)?.value
+                ?.takeIf { BlockedCallerRules.keyOf(it) != null }
+            write(hh, PutThroughRules.activityId(heldId), PutThroughRules.activity(number, taken, now()), EntityTypes.AGENT_ACTION)
+            runCatching { onWritten(hh) }
+        }
+    }
+
+    /** A line of About you ([AboutYouFields]), or null. Never throws. */
+    private fun profileText(hh: String, field: String): String? = runCatching {
+        (fields.latest(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, field) as? FieldValue.Text)?.value?.trim()?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
 
     /**
      * The caller's answer to "who's calling?" ([CallIntroRules.judge], with the number's reputation when the lookup
@@ -820,17 +918,23 @@ class TwilioVoice(
         val call = form["CallSid"]?.trim()?.takeIf { it.isNotEmpty() && it.length <= 64 } ?: return null
         val from = form["From"]
         return when (step) {
-            VoiceStep.INCOMING -> VoiceEvent.Incoming(call, from)
+            VoiceStep.INCOMING -> VoiceEvent.Incoming(call, from, form["To"])
             VoiceStep.INTRODUCED -> VoiceEvent.Introduced(call, from, form["SpeechResult"])
             VoiceStep.RECORDED -> VoiceEvent.Recorded(call, from, form["RecordingDuration"]?.trim()?.toIntOrNull() ?: 0)
-            VoiceStep.ANSWERED -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"])
-            VoiceStep.ANSWERED_AGAIN -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"], again = true)
+            VoiceStep.ANSWERED -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"], from = from, to = form["To"])
+            VoiceStep.ANSWERED_AGAIN -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"], again = true, from = from, to = form["To"])
+            VoiceStep.WHISPER -> VoiceEvent.Whisper(call, parentOf(form))
+            VoiceStep.WHISPER_ANSWERED -> VoiceEvent.WhisperAnswered(call, parentOf(form), form["Digits"])
+            VoiceStep.DIALED -> VoiceEvent.Dialed(call)
             VoiceStep.TRANSCRIBED -> VoiceEvent.Transcribed(
                 call, form["TranscriptionText"].takeIf { form["TranscriptionStatus"] == "completed" }, form["RecordingSid"]?.trim(),
             )
             else -> null
         }
     }
+
+    /** The caller's call a put-through leg belongs to (`ParentCallSid`), or null. */
+    private fun parentOf(form: Map<String, String>): String? = form["ParentCallSid"]?.trim()?.takeIf { it.isNotEmpty() && it.length <= 64 }
 
     override fun render(reply: VoiceReply, baseUrl: String, voice: CallVoice, clip: (voice: String, text: String) -> String?): Pair<String, String> {
         val base = baseUrl.trimEnd('/')
@@ -861,6 +965,15 @@ class TwilioVoice(
                     say(if (reply.again) s.URGENT_AGAIN else s.URGENT_QUESTION) + "</Gather>" +
                     say(s.thanks(reply.atWork)) + "<Hangup/>"
             is VoiceReply.Goodbye -> say(reply.text) + "<Hangup/>"
+            // Item (c) slice 2: ring his mobile from the assistant's own number; the whisper plays when he answers.
+            is VoiceReply.PutThrough -> say(PutThroughRules.HOLD) +
+                """<Dial timeout="${PutThroughRules.RING_SECONDS}" callerId="${xml(reply.callerId)}" action="${url(VoiceStep.DIALED)}" method="POST">""" +
+                """<Number url="${url(VoiceStep.WHISPER)}" method="POST">${xml(reply.mobile)}</Number></Dial>"""
+            is VoiceReply.Whisper ->
+                """<Gather input="dtmf" numDigits="1" timeout="${PutThroughRules.WHISPER_SECONDS}" action="${url(VoiceStep.WHISPER_ANSWERED)}" method="POST">""" +
+                    say(reply.text) + "</Gather><Hangup/>"
+            VoiceReply.Connect -> say(PutThroughRules.CONNECTING)
+            VoiceReply.HangUp -> "<Hangup/>"
             VoiceReply.Busy -> """<Reject reason="busy"/>"""
             VoiceReply.Done -> ""
         }
