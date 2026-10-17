@@ -117,6 +117,81 @@ class TrainBoardTest {
         assertNull(RouteRules.healthRow(live(), at(7), cal))
     }
 
+    private val quiet = QuietHours.DEFAULT // 22:00–07:00
+
+    @Test
+    fun aLateOrCancelledTrainInTheWindowIsOneHeadsUpWithTheNextGoodOne() {
+        // 07:10: the 07:24 is 5 min late (the first bad one in the next 45 min); the 07:12 before it is fine.
+        val n = RouteRules.liveNotices(snap(live()), office, quiet, at(7, 10), cal).single()
+        assertEquals("South Rail 07:24 5 min late", n.title)
+        // No good train after it on the board (cancelled, delayed): the one before it.
+        assertEquals("Or the 07:12 on time, platform 3, arrives 07:41 · also 07:42 cancelled, 07:54 delayed · live 07:05", n.text)
+        assertEquals(NoticeSource.TRAINS, n.source)
+        assertEquals(NoticeTier.HEADS_UP, n.tier)
+        assertEquals(NoticeTarget.TODAY, n.target)
+        assertEquals(at(7, 5), n.atMs)
+        assertEquals(at(7, 30), n.expiresAtMs) // the 07:24 leaves at 07:29
+        // RouteRules.notices carries it too (with no TfL status read).
+        assertEquals(listOf(n.key), RouteRules.notices(snap(live()), office, quiet, at(7, 10), cal).map { it.key })
+
+        // A cancelled train with a good one after it; a later read where it is still cancelled keeps the key (no second buzz).
+        val list = listOf(
+            TrainDeparture(7 * 60 + 30, null, cancelled = true),
+            TrainDeparture(7 * 60 + 45, 7 * 60 + 45, platform = "2", arrMin = 8 * 60 + 14),
+        )
+        val c = RouteRules.liveNotices(snap(live(list = list)), office, quiet, at(7, 10), cal).single()
+        assertEquals("South Rail 07:30 cancelled", c.title)
+        assertEquals("Next good: 07:45 on time, platform 2, arrives 08:14 · live 07:05", c.text)
+        val again = RouteRules.liveNotices(snap(live(checked = at(7, 15), list = list)), office, quiet, at(7, 16), cal).single()
+        assertEquals(c.key, again.key)
+        val gov = Governor.evaluate(listOf(c), NotificationSettings.DEFAULT, DeviceAlerts.ALL, GovernorState(), at(7, 10), cal)
+        assertEquals(listOf(c.key), gov.post.map { it.key })
+        assertTrue(Governor.evaluate(listOf(again), NotificationSettings.DEFAULT, DeviceAlerts.ALL, gov.state, at(7, 16), cal).post.isEmpty())
+
+        // Nothing good on the board: the fallback when TfL says it runs, else check before you leave.
+        val none = listOf(TrainDeparture(7 * 60 + 30, null, cancelled = true))
+        assertEquals("No good train on the board yet · check before you leave · live 07:05",
+            RouteRules.liveNotices(snap(live(list = none)), office, quiet, at(7, 10), cal).single().text)
+        val tfl = listOf(LineState(InventedRoute.FIRST, 10), LineState(InventedRoute.FALLBACK, 10))
+        assertEquals("North Rail to Riverside is running · live 07:05",
+            RouteRules.liveNotices(snap(live(list = none), tfl, at(7)), office, quiet, at(7, 10), cal).single().text)
+
+        // The evening: the board home, from 45 minutes before work ends.
+        val pm = live(dir = TrainBoard.PM, checked = at(17, 5), list = listOf(TrainDeparture(17 * 60 + 40, 17 * 60 + 52), TrainDeparture(17 * 60 + 55, 17 * 60 + 55)))
+        val e = RouteRules.liveNotices(snap(pm), office, quiet, at(17, 10), cal).single()
+        assertEquals("South Rail 17:40 12 min late", e.title)
+        assertEquals("Next good: 17:55 on time · live 17:05", e.text)
+        assertTrue(e.key != c.key)
+    }
+
+    @Test
+    fun allGoodFarOffStaleWrongWayOrOffCommuteTellsNothing() {
+        val fine = listOf(TrainDeparture(7 * 60 + 20, 7 * 60 + 22), TrainDeparture(7 * 60 + 40, 7 * 60 + 40))
+        assertTrue(RouteRules.liveNotices(snap(live(list = fine)), office, quiet, at(7, 10), cal).isEmpty())
+        // A cancelled train more than 45 minutes away waits until it is in the window.
+        val later = listOf(TrainDeparture(7 * 60 + 20, 7 * 60 + 20), TrainDeparture(8 * 60 + 10, null, cancelled = true))
+        assertTrue(RouteRules.liveNotices(snap(live(list = later)), office, quiet, at(7, 10), cal).isEmpty())
+        assertEquals("South Rail 08:10 cancelled", RouteRules.liveNotices(snap(live(checked = at(7, 25), list = later)), office, quiet, at(7, 30), cal).single().title)
+        // Stale, the wrong way, not ok, outside the commute, or no route.
+        assertTrue(RouteRules.liveNotices(snap(live(checked = at(6, 35))), office, quiet, at(7, 10), cal).isEmpty())
+        assertTrue(RouteRules.liveNotices(snap(live(dir = TrainBoard.PM)), office, quiet, at(7, 10), cal).isEmpty())
+        assertTrue(RouteRules.liveNotices(snap(live().copy(state = TrainBoard.ERROR)), office, quiet, at(7, 10), cal).isEmpty())
+        assertTrue(RouteRules.liveNotices(snap(live(checked = at(11))), office, quiet, at(11, 5), cal).isEmpty())
+        assertTrue(RouteRules.liveNotices(snap(live()), null, quiet, at(7, 10), cal).isEmpty())
+        Household.set(HouseholdNames.EMPTY)
+        assertTrue(RouteRules.liveNotices(snap(live()), office, quiet, at(7, 10), cal).isEmpty())
+    }
+
+    @Test
+    fun quietHoursHoldItUntilTheyEndUnlessTheTrainHasGone() {
+        val q = QuietHours(enabled = true, startMinute = 22 * 60, endMinute = 7 * 60 + 15)
+        // Read at 07:05 in quiet hours; the 07:24 leaves at 07:29, so it comes at 07:15.
+        assertEquals(at(7, 15), RouteRules.liveNotices(snap(live()), office, q, at(7, 10), cal).single().atMs)
+        // Quiet until 07:40: the train has gone by then, so nothing.
+        val late = QuietHours(enabled = true, startMinute = 22 * 60, endMinute = 7 * 60 + 40)
+        assertTrue(RouteRules.liveNotices(snap(live()), office, late, at(7, 10), cal).isEmpty())
+    }
+
     @Test
     fun aboutYouKeepsTheHomeStation() {
         assertEquals("King's Cross", AboutYouRules.clean(AboutField.HOME_STATION, "  King’s   Cross "))

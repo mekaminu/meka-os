@@ -546,7 +546,10 @@ object RouteRules {
      * reaches Meka at 07:00 rather than being lost to a digest after he has left); stale once the commute is over
      * (work starts, or 90 minutes after it ends).
      */
-    fun notices(s: LineStatusSnapshot, office: OfficeWindow?, quiet: QuietHours, nowMs: Long, cal: LocalCalendar): List<Notice> {
+    fun notices(s: LineStatusSnapshot, office: OfficeWindow?, quiet: QuietHours, nowMs: Long, cal: LocalCalendar): List<Notice> =
+        lineNotices(s, office, quiet, nowMs, cal) + liveNotices(s, office, quiet, nowMs, cal)
+
+    private fun lineNotices(s: LineStatusSnapshot, office: OfficeWindow?, quiet: QuietHours, nowMs: Long, cal: LocalCalendar): List<Notice> {
         val r = route() ?: return emptyList()
         val commute = commute(office, nowMs, cal) ?: return emptyList()
         if (!fresh(s, nowMs)) return emptyList()
@@ -574,6 +577,65 @@ object RouteRules {
                 atMs = atMs, target = NoticeTarget.TODAY, expiresAtMs = until,
             )
         }
+    }
+
+    /** Live trains, slice 2: a train leaving within this many minutes is "in his window" for a heads-up. */
+    const val WINDOW_MIN = 45
+
+    /** When [d] leaves: its expected time, else booked (a cancelled one by its booked time). */
+    private fun leavesMin(d: TrainDeparture): Int = if (d.cancelled) d.depMin else (d.expMin ?: d.depMin)
+
+    /** Minutes from [nowMin] until [min], wrapping past midnight. */
+    private fun ahead(min: Int, nowMin: Int): Int = ((min - nowMin) % 1440 + 1440) % 1440
+
+    /**
+     * Live trains, slice 2 (Places item 4: "a heads-up as soon as a train in his window is delayed ≥ 5 min or
+     * cancelled, with the next good one"). On an office day's commute, with a fresh live board going the commute's way,
+     * the first train leaving within [WINDOW_MIN] minutes that is [bad] brings one [NoticeSource.TRAINS] heads-up:
+     * "South Rail 07:42 cancelled" · "Next good: 07:54 on time, platform 3, arrives 08:20 · also 07:50 cancelled · live
+     * 07:05". The next good one is the first train after it that isn't bad (else one before it still to leave, "or");
+     * with none on the board, the fallback line when TfL says it is running, else "Check before you leave". Once per
+     * train (the key holds the day, the commute and the train's booked time, so a train going from 5 to 15 minutes late
+     * doesn't buzz again; a later bad train gets its own once the first has gone). Due when the board was read, or
+     * when quiet hours end; stale once that train has left or the commute is over. Wear OS shows it on the watch (the
+     * phone's heads-ups aren't local-only).
+     */
+    fun liveNotices(s: LineStatusSnapshot, office: OfficeWindow?, quiet: QuietHours, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        val r = route() ?: return emptyList()
+        val commute = commute(office, nowMs, cal) ?: return emptyList()
+        val b = liveBoard(s, commute, nowMs) ?: return emptyList()
+        office!!
+        val morning = commute == Commute.MORNING
+        val nowMin = cal.minuteOfDay(nowMs)
+        val next = upcoming(b, nowMs, cal, n = TrainBoardCodec.MAX)
+        val inWindow = next.filter { ahead(leavesMin(it), nowMin) <= WINDOW_MIN }
+        val worst = inWindow.firstOrNull(::bad) ?: return emptyList()
+        val i = next.indexOf(worst)
+        val after = next.drop(i + 1)
+        val good = after.firstOrNull { !bad(it) }
+        val before = if (good == null) next.take(i).firstOrNull { !bad(it) } else null
+        val alsoBad = after.takeWhile { it != good }.filter(::bad).filter { ahead(leavesMin(it), nowMin) <= WINDOW_MIN }
+        val from = if (morning) cal.toEpochMs(cal.epochDayOf(office.startMs), MORNING_FROM_MIN) else office.endMs - EVENING_LEAD_MS
+        val until = if (morning) office.startMs else office.endMs + EVENING_AFTER_MS
+        val leavesMs = cal.toEpochMs(cal.epochDayOf(nowMs), nowMin) + ahead(leavesMin(worst), nowMin) * 60_000L + 60_000L
+        val expires = minOf(until, leavesMs)
+        val atMs = quiet.endAfter(maxOf(from, b.checkedMs!!), cal)
+        if (atMs >= expires) return emptyList()
+        val advice = when {
+            good != null -> "Next good: " + askWords(good)
+            before != null -> "Or the " + askWords(before)
+            else -> fallbackAdvice(r, r.fallbackId?.let { s.severityOf(it) }.takeIf { fresh(s, nowMs) }, morning) ?: "No good train on the board yet · check before you leave"
+        }
+        val also = alsoBad.takeIf { it.isNotEmpty() }?.let { l -> " · also " + l.joinToString(", ") { words(it) } }.orEmpty()
+        val checked = LocalClock.formatMinute(cal.minuteOfDay(b.checkedMs))
+        val day = cal.epochDayOf(office.startMs)
+        return listOf(
+            Notice(
+                key = "trainlive:$day:${commute.name.lowercase()}:${worst.depMin}", source = NoticeSource.TRAINS, tier = NoticeTier.HEADS_UP,
+                title = name(r.firstId, r) + " " + words(worst), text = "$advice$also · live $checked",
+                atMs = atMs, target = NoticeTarget.TODAY, expiresAtMs = expires,
+            ),
+        )
     }
 
     /** The server's checked time, rounded down so a quiet line writes at most twice an hour. */
