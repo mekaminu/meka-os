@@ -204,7 +204,7 @@ class MoneyFacadeTest {
         // After the fingerprint: answered, Talk's follow-ups too, for five minutes.
         fold.unlockMoneyAsk()
         assertEquals(
-            "You spent £60 on groceries last month (September), 1 payment.",
+            "You spent £60 on groceries last month (September), 1 payment. Your statements start 10 Sep 2026, so that's from then.",
             said(fold.askMeka("how much did I spend on groceries last month?")).text,
         )
         assertEquals(
