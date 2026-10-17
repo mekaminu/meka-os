@@ -31,7 +31,15 @@ data class MoneyForecastRow(val label: String, val amount: String, val line: Str
 data class MoneyForecastView(
     val head: String, val notReady: String?, val pace: String?, val left: String?, val leftLit: Boolean,
     val rows: List<MoneyForecastRow>, val cuts: List<MoneyCutChip>, val extraLine: String?, val basis: String?,
+    /** Trading tracker, slice 11: "Trading as it's gone · +£120 a month" from his Hyperliquid results, and where it's from. */
+    val trading: MoneyCutChip? = null, val tradingLine: String? = null,
 )
+
+/**
+ * Trading tracker, slice 11: his actual trading result a month in pence (after fees and funding, at the ECB's dollar rate)
+ * and where it comes from ("September and August", "the last 30 days").
+ */
+data class MoneyTradingPace(val pencePerMonth: Long, val from: String)
 
 /** What-ifs held by the facade while Money is open: categories halved and an extra amount a month (pence). */
 data class MoneyWhatIf(val cuts: Set<String> = emptySet(), val extraPence: Long = 0L) {
@@ -49,6 +57,9 @@ object MoneyForecast {
     const val MAX_EXTRA_PENCE = 10_000_000L
     const val MAX_CUTS = 3
     const val CUT_MIN_PENCE = 2_000L
+    /** Slice 11: the trading what-if's key, toggled like a cut (never a category's key). */
+    const val TRADING_KEY = "trading"
+    const val TRADING_LABEL = "Trading as it's gone"
 
     /** Spending that can't simply be halved (bills, fees) or says too little (other). */
     private val NOT_CUTTABLE = setOf(MoneyCategory.BILLS, MoneyCategory.FEES, MoneyCategory.OTHER, MoneyCategory.SUBSCRIPTIONS)
@@ -94,8 +105,40 @@ object MoneyForecast {
 
     fun extraSaid(pence: Long): String = if (pence == 0L) EXTRA_CLEARED else "What if: ${fmt(pence)} a month more coming in"
 
+    /**
+     * Trading tracker, slice 11: what trading has actually made him a month, from the followed Hyperliquid accounts (every
+     * one must have the ECB's rate): the last finished month's review, averaged with the month before's when every account
+     * has both; else the last 30 days' trades. Null without accounts, before the server has read them, or with no trades,
+     * fees or funding at all (nothing to go on).
+     */
+    fun tradingPace(wallets: List<TradingWallet>, nowMs: Long, cal: LocalCalendar): MoneyTradingPace? {
+        if (wallets.isEmpty() || wallets.any { w -> w.gbpPerUsdMicros?.let { TradingTracker.rateOk(it) } != true }) return null
+        fun pence(w: TradingWallet, stats: List<TradingCoinStats>) = TradingTracker.pence(stats.sumOf { it.netCents }, w.gbpPerUsdMicros!!)
+        fun active(stats: List<TradingCoinStats>) = stats.any { it.trades > 0 || it.feesCents != 0L || it.fundingCents != 0L }
+        val month = TradingMonth.lastFinished(nowMs, cal)
+        if (wallets.all { it.reviewMonth == month.key }) {
+            val cur = wallets.sumOf { pence(it, it.review) }
+            val bothMonths = wallets.all { it.reviewPrev != null }
+            val anything = wallets.any { active(it.review) || (bothMonths && active(it.reviewPrev.orEmpty())) }
+            if (anything) {
+                return if (bothMonths) {
+                    val prev = wallets.sumOf { pence(it, it.reviewPrev.orEmpty()) }
+                    MoneyTradingPace((cur + prev) / 2, "${month.name} and ${month.previous.name}")
+                } else MoneyTradingPace(cur, month.name)
+            }
+        }
+        if (wallets.all { it.tradesAtMs != null } && wallets.any { active(it.trades) }) {
+            return MoneyTradingPace(wallets.sumOf { pence(it, it.trades) }, "the last 30 days")
+        }
+        return null
+    }
+
+    /** Slice 11: the line under the trading what-if. */
+    fun tradingLine(pace: MoneyTradingPace): String =
+        "Trading: your Hyperliquid result a month from ${pace.from}, after fees and funding, at today's dollar rate · on top of your statements · not a promise"
+
     /** The forecast for [today] from every line, with [whatIf] applied; null with no lines at all. */
-    fun view(lines: List<MoneyLine>, today: Long, whatIf: MoneyWhatIf = MoneyWhatIf()): MoneyForecastView? {
+    fun view(lines: List<MoneyLine>, today: Long, whatIf: MoneyWhatIf = MoneyWhatIf(), trading: MoneyTradingPace? = null): MoneyForecastView? {
         if (lines.isEmpty()) return null
         val months = wholeMonths(lines, today)
         if (months.size < 2) return MoneyForecastView(HEAD, NOT_READY, null, null, false, emptyList(), emptyList(), null, null)
@@ -123,7 +166,14 @@ object MoneyForecast {
             MoneyCutChip(c.key, "Halve ${c.label}", "+${fmt(save)} a month", on,
                 "Halve ${c.label}, ${fmt(save)} a month more" + if (on) ", on" else "")
         }
-        val saved = cuttable.filter { it.key.key in whatIf.cuts }.sumOf { it.value / 2 } + whatIf.extraPence
+        // Slice 11: trading at the pace it has gone, his tap (a loss counts too).
+        val tradingOn = trading != null && TRADING_KEY in whatIf.cuts
+        val tradingChip = trading?.let { t ->
+            val shown = signed(roundTen(t.pencePerMonth)) + " a month"
+            MoneyCutChip(TRADING_KEY, TRADING_LABEL, shown, tradingOn, "$TRADING_LABEL, $shown" + if (tradingOn) ", on" else "")
+        }
+        val saved = cuttable.filter { it.key.key in whatIf.cuts }.sumOf { it.value / 2 } + whatIf.extraPence +
+            (if (tradingOn) trading!!.pencePerMonth else 0L)
         val thisMonth = MoneyRules.monthOf(today)
         val rows = listOf(6, 12).map { h ->
             val at = roundTen(net * h)
@@ -140,6 +190,7 @@ object MoneyForecast {
         val span = if (n == 1) monthShort(months.first()) else "${Recurrence.MONTH_SHORT[months.first() % 12]} – ${monthShort(months.last())}"
         val basis = "From $span ($n whole months) · $NOT_ADVICE"
         val extraLine = if (whatIf.extraPence > 0) "${signed(whatIf.extraPence)} a month coming in · your own figure" else null
-        return MoneyForecastView(HEAD, null, pace, left, income > 0 && leftRounded <= -1_000, rows, cuts, extraLine, basis)
+        return MoneyForecastView(HEAD, null, pace, left, income > 0 && leftRounded <= -1_000, rows, cuts, extraLine, basis,
+            tradingChip, trading?.let { tradingLine(it) })
     }
 }

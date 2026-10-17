@@ -393,21 +393,13 @@ struct MoneySheet: View {
                 Text(MoneyForecast.shared.WHAT_IF).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
                 if !f.cuts.isEmpty {
                     HStack(spacing: MekaSpace.xs) {
-                        ForEach(f.cuts, id: \.key) { c in
-                            Button {
-                                model.moneyForecastCut(c.key)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 0) {
-                                    Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
-                                    Text(c.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                                }
-                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
-                                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
-                            }
-                            .buttonStyle(MekaPressStyle())
-                            .accessibilityLabel(c.spoken)
-                        }
+                        ForEach(f.cuts, id: \.key) { c in cutChip(c) }
                     }
+                }
+                // Trading tracker, slice 11: trading at the pace it has gone, on its own row, and where it's from.
+                if let t = f.trading { cutChip(t) }
+                if let l = f.tradingLine {
+                    Text(l).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
                 }
                 TextField(MoneyForecast.shared.EXTRA_HINT, text: $extra)
                     .textFieldStyle(.roundedBorder)
@@ -422,6 +414,22 @@ struct MoneySheet: View {
             }
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: f.rows.map { $0.line })
+    }
+
+    /// A what-if chip (a halved category, or slice 11's trading); a click turns it on or off on this Mac only.
+    private func cutChip(_ c: MoneyCutChip) -> some View {
+        Button {
+            model.moneyForecastCut(c.key)
+        } label: {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(c.label).font(MekaType.caption).foregroundStyle(c.on ? palette.accent : palette.textSecondary)
+                Text(c.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+            .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(c.spoken)
     }
 
     /// Slice 3: one payment worth a look, with That's fine (Undo in the line below).

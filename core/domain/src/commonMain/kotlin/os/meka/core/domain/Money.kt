@@ -626,7 +626,7 @@ object MoneyRules {
             regular = MoneyTips.regularView(regular),
             hiddenTips = MoneyTips.hiddenLine(hiddenTips),
             alerts = if (partial) MoneyWatch.alerts(watch, today, names, fineAlerts) else emptyList(),
-            forecast = if (partial) MoneyForecast.view(lines, today, whatIf) else null,
+            forecast = if (partial) MoneyForecast.view(lines, today, whatIf, nowMs?.let { MoneyForecast.tradingPace(trading, it, cal) }) else null,
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
             payday = if (partial) MoneyPayday.view(
                 mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,

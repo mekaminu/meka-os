@@ -109,4 +109,73 @@ class MoneyForecastTest {
         assertEquals("About £2,350 a month left over", now.forecast?.left)
         assertNull(MoneyRules.view(accounts, txns, emptyMap(), oct16, cal, 1).forecast)
     }
+
+    // ---- Trading tracker, slice 11: his actual trading result as a what-if (invented accounts and figures) ----
+
+    private val nowMs = LocalCalendar.UTC.toEpochMs(oct16, 10 * 60)
+    private val eth = TradingCoinStats("ETH", 4, 3, 1, 30_000, 2_000, -1_000, 40_000, -10_000, 18_000, -10_000)
+    private val sol = TradingCoinStats("SOL", 2, 0, 2, -8_000, 500, 0, 0, -8_000, -3_000, -5_000)
+
+    private fun wallet(
+        n: Int, month: String? = "2026-09", review: List<TradingCoinStats> = listOf(eth, sol),
+        prev: List<TradingCoinStats>? = listOf(eth.copy(realisedCents = 10_000)), rate: Long? = 750_000,
+        trades: List<TradingCoinStats> = emptyList(), tradesAt: Long? = null,
+    ): TradingWallet {
+        val address = "0x" + n.toString().repeat(40)
+        return TradingWallet(TradingTracker.walletId(address), address, "Account $n", TradingTracker.OK, nowMs, nowMs, 1_000_000, null, null, null, null, 0,
+            emptyList(), trades = trades, tradesAtMs = tradesAt, gbpPerUsdMicros = rate, reviewMonth = month, review = review, reviewPrev = prev)
+    }
+
+    @Test
+    fun tradingPaceAveragesTheLastTwoMonthsInPounds() {
+        // September +$185, August +$70: about $127.50 a month, £95.62 at £0.75.
+        val p = MoneyForecast.tradingPace(listOf(wallet(1)), nowMs, LocalCalendar.UTC)!!
+        assertEquals(9_562, p.pencePerMonth)
+        assertEquals("September and August", p.from)
+        // Only September read so far for the month before: September alone.
+        assertEquals(MoneyTradingPace(13_875, "September"), MoneyForecast.tradingPace(listOf(wallet(1, prev = null)), nowMs, LocalCalendar.UTC))
+        // Last month not added up yet: the last 30 days.
+        val recent = MoneyForecast.tradingPace(listOf(wallet(1, month = "2026-08", trades = listOf(sol), tradesAt = nowMs)), nowMs, LocalCalendar.UTC)!!
+        assertEquals(MoneyTradingPace(-6_375, "the last 30 days"), recent)
+        // Nothing to go on: no accounts, an account without the dollar rate, or no trades at all.
+        assertNull(MoneyForecast.tradingPace(emptyList(), nowMs, LocalCalendar.UTC))
+        assertNull(MoneyForecast.tradingPace(listOf(wallet(1), wallet(2, rate = null)), nowMs, LocalCalendar.UTC))
+        assertNull(MoneyForecast.tradingPace(listOf(wallet(1, review = emptyList(), prev = emptyList())), nowMs, LocalCalendar.UTC))
+    }
+
+    @Test
+    fun tradingIsAWhatIfOnHisTap() {
+        val pace = MoneyTradingPace(9_562, "September and August")
+        val off = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(), pace)!!
+        assertEquals("Trading as it's gone", off.trading?.label)
+        assertEquals("+£100 a month", off.trading?.line)
+        assertFalse(off.trading!!.on)
+        assertEquals("put by at your pace", off.rows[0].line)
+        assertTrue(off.tradingLine!!.startsWith("Trading: your Hyperliquid result a month from September and August, after fees and funding"))
+        // Two cut chips only: trading has its own.
+        assertEquals(listOf("eating_out", "groceries"), off.cuts.map { it.key })
+        val on = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf(MoneyForecast.TRADING_KEY)), pace)!!
+        assertTrue(on.trading!!.on)
+        assertEquals("put by at your pace · +£570 with your what-ifs", on.rows[0].line)
+        assertEquals("put by at your pace · +£1,150 with your what-ifs", on.rows[1].line)
+        // A losing pace counts against him, said plainly.
+        val losing = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("trading")), MoneyTradingPace(-6_375, "the last 30 days"))!!
+        assertEquals("−£60 a month", losing.trading?.line)
+        assertEquals("put by at your pace · −£380 with your what-ifs", losing.rows[0].line)
+        // Without a pace the "trading" key does nothing and there's no chip.
+        val none = MoneyForecast.view(months(7, 8, 9), oct16, MoneyWhatIf(cuts = setOf("trading")))!!
+        assertNull(none.trading)
+        assertEquals("put by at your pace", none.rows[0].line)
+    }
+
+    @Test
+    fun theMoneyScreenCarriesTheTradingPace() {
+        val accounts = listOf(MoneyAccount("a-current", "Current account", "csv", null))
+        val txns = listOf(7, 8, 9, 10).flatMap { m ->
+            listOf(MoneyTxn("p$m", "a-current", d(m, 1), 250_000, "SALARY OAKFIELD LTD"), MoneyTxn("t$m", "a-current", d(m, 12), -15_000, "TESCO STORES 2041"))
+        }
+        val v = MoneyRules.view(accounts, txns, emptyMap(), oct16, LocalCalendar.UTC, 0, nowMs = nowMs, trading = listOf(wallet(1)))
+        assertEquals("+£100 a month", v.forecast?.trading?.line)
+        assertNull(MoneyRules.view(accounts, txns, emptyMap(), oct16, LocalCalendar.UTC, 0, nowMs = nowMs).forecast?.trading)
+    }
 }

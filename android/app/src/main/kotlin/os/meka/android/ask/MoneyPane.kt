@@ -69,6 +69,7 @@ import os.meka.core.domain.MoneyCardRow
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyCardsView
 import os.meka.core.domain.MoneyCategoryRow
+import os.meka.core.domain.MoneyCutChip
 import os.meka.core.domain.MoneyForecast
 import os.meka.core.domain.MoneyForecastRow
 import os.meka.core.domain.MoneyForecastView
@@ -1092,23 +1093,30 @@ private fun ForecastBlock(f: MoneyForecastView, modifier: Modifier, onCut: (Stri
         }
         if (f.cuts.isNotEmpty()) {
             Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                f.cuts.forEach { c ->
-                    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-cut-${c.key}")
-                    Column(
-                        Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
-                            .clickable(role = Role.Switch) { onCut(c.key) }.minTouch()
-                            .semantics(mergeDescendants = true) { contentDescription = c.spoken }
-                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                    ) {
-                        Text(c.label, style = MekaType.caption, color = col)
-                        Text(c.line, style = MekaType.caption, color = Meka.colors.textTertiary)
-                    }
-                }
+                f.cuts.forEach { c -> CutChip(c, onCut) }
             }
         }
+        // Trading tracker, slice 11: trading at the pace it has gone, on its own row, with where the figure comes from.
+        f.trading?.let { t -> CutChip(t, onCut) }
+        f.tradingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Field(MoneyForecast.EXTRA_HINT, value = extra, onValue = { extra = it }) { extra = it; onExtra(it) }
         f.extraLine?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.accent) }
         f.basis?.let { b -> Text(b, style = MekaType.caption, color = Meka.colors.textTertiary) }
+    }
+}
+
+@Composable
+private fun CutChip(c: MoneyCutChip, onCut: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val col by animateColorAsState(if (c.on) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-cut-${c.key}")
+    Column(
+        Modifier.clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Switch) { onCut(c.key) }.minTouch()
+            .semantics(mergeDescendants = true) { contentDescription = c.spoken }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    ) {
+        Text(c.label, style = MekaType.caption, color = col)
+        Text(c.line, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
