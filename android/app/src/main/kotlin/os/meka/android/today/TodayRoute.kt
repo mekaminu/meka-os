@@ -1501,5 +1501,6 @@ private fun meta(t: Task): String? {
 private fun greeting(): String = when (LocalTime.now().hour) {
     in 5..11 -> "Good morning, Meka"
     in 12..17 -> "Good afternoon, Meka"
-    else -> "Good evening, Meka"
+    in 18..23 -> "Good evening, Meka"
+    else -> "Good night, Meka" // 00:00–04:59 (Meka, 2026-10-17 02:03: "Good evening" in the small hours)
 }

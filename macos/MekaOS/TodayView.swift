@@ -656,7 +656,8 @@ struct TodayView: View {
         switch Calendar.current.component(.hour, from: .now) {
         case 5..<12: "Good morning, Meka"
         case 12..<18: "Good afternoon, Meka"
-        default: "Good evening, Meka"
+        case 18..<24: "Good evening, Meka"
+        default: "Good night, Meka" // 00:00–04:59
         }
     }
 }
