@@ -258,6 +258,17 @@ class NumberLookup(
         }
     }
 
+    /**
+     * The call assistant's view (it talks to them, 2026-10-17): [lookUp]'s answer as a [NumberReputation], or null for
+     * no lookup (off, pending, failed, not a number). Starting a lookup with [waitMs] 0 just sets the search going.
+     */
+    fun reputation(householdId: String, number: String, waitMs: Long): NumberReputation? {
+        val r = lookUp(householdId, number, waitMs)
+        if (r.state != NumberLookupCodec.Response.OK) return null
+        val verdict = NumberVerdict.entries.firstOrNull { it.name.equals(r.verdict, ignoreCase = true) } ?: return null
+        return NumberReputation(verdict, r.reports, r.sure, r.why)
+    }
+
     private fun run(householdId: String, hash: String, number: String): LookupRow {
         val at = now()
         val row = try {

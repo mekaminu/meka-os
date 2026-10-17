@@ -1048,7 +1048,12 @@ fun main(args: Array<String>) {
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
-            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai)
+            // Spam-call lookup (2026-10-17): unknown callers' numbers searched on the web; off until the Brave key is in.
+            // Made before the call assistant, which asks it about the caller while they say who they are.
+            val numberLookup = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let {
+                NumberLookup(BraveSearch.fromSecret(it), PostgresNumberLookupStore(ds))
+            }
+            val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup)
             voice?.let { startRecordingSweep(it.assistant) }
             voice?.let { startCallClipsWarm(it) }
             // The call assistant's low-balance guard: the phone service's credit, read a few times a day.
@@ -1068,10 +1073,6 @@ fun main(args: Array<String>) {
                     opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
                     feed = os.meka.backend.integrations.LunchFlowFeed.fromSecret(secret), onWritten = { hh -> push?.serverChanged(hh) },
                 ).also { startBankSync(it) }
-            }
-            // Spam-call lookup (2026-10-17): unknown callers' numbers searched on the web; off until the Brave key is in.
-            val numberLookup = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let {
-                NumberLookup(BraveSearch.fromSecret(it), PostgresNumberLookupStore(ds))
             }
             val verifier = RequestVerifier()
             // his wife's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
@@ -1198,7 +1199,10 @@ fun assistantCallsReader(opStore: PostgresOpStore): (String) -> List<os.meka.cor
  * The call assistant's webhooks. Null unless the deployment names the Twilio secret and a public URL; while the secret
  * is still `{}` every webhook is refused (no auth token to check signatures with).
  */
-fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null, ai: AiLayer? = null): VoiceRoutes? {
+fun voiceFromEnv(
+    opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?, speech: SpeechService? = null, ai: AiLayer? = null,
+    numberLookup: NumberLookup? = null,
+): VoiceRoutes? {
     val secret = System.getenv("MEKA_VOICE_TWILIO_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val publicUrl = System.getenv("MEKA_PUBLIC_URL")?.takeIf { it.isNotBlank() } ?: return null
     // Callers' recordings (polish 8c) in MEKA's own private bucket; none kept without one.
@@ -1215,6 +1219,8 @@ fun voiceFromEnv(opStore: PostgresOpStore, devices: DeviceRegistry, push: Push?,
         } else null,
         // Suspected spam (8b c): MEKA's AI reads a message's words (never the number); metered, off with the AI.
         scamCheck = ai?.provider?.let { CallScamCheck(it) },
+        // The assistant talks to them (2026-10-17): the caller's number's web reputation while they say who they are.
+        reputation = numberLookup?.let { lookup -> { hh, number, waitMs -> lookup.reputation(hh, number, waitMs) } },
     )
     // Callers hear a chosen Google voice (natural voice, slice 3): its lines made once, on Google's meter.
     val clips = speech?.let { sp -> CallClips(synth = { text, v -> sp.googleClip(text, v) }, store = recordings) }

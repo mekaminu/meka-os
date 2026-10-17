@@ -12,6 +12,11 @@ import os.meka.core.domain.BankHolidayStore
 import os.meka.core.domain.CallAssistantRules
 import os.meka.core.domain.CallAssistantScript
 import os.meka.core.domain.CallCreditReading
+import os.meka.core.domain.CallIntroRules
+import os.meka.core.domain.IntroJudgement
+import os.meka.core.domain.IntroVerdict
+import os.meka.core.domain.NumberLookupRules
+import os.meka.core.domain.NumberReputation
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
@@ -56,6 +61,11 @@ sealed class VoiceEvent {
     abstract val callId: String
 
     data class Incoming(override val callId: String, val from: String?) : VoiceEvent()
+    /**
+     * The caller's answer to "who's calling, and what's it about?" ([CallIntroRules]; [speech] as recognised, empty or
+     * null when they said nothing). Added 2026-10-17 (the call assistant talks to them).
+     */
+    data class Introduced(override val callId: String, val from: String?, val speech: String?) : VoiceEvent()
     /** The message was recorded ([seconds] long; 0 when nothing was said). */
     data class Recorded(override val callId: String, val from: String?, val seconds: Int) : VoiceEvent()
     /**
@@ -76,7 +86,12 @@ sealed class VoiceReply {
      * Greet, ask for a message and record it (then [VoiceStep.RECORDED]; the transcript later to [VoiceStep.TRANSCRIBED]).
      * [atWork] picks the greeting ([CallAssistantScript.greeting]): outside work hours it doesn't say Meka is at work.
      */
-    data class TakeMessage(val atWork: Boolean = true) : VoiceReply()
+    data class TakeMessage(val atWork: Boolean = true, val greet: Boolean = true) : VoiceReply()
+    /**
+     * Greet, then ask who's calling and what it's about ([CallIntroRules.INTRO_QUESTION]; the answer to
+     * [VoiceStep.INTRODUCED], which then takes the message without greeting again, or ends a judged scam).
+     */
+    data class AskWho(val atWork: Boolean = true) : VoiceReply()
     /**
      * Ask "is it urgent?" (answer to [VoiceStep.ANSWERED]); [atWork] picks the goodbye if nothing is answered. [again]
      * asks once more ([CallAssistantScript.URGENT_AGAIN], answer to [VoiceStep.ANSWERED_AGAIN]) after an answer the
@@ -93,6 +108,7 @@ sealed class VoiceReply {
 /** The webhook paths, `/v1/voice/<provider>/<step>`. */
 object VoiceStep {
     const val INCOMING = "incoming"
+    const val INTRODUCED = "introduced"
     const val RECORDED = "recorded"
     const val ANSWERED = "answered"
     const val ANSWERED_AGAIN = "answered-again"
@@ -268,11 +284,12 @@ class CallClips(
             CallAssistantScript.GREETING, CallAssistantScript.GREETING_AWAY, CallAssistantScript.RECORD_PROMPT,
             CallAssistantScript.URGENT_QUESTION, CallAssistantScript.URGENT_AGAIN, CallAssistantScript.THANKS_URGENT,
             CallAssistantScript.THANKS, CallAssistantScript.THANKS_AWAY, CallAssistantScript.NO_MESSAGE,
+            CallIntroRules.INTRO_QUESTION, CallIntroRules.RECORD_AFTER_INTRO, CallIntroRules.SCAM_CLOSE,
         )
         /** A failed or partial warm-up is tried again no sooner than this (each call would otherwise ask Google). */
         const val RETRY_MS = 5 * 60_000L
         /** A few voices' worth; past it the cache starts again (a voice changed many times). */
-        const val MAX_CLIPS = 9 * 6
+        const val MAX_CLIPS = 12 * 6
         private val KEY = Regex("[0-9a-f]{32}")
     }
 }
@@ -329,22 +346,55 @@ class CallAssistant(
      * the caller's number on Suspected spam. Null (no AI) flags nothing.
      */
     private val scamCheck: ScamChecker? = null,
+    /**
+     * The caller's number's web reputation (spam-call lookup, [NumberLookup.lookUp]): waits at most `waitMs` and
+     * answers null for no lookup (off, pending, failed). Null: the assistant judges from the caller's words alone.
+     */
+    private val reputation: ((householdId: String, number: String, waitMs: Long) -> NumberReputation?)? = null,
 ) {
     private val clock = HlcClock(Integrations.SERVER_DEVICE, now)
+
+    /**
+     * What each caller said when asked who's calling, by call id, until the message is recorded (a few minutes).
+     * Memory only: a restart mid-call just loses the line, and the words are never logged.
+     */
+    private val intros = java.util.concurrent.ConcurrentHashMap<String, Pair<Long, String>>()
+
+    private fun keepIntro(callId: String, intro: String) {
+        val at = now()
+        intros.entries.removeIf { at - it.value.first > INTRO_KEEP_MS }
+        if (intros.size < 500) intros[callId] = at to intro
+    }
+
+    private fun introOf(callId: String): String? = intros[callId]?.takeIf { now() - it.first <= INTRO_KEEP_MS }?.second
 
     fun handle(provider: String, event: VoiceEvent): VoiceReply {
         val hh = household() ?: return if (event is VoiceEvent.Incoming) VoiceReply.Busy else VoiceReply.Done
         val id = CallAssistantRules.heldId(provider, event.callId)
         return when (event) {
-            is VoiceEvent.Incoming -> if (switchedOn(hh)) VoiceReply.TakeMessage(atWork(hh)) else VoiceReply.Busy
+            is VoiceEvent.Incoming -> {
+                if (!switchedOn(hh)) return VoiceReply.Busy
+                // The number's reputation starts now (not waited for), so it's ready when they've said who they are.
+                event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n -> runCatching { reputation?.invoke(hh, n, 0) } }
+                VoiceReply.AskWho(atWork(hh))
+            }
+            is VoiceEvent.Introduced -> introduced(hh, id, event)
             is VoiceEvent.Recorded -> {
+                val intro = introOf(event.callId)
                 if (event.seconds < 1) {
-                    noteHangup(hh, id, event.from)
+                    // They said who they were and hung up at the tone: that's a call to see, not a hang-up to block.
+                    if (CallIntroRules.real(intro)) {
+                        noMessage(hh, id, event.from, intro!!)
+                    } else {
+                        noteHangup(hh, id, event.from)
+                    }
                     return VoiceReply.Goodbye(CallAssistantScript.NO_MESSAGE)
                 }
                 // A retry finds the message written: it keeps the at-work reading it was taken with.
                 val atWork = if (exists(hh, id)) !away(hh, id) else atWork(hh)
-                if (write(hh, id, CallAssistantRules.messageFields(event.from, now(), atWork, seconds = event.seconds))) runCatching { onWritten(hh) }
+                val values = CallAssistantRules.messageFields(event.from, now(), atWork, seconds = event.seconds) +
+                    (intro?.let { mapOf(HeldMessageFields.INTRO to it.fv()) } ?: emptyMap())
+                if (write(hh, id, values)) runCatching { onWritten(hh) }
                 VoiceReply.AskUrgent(atWork)
             }
             is VoiceEvent.Answered -> {
@@ -370,6 +420,72 @@ class CallAssistant(
                 if (!transcribesLater(event)) settle(hh, id, event.text)
                 VoiceReply.Done
             }
+        }
+    }
+
+    /**
+     * The caller's answer to "who's calling?" ([CallIntroRules.judge], with the number's reputation when the lookup
+     * answers within [REPUTATION_WAIT_MS]): a judged scam is ended politely ([CallIntroRules.SCAM_CLOSE]) and kept as a
+     * call to see, its number on Suspected spam; anyone else goes on to leave a message.
+     */
+    private fun introduced(hh: String, id: String, event: VoiceEvent.Introduced): VoiceReply {
+        val intro = CallIntroRules.clean(event.speech)
+        intro?.let { keepIntro(event.callId, it) }
+        val rep = event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n ->
+            runCatching { reputation?.invoke(hh, n, REPUTATION_WAIT_MS) }.getOrNull()
+        }
+        val judged = CallIntroRules.judge(intro, rep)
+        if (judged.verdict == IntroVerdict.SCAM) {
+            runCatching { endAsScam(hh, id, event.from, intro, judged) }
+            return VoiceReply.Goodbye(CallIntroRules.SCAM_CLOSE)
+        }
+        return VoiceReply.TakeMessage(atWork(hh), greet = false)
+    }
+
+    /**
+     * A call ended as a likely scam: kept as a voice message with no recording ([HeldMessageFields.ENDED] scam, what
+     * they said and the one-line why as its summary; never urgent), and a real number not already blocked, flagged or
+     * cleared with Not spam goes on Suspected spam with an Activity entry. Once per call (op ids from the call).
+     */
+    private fun endAsScam(hh: String, id: String, from: String?, intro: String?, judged: IntroJudgement) {
+        val at = now()
+        val values = CallAssistantRules.messageFields(from, at, atWork(hh)) + buildMap<String, FieldValue> {
+            put(HeldMessageFields.ENDED, CallIntroRules.ENDED_SCAM.fv())
+            put(HeldMessageFields.SUMMARY, CallIntroRules.summary(judged).fv())
+            if (intro != null) {
+                put(HeldMessageFields.INTRO, intro.fv())
+                put(HeldMessageFields.TEXT, intro.fv())
+            } else {
+                put(HeldMessageFields.NO_TRANSCRIPT, true.fv())
+            }
+        }
+        var wrote = write(hh, id, values)
+        val key = BlockedCallerRules.keyOf(from)
+        if (key != null && from != null) {
+            fun flag(field: String) = (fields.latest(hh, EntityTypes.BLOCKED_CALLER, key, field) as? FieldValue.Bool)?.value
+            if (flag(BlockedCallerFields.BLOCKED) != true && flag(BlockedCallerFields.SUSPECTED) == null) {
+                if (write(hh, key, SuspectedSpamRules.flagFields(from, CallIntroRules.why(judged), at), EntityTypes.BLOCKED_CALLER, opBase = id + "introscam")) {
+                    write(hh, CallIntroRules.activityId(id), CallIntroRules.activity(from, judged, at), EntityTypes.AGENT_ACTION)
+                    wrote = true
+                }
+            }
+        }
+        if (wrote) runCatching { onWritten(hh) }
+    }
+
+    /**
+     * They said who they were, then left no message: kept as a call to see ([HeldMessageFields.ENDED] noMessage, their
+     * words as its text), and their words read like a message's (the AI's summary and scam check, when on).
+     */
+    private fun noMessage(hh: String, id: String, from: String?, intro: String) {
+        val values = CallAssistantRules.messageFields(from, now(), atWork(hh)) + mapOf(
+            HeldMessageFields.ENDED to CallIntroRules.ENDED_NO_MESSAGE.fv(),
+            HeldMessageFields.INTRO to intro.fv(),
+            HeldMessageFields.TEXT to intro.fv(),
+        )
+        if (write(hh, id, values)) {
+            runCatching { onWritten(hh) }
+            runCatching { readWords(hh, id, intro) }
         }
     }
 
@@ -406,7 +522,9 @@ class CallAssistant(
         if (write(hh, id, mapOf(HeldMessageFields.TEXT to text.fv()))) {
             val wasUrgent = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.URGENT) == FieldValue.Bool(true)
             runCatching { if (Urgency.isUrgent(text) && !wasUrgent) onUrgent(hh) else onWritten(hh) }
-            runCatching { readWords(hh, id, text) }
+            // What they said when asked who's calling goes with the message, so the summary knows who it's from.
+            val intro = (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.INTRO) as? FieldValue.Text)?.value
+            runCatching { readWords(hh, id, intro?.let { "$it. $text" } ?: text) }
         }
     }
 
@@ -627,6 +745,10 @@ class CallAssistant(
 
     companion object {
         private val UK: java.time.ZoneId = java.time.ZoneId.of("Europe/London")
+        /** How long the answer to "who's calling?" waits for the number's lookup (the phone service waits up to 15 s). */
+        const val REPUTATION_WAIT_MS = 1_500L
+        /** How long a caller's answer is held for their message (a message is at most two minutes). */
+        const val INTRO_KEEP_MS = 10 * 60_000L
 
         fun opId(heldId: String, field: String) = "srvvoice$heldId${field.lowercase().filter(Char::isLetterOrDigit)}"
     }
@@ -699,6 +821,7 @@ class TwilioVoice(
         val from = form["From"]
         return when (step) {
             VoiceStep.INCOMING -> VoiceEvent.Incoming(call, from)
+            VoiceStep.INTRODUCED -> VoiceEvent.Introduced(call, from, form["SpeechResult"])
             VoiceStep.RECORDED -> VoiceEvent.Recorded(call, from, form["RecordingDuration"]?.trim()?.toIntOrNull() ?: 0)
             VoiceStep.ANSWERED -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"])
             VoiceStep.ANSWERED_AGAIN -> VoiceEvent.Answered(call, form["Digits"], form["SpeechResult"], again = true)
@@ -718,7 +841,13 @@ class TwilioVoice(
         fun url(step: String) = xml(base + VoiceStep.path(ID, step))
         val s = CallAssistantScript
         val body = when (reply) {
-            is VoiceReply.TakeMessage -> say(s.greeting(reply.atWork)) + say(s.RECORD_PROMPT) +
+            // The call assistant talks to them (2026-10-17): greet, then ask who's calling; silence comes back too.
+            is VoiceReply.AskWho -> say(s.greeting(reply.atWork)) +
+                """<Gather input="speech" timeout="${CallIntroRules.INTRO_SECONDS}" speechTimeout="auto" language="en-GB" """ +
+                """hints="${CallIntroRules.HINTS}" actionOnEmptyResult="true" action="${url(VoiceStep.INTRODUCED)}" method="POST">""" +
+                say(CallIntroRules.INTRO_QUESTION) + "</Gather>" +
+                """<Redirect method="POST">${url(VoiceStep.INTRODUCED)}</Redirect>"""
+            is VoiceReply.TakeMessage -> (if (reply.greet) say(s.greeting(reply.atWork)) + say(s.RECORD_PROMPT) else say(CallIntroRules.RECORD_AFTER_INTRO)) +
                 """<Record action="${url(VoiceStep.RECORDED)}" method="POST" maxLength="${s.MAX_MESSAGE_SECONDS}" """ +
                 """timeout="${s.SILENCE_SECONDS}" finishOnKey="#" playBeep="true" transcribe="true" """ +
                 """transcribeCallback="${url(VoiceStep.TRANSCRIBED)}"/>""" +

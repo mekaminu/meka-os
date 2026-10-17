@@ -87,7 +87,7 @@ object CallNoticeRules {
      * show a person spoke (a robocall pressing 1 never breaks through); "yes" said aloud, or its own words saying urgent.
      */
     fun urgent(item: CapturedItem): Boolean {
-        if (item.automated) return false
+        if (item.automated || item.endedAsScam) return false
         if (Urgency.isUrgent(item.text)) return true
         if (!item.urgent) return false
         return item.urgentBy != BY_KEYPAD || hasWords(item.text)
@@ -126,6 +126,9 @@ object CallNoticeRules {
     fun happened(item: CapturedItem, cal: LocalCalendar): String {
         val at = LocalClock.formatMinute(cal.minuteOfDay(item.atMs))
         val left = when {
+            // The call assistant talks to them (2026-10-17): it ended the call after asking who was calling.
+            item.ended == CallIntroRules.ENDED_SCAM -> CallIntroRules.HAPPENED_SCAM
+            item.ended == CallIntroRules.ENDED_NO_MESSAGE -> CallIntroRules.HAPPENED_NO_MESSAGE
             item.seconds != null && item.seconds < AUTOMATED_SECONDS -> "hung up after ${item.seconds.coerceAtLeast(0)} s"
             item.seconds != null -> "left a ${length(item.seconds)} message"
             else -> "left a message"
@@ -142,6 +145,8 @@ object CallNoticeRules {
             else -> ONE_WORD
         }
         item.summary?.let { return it }
+        // What they said when asked who's calling, before the message's own words arrive (or when they left none).
+        if (text == null || item.ended != null) item.intro?.let { return "Said: “" + (if (it.length > ABOUT_MAX) it.take(ABOUT_MAX - 1).trimEnd() + "…" else it) + "”" }
         if (text != null) {
             val cut = if (text.length > ABOUT_MAX) text.take(ABOUT_MAX - 1).trimEnd() + "…" else text
             return "“$cut”"

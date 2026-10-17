@@ -97,9 +97,17 @@ class CallAssistantTest {
         val twiml = greet.bodyAsText()
         assertTrue(twiml.startsWith("<?xml"))
         assertTrue("Hi, this is Navilife, Meka&apos;s automated assistant." in twiml, twiml)
-        assertTrue("""<Record action="$base/v1/voice/twilio/recorded"""" in twiml, twiml)
-        assertTrue("""transcribeCallback="$base/v1/voice/twilio/transcribed"""" in twiml, twiml)
-        assertTrue("""maxLength="120"""" in twiml)
+        // The assistant talks to them (2026-10-17): first it asks who's calling, then takes the message.
+        assertTrue("""<Gather input="speech"""" in twiml, twiml)
+        assertTrue("""action="$base/v1/voice/twilio/introduced"""" in twiml, twiml)
+        assertTrue("may I ask who&apos;s calling" in twiml, twiml)
+        assertFalse("<Record" in twiml)
+        val take = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "Hi, it's the garage about your car").bodyAsText()
+        assertTrue("""<Record action="$base/v1/voice/twilio/recorded"""" in take, take)
+        assertTrue("""transcribeCallback="$base/v1/voice/twilio/transcribed"""" in take, take)
+        assertTrue("""maxLength="120"""" in take)
+        assertTrue("Thank you. Please leave your message after the tone" in take, take)
+        assertFalse("Hi, this is Navilife" in take) // not greeted twice
         assertTrue(heldOps().isEmpty())
 
         val asked = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "14", "RecordingSid" to "RE1").bodyAsText()
@@ -125,6 +133,8 @@ class CallAssistantTest {
         assertFalse(item.away) // Thursday 10:00 in the UK: at work
         assertEquals(nowMs, item.atMs)
         assertEquals(CallAssistantRules.heldId("twilio", "CA100"), item.id)
+        assertEquals("Hi, it's the garage about your car", item.intro)
+        assertEquals("Said: “Hi, it's the garage about your car”", os.meka.core.domain.CallNoticeRules.about(item))
         assertTrue(heldOps().all { it.deviceId == "server" })
 
         // The transcript arrives later and is shown in the summary on both apps.
@@ -219,6 +229,82 @@ class CallAssistantTest {
     }
 
     @Test
+    fun aCallerWhoSaysTheyreHmrcAndAsksForPaymentIsEndedPolitelyAndFlagged() = testApplication {
+        val asked = mutableListOf<Long>()
+        val talking = CallAssistant(
+            ops, FieldReader.scanning(ops), household = { devices.soleHousehold() }, now = { nowMs },
+            onWritten = { woken += it }, onUrgent = { urgent += it },
+            reputation = { _, _, waitMs -> asked += waitMs; null },
+        )
+        application { mekaSync(ops, devices, voice = VoiceRoutes(talking, listOf(TwilioVoice(authToken = { token })), base)) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA300", "From" to "+441632960301")
+        hook(VoiceStep.INCOMING, *call)
+        assertEquals(listOf(0L), asked) // the lookup is set going, not waited for
+
+        val bye = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "This is HMRC, you have unpaid tax and it's urgent you pay today").bodyAsText()
+        assertTrue("Meka will contact the organisation directly if he needs to. Goodbye." in bye, bye)
+        assertTrue("<Hangup/>" in bye)
+        assertFalse("<Record" in bye)
+        assertEquals(listOf(0L, CallAssistant.REPUTATION_WAIT_MS), asked)
+
+        val item = fold().items().single()
+        assertTrue(item.endedAsScam)
+        assertFalse(item.isUrgent) // "urgent" in a scam's words never breaks through
+        assertEquals("Said they're from HMRC and asked for payment", item.summary)
+        assertTrue(urgent.isEmpty())
+        // On Suspected spam (Block or Not spam stays his), with an Activity entry; nothing blocked.
+        val key = os.meka.core.domain.BlockedCallerRules.keyOf("+441632960301")!!
+        val flagged = ops.after("hh", 0, 1_000).map { it.op }.filter { it.entityType == EntityTypes.BLOCKED_CALLER && it.entityId == key }
+        assertEquals(FieldValue.Bool(true), flagged.single { it.field == BlockedCallerFields.SUSPECTED }.value)
+        assertTrue(flagged.none { it.field == BlockedCallerFields.BLOCKED })
+        val activity = ops.after("hh", 0, 1_000).map { it.op }.filter { it.entityType == EntityTypes.AGENT_ACTION }
+        assertTrue(activity.any { it.field == ActivityFields.SUMMARY && (it.value as FieldValue.Text).value.startsWith("Ended a likely scam call") }, activity.toString())
+        assertEquals(listOf("hh"), woken)
+
+        // The phone service retries the webhook: nothing more is written.
+        val before = ops.after("hh", 0, 1_000).size
+        hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "This is HMRC, you have unpaid tax and it's urgent you pay today")
+        assertEquals(before, ops.after("hh", 0, 1_000).size)
+    }
+
+    @Test
+    fun aNumberReportedAsAScamIsEndedEvenWhenTheCallerSaysNothing() = testApplication {
+        val sure = os.meka.core.domain.NumberReputation(os.meka.core.domain.NumberVerdict.SCAM, reports = 23, sure = true)
+        val talking = CallAssistant(
+            ops, FieldReader.scanning(ops), household = { devices.soleHousehold() }, now = { nowMs }, reputation = { _, _, _ -> sure },
+        )
+        application { mekaSync(ops, devices, voice = VoiceRoutes(talking, listOf(TwilioVoice(authToken = { token })), base)) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA310", "From" to "+441632960310")
+        assertTrue("contact the organisation directly" in hook(VoiceStep.INTRODUCED, *call).bodyAsText())
+        val item = fold().items().single()
+        assertTrue(item.endedAsScam)
+        assertTrue(item.noTranscript)
+        assertEquals("Reported online as a scam", item.summary)
+        // A caller with nothing against them who says who they are goes on to leave a message.
+        val ok = arrayOf("CallSid" to "CA311", "From" to "+441632960311")
+        val clean = CallAssistant(ops, FieldReader.scanning(ops), household = { devices.soleHousehold() }, now = { nowMs }, reputation = { _, _, _ -> null })
+        assertEquals(VoiceReply.TakeMessage(atWork = true, greet = false), clean.handle("twilio", VoiceEvent.Introduced("CA311", ok[1].second, "It's Sam about Saturday")))
+    }
+
+    @Test
+    fun aCallerWhoSaysWhoTheyAreThenHangsUpIsKeptAsACallNotAHangUp() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA320", "From" to "+441632960320")
+        hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "It's Sam from the surgery about Thursday")
+        val bye = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "0").bodyAsText()
+        assertTrue("I didn&apos;t hear a message" in bye, bye)
+        val item = fold().items().single()
+        assertEquals(os.meka.core.domain.CallIntroRules.ENDED_NO_MESSAGE, item.ended)
+        assertEquals("It's Sam from the surgery about Thursday", item.text)
+        assertFalse(item.automated)
+        // Not noted as a hang-up, so the Fold won't block them.
+        assertTrue(ops.after("hh", 0, 1_000).none { it.op.field == BlockedCallerFields.HUNG_UP_AT })
+    }
+
+    @Test
     fun outsideWorkHoursTheAssistantDoesntSayMekaIsAtWork() = testApplication {
         application { mekaSync(ops, devices, voice = voice) }
         nowMs = 1_791_575_340_000L // Fri 2026-10-09 19:49 UTC, 20:49 in the UK: Meka's first real test call
@@ -262,7 +348,7 @@ class CallAssistantTest {
         // Never switched on: busy.
         assertEquals("""<?xml version="1.0" encoding="UTF-8"?><Response><Reject reason="busy"/></Response>""", hook(VoiceStep.INCOMING, "CallSid" to "CA1").bodyAsText())
         switch(true)
-        assertTrue("<Record" in hook(VoiceStep.INCOMING, "CallSid" to "CA2").bodyAsText())
+        assertTrue("""<Gather input="speech"""" in hook(VoiceStep.INCOMING, "CallSid" to "CA2").bodyAsText())
         switch(false)
         assertTrue("<Reject" in hook(VoiceStep.INCOMING, "CallSid" to "CA3").bodyAsText())
         switch(true)
@@ -454,10 +540,13 @@ class CallAssistantTest {
         // Now every line is played in Aoede, from this server, and nothing is said by Polly.
         val greet = hook(VoiceStep.INCOMING, *call).bodyAsText()
         val plays = Regex("<Play>([^<]+)</Play>").findAll(greet).map { it.groupValues[1] }.toList()
-        assertEquals(3, plays.size, greet) // greeting, the prompt, and "I didn't hear a message"
+        assertEquals(2, plays.size, greet) // the greeting and "who's calling?"
         assertTrue(plays.all { it.startsWith("$base${CallClips.PATH}") && it.endsWith(".mp3") })
         assertFalse("<Say" in greet, greet)
-        assertTrue("<Record " in greet)
+        val take = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "It's Sam about Saturday").bodyAsText()
+        assertEquals(2, Regex("<Play>").findAll(take).count(), take) // the prompt, and "I didn't hear a message"
+        assertFalse("<Say" in take, take)
+        assertTrue("<Record " in take)
         val asked = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "9").bodyAsText()
         assertTrue("<Gather " in asked && "<Play>" in asked && "<Say" !in asked, asked)
         assertTrue("<Play>" in hook(VoiceStep.ANSWERED, *call, "Digits" to "1").bodyAsText())

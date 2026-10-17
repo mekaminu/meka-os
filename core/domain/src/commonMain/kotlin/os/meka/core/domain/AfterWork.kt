@@ -62,7 +62,14 @@ data class CapturedItem(
      * reply typed (WhatsApp's own click-to-chat link). Null for groups and when the notification didn't carry one.
      */
     val chatNumber: String? = null,
+    /** What the caller said when asked who's calling ([HeldMessageFields.INTRO]); null = not asked or nothing said. */
+    val intro: String? = null,
+    /** How the assistant ended a call without a message ([HeldMessageFields.ENDED]); null = a message was taken. */
+    val ended: String? = null,
 ) {
+    /** The call assistant ended this call as a likely scam ([CallIntroRules.judge]); never urgent. */
+    val endedAsScam: Boolean get() = fromCallAssistant && ended == CallIntroRules.ENDED_SCAM
+
     val personKey: String get() = People.key(personName)
 
     /** The call assistant's message (not a WhatsApp voice note, whose "text" is its length). */
@@ -81,7 +88,7 @@ data class CapturedItem(
     val displayLine: String get() = when (kind) {
         CaptureKind.MISSED_CALL -> "Missed call"
         CaptureKind.MESSAGE -> text.orEmpty()
-        CaptureKind.VOICE_MESSAGE -> if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let {
+        CaptureKind.VOICE_MESSAGE -> if (endedAsScam) CallIntroRules.DISPLAY_SCAM + (summary?.let { " \u00b7 $it" } ?: "") else if (automated) CallNoticeRules.AUTOMATED_LABEL + (text?.let { " \u00b7 \u201c$it\u201d" } ?: "") else text?.let {
             // Call notifications, slice 2: the AI's one-line summary first, then the words.
             "Voice message \u00b7 " + (summary?.let { s -> "$s \u00b7 " } ?: "") + "\u201c$it\u201d"
         } ?: when {
@@ -620,6 +627,17 @@ object HeldMessageFields {
      * words. Absent = no summary (AI off, no words, or before 2026-10-14).
      */
     const val SUMMARY = "summary"
+    /**
+     * What the caller said when the call assistant asked who's calling and what it's about ([CallIntroRules]; Text,
+     * written once by the server, display only, untrusted, ADR-006). Blanked by Done like the words. Absent = not asked
+     * (before 2026-10-17) or nothing said. Added 2026-10-17.
+     */
+    const val INTRO = "intro"
+    /**
+     * How the assistant ended the call when it didn't take a message (Text: [CallIntroRules.ENDED_SCAM] ·
+     * [CallIntroRules.ENDED_NO_MESSAGE]; written once by the server). Absent = a message was taken. Added 2026-10-17.
+     */
+    const val ENDED = "ended"
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
@@ -710,6 +728,8 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             seconds = e[HeldMessageFields.SECONDS].longOrNull?.toInt(),
             urgentBy = e[HeldMessageFields.URGENT_BY].textOrNull,
             summary = e[HeldMessageFields.SUMMARY].textOrNull?.let(CallNoticeRules::cleanSummary),
+            intro = e[HeldMessageFields.INTRO].textOrNull?.let(CallIntroRules::clean),
+            ended = e[HeldMessageFields.ENDED].textOrNull,
         )
     }
 
@@ -738,7 +758,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             replica.commitLocal(
                 EntityTypes.HELD_MESSAGE, e.ref.entityId,
                 mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null,
-                    HeldMessageFields.SUMMARY to FieldValue.Null),
+                    HeldMessageFields.SUMMARY to FieldValue.Null, HeldMessageFields.INTRO to FieldValue.Null),
             )
             n++
         }
