@@ -353,6 +353,10 @@ final class CoreModel {
     var showCalendars = false
     /// Ask → More → Settings → Mail (Inbox autopilot, slice 1): connect Gmail and Outlook, label each account.
     var showMail = false
+    /// Review opens its own list (Meka, 2026-10-17), slice 1: the Empty Junk card's review sheet (who, ticks, Approve).
+    var showJunkReview = false
+    private(set) var junkReview: JunkReview?
+    private(set) var junkReviewCardId: String?
     /// The mail accounts as the server last listed them; nil until read once (or when it couldn't be reached).
     private(set) var mail: MailAccountsView?
     /// The server couldn't be reached the last time Mail asked.
@@ -3130,6 +3134,13 @@ final class CoreModel {
         case .removeDocument(let id): run { _ = try await $0.removeDocument(id: id) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .unapproveBacklog(let id): run { _ = try await $0.unapproveMailBacklog(id: id) }
+        case .junkKeep(let cardId, let key, let keep):
+            Task {
+                guard let core else { return }
+                if let change = try? await core.keepJunkSender(cardId: cardId, key: key, keep: keep), junkReviewCardId == cardId {
+                    junkReview = change.review
+                }
+            }
         case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
         case .later(let move): run { try await $0.undoMoveLater(move: move) }
@@ -4513,6 +4524,42 @@ final class CoreModel {
         }
     }
 
+    /// Review opens its own list, slice 1: reads the Empty Junk card's review and opens its sheet. Only the id crosses.
+    func openJunkReview(_ cardId: String) {
+        guard let core else { return }
+        MekaHaptics.light()
+        junkReviewCardId = cardId
+        Task {
+            junkReview = try? await core.junkReview(cardId: cardId)
+            showJunkReview = true
+        }
+    }
+
+    /// The tick on one sender in the Empty Junk review ([keep] true: their mail stays in Junk), with Undo on the bar.
+    /// Only Strings and a Bool cross to the core; the sheet comes back as the core's value.
+    func keepJunkSender(_ key: String, keep: Bool, title: String) {
+        guard let core, let cardId = junkReviewCardId else { return }
+        MekaHaptics.tick()
+        Task {
+            do {
+                let change = try await core.keepJunkSender(cardId: cardId, key: key, keep: keep)
+                junkReview = change.review
+                if let line = change.line { offerEventUndo("\(line) · \(title)", .junkKeep(cardId, key, !keep)) }
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Approve inside the Empty Junk review: the same synced approval as the card's →, then the sheet closes.
+    func approveJunkReview() {
+        guard let core, let cardId = junkReviewCardId else { return }
+        MekaHaptics.medium()
+        Task {
+            guard let r = try? await core.approveMailBacklog(id: cardId) else { return }
+            showJunkReview = false
+            offerEventUndo(r.line, .unapproveBacklog(cardId))
+        }
+    }
+
     /// Unsubscribe from all on "Not opened in 30 days" (Inbox autopilot, slice 5c): the server unsubscribes from each at its
     /// next check; the offer folds away here and on the Fold, with Undo on the bar. Nothing crosses but the call.
     func unsubscribeUnopened() {
@@ -5068,6 +5115,9 @@ final class CoreModel {
         case .openMail:
             // Review: Mail, where the plan lists what goes where.
             showMail = true
+        case .openReview:
+            // Review opens its own list, slice 1: the card's own sheet (Empty Junk: who, a tick per sender, Approve).
+            openJunkReview(card.id)
         case .setAside:
             MekaHaptics.light()
             withAnimation(MekaMotion.replan(reduced: reduced)) {
@@ -5209,6 +5259,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case unsetAside(String)
         /// Approve on a Needs you clean-up card (inbox fixes, slice 2): withdrawn while nothing has moved.
         case unapproveBacklog(String)
+        /// A tick in the Empty Junk review (card id, sender key, the keep to put back).
+        case junkKeep(String, String, Bool)
         /// Add event (calendar editing): taken back inside the five seconds, so nothing is sent.
         case eventEdit(String)
         /// Plan my day's blocks on their way to the calendar (slice 2e): taken back; the tasks stay planned.

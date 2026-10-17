@@ -68,6 +68,7 @@ import os.meka.core.domain.MailBacklogKind
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailBacklogFields
 import os.meka.core.domain.MailJunkClearRules
+import os.meka.core.domain.MailJunkReviewRules
 import os.meka.backend.integrations.HttpOneClickUnsubscriber
 import os.meka.backend.integrations.OneClickUnsubscriber
 import os.meka.backend.integrations.UnsubscribeMessage
@@ -1371,6 +1372,42 @@ class MailSyncTest {
         now += 60_000
         i.syncAccount(id)
         assertEquals(setOf("fresh", "bank", "j1", "j2", "j3"), gmail.junkBox.keys)
+    }
+
+    @Test
+    fun emptyJunksReviewListsTheSendersAndAKeptSenderStaysInJunk() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        gmail.backlogPages = mapOf(null to MailBacklogPage(next = null))
+        gmail.nextRound = { MailChanges(cursor = "h1") }
+        gmail.junkCountAnswer = 4
+        gmail.junkBox["a1"] = junkMsg("a1", "deals@spam.example", "Hot offer").copy(receivedAtMs = now - 10 * day)
+        gmail.junkBox["a2"] = junkMsg("a2", "more@spam.example", "Hotter offer").copy(receivedAtMs = now - 11 * day)
+        gmail.junkBox["b1"] = junkMsg("b1", "hello@other.example", "Weekly news").copy(receivedAtMs = now - 12 * day)
+        gmail.junkBox["bank"] = junkMsg("bank", "alerts@barclays.co.uk", "Statement").copy(receivedAtMs = now - 20 * day)
+        val id = connect(i)
+        autopilotOn(ops, on = false)
+        i.syncAccount(id)
+        val entityId = MailBacklogRules.entityId(id)
+        val counted = MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!
+        val senders = MailJunkReviewRules.decode(counted.junkSenders)!!
+        val spam = senders.first { it.domain == "spam.example" }
+        assertEquals(2, spam.count)
+        assertEquals(MailTidy.JUNK_TRASH, spam.tidy)
+        assertEquals(listOf("Hot offer", "Hotter offer"), spam.subjects)
+        assertEquals(MailTidy.KEEP, senders.first { it.domain == "barclays.co.uk" }.tidy)
+        // No address in what's synced.
+        assertFalse("deals@" in counted.junkSenders!!)
+        // He takes the tick off spam.example, then approves: only other.example's goes.
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.JUNK_KEEP_SENDERS, FieldValue.Text(spam.key))
+        val review = MailJunkReviewRules.review(MailBacklogRules.read(entityId, backlogs(ops).getValue(entityId))!!)!!
+        assertEquals("Approve · 1 to Trash", review.approveLabel)
+        device(ops, EntityTypes.MAIL_BACKLOG, entityId, MailBacklogFields.JUNK_APPROVED_AT, FieldValue.Int64(now))
+        now += 300_000
+        i.syncAccount(id)
+        assertEquals(mapOf("b1" to MailTidy.JUNK_TRASH), gmail.tidyCalls.single())
+        assertEquals(setOf("a1", "a2", "bank"), gmail.junkBox.keys)
     }
 
     @Test

@@ -197,6 +197,9 @@ object MailJunkClearRules {
     fun countDue(b: MailBacklog?, nowMs: Long): Boolean {
         if (b == null || b.junkApprovedAtMs != null || b.junkFinishedAtMs != null) return false
         val at = b.junkCountedAtMs ?: return true
+        // Review opens its own list, slice 1: a count made before the sender list existed is made again once.
+        // (Not more than every half hour, in case the provider can't list the folder.)
+        if (b.junkFolder > 0 && b.junkSenders == null && nowMs - at >= 30 * 60_000L) return true
         return nowMs - at >= RECOUNT_EVERY_MS
     }
 
@@ -237,7 +240,8 @@ object MailJunkClearRules {
         if (!canApprove(b)) return null
         fun g(v: Int) = SpeechRules.grouped(v.toLong())
         val looked = b.junkLooked
-        val n = if (looked != null && b.junkLookFull) (b.junkFolder - b.junkKeep - b.junkRescue).coerceAtLeast(0) else b.junkFolder
+        val kept = MailJunkReviewRules.keptCount(b)
+        val n = (if (looked != null && b.junkLookFull) (b.junkFolder - b.junkKeep - b.junkRescue).coerceAtLeast(0) else b.junkFolder) - kept
         val atLeast = if (b.junkLookFull) "" else "at least "
         val keep = when {
             looked == null -> "banks, schools and public bodies stay for you to check"
@@ -252,9 +256,10 @@ object MailJunkClearRules {
             else -> "$atLeast${g(b.junkRescue)} from people you know go back to the inbox"
         }
         // Everything older is for him to check (or too new for the clean-out): nothing to approve.
-        if (looked != null && b.junkLookFull && n == 0 && b.junkRescue == 0) return null
+        if (looked != null && b.junkLookFull && n <= 0 && b.junkRescue == 0) return null
         val why = listOfNotNull(
-            if (n == 0) null else "${g(n)} ${if (n == 1) "email" else "emails"} your provider called spam → Trash, recoverable for 30 days",
+            if (n <= 0) null else "${g(n)} ${if (n == 1) "email" else "emails"} your provider called spam → Trash, recoverable for 30 days",
+            kept.takeIf { it > 0 }?.let { "${g(it)} kept in Junk" },
             keep,
             rescue,
             "nothing moves until you approve",
@@ -262,7 +267,7 @@ object MailJunkClearRules {
         return DecisionCard(
             id = cardId(b.id), kind = DecisionKind.MAIL_CLEANUP, title = "Empty Junk · ${b.account}", why = why, taskId = null,
             yesLabel = CARD_YES, laterLabel = CARD_LATER, openLabel = CARD_OPEN,
-            yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_MAIL,
+            yes = DecisionEffect.APPROVE_BACKLOG, later = DecisionEffect.SET_ASIDE, open = DecisionEffect.OPEN_REVIEW,
             urgent = false,
         )
     }

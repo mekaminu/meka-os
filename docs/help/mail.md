@@ -30,3 +30,4 @@ tip: To have renewals and promises from your mail added for you, turn on Renewal
 tip: Fifteen minutes before a meeting with other people, Today shows Prep: who is coming, the last email from each of them and what you promised them or are waiting on from them; a heads-up says the same.
 tip: Prep also says when you last met each of them ("Last met Tue 6 Oct"); choose how early it comes (5, 10, 15 or 30 minutes) or turn it off under Meeting prep in Mail.
 tip: Prep finds each guest's last email in your connected mailboxes themselves (the last 60 days), not only the emails Navilife has already shown you.
+tip: On an "Empty Junk" card in Needs you, Review lists who the emails going to Trash are from; take the tick off a sender to keep their mail in Junk, then Approve there.

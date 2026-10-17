@@ -119,6 +119,7 @@ fun NeedsYouRoute(core: MekaCore, openLists: () -> Unit = {}) {
             MekaPane(visible = showAfterWork) { AfterWorkHost(onClose = { showAfterWork = false }) }
             RequestChangePane(core, moves)
             ArchivedAllHost(core, moves)
+            JunkReviewHost(core, moves)
             EventUndoBar(undo, Modifier.align(Alignment.BottomCenter))
         }
       }
@@ -160,6 +161,8 @@ internal class DecisionMoves(
     val openTask: (String) -> Unit = {},
     /** "Archived for you" shows which emails, slice 3: All tidied mail open over the screen ([ArchivedAllHost]). */
     val archivedAll: MutableState<Boolean> = mutableStateOf(false),
+    /** Review opens its own list, slice 1: the Empty Junk card whose review is open over the screen ([JunkReviewHost]). */
+    val junkReview: MutableState<String?> = mutableStateOf(null),
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -174,6 +177,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
     val scope = rememberCoroutineScope()
     val aside = remember { mutableStateOf(listOf<String>()) }
     val changed = remember { mutableStateOf<RequestChange?>(null) }
+    val junkReview = remember { mutableStateOf<String?>(null) }
     val latestOpenTask by rememberUpdatedState(openTask)
     val latestOpenLists by rememberUpdatedState(openLists)
     val context = LocalContext.current.applicationContext
@@ -207,6 +211,8 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     app.openMail.value = true
                     app.openDestination.value = os.meka.android.shell.ShellDestination.ASK
                 }
+                // Review opens its own list, slice 1: the card's own sheet (Empty Junk: who, ticks, Approve).
+                DecisionEffect.OPEN_REVIEW -> { junkReview.value = card.id }
                 DecisionEffect.SET_ASIDE -> {
                     aside.value = aside.value - card.id + card.id
                     undo.show(NeedsYouStackRules.message(card, move)) { aside.value = aside.value - card.id }
@@ -333,7 +339,7 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     ?.let { done -> undo.show(done.line) { core.undoSchoolCover(done) } }
                 Unit
             }
-        }, openTask = { latestOpenTask(it) })
+        }, openTask = { latestOpenTask(it) }, junkReview = junkReview)
     }
 }
 

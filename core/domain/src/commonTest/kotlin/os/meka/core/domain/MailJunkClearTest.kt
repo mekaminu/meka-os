@@ -97,7 +97,7 @@ class MailJunkClearTest {
     fun theFolderIsCountedAgainNowAndThen() {
         assertFalse(MailJunkClearRules.countDue(null, now))
         assertTrue(MailJunkClearRules.countDue(plan(), now))
-        val counted = plan(MailJunkClearRules.countFields(5, now))
+        val counted = plan(MailJunkClearRules.countFields(5, now) + MailJunkReviewRules.fields(emptyList()))
         assertFalse(MailJunkClearRules.countDue(counted, now + MailJunkClearRules.RECOUNT_EVERY_MS - 1))
         assertTrue(MailJunkClearRules.countDue(counted, now + MailJunkClearRules.RECOUNT_EVERY_MS))
         // An empty Junk shows no card.

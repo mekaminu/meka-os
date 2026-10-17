@@ -96,6 +96,14 @@ object MailBacklogFields {
     const val JUNK_LOOK_FULL = "junkLookFull"
 
     /**
+     * Review opens its own list, slice 1 ([MailJunkReviewRules]): who the looked-at Junk is from, grouped by sender (the
+     * server writes it with the count; a key per sender, never an address), and the senders Meka took the tick off so
+     * their mail stays in Junk (comma-separated keys; the apps write it, the server never trashes them).
+     */
+    const val JUNK_SENDERS = "junkSenders"
+    const val JUNK_KEEP_SENDERS = "junkKeepSenders"
+
+    /**
      * Inbox fixes, slice 7 (Today's unread line, [MailUnreadRules]): the inbox's unread count as the provider gives it,
      * how many of those unread ones Navilife's rules would tidy (newsletters, promos, notifications, receipts), and when
      * they were counted. Counts only.
@@ -150,6 +158,9 @@ data class MailBacklog(
     val junkRescue: Int = 0,
     val junkLooked: Int? = null,
     val junkLookFull: Boolean = false,
+    /** Review opens its own list, slice 1: the looked-at Junk by sender (encoded, [MailJunkReviewRules.decode]) and his kept senders. */
+    val junkSenders: String? = null,
+    val junkKeepSenders: Set<String> = emptySet(),
     /** Inbox fixes, slice 7: the inbox's unread count, the unread ones Navilife can tidy, and when ([MailUnreadRules]). */
     val inboxUnread: Int? = null,
     val tidyUnread: Int = 0,
@@ -345,6 +356,8 @@ object MailBacklogRules {
             junkRescue = long(MailBacklogFields.JUNK_RESCUE)?.toInt()?.coerceAtLeast(0) ?: 0,
             junkLooked = long(MailBacklogFields.JUNK_LOOKED)?.toInt()?.takeIf { it >= 0 },
             junkLookFull = (f[MailBacklogFields.JUNK_LOOK_FULL] as? FieldValue.Bool)?.value == true,
+            junkSenders = text(MailBacklogFields.JUNK_SENDERS),
+            junkKeepSenders = MailJunkReviewRules.decodeKept(text(MailBacklogFields.JUNK_KEEP_SENDERS)),
             inboxUnread = long(MailBacklogFields.INBOX_UNREAD)?.toInt()?.takeIf { it >= 0 },
             tidyUnread = long(MailBacklogFields.TIDY_UNREAD)?.toInt()?.coerceAtLeast(0) ?: 0,
             unreadCountedAtMs = long(MailBacklogFields.UNREAD_COUNTED_AT)?.takeIf { it > 0 },

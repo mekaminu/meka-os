@@ -47,6 +47,7 @@ import os.meka.core.domain.MailUnreadRules
 import os.meka.core.domain.MailMarkReadRules
 import os.meka.core.domain.MailJunkFacts
 import os.meka.core.domain.MailJunkRules
+import os.meka.core.domain.MailJunkReviewRules
 import os.meka.core.domain.MailTidyBatchFields
 import os.meka.core.domain.MailSort
 import os.meka.core.domain.MailSender
@@ -1549,6 +1550,7 @@ class Integrations(
         val known = ms.inboxSorted(a.id)
             .filter { (h, s) -> h.inInbox && (s.sort == MailSort.NEEDS_YOU || s.sort == MailSort.FYI) }
             .mapNotNull { it.first.fromAddress?.lowercase() }.toSet()
+        val keptSenders = junkKeptSenders(a)
         val plan = junk.mapNotNull { h ->
             val t = MailJunkRules.tidyOf(MailJunkRules.verdict(MailJunkFacts(
                 h.fromAddress, h.fromName, h.subject, keep,
@@ -1557,7 +1559,8 @@ class Integrations(
                 // Inbox fixes, slice 3: Junk older than two days goes to Trash.
                 receivedAtMs = h.receivedAtMs, nowMs = nowMs,
             )))
-            if (t == MailTidy.KEEP) null else h to t
+            // Review opens its own list, slice 1: a sender he kept in Junk is never trashed.
+            if (t == MailTidy.KEEP || MailJunkReviewRules.keptInJunk(keptSenders, h.fromAddress, h.fromName, t)) null else h to t
         }.take(MailJunkRules.MAX_PER_REVIEW)
         junkReviewedAt[a.id] = nowMs
         if (plan.isEmpty()) return
@@ -1648,7 +1651,13 @@ class Integrations(
      * Where each of [junk] would go by [MailJunkRules.verdict] (KEEP: stays for him to check). Reads which threads he
      * wrote in once; the people he knows are his keep list and the senders the sort calls his.
      */
-    private fun junkTidies(a: AccountRow, m: MailProvider, token: String, ms: MailStore, junk: List<MailHeader>, nowMs: Long): List<Pair<MailHeader, MailTidy>> {
+    private fun junkTidies(a: AccountRow, m: MailProvider, token: String, ms: MailStore, junk: List<MailHeader>, nowMs: Long): List<Pair<MailHeader, MailTidy>> =
+        junkJudged(a, m, token, ms, junk, nowMs).map { (h, t, _) -> h to t }
+
+    /** [junkTidies] with, for a rescue, why ([MailJunkReviewRules.rescueWhy]); a sender Meka kept in Junk is never trashed. */
+    private fun junkJudged(
+        a: AccountRow, m: MailProvider, token: String, ms: MailStore, junk: List<MailHeader>, nowMs: Long, honourKept: Boolean = true,
+    ): List<Triple<MailHeader, MailTidy, String?>> {
         if (junk.isEmpty()) return emptyList()
         val oldest = junk.minOf { it.receivedAtMs }
         val replied = m.repliedThreads(token, oldest - MAIL_WINDOW_MS)
@@ -1656,14 +1665,24 @@ class Integrations(
         val known = ms.inboxSorted(a.id)
             .filter { (h, s) -> h.inInbox && (s.sort == MailSort.NEEDS_YOU || s.sort == MailSort.FYI) }
             .mapNotNull { it.first.fromAddress?.lowercase() }.toSet()
+        val kept = if (honourKept) junkKeptSenders(a) else emptySet()
         return junk.map { h ->
-            h to MailJunkRules.tidyOf(MailJunkRules.verdict(MailJunkFacts(
+            val facts = MailJunkFacts(
                 h.fromAddress, h.fromName, h.subject, keep,
                 replied = h.threadId?.let { it in replied } == true,
                 knownSender = h.fromAddress?.lowercase()?.let { it in known } == true,
                 receivedAtMs = h.receivedAtMs, nowMs = nowMs,
-            )))
+            )
+            val t = MailJunkRules.tidyOf(MailJunkRules.verdict(facts))
+            val tidy = if (MailJunkReviewRules.keptInJunk(kept, h.fromAddress, h.fromName, t)) MailTidy.KEEP else t
+            Triple(h, tidy, if (tidy == MailTidy.RESCUE) MailJunkReviewRules.rescueWhy(facts) else null)
         }
+    }
+
+    /** Review opens its own list, slice 1: the senders Meka took the tick off in the Empty Junk review (their mail stays in Junk). */
+    private fun junkKeptSenders(a: AccountRow): Set<String> {
+        val entityId = MailBacklogRules.entityId(a.id)
+        return reader.entity(a.householdId, EntityTypes.MAIL_BACKLOG, entityId)?.let { MailBacklogRules.read(entityId, it) }?.junkKeepSenders ?: emptySet()
     }
 
     /**
@@ -1687,7 +1706,12 @@ class Integrations(
             before = fresh.minOf { it.receivedAtMs }
         }
         val junk = seen.values.filter { it.id !in never }
-        return MailJunkClearRules.lookFields(junkTidies(a, m, token, ms, junk, nowMs).map { it.second }, full)
+        // Review opens its own list, slice 1: who they're from, grouped by sender, for the card's Review sheet. The kept
+        // senders' mail is listed where the rules would send it, so the sheet shows their tick off (the clean-out leaves it).
+        val looked = junkJudged(a, m, token, ms, junk, nowMs, honourKept = false).map { (h, t, why) ->
+            MailJunkReviewRules.Looked(h.fromAddress, h.fromName, h.subject, h.receivedAtMs, t, why)
+        }
+        return MailJunkClearRules.lookFields(looked.map { it.tidy }, full) + MailJunkReviewRules.fields(MailJunkReviewRules.group(looked))
     }
 
     /**

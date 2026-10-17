@@ -364,5 +364,9 @@ private struct ShellSheetsD: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showMail }, set: { model.showMail = $0 })) {
                 MailSheet(palette: palette)
             }
+            // Review opens its own list, slice 1: the Empty Junk card's review (who, a tick per sender, Approve).
+            .sheet(isPresented: Binding(get: { model.showJunkReview }, set: { model.showJunkReview = $0 })) {
+                JunkReviewSheet(palette: palette)
+            }
     }
 }

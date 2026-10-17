@@ -464,6 +464,8 @@ fun TodayRoute(
             RequestChangePane(core, moves)
             // "Archived for you" shows which emails, slice 3: All tidied mail from the card in that column.
             ArchivedAllHost(core, moves)
+            // Review opens its own list, slice 1: the Empty Junk review from the card in that column.
+            JunkReviewHost(core, moves)
             EventUndoBar(eventUndo, Modifier.align(Alignment.BottomCenter))
         }
       }

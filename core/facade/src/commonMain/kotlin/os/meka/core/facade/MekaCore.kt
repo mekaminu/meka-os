@@ -5890,6 +5890,23 @@ class MekaCore(
         return MailSwitched(line, lastMailFacts?.let { mailView(it) })
     }
 
+    /**
+     * Review opens its own list (Meka, 2026-10-17), slice 1: ↑ Review on an Empty Junk card opens this sheet — who the
+     * emails going to Trash are from, grouped by sender with a couple of subjects and a scam chip, the rescues first
+     * (who and why), a tick per sender and Approve inside. Null when the card has nothing left to approve.
+     */
+    suspend fun junkReview(cardId: String): os.meka.core.domain.JunkReview? = onCore { activity.junkReview(cardId) }
+
+    /**
+     * Slice 1: the tick on a sender in the Empty Junk review ([keep] true: their mail stays in Junk). Synced; returns the
+     * bar's line and the sheet as it is now (null line: nothing changed, e.g. the clean-out already started).
+     */
+    suspend fun keepJunkSender(cardId: String, key: String, keep: Boolean): JunkReviewChange = onCore {
+        val line = activity.keepJunkSender(cardId, key, keep)
+        if (line != null) refresh()
+        JunkReviewChange(line, activity.junkReview(cardId))
+    }
+
     /** Slice 8b: Cancel after Approve (only while nothing has moved). Returns Mail's line and the pane. */
     suspend fun unapproveMailBacklog(id: String): MailSwitched {
         val undone = onCore { activity.unapproveBacklog(id).also { if (it) refresh() } }
@@ -8132,3 +8149,6 @@ internal class ZoneCalendar(private val timeZone: () -> TimeZone) : LocalCalenda
  * ([view], null when this device hasn't listed the accounts yet: the pane reads them again).
  */
 data class MailSwitched(val line: String, val view: os.meka.core.domain.MailAccountsView?)
+
+/** Review opens its own list, slice 1: what a tick in the Empty Junk review said ([line] null: nothing changed) and the sheet now. */
+data class JunkReviewChange(val line: String?, val review: os.meka.core.domain.JunkReview?)

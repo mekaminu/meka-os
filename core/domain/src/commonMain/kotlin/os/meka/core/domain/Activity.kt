@@ -672,6 +672,28 @@ class ActivityLog(
         return true
     }
 
+    /** Review opens its own list, slice 1: the Empty Junk card's review sheet ([cardId] the card's id); null when there's nothing to approve. */
+    fun junkReview(cardId: String): JunkReview? {
+        if (!MailJunkClearRules.isCard(cardId)) return null
+        val entity = MailJunkClearRules.backlogIdOf(cardId)
+        return mailBacklogs().firstOrNull { it.id == entity }?.let { MailJunkReviewRules.review(it) }
+    }
+
+    /**
+     * Review opens its own list, slice 1: the tick on one sender in the Empty Junk review. [keep] true takes it off (their
+     * mail stays in Junk; the server never trashes it), false puts it back. Synced; the bar's line, or null when nothing
+     * was written (the clean-out already started, or an unknown card).
+     */
+    fun keepJunkSender(cardId: String, key: String, keep: Boolean): String? {
+        if (!MailJunkClearRules.isCard(cardId)) return null
+        val entity = MailJunkClearRules.backlogIdOf(cardId)
+        val b = mailBacklogs().firstOrNull { it.id == entity } ?: return null
+        if (b.junkApprovedAtMs != null || b.junkFinishedAtMs != null) return null
+        if ((key in b.junkKeepSenders) == keep) return if (keep) MailJunkReviewRules.KEPT_BAR else MailJunkReviewRules.UNKEPT_BAR
+        replica.commitLocal(EntityTypes.MAIL_BACKLOG, entity, MailJunkReviewRules.keptFields(b.junkKeepSenders, key, keep))
+        return if (keep) MailJunkReviewRules.KEPT_BAR else MailJunkReviewRules.UNKEPT_BAR
+    }
+
     private fun calendarEdits(): List<ActivityItem> {
         val now = nowMs()
         return replica.entities(EntityTypes.EVENT_EDIT)

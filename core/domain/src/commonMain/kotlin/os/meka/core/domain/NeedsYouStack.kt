@@ -14,6 +14,7 @@ package os.meka.core.domain
  * | From your lists (chases, reviews, renewals due) | Go through (opens Lists) | Later | Open Lists |
  * | The call assistant's credit low or paused ([CallCreditRules.card]) | Top up (opens the billing page) | Later | Open Twilio |
  * | An account's backlog clean-up ready ([MailBacklogRules.cards]) | Approve (synced; Undo while nothing moved) | Later | Review (Mail) |
+ * | An account's Empty Junk ([MailJunkClearRules.card]) | Approve | Later | Review (its own sheet: who, per-sender ticks, Approve) |
  *
  * "Later" on a card that can't be snoozed only sets it aside for this screen ([NeedsYouStackRules.ordered]); nothing is
  * written. Done and Tomorrow are ordinary task edits (synced, undoable from the undo bar).
@@ -27,7 +28,12 @@ enum class DecisionEffect { COMPLETE_TASK, SNOOZE_TASK, OPEN_TASK, OPEN_LISTS, S
     /** Inbox fixes, slice 2: approves the backlog clean-up whose `mail_backlog` id is the card's id. */
     APPROVE_BACKLOG,
     /** Inbox fixes, slice 2: opens Mail (Ask → Settings → Mail). */
-    OPEN_MAIL }
+    OPEN_MAIL,
+    /**
+     * Review opens its own list (Meka, 2026-10-17): opens the card's own review sheet — what would move, grouped by
+     * sender, with a tick per sender and Approve inside ([MailJunkReviewRules.review] for Empty Junk).
+     */
+    OPEN_REVIEW }
 
 enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT, MAIL_CLEANUP }
 
@@ -176,7 +182,7 @@ object NeedsYouStackRules {
         DecisionEffect.SNOOZE_TASK -> "Tomorrow · ${card.title}"
         DecisionEffect.SET_ASIDE -> "Set aside for later"
         DecisionEffect.APPROVE_BACKLOG -> MailBacklogRules.APPROVED_BAR
-        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK, DecisionEffect.OPEN_MAIL -> card.title
+        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK, DecisionEffect.OPEN_MAIL, DecisionEffect.OPEN_REVIEW -> card.title
     }
 
     /** The hint under the top card: "→ Done · ← Tomorrow · ↑ Open". */
