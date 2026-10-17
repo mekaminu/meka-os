@@ -231,6 +231,20 @@ object AutonomyRules {
         )
     }
 
+    /**
+     * "The mic should just add it", slice 1: "Add what you ask for" leads Your lists ([DirectAddRules.row]) — on unless
+     * Meka chose Ask first. The summary is unchanged: adding what he asked for isn't Navilife acting on its own.
+     */
+    fun view(
+        states: Map<TrustKind, TrustState>, setting: AutonomySetting, cal: LocalCalendar, nowMs: Long,
+        mail: MailAutopilotSetting, mailFinds: Boolean, direct: DirectAddSetting,
+    ): AutonomyView {
+        val v = view(states, setting, cal, nowMs, mail, mailFinds)
+        return v.copy(sections = v.sections.map { s ->
+            if (s.label == LISTS_LABEL) s.copy(rows = listOf(DirectAddRules.row(direct, setting.paused)) + s.rows) else s
+        })
+    }
+
     /** The undo bar's line after Pause / Resume. */
     fun pausedLine(paused: Boolean): String =
         if (paused) "Paused · Navilife asks before everything" else "Resumed · Navilife does what you've trusted it with again"

@@ -3934,6 +3934,13 @@ class MekaCore(
             refresh()
             return@onCore os.meka.core.domain.MailFindAutoRules.switchedLine(on)
         }
+        // "The mic should just add it", slice 1: "Add what you ask for" — Ask first / Just add it.
+        if (kindKey == os.meka.core.domain.DirectAddRules.ENTITY_ID) {
+            val askFirst = !directAddSetting().askFirst
+            replica.commitLocal(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.DirectAddRules.ENTITY_ID, os.meka.core.domain.DirectAddRules.fields(askFirst))
+            refresh()
+            return@onCore os.meka.core.domain.DirectAddRules.switchedLine(askFirst)
+        }
         val kind = os.meka.core.domain.TrustKind.of(kindKey) ?: return@onCore null
         val before = trust.reset(kind) ?: return@onCore null
         os.meka.core.domain.AutonomyRules.resetLine(kind, before)
@@ -5883,6 +5890,56 @@ class MekaCore(
     )
 
     /** Mail finds, slice 3: "Renewals and promises from mail" in What Navilife may do (synced; absent = off). */
+    /** "The mic should just add it", slice 1: whether his adds run at once (absent = yes) or wait as a card. */
+    private fun directAddSetting(): os.meka.core.domain.DirectAddSetting = os.meka.core.domain.DirectAddRules.read(
+        replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.DirectAddRules.ENTITY_ID)?.fields,
+    )
+
+    /**
+     * ADR-006 addendum 2026-10-17: his own words asking to add are his request, executed under the rule [directAddSetting]
+     * keeps (provenance USER, reversible, CREATE_TASK in TASKS); the kill switch holds it at a card like everything else.
+     */
+    private fun directAddAllowed(p: os.meka.core.domain.AskProposal): Boolean {
+        if (directAddSetting().askFirst) return false
+        val (type, domain) = askAction(p)
+        val rule = os.meka.core.domain.DirectAddRules.RULE_ID
+        val config = PolicyConfig(
+            levels = mapOf((domain to type) to AutonomyLevel.AUTO_UNDER_RULE), autoRules = mapOf(rule to type),
+            killSwitch = autonomy.paused(),
+        )
+        val decision = PolicyEngine(config).decide(
+            ActionRequest(type, domain, provenance = Provenance.USER, reversible = true, requestedLevel = AutonomyLevel.AUTO_UNDER_RULE, ruleId = rule),
+        )
+        return decision is PolicyDecision.Permit
+    }
+
+    /**
+     * "The mic should just add it", slice 1: [q] (typed in Ask or said to Talk) plainly asks to add a task or shopping
+     * ([os.meka.core.domain.DirectAddRules.request]): it is added now, no AI and no card, shown with Undo and kept in
+     * Activity; with Ask first (or paused) it is the card he taps. Null for anything else.
+     */
+    private suspend fun directAdd(q: String): os.meka.core.domain.AskOutcome? {
+        val add = os.meka.core.domain.DirectAddRules.request(q) ?: return null
+        return onCore {
+            val cal = ZoneCalendar(timeZone)
+            val today = cal.epochDayOf(nowMs())
+            val p = os.meka.core.domain.DirectAddRules.proposal(add, today, cal.minuteOfDay(nowMs())) ?: return@onCore null
+            val card = os.meka.core.domain.AskRules.cardOf(p, today)
+            if (!directAddAllowed(p)) return@onCore os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer("", listOf(card)))
+            val line = os.meka.core.domain.DirectAddRules.doneLine(p, today)
+            val id = try {
+                activity.actRecorded(
+                    line, os.meka.core.domain.DirectAddRules.WHY, os.meka.core.domain.DirectAddRules.SOURCE,
+                    AutonomyLevel.AUTO_UNDER_RULE.name, detail = os.meka.core.domain.DirectAddRules.DETAIL,
+                ) { performAsk(card) }.second
+            } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+            if (id == null) return@onCore os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer("", listOf(card)))
+            activityChanged()
+            refresh()
+            os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer("", emptyList(), did = listOf(os.meka.core.domain.AskAutoDone(p, line, id))))
+        }
+    }
+
     private fun mailFindsAutoOn(): Boolean = os.meka.core.domain.MailFindAutoRules.read(
         replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailFindAutoRules.ENTITY_ID)?.fields,
     )
@@ -6531,6 +6588,8 @@ class MekaCore(
     ): os.meka.core.domain.AskOutcome {
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
+        // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
+        if (!beyondHelp) directAdd(q)?.let { return it }
         val cal = ZoneCalendar(timeZone)
         // A question about notifications carries the phone's trace; without the AI the device answers from it itself.
         val notifyAsked = os.meka.core.domain.NotifyAskRules.isAbout(q)
@@ -7909,7 +7968,7 @@ class MekaCore(
         _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
-        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn())
+        _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting())
         _lists.value = listsNow
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()

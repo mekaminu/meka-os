@@ -70,7 +70,7 @@ class AutonomyFacadeTest {
 
         // Paused: the card waits for a tap.
         addTask("Milk")
-        val paused = assertIs<AskOutcome.Answered>(fold.askMeka("add milk")).answer
+        val paused = assertIs<AskOutcome.Answered>(fold.askMeka("milk?")).answer
         assertEquals(1, paused.cards.size)
         assertTrue(paused.did.isEmpty())
 
@@ -83,7 +83,7 @@ class AutonomyFacadeTest {
 
         // Resumed: trust was kept, so MEKA just does it again.
         addTask("Bread")
-        val resumed = assertIs<AskOutcome.Answered>(fold.askMeka("add bread")).answer
+        val resumed = assertIs<AskOutcome.Answered>(fold.askMeka("bread?")).answer
         assertTrue(resumed.cards.isEmpty())
         assertEquals("Added “Bread” · done for you", resumed.did.single().line)
     }
@@ -106,7 +106,7 @@ class AutonomyFacadeTest {
         assertEquals(AutonomyRules.NONE_LINE, c.autonomyView.value.summary)
 
         addTask("Milk")
-        val answer = assertIs<AskOutcome.Answered>(c.askMeka("add milk")).answer
+        val answer = assertIs<AskOutcome.Answered>(c.askMeka("milk?")).answer
         assertEquals(1, answer.cards.size)
         assertTrue(answer.did.isEmpty())
     }

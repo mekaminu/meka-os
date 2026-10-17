@@ -54,7 +54,7 @@ class EarnedTrustFacadeTest {
         val c = core()
         repeat(TrustRules.STREAK) { i ->
             addTask("Task $i")
-            val card = assertIs<AskOutcome.Answered>(c.askMeka("add task $i")).answer.cards.single()
+            val card = assertIs<AskOutcome.Answered>(c.askMeka("task $i?")).answer.cards.single()
             val done = c.doAsk(card)
             if (i < TrustRules.STREAK - 1) assertNull(done.offer) else {
                 val offer = assertNotNull(done.offer)
@@ -63,7 +63,7 @@ class EarnedTrustFacadeTest {
             }
         }
         addTask("Milk")
-        val answer = assertIs<AskOutcome.Answered>(c.askMeka("add milk")).answer
+        val answer = assertIs<AskOutcome.Answered>(c.askMeka("milk?")).answer
         assertTrue(answer.cards.isEmpty())
         val did = answer.did.single()
         assertEquals("Added “Milk” · done for you", did.line)
@@ -76,7 +76,7 @@ class EarnedTrustFacadeTest {
         assertTrue("Milk" !in c.titles())
         // Back to asking first.
         addTask("Bread")
-        val again = assertIs<AskOutcome.Answered>(c.askMeka("add bread")).answer
+        val again = assertIs<AskOutcome.Answered>(c.askMeka("bread?")).answer
         assertEquals(listOf("Add “Bread”"), again.cards.map { it.line })
         assertTrue(again.did.isEmpty())
     }
@@ -88,7 +88,7 @@ class EarnedTrustFacadeTest {
         // A saved link's title is someone else's words: the question is untrusted, so the card waits for a tap.
         c.addToQueue("https://www.bbc.co.uk/news/uk-123", "Why trains run late")
         addTask("Milk")
-        val answer = assertIs<AskOutcome.Answered>(c.askMeka("add milk")).answer
+        val answer = assertIs<AskOutcome.Answered>(c.askMeka("milk?")).answer
         assertTrue(server.asked.last().untrusted)
         assertEquals(1, answer.cards.size)
         assertTrue(answer.did.isEmpty())
