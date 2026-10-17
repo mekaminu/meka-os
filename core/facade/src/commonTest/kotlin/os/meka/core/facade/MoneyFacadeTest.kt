@@ -388,7 +388,7 @@ class MoneyFacadeTest {
         fold.syncNow(); mac.syncNow()
         mac.openMoney()
         assertEquals("Jordan paid £80 for Big shop · counted in who paid what", mac.moneySharedAdd("Big shop £80").line)
-        assertEquals("You owe Jordan £10", mac.moneyView.value.shared!!.balanceLine)
+        assertEquals("Jordan owes you £10", mac.moneyView.value.shared!!.balanceLine)
         mac.moneySharedShare("60")
         assertEquals("You owe Jordan £8", mac.moneyView.value.shared!!.balanceLine)
         val settle = mac.moneySharedSettle()
