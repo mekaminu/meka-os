@@ -718,7 +718,7 @@ struct MoneySheet: View {
             if let m = tr.moreLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             Text(tr.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.top, MekaSpace.s)
+        .padding(.top, MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.summary)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tr.coins.count)
     }

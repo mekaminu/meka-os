@@ -626,7 +626,7 @@ private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> 
 @Composable
 private fun TradesBlock(tr: TradingTradesView) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.s), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text(tr.head, style = MekaType.caption, color = Meka.colors.textTertiary)
         tr.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
         tr.summary?.let { s ->
