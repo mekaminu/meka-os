@@ -383,6 +383,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
             }
+            // Slice 18: the year in review — last year, open, in January; this year so far, folded, after (this month only).
+            v.year?.let { yv ->
+                item(key = "year-head") {
+                    Text(yv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "year") { YearBlock(yv, Modifier.animateItem().appear(rememberAppearance(4)), onToggle = { haptics.tick() }) }
+            }
             // Slice 5: refunds on Waiting for, checked against his statements (this month only).
             v.refunds?.let { rf ->
                 item(key = "refunds-head") {
@@ -1136,6 +1144,48 @@ private fun TravelBlock(tv: os.meka.core.domain.MoneyTravelView, modifier: Modif
             }
         }
         Text(tv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Slice 18: the year in review — the folded line with Open/Fold (open by itself for January's finished year), then what
+ * was spent and came in, what was left over (brass when more went out), against the year before, each category with its
+ * share as a bar (brass when well up on the year before), the busiest and quietest months and the biggest payment. Unfolds
+ * on the expand spring; the bars grow on appear (reduced motion: cross-fades, bars shown at once).
+ */
+@Composable
+private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier, onToggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    var open by rememberSaveable(yv.year, yv.unfolded) { mutableStateOf(yv.unfolded) }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth().minTouch().clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button) { open = !open; onToggle() }
+            .semantics(mergeDescendants = true) { contentDescription = if (open) "${yv.spoken}. Fold" else "${yv.folded}. Open" },
+            verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(if (open) yv.title else yv.folded, animationSpec = MekaMotion.appear(reduced), label = "money-year-title",
+                modifier = Modifier.weight(1f)) { l ->
+                Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
+            }
+            Text(if (open) "Fold" else "Open", style = MekaType.body, color = Meka.colors.accent)
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = open,
+            enter = if (reduced) androidx.compose.animation.fadeIn(MekaMotion.appear(true))
+                else androidx.compose.animation.expandVertically(MekaMotion.expand(false)) + androidx.compose.animation.fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) androidx.compose.animation.fadeOut(MekaMotion.appear(true))
+                else androidx.compose.animation.shrinkVertically(MekaMotion.expand(false)) + androidx.compose.animation.fadeOut(MekaMotion.appear(false)),
+        ) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                yv.leftLine?.let { Text(it, style = MekaType.body, color = if (yv.leftLit) Meka.colors.accent else Meka.colors.textSecondary) }
+                yv.vsLine?.let { Text(it, style = MekaType.caption, color = if (yv.vsLit) Meka.colors.accent else Meka.colors.textSecondary) }
+                yv.categories.forEach { c ->
+                    CategoryRow(MoneyCategoryRow(c.key, c.label, c.amount, c.share, c.line, c.lit, c.spoken), Modifier)
+                }
+                yv.monthsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                yv.biggest?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                Text(yv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
     }
 }
 

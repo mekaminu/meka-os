@@ -822,6 +822,13 @@ class MekaCore(
      * Money manager (17): whether this device is outside UK time now (its time zone's offset isn't London's), for
      * PAYING ABROAD's banner. A zone the system can't name counts as home.
      */
+    private fun moneyYearReady(): Int? {
+        val today = todayEpochDay()
+        if (os.meka.core.domain.CivilDate.fromEpochDay(today).month != 1) return null
+        val ids = money.accounts().map { it.id }.toSet()
+        return os.meka.core.domain.MoneyYear.readyYear(money.txns().asSequence().filter { it.account in ids }.map { it.day }.asIterable(), today)
+    }
+
     private fun moneyAbroadNow(): Boolean = runCatching {
         val now = Instant.fromEpochMilliseconds(nowMs())
         timeZone().offsetAt(now) != TimeZone.of(MONEY_HOME_ZONE).offsetAt(now)
@@ -8545,6 +8552,8 @@ class MekaCore(
             cards = money.cards(),
             // Trading tracker, slice 3: near liquidation (even in quiet hours) and a drop from the month's high.
             trading = trading.wallets(), tradingAlerts = tradingAlertSetting(),
+            // Money manager, slice 18: on 2 January, last year's review is ready (read only in January).
+            moneyYear = moneyYearReady(),
         )
 
     /**

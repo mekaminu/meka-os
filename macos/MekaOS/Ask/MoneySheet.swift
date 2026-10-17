@@ -52,6 +52,8 @@ struct MoneySheet: View {
     @State private var tradingText = ""
     @State private var exporting = false
     @State private var worthBalances: [String: String] = [:]
+    /// Slice 18: the year in review opened or folded by him, per year (else January's finished year opens by itself).
+    @State private var yearOpen: [Int32: Bool] = [:]
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -134,6 +136,7 @@ struct MoneySheet: View {
             if let p = v.payday { payday(p).transition(.opacity) }
             if let c = v.cards, !(c.rows.isEmpty && c.offers.isEmpty) { cards(c).transition(.opacity) }
             if let tv = v.travel { travel(tv).transition(.opacity) }
+            if let yv = v.year { year(yv).transition(.opacity) }
             if let r = v.refunds {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -394,6 +397,57 @@ struct MoneySheet: View {
             Text(tv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tv.rows.count)
+    }
+
+    /// Slice 18: the year in review — the folded line with Open/Fold (January's finished year opens by itself), then
+    /// what was spent and came in, left over, against the year before, each category with its bar, the busiest and
+    /// quietest months and the biggest payment. Unfolds on the expand spring.
+    private func year(_ yv: MoneyYearView) -> some View {
+        let open = yearOpen[yv.year] ?? yv.unfolded
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(yv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            Button {
+                let y = yv.year
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { yearOpen[y] = !open }
+            } label: {
+                HStack {
+                    Text(open ? yv.title : yv.folded).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        .contentTransition(.opacity).fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Text(open ? "Fold" : "Open").font(MekaType.body).foregroundStyle(palette.accent)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(open ? yv.spoken : yv.folded)
+            if open {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    if let l = yv.leftLine {
+                        Text(l).font(MekaType.body).foregroundStyle(yv.leftLit ? palette.accent : palette.textSecondary)
+                    }
+                    if let vs = yv.vsLine {
+                        Text(vs).font(MekaType.caption).foregroundStyle(yv.vsLit ? palette.accent : palette.textSecondary)
+                    }
+                    ForEach(yv.categories, id: \.key) { c in
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            HStack {
+                                Text(c.label).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                Spacer()
+                                Text(c.amount).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            }
+                            MoneyBar(share: Double(c.share), lit: c.lit, palette: palette, reduced: reduceMotion)
+                            Text(c.line).font(MekaType.caption).foregroundStyle(c.lit ? palette.accent : palette.textSecondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(c.spoken)
+                    }
+                    if let ml = yv.monthsLine { Text(ml).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    if let b = yv.biggest { Text(b).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    Text(yv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
     }
 
     /// Slice 15: one allowance or cap — its title and amount, a bar to its share (brass from 90%), what's left and Remove.

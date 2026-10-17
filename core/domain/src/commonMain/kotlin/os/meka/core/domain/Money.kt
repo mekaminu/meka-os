@@ -441,6 +441,8 @@ data class MoneyView(
     val challenges: MoneyChallengesView? = null,
     /** Slice 17: PAYING ABROAD — which accounts charged foreign fees, the one to use, and a banner while he's abroad ([MoneyTravel]); this month only. */
     val travel: MoneyTravelView? = null,
+    /** Slice 18: the year in review — last year in January, this year so far after ([MoneyYear]); this month only. */
+    val year: MoneyYearView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -677,6 +679,7 @@ object MoneyRules {
             shared = shared,
             challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
+            year = if (partial) MoneyYear.view(mine.map { MoneyYearLine(it.day, it.pence, keyOf(it), cat(it)) }, today) else null,
         )
     }
 

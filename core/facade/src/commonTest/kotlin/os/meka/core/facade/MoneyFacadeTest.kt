@@ -618,4 +618,29 @@ class MoneyFacadeTest {
         assertEquals(listOf("gbp"), f.currency!!.chips.filter { it.on }.map { it.key })
         assertEquals(listOf("5"), f.alerts!!.liqChips.filter { it.on }.map { it.key })
     }
+
+    @Test
+    fun theYearSoFarIsFoldedAndJanuaryReviewsLastYearWithAHeadsUpOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        // October: this year so far, folded, transfers and income left out of what was spent.
+        val soFar = fold.moneyView.value.year!!
+        assertEquals("2026 SO FAR", soFar.head)
+        assertFalse(soFar.unfolded)
+        assertEquals("Your year so far · Spent £103.20 · in £2,500", soFar.folded)
+        assertTrue(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).post.none { it.title.contains("year in review") })
+        // 2 January 2027: last year's review leads, open, and the Mac gets one heads-up with no amounts.
+        now = 1_798_884_000_000L
+        fold.syncNow(); mac.syncNow()
+        fold.closeMoney(); fold.openMoney()
+        val y = fold.moneyView.value.year!!
+        assertEquals("2026 IN REVIEW", y.head)
+        assertTrue(y.unfolded)
+        assertEquals(listOf("Groceries", "Coffee"), y.categories.map { it.label })
+        val n = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).post.single { it.title.contains("year in review") }
+        assertEquals("Your 2026 money year in review is ready", n.title)
+        assertFalse(n.text.contains("£"))
+    }
 }
