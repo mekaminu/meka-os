@@ -44,8 +44,9 @@ import os.meka.core.facade.MekaCore
 
 /**
  * Inbox autopilot, slice 5c: the weekly "Not opened in 30 days · Unsubscribe from 11?" in Needs you, from Saturday 09:00
- * until answered that week (on either app). The senders (busiest first) each with Keep; **Unsubscribe from all N** asks
- * the server to unsubscribe from each at its next check; Not now folds it away until next Saturday. Every answer has Undo
+ * until answered that week (on either app). The senders (busiest first) each with Keep; past eight, **Show all N** unfolds
+ * the rest in place with their own Keep; **Unsubscribe from N** (only those not kept) asks the server to unsubscribe from
+ * each at its next check; Not now folds it away until next Saturday. Every answer has Undo
  * on the bar. Show/Hide unfolds the senders in place (expand spring; reduced motion: cross-fade).
  */
 @Composable
@@ -55,6 +56,8 @@ internal fun UnopenedOfferSection(
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
     var open by rememberSaveable { mutableStateOf(true) }
+    // "Show all 31" unfolds the senders past the first eight in place, each with Keep (Meka, 2026-10-17 04:05).
+    var all by rememberSaveable { mutableStateOf(false) }
     val reduced = Meka.reducedMotion
     fun answer(action: suspend () -> String) {
         scope.launch {
@@ -88,7 +91,25 @@ internal fun UnopenedOfferSection(
                         UnopenedRow(row) { haptics.light(); answer { core.keepMailSender(row.id) } }
                     }
                 }
-                card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                AnimatedVisibility(all && card.moreRows.isNotEmpty(), enter = unfold(), exit = fold()) {
+                    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        card.moreRows.forEach { row ->
+                            androidx.compose.runtime.key(row.id) {
+                                UnopenedRow(row) { haptics.light(); answer { core.keepMailSender(row.id) } }
+                            }
+                        }
+                    }
+                }
+                card.showAllLabel?.let { label ->
+                    val shown = if (all) MailUnopenedRules.SHOW_FEWER else label
+                    Text(
+                        shown, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                            .clickable(role = Role.Button) { haptics.tick(); all = !all }
+                            .semantics { contentDescription = if (all) "${MailUnopenedRules.SHOW_FEWER} senders" else card.moreLine ?: label }
+                            .padding(vertical = MekaSpace.xs).testTag("unopened-show-all"),
+                    )
+                }
                 Text(card.note, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             }
         }

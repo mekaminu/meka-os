@@ -1563,3 +1563,9 @@ Core MoneyWorth.kt (rules only, no AI): **NET WORTH** on this month's Money scre
 - Server: `resortSecurity` re-sorts inbox mail sorted before the rule; `restoreSecurity` (stage "security", before Autopilot) puts back security mail from this account's non-Junk tidies of the last 14 days, once (never tidied again, unread again when tidies mark read); `publishMailNeeds` writes the provider.
 - Fold MailNeedsSection and Mac MailNeedsView show the line in red above the sender.
 - Tests: MailSecurityTest (sorting, spoofs and free mailboxes, Always tidy, backlog, Junk, the card), MailSyncTest `accountSecurityMailIsNeverTidiedAndAsksHimToCheckItWasHim`, `securityMailATidyMovedEarlierGoesBackToTheInbox`.
+
+## Review on an approval card opens the wrong screen — slice 3 (2026-10-17): "+ 23 more" becomes Show all with Keep
+
+- Core `MailUnopenedCard` gains `moreRows` (every sender past the first eight, busiest first) and `showAllLabel` ("Show all 31"); `moreLine` now reads "+ 23 more · Show all 31 to see them or keep any" (what a screen reader says while folded); `MailUnopenedRules.SHOW_FEWER`, `showAllLabel(n)`; `unsubscribeLabel(n)` reads "Unsubscribe from 31" (was "… from all 31"). Keep already took a kept sender off the candidates, so the button, the headline and Show all count only those not kept.
+- Fold `UnopenedOfferSection` and Mac `UnopenedOfferView`: the brass "Show all 31" unfolds the rest in place on the expand spring, each with its own Keep, and reads "Show fewer" to fold them back (tick haptic; reduced motion cross-fades). Motion catalogue row updated.
+- Tests: MailUnopenedTest `keepingOneOfTheHiddenSendersTakesItOffTheButtonsCount` (31 senders → 8 + 23; keep one hidden and one shown → "Unsubscribe from 29", "Show all 29"; eight → no Show all), `oneSenderAndMoreThanEight` updated; Mac bridge test's label. Core only + both apps' card, no server change, no migration. Mac checked nightly.

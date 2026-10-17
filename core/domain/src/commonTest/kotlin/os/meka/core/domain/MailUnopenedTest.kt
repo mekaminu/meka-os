@@ -65,10 +65,12 @@ class MailUnopenedTest {
         val card = assertNotNull(MailUnopenedRules.card(senders, seenAtMs = at(saturday - 7, 10), satMorning, cal))
         assertEquals(MailUnopenedRules.TITLE, card.title)
         assertEquals("Unsubscribe from 2?", card.headline)
-        assertEquals("Unsubscribe from all 2", card.unsubscribeLabel)
+        assertEquals("Unsubscribe from 2", card.unsubscribeLabel)
         assertEquals(listOf("b", "a"), card.ids)
         assertEquals("Personal · 9 emails, none opened · last yesterday", card.rows.first().line)
         assertNull(card.moreLine)
+        assertNull(card.showAllLabel)
+        assertTrue(card.moreRows.isEmpty())
         assertEquals("Not opened in 30 days. Unsubscribe from 2?", card.spoken)
         // Answered this week (the button or Not now, either app): gone until next Saturday.
         assertNull(MailUnopenedRules.card(senders, seenAtMs = satMorning, satMorning + 60_000, cal))
@@ -88,8 +90,35 @@ class MailUnopenedTest {
         assertEquals(8, many.rows.size)
         assertEquals(11, many.ids.size)
         assertEquals("s11", many.ids.first())
-        assertEquals("+ 3 more · the button unsubscribes from them too", many.moreLine)
-        assertEquals("Unsubscribe from all 11", many.unsubscribeLabel)
+        assertEquals("+ 3 more · Show all 11 to see them or keep any", many.moreLine)
+        assertEquals("Show all 11", many.showAllLabel)
+        assertEquals(listOf("s3", "s2", "s1"), many.moreRows.map { it.id })
+        assertEquals("Unsubscribe from 11", many.unsubscribeLabel)
+    }
+
+    @Test
+    fun keepingOneOfTheHiddenSendersTakesItOffTheButtonsCount() {
+        // Meka, 2026-10-17 04:05: "+ 23 more" must open so he can Keep any before agreeing to all.
+        val senders = (1..31).map { s("s$it", unopened = 3 + it) }
+        val card = assertNotNull(MailUnopenedRules.card(senders, null, satMorning, cal))
+        assertEquals(8, card.rows.size)
+        assertEquals(23, card.moreRows.size)
+        assertEquals("Show all 31", card.showAllLabel)
+        assertEquals("Unsubscribe from 31", card.unsubscribeLabel)
+        // Keep one from the folded part and one shown: both leave, the button and Show all count 29.
+        val kept = senders.map { if (it.id == "s1" || it.id == "s31") it.copy(keptAtMs = satMorning) else it }
+        val after = assertNotNull(MailUnopenedRules.card(kept, null, satMorning + 60_000, cal))
+        assertEquals("Unsubscribe from 29", after.unsubscribeLabel)
+        assertEquals("Unsubscribe from 29?", after.headline)
+        assertEquals("Show all 29", after.showAllLabel)
+        assertEquals(29, after.ids.size)
+        assertFalse("s1" in after.ids || "s31" in after.ids)
+        assertEquals(after.ids, (after.rows + after.moreRows).map { it.id })
+        // Down to eight: nothing to show all.
+        val eight = senders.take(8)
+        val fits = assertNotNull(MailUnopenedRules.card(eight, null, satMorning, cal))
+        assertNull(fits.showAllLabel)
+        assertTrue(fits.moreRows.isEmpty())
     }
 
     @Test

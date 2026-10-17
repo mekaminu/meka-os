@@ -7,9 +7,11 @@ import os.meka.core.sync.fv
  * Inbox autopilot, slice 5c: the weekly **"Not opened in 30 days · unsubscribe from 11?"** (Meka, 2026-10-12: unsubscribe
  * done for him). Once a week, from Saturday 09:00, Needs you on both apps lists the newsletter and promo senders whose
  * last 30 days of email he never opened (at least [MIN_EMAILS] of them, worked out by the server from each email's
- * read flag), with **Unsubscribe from all N** (one tap asks the server to unsubscribe from each, as Mail's own
+ * read flag), with **Unsubscribe from N** (one tap asks the server to unsubscribe from each, as Mail's own
  * Unsubscribe does), **Keep** per sender (never offered again) and **Not now** (back next Saturday, if any are left).
- * Each has Undo; nothing is sent before the server's next check, and an Undo before then sends nothing.
+ * Each has Undo; nothing is sent before the server's next check, and an Undo before then sends nothing. Past
+ * [SHOWN] senders, **Show all N** unfolds the rest in place with their own Keep (2026-10-17), and N counts only the
+ * senders not kept.
  *
  * Only senders the server can unsubscribe from by itself are offered (one-click or the list's unsubscribe email; an
  * Outlook sender whose headers are read on the tap); a sender with only a web page stays in Mail. Non-AI, pure,
@@ -36,12 +38,19 @@ data class MailUnopenedCard(
     val title: String,
     /** "Unsubscribe from 11?" */
     val headline: String,
-    /** "Unsubscribe from all 11" (or "Unsubscribe" for one). */
+    /** "Unsubscribe from 11" (or "Unsubscribe" for one): counts only the senders not kept. */
     val unsubscribeLabel: String,
     val note: String,
     /** Busiest first, at most [MailUnopenedRules.SHOWN]. */
     val rows: List<MailUnopenedRow>,
-    /** "+ 3 more · all unsubscribed by the button" when more than [MailUnopenedRules.SHOWN]; else null. */
+    /**
+     * The rest, past [MailUnopenedRules.SHOWN], shown in place under [rows] (each with Keep) once he taps [showAllLabel]
+     * (Meka, 2026-10-17 04:05: he must see and Keep every sender before agreeing to all). Empty when all fit.
+     */
+    val moreRows: List<MailUnopenedRow>,
+    /** "Show all 31" when [moreRows] isn't empty; else null. Its other state reads [MailUnopenedRules.SHOW_FEWER]. */
+    val showAllLabel: String?,
+    /** "+ 23 more · Show all 31 to see them or keep any" (what's said while they're folded); else null. */
     val moreLine: String?,
     /** Every sender the button asks for, the shown ones first. */
     val ids: List<String>,
@@ -56,6 +65,7 @@ object MailUnopenedRules {
     const val NOT_NOW = "Not now"
     const val SHOW = "Show"
     const val HIDE = "Hide"
+    const val SHOW_FEWER = "Show fewer"
     const val NOTE = "You haven't opened any of their emails in the last 30 days. Navilife unsubscribes at its next check, " +
         "by one-click or the list's unsubscribe email from that account, and anything they send after goes to Trash (recoverable)."
     const val NOT_NOW_LINE = "Not opened in 30 days · asks again next Saturday"
@@ -102,7 +112,9 @@ object MailUnopenedRules {
 
     fun headline(n: Int): String = if (n == 1) "Unsubscribe from 1 sender?" else "Unsubscribe from $n?"
 
-    fun unsubscribeLabel(n: Int): String = if (n == 1) MailSenderPanelRules.UNSUBSCRIBE else "Unsubscribe from all $n"
+    fun unsubscribeLabel(n: Int): String = if (n == 1) MailSenderPanelRules.UNSUBSCRIBE else "Unsubscribe from $n"
+
+    fun showAllLabel(n: Int): String = "Show all $n"
 
     /**
      * The offer, or null: due from this week's Saturday 09:00 while he hasn't answered it this week ([seenAtMs]: the
@@ -115,7 +127,7 @@ object MailUnopenedRules {
             .sortedWith(compareByDescending<MailSender> { it.unopened }.thenByDescending { it.lastAtMs }.thenBy { it.id })
         if (all.isEmpty()) return null
         val today = cal.epochDayOf(nowMs)
-        val rows = all.take(SHOWN).map { s ->
+        val rows = all.map { s ->
             val day = cal.epochDayOf(s.lastAtMs)
             val last = when {
                 s.lastAtMs <= 0 -> null
@@ -125,15 +137,19 @@ object MailUnopenedRules {
             }
             MailUnopenedRow(s.id, s.name, listOfNotNull(s.account, "${s.unopened} emails, none opened", last).joinToString(" · "))
         }
-        val more = all.size - rows.size
+        val shown = rows.take(SHOWN)
+        val rest = rows.drop(SHOWN)
+        val more = rest.size
         val head = headline(all.size)
         return MailUnopenedCard(
             title = TITLE,
             headline = head,
             unsubscribeLabel = unsubscribeLabel(all.size),
             note = NOTE,
-            rows = rows,
-            moreLine = if (more > 0) "+ $more more · the button unsubscribes from them too" else null,
+            rows = shown,
+            moreRows = rest,
+            showAllLabel = if (more > 0) showAllLabel(all.size) else null,
+            moreLine = if (more > 0) "+ $more more · ${showAllLabel(all.size)} to see them or keep any" else null,
             ids = all.map { it.id },
             spoken = "$TITLE. $head",
         )
