@@ -28,6 +28,95 @@ object LineStatusFields {
     const val PLANNED_DAY = "plannedDay"
     /** When the server read [PLANNED], rounded down like [CHECKED]. */
     const val PLANNED_CHECKED = "plannedChecked"
+
+    /**
+     * Live trains (Needs Meka #16, 2026-10-17): the next departures from his home station to where he changes (morning)
+     * or from there home (evening), from National Rail's Live Departure Board, in [TrainBoardCodec]'s text.
+     */
+    const val DEPARTURES = "departures"
+    /** Which way [DEPARTURES] goes: [TrainBoard.AM] (home → change) or [TrainBoard.PM] (change → home). */
+    const val DEPARTURES_DIR = "departuresDir"
+    /** When the server read [DEPARTURES], rounded down to [RouteRules.BOARD_STEP_MS]. */
+    const val DEPARTURES_CHECKED = "departuresChecked"
+    /** The live board's state: [TrainBoard.OK], [TrainBoard.NO_STATION], [TrainBoard.KEY] or [TrainBoard.ERROR]. */
+    const val BOARD_STATE = "boardState"
+    /** When [BOARD_STATE] was last ok (rounded like [DEPARTURES_CHECKED]). */
+    const val BOARD_OK_AT = "boardOkAt"
+}
+
+/**
+ * One departure on the live board. Times are London minutes of the day: [depMin] booked, [expMin] expected (equal to
+ * it when on time; null when [delayed] with no estimate or [cancelled]); [arrMin] the booked arrival where he gets off.
+ */
+data class TrainDeparture(
+    val depMin: Int,
+    val expMin: Int?,
+    val cancelled: Boolean = false,
+    val delayed: Boolean = false,
+    val platform: String? = null,
+    val arrMin: Int? = null,
+) {
+    /** Minutes late (0 on time); null when cancelled or delayed with no estimate. */
+    val lateMin: Int?
+        get() {
+            if (cancelled) return null
+            val e = expMin ?: return null
+            val d = ((e - depMin) % 1440 + 1440) % 1440
+            return if (d < 720) d else 0 // early counts as on time
+        }
+}
+
+/** The live board as the server last wrote it. */
+data class TrainBoard(
+    val departures: List<TrainDeparture> = emptyList(),
+    val dir: String? = null,
+    val checkedMs: Long? = null,
+    val state: String? = null,
+    val okAtMs: Long? = null,
+) {
+    companion object {
+        val EMPTY = TrainBoard()
+        const val AM = "am"
+        const val PM = "pm"
+        const val OK = "ok"
+        /** His home station (or the change station) couldn't be found on National Rail's list. */
+        const val NO_STATION = "nostation"
+        /** The rail data key was refused. */
+        const val KEY = "key"
+        const val ERROR = "error"
+    }
+}
+
+/**
+ * "432,437,3,461;444,x,,": per departure the booked minute, the expected one ("d" delayed with no estimate, "x"
+ * cancelled), the platform and the booked arrival minute where he gets off (blank when unknown). Unreadable parts are
+ * skipped (it came from the network).
+ */
+object TrainBoardCodec {
+    const val MAX = 6
+
+    fun encode(list: List<TrainDeparture>): String = list.filter { it.depMin in 0 until 1440 }.take(MAX).joinToString(";") { d ->
+        val exp = when { d.cancelled -> "x"; d.expMin == null -> "d"; else -> d.expMin.toString() }
+        listOf(d.depMin.toString(), exp, platform(d.platform).orEmpty(), d.arrMin?.takeIf { it in 0 until 1440 }?.toString().orEmpty()).joinToString(",")
+    }
+
+    fun decode(s: String?): List<TrainDeparture> {
+        if (s.isNullOrBlank()) return emptyList()
+        return s.split(';').mapNotNull { part ->
+            val f = part.split(',')
+            if (f.size != 4) return@mapNotNull null
+            val dep = f[0].toIntOrNull()?.takeIf { it in 0 until 1440 } ?: return@mapNotNull null
+            val (exp, cancelled, delayed) = when (f[1]) {
+                "x" -> Triple(null, true, false)
+                "d" -> Triple(null, false, true)
+                else -> Triple(f[1].toIntOrNull()?.takeIf { it in 0 until 1440 } ?: return@mapNotNull null, false, false)
+            }
+            TrainDeparture(dep, exp, cancelled, delayed, platform(f[2]), f[3].toIntOrNull()?.takeIf { it in 0 until 1440 })
+        }.take(MAX)
+    }
+
+    /** Up to 3 letters or digits ("3", "10A"); anything else is dropped. */
+    fun platform(p: String?): String? = p?.trim()?.takeIf { it.isNotEmpty() && it.length <= 3 && it.all { c -> c in 'a'..'z' || c in 'A'..'Z' || c in '0'..'9' } }
 }
 
 /** One line's status: TfL's line id and its status severity code. */
@@ -40,6 +129,8 @@ data class LineStatusSnapshot(
     val planned: List<LineState> = emptyList(),
     val plannedDay: Long? = null,
     val plannedCheckedMs: Long? = null,
+    /** Live trains: the departure board ([LineStatusFields.DEPARTURES]); empty without the rail key or a home station. */
+    val board: TrainBoard = TrainBoard.EMPTY,
 ) {
     fun severityOf(id: String): Int? = lines.firstOrNull { it.id == id }?.severity
     fun plannedSeverityOf(id: String): Int? = planned.firstOrNull { it.id == id }?.severity
@@ -167,6 +258,9 @@ object RouteRules {
         if (n.any { !(it.isLetterOrDigit() || it == ' ' || it == '&' || it == '-' || it == '\'' || it == '.') }) return null
         return n.takeIf { lineId(it).isNotEmpty() }
     }
+
+    /** A station's name as typed, cleaned ("King’s Cross" → "King's Cross"); null when it can't be one. */
+    fun stationName(t: String): String? = station(t)
 
     private fun station(t: String): String? {
         val n = t.trim()
@@ -303,43 +397,143 @@ object RouteRules {
 
     private fun part(id: String, sev: Int, r: CommuteRoute? = route()) = "${name(id, r)} ${words(sev)}"
 
+    /** A departure this late or worse (or cancelled, or delayed with no estimate) lights Today's line. */
+    const val LATE_MIN = 5
+    /** The live board is shown and told only this long after the server read it. */
+    const val BOARD_FRESH_MS = 20 * 60_000L
+    /** The server writes the board's read time rounded down to this (and the board itself only when it changed). */
+    const val BOARD_STEP_MS = 5 * 60_000L
+    /** How many of the next departures Today shows. */
+    const val SHOWN = 3
+
+    fun boardFresh(b: TrainBoard, nowMs: Long): Boolean {
+        val checked = b.checkedMs ?: return false
+        return b.state == TrainBoard.OK && b.departures.isNotEmpty() && nowMs - checked < BOARD_FRESH_MS + BOARD_STEP_MS
+    }
+
+    /** The departures still to leave at [nowMs] (expected time, else booked), the next [n]; a cancelled one by its booked time. */
+    fun upcoming(b: TrainBoard, nowMs: Long, cal: LocalCalendar, n: Int = SHOWN): List<TrainDeparture> {
+        val now = cal.minuteOfDay(nowMs)
+        return b.departures.filter { d ->
+            val leaves = if (d.cancelled) d.depMin else (d.expMin ?: d.depMin)
+            // Minutes ahead, wrapping past midnight; a board reaches at most a few hours ahead.
+            ((leaves - now) % 1440 + 1440) % 1440 < 12 * 60
+        }.take(n)
+    }
+
+    /** "07:12 on time", "07:24 5 min late", "07:42 cancelled", "07:50 delayed". */
+    fun words(d: TrainDeparture): String {
+        val t = LocalClock.formatMinute(d.depMin)
+        val late = d.lateMin
+        return when {
+            d.cancelled -> "$t cancelled"
+            late == null -> "$t delayed"
+            late == 0 -> "$t on time"
+            else -> "$t $late min late"
+        }
+    }
+
+    /** Cancelled, delayed with no estimate, or [LATE_MIN] or more late. */
+    fun bad(d: TrainDeparture): Boolean = d.cancelled || d.lateMin.let { it == null || it >= LATE_MIN }
+
+    /** The board when it is fresh and goes the way of [commute] (home → change in the morning, back in the evening). */
+    fun liveBoard(s: LineStatusSnapshot, commute: Commute, nowMs: Long): TrainBoard? {
+        val b = s.board
+        if (!boardFresh(b, nowMs)) return null
+        if (b.dir != (if (commute == Commute.MORNING) TrainBoard.AM else TrainBoard.PM)) return null
+        return b
+    }
+
     /**
-     * Today's line on an office day's commute. All running: "South Rail · Metro · good service". Otherwise each leg in
+     * Today's line on an office day's commute. With live departures (the rail key and his home station): "South Rail ·
+     * 07:12 on time · 07:24 5 min late · 07:42 cancelled", lit when one of them is cancelled or [LATE_MIN]+ late, with
+     * any leg TfL doesn't call good after it ("· Metro minor delays") and the fallback when the first line isn't good.
+     * Without them, TfL's status as before. All running: "South Rail · Metro · good service". Otherwise each leg in
      * the order travelled, lit: "South Rail severe delays · Metro good service — North Rail to Riverside is running"
-     * (the fallback named only when it is running and the first line isn't). Null outside the commute, without a fresh
-     * status, without a route in About you, or when TfL said nothing about the route.
+     * (the fallback named only when it is running and the first line isn't). Null outside the commute, without
+     * anything fresh, without a route in About you, or when nothing is known about the route.
      */
     fun todayLine(s: LineStatusSnapshot, office: OfficeWindow?, nowMs: Long, cal: LocalCalendar): RouteLine? {
         val r = route() ?: return null
         val commute = commute(office, nowMs, cal) ?: return null
-        if (!fresh(s, nowMs)) return null
-        val legs = r.legs(commute == Commute.MORNING).mapNotNull { id -> s.severityOf(id)?.let { id to it } }
+        val morning = commute == Commute.MORNING
+        val tfl = fresh(s, nowMs)
+        val legs = if (tfl) r.legs(morning).mapNotNull { id -> s.severityOf(id)?.let { id to it } } else emptyList()
+        val first = if (tfl) s.severityOf(r.firstId) else null
+        val fb = if (tfl) r.fallbackId?.let { s.severityOf(it) } else null
+        val fallback = if (first != null && level(first) != LineLevel.GOOD && fb != null && level(fb) == LineLevel.GOOD) {
+            fallbackAdvice(r, fb, morning)?.let { " — $it" }.orEmpty()
+        } else ""
+        val live = liveBoard(s, commute, nowMs)?.let { upcoming(it, nowMs, cal) }?.takeIf { it.isNotEmpty() }
+        if (live != null) {
+            val notGood = legs.filter { level(it.second) != LineLevel.GOOD }
+            val text = name(r.firstId, r) + " · " + live.joinToString(" · ") { words(it) } +
+                notGood.joinToString("") { (id, sev) -> " · " + part(id, sev, r) } + fallback
+            val lit = live.any(::bad) || notGood.isNotEmpty()
+            return RouteLine(text, lit = lit, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — ", ". "))
+        }
         if (legs.isEmpty()) return null
         if (legs.all { level(it.second) == LineLevel.GOOD }) {
             val text = legs.joinToString(" · ") { name(it.first, r) } + " · good service"
             return RouteLine(text, lit = false, spoken = "Trains: " + text.replace(" · ", ", "))
         }
-        val first = s.severityOf(r.firstId)
-        val fb = r.fallbackId?.let { s.severityOf(it) }
-        val fallback = if (first != null && level(first) != LineLevel.GOOD && fb != null && level(fb) == LineLevel.GOOD) {
-            fallbackAdvice(r, fb, commute == Commute.MORNING)?.let { " — $it" }.orEmpty()
-        } else ""
         val text = legs.joinToString(" · ") { (id, sev) -> part(id, sev, r) } + fallback
         return RouteLine(text, lit = true, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — ", ". "))
     }
 
+    /** "07:12 on time, platform 3, arrives 07:41". */
+    private fun askWords(d: TrainDeparture): String =
+        listOfNotNull(words(d), d.platform?.let { "platform $it" }, d.arrMin?.takeIf { !d.cancelled }?.let { "arrives " + LocalClock.formatMinute(it) })
+            .joinToString(", ")
+
     /**
      * The status as Ask MEKA hears it ("are the trains OK?"): one line, any time it is fresh. "train lines on Meka's
-     * route (TfL status, checked 08:30): South Rail good service; North Rail good service; Metro minor delays". Empty
-     * when stale, unknown or without a route.
+     * route (TfL status, checked 08:30): South Rail good service; North Rail good service; Metro minor delays". With
+     * a fresh live board also "next trains from Oakfield to Oakfield Junction (live departures, checked 07:05): 07:12
+     * on time, platform 3, arrives 07:41; …". Empty when stale, unknown or without a route.
      */
     fun askLines(s: LineStatusSnapshot, nowMs: Long, cal: LocalCalendar): List<String> {
         val r = route() ?: return emptyList()
-        if (!fresh(s, nowMs)) return emptyList()
-        val known = r.ids.mapNotNull { id -> s.severityOf(id)?.let { part(id, it, r) } }
-        if (known.isEmpty()) return emptyList()
-        val at = LocalClock.formatMinute(cal.minuteOfDay(s.checkedMs!!))
-        return listOf("train lines on Meka's route (TfL status, checked $at): " + known.joinToString("; "))
+        val out = mutableListOf<String>()
+        if (fresh(s, nowMs)) {
+            val known = r.ids.mapNotNull { id -> s.severityOf(id)?.let { part(id, it, r) } }
+            if (known.isNotEmpty()) {
+                val at = LocalClock.formatMinute(cal.minuteOfDay(s.checkedMs!!))
+                out += "train lines on Meka's route (TfL status, checked $at): " + known.joinToString("; ")
+            }
+        }
+        val b = s.board
+        if (boardFresh(b, nowMs)) {
+            val next = upcoming(b, nowMs, cal, n = TrainBoardCodec.MAX)
+            val home = Household.names.homeStation ?: "his home station"
+            val change = r.change ?: "where he changes"
+            val (from, to) = if (b.dir == TrainBoard.PM) change to home else home to change
+            if (next.isNotEmpty()) {
+                val at = LocalClock.formatMinute(cal.minuteOfDay(b.checkedMs!!))
+                out += "next trains from $from to $to (live departures, checked $at): " + next.joinToString("; ") { askWords(it) }
+            }
+        }
+        return out
+    }
+
+    const val HEALTH_KEY = "trains"
+
+    /**
+     * Health's Trains row: "Live · checked 07:05" once the board reads; what to do when it can't (no home station, a
+     * station not found, the key refused, the feed down). Null without a route in About you (nothing to follow).
+     */
+    fun healthRow(b: TrainBoard, nowMs: Long, cal: LocalCalendar): HealthRow? {
+        route() ?: return null
+        val title = "Trains"
+        val last = b.okAtMs?.let { "last live ${HealthRules.at(it, nowMs, cal)}" }
+        return when {
+            Household.names.homeStation == null -> HealthRow(HEALTH_KEY, title, "Line status from TfL · add your home station in About you for live departures", HealthState.UNKNOWN)
+            b.state == null -> HealthRow(HEALTH_KEY, title, "Live departures start at the next check", HealthState.UNKNOWN)
+            b.state == TrainBoard.NO_STATION -> HealthRow(HEALTH_KEY, title, "Couldn't find your home station or where you change on National Rail's list · check their names in About you", HealthState.WARN)
+            b.state == TrainBoard.KEY -> HealthRow(HEALTH_KEY, title, "National Rail refused Navilife's rail key · line status from TfL meanwhile", HealthState.BAD)
+            b.state == TrainBoard.ERROR -> HealthRow(HEALTH_KEY, title, listOfNotNull("Couldn't read live departures", last).joinToString(" · "), HealthState.WARN)
+            else -> HealthRow(HEALTH_KEY, title, listOfNotNull("Live", b.checkedMs?.let { "checked ${HealthRules.at(it, nowMs, cal)}" }).joinToString(" · "), HealthState.OK)
+        }
     }
 
     /**
@@ -396,6 +590,13 @@ class LineStatusStore(private val replica: Replica) {
             planned = LineStatusCodec.decode(e[LineStatusFields.PLANNED]?.textOrNull),
             plannedDay = (e[LineStatusFields.PLANNED_DAY] as? FieldValue.Int64)?.value,
             plannedCheckedMs = (e[LineStatusFields.PLANNED_CHECKED] as? FieldValue.Int64)?.value,
+            board = TrainBoard(
+                departures = TrainBoardCodec.decode(e[LineStatusFields.DEPARTURES]?.textOrNull),
+                dir = e[LineStatusFields.DEPARTURES_DIR]?.textOrNull,
+                checkedMs = (e[LineStatusFields.DEPARTURES_CHECKED] as? FieldValue.Int64)?.value,
+                state = e[LineStatusFields.BOARD_STATE]?.textOrNull,
+                okAtMs = (e[LineStatusFields.BOARD_OK_AT] as? FieldValue.Int64)?.value,
+            ),
         )
     }
 

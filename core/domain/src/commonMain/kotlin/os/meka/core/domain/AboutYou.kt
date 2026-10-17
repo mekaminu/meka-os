@@ -65,6 +65,12 @@ object AboutYouFields {
      * server's TfL questions read it; the Fold copies the route the code knew into it once.
      */
     const val ROUTE = "commuteRoute"
+    /**
+     * Live trains (Needs Meka #16, 2026-10-17): the station he catches the train from at home ("Oakfield"), as typed.
+     * The server finds its National Rail code and reads the live departures from it to where he changes (the route's
+     * change station), and back in the evening. Never in the code (rule 13).
+     */
+    const val HOME_STATION = "homeStation"
     /** Int64: when the Fold copied MEKA's earlier values in (release 1); absent when he typed it all. */
     const val SEEDED_AT = "seededAtMs"
     /** Int64: when the Fold first held a filled-in profile after a clean sync (slice 2, release 2's gate). */
@@ -121,13 +127,15 @@ data class AboutYou(
     val voicemailNumber: String? = null,
     /** The train route as kept ([RouteRules.parse] reads it). */
     val route: String? = null,
+    /** Live trains: the home station as typed ("Oakfield"). */
+    val homeStation: String? = null,
     val seededAtMs: Long? = null,
     /** The school's council's holidays ([AboutYouFields.COUNCIL_DATES]); not a typed line, so not part of [isEmpty]. */
     val councilDates: TermCalendar? = null,
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, assistantNumber, voicemailNumber, route).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, assistantNumber, voicemailNumber, route, homeStation).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -145,6 +153,8 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     WORK(AboutYouFields.WORK, "Work", "Where the office is", "Add work for office-day weather"),
     ROUTE(AboutYouFields.ROUTE, "Train route", "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside",
         "Add your train route so Today, the brief and Leaving now say how its lines are running"),
+    HOME_STATION(AboutYouFields.HOME_STATION, "Home station", "The station you catch the train from: Oakfield",
+        "Add your home station for live departures on Today"),
     SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
     SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk, parentmail.co.uk",
         "Add the addresses the school writes from so its trips, payments and days off are offered for School"),
@@ -207,6 +217,7 @@ object AboutYouRules {
     const val NOT_SCHOOL_MAIL = "Type the school's email addresses or their domain, up to 6, with commas: “office@oakfield.sch.uk, parentmail.co.uk”."
     const val NOT_CLUBS = "Type each club's short name first, as your calendar writes it: “OFC Oakfield Town, HRFC”."
     const val NOT_ROUTE = "Type the line from home, where you change and the next line: “South Rail to Oakfield Junction, then Metro”, and after a semicolon the line you take instead: “; or North Rail to Riverside”."
+    const val NOT_STATION = "Type the station's name as the station sign has it, up to 40 letters: “Oakfield”."
     const val MAX_CLUBS = 6
     const val MAX_CLUB_SHORT = 10
     const val MAX_CLUB_NAME = 40
@@ -291,6 +302,7 @@ object AboutYouRules {
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
             route = text(AboutYouFields.ROUTE)?.let { RouteRules.parse(it)?.text },
+            homeStation = text(AboutYouFields.HOME_STATION)?.let(RouteRules::stationName),
             seededAtMs = fields[AboutYouFields.SEEDED_AT]?.longOrNull,
             councilDates = SchoolTerms.decode(fields[AboutYouFields.COUNCIL_DATES]?.textOrNull),
         )
@@ -309,6 +321,7 @@ object AboutYouRules {
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
         AboutField.ROUTE -> a.route
+        AboutField.HOME_STATION -> a.homeStation
     }
 
     /**
@@ -327,6 +340,7 @@ object AboutYouRules {
             AboutField.SCHOOL_MAIL -> SchoolMailRules.cleanSenders(t)
             AboutField.CLUBS -> clubs(t)
             AboutField.ROUTE -> RouteRules.parse(t)?.text
+            AboutField.HOME_STATION -> RouteRules.stationName(t)
         }
     }
 
@@ -339,6 +353,7 @@ object AboutYouRules {
         AboutField.SCHOOL_MAIL -> NOT_SCHOOL_MAIL
         AboutField.CLUBS -> NOT_CLUBS
         AboutField.ROUTE -> NOT_ROUTE
+        AboutField.HOME_STATION -> NOT_STATION
     }
 
     /** Spaces collapsed and trimmed; no regex (Kotlin/Native reads some differently). */
@@ -569,6 +584,7 @@ object AboutYouRules {
             a.home?.let { "home" },
             a.work?.let { "work" },
             a.route?.let { "train route" },
+            a.homeStation?.let { "home station" },
             a.schoolWebsite?.let { "the school's website" },
             a.schoolMail?.let { "the school's email" },
             a.clubs?.let { "clubs" },

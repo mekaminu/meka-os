@@ -99,6 +99,8 @@ object NotifyDiagnosticsCodec {
         val mail: List<Entry>? = null,
         /** Money's bank sync: one line of counts (state, accounts, transactions, last ok); null from a server before it. */
         val bank: String? = null,
+        /** Live trains: the rail key's probe and the household's board, counts only; null from a server before it. */
+        val trains: String? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -146,6 +148,7 @@ object NotifyDiagnosticsCodec {
             })
         }
         l.bank?.let { put("bank", clean(it, MAIL_DETAIL_MAX)) }
+        l.trains?.let { put("trains", clean(it, MAIL_DETAIL_MAX)) }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -167,6 +170,7 @@ object NotifyDiagnosticsCodec {
             assistant = (o["assistant"] as? JsonArray)?.let { a -> entries(a, ASSISTANT_MAX, ASSISTANT_DETAIL_MAX) },
             mail = (o["mail"] as? JsonArray)?.let { a -> entries(a, MAIL_MAX, MAIL_DETAIL_MAX) },
             bank = o.str("bank")?.let { clean(it, MAIL_DETAIL_MAX) },
+            trains = o.str("trains")?.let { clean(it, MAIL_DETAIL_MAX) },
         )
     }
 

@@ -256,7 +256,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -316,6 +316,12 @@ object ReleasePublisherCli {
                     println(bankLine(line))
                     0
                 }
+                "publisher-trains" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=Live trains::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    println(trainsLine(l.trains))
+                    0
+                }
                 "publisher-mail" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -343,6 +349,13 @@ object ReleasePublisherCli {
         if (line == null) return "::notice title=Bank sync::the server doesn't report it yet"
         val ok = line.startsWith("ok ") || line.startsWith("ok·") || line.startsWith("ok ·")
         return "::${if (ok) "notice" else "warning"} title=Bank sync::$line".replace("%", "%25")
+    }
+
+    /** Live trains: one notice (a warning unless the probe read a board); counts only, never a station. */
+    fun trainsLine(line: String?): String {
+        if (line == null) return "::notice title=Live trains::the server doesn't report it yet"
+        val ok = line.startsWith("probe OK")
+        return "::${if (ok) "notice" else "warning"} title=Live trains::$line".replace("%", "%25")
     }
 
     /**

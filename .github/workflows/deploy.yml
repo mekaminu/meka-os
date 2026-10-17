@@ -259,6 +259,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-bank "${{ steps.decide.outputs.url }}"
 
+      # Live trains (Needs Meka #16): a probe of a public terminus's board proving the rail key and endpoint, then what
+      # the household's own board last did; counts only, never a station.
+      - name: Live trains
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-trains "${{ steps.decide.outputs.url }}"
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

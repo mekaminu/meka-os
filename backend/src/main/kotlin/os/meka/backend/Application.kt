@@ -1076,7 +1076,8 @@ fun main(args: Array<String>) {
                             val f = opStore.latestFields(hh, EntityTypes.CONTEXT_MODE, os.meka.core.domain.MoneyBank.SYNC_ID)[os.meka.core.domain.MoneyBank.SYNC_ID]
                             os.meka.core.domain.MoneyBank.reportLine(f?.let { m -> os.meka.core.domain.MoneyBank.read { m[it] } }) { NotifyReports.utc(it) } +
                                 (if (bankSync == null) " · server has no Lunch Flow secret set" else "")
-                        }),
+                        },
+                        trains = { hh -> integrations?.trainsReport(hh) ?: "off · integrations not running" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
@@ -1108,6 +1109,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),
         reader = opStoreReader(opStore),
         lines = listOf(TflLineStatus()).associateBy { it.id },
+        // Live trains (Needs Meka #16): off (and nothing sent) until the rail key is in its secret.
+        rail = System.getenv("MEKA_RAIL_DARWIN_SECRET")?.takeIf { it.isNotBlank() }?.let { os.meka.backend.integrations.DarwinBoard.fromSecret(it) },
         // Weekend football, slice 2b: off (and nothing sent) until Meka pastes the Google key into the secret.
         travel = System.getenv("MEKA_MAPS_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
             ?.let { listOf(GoogleRoutes.fromSecret(it)).associateBy { p -> p.id } }.orEmpty(),

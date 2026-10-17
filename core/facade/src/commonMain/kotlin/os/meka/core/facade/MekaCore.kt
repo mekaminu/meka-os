@@ -6123,6 +6123,7 @@ class MekaCore(
             callCredit = callCredit.current(),
             aboutYou = aboutYou.held(),
             bankSync = moneyBank.sync(),
+            trains = lineStatus.snapshot().board,
         )
     }
 

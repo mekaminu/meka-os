@@ -132,6 +132,8 @@ data class HealthFacts(
     val aboutYou: AboutYouHeld? = null,
     /** Money's bank sync through Lunch Flow as the server last wrote it ([MoneyBank]); null leaves the row out. */
     val bankSync: MoneyBankSync? = null,
+    /** Live trains: the departure board as the server last wrote it ([RouteRules.healthRow]); null leaves the row out. */
+    val trains: TrainBoard? = null,
 )
 
 object HealthRules {
@@ -186,6 +188,7 @@ object HealthRules {
             update(f, cal)?.let(::add)
             AboutYouRules.healthRow(f.aboutYou, f.nowMs, cal)?.let(::add)
             MoneyBank.healthRow(f.bankSync, f.nowMs, cal)?.let(::add)
+            f.trains?.let { RouteRules.healthRow(it, f.nowMs, cal) }?.let(::add)
         }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }

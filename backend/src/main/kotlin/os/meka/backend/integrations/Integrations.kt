@@ -82,6 +82,8 @@ import os.meka.core.domain.LineStatusCodec
 import os.meka.core.domain.LineStatusFields
 import os.meka.core.domain.LineStatusStore
 import os.meka.core.domain.RouteRules
+import os.meka.core.domain.TrainBoard
+import os.meka.core.domain.TrainBoardCodec
 import os.meka.core.domain.SignInFields
 import os.meka.core.domain.SignInRules
 import os.meka.core.domain.SignInState
@@ -173,6 +175,8 @@ class Integrations(
     private val unsubscriber: OneClickUnsubscriber = OneClickUnsubscriber.NONE,
     /** Drafted replies come to him: a draft for each email that needs a reply (AI off, tests: null drafts nothing). */
     private val mailDrafter: MailDrafter? = null,
+    /** Live trains (Needs Meka #16): National Rail's departure boards; null (no rail key secret set, tests) leaves them off. */
+    private val rail: RailBoardProvider? = null,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -2309,6 +2313,9 @@ class Integrations(
         if (a.status == "ok" && last != null && now() - last < LINES_PERIOD_MS) return
         val lines = routeLines(a.householdId)
         if (lines.isEmpty()) return
+        // Live trains first: TfL being down never holds up the board, nor the board TfL.
+        val board = rail?.let { r -> runCatching { syncBoard(a, r) }.getOrDefault(false) } ?: false
+        if (board) runCatching { onChanged(a.householdId) }
         try {
             val changed = applyLines(a, source.statuses(lines))
             store.transaction { store.markSynced(a.id, now()) }
@@ -2340,6 +2347,94 @@ class Integrations(
             write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
             linesChanged
         }
+    }
+
+    /** When each household's board was last read, and what the deploy report says about it (in memory). */
+    private val boardAt = HashMap<String, Long>()
+    private val boardNote = HashMap<String, String>()
+
+    /**
+     * Live trains (Needs Meka #16, 2026-10-17): the next departures from About you's Home station to the route's change
+     * station before noon London ([TrainBoard.AM]), from there home after ([TrainBoard.PM]), into the same
+     * `context_mode/line_status` entity ([LineStatusFields.DEPARTURES] …). Read every line-status pass (4 minutes) on
+     * weekdays 06:00–10:00 and 15:00–20:00, otherwise at most every [BOARD_IDLE_MS]. A station not on National Rail's
+     * list, a refused key or a failed read are written as the board's state (Health says what to do); the departures
+     * stay as last read, and the apps stop showing them once they're 20 minutes old. Returns whether the devices
+     * should be woken (the departures, their direction or the state changed).
+     */
+    internal fun syncBoard(a: AccountRow, rail: RailBoardProvider): Boolean {
+        val hh = a.householdId
+        if (!rail.configured()) { synchronized(boardNote) { boardNote[hh] = "server has no rail key set" }; return false }
+        val profile = runCatching { AboutYouRules.read(reader.entity(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)) }.getOrNull()
+        val route = RouteRules.parse(profile?.route)
+        val home = profile?.homeStation
+        if (route == null || home == null) {
+            synchronized(boardNote) { boardNote[hh] = if (route == null) "no train route in About you" else "no home station in About you" }
+            return false
+        }
+        val at = java.time.Instant.ofEpochMilli(now()).atZone(zone)
+        val min = at.hour * 60 + at.minute
+        val weekday = at.dayOfWeek.value <= 5
+        val busy = weekday && (min in 6 * 60 until 10 * 60 || min in 15 * 60 until 20 * 60)
+        val last = synchronized(boardAt) { boardAt[a.id] }
+        if (!busy && last != null && now() - last < BOARD_IDLE_MS) return false
+        synchronized(boardAt) { boardAt[a.id] = now() }
+        val dir = if (at.hour < 12) TrainBoard.AM else TrainBoard.PM
+        val homeCrs = RailStations.crs(home)
+        val changeCrs = route.change?.let(RailStations::crs)
+        val (from, to) = if (dir == TrainBoard.AM) homeCrs to changeCrs else changeCrs to homeCrs
+        val read: RailBoardRead?
+        val state: String
+        when {
+            homeCrs == null || (route.change != null && changeCrs == null) -> { read = null; state = TrainBoard.NO_STATION }
+            from == null -> { synchronized(boardNote) { boardNote[hh] = "no change station on the route for the way home" }; return false }
+            else -> {
+                val r = runCatching { rail.departures(checkNotNull(from), to) }
+                read = r.getOrNull()
+                state = when (r.exceptionOrNull()) { null -> TrainBoard.OK; is RailKeyRefused -> TrainBoard.KEY; else -> TrainBoard.ERROR }
+                r.exceptionOrNull()?.let { e -> if (e !is RailKeyRefused) synchronized(boardNote) { boardNote[hh] = "error ${e::class.simpleName}: ${e.message?.take(60)}" } }
+            }
+        }
+        val step = now().floorDiv(RouteRules.BOARD_STEP_MS) * RouteRules.BOARD_STEP_MS
+        if (read != null) synchronized(boardNote) {
+            boardNote[hh] = "board OK · ${read.services} services · ${read.departures.size} kept · " +
+                (if (dir == TrainBoard.AM) "morning" else "evening") + (rail.endpoint?.let { " · via $it" } ?: "")
+        } else if (state == TrainBoard.NO_STATION) synchronized(boardNote) {
+            boardNote[hh] = if (homeCrs == null) "home station not found on National Rail's list" else "change station not found on National Rail's list"
+        } else if (state == TrainBoard.KEY) synchronized(boardNote) { boardNote[hh] = "rail key refused on every endpoint" }
+        return store.transaction {
+            ops.transaction {
+                store.lockAccount(a.id)
+                val prev = store.mirror(hh, a.id)[LineStatusStore.ENTITY_ID]
+                fun was(k: String) = prev?.fieldOps?.get(k)?.second
+                val desired = linkedMapOf<String, FieldValue>(LineStatusFields.BOARD_STATE to FieldValue.Text(state))
+                if (read != null) {
+                    desired[LineStatusFields.DEPARTURES] = FieldValue.Text(TrainBoardCodec.encode(read.departures))
+                    desired[LineStatusFields.DEPARTURES_DIR] = FieldValue.Text(dir)
+                    desired[LineStatusFields.DEPARTURES_CHECKED] = FieldValue.Int64(step)
+                    desired[LineStatusFields.BOARD_OK_AT] = FieldValue.Int64(step)
+                }
+                val changed = listOf(LineStatusFields.DEPARTURES, LineStatusFields.DEPARTURES_DIR, LineStatusFields.BOARD_STATE)
+                    .any { k -> desired[k]?.let { v -> was(k) != valueKey(v) } == true }
+                write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
+                changed
+            }
+        }
+    }
+
+    /**
+     * The deploy report's "Live trains" line (counts only, never a station): a probe of a public station's board
+     * ([PROBE_CRS]) proving the key and the endpoint, then what the household's own board last did.
+     */
+    fun trainsReport(hh: String): String {
+        val r = rail ?: return "off · server has no rail key secret set"
+        if (!r.configured()) return "off · the rail secret holds no key"
+        val probe = runCatching { r.departures(PROBE_CRS, null) }.fold(
+            { "probe OK · ${it.services} services" + (r.endpoint?.let { e -> " · via $e" } ?: "") },
+            { e -> if (e is RailKeyRefused) "probe: key refused" else "probe failed (${e::class.simpleName}: ${e.message?.take(60)})" },
+        )
+        val own = synchronized(boardNote) { boardNote[hh] } ?: "own board not read yet"
+        return "$probe · $own"
     }
 
     /** The TfL ids of the household's Train route (About you); empty without one. */
@@ -2897,6 +2992,10 @@ class Integrations(
         const val WEATHER_PERIOD_MS = 30 * 60_000L
         /** The line status: each calendar poll (every 5 minutes) between 05:00 and 23:00 London time. */
         const val LINES_PERIOD_MS = 4 * 60_000L
+        /** Live trains outside the commute's hours: the board at most twice an hour. */
+        const val BOARD_IDLE_MS = 30 * 60_000L
+        /** A big public terminus whose board the deploy report reads to prove the rail key (never his own station). */
+        const val PROBE_CRS = "EUS"
         const val LINES_FROM_HOUR = 5
         const val LINES_TO_HOUR = 23
         /** From 17:00 London the line feed also reads tomorrow morning's plans, at most every half hour. */

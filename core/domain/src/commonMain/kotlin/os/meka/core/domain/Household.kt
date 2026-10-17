@@ -46,6 +46,8 @@ data class HouseholdNames(
     val council: TermCalendar? = null,
     /** About you's Train route ([RouteRules.route] reads it); null with none typed. */
     val route: CommuteRoute? = null,
+    /** About you's Home station (live trains); null with none typed. */
+    val homeStation: String? = null,
 ) {
     /** The partner's first name ("Sam" for "Sam Lane"); null with none. */
     val partnerFirst: String? get() = partner?.trim()?.substringBefore(' ')?.takeIf { it.isNotEmpty() }
@@ -75,6 +77,7 @@ data class HouseholdNames(
                 shown = a.shownName?.trim()?.takeIf { it.isNotEmpty() },
                 council = a.councilDates,
                 route = RouteRules.parse(a.route),
+                homeStation = a.homeStation,
             )
         }
     }

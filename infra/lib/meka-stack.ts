@@ -276,6 +276,9 @@ export class MekaStack extends cdk.Stack {
     // Money's bank sync (Needs Meka #38, 2026-10-17): Meka made this secret himself ({"api_key": "…"}, his Lunch Flow
     // Personal API key), so the stack only refers to it by name and lets the service read it. Read at use time.
     const moneyLunchFlow = secretsmanager.Secret.fromSecretNameV2(this, 'MoneyLunchFlow', `${prefix}/money/lunchflow`);
+    // Live trains (Needs Meka #16, 2026-10-17): Meka made this secret himself ({"api_key": "…"}, the Rail Data
+    // Marketplace's Live Departure Board consumer key); referred to by name, read at use time.
+    const railDarwin = secretsmanager.Secret.fromSecretNameV2(this, 'RailDarwin', `${prefix}/rail/darwin`);
 
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
@@ -308,6 +311,7 @@ export class MekaStack extends cdk.Stack {
         MEKA_APPROVALS_KESTREL_SECRET: approvalsKestrel.secretArn,
         // By name: the secret's ARN carries a suffix the stack doesn't know.
         MEKA_MONEY_LUNCHFLOW_SECRET: `${prefix}/money/lunchflow`,
+        MEKA_RAIL_DARWIN_SECRET: `${prefix}/rail/darwin`,
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
@@ -343,6 +347,7 @@ export class MekaStack extends cdk.Stack {
     carDvla.grantRead(task.taskRole);
     carFuel.grantRead(task.taskRole);
     approvalsKestrel.grantRead(task.taskRole); // a public key only
+    railDarwin.grantRead(task.taskRole); // read-only departure boards; nothing about him is sent but station codes
     moneyLunchFlow.grantRead(task.taskRole); // read-only bank data through Lunch Flow; nothing can move money
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.

@@ -220,6 +220,17 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     for (const s of grants) expect(([] as string[]).concat(s.Action).every((a) => /^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toBe(true);
   });
 
+  test('live trains read the rail key Meka stored, by name and read-only', () => {
+    t.hasResourceProperties('AWS::ECS::TaskDefinition', {
+      ContainerDefinitions: [Match.objectLike({ Environment: Match.arrayWith([Match.objectLike({ Name: 'MEKA_RAIL_DARWIN_SECRET', Value: 'meka-os-dev/rail/darwin' })]) })],
+    });
+    const policies = Object.values(t.findResources('AWS::IAM::Policy')) as any[];
+    const grants = policies.flatMap((p) => p.Properties.PolicyDocument.Statement)
+      .filter((s: any) => JSON.stringify(s.Resource).includes('rail/darwin-??????'));
+    expect(grants.length).toBeGreaterThan(0);
+    for (const s of grants) expect(([] as string[]).concat(s.Action).every((a) => /^secretsmanager:(GetSecretValue|DescribeSecret)$/.test(a))).toBe(true);
+  });
+
   test('the car reads the DVLA keys from their own secret, read-only', () => {
     t.hasResourceProperties('AWS::SecretsManager::Secret', { Name: 'meka-os-dev/car/dvla', SecretString: '{}' });
     const secrets = t.findResources('AWS::SecretsManager::Secret');
