@@ -26,7 +26,7 @@ import os.meka.core.sync.fv
  */
 object MoneyAccountFields {
     const val NAME = "name"
-    /** "csv" (a statement file); "bank" once Enable Banking lands. */
+    /** "csv" (a statement file); "bank" from his banks through Lunch Flow ([MoneyBank]). */
     const val SOURCE = "source"
     const val IMPORTED_AT = "importedAtMs"
     /** Slice 6: the balance in signed pence (overdrawn is negative), from a statement's Balance column or typed; Null when unknown. */
@@ -111,7 +111,11 @@ data class MoneyCsvRead(
 /** One stored statement line. */
 data class MoneyTxn(val id: String, val account: String, val day: Long, val pence: Long, val text: String)
 
-data class MoneyAccount(val id: String, val name: String, val source: String, val importedAtMs: Long?, val balance: MoneyBalance? = null)
+data class MoneyAccount(
+    val id: String, val name: String, val source: String, val importedAtMs: Long?, val balance: MoneyBalance? = null,
+    /** Bank sync: [MoneyBank.OK] or [MoneyBank.RECONNECT] for an account from his banks; null for a statement file's. */
+    val bankStatus: String? = null,
+)
 
 /**
  * Reads a bank or card statement saved as CSV. Finds the header row (in the first 15 lines), then the date column
@@ -420,6 +424,8 @@ data class MoneyView(
     val cards: MoneyCardsView? = null,
     /** Slice 8: his net worth — balances, cards, what he typed, and the month-by-month line ([MoneyWorth]); shown with this month (and before any statement). */
     val worth: MoneyWorthView? = null,
+    /** Bank sync: FROM YOUR BANKS — Lunch Flow's state, Refresh, accounts to reconnect ([MoneyBank]); shown whatever month. */
+    val bank: MoneyBankView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -440,7 +446,7 @@ object MoneyRules {
     const val UNLOCK = "Open Money"
     const val UNLOCK_REASON = "Open Money"
     const val EMPTY = "Nothing imported yet · download a statement from your bank or card as CSV (a spreadsheet file) and import it here."
-    const val CONNECT_LATER = "Connecting your banks directly (read-only, through Open Banking) comes once Enable Banking is set up; a statement file works for any bank meanwhile."
+    const val CONNECT_LATER = "Your banks fill this in by themselves (read-only, through Lunch Flow) once Navilife's server has its key; a statement file works for any bank meanwhile."
     const val ACCOUNT_HINT = "Which account? (Current account, Credit card…)"
     const val NO_ACCOUNT = "Name the account first (e.g. Current account), then pick the file."
     const val IMPORT = "Import a statement file"
@@ -519,24 +525,33 @@ object MoneyRules {
         hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(), whatIf: MoneyWhatIf = MoneyWhatIf(),
         refundWaits: List<WaitingItem> = emptyList(), bills: List<MoneyBill> = emptyList(), holidays: HolidayCalendar = HolidayCalendar(),
         cards: List<MoneyCard> = emptyList(), worthItems: List<MoneyWorthItem> = emptyList(),
+        /** Bank sync: what the server last did, accounts he removed, his Refresh, and the moment (for "updated 06:10"). */
+        bankSync: MoneyBankSync? = null, bankRemoved: Int = 0, bankAskedAtMs: Long? = null, nowMs: Long? = null,
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
+        val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
+        // Bank sync: a statement account that is one of his bank accounts counts once (its matched lines and balance).
+        val merged = MoneyBank.merge(accounts, txns.filter { it.account in names })
+        val counted = accounts.filter { it.id !in merged.sameAs }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
         val keys = HashMap<String, String>()
         val cats = HashMap<String, MoneyCategory>()
         fun keyOf(t: MoneyTxn): String = keys.getOrPut(t.id) { MoneyCategoryRules.merchantKey(t.text) }
         fun cat(t: MoneyTxn): MoneyCategory = cats.getOrPut(t.id) { rules[keyOf(t)] ?: MoneyCategoryRules.categoryOf(t.text, t.pence) }
-        val mine = txns.filter { it.account in names }
+        val mine = merged.txns
         val accountRows = accounts.sortedBy { it.name.lowercase() }.map { a ->
             val ts = mine.filter { it.account == a.id }
             val span = if (ts.isEmpty()) "no transactions" else
                 "${ts.size} transaction${if (ts.size == 1) "" else "s"} · ${dayMonth(ts.minOf { it.day })} – ${dayMonth(ts.maxOf { it.day })}"
-            MoneyAccountRow(a.id, a.name, span + (a.importedAtMs?.let { " · imported ${CivilDate.shortLabel(cal.epochDayOf(it))}" } ?: ""))
+            val bankLine = if (a.source == MoneyBank.SOURCE) "From your bank" + (if (a.bankStatus == MoneyBank.RECONNECT) " · reconnect in Lunch Flow" else "") + " · " else ""
+            val when_ = a.importedAtMs?.let { " · ${if (a.source == MoneyBank.SOURCE) "updated" else "imported"} ${CivilDate.shortLabel(cal.epochDayOf(it))}" } ?: ""
+            val same = merged.sameAs[a.id]?.let { b -> " · the same account as ${names[b]} from your bank, so lines in both count once" } ?: ""
+            MoneyAccountRow(a.id, a.name, bankLine + span + when_ + same)
         }
         // Slice 8: net worth from balances, cards and what he typed (also before any statement is in).
         val liveCards = cards.filter { it.id in names }
-        val worth = MoneyWorth.view(accounts, liveCards, worthItems, mine.map { Triple(it.account, it.day, it.pence) }, today)
-        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth)
+        val worth = MoneyWorth.view(counted, liveCards, worthItems, mine.map { Triple(it.account, it.day, it.pence) }, today)
+        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank)
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })
         val shown = (thisMonth - offset.coerceAtLeast(0)).coerceAtLeast(firstMonth)
@@ -595,7 +610,8 @@ object MoneyRules {
             vsLine = vsLine, vsLit = !partial && avgTotal != null && spent - avgTotal >= OVER_MIN_PENCE,
             categories = catRows, txns = rows, more = (sorted.size - rows.size).coerceAtLeast(0),
         )
-        val summary = "${accounts.size} account${if (accounts.size == 1) "" else "s"} · ${mine.size} transactions"
+        val summary = "${accounts.size} account${if (accounts.size == 1) "" else "s"} · ${mine.size} transactions" +
+            (if (merged.hidden > 0) " · ${merged.hidden} in a statement and from your bank, counted once" else "")
         // Slice 2: tips and regular payments go with this month (they're about now, not the month shown).
         val lines = if (partial) mine.map { MoneyLine(it.day, it.pence, keyOf(it), cat(it)) } else emptyList()
         val regular = if (partial) MoneyTips.regular(lines, today) else emptyList()
@@ -610,14 +626,15 @@ object MoneyRules {
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
             payday = if (partial) MoneyPayday.view(
                 mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
-                accounts.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
+                counted.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
                 // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
                 bills + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
             ) else null,
             cards = if (partial) MoneyCards.view(
-                cards.filter { it.id in names }, accounts, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
+                cards.filter { it.id in names }, counted, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
             ) else null,
             worth = if (partial) worth else null,
+            bank = bank,
         )
     }
 
@@ -643,7 +660,8 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
         val bp = e[MoneyAccountFields.BALANCE].longOrNull
         val bd = e[MoneyAccountFields.BALANCE_DAY].longOrNull
         MoneyAccount(e.ref.entityId, name, e[MoneyAccountFields.SOURCE].textOrNull ?: "csv", e[MoneyAccountFields.IMPORTED_AT].longOrNull,
-            if (bp != null && bd != null) MoneyBalance(bp, bd, e[MoneyAccountFields.BALANCE_TYPED].boolOrNull == true) else null)
+            if (bp != null && bd != null) MoneyBalance(bp, bd, e[MoneyAccountFields.BALANCE_TYPED].boolOrNull == true) else null,
+            e[MoneyBankAccountFields.STATUS].textOrNull)
     }
 
     /**

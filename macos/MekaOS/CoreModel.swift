@@ -3305,6 +3305,28 @@ final class CoreModel {
         }
     }
 
+    /// Bank sync: Refresh — asks Navilife's server to fetch his banks through Lunch Flow now. Nothing but the call crosses.
+    func moneyBankRefresh() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyBankRefresh())
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Bank sync: the bank accounts he removed are synced again.
+    func moneyBankRestore() async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyBankRestore())
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 8: takes a typed thing off his net worth; Undo with `undoMoneyCategory`.
     func moneyWorthRemove(id: String) async -> MoneySaid? {
         guard let core else { return nil }

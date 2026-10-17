@@ -62,6 +62,8 @@ import os.meka.android.security.FoldBiometric
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.MoneyAlert
+import os.meka.core.domain.MoneyBank
+import os.meka.core.domain.MoneyBankView
 import os.meka.core.domain.MoneyCardRow
 import os.meka.core.domain.MoneyCards
 import os.meka.core.domain.MoneyCardsView
@@ -116,6 +118,11 @@ import os.meka.core.facade.MekaCore
  * Slice 4: **FORECAST AT YOUR PACE** — his average whole month (in, out, left over) and where that leaves him in 6 and 12
  * months; what-ifs (halve one of his three biggest everyday categories, an extra amount a month he types) live on this
  * phone only and go when Money locks.
+ *
+ * Bank sync: **FROM YOUR BANKS** — his banks fill Money by themselves through Lunch Flow (read-only, on Navilife's server):
+ * when they were last fetched and how many accounts, **Refresh** (Refreshing… until the server has been), each account
+ * whose bank wants it reconnected in Lunch Flow (lit, with Open Lunch Flow), and Sync them again for bank accounts he
+ * removed. A statement of the same account counts once.
  *
  * Locking: the core holds no figures for the screen until [MekaCore.openMoney] after the prompt's yes, and closing the
  * pane (or leaving it) calls [MekaCore.closeMoney].
@@ -196,6 +203,25 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     modifier = Modifier.clickable(role = Role.Button) { unlock() }.minTouch().appear(rememberAppearance(2)))
             }
             return@LazyColumn
+        }
+        // Bank sync: FROM YOUR BANKS (whatever month is shown).
+        v.bank?.let { b ->
+            item(key = "bank-head") {
+                Text(b.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "bank") {
+                BankBlock(b, Modifier.animateItem().appear(rememberAppearance(2)),
+                    onRefresh = { scope.launch { runCatching { core.moneyBankRefresh() }.getOrNull()?.let(say) } },
+                    onRestore = { scope.launch { runCatching { core.moneyBankRestore() }.getOrNull()?.let(say) } },
+                    onOpen = {
+                        haptics.light()
+                        runCatching {
+                            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse(MoneyBank.LUNCH_FLOW_URL))
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                    })
+            }
         }
         v.month?.let { m ->
             item(key = "month") {
@@ -434,7 +460,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         if (account.isBlank()) say(MoneySaved(MoneyRules.NO_ACCOUNT, refused = true))
                         else pick.launch(arrayOf("text/*", "application/csv", "application/vnd.ms-excel", "application/octet-stream"))
                     }.minTouch())
-                Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
+                if (v.bank == null) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
         if (v.accounts.isNotEmpty()) {
@@ -483,6 +509,40 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Bank sync: what Lunch Flow last gave (lit when something needs him), each account to reconnect, Refresh (Refreshing…
+ * while the server hasn't been yet), Open Lunch Flow when lit, and Sync them again for removed bank accounts.
+ */
+@Composable
+private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Unit, onRestore: () -> Unit, onOpen: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val c by animateColorAsState(if (b.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-bank-lit")
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Crossfade(b.line, animationSpec = MekaMotion.appear(reduced), label = "money-bank-line") { l ->
+            Text(l, style = MekaType.body, color = c)
+        }
+        b.reconnect.forEach { r -> Text(r.line, style = MekaType.caption, color = Meka.colors.accent) }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Crossfade(b.refreshing, animationSpec = MekaMotion.appear(reduced), label = "money-bank-refresh") { busy ->
+                Text(if (busy) MoneyBank.REFRESHING else MoneyBank.REFRESH, style = MekaType.itemMeta,
+                    color = if (busy) Meka.colors.textTertiary else Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button, enabled = !busy) { onRefresh() }.minTouch())
+            }
+            if (b.lit) {
+                Text(MoneyBank.OPEN, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { onOpen() }.minTouch())
+            }
+        }
+        b.restoreLine?.let { r ->
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(r, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+                Text(MoneyBank.RESTORE, style = MekaType.caption, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRestore() }.minTouch().padding(MekaSpace.xs))
             }
         }
     }

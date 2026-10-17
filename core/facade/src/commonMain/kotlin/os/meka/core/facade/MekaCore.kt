@@ -170,6 +170,8 @@ class MekaCore(
     private val kids = os.meka.core.domain.Kids(replica, nowMs)
     // Money manager, slice 1: its lines are kept in memory between changes; this listener (before refresh's) drops them.
     private val money = os.meka.core.domain.Money(replica, nowMs).also { m -> replica.addListener { refs -> m.changed(refs) } }
+    // Money manager, bank sync: what the server last did through Lunch Flow, and Refresh.
+    private val moneyBank = os.meka.core.domain.MoneyBankStore(replica)
     private val kidChores = os.meka.core.domain.KidChores(replica)
     private val discordStore = os.meka.core.domain.DiscordStore(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
@@ -748,7 +750,33 @@ class MekaCore(
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
             moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
+            moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(),
         )
+    }
+
+    /**
+     * Bank sync: Refresh — asks Navilife's server to fetch his banks through Lunch Flow now (it syncs every 6 hours by
+     * itself). Only while Money is open; refused while one asked a moment ago is still waiting.
+     */
+    suspend fun moneyBankRefresh(): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val s = moneyBank.sync()
+        val t = nowMs()
+        if (os.meka.core.domain.MoneyBank.refreshing(s, moneyBank.askedAtMs(), t) ||
+            s?.lastTryMs?.let { t - it in 0 until os.meka.core.domain.MoneyBank.MIN_GAP_MS } == true
+        ) return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyBank.TOO_SOON, refused = true)
+        moneyBank.refresh(t)
+        refreshMoney()
+        os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyBank.REFRESH_SAID)
+    }
+
+    /** Bank sync: the bank accounts he removed are synced again (the server fetches them at once). Only while Money is open. */
+    suspend fun moneyBankRestore(): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val n = moneyBank.restore(nowMs())
+        refreshMoney()
+        if (n == 0) os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        else os.meka.core.domain.MoneySaved("Syncing $n bank account${if (n == 1) "" else "s"} again · they come back in a minute")
     }
 
     /**
@@ -6034,6 +6062,7 @@ class MekaCore(
             callAssistantOn = _workMode.value.callAssistant, spamProtectionOn = _workMode.value.spamProtection, lastVoiceMessageMs = lastVoice, nowMs = nowMs(),
             callCredit = callCredit.current(),
             aboutYou = aboutYou.held(),
+            bankSync = moneyBank.sync(),
         )
     }
 

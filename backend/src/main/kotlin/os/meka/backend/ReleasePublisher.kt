@@ -256,7 +256,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -304,6 +304,18 @@ object ReleasePublisherCli {
                     assistantLines(l).forEach(::println)
                     0
                 }
+                "publisher-bank" -> {
+                    // The first sync runs a minute after the server starts: give a fresh deploy a few minutes.
+                    var line: String? = null
+                    for (attempt in 0 until 6) {
+                        val l = runCatching { client.notifications() }.getOrNull()
+                        line = l?.bank
+                        if (line != null && !line.startsWith("not synced yet")) break
+                        if (attempt < 5) kotlinx.coroutines.delay(30_000)
+                    }
+                    println(bankLine(line))
+                    0
+                }
                 "publisher-mail" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -324,6 +336,13 @@ object ReleasePublisherCli {
                 }
             }
         }
+    }
+
+    /** Money's bank sync: one notice (a warning unless it's syncing); counts only, never a name or an amount. */
+    fun bankLine(line: String?): String {
+        if (line == null) return "::notice title=Bank sync::the server doesn't report it yet"
+        val ok = line.startsWith("ok ") || line.startsWith("ok·") || line.startsWith("ok ·")
+        return "::${if (ok) "notice" else "warning"} title=Bank sync::$line".replace("%", "%25")
     }
 
     /**

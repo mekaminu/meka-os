@@ -34,6 +34,8 @@ class NotifyReports(
     private val assistantCalls: ((householdId: String) -> List<AssistantCallEntry>)? = null,
     /** Inbox fixes, slice 6: each mail account's last check ([MailCheckRules.Report]), for the "Mail autopilot" notices. */
     private val mailChecks: ((householdId: String) -> List<MailCheckRules.Report>)? = null,
+    /** Money's bank sync: one line of counts ([os.meka.core.domain.MoneyBank.reportLine]), never a name or an amount. */
+    private val bank: ((householdId: String) -> String)? = null,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
@@ -54,6 +56,7 @@ class NotifyReports(
         val about = NotifyDiagnosticsCodec.Latest(
             null, aboutFilled = held?.filled, aboutFoldAtMs = held?.foldAtMs, aboutMacAtMs = held?.macAtMs,
             aboutClubs = held?.clubs, aboutCouncil = held?.council, aboutRoute = held?.route, assistant = calls, mail = mail,
+            bank = bank?.let { read -> runCatching { read(who.householdId) }.getOrNull() },
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)

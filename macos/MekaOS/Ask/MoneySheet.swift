@@ -64,6 +64,7 @@ struct MoneySheet: View {
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
+                        if let b = v.bank { bank(b).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
                         if let w = v.worth { worth(w).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
@@ -564,6 +565,45 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: s)
     }
 
+    /// Bank sync: FROM YOUR BANKS — when Lunch Flow last gave his banks (lit when something needs him), each account to
+    /// reconnect, Refresh (Refreshing… until the server has been), Open Lunch Flow, Sync them again for removed accounts.
+    private func bank(_ b: MoneyBankView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(b.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(b.line).font(MekaType.body).foregroundStyle(b.lit ? palette.accent : palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .contentTransition(.opacity)
+            ForEach(b.reconnect, id: \.id) { r in
+                Text(r.line).font(MekaType.caption).foregroundStyle(palette.accent).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack(spacing: MekaSpace.m) {
+                Button(b.refreshing ? MoneyBank.shared.REFRESHING : MoneyBank.shared.REFRESH) {
+                    Task { said = await model.moneyBankRefresh() }
+                }
+                .buttonStyle(MekaPressStyle()).font(MekaType.caption)
+                .foregroundStyle(b.refreshing ? palette.textTertiary : palette.accent)
+                .disabled(b.refreshing)
+                if b.lit {
+                    Button(MoneyBank.shared.OPEN) {
+                        MekaHaptics.light()
+                        if let url = URL(string: MoneyBank.shared.LUNCH_FLOW_URL) { NSWorkspace.shared.open(url) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+            }
+            if let r = b.restoreLine {
+                HStack {
+                    Text(r).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    Button(MoneyBank.shared.RESTORE) { Task { said = await model.moneyBankRestore() } }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: b.line)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: b.refreshing)
+    }
+
     private func importer(_ v: MoneyView) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("IMPORT A STATEMENT").font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -582,8 +622,10 @@ struct MoneySheet: View {
             TextField(MoneyRules.shared.ACCOUNT_HINT, text: $account).textFieldStyle(.roundedBorder)
             Button(busy ? "Reading the file…" : MoneyRules.shared.IMPORT + "…") { chooseFile() }
                 .disabled(busy)
-            Text(MoneyRules.shared.CONNECT_LATER).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            if v.bank == nil {
+                Text(MoneyRules.shared.CONNECT_LATER).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

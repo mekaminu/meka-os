@@ -13,6 +13,18 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.test.assertNull
+import os.meka.core.domain.CivilDate
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MoneyAccountFields
+import os.meka.core.domain.MoneyBank
+import os.meka.core.domain.MoneyBankAccountFields
+import os.meka.core.domain.MoneyBankSync
+import os.meka.core.domain.MoneyTxnFields
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.HlcClock
+import os.meka.core.sync.Op
+import os.meka.core.sync.fv
 
 /** Money manager, slice 1, through the facade: locked until opened, a statement imported on one app shows on the other. */
 class MoneyFacadeTest {
@@ -80,6 +92,46 @@ class MoneyFacadeTest {
         assertEquals(MoneyRules.EMPTY, mac.moneyView.value.empty)
         assertTrue(mac.lifeLines.value.needsSetUp(LifeTile.MONEY))
     }
+    @Test
+    fun bankLinesFromTheServerShowOnTheFoldAndRefreshAsksForMore() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        fold.openMoney()
+        assertNull(fold.moneyView.value.bank)
+        // What Navilife's server writes after a sync through Lunch Flow (invented account and line).
+        val clock = HlcClock("server", { now })
+        var n = 0
+        fun put(type: String, id: String, fields: Map<String, FieldValue>) = fields.forEach { (f, v) ->
+            ops.append(Op("srvbank${n++}", "hh", type, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        val acct = MoneyBank.accountId("101")
+        put(EntityTypes.MONEY_ACCOUNT, acct, mapOf(
+            MoneyAccountFields.NAME to "Oakbank Current".fv(), MoneyAccountFields.SOURCE to MoneyBank.SOURCE.fv(),
+            MoneyBankAccountFields.STATUS to MoneyBank.OK.fv(), MoneyAccountFields.IMPORTED_AT to now.fv(),
+        ))
+        put(EntityTypes.MONEY_TXN, MoneyBank.txnId(acct, "x1"), mapOf(
+            MoneyTxnFields.ACCOUNT to acct.fv(), MoneyTxnFields.DAY to CivilDate.toEpochDay(2026, 10, 2).fv(),
+            MoneyTxnFields.PENCE to (-4_000L).fv(), MoneyTxnFields.TEXT to "Tesco · TESCO STORES 2041".fv(),
+        ))
+        put(EntityTypes.CONTEXT_MODE, MoneyBank.SYNC_ID, MoneyBank.fields(MoneyBankSync(MoneyBank.OK, now, now, 1, 1)))
+        fold.syncNow()
+        val v = fold.moneyView.value
+        assertEquals("Through Lunch Flow, read-only · updated just now · 1 account", v.bank!!.line)
+        assertEquals(listOf("Groceries"), v.month!!.categories.map { it.label })
+        assertTrue(v.accounts.single().line.startsWith("From your bank · 1 transaction"))
+        // Refresh asks the server (once; a second tap while it waits is refused).
+        now += 120_000
+        assertEquals(MoneyBank.REFRESH_SAID, fold.moneyBankRefresh().line)
+        assertTrue(fold.moneyView.value.bank!!.refreshing)
+        assertTrue(fold.moneyBankRefresh().refused)
+        fold.syncNow()
+        assertTrue(ops.after("hh", 0, 10_000).any { it.op.entityId == MoneyBank.REFRESH_ID && it.op.deviceId == "android" })
+        // Removed here, it stays off until Sync them again.
+        fold.removeMoneyAccount(acct)
+        assertEquals("1 bank account you removed isn't synced", fold.moneyView.value.bank!!.restoreLine)
+        assertFalse(fold.moneyBankRestore().refused)
+        assertNull(fold.moneyView.value.bank!!.restoreLine)
+    }
+
     @Test
     fun tipsHiddenOnTheFoldStayHiddenOnTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")

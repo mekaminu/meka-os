@@ -130,6 +130,8 @@ data class HealthFacts(
     val callCredit: CallCredit? = null,
     /** About you, slice 2: whether the Fold and the Mac each hold the profile; null leaves the row out. */
     val aboutYou: AboutYouHeld? = null,
+    /** Money's bank sync through Lunch Flow as the server last wrote it ([MoneyBank]); null leaves the row out. */
+    val bankSync: MoneyBankSync? = null,
 )
 
 object HealthRules {
@@ -183,6 +185,7 @@ object HealthRules {
             battery(f)?.let(::add)
             update(f, cal)?.let(::add)
             AboutYouRules.healthRow(f.aboutYou, f.nowMs, cal)?.let(::add)
+            MoneyBank.healthRow(f.bankSync, f.nowMs, cal)?.let(::add)
         }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }

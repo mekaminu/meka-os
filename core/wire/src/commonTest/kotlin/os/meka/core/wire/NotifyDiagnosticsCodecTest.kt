@@ -62,6 +62,10 @@ class NotifyDiagnosticsCodecTest {
         // Inbox fixes, slice 6: the mail accounts' lines round-trip; an older server has none.
         val mail = listOf(NotifyDiagnosticsCodec.Entry(1_790_000_000_000L, "Personal", "Gmail · ok · inbox 88"))
         assertEquals(mail, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, mail = mail))).mail)
+        // Money's bank sync: one line of counts, and absent from a server before it.
+        val bank = "ok · 6 accounts · 412 transactions"
+        assertEquals(bank, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, bank = bank))).bank)
+        assertEquals(null, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null))).bank)
         assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null}""").mail)
     }
 

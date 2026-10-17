@@ -1,7 +1,7 @@
 ---
 id: money
 title: Money
-keywords: money, net worth, what am i worth, my net worth, what i own and owe, pension value, savings elsewhere, loans and debts, credit card, card due, card payment, charge card, minimum payment, credit limit, card limit, 0% ends, zero percent, interest charged, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
+keywords: money, net worth, what am i worth, my net worth, what i own and owe, pension value, savings elsewhere, loans and debts, credit card, card due, card payment, charge card, minimum payment, credit limit, card limit, 0% ends, zero percent, interest charged, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking, lunch flow, bank sync, refresh my bank, reconnect my bank
 data: yes
 fold: MONEY
 fold_where: Ask → Life → Money
@@ -15,7 +15,9 @@ tip: Each month shows what you spent, what came in, and each category with its s
 tip: A payment in the wrong category? Tap it and pick the right one: every payment to that shop goes there from now on, on the Fold and the Mac alike, with Undo.
 tip: A card statement that lists purchases as positive amounts is read the right way round (purchases as money out); the line after an import says so.
 tip: Remove takes one account and its transactions off every device; Delete all money data at the foot clears everything. Your bank keeps its own records.
-tip: Connecting your banks directly (read-only, through Open Banking) comes once it's set up; a statement file works for any bank or card meanwhile.
+tip: From your banks: your accounts and cards fill Money by themselves through Lunch Flow, read-only, every few hours. Refresh fetches them now (it takes a minute); the line says when they were last fetched and how many accounts.
+tip: A bank asks you to agree again every 90 days or so: Money then says "Reconnect … in Lunch Flow" and Open Lunch Flow takes you there. Navilife never logs in to your bank and never moves money.
+tip: A statement you imported before for the same account counts once: its lines that match the bank's are left out, and its balance isn't added twice. A bank account you Remove stays off until you tap Sync them again.
 tip: This month also shows tips from your own numbers: a habit and what halving it would save ("Coffee 19× · £71 in the last 30 days"), a category already well over its 6-month average, and a regular payment that went up. Hide tips like this turns that kind off on both devices (Undo, or Show them again later).
 tip: Regular payments lists what's taken about once a month for about the same amount (subscriptions, the gym, bills), with when it was last taken, when it's next due and the monthly and yearly total.
 tip: Worth a look leads this month when a payment deserves a second look: the same amount at the same shop twice within a day, a payment much bigger than usual or a first big one somewhere new, and fees (foreign, late, interest).

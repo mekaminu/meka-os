@@ -1045,6 +1045,14 @@ fun main(args: Array<String>) {
                     ),
                 )
             }
+            // Money's bank sync (Needs Meka #38): his banks through Lunch Flow, read-only; off until the key is in its secret.
+            val bankSync = System.getenv("MEKA_MONEY_LUNCHFLOW_SECRET")?.takeIf { it.isNotBlank() }?.let { secret ->
+                val devices = PostgresDeviceRegistry(ds)
+                BankSync(
+                    opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
+                    feed = os.meka.backend.integrations.LunchFlowFeed.fromSecret(secret), onWritten = { hh -> push?.serverChanged(hh) },
+                ).also { startBankSync(it) }
+            }
             val verifier = RequestVerifier()
             // his wife's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
             // and the dinners, written as server ops, and the emergency card, read only. FamilyShare only ever asks for its
@@ -1063,7 +1071,12 @@ fun main(args: Array<String>) {
                     foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
                     notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push, profile = { hh ->
                         opStore.latestFields(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)[AboutYouRules.ENTITY_ID]
-                    }, assistantCalls = assistantCallsReader(opStore), mailChecks = { hh -> integrations?.mailReport(hh).orEmpty() }),
+                    }, assistantCalls = assistantCallsReader(opStore), mailChecks = { hh -> integrations?.mailReport(hh).orEmpty() },
+                        bank = { hh ->
+                            val f = opStore.latestFields(hh, EntityTypes.CONTEXT_MODE, os.meka.core.domain.MoneyBank.SYNC_ID)[os.meka.core.domain.MoneyBank.SYNC_ID]
+                            os.meka.core.domain.MoneyBank.reportLine(f?.let { m -> os.meka.core.domain.MoneyBank.read { m[it] } }) { NotifyReports.utc(it) } +
+                                (if (bankSync == null) " · server has no Lunch Flow secret set" else "")
+                        }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
