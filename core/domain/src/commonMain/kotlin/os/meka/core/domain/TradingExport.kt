@@ -164,7 +164,7 @@ object TradingExportRules {
         data class Line(val at: Long, val cells: List<String>)
         var allClosed = 0L; var allFees = 0L; var allFunding = 0L
         var allGbp = Gbp()
-        val missing = sortedSetOf<Int>()
+        val missing = mutableSetOf<Int>() // sortedSetOf is JVM-only (breaks the Mac's Kotlin/Native build)
         fun pounds(at: Long, closed: Long?, fee: Long?, funding: Long?, sum: Gbp): List<String> {
             val m = monthOf(at)
             val r = rates[m]?.takeIf { it > 0 } ?: run { missing += m; sum.missing = true; return listOf("", "", "", "", "") }
@@ -198,7 +198,7 @@ object TradingExportRules {
         }
         if (read.size > 1) totals += listOf("Tax year ${year.label}", "All accounts", "Total", "", "${read.sumOf { it.orders.size }} orders", "", "", "",
             plain(allClosed), plain(-allFees), plain(allFunding), plain(allClosed - allFees + allFunding)) + allGbp.cells()
-        if (missing.isNotEmpty()) totals += note("", "HMRC's rate for " + missing.joinToString(", ") { monthLabel(it) } +
+        if (missing.isNotEmpty()) totals += note("", "HMRC's rate for " + missing.sorted().joinToString(", ") { monthLabel(it) } +
             " couldn't be read; pounds for those months and the pound totals are left blank")
         totals.forEach { out.append(row(it)).append("\r\n") }
         return out.toString()
@@ -207,7 +207,7 @@ object TradingExportRules {
     /** What he's told once the file is ready: "2025–26: 212 orders and 180 days of funding across 2 accounts · net +$1,240.00 (+£925.37 at HMRC's monthly rates) · …". */
     fun saidReady(year: TradingTaxYear, accounts: List<TradingExportAccount>, rates: Map<Int, Long> = emptyMap()): MoneySaved {
         val read = accounts.filter { !it.failed }
-        val months = read.flatMap { a -> a.orders.map { monthOf(it.atMs) } + a.funding.map { monthOf(it.day * CivilDate.DAY_MS) } }.toSortedSet()
+        val months = read.flatMap { a -> a.orders.map { monthOf(it.atMs) } + a.funding.map { monthOf(it.day * CivilDate.DAY_MS) } }.distinct().sorted()
         val missing = months.filter { (rates[it] ?: 0L) <= 0L }
         val pounds = if (missing.isNotEmpty() || months.isEmpty()) null else read.sumOf { a ->
             a.orders.sumOf { o -> rates.getValue(monthOf(o.atMs)).let { r -> pence(o.closedPnlCents, r) - pence(o.feeCents, r) } } +
