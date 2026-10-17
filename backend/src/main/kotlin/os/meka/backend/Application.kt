@@ -155,7 +155,7 @@ fun Application.mekaSync(
 
         // Public pages the OAuth consent screens link to (Google requires a home page and privacy policy to publish).
         get("/") {
-            call.respondText(resultPage("Navilife", "A private, single-household personal operating system. It is not a public service and has no sign-ups."), ContentType.Text.Html)
+            call.respondText(resultPage("Navilife", "A private, single-household personal operating system. It is not a public service and has no sign-ups. Caller-number checks use the Brave Search API (search.brave.com)."), ContentType.Text.Html)
         }
         get("/privacy") { call.respondText(resultPage("Navilife privacy policy", PRIVACY_TEXT), ContentType.Text.Html) }
         // Enable Banking's production application form asks for a terms URL too (2026-10-17).
