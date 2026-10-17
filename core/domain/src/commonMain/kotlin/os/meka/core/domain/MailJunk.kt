@@ -115,6 +115,8 @@ object MailJunkRules {
         val scam = scamSignal(f.fromAddress, f.fromName, f.subject)
         // Banks, public bodies and schools: never trashed, never rescued on their own say-so.
         if (MailTidyRules.protectedSender(f.fromAddress, emptySet())) return MailJunkVerdict.LEAVE
+        // Account-security mail from the provider's real domain: never trashed, never rescued on its own say-so.
+        if (MailSecurityRules.kind(f.fromAddress, f.subject) != null) return MailJunkVerdict.LEAVE
         // Someone who already writes to him is never trashed; rescued unless it reads as a scam (a hacked account).
         if (f.knownSender && address != null) return if (scam == null) MailJunkVerdict.RESCUE else MailJunkVerdict.LEAVE
         if (scam != null) return MailJunkVerdict.TRASH

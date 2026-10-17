@@ -1553,3 +1553,13 @@ Core MoneyWorth.kt (rules only, no AI): **NET WORTH** on this month's Money scre
 - **Server**: the count's look writes the sender list; `junkJudged` honours kept senders (a JUNK_TRASH verdict becomes KEEP) in the clean-out, and the daily Junk review skips them too.
 - **Apps**: Fold `JunkReviewPane`/`JunkReviewHost` over Needs you and the command centre (DecisionMoves.junkReview); Mac `JunkReviewSheet` (CoreModel openJunkReview/keepJunkSender/approveJunkReview, undo `.junkKeep`). Help tip in Mail; motion catalogue row "Empty Junk review".
 - **Tests**: MailJunkReviewTest (7), MailJunkClearTest updated, backend MailSyncTest `emptyJunksReviewListsTheSendersAndAKeptSenderStaysInJunk`.
+
+
+## Review on an approval card opens the wrong screen — slice 2 (2026-10-17): the security-alert rule
+
+- Core `MailSecurityRules` (MailSecurity.kt): providers and their real domains (no free-mailbox domains), alert words and code words in the subject; `kind`, `sorted`, `kept`, `line`, `itemProvider`. `MailSortReason.SECURITY` (Needs you, sure) and `SECURITY_CODE` (FYI, sure); `MailSortRules.sort` checks it right after Gmail's spam label.
+- `MailTidyRules.plan` keeps any security sort before sender rules (Always tidy included), so Autopilot, Mark read and the backlog clean-up never move or mark them; `MailBacklogRules.PLAN_VERSION` 3 replans an unapproved plan. `MailJunkRules.verdict` leaves a real one in Junk (never trashed, never rescued on its own say-so); a spoof still reads as a scam.
+- `mail_item.security` (Text, server-written; ADR-008 addendum); `MailItem.security`, `MailNeedsRow.security` = "Security alert from Google · check it was you", first in the spoken line.
+- Server: `resortSecurity` re-sorts inbox mail sorted before the rule; `restoreSecurity` (stage "security", before Autopilot) puts back security mail from this account's non-Junk tidies of the last 14 days, once (never tidied again, unread again when tidies mark read); `publishMailNeeds` writes the provider.
+- Fold MailNeedsSection and Mac MailNeedsView show the line in red above the sender.
+- Tests: MailSecurityTest (sorting, spoofs and free mailboxes, Always tidy, backlog, Junk, the card), MailSyncTest `accountSecurityMailIsNeverTidiedAndAsksHimToCheckItWasHim`, `securityMailATidyMovedEarlierGoesBackToTheInbox`.

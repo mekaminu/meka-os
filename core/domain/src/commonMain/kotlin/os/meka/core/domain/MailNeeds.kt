@@ -75,6 +75,11 @@ object MailItemFields {
     const val TIDY_RULE_AT = "tidyRuleAtMs"
     const val TIDY_CLEARED_AT = "tidyClearedAtMs"
     /** Scheduling assistant, slice 2 (an app's): Book it's calendar edit ("" once undone) and the start it booked (0). */
+    /**
+     * Account-security mail ([MailSecurityRules], 2026-10-17): the provider whose security alert this is ("Google"),
+     * server-written, Text; "" or absent for any other email.
+     */
+    const val SECURITY = "security"
     const val MEETING_EDIT_ID = "meetingEditId"
     const val MEETING_AT = "meetingAtMs"
 }
@@ -128,6 +133,8 @@ data class MailItem(
     val autoDraftAtMs: Long? = null,
     val autoDraftTriedAtMs: Long? = null,
     val draftDismissedAtMs: Long? = null,
+    /** The provider whose account-security alert this is ("Google"), or null. */
+    val security: String? = null,
 )
 
 /** One email on the card. */
@@ -171,6 +178,8 @@ data class MailNeedsRow(
     val wants: String? = null,
     /** Drafted replies: Navilife's draft to Send, Edit or put away (Not needed); null when there is none to show. */
     val autoDraft: String? = null,
+    /** "Security alert from Google · check it was you" for account-security mail, else null. */
+    val security: String? = null,
 )
 
 data class MailNeedsCard(
@@ -285,9 +294,10 @@ object MailNeedsRules {
     /** What the server publishes for one email (Needs you, in the inbox, inside the window). */
     fun serverFields(
         account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
-        threadKey: String? = null,
+        threadKey: String? = null, security: String = "",
     ): Map<String, FieldValue> =
-        (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) + mapOf(
+        (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) +
+            (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) + mapOf(
             MailItemFields.ACCOUNT to account.fv(),
             MailItemFields.FROM to MailUnsubscribeRules.displayName(fromName, fromAddress).take(MAX_FROM).fv(),
             MailItemFields.SUBJECT to (subject?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_SUBJECT) ?: "(no subject)").fv(),
@@ -343,6 +353,7 @@ object MailNeedsRules {
             autoDraftAtMs = ms(MailAutoDraftFields.AUTO_DRAFT_AT),
             autoDraftTriedAtMs = ms(MailAutoDraftFields.AUTO_DRAFT_TRIED_AT),
             draftDismissedAtMs = ms(MailAutoDraftFields.DISMISSED_AT),
+            security = text(MailItemFields.SECURITY),
         )
     }
 
@@ -483,10 +494,11 @@ object MailNeedsRules {
             val pickedLine = pick?.let { if (booked) MeetingPickRules.bookedLine(it.slot, cal) else MeetingPickRules.pickedLine(i.from, it.slot, cal) }
                 ?: MeetingPickRules.declinedLine(i.from).takeIf { declined }
             val meet = !replySent(i) && pick == null && (declined || MeetingRequestRules.asks(i.subject, i.preview))
+            val security = i.security?.let(MailSecurityRules::line)
             MailNeedsRow(
                 id = i.id, from = i.from, line = line, subject = i.subject, preview = i.preview,
                 business = i.account == MailLabel.BUSINESS.label,
-                spoken = listOfNotNull("${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
+                spoken = listOfNotNull(security, "${i.from}, ${i.subject}", line, i.preview, MeetingRequestRules.ASKS.takeIf { meet && !declined }, pickedLine, linkedLine, notice,
                     i.wants?.let { "Needs a reply: $it" }?.takeIf { MailAutoDraftRules.needsReply(i) },
                     "Navilife drafted a reply".takeIf { MailAutoDraftRules.draftShowing(i) && notice == null }).joinToString(". "),
                 notice = notice,
@@ -499,6 +511,7 @@ object MailNeedsRules {
                 canBook = pick != null && !booked,
                 wants = if (MailAutoDraftRules.needsReply(i)) i.wants ?: MailAutoDraftRules.NEEDS_REPLY else null,
                 autoDraft = i.autoDraft?.takeIf { MailAutoDraftRules.draftShowing(i) && notice == null },
+                security = security,
             )
         }
 

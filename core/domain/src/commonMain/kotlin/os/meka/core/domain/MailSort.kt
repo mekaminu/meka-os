@@ -9,6 +9,7 @@ package os.meka.core.domain
  * carrier senders with order words, no-reply senders). Anything a person seems to have written lands in Needs you
  * with [MailSorted.sure] false: the safe side (nothing in Needs you is ever tidied away), and the AI looks at those in
  * slice 2b ([afterAi]: Needs you or FYI, from the sender and subject only). Mail from public bodies and schools (gov.uk, nhs, police, sch.uk) is always Needs you, sure.
+ * Account-security mail from a provider's real domain ([MailSecurityRules]) is Needs you (a code: FYI), sure, and never tidied.
  * Sorting changes nothing in the mailbox; acting on it is slice 3.
  */
 enum class MailSort(val one: String, val many: String) {
@@ -48,7 +49,11 @@ enum class MailSortReason(val line: String) {
     /** The AI was asked but gave no clear answer: kept as Needs you (the safe side), not asked again. */
     AI_UNCLEAR("Navilife's AI couldn't tell · kept for you"),
     /** Inbox fixes, slice 4: from someone Meka has written to (his sent mail): his, never asked about, never tidied. */
-    KNOWN_PERSON("Someone you've written to · always yours");
+    KNOWN_PERSON("Someone you've written to · always yours"),
+    /** [MailSecurityRules]: an account-security email from the provider's real domain: never tidied. */
+    SECURITY("About your account's security, from the provider's real address · always kept in your inbox"),
+    /** [MailSecurityRules]: a sign-in or verification code from the provider's real domain: kept in the inbox. */
+    SECURITY_CODE("A sign-in or verification code · kept in your inbox");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }
@@ -151,6 +156,8 @@ object MailSortRules {
         fun sure(s: MailSort, r: MailSortReason) = MailSorted(s, r, true)
         return when {
             "SPAM" in labels -> sure(MailSort.JUNK, MailSortReason.SPAM)
+            // Account-security mail from the provider's real domain: kept, whatever its other headers say.
+            MailSecurityRules.sorted(f.fromAddress, f.subject) != null -> MailSecurityRules.sorted(f.fromAddress, f.subject)!!
             domain != null && PUBLIC_SUFFIXES.any { endsWithDomain(domain, it) } -> sure(MailSort.NEEDS_YOU, MailSortReason.PUBLIC_BODY)
             domain != null && CARRIERS.any { endsWithDomain(domain, it) } -> sure(MailSort.RECEIPT, MailSortReason.CARRIER)
             hasWord(subject, ORDER_WORDS) && (list || isAutomated(f.fromAddress) || "CATEGORY_UPDATES" in labels || "CATEGORY_PURCHASES" in labels) ->

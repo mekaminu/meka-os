@@ -98,6 +98,8 @@ object MailTidyRules {
     fun plan(f: MailTidyFacts): MailTidy {
         val s = f.sorted ?: return MailTidy.KEEP
         if (!f.inInbox || f.replied || protectedSender(f.fromAddress, f.keepAddresses)) return MailTidy.KEEP
+        // Account-security mail is never tidied, not even by his "always tidy" on the sender.
+        if (MailSecurityRules.kept(s.reason)) return MailTidy.KEEP
         // His "never tidy" wins over everything below, the unsubscribed sender's Trash included.
         if (f.rule == MailSenderRule.KEEP) return MailTidy.KEEP
         // Slice 5b: only what still reads as a newsletter or promo goes to Trash (a receipt or a person's email from the

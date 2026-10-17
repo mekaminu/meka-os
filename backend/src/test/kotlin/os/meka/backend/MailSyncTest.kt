@@ -804,6 +804,61 @@ class MailSyncTest {
     }
 
     @Test
+    fun accountSecurityMailIsNeverTidiedAndAsksHimToCheckItWasHim() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        autopilotOn(ops)
+        now += day * 2
+        val google = "no-reply@accounts.google.com"
+        gmail.mailbox["s1"] = msg("s1", 0, google).copy(fromName = "Google", subject = "Security alert", labels = listOf("INBOX", "CATEGORY_UPDATES"))
+        gmail.mailbox["c1"] = msg("c1", 0, google).copy(fromName = "Google", subject = "Your sign-in code", labels = listOf("INBOX", "CATEGORY_UPDATES"))
+        gmail.mailbox["u1"] = msg("u1", 0, "noreply@x.example")
+        gmail.nextRound = { MailChanges(fetch = listOf("s1", "c1", "u1"), cursor = "h2") }
+        i.syncAccount(id)
+        // Only the ordinary notification is tidied; the alert and the code stay in the inbox.
+        assertEquals(mapOf("u1" to MailTidy.ARCHIVE), gmail.tidyCalls.single())
+        assertTrue(gmail.mailbox.getValue("s1").inInbox && gmail.mailbox.getValue("c1").inInbox)
+        assertEquals(MailSortReason.SECURITY, ms.sortOf(id, "s1")!!.reason)
+        assertEquals(MailSortReason.SECURITY_CODE, ms.sortOf(id, "c1")!!.reason)
+        // The alert is in Needs you with the provider's name (never the address); the code isn't.
+        val shown = items(ops).values.filter { (it[MailItemFields.GONE_AT] as? FieldValue.Int64)?.value == 0L }
+        val alert = shown.single()
+        assertEquals(FieldValue.Text("Google"), alert[MailItemFields.SECURITY])
+        assertEquals(FieldValue.Text("Security alert"), alert[MailItemFields.SUBJECT])
+    }
+
+    @Test
+    fun securityMailATidyMovedEarlierGoesBackToTheInbox() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, _, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        // Archived as a notification before the rule existed (a tidy batch that moved it and an ordinary email).
+        val alert = msg("s0", 1, "no-reply@accounts.google.com").copy(fromName = "Google", subject = "Security alert", inInbox = false, labels = emptyList())
+        val other = msg("o0", 1, "noreply@x.example").copy(inInbox = false, labels = emptyList())
+        gmail.mailbox["s0"] = alert; gmail.mailbox["o0"] = other
+        ms.put("home", id, alert); ms.put("home", id, other)
+        val batchId = MailAutopilotRules.batchId(id, now - day)
+        ms.recordTidy(id, batchId, listOf(MailMoved("s0", "s0", MailTidy.ARCHIVE), MailMoved("o0", "o0", MailTidy.ARCHIVE)))
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.AT, FieldValue.Int64(now - day))
+        device(ops, EntityTypes.MAIL_TIDY, batchId, MailTidyBatchFields.SUMMARY, FieldValue.Text("Tidied 2 emails · Personal"))
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("s0").inInbox)
+        assertFalse(gmail.mailbox.getValue("o0").inInbox)
+        assertTrue("s0" in ms.neverTidied(id))
+        // Once: the next check moves nothing back again.
+        gmail.mailbox["s0"] = gmail.mailbox.getValue("s0").copy(inInbox = false)
+        ms.put("home", id, gmail.mailbox.getValue("s0"))
+        i.syncAccount(id)
+        assertFalse(gmail.mailbox.getValue("s0").inInbox)
+    }
+
+    @Test
     fun aReceiptWithAReturnWindowPutsOneReminderOnTheRenewalsRadar() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

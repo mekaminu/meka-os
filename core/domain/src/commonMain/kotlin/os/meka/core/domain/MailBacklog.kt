@@ -205,10 +205,10 @@ object MailBacklogRules {
 
     /**
      * Inbox fixes, slice 2: the planning rules' version. 2 = the 7-day age and slice 1's better sort (bulk headers,
-     * Outlook's list headers read per sender). A plan written under an older version that nothing has moved under is
-     * started again by the server ([needsReplan]).
+     * Outlook's list headers read per sender); 3 = account-security mail is never moved ([MailSecurityRules]). A plan
+     * written under an older version that nothing has moved under is started again by the server ([needsReplan]).
      */
-    const val PLAN_VERSION = 2
+    const val PLAN_VERSION = 3
     private const val DAY_MS = 86_400_000L
     /** How many senders the plan names. */
     const val TOP_SENDERS = 3

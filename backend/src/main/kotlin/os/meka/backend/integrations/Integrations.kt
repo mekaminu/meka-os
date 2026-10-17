@@ -8,6 +8,7 @@ import os.meka.core.domain.MailSortFacts
 import os.meka.core.domain.MailSortRules
 import os.meka.core.domain.MailSortReason
 import os.meka.core.domain.MailSorted
+import os.meka.core.domain.MailSecurityRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
 import os.meka.core.domain.MailRefundRules
@@ -602,6 +603,8 @@ class Integrations(
         sortHeaders(a, ms)
         // Slice 5a: the newsletter and promo senders (before Autopilot moves their newest email) and any Unsubscribe asked.
         stage(a, "mailSenders") { mailSenders(a, m, token, ms) }
+        // Account-security mail a tidy moved before the rule existed goes back to the inbox (Undo's own way).
+        stage(a, "security") { restoreSecurity(a, m, token, ms) }
         // Slice 3b: Autopilot (only once it's on and the dry-run day is over); a failure there never fails the check.
         stage(a, "autopilot") { autopilot(a, m, token, ms) }
         // Slice 3c: the daily Junk review (same switch and dry-run day as Autopilot).
@@ -1349,6 +1352,7 @@ class Integrations(
             writeMail(a, id, MailNeedsRules.serverFields(
                 account, h.fromName, h.fromAddress, h.subject, preview, h.receivedAtMs, threads[h.threadId ?: h.id] ?: 1,
                 threadKey = MailNeedsRules.threadKey(a.id, h.threadId ?: h.id),
+                security = MailSecurityRules.itemProvider(reasons[h.id], h.fromAddress),
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
@@ -2000,7 +2004,51 @@ class Integrations(
                 .forEach { h -> ms.noteSender(a.householdId, a.id, h) }
             if (batch.size < SORT_BATCH) break
         }
+        resortSecurity(a, ms)
         askAi(a, ms, known)
+    }
+
+    /**
+     * Account-security mail ([MailSecurityRules], 2026-10-17): an email in the inbox sorted before the rule existed
+     * (a Google "Security alert" sorted as a no-reply notification) is sorted again, so it's never tidied and shows in
+     * Needs you. Headers only; nothing in the mailbox moves.
+     */
+    internal fun resortSecurity(a: AccountRow, ms: MailStore) {
+        val again = ms.inboxSorted(a.id).mapNotNull { (h, s) ->
+            if (MailSecurityRules.kept(s.reason) || s.reason == MailSortReason.SPAM) return@mapNotNull null
+            MailSecurityRules.sorted(h.fromAddress, h.subject)?.let { h.id to it }
+        }.toMap()
+        if (again.isNotEmpty()) ms.setSorts(a.id, again)
+    }
+
+    /**
+     * Account-security mail Autopilot or a clean-up moved before the rule existed goes back to the inbox (Meka,
+     * 2026-10-17: two Google security alerts were archived as notifications): each email of this account's tidies from
+     * the last [SECURITY_RESTORE_MS] whose headers make it a provider's real security email is put back (unread again
+     * when tidies mark read) and never tidied again. Junk's clean-outs are left alone (Junk mail is never put in the
+     * inbox on its own say-so). Once each; a provider failure is tried again at the next check.
+     */
+    internal fun restoreSecurity(a: AccountRow, m: MailProvider, token: String, ms: MailStore) {
+        val never = ms.neverTidied(a.id)
+        val headers = ms.messages(a.id).filter { !it.inInbox && MailSecurityRules.kind(it.fromAddress, it.subject) != null }
+        if (headers.isEmpty()) return
+        val byId = headers.associateBy { it.id }
+        val since = now() - SECURITY_RESTORE_MS
+        val batches = reader.entities(a.householdId, EntityTypes.MAIL_TIDY)
+            .mapNotNull { (id, f) -> MailAutopilotRules.readBatch(id, f) }
+            .filter { !it.junk && it.atMs >= since }
+        val moved = batches.flatMap { b -> ms.tidied(a.id, b.id) }
+            .filter { t -> t.id !in never && t.movedId !in never && t.tidy != MailTidy.JUNK_TRASH && t.tidy != MailTidy.RESCUE }
+            .filter { t -> byId[t.id] != null || byId[t.movedId] != null }
+            .distinctBy { it.movedId }
+        if (moved.isEmpty()) return
+        val (back, _) = m.untidyKept(token, moved.associate { it.movedId to it.tidy })
+        val handled = moved.filter { it.movedId in back }
+        if (handled.isEmpty()) return
+        ms.neverTidy(a.id, handled.map { it.id } + handled.map { it.movedId } + back.values)
+        if (markingRead(a.householdId)) markRead(m, token, handled.filter { it.tidy.marksRead }.mapNotNull { back[it.movedId] }, false)
+        // Gmail keeps the id: back in the inbox now, sorted again (as security) next check; Outlook's new id comes with its feed.
+        handled.forEach { t -> (byId[t.id] ?: byId[t.movedId])?.takeIf { back[t.movedId] == it.id }?.let { h -> ms.put(a.householdId, a.id, h.copy(inInbox = true)) } }
     }
 
     /**
@@ -2680,6 +2728,8 @@ class Integrations(
             remote.takeIf { it.startsWith(FOLLOW_UP_THREAD) }?.substringAfter(FOLLOW_UP_SEP, "")?.takeIf { it.isNotEmpty() }
         /** Slice 2a: headers sorted per round (rules only, cheap; a big first listing takes a few rounds of one check). */
         const val SORT_BATCH = 500
+        /** How far back account-security mail a tidy moved is put back in the inbox ([restoreSecurity]). */
+        const val SECURITY_RESTORE_MS = 14 * 86_400_000L
         const val SORT_ROUNDS = 20
         /** Slice 5a: the senders published per account (the busiest), the ones read for an Unsubscribe, Outlook header reads a check. */
         const val SENDERS_SHOWN = 30

@@ -198,6 +198,10 @@ struct MailNeedsRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                // Account-security mail: who it's really from and what to do, above the sender.
+                if let security = row.security {
+                    Text(security).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                }
                 HStack(spacing: MekaSpace.xs) {
                     Text(row.from).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(1)
                     if row.business {
