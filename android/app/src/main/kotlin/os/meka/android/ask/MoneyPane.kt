@@ -28,6 +28,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -86,6 +87,7 @@ import os.meka.core.domain.MoneyWorth
 import os.meka.core.domain.MoneyWorthPoint
 import os.meka.core.domain.MoneyWorthRow
 import os.meka.core.domain.MoneyWorthView
+import os.meka.core.domain.TradingView
 import os.meka.core.facade.MekaCore
 
 /**
@@ -221,6 +223,18 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
                         }
                     })
+            }
+        }
+        // Trading tracker: TRADING · HYPERLIQUID (whatever month is shown), from his public addresses only.
+        v.trading?.let { t ->
+            item(key = "trading-head") {
+                Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "trading") {
+                TradingBlock(t, Modifier.animateItem().appear(rememberAppearance(2)),
+                    onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } })
             }
         }
         v.month?.let { m ->
@@ -545,6 +559,61 @@ private fun BankBlock(b: MoneyBankView, modifier: Modifier, onRefresh: () -> Uni
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRestore() }.minTouch().padding(MekaSpace.xs))
             }
         }
+    }
+}
+
+/**
+ * Trading tracker: equity and when it was read, P&L for today, the week, the month and all time (up in brass), the open
+ * positions nearest liquidation first (lit within 10%), each address with Remove, and a field for a public address.
+ */
+@Composable
+private fun TradingBlock(t: TradingView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    var adding by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        t.total?.let { total ->
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = t.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Crossfade(total, animationSpec = MekaMotion.appear(reduced), label = "trading-total") { l ->
+                    Text(l, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
+                }
+                t.totalLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            }
+        }
+        t.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        t.pnl.forEach { r ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(r.label, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "trading-pnl-${r.label}") { a ->
+                    Text(a, style = MekaType.body, color = if (r.up == true) Meka.colors.accent else Meka.colors.textPrimary)
+                }
+            }
+        }
+        t.unrealisedLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        t.positions.forEach { p -> key(p.id) {
+            val c by animateColorAsState(if (p.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "trading-liq-${p.id}")
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = p.spoken },
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                    Text(p.amount, style = MekaType.body, color = if (p.up == true) Meka.colors.accent else Meka.colors.textPrimary)
+                }
+                if (p.line.isNotEmpty()) Text(p.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                p.liquidationLine?.let { l -> Text(l, style = MekaType.caption, color = c) }
+            }
+        } }
+        t.wallets.forEach { w ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = w.name + ". " + w.line }) {
+                    Text(w.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(w.line, style = MekaType.caption, color = if (w.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                }
+                Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onRemove(w.id) }
+                        .semantics { contentDescription = "Stop following ${w.name}" }.minTouch().padding(MekaSpace.xs))
+            }
+        }
+        Field(t.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        Text(t.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

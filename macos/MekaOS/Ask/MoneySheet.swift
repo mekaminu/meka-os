@@ -46,6 +46,7 @@ struct MoneySheet: View {
     @State private var editingCard: String?
     @State private var cardTexts: [String: String] = [:]
     @State private var worthText = ""
+    @State private var tradingText = ""
     @State private var worthBalances: [String: String] = [:]
 
     var body: some View {
@@ -65,6 +66,7 @@ struct MoneySheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         if let b = v.bank { bank(b).staggeredAppear(2) }
+                        if let t = v.trading { trading(t).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
                         if let w = v.worth { worth(w).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
@@ -602,6 +604,78 @@ struct MoneySheet: View {
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: b.refreshing)
+    }
+
+    /// Trading tracker: TRADING · HYPERLIQUID — equity and when it was read, P&L (up in brass), open positions nearest
+    /// liquidation first (lit within 10%), each public address with Remove, and a field to add one. Read-only.
+    private func trading(_ t: TradingView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(t.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            if let total = t.total {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(total).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    if let l = t.totalLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(t.spoken)
+            }
+            if let e = t.empty {
+                Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(t.pnl, id: \.label) { r in
+                HStack {
+                    Text(r.label).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                    Spacer()
+                    Text(r.amount).font(MekaType.body)
+                        .foregroundStyle(r.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                        .contentTransition(.opacity)
+                }
+            }
+            if let u = t.unrealisedLine { Text(u).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+            ForEach(t.positions, id: \.id) { p in
+                VStack(alignment: .leading, spacing: 0) {
+                    HStack {
+                        Text(p.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Spacer()
+                        Text(p.amount).font(MekaType.body)
+                            .foregroundStyle(p.up?.boolValue == true ? palette.accent : palette.textPrimary)
+                    }
+                    if !p.line.isEmpty { Text(p.line).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                    if let l = p.liquidationLine {
+                        Text(l).font(MekaType.caption).foregroundStyle(p.lit ? palette.accent : palette.textSecondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(p.spoken)
+                .transition(.opacity)
+            }
+            ForEach(t.wallets, id: \.id) { w in
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(w.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(w.line).font(MekaType.caption).foregroundStyle(w.lit ? palette.accent : palette.textSecondary)
+                    }
+                    Spacer()
+                    Button("Remove") {
+                        let id = w.id
+                        Task { said = await model.tradingWalletRemove(id: id) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .accessibilityLabel("Stop following \(w.name)")
+                }
+                .transition(.opacity)
+            }
+            TextField(t.hint, text: $tradingText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let text = tradingText
+                    tradingText = ""
+                    Task { said = await model.tradingWalletAdd(text: text) }
+                }
+            Text(t.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: t.total)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: t.wallets.count)
     }
 
     private func importer(_ v: MoneyView) -> some View {

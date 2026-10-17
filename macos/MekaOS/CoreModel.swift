@@ -3353,6 +3353,28 @@ final class CoreModel {
     }
 
     /// Slice 8: takes a typed thing off his net worth; Undo with `undoMoneyCategory`.
+    /// Trading tracker: a Hyperliquid public address typed in Money ("Main 0x…"); Undo with `undoMoneyCategory`.
+    func tradingWalletAdd(text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.tradingWalletAdd(text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Trading tracker: stops following an address on every device; Undo with `undoMoneyCategory`.
+    func tradingWalletRemove(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.tradingWalletRemove(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     func moneyWorthRemove(id: String) async -> MoneySaid? {
         guard let core else { return nil }
         do {

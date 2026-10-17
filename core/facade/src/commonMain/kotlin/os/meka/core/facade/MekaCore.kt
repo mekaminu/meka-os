@@ -172,6 +172,7 @@ class MekaCore(
     private val money = os.meka.core.domain.Money(replica, nowMs).also { m -> replica.addListener { refs -> m.changed(refs) } }
     // Money manager, bank sync: what the server last did through Lunch Flow, and Refresh.
     private val moneyBank = os.meka.core.domain.MoneyBankStore(replica)
+    private val trading = os.meka.core.domain.TradingStore(replica)
     private val kidChores = os.meka.core.domain.KidChores(replica)
     private val discordStore = os.meka.core.domain.DiscordStore(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
@@ -660,6 +661,7 @@ class MekaCore(
 
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
         if (!moneyOpen) return@onCore false
+        if (token.startsWith(os.meka.core.domain.TradingTracker.UNDO)) return@onCore trading.undo(token).also { refreshMoney() }
         if (token.startsWith(moneyRefundUndoPrefix)) {
             val undo = moneyRefundUndo.takeIf { token == it.first }?.second ?: return@onCore false
             moneyRefundUndo = "" to null
@@ -712,7 +714,7 @@ class MekaCore(
 
     /** Delete all money data: every account, transaction and category choice, on every device (after his yes). */
     suspend fun deleteAllMoney(): os.meka.core.domain.MoneySaved = onCore {
-        if (!moneyOpen) moneyLocked() else money.deleteAll().also { moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); refreshMoney() }
+        if (!moneyOpen) moneyLocked() else money.deleteAll().also { trading.deleteAll(); moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); refreshMoney() }
     }
 
     /** Slice 2: hides every tip of [kind] ("habit", "over", "rise") on both devices; Undo by [undoMoneyCategory]. */
@@ -754,7 +756,21 @@ class MekaCore(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
             moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
             moneyBank.sync(), moneyBank.removed().size, moneyBank.askedAtMs(), nowMs(),
-        )
+        ).copy(trading = os.meka.core.domain.TradingTracker.view(trading.wallets(), nowMs(), ZoneCalendar(timeZone)))
+    }
+
+    /**
+     * Trading tracker: a Hyperliquid public address typed as [text] ("Main 0x…"; the same address again renames it), on
+     * both devices; Navilife's server reads it from Hyperliquid's public data. Undo by [undoMoneyCategory]. Only while
+     * Money is open. Never a key: anything key-length is refused.
+     */
+    suspend fun tradingWalletAdd(text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else trading.add(text).also { refreshMoney() }
+    }
+
+    /** Trading tracker: stops following [id] on every device, its figures cleared; Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun tradingWalletRemove(id: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else trading.remove(id).also { refreshMoney() }
     }
 
     /**

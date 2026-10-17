@@ -426,6 +426,8 @@ data class MoneyView(
     val worth: MoneyWorthView? = null,
     /** Bank sync: FROM YOUR BANKS — Lunch Flow's state, Refresh, accounts to reconnect ([MoneyBank]); shown whatever month. */
     val bank: MoneyBankView? = null,
+    /** Trading tracker: TRADING · HYPERLIQUID — his public addresses, equity, P&L and open positions ([TradingTracker]); shown whatever month. */
+    val trading: TradingView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)

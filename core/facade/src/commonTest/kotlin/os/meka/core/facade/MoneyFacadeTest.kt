@@ -366,4 +366,30 @@ class MoneyFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertEquals(os.meka.core.domain.MoneyWorth.EMPTY, mac.moneyView.value.worth!!.empty)
     }
+
+    @Test
+    fun tradingAddressesAddOnOneAppShowOnTheOtherAndUndo() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        val address = "0x" + "ab12".repeat(10)
+        // Locked: nothing goes in.
+        assertTrue(fold.tradingWalletAdd("Main $address").refused)
+        fold.openMoney(); mac.openMoney()
+        assertEquals(os.meka.core.domain.TradingTracker.EMPTY, fold.moneyView.value.trading!!.empty)
+        // A key is never taken.
+        assertTrue(fold.tradingWalletAdd("0x" + "1f".repeat(32)).refused)
+        val added = fold.tradingWalletAdd("Main $address")
+        assertFalse(added.refused)
+        assertEquals("Main", fold.moneyView.value.trading!!.wallets.single().name)
+        fold.syncNow(); mac.syncNow()
+        val id = mac.moneyView.value.trading!!.wallets.single().id
+        val removed = mac.tradingWalletRemove(id)
+        assertTrue(mac.moneyView.value.trading!!.wallets.isEmpty())
+        assertTrue(mac.undoMoneyCategory(removed.undo!!))
+        assertEquals("Main", mac.moneyView.value.trading!!.wallets.single().name)
+        // Delete all money data takes the addresses too, on both.
+        mac.deleteAllMoney()
+        mac.syncNow(); fold.syncNow()
+        assertEquals(os.meka.core.domain.TradingTracker.EMPTY, fold.moneyView.value.trading!!.empty)
+    }
 }

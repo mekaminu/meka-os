@@ -1074,6 +1074,14 @@ fun main(args: Array<String>) {
                     feed = os.meka.backend.integrations.LunchFlowFeed.fromSecret(secret), onWritten = { hh -> push?.serverChanged(hh) },
                 ).also { startBankSync(it) }
             }
+            // Trading tracker: his Hyperliquid accounts by public address only, read-only (no key exists to hold).
+            if (System.getenv("MEKA_TRADING_TRACKER") != "off") {
+                val devices = PostgresDeviceRegistry(ds)
+                startTradingSync(TradingSync(
+                    opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, household = { devices.soleHousehold() },
+                    feed = os.meka.backend.integrations.HyperliquidInfo.network(), onWritten = { hh -> push?.serverChanged(hh) },
+                ))
+            }
             val verifier = RequestVerifier()
             // his wife's page (family sharing, slice 2; meal plan slice 3; emergency card slice 1): only the shopping list
             // and the dinners, written as server ops, and the emergency card, read only. FamilyShare only ever asks for its
