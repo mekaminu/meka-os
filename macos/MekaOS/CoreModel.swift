@@ -4623,6 +4623,33 @@ final class CoreModel {
         }
     }
 
+    /// Block sender (Bin & block on a possible scam) on an email in "From your mail" (junk fix slice 2): Done, and at the
+    /// server's next check this email and the sender's later ones go to Trash; Undo on the bar brings it back and takes
+    /// the block off. Only the id (a String) crosses.
+    func blockMailItem(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.blockMailItem(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// Unsubscribe on an email in "From your mail" (junk fix slice 2): Done, and the server unsubscribes the sender its
+    /// own way at its next check; Undo before then calls it off. Only the id crosses.
+    func unsubscribeMailItem(_ id: String) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.unsubscribeMailItem(id: id)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Task on an email in "From your mail" (slice 6b-1): a task from its subject, the email archived at the server's
     /// next check, Undo on the bar. Only the id (a String) crosses.
     func taskFromMailItem(_ id: String) {

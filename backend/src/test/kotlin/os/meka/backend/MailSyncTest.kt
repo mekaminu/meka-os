@@ -88,6 +88,7 @@ import os.meka.core.domain.MailUnsubscribeRules
 import os.meka.core.domain.UnsubscribeMailto
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribeState
+import os.meka.core.domain.MailCardUnsubRules
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Hlc
 import os.meka.core.sync.InMemoryServerOpStore
@@ -1850,6 +1851,71 @@ class MailSyncTest {
         assertFalse(MailSenderRuleRules.clearDue(MailNeedsRules.read(p2, items(ops).getValue(p2))!!))
     }
 
+    @Test
+    fun blockSenderOnACardBinsTheEmailAndTheirLaterMailWithoutAutopilot() {
+        // Junk fix slice 2.
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val posted = mutableListOf<String>()
+        val (gmail, _, i) = world(ms, ops = ops, unsubscriber = { url -> posted += url; true })
+        gmail.mailbox["p0"] = msg("p0", 0, "Win@Prizes.Example").copy(fromName = "Prize Team")
+        gmail.mailbox["b0"] = msg("b0", 0, "office@oakfield.sch.uk").copy(fromName = "Oakfield School")
+        gmail.mailbox["u0"] = msg("u0", 0, "sam@club.example").copy(fromName = "Sam")
+        val id = connect(i)
+        i.syncAccount(id)
+        val p0 = MailNeedsRules.itemId(id, "p0")
+        val b0 = MailNeedsRules.itemId(id, "b0")
+        val u0 = MailNeedsRules.itemId(id, "u0")
+        assertEquals(setOf(p0, b0, u0), items(ops).keys)
+        fun senders() = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_SENDER)
+        val sid = MailUnsubscribeRules.senderId(id, "win@prizes.example")
+
+        // Block on the prize email and the school's: the prize email goes to Trash and its sender is blocked; the school
+        // is never blocked, only archived.
+        now += 60_000
+        val asked = now
+        for (c in listOf(p0, b0)) MailSenderRuleRules.cardFields(asked, MailSenderRule.BLOCK).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, c, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h2") }
+        i.syncAccount(id)
+        assertEquals(MailTidy.TRASH, gmail.tidyCalls.first { "p0" in it }["p0"])
+        assertEquals(MailTidy.ARCHIVE, gmail.tidyCalls.first { "b0" in it }["b0"])
+        assertEquals(MailSenderRule.BLOCK, MailSenderRuleRules.read(senders().getValue(sid)))
+        assertNull(senders()[MailUnsubscribeRules.senderId(id, "office@oakfield.sch.uk")]?.let { MailSenderRuleRules.read(it) })
+
+        // Their next email goes to Trash as it arrives, with Autopilot off, recorded as a tidy with Undo.
+        now += 60_000
+        gmail.mailbox["p1"] = msg("p1", 0, "win@prizes.example")
+        gmail.nextRound = { MailChanges(fetch = listOf("p1"), cursor = "h3") }
+        i.syncAccount(id)
+        assertEquals(MailTidy.TRASH, gmail.tidyCalls.last()["p1"])
+        assertFalse(gmail.mailbox.getValue("p1").inInbox)
+        val tidies = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_TIDY)
+        assertTrue(tidies.values.any { (it[MailTidyBatchFields.DETAIL] as? FieldValue.Text)?.value?.contains("1 from a blocked or unsubscribed sender → Trash") == true })
+
+        // Undo on the card: the email is back in the inbox and the block comes off.
+        now += 60_000
+        device(ops, EntityTypes.MAIL_ITEM, p0, MailItemFields.UNDO_ASKED_AT, FieldValue.Int64(now))
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertTrue(gmail.mailbox.getValue("p0").inInbox)
+        assertNull(MailSenderRuleRules.read(senders().getValue(sid)))
+
+        // Unsubscribe on a card whose email says how: the sender is unsubscribed once and the card says so.
+        val h = ms.messages(id).first { it.id == "u0" }
+        ms.put("home", id, h.copy(listUnsubscribe = "<https://club.example/u>", oneClickUnsubscribe = true))
+        now += 60_000
+        MailCardUnsubRules.askFields(now).forEach { (f, v) -> device(ops, EntityTypes.MAIL_ITEM, u0, f, v) }
+        gmail.nextRound = { MailChanges(cursor = "h5") }
+        i.syncAccount(id)
+        assertEquals(listOf("https://club.example/u"), posted)
+        val u = assertNotNull(MailNeedsRules.read(u0, items(ops).getValue(u0)))
+        assertEquals(UnsubscribeState.DONE.note, u.unsubNote)
+        assertFalse(MailCardUnsubRules.due(u))
+        gmail.nextRound = { MailChanges(cursor = "h6") }
+        i.syncAccount(id)
+        assertEquals(1, posted.size)
+    }
+
     // ---- Slice 5a: Unsubscribe for him ----
 
     // ---- Slice 6a: "From your mail" cards ----
@@ -2294,7 +2360,7 @@ class MailSyncTest {
         assertEquals(mapOf("a3" to MailTidy.TRASH, "r3" to MailTidy.RECEIPT, "o3" to MailTidy.NEWSLETTER), gmail.tidyCalls.last())
         val batch = tidies(ops).entries.maxBy { (it.value[MailTidyBatchFields.AT] as FieldValue.Int64).value }
         assertEquals(FieldValue.Int64(1), batch.value[MailTidyBatchFields.TRASHED])
-        assertTrue((batch.value[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains("1 from an unsubscribed sender → Trash"))
+        assertTrue((batch.value[MailTidyBatchFields.DETAIL] as FieldValue.Text).value.contains("1 from a blocked or unsubscribed sender → Trash"))
         assertEquals(FieldValue.Int64(1), senders(ops).getValue(sender)[MailSenderFields.TRASHED])
         // Undo puts it back, and it is never moved again.
         now += 60_000

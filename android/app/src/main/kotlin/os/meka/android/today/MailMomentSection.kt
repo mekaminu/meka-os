@@ -161,6 +161,8 @@ private fun MomentSession(session: MailMomentSession, core: MekaCore, undo: (Str
                     onDraft = { core.draftMailReply(row.id) },
                     onSuggestTimes = { core.suggestMeetingTimes(row.id) },
                     onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
+                    onBlock = { haptics.medium(); answer { core.blockMailItem(row.id) } },
+                    onUnsubscribe = { haptics.medium(); answer { core.unsubscribeMailItem(row.id) } },
                     onSend = { text, sent ->
                         haptics.medium()
                         scope.launch {

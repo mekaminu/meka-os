@@ -117,11 +117,11 @@ class MailTidyTest {
         // The lines say Trash.
         val (summary, detail) = MailAutopilotRules.lines(mapOf(MailTidy.NEWSLETTER to 1, MailTidy.TRASH to 2), "Personal")
         assertEquals("Tidied 3 emails · Personal", summary)
-        assertEquals("1 newsletter → Navilife/Newsletters · 2 from unsubscribed senders → Trash", detail)
-        assertEquals("1 from an unsubscribed sender → Trash", MailAutopilotRules.lines(mapOf(MailTidy.TRASH to 1), "Personal").second)
+        assertEquals("1 newsletter → Navilife/Newsletters · 2 from blocked or unsubscribed senders → Trash", detail)
+        assertEquals("1 from a blocked or unsubscribed sender → Trash", MailAutopilotRules.lines(mapOf(MailTidy.TRASH to 1), "Personal").second)
         val b = MailAutopilotRules.readBatch("t", MailAutopilotRules.batchFields(1L, "Personal", mapOf(MailTidy.TRASH to 2)))!!
         assertEquals(mapOf(MailTidy.TRASH to 2), b.kinds)
-        assertEquals("Tidied 2 · 2 from unsubscribed senders", ArchivedForYouRules.headline(listOf(b)))
+        assertEquals("Tidied 2 · 2 from blocked or unsubscribed senders", ArchivedForYouRules.headline(listOf(b)))
     }
 
     @Test

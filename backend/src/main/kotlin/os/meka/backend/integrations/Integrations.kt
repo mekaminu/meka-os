@@ -65,6 +65,7 @@ import os.meka.core.domain.MailItem
 import os.meka.core.domain.UnsubscribeMethod
 import os.meka.core.domain.UnsubscribePlan
 import os.meka.core.domain.UnsubscribeState
+import os.meka.core.domain.MailCardUnsubRules
 import os.meka.core.domain.AboutYou
 import os.meka.core.domain.AboutYouRules
 import os.meka.core.domain.AutonomyRules
@@ -1251,9 +1252,12 @@ class Integrations(
         val chases = all.filter { MailChaseRules.due(it, now()) }
         val asked = all.filter { MailNeedsRules.archiveDue(it) || MailNeedsRules.putBackDue(it) || MailNeedsRules.replyDue(it, now()) }
         val rules = all.filter { MailSenderRuleRules.ruleDue(it) || MailSenderRuleRules.clearDue(it) }
-        if (asked.isEmpty() && chases.isEmpty() && rules.isEmpty()) return
+        val unsubs = all.filter { MailCardUnsubRules.due(it) }
+        if (asked.isEmpty() && chases.isEmpty() && rules.isEmpty() && unsubs.isEmpty()) return
         val byItem = ms.messages(a.id).associateBy { MailNeedsRules.itemId(a.id, it.id) }
         if (rules.isNotEmpty()) cardRules(a, rules, byItem)
+        if (unsubs.isNotEmpty()) cardUnsubscribes(a, m, token, unsubs, byItem)
+        val keep by lazy { keepAddresses(hh) }
         for (item in chases) {
             // Slice 6b-3: his chase of a Waiting for item, from this account, in the email's thread (the email stays
             // archived). Outlook gave the archived email a new id: that one. Sent once; a failure goes back to him.
@@ -1279,8 +1283,10 @@ class Integrations(
                     writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
                     continue
                 }
-                val moved = m.tidyKept(token, mapOf(h.id to MailTidy.ARCHIVE)).first[h.id] ?: continue
-                ms.recordTidy(a.id, item.id, listOf(MailMoved(h.id, moved, MailTidy.ARCHIVE)))
+                // Junk fix slice 2: Block sender's (and Bin & block's) own email goes to Trash, never a protected sender's.
+                val tidy = MailSenderRuleRules.cardTidy(item, MailTidyRules.protectedSender(h.fromAddress, keep))
+                val moved = m.tidyKept(token, mapOf(h.id to tidy)).first[h.id] ?: continue
+                ms.recordTidy(a.id, item.id, listOf(MailMoved(h.id, moved, tidy)))
                 ms.put(hh, a.id, h.copy(inInbox = false))
                 writeMail(a, item.id, MailNeedsRules.archivedFields(now()), EntityTypes.MAIL_ITEM)
             } else {
@@ -1310,20 +1316,50 @@ class Integrations(
         val account = MailLabel.of(a.label)?.label ?: "Mail"
         for (item in items) {
             val asked = item.tidyAskedAtMs ?: continue
+            val rule = MailSenderRuleRules.asked(item)
             val h = byItem[item.id]
             val address = h?.fromAddress?.lowercase()?.takeIf { it.isNotEmpty() }
             val id = address?.let { MailUnsubscribeRules.senderId(a.id, it) }
             if (MailSenderRuleRules.ruleDue(item)) {
                 if (h != null && id != null && !MailTidyRules.protectedSender(address, keep)) {
-                    MailSenderRuleRules.senderFieldsForCard(senders[id], account, h.fromName, address, h.receivedAtMs, asked)
+                    MailSenderRuleRules.senderFieldsForCard(senders[id], account, h.fromName, address, h.receivedAtMs, asked, rule)
                         ?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
                 }
                 writeMail(a, item.id, MailSenderRuleRules.ruleWrittenFields(now()), EntityTypes.MAIL_ITEM)
             } else {
-                if (id != null) MailSenderRuleRules.clearFieldsForCard(senders[id], asked, now())?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
+                if (id != null) MailSenderRuleRules.clearFieldsForCard(senders[id], asked, now(), rule)?.let { writeSender(a, id, it, rewrite = RULE_FIELDS) }
                 writeMail(a, item.id, MailSenderRuleRules.ruleClearedFields(now()), EntityTypes.MAIL_ITEM)
             }
         }
+    }
+
+    /**
+     * Junk fix slice 2: **Unsubscribe** on a card — the sender is unsubscribed its own way (as Mail's Unsubscribe and
+     * Archived for you's do: its entity made when Autopilot hadn't published it, never the address), once per ask, and
+     * the outcome's note written on the card. A sender already unsubscribed answers so; the email gone answers it can't.
+     */
+    private fun cardUnsubscribes(a: AccountRow, m: MailProvider, token: String, items: List<MailItem>, byItem: Map<String, MailHeader>) {
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        for (item in items) {
+            val h = byItem[item.id]
+            val note = h?.let { unsubscribeFrom(a, m, token, it, account) } ?: UnsubscribeState.FAILED.note
+            writeMail(a, item.id, MailCardUnsubRules.triedFields(note, now()), EntityTypes.MAIL_ITEM)
+        }
+    }
+
+    /** One email's sender unsubscribed its own way; the outcome's note. */
+    private fun unsubscribeFrom(a: AccountRow, m: MailProvider, token: String, h: MailHeader, account: String): String {
+        val address = h.fromAddress ?: return UnsubscribeState.FAILED.note
+        val plan = MailUnsubscribeRules.plan(h.listUnsubscribe, h.oneClickUnsubscribe)
+        if (plan.method == UnsubscribeMethod.NONE) return UnsubscribeState.FAILED.note
+        val id = MailUnsubscribeRules.senderId(a.id, address)
+        val current = reader.entity(a.householdId, EntityTypes.MAIL_SENDER, id)
+        val s = current?.let { MailUnsubscribeRules.read(id, it) }
+        if (s?.state?.finished == true) return MailSenderPanelRules.ALREADY
+        if (current?.get(MailSenderFields.NAME) == null) writeSender(a, id, MailUnsubscribeRules.senderFields(
+            account, MailUnsubscribeRules.displayName(h.fromName, address), MailSortRules.domain(address), plan.method, h.receivedAtMs, 1,
+        ))
+        return unsubscribe(a, m, token, id, plan).note
     }
 
     /** Sends one reply; null when the provider took it, else why not in a few words (never the reply itself). */
@@ -1372,6 +1408,8 @@ class Integrations(
                 threadKey = MailNeedsRules.threadKey(a.id, h.threadId ?: h.id),
                 security = MailSecurityRules.itemProvider(reasons[h.id], h.fromAddress),
                 warning = MailScamRules.itemWarning(reasons[h.id], h.fromAddress, h.fromName, h.subject),
+                // Junk fix slice 2: Unsubscribe on the card when the email says how (never the link itself).
+                canUnsubscribe = MailUnsubscribeRules.plan(h.listUnsubscribe, h.oneClickUnsubscribe).method != UnsubscribeMethod.NONE,
             ) + MailAutoDraftRules.serverFields(asks, if (asks) MailAutoDraftRules.wants(h.subject, preview) else null), EntityTypes.MAIL_ITEM)
         }
         goneMailNeeds(a, shown)
@@ -1454,6 +1492,7 @@ class Integrations(
         tidiedEmailAsks(a, m, token, ms)
         val setting = MailAutopilotRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID))
         val paused = AutonomyRules.read(reader.entity(hh, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused
+        if (!paused) blockedMail(a, m, token, ms, setting.markRead)
         val check = mailChecks[a.id]
         val since = MailAutopilotRules.since(setting, paused, a.grantedAtMs, now())
             ?: return run { check?.autopilot = "not tidying" }
@@ -1511,6 +1550,44 @@ class Integrations(
         done.filter { it.second == MailTidy.TRASH }.mapNotNull { (h, _) -> senderOf(h) }.groupBy { it.id }.forEach { (id, ss) ->
             writeSender(a, id, MailUnsubscribeRules.trashedFields(ss.first().trashed, ss.size, at))
         }
+    }
+
+    /**
+     * Junk fix slice 2: **Block sender**. The inbox emails from senders he blocked that arrived since the block go to
+     * Trash at each check, whether or not Autopilot is on (his rule is the permission; Navilife's Pause stops it), by
+     * [MailTidyRules.plan] with the block rule, so never people he writes to, his partner, banks, schools, public bodies,
+     * a thread he wrote in or security mail. One `mail_tidy` per check with Undo, like Autopilot's own.
+     */
+    private fun blockedMail(a: AccountRow, m: MailProvider, token: String, ms: MailStore, markRead: Boolean) {
+        val hh = a.householdId
+        val senders = runCatching { reader.entities(hh, EntityTypes.MAIL_SENDER) }.getOrDefault(emptyMap())
+        val blocked = senders.filter { (_, f) -> MailSenderRuleRules.read(f) == MailSenderRule.BLOCK }
+        if (blocked.isEmpty()) return
+        val never = ms.neverTidied(a.id)
+        val inbox = ms.inboxSorted(a.id).filter { (h, _) -> h.inInbox && h.id !in never }
+        val ruleAt = inbox.mapNotNull { (h, _) -> h.fromAddress?.lowercase() }.distinct().mapNotNull { address ->
+            val f = blocked[MailUnsubscribeRules.senderId(a.id, address)] ?: return@mapNotNull null
+            address to ((f[MailSenderFields.RULE_AT] as? FieldValue.Int64)?.value ?: return@mapNotNull null)
+        }.toMap()
+        if (ruleAt.isEmpty()) return
+        val keep = keepAddresses(hh)
+        val replied by lazy { m.repliedThreads(token, now() - MAIL_WINDOW_MS) }
+        val due = MailSenderRuleRules.blockedDue(inbox, { it.first.fromAddress }, { it.first.receivedAtMs }, ruleAt) { (h, s) ->
+            MailTidyRules.plan(MailTidyFacts(h.fromAddress, h.inInbox, s, keep, replied = h.threadId?.let { it in replied } == true, rule = MailSenderRule.BLOCK))
+        }.map { it.first }.take(MailAutopilotRules.MAX_PER_CHECK)
+        if (due.isEmpty()) return
+        val at = now()
+        val moved = m.tidyKept(token, due.associate { it.id to MailTidy.TRASH }).first
+        val done = due.filter { it.id in moved }
+        if (done.isEmpty()) return
+        // Its own id, so a check that also tidies (the same moment) keeps two batches.
+        val batchId = MailAutopilotRules.batchId("${a.id}:blocked", at)
+        ms.recordTidy(a.id, batchId, done.map { MailMoved(it.id, moved.getValue(it.id), MailTidy.TRASH) })
+        if (markRead) markRead(m, token, done.filter { it.unread }.map { moved.getValue(it.id) }, true)
+        done.forEach { h -> ms.put(hh, a.id, h.copy(inInbox = false)) }
+        val account = MailLabel.of(a.label)?.label ?: "Mail"
+        val emails = tidiedEmails(a, ms, done.map { it to MailTidy.TRASH }) { _, _ -> null to null }
+        writeTidy(a, batchId, MailAutopilotRules.batchFields(at, account, mapOf(MailTidy.TRASH to done.size), emptyList(), 0, 0) + emails)
     }
 
     /**

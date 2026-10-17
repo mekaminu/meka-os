@@ -27,7 +27,7 @@ enum class MailTidy(val one: String, val many: String, val label: String?) {
      * Slice 5b: a newsletter or promo from a sender Meka unsubscribed from, arriving after the unsubscribe: moved to
      * Trash (recoverable for 30 days, never deleted for good), with Undo like any tidy.
      */
-    TRASH("from an unsubscribed sender", "from unsubscribed senders", null),
+    TRASH("from a blocked or unsubscribed sender", "from blocked or unsubscribed senders", null),
     /**
      * Slice 3c, the daily Junk review: an obvious scam or spam in the Junk folder moved to Trash (recoverable for 30 days,
      * never deleted for good); Undo puts it back in Junk.

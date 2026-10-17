@@ -74,6 +74,15 @@ object MailItemFields {
     /** Slice 10b (the server): it wrote the sender's rule for that ask, and (after an Undo) took it off again. */
     const val TIDY_RULE_AT = "tidyRuleAtMs"
     const val TIDY_CLEARED_AT = "tidyClearedAtMs"
+    /** Junk fix slice 2 (an app): the rule the card asked for with [TIDY_ASKED_AT], Text "TIDY" / "BLOCK"; absent = TIDY. */
+    const val RULE_ASKED = "ruleAsked"
+    /** Junk fix slice 2 (the server): the email carries a usable List-Unsubscribe, so the card offers Unsubscribe (Bool). */
+    const val CAN_UNSUB = "canUnsub"
+    /** Junk fix slice 2 (an app): Unsubscribe on the card (with a Done); 0 after an Undo before the server acted. */
+    const val UNSUB_ASKED_AT = "unsubAskedAtMs"
+    /** The server tried it, and what came of it ([UnsubscribeState.note]). */
+    const val UNSUB_TRIED_AT = "unsubTriedAtMs"
+    const val UNSUB_NOTE = "unsubNote"
     /** Scheduling assistant, slice 2 (an app's): Book it's calendar edit ("" once undone) and the start it booked (0). */
     /**
      * Account-security mail ([MailSecurityRules], 2026-10-17): the provider whose security alert this is ("Google"),
@@ -128,6 +137,12 @@ data class MailItem(
     val tidyAskedAtMs: Long? = null,
     val tidyRuleAtMs: Long? = null,
     val tidyClearedAtMs: Long? = null,
+    /** Junk fix slice 2: the rule the card asked for, the email's Unsubscribe, and the server's answer to it. */
+    val ruleAsked: String? = null,
+    val canUnsubscribe: Boolean = false,
+    val unsubAskedAtMs: Long? = null,
+    val unsubTriedAtMs: Long? = null,
+    val unsubNote: String? = null,
     /** Scheduling assistant, slice 2: Book it's calendar edit and the start it booked, or null. */
     val meetingEditId: String? = null,
     val meetingAtMs: Long? = null,
@@ -191,6 +206,10 @@ data class MailNeedsRow(
     val warning: String? = null,
     /** True when [warning] is a possible scam (the critical colour); false for a real company's line. */
     val scam: Boolean = false,
+    /** Junk fix slice 2: the email has an unsubscribe link, so the row offers Unsubscribe. */
+    val canUnsubscribe: Boolean = false,
+    /** Junk fix slice 2: Block sender (Bin & block on a scam) is offered ([MailSenderRuleRules.canBlock]). */
+    val canBlock: Boolean = false,
 )
 
 data class MailNeedsCard(
@@ -305,8 +324,9 @@ object MailNeedsRules {
     /** What the server publishes for one email (Needs you, in the inbox, inside the window). */
     fun serverFields(
         account: String, fromName: String?, fromAddress: String?, subject: String?, preview: String?, receivedAtMs: Long, threadCount: Int,
-        threadKey: String? = null, security: String = "", warning: String = "",
+        threadKey: String? = null, security: String = "", warning: String = "", canUnsubscribe: Boolean = false,
     ): Map<String, FieldValue> =
+        mapOf(MailItemFields.CAN_UNSUB to FieldValue.Bool(canUnsubscribe)) +
         (if (threadKey != null) mapOf(MailItemFields.THREAD_KEY to threadKey.fv()) else emptyMap<String, FieldValue>()) +
             (if (security.isNotEmpty()) mapOf(MailItemFields.SECURITY to security.fv()) else emptyMap()) +
             (if (warning.isNotEmpty()) mapOf(MailItemFields.WARNING to warning.fv()) else emptyMap()) + mapOf(
@@ -357,6 +377,11 @@ object MailNeedsRules {
             tidyAskedAtMs = ms(MailItemFields.TIDY_ASKED_AT),
             tidyRuleAtMs = ms(MailItemFields.TIDY_RULE_AT),
             tidyClearedAtMs = ms(MailItemFields.TIDY_CLEARED_AT),
+            ruleAsked = text(MailItemFields.RULE_ASKED),
+            canUnsubscribe = (f[MailItemFields.CAN_UNSUB] as? FieldValue.Bool)?.value == true,
+            unsubAskedAtMs = ms(MailItemFields.UNSUB_ASKED_AT),
+            unsubTriedAtMs = ms(MailItemFields.UNSUB_TRIED_AT),
+            unsubNote = text(MailItemFields.UNSUB_NOTE),
             meetingEditId = text(MailItemFields.MEETING_EDIT_ID),
             meetingAtMs = ms(MailItemFields.MEETING_AT),
             replyNeeded = (f[MailAutoDraftFields.REPLY_NEEDED] as? FieldValue.Bool)?.value == true,
@@ -528,7 +553,8 @@ object MailNeedsRules {
                 security = security,
                 warning = warning,
                 scam = MailScamRules.scamLine(warning),
-            )
+                canUnsubscribe = i.canUnsubscribe && security == null,
+            ).let { it.copy(canBlock = MailSenderRuleRules.canBlock(it)) }
         }
 
     /** Done: the card goes on both apps and the server archives the email at its next check. */

@@ -64,6 +64,8 @@ struct MailNeedsView: View {
                                                  send: { text, sent in model.replyToMailItem(row.id, text, sent: sent) },
                                                  draft: { await model.draftMailReply(row.id) },
                                                  alwaysTidy: { model.alwaysTidyMailItem(row.id) },
+                                                 block: { model.blockMailItem(row.id) },
+                                                 unsubscribe: { model.unsubscribeMailItem(row.id) },
                                                  incoming: incoming[row.id],
                                                  onEditor: { t in texts[row.id] = t },
                                                  suggestTimes: { await model.suggestMeetingTimes(row.id) },
@@ -175,6 +177,9 @@ struct MailNeedsRowView: View {
     let draft: @MainActor () async -> (text: String?, line: String)
     /// Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive (nil: not offered here).
     var alwaysTidy: (() -> Void)? = nil
+    /// Junk fix slice 2: Block sender (Bin & block on a possible scam) and Unsubscribe (nil: not offered here).
+    var block: (() -> Void)? = nil
+    var unsubscribe: (() -> Void)? = nil
     /// Draft replies on the card: a draft to open the editor with (nil: none), and where the open editor's words go
     /// (nil when closed) for Send all.
     var incoming: MailIncomingDraft? = nil
@@ -310,9 +315,19 @@ struct MailNeedsRowView: View {
                               spoken: "Waiting for \(row.from) on \(row.subject), chase in 3 days", action: waiting)
                 MailNeedsPill(label: MailNeedsRules.shared.SNOOZE, palette: palette, quiet: true,
                               spoken: "Snooze \(row.subject) till tomorrow 8 o'clock", action: snooze)
+                if let unsubscribe, row.canUnsubscribe {
+                    MailNeedsPill(label: MailCardUnsubRules.shared.UNSUBSCRIBE, palette: palette, quiet: true,
+                                  spoken: "Unsubscribe from \(row.from) and archive this email", action: unsubscribe)
+                }
                 if let alwaysTidy {
                     MailNeedsPill(label: MailSenderRuleRules.shared.ALWAYS_TIDY, palette: palette, quiet: true,
-                                  spoken: "Archive this and always tidy \(row.from)'s emails as they arrive", action: alwaysTidy)
+                                  spoken: "Archive this, and \(row.from)'s future emails skip your inbox and go to Archive", action: alwaysTidy)
+                }
+                // Block sender: this email and their later ones to Trash; on a possible scam, Bin & block in the critical colour.
+                if let block, row.canBlock {
+                    MailNeedsPill(label: row.scam ? MailSenderRuleRules.shared.BIN : MailSenderRuleRules.shared.BLOCK,
+                                  palette: palette, quiet: !row.scam, critical: row.scam,
+                                  spoken: "Block \(row.from): this email and their later ones go to Trash", action: block)
                 }
             }
             .padding(.top, MekaSpace.xxs)
@@ -460,6 +475,8 @@ struct MailNeedsPill: View {
     let label: String
     let palette: MekaPalette
     var quiet: Bool = false
+    /// Junk fix slice 2: Bin & block on a possible scam wears the critical colour.
+    var critical: Bool = false
     let spoken: String
     let action: () -> Void
 
@@ -467,7 +484,7 @@ struct MailNeedsPill: View {
         Button(label, action: action)
             .buttonStyle(MekaPressStyle())
             .font(MekaType.itemMeta)
-            .foregroundStyle(quiet ? palette.textSecondary : palette.accent)
+            .foregroundStyle(critical ? palette.critical : (quiet ? palette.textSecondary : palette.accent))
             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .background(palette.surface, in: Capsule())
             .accessibilityLabel(spoken)

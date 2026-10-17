@@ -64,6 +64,7 @@ import os.meka.core.domain.MailNeedsRules
 import os.meka.core.domain.MailSendAllRules
 import os.meka.core.domain.MeetingPickRules
 import os.meka.core.domain.MeetingRequestRules
+import os.meka.core.domain.MailCardUnsubRules
 import os.meka.core.domain.MailSenderRuleRules
 import os.meka.core.facade.MekaCore
 
@@ -173,6 +174,9 @@ internal fun MailNeedsSection(
                             onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
                             // Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive.
                             onAlwaysTidy = { haptics.medium(); answer { core.alwaysTidyMailItem(row.id) } },
+                            // Junk fix slice 2: Block sender (Bin & block on a possible scam) and Unsubscribe, Undo on the bar.
+                            onBlock = { haptics.medium(); answer { core.blockMailItem(row.id) } },
+                            onUnsubscribe = { haptics.medium(); answer { core.unsubscribeMailItem(row.id) } },
                             onDraft = { core.draftMailReply(row.id) },
                             onSuggestTimes = { core.suggestMeetingTimes(row.id) },
                             // Drafted replies: Not needed puts Navilife's draft away (Undo on the bar); the email stays.
@@ -205,6 +209,9 @@ internal fun MailNeedsRowView(
     onDraft: suspend () -> MailDraft,
     onSend: (String, () -> Unit) -> Unit,
     onAlwaysTidy: (() -> Unit)? = null,
+    /** Junk fix slice 2: Block sender / Bin & block and Unsubscribe (null: not offered here). */
+    onBlock: (() -> Unit)? = null,
+    onUnsubscribe: (() -> Unit)? = null,
     incoming: Pair<Int, String>? = null,
     onEditor: ((String?) -> Unit)? = null,
     /** Scheduling assistant, slice 1: his free times as a reply, for an email that asks to meet (null: not offered here). */
@@ -415,10 +422,23 @@ internal fun MailNeedsRowView(
             MailNeedsPill(MailNeedsRules.TASK, spoken = "Make a task from ${row.subject} and archive the email", onClick = onTask)
             MailNeedsPill(MailNeedsRules.WAITING, quiet = true, spoken = "Waiting for ${row.from} on ${row.subject}, chase in 3 days", onClick = onWaiting)
             MailNeedsPill(MailNeedsRules.SNOOZE, quiet = true, spoken = "${MailNeedsRules.SNOOZE} ${row.subject} till tomorrow 8 o'clock", onClick = onSnooze)
+            if (onUnsubscribe != null && row.canUnsubscribe) {
+                MailNeedsPill(
+                    MailCardUnsubRules.UNSUBSCRIBE, quiet = true,
+                    spoken = "Unsubscribe from ${row.from} and archive this email", onClick = onUnsubscribe,
+                )
+            }
             if (onAlwaysTidy != null) {
                 MailNeedsPill(
                     MailSenderRuleRules.ALWAYS_TIDY, quiet = true,
-                    spoken = "Archive this and always tidy ${row.from}'s emails as they arrive", onClick = onAlwaysTidy,
+                    spoken = "Archive this, and ${row.from}'s future emails skip your inbox and go to Archive", onClick = onAlwaysTidy,
+                )
+            }
+            // Block sender: this email and their later ones to Trash; on a possible scam it reads Bin & block in the critical colour.
+            if (onBlock != null && row.canBlock) {
+                MailNeedsPill(
+                    if (row.scam) MailSenderRuleRules.BIN else MailSenderRuleRules.BLOCK, quiet = !row.scam, critical = row.scam,
+                    spoken = "Block ${row.from}: this email and their later ones go to Trash", onClick = onBlock,
                 )
             }
         }
@@ -451,10 +471,12 @@ private fun MailSendAllBar(
 }
 
 @Composable
-internal fun MailNeedsPill(label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, onClick: () -> Unit) {
+internal fun MailNeedsPill(
+    label: String, spoken: String, quiet: Boolean = false, enabled: Boolean = true, critical: Boolean = false, onClick: () -> Unit,
+) {
     Text(
         label, style = MekaType.itemMeta,
-        color = when { !enabled -> Meka.colors.textTertiary; quiet -> Meka.colors.textSecondary; else -> Meka.colors.accent },
+        color = when { !enabled -> Meka.colors.textTertiary; critical -> Meka.colors.critical; quiet -> Meka.colors.textSecondary; else -> Meka.colors.accent },
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
             .background(Meka.colors.surface)
             .clickable(enabled = enabled, role = Role.Button, onClick = onClick)

@@ -5258,6 +5258,49 @@ class MekaCore(
         os.meka.core.domain.MailSenderRuleRules.cardLine(item.from)
     }
 
+    /**
+     * Junk fix slice 2 (Meka, 2026-10-17): **Block sender** (on a possible scam, **Bin & block**) on an email in "From
+     * your mail": it is Done, and at the server's next check this email goes to Trash and its sender gets the block
+     * rule ([os.meka.core.domain.MailSenderRule.BLOCK]), so their later mail goes straight to Trash too (never people he
+     * writes to, his partner, banks, schools or public bodies: those are only archived). The linked emails are Done with
+     * it. Undo brings the card (and the email) back and takes the block off again. Returns the bar's line.
+     */
+    suspend fun blockMailItem(id: String): String = onCore {
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        val scam = os.meka.core.domain.MailScamRules.scamLine(item.warning)
+        val group = mailGroup(id)
+        replica.commitLocal(
+            os.meka.core.domain.EntityTypes.MAIL_ITEM, id,
+            os.meka.core.domain.MailSenderRuleRules.cardFields(nowMs(), os.meka.core.domain.MailSenderRule.BLOCK),
+        )
+        val linked = doneLinked(group)
+        mailNeedsUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailNeedsRules.undoDoneFields(nowMs()))
+            linked()
+        }
+        mailNeedsChanged()
+        if (scam) os.meka.core.domain.MailSenderRuleRules.binLine(item.from) else os.meka.core.domain.MailSenderRuleRules.blockLine(item.from)
+    }
+
+    /**
+     * Junk fix slice 2: **Unsubscribe** on an email in "From your mail" that carries an unsubscribe link: it is Done (with
+     * its linked emails) and the server unsubscribes the sender its own way at its next check. Undo before then calls it
+     * off and brings the card back. Returns the bar's line.
+     */
+    suspend fun unsubscribeMailItem(id: String): String = onCore {
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore os.meka.core.domain.MailNeedsRules.UNKNOWN
+        if (!item.canUnsubscribe) return@onCore os.meka.core.domain.UnsubscribeState.FAILED.note
+        val group = mailGroup(id)
+        replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailCardUnsubRules.askFields(nowMs()))
+        val linked = doneLinked(group)
+        mailNeedsUndo = {
+            replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, os.meka.core.domain.MailCardUnsubRules.undoFields(nowMs()))
+            linked()
+        }
+        mailNeedsChanged()
+        os.meka.core.domain.MailCardUnsubRules.line(item.from)
+    }
+
     /** Slice 6c: [id] and the emails linked to it on "From your mail" ([id] first). */
     private fun mailGroup(id: String): List<String> = os.meka.core.domain.MailLinkRules.groupIds(activity.mailItems(), id, nowMs())
 

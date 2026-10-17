@@ -5,6 +5,9 @@ import kotlinx.datetime.TimeZone
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.MailItemFields
 import os.meka.core.domain.MailNeedsRules
+import os.meka.core.domain.MailCardUnsubRules
+import os.meka.core.domain.MailSenderRuleRules
+import os.meka.core.domain.UnsubscribeState
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
@@ -36,9 +39,13 @@ class MailNeedsFacadeTest {
         serverOps.append(Op("srvmi${k++}", "hh", EntityTypes.MAIL_ITEM, id, f, v, clock.now(), emptyList(), "server"))
     }
 
-    private fun email(message: String, from: String, subject: String, agoMs: Long, account: String = "Personal"): String {
+    private fun email(
+        message: String, from: String, subject: String, agoMs: Long, account: String = "Personal",
+        warning: String = "", canUnsubscribe: Boolean = false,
+    ): String {
         val id = MailNeedsRules.itemId("acc1", message)
-        serverWrite(id, MailNeedsRules.serverFields(account, from, null, subject, "Hi, can you look at this", now - agoMs, 1))
+        serverWrite(id, MailNeedsRules.serverFields(account, from, null, subject, "Hi, can you look at this", now - agoMs, 1,
+            warning = warning, canUnsubscribe = canUnsubscribe))
         return id
     }
 
@@ -80,7 +87,7 @@ class MailNeedsFacadeTest {
         val fold = core("android")
         val mac = core("mac")
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
-        assertEquals("Done · Autopilot will tidy Tool Reports's emails as they arrive", fold.alwaysTidyMailItem(a))
+        assertEquals(MailSenderRuleRules.cardLine("Tool Reports"), fold.alwaysTidyMailItem(a))
         assertEquals(listOf(b), fold.mailNeeds.value?.rows?.map { it.id })
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertEquals(listOf(b), mac.mailNeeds.value?.rows?.map { it.id })
@@ -90,6 +97,36 @@ class MailNeedsFacadeTest {
         fold.undoMailItem()
         assertEquals(listOf(a, b), fold.mailNeeds.value?.rows?.map { it.id })
         assertEquals(MailNeedsRules.UNKNOWN, fold.alwaysTidyMailItem("nothing"))
+    }
+
+    @Test
+    fun blockAndUnsubscribeAreDonesThatAskTheServerAndUndoTakesThemBack() = runTest {
+        // Junk fix slice 2: Block sender (Bin & block on a possible scam) and Unsubscribe on a card.
+        val a = email("m1", "Prize Team", "4 HOURS LEFT", hour, canUnsubscribe = true)
+        val b = email("m2", "Notification via PayPal", "Your account will be closed", 2 * hour,
+            warning = "⚠ Possible scam · sent from mail-x.example, not paypal.com")
+        val c = email("m3", "Alex Reed", "Invoice question", 3 * hour)
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        val rows = assertNotNull(fold.mailNeeds.value).rows.associateBy { it.id }
+        assertTrue(rows.getValue(a).canUnsubscribe && rows.getValue(a).canBlock)
+        assertTrue(rows.getValue(b).scam && rows.getValue(b).canBlock && !rows.getValue(b).canUnsubscribe)
+        assertEquals(MailSenderRuleRules.binLine("Notification via PayPal"), fold.blockMailItem(b))
+        assertEquals(MailCardUnsubRules.line("Prize Team"), fold.unsubscribeMailItem(a))
+        assertEquals(listOf(c), fold.mailNeeds.value?.rows?.map { it.id })
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals(listOf(c), mac.mailNeeds.value?.rows?.map { it.id })
+        val ops = serverOps.after("hh", 0, 100_000).map { it.op }
+        assertTrue(ops.any { it.entityId == b && it.field == MailItemFields.RULE_ASKED })
+        assertTrue(ops.any { it.entityId == a && it.field == MailItemFields.UNSUB_ASKED_AT })
+        // Undo takes back the last one (the unsubscribe): the card is back and it's called off.
+        now += 1_000
+        fold.undoMailItem()
+        assertEquals(listOf(a, c), fold.mailNeeds.value?.rows?.map { it.id })
+        // Unsubscribe on an email without a link says it can't.
+        assertEquals(UnsubscribeState.FAILED.note, fold.unsubscribeMailItem(c))
+        assertEquals(MailNeedsRules.UNKNOWN, fold.blockMailItem("nothing"))
     }
 
     @Test

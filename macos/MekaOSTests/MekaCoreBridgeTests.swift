@@ -3064,7 +3064,7 @@ final class MekaCoreBridgeTests: XCTestCase {
                                     undoAskedAtMs: nil, undoneAtMs: nil, undoNote: nil,
                                     kinds: [MailTidy.trash: KotlinInt(int: 2)], backlog: false, junk: false,
                                     receiptsPence: nil, receiptsPriced: 0, merchants: [], accountKey: nil, emails: [], emailAsks: [], emailDone: [])
-        XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [trashed]), "Tidied 2 · 2 from unsubscribed senders")
+        XCTAssertEqual(ArchivedForYouRules.shared.headline(batches: [trashed]), "Tidied 2 · 2 from blocked or unsubscribed senders")
         XCTAssertEqual(MailTidy.trash.destination, "→ Trash")
         // Slice 3c: the daily Junk review's tidy reads the same way.
         let junk = MailAutopilotRules.shared.readBatch(id: "t3", f: MailJunkRules.shared.batchFields(atMs: 3_000, account: "Personal",
