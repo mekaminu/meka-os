@@ -1780,6 +1780,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MoneyRules.shared.CHOICES.first?.label, "Groceries")
     }
 
+    func testMoneyAskReachesSwift() {
+        // Money manager (16): which questions are money ones, the amount read, and the unlock's words cross to Swift.
+        XCTAssertTrue(MoneyAskRules.shared.isAbout(question: "can I afford £300 on Saturday?"))
+        XCTAssertFalse(MoneyAskRules.shared.isAbout(question: "how do I import a statement?"))
+        XCTAssertEqual(MoneyAskRules.shared.amount(q: "can I afford £300?"), KotlinLong(value: 30_000))
+        XCTAssertEqual(MoneyAskRules.shared.UNLOCK, "Unlock Money to answer")
+    }
+
     func testMoneyTipsReachSwift() {
         // Money manager, slice 2: the tip kinds and their words cross to Swift; nothing hidden says nothing.
         XCTAssertEqual(MoneyTipKind.habit.key, "habit")

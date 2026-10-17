@@ -37,6 +37,8 @@ data class MoneyPaydayView(
     val goingOut: String?, val rows: List<MoneyPaydayRow>, val more: Int,
     val account: String?, val accountName: String?, val balanceLine: String?, val balanceKnown: Boolean,
     val safe: String?, val safeLit: Boolean, val foot: String,
+    /** Money manager (16), Ask: the next payday and, with a balance, what's left after the bills before it (pence). */
+    val paydayDay: Long? = null, val leftPence: Long? = null,
 )
 
 /** A line of the statements for the payday view: its account, day, signed pence, merchant key and category. */
@@ -127,7 +129,7 @@ object MoneyPayday {
     }
 
     /** Whether a radar bill is one of the regular payments already counted (its name's word, or the same amount nearby). */
-    private fun sameAs(b: MoneyBill, r: MoneyTips.Regular): Boolean {
+    fun sameAs(b: MoneyBill, r: MoneyTips.Regular): Boolean {
         val words = { s: String -> s.lowercase().split(Regex("[^a-z0-9]+")).filter { it.length >= 3 }.toSet() }
         val bw = words(b.title)
         val rw = words(r.label)
@@ -172,6 +174,7 @@ object MoneyPayday {
         var balanceLine: String
         var safe: String? = null
         var lit = false
+        var leftPence: Long? = null
         if (bal == null) {
             balanceLine = "Type $accountName's balance now to see what's safe to spend until payday"
         } else {
@@ -183,6 +186,7 @@ object MoneyPayday {
                 (if (since != 0L) " · with the payments since" else "") +
                 (if (asOf < today - STALE_DAYS) " · newer payments aren't in" else "")
             val left = now - total
+            leftPence = left
             val daysLeft = (payday - today).coerceAtLeast(1)
             when {
                 left < 0 -> {
@@ -199,6 +203,7 @@ object MoneyPayday {
         return MoneyPaydayView(
             HEAD, null, payLine, fromLine, sinceLine, goingOut, rows, (sorted.size - rows.size).coerceAtLeast(0),
             pay.account, accountName, balanceLine, bal != null, safe, lit, FOOT,
+            paydayDay = payday, leftPence = leftPence,
         )
     }
 }

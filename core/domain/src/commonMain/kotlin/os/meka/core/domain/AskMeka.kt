@@ -113,6 +113,11 @@ data class AskAnswer(
      * asks the same question of the AI, past the help (the facade's askBeyondHelp). Null for every other answer.
      */
     val stillStuck: String? = null,
+    /**
+     * Money manager (16): a money question while Money is locked — the button's words ([MoneyAskRules.UNLOCK]); the
+     * app asks for the fingerprint, then the facade's unlockMoneyAsk, then the same question again. Null otherwise.
+     */
+    val unlockMoney: String? = null,
 )
 
 /** What asking came to: an answer, or why there is none (AI off, the month's budget spent, offline, a failure). */

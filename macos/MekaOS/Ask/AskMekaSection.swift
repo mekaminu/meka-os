@@ -119,6 +119,12 @@ struct AskMekaSection: View {
         .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
         .onChange(of: model.talkOnOpenRequested) { _, asked in if asked { takeTalkOnOpen() } }
         .onDisappear { talk.stop() }
+        // Money manager (16): Touch ID said yes to "Unlock Money to answer": the same question again, answered here.
+        .onChange(of: model.moneyAskUnlocks) { _, _ in
+            if let q = model.moneyAskAgain { ask(again: q, beyondHelp: false) }
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.screensDidSleepNotification)) { _ in model.lockMoneyAsk() }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.sessionDidResignActiveNotification)) { _ in model.lockMoneyAsk() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in talk.stop() }
     }
 
@@ -214,6 +220,20 @@ struct AskMekaSection: View {
                         .accessibilityLabel(label)
                         .staggeredAppear(reply.lines.count + reply.did.count + reply.cards.count + 1)
                     }
+                    // Money manager (16): a money question while Money is locked; Touch ID, then the answer.
+                    if let label = reply.unlockMoney {
+                        Button {
+                            model.unlockMoneyAsk(question: q)
+                        } label: {
+                            Text(label).font(MekaType.itemMeta)
+                                .foregroundStyle(palette.onAccent)
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(palette.accent, in: Capsule())
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel(label)
+                        .staggeredAppear(reply.lines.count)
+                    }
                     // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
                     if let offer = model.askTrustOffer {
                         TrustOfferRow(offer: offer, palette: palette,
@@ -253,14 +273,15 @@ struct AskMekaSection: View {
     }
 
     /// Asks what was typed; `again` asks that question of the AI past the help ("Still stuck? Ask Navilife").
-    private func ask(again: String? = nil) {
+    /// `beyondHelp` false asks `again` as a plain question (after "Unlock Money to answer").
+    private func ask(again: String? = nil, beyondHelp: Bool? = nil) {
         guard let q = again ?? AskRules.shared.question(text: text), thinking == nil else { return }
         MekaHaptics.light()
         asked = q
         if !usedAsk { usedAsk = true }
         withAnimation(MekaMotion.appear(reduced: reduceMotion)) { thinking = q }
         Task {
-            let r = await model.askMeka(q, beyondHelp: again != nil)
+            let r = await model.askMeka(q, beyondHelp: beyondHelp ?? (again != nil))
             withAnimation(MekaMotion.appear(reduced: reduceMotion)) {
                 question = q
                 reply = r
@@ -278,7 +299,7 @@ struct AskMekaSection: View {
         talk.attach(model)
         talk.onAnswer = { q, out in
             let r: AskReplyView = switch onEnum(of: out) {
-            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck)
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney)
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q

@@ -189,6 +189,40 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun moneyQuestionsAreAnsweredOnTheDeviceOnlyOnceUnlocked() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        fun said(o: os.meka.core.domain.AskOutcome) = (o as os.meka.core.domain.AskOutcome.Answered).answer
+        // Nothing in Money yet: it says so (no AI is connected here, so every answer below is the device's own).
+        assertEquals(os.meka.core.domain.MoneyAskRules.EMPTY, said(fold.askMeka("how much did I spend on coffee?")).text)
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        fold.closeMoney()
+        // Locked: no figures, an Unlock button instead.
+        val locked = said(fold.askMeka("how much did I spend on groceries last month?"))
+        assertEquals(os.meka.core.domain.MoneyAskRules.LOCKED, locked.text)
+        assertEquals(os.meka.core.domain.MoneyAskRules.UNLOCK, locked.unlockMoney)
+        // After the fingerprint: answered, Talk's follow-ups too, for five minutes.
+        fold.unlockMoneyAsk()
+        assertEquals(
+            "You spent £60 on groceries last month (September), 1 payment.",
+            said(fold.askMeka("how much did I spend on groceries last month?")).text,
+        )
+        assertEquals(
+            "You spent £3.20 on coffee this month so far, 1 payment. Your statements reach Mon 5 Oct.",
+            said(fold.talk("how much have I spent on coffee this month?", emptyList())).text,
+        )
+        now += 6 * 60_000L
+        assertEquals(os.meka.core.domain.MoneyAskRules.LOCKED, said(fold.askMeka("what did I spend at Tesco?")).text)
+        // Open Money also answers; locking it (the app going away) ends an unlock from Ask at once.
+        fold.unlockMoneyAsk()
+        fold.lockMoneyAsk()
+        assertEquals(os.meka.core.domain.MoneyAskRules.LOCKED, said(fold.askMeka("what did I spend at Tesco?")).text)
+        fold.openMoney()
+        assertEquals("You spent £40 at Tesco Stores this month so far, 1 payment. Your statements reach Mon 5 Oct.",
+            said(fold.askMeka("what did I spend at Tesco?")).text)
+    }
+
+    @Test
     fun paydayAndSafeToSpendFollowTheStatementsBalanceAndATypedOneOnBothDevices() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

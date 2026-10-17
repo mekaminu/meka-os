@@ -675,6 +675,18 @@ object MoneyRules {
         )
     }
 
+    /**
+     * Money manager (16): every account's lines for Ask's answers, a statement line and the same bank line counted once
+     * ([MoneyBank.merge]), each with its merchant key and category (his corrections first).
+     */
+    fun askLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyLine> {
+        val ids = accounts.map { it.id }.toSet()
+        return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
+            val key = MoneyCategoryRules.merchantKey(t.text)
+            MoneyLine(t.day, t.pence, key, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence))
+        }
+    }
+
     fun movedLine(merchant: String, category: MoneyCategory, count: Int): String =
         "$merchant is ${category.label} from now on" + (if (count > 1) " · $count payments" else "")
 

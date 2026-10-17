@@ -1959,7 +1959,7 @@ final class CoreModel {
         if let out = asked {
             switch onEnum(of: out) {
             case .answered(let a):
-                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck)
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney)
             case .unavailable(let u):
                 reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
@@ -3257,6 +3257,32 @@ final class CoreModel {
 
     /// Locks Money again (the sheet closed or the app went to the background).
     func closeMoney() { run { try await $0.closeMoney() } }
+
+    // Money manager (16): money questions in Ask and Talk, answered on this Mac from his own Money, behind Touch ID.
+    /// The question to ask again once Touch ID said yes; AskMekaSection asks it when `moneyAskUnlocks` changes.
+    private(set) var moneyAskAgain: String?
+    private(set) var moneyAskUnlocks = 0
+
+    /// "Unlock Money to answer": Touch ID (or the Mac's password), then the core answers money questions for five minutes
+    /// and Ask asks `question` again. Only a String crosses into the core.
+    func unlockMoneyAsk(question: String) {
+        MekaHaptics.tick()
+        MacBiometric.unlock(reason: MoneyAskRules.shared.UNLOCK_REASON) { [weak self] ok in
+            guard ok else { MekaHaptics.tick(); return }
+            MekaHaptics.light()
+            Task { await self?.finishMoneyUnlock(question) }
+        }
+    }
+
+    private func finishMoneyUnlock(_ question: String) async {
+        guard let core else { return }
+        _ = try? await core.unlockMoneyAsk()
+        moneyAskAgain = question
+        moneyAskUnlocks += 1
+    }
+
+    /// Ends an unlock from Ask at once (the screen slept or the session went away).
+    func lockMoneyAsk() { run { try await $0.lockMoneyAsk() } }
 
     /// ‹ (−1) or › (+1) a month.
     func moneyStep(_ step: Int32) { MekaHaptics.tick(); run { try await $0.moneyStep(step: step) } }
@@ -5467,6 +5493,8 @@ struct AskReplyView {
     var help: MekaKit.HelpLink? = nil
     /// "Still stuck? Ask Navilife" under a help answer (slice 2).
     var stillStuck: String? = nil
+    /// Money manager (16): "Unlock Money to answer" under a money question asked while Money is locked.
+    var unlockMoney: String? = nil
 }
 
 /// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.

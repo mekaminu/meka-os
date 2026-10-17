@@ -169,7 +169,13 @@ fun AskMekaSection(
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
-        val obs = LifecycleEventObserver { _, e -> if (e == Lifecycle.Event.ON_STOP) talk.stop() }
+        val obs = LifecycleEventObserver { _, e ->
+            if (e == Lifecycle.Event.ON_STOP) {
+                talk.stop()
+                // Money manager (16): an unlock from Ask ends when Navilife goes to the background.
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch { runCatching { core.lockMoneyAsk() } }
+            }
+        }
         lifecycle.addObserver(obs)
         onDispose { lifecycle.removeObserver(obs); talk.release() }
     }
@@ -226,6 +232,25 @@ fun AskMekaSection(
             shown = AskShown.Answer(q, out, asks + 1)
             asks += 1
             if (out is AskOutcome.Answered) text = ""
+        }
+    }
+
+    /**
+     * Money manager (16): "Unlock Money to answer" under a money question asked while Money is locked — the fingerprint
+     * (or the phone's PIN), then the same question again, answered on the phone from his own Money.
+     */
+    fun unlockMoney(q: String) {
+        haptics.tick()
+        os.meka.android.security.FoldBiometric.unlock(context, os.meka.core.domain.MoneyAskRules.UNLOCK_REASON, "Your spending, read-only · on this phone") { ok ->
+            if (!ok) { haptics.tick(); return@unlock }
+            haptics.light()
+            shown = AskShown.Thinking(q)
+            scope.launch {
+                runCatching { core.unlockMoneyAsk() }
+                val out = core.askMeka(q)
+                shown = AskShown.Answer(q, out, asks + 1)
+                asks += 1
+            }
         }
     }
 
@@ -418,6 +443,10 @@ fun AskMekaSection(
                                     ask(again = s.question)
                                 }
                             }
+                            // Money manager (16): a money question while Money is locked; the fingerprint, then the answer.
+                            o.answer.unlockMoney?.let { label ->
+                                UnlockMoneyRow(label, Modifier.appear(rememberAppearance(lines.size))) { unlockMoney(s.question) }
+                            }
                             // Earned trust: "want me to just do these?" rises under the answer after the fifth yes in a row.
                             AnimatedVisibility(
                                 visible = offer != null,
@@ -446,6 +475,7 @@ const val ASK_AUTO_TAG = "ask-auto"
 const val ASK_TRUST_TAG = "ask-trust"
 const val ASK_HELP_TAG = "ask-help"
 const val ASK_STILL_STUCK_TAG = "ask-still-stuck"
+const val ASK_UNLOCK_MONEY_TAG = "ask-unlock-money"
 
 /**
  * The best matches for what's typed: the title, then "Task · Planned today 14:00"; a task, list item, goal or habit
@@ -589,6 +619,20 @@ private fun StillStuckRow(label: String, modifier: Modifier, onTap: () -> Unit) 
             .testTag(ASK_STILL_STUCK_TAG)
             .semantics { contentDescription = label }
             .padding(vertical = MekaSpace.xs),
+    )
+}
+
+/** Money manager (16): "Unlock Money to answer" in an accent pill, like Take me there. */
+@Composable
+private fun UnlockMoneyRow(label: String, modifier: Modifier, onTap: () -> Unit) {
+    Text(
+        label, style = MekaType.itemMeta, color = Meka.colors.onAccent,
+        modifier = modifier.padding(top = MekaSpace.xxs).minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+            .clickable(role = Role.Button, onClick = onTap)
+            .testTag(ASK_UNLOCK_MONEY_TAG)
+            .semantics { contentDescription = label }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
 

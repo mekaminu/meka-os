@@ -638,7 +638,56 @@ class MekaCore(
     suspend fun openMoney() = onCore { moneyOpen = true; moneyOffset = 0; refreshMoney() }
 
     /** Locks Money again (the pane closed or the app went away). */
-    suspend fun closeMoney() = onCore { moneyOpen = false; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
+    suspend fun closeMoney() = onCore { moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
+
+    // ---- Money manager (16), slice 1: money questions in Ask and Talk, answered on the device ----
+
+    // Until when an unlock from Ask lets money questions be answered (0 = locked); this device only, never synced.
+    private var moneyAskUntilMs = 0L
+
+    /**
+     * After the app's own fingerprint (Touch ID) yes on Ask's "Unlock Money to answer": money questions are answered for
+     * [os.meka.core.domain.MoneyAskRules.ASK_WINDOW_MS] (Talk's follow-ups too). Ask the question again after it.
+     */
+    suspend fun unlockMoneyAsk() = onCore { moneyAskUntilMs = nowMs() + os.meka.core.domain.MoneyAskRules.ASK_WINDOW_MS }
+
+    /** Ends an unlock from Ask at once (the app went to the background). */
+    suspend fun lockMoneyAsk() = onCore { moneyAskUntilMs = 0L }
+
+    /** What Ask's money answers read: every account's lines, what's due to go out and the payday view. Caller is on the core. */
+    private fun moneyAskData(): os.meka.core.domain.MoneyAskData {
+        val today = todayEpochDay()
+        val cal = ZoneCalendar(timeZone)
+        val accounts = money.accounts()
+        val txns = money.txns()
+        val rules = money.rules()
+        val ids = accounts.map { it.id }.toSet()
+        val cards = money.cards().filter { it.id in ids }
+        val lines = os.meka.core.domain.MoneyRules.askLines(accounts, txns, rules)
+        val bills = moneyBills()
+        val view = os.meka.core.domain.MoneyRules.view(
+            accounts, txns, rules, today, cal, 0, bills = bills, holidays = bankHolidays.calendar(), cards = cards,
+        )
+        val upcoming = os.meka.core.domain.MoneyAskRules.upcoming(
+            os.meka.core.domain.MoneyTips.regular(lines, today), bills + os.meka.core.domain.MoneyCards.bills(cards, today), today,
+        )
+        return os.meka.core.domain.MoneyAskData(lines, today, upcoming, view.payday)
+    }
+
+    /**
+     * A money question ([os.meka.core.domain.MoneyAskRules.isAbout]) answered from his own Money on this device, never
+     * by the AI: while Money is open or unlocked from Ask; otherwise the locked line with Unlock. Caller is on the core.
+     */
+    private fun moneyAnswer(q: String): os.meka.core.domain.AskOutcome {
+        val rules = os.meka.core.domain.MoneyAskRules
+        if (money.accounts().isEmpty() && moneyBills().isEmpty()) {
+            return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.EMPTY, emptyList()))
+        }
+        if (!rules.unlocked(moneyOpen, moneyAskUntilMs, nowMs())) {
+            return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.LOCKED, emptyList(), unlockMoney = rules.UNLOCK))
+        }
+        return os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.answer(q, moneyAskData()), emptyList()))
+    }
 
     /** ‹ / ›: [step] −1 a month earlier, +1 a month later (never past this month). */
     suspend fun moneyStep(step: Int) = onCore {
@@ -6834,6 +6883,9 @@ class MekaCore(
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
         // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
         if (!beyondHelp) directAdd(q)?.let { return it }
+        // Money manager (16): "how much did I spend on takeaways?", "can I afford £300 on Saturday?" are answered from
+        // his own Money here, behind his fingerprint, and never go to the AI.
+        if (!beyondHelp && os.meka.core.domain.MoneyAskRules.isAbout(q)) return onCore { moneyAnswer(q) }
         val cal = ZoneCalendar(timeZone)
         // A question about notifications carries the phone's trace; without the AI the device answers from it itself.
         val notifyAsked = os.meka.core.domain.NotifyAskRules.isAbout(q)
