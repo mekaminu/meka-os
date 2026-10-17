@@ -439,6 +439,8 @@ data class MoneyView(
     val shared: MoneySharedView? = null,
     /** Slice 15: CHALLENGES — no-spend days, fun money for the week, category caps ([MoneyChallenges]); shown with this month only. */
     val challenges: MoneyChallengesView? = null,
+    /** Slice 17: PAYING ABROAD — which accounts charged foreign fees, the one to use, and a banner while he's abroad ([MoneyTravel]); this month only. */
+    val travel: MoneyTravelView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -549,6 +551,8 @@ object MoneyRules {
         sharedEntries: List<MoneySharedEntry> = emptyList(), sharedSetting: MoneySharedSetting = MoneySharedSetting(), partner: String? = null,
         /** Slice 15: the challenges he set. */
         challenges: MoneyChallengeSetting = MoneyChallengeSetting(),
+        /** Slice 17: the device is outside UK time, and a trip on or near (its name and first day). */
+        abroadNow: Boolean = false, trip: Pair<String, Long>? = null,
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -672,6 +676,7 @@ object MoneyRules {
             business = business,
             shared = shared,
             challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
+            travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
         )
     }
 
@@ -684,6 +689,15 @@ object MoneyRules {
         return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
             val key = MoneyCategoryRules.merchantKey(t.text)
             MoneyLine(t.day, t.pence, key, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence))
+        }
+    }
+
+    /** Money manager (17): every account's lines for PAYING ABROAD in Ask's answer, counted once, with text and category. */
+    fun travelLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyTravelLine> {
+        val ids = accounts.map { it.id }.toSet()
+        return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
+            val key = MoneyCategoryRules.merchantKey(t.text)
+            MoneyTravelLine(t.account, t.day, t.pence, t.text, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence))
         }
     }
 

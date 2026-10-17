@@ -57,6 +57,9 @@ object MoneyWatch {
 
     private fun fmt(p: Long) = MoneyRules.fmt(p)
 
+    /** A foreign transaction fee's line ("Non-sterling transaction fee", "FX fee"); also read by [MoneyTravel]. */
+    fun isForeignFee(text: String): Boolean = FX.containsMatchIn(text)
+
     private fun id(kind: MoneyAlertKind, vararg parts: String): String = "w" + ActivityRules.fnv64("moneyalert:${kind.key}:" + parts.joinToString(":"))
 
     private fun median(xs: List<Long>): Long = xs.sorted().let { s -> if (s.size % 2 == 1) s[s.size / 2] else (s[s.size / 2 - 1] + s[s.size / 2]) / 2 }

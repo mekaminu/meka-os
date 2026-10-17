@@ -314,6 +314,15 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
+            // Slice 17: abroad, or a trip near — the card to use leads this month (lit).
+            v.travel?.banner?.let { b ->
+                item(key = "travel-banner") {
+                    Crossfade(b, animationSpec = MekaMotion.appear(reduced), label = "money-travel-banner",
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(3))) { l ->
+                        Text(l, style = MekaType.body, color = Meka.colors.accent)
+                    }
+                }
+            }
             // Slice 3: payments worth a second look (this month only), before the tips.
             if (v.alerts.isNotEmpty()) {
                 item(key = "alerts-head") {
@@ -365,6 +374,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         scope.launch { runCatching { core.moneyCardKind(id, card = true, charge = false) }.getOrNull()?.let(say) }
                     }
                 }
+            }
+            // Slice 17: PAYING ABROAD — which accounts charged foreign fees, and the one to use (this month only).
+            v.travel?.let { tv ->
+                item(key = "travel-head") {
+                    Text(tv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "travel") { TravelBlock(tv, Modifier.animateItem().appear(rememberAppearance(4))) }
             }
             // Slice 5: refunds on Waiting for, checked against his statements (this month only).
             v.refunds?.let { rf ->
@@ -1087,6 +1104,38 @@ private fun ChallengesBlock(
         Field(ch.funHint, value = funText, onValue = { funText = it }) { funText = ""; onFun(it) }
         Field(ch.capHint, value = capText, onValue = { capText = it }) { capText = ""; onCap(it) }
         Text(ch.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Slice 17: PAYING ABROAD — the tip (brass when there's a card with no foreign fees, or he's going), then each account:
+ * its name and a line, a brass dot by one that charged no foreign fees. Lines cross-fade as they change (reduced motion
+ * honoured by MekaMotion.appear).
+ */
+@Composable
+private fun TravelBlock(tv: os.meka.core.domain.MoneyTravelView, modifier: Modifier) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        tv.tip?.let { t ->
+            val c by animateColorAsState(if (tv.tipLit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-travel-tip")
+            Crossfade(t, animationSpec = MekaMotion.appear(reduced), label = "money-travel-tip-line") { l ->
+                Text(l, style = MekaType.body, color = c)
+            }
+        }
+        tv.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = r.spoken },
+                verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                val dot by animateColorAsState(if (r.good) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "money-travel-dot-${r.id}")
+                Box(Modifier.size(8.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(dot))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-travel-line-${r.id}") { l ->
+                        Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+            }
+        }
+        Text(tv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

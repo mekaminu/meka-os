@@ -33,10 +33,10 @@ class MoneyFacadeTest {
     private var now = 1_792_144_800_000L // Fri 16 Oct 2026, 11:00 in London
     private val ops = InMemoryServerOpStore()
 
-    private fun core(device: String) = MekaCore(
+    private fun core(device: String, zone: String = "Europe/London") = MekaCore(
         householdId = "hh", deviceId = device, store = InMemoryReplicaStore(),
         transport = os.meka.core.testing.FaultyTransport(SyncService(ops)),
-        secureRandom = Random(device.hashCode()), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        secureRandom = Random(device.hashCode()), timeZone = { TimeZone.of(zone) }, nowMs = { now },
     )
 
     private val statement = "Date,Description,Amount\n" +
@@ -220,6 +220,41 @@ class MoneyFacadeTest {
         fold.openMoney()
         assertEquals("You spent £40 at Tesco Stores this month so far, 1 payment. Your statements reach Mon 5 Oct.",
             said(fold.askMeka("what did I spend at Tesco?")).text)
+    }
+
+    @Test
+    fun payingAbroadSaysWhichCardHadNoFeesAndLeadsWhileAbroad() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val card = "Date,Description,Amount\n" +
+            "20/07/2026,RESTAURANTE SOL MADRID EUR 116.20,-100.00\n" +
+            "20/07/2026,NON-STERLING TRANSACTION FEE,-2.99\n" +
+            "10/10/2026,TESCO STORES 2041,-20.00\n"
+        val travel = "Date,Description,Amount\n" +
+            "22/07/2026,TAPAS BAR EUR 46.50,-40.00\n" +
+            "23/07/2026,CAFE CENTRAL EUR 11.60,-10.00\n"
+        fold.openMoney()
+        fold.importMoneyStatement("Credit card", card)
+        fold.importMoneyStatement("Travel card", travel)
+        val v = fold.moneyView.value.travel!!
+        assertEquals(
+            "Abroad, pay with Travel card: no foreign fees on your 2 payments abroad in the last year. Credit card charged £2.99 in fees (about 3%).",
+            v.tip,
+        )
+        assertEquals(listOf("Travel card", "Credit card"), v.rows.map { it.name })
+        assertNull(v.banner) // at home, no trip near
+        // Ask answers it the same, on the device.
+        val a = (fold.askMeka("which card should I use abroad?") as os.meka.core.domain.AskOutcome.Answered).answer.text
+        assertTrue(a.startsWith("Abroad, pay with Travel card"), a)
+        // A trip in a few days, or the phone in another time zone, puts the banner first.
+        fold.closeMoney()
+        fold.addTrip("Barcelona 20–24 Oct")
+        fold.openMoney()
+        assertEquals("Barcelona in 4 days · if it's abroad, pay with Travel card: no foreign fees there before", fold.moneyView.value.travel!!.banner)
+        fold.syncNow()
+        val away = core("mac", zone = "Europe/Madrid")
+        away.syncNow()
+        away.openMoney()
+        assertEquals("You're abroad · pay with Travel card: no foreign fees there before", away.moneyView.value.travel!!.banner)
     }
 
     @Test

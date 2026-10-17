@@ -27,6 +27,8 @@ data class MoneyAskData(
     /** What's due to go out: regular payments' next days, radar bills and card statements, each once. */
     val upcoming: List<MoneyBill>,
     val payday: MoneyPaydayView?,
+    /** Money manager (17): paying abroad, for "which card should I use abroad?" ([MoneyTravel]). */
+    val travel: MoneyTravelView? = null,
 )
 
 object MoneyAskRules {
@@ -34,7 +36,7 @@ object MoneyAskRules {
     const val UNLOCK = "Unlock Money to answer"
     const val UNLOCK_REASON = "Answer from your money"
     const val EMPTY = "Money has nothing to go on yet · import a statement or connect your banks in Ask → Life → Money."
-    const val HOW = "I can answer from Money: what you spent on something (“takeaways last month”), what's coming out this week, when payday is, what's safe to spend, or whether you can afford an amount (“can I afford £300 on Saturday?”)."
+    const val HOW = "I can answer from Money: what you spent on something (“takeaways last month”), what's coming out this week, when payday is, what's safe to spend, whether you can afford an amount (“can I afford £300 on Saturday?”), or which card to use abroad."
     const val NOT_ADVICE = " From your own statements · not financial advice."
     /** How long an unlock from Ask lets money questions be answered (Talk's follow-ups too). */
     const val ASK_WINDOW_MS = 5 * 60_000L
@@ -48,6 +50,7 @@ object MoneyAskRules {
     private val AFFORD = Regex("""\bafford\b""", RegexOption.IGNORE_CASE)
     private val PAYDAY = Regex("""\b(pay ?day|when (do|will) i get paid|when am i paid|next pay)\b""", RegexOption.IGNORE_CASE)
     private val SAFE = Regex("""\b(safe to spend|left to spend|how much (money )?(have i got|do i have) left|how much can i spend)\b""", RegexOption.IGNORE_CASE)
+    private val ABROAD = Regex("""\b(foreign (transaction )?fees?|non[- ]?sterling|fx fees?)\b|\bwhich (card|account)\b.*\b(abroad|overseas|holiday|travel(l?ing)?)\b|\b(card|pay|paying|use)\b.*\b(abroad|overseas)\b""", RegexOption.IGNORE_CASE)
     private val AMOUNT = Regex("""£\s?(\d[\d,]*(?:\.\d{1,2})?)\s?(k\b)?|\b(\d[\d,]*(?:\.\d{1,2})?)\s?(k\s)?\s?(pounds|quid)\b""", RegexOption.IGNORE_CASE)
 
     /** Whether [question] is a money question these rules answer (a how-to about Money stays with the help). */
@@ -55,6 +58,7 @@ object MoneyAskRules {
         val q = question.trim()
         if (HOW_TO.containsMatchIn(q)) return false
         if (SAFE.containsMatchIn(q) || PAYDAY.containsMatchIn(q)) return true
+        if (ABROAD.containsMatchIn(q)) return true
         if (OUT.containsMatchIn(q)) return !NOT_OUT.containsMatchIn(q)
         if (AFFORD.containsMatchIn(q)) return amount(q) != null
         return SPEND.containsMatchIn(q) && !NOT_MONEY.containsMatchIn(q)
@@ -190,6 +194,7 @@ object MoneyAskRules {
     fun answer(question: String, d: MoneyAskData): String {
         val q = question.trim()
         return when {
+            ABROAD.containsMatchIn(q) && !AFFORD.containsMatchIn(q) -> MoneyTravel.answer(d.travel)
             AFFORD.containsMatchIn(q) -> answerAfford(q, d)
             SAFE.containsMatchIn(q) -> answerSafe(d)
             OUT.containsMatchIn(q) -> answerOut(q, d)

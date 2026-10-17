@@ -120,6 +120,11 @@ struct MoneySheet: View {
             if let vs = m.vsLine {
                 Text(vs).font(MekaType.caption).foregroundStyle(m.vsLit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
             }
+            if let b = v.travel?.banner {
+                // Slice 17: abroad, or a trip near — the card to use leads this month.
+                Text(b).font(MekaType.body).foregroundStyle(palette.accent).contentTransition(.opacity)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, MekaSpace.xxs)
+            }
             if !v.alerts.isEmpty {
                 Text(MoneyWatch.shared.head(n: Int32(v.alerts.count))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -128,6 +133,7 @@ struct MoneySheet: View {
             }
             if let p = v.payday { payday(p).transition(.opacity) }
             if let c = v.cards, !(c.rows.isEmpty && c.offers.isEmpty) { cards(c).transition(.opacity) }
+            if let tv = v.travel { travel(tv).transition(.opacity) }
             if let r = v.refunds {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -362,6 +368,32 @@ struct MoneySheet: View {
             Text(ch.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
+    }
+
+    /// Slice 17: PAYING ABROAD — the tip (brass when a card had no foreign fees, or he's going), then each account with
+    /// a brass dot by one that charged none. Lines cross-fade as they change.
+    private func travel(_ tv: MoneyTravelView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(tv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let t = tv.tip {
+                Text(t).font(MekaType.body).foregroundStyle(tv.tipLit ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(tv.rows, id: \.id) { r in
+                HStack(spacing: MekaSpace.xs) {
+                    Circle().fill(r.good ? palette.accent : palette.surfaceRaised).frame(width: 8, height: 8)
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(r.spoken)
+                .transition(.opacity)
+            }
+            Text(tv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: tv.rows.count)
     }
 
     /// Slice 15: one allowance or cap — its title and amount, a bar to its share (brass from 90%), what's left and Remove.

@@ -671,7 +671,11 @@ class MekaCore(
         val upcoming = os.meka.core.domain.MoneyAskRules.upcoming(
             os.meka.core.domain.MoneyTips.regular(lines, today), bills + os.meka.core.domain.MoneyCards.bills(cards, today), today,
         )
-        return os.meka.core.domain.MoneyAskData(lines, today, upcoming, view.payday)
+        val travel = os.meka.core.domain.MoneyTravel.view(
+            os.meka.core.domain.MoneyRules.travelLines(accounts, txns, rules), accounts.associate { it.id to it.name }, today,
+            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), today),
+        )
+        return os.meka.core.domain.MoneyAskData(lines, today, upcoming, view.payday, travel)
     }
 
     /**
@@ -810,8 +814,18 @@ class MekaCore(
             money.businessAccounts(), money.businessMerchants(), money.setAsidePct(),
             money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
             money.challenges(),
+            moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), todayEpochDay()),
         ).copy(trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
     }
+
+    /**
+     * Money manager (17): whether this device is outside UK time now (its time zone's offset isn't London's), for
+     * PAYING ABROAD's banner. A zone the system can't name counts as home.
+     */
+    private fun moneyAbroadNow(): Boolean = runCatching {
+        val now = Instant.fromEpochMilliseconds(nowMs())
+        timeZone().offsetAt(now) != TimeZone.of(MONEY_HOME_ZONE).offsetAt(now)
+    }.getOrDefault(false)
 
     // ---- Trading tracker, slice 3: the alerts ----
 
@@ -4852,6 +4866,8 @@ class MekaCore(
         const val DIGEST_KEY = "meka.digest"
         /** Trading export: how many times to ask while the server is still reading (each waits up to 20 s). */
         const val EXPORT_ASKS = 6
+        /** Money manager (17): UK time, for whether he's abroad. */
+        const val MONEY_HOME_ZONE = "Europe/London"
     }
 
     fun stopSync() { syncLoop?.cancel(); syncLoop = null }
