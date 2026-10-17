@@ -281,4 +281,56 @@ class TrainBoardTest {
         assertNull(RouteRules.leaveBy(live(), RouteRules.Commute.MORNING, office!!, at(7, 10), cal))
         assertEquals("South Rail · 07:12 on time · 07:24 5 min late · 07:42 cancelled", RouteRules.todayLine(snap(live()), office, at(7, 10), cal)!!.text)
     }
+
+    // ---- Slice 4: the fallback line's own board ----
+
+    private val northRail = listOf(
+        TrainDeparture(7 * 60 + 15, 7 * 60 + 15, platform = "2", arrMin = 7 * 60 + 58),
+        TrainDeparture(7 * 60 + 30, 7 * 60 + 32),
+        TrainDeparture(7 * 60 + 45, 7 * 60 + 45),
+    )
+
+    @Test
+    fun troubleOnTheFirstLineShowsTheFallbacksOwnTrains() {
+        val b = live().copy(fallback = northRail)
+        val line = RouteRules.todayLine(snap(b), office, at(7, 10), cal)!!
+        assertEquals("South Rail · 07:12 on time · 07:24 5 min late · 07:42 cancelled — or North Rail to Riverside · 07:15 on time · 07:30 2 min late", line.text)
+        assertTrue(line.lit)
+        assertTrue(line.spoken.endsWith("07:42 cancelled. Or North Rail to Riverside, 07:15 on time, 07:30 2 min late"), line.spoken)
+        // The fallback's board beats TfL's "is running" when both are known.
+        val tfl = listOf(LineState(InventedRoute.FIRST, 6), LineState(InventedRoute.FALLBACK, 10))
+        assertTrue(RouteRules.todayLine(snap(b, tfl, at(7)), office, at(7, 10), cal)!!.text.endsWith("severe delays — or North Rail to Riverside · 07:15 on time · 07:30 2 min late"))
+        // All good on the first line (and TfL calling it good): the fallback's trains aren't shown.
+        val calm = live(list = listOf(TrainDeparture(7 * 60 + 30, 7 * 60 + 30))).copy(fallback = northRail)
+        assertEquals("South Rail · 07:30 on time", RouteRules.todayLine(snap(calm), office, at(7, 10), cal)!!.text)
+        // The way home: from Riverside.
+        val pm = live(dir = TrainBoard.PM, checked = at(17, 20), list = listOf(TrainDeparture(17 * 60 + 40, null, cancelled = true)))
+            .copy(fallback = listOf(TrainDeparture(17 * 60 + 50, 17 * 60 + 50)))
+        assertTrue(RouteRules.todayLine(snap(pm), office, at(17, 25), cal)!!.text.endsWith("— or North Rail from Riverside · 17:50 on time"))
+    }
+
+    @Test
+    fun theHeadsUpAndAskOfferTheFallbacksTrains() {
+        // Every South Rail train on the board is bad: the heads-up offers North Rail's first good one.
+        val bad = listOf(TrainDeparture(7 * 60 + 20, null, cancelled = true), TrainDeparture(7 * 60 + 35, null, delayed = true))
+        val n = RouteRules.liveNotices(snap(live(list = bad).copy(fallback = northRail)), office, quiet, at(7, 10), cal).single()
+        assertEquals("Or North Rail to Riverside: 07:15 on time, platform 2, arrives 07:58 · also 07:35 delayed · live 07:05", n.text)
+        // Without it, as before.
+        assertTrue(RouteRules.liveNotices(snap(live(list = bad)), office, quiet, at(7, 10), cal).single().text.startsWith("No good train on the board yet"))
+        // Ask hears the fallback board after the first line's.
+        val ask = RouteRules.askLines(snap(live(list = bad).copy(fallback = northRail)), at(7, 10), cal)
+        assertEquals("the fallback, North Rail from Oakfield to Riverside (live departures, checked 07:05): 07:15 on time, platform 2, arrives 07:58; " +
+            "07:30 2 min late; 07:45 on time", ask.last())
+    }
+
+    @Test
+    fun theServerReadsTheFallbackOnlyWhenTheFirstLineIsInTrouble() {
+        assertTrue(RouteRules.needsFallback(trains, null))
+        val fine = listOf(TrainDeparture(600, 600), TrainDeparture(615, 617))
+        assertTrue(!RouteRules.needsFallback(fine, null))
+        assertTrue(!RouteRules.needsFallback(fine, 10))
+        assertTrue(RouteRules.needsFallback(fine, 6))
+        // Only the next few count: a bad train far down the board doesn't.
+        assertTrue(!RouteRules.needsFallback(fine + TrainDeparture(630, 631) + TrainDeparture(645, null, cancelled = true), null))
+    }
 }

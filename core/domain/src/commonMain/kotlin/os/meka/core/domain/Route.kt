@@ -42,6 +42,12 @@ object LineStatusFields {
     const val BOARD_STATE = "boardState"
     /** When [BOARD_STATE] was last ok (rounded like [DEPARTURES_CHECKED]). */
     const val BOARD_OK_AT = "boardOkAt"
+    /**
+     * Live trains, slice 4: the fallback line's own board, read with [DEPARTURES] only while the first line is in
+     * trouble (a cancelled or late train among the next ones, or TfL not calling it good): from home to the route's
+     * fallback station in the morning, from there home in the evening, in [TrainBoardCodec]'s text; "" otherwise.
+     */
+    const val FALLBACK_DEPARTURES = "fallbackDepartures"
 }
 
 /**
@@ -73,6 +79,8 @@ data class TrainBoard(
     val checkedMs: Long? = null,
     val state: String? = null,
     val okAtMs: Long? = null,
+    /** Live trains, slice 4: the fallback line's next departures (same way, same read), empty unless it was needed. */
+    val fallback: List<TrainDeparture> = emptyList(),
 ) {
     companion object {
         val EMPTY = TrainBoard()
@@ -479,11 +487,14 @@ object RouteRules {
         val live = liveBoard(s, commute, nowMs)?.let { upcoming(it, nowMs, cal) }?.takeIf { it.isNotEmpty() }
         if (live != null) {
             val notGood = legs.filter { level(it.second) != LineLevel.GOOD }
+            // Slice 4: the fallback line's own board, when it was read for trouble on the first line.
+            val fbLive = fallbackLive(s, r, morning, nowMs, cal)
+            val fallbackPart = if (fbLive != null && (live.any(::bad) || (first != null && level(first) != LineLevel.GOOD))) " — or $fbLive" else fallback
             val leave = office?.let { o -> liveBoard(s, commute, nowMs)?.let { leaveBy(it, commute, o, nowMs, cal) } }
             val text = name(r.firstId, r) + " · " + (leave?.let { it.words + " · " }.orEmpty()) + live.joinToString(" · ") { words(it) } +
-                notGood.joinToString("") { (id, sev) -> " · " + part(id, sev, r) } + fallback
+                notGood.joinToString("") { (id, sev) -> " · " + part(id, sev, r) } + fallbackPart
             val lit = live.any(::bad) || notGood.isNotEmpty()
-            return RouteLine(text, lit = lit, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — ", ". "))
+            return RouteLine(text, lit = lit, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — or ", ". Or ").replace(" — ", ". "))
         }
         if (legs.isEmpty()) return null
         if (legs.all { level(it.second) == LineLevel.GOOD }) {
@@ -530,6 +541,14 @@ object RouteRules {
                 leave?.let { l ->
                     out += "when Meka should leave (his ${l.walkMin} min to the train from ${if (c == Commute.MORNING) "home" else "work"} in About you): " + l.words
                 }
+            }
+            // Slice 4: the fallback line's board, read because the first line is in trouble.
+            val fbNext = upcoming(b.copy(departures = b.fallback), nowMs, cal, n = TrainBoardCodec.MAX)
+            val fbTo = r.fallbackTo
+            if (fbNext.isNotEmpty() && r.fallback != null && fbTo != null) {
+                val at = LocalClock.formatMinute(cal.minuteOfDay(b.checkedMs!!))
+                val (ff, ft) = if (b.dir == TrainBoard.PM) fbTo to home else home to fbTo
+                out += "the fallback, ${r.fallback} from $ff to $ft (live departures, checked $at): " + fbNext.joinToString("; ") { askWords(it) }
             }
         }
         return out
@@ -643,7 +662,8 @@ object RouteRules {
         val advice = when {
             good != null -> "Next good: " + askWords(good) + (leaveFor(good, commute, nowMin)?.let { " · leave ${if (morning) "" else "work "}by " + LocalClock.formatMinute(it) }.orEmpty())
             before != null -> "Or the " + askWords(before)
-            else -> fallbackAdvice(r, r.fallbackId?.let { s.severityOf(it) }.takeIf { fresh(s, nowMs) }, morning) ?: "No good train on the board yet · check before you leave"
+            // Slice 4: the fallback line's first good train on its own board.
+            else -> fallbackFirst(b, r, morning, nowMs, cal) ?: fallbackAdvice(r, r.fallbackId?.let { s.severityOf(it) }.takeIf { fresh(s, nowMs) }, morning) ?: "No good train on the board yet · check before you leave"
         }
         val also = alsoBad.takeIf { it.isNotEmpty() }?.let { l -> " · also " + l.joinToString(", ") { words(it) } }.orEmpty()
         val checked = LocalClock.formatMinute(cal.minuteOfDay(b.checkedMs))
@@ -656,6 +676,42 @@ object RouteRules {
             ),
         )
     }
+
+    // ---- Live trains, slice 4: the fallback line's own board ----
+
+    /** How many of the fallback line's departures Today shows after the first line's. */
+    const val FALLBACK_SHOWN = 2
+
+    /** "North Rail to Riverside" in the morning, "North Rail from Riverside" in the evening; null without a fallback. */
+    private fun fallbackName(r: CommuteRoute, morning: Boolean): String? {
+        val f = r.fallback ?: return null
+        return f + (r.fallbackTo?.let { if (morning) " to $it" else " from $it" } ?: "")
+    }
+
+    /**
+     * Today's fallback part from the fallback board, while it is fresh and goes the commute's way: "North Rail to
+     * Riverside · 07:15 on time · 07:30 2 min late" (its next [FALLBACK_SHOWN]); null with nothing on it.
+     */
+    fun fallbackLive(s: LineStatusSnapshot, r: CommuteRoute, morning: Boolean, nowMs: Long, cal: LocalCalendar): String? {
+        val b = liveBoard(s, if (morning) Commute.MORNING else Commute.EVENING, nowMs) ?: return null
+        val next = upcoming(b.copy(departures = b.fallback), nowMs, cal, n = FALLBACK_SHOWN).takeIf { it.isNotEmpty() } ?: return null
+        val name = fallbackName(r, morning) ?: return null
+        return name + " · " + next.joinToString(" · ") { words(it) }
+    }
+
+    /** The heads-up's "Or North Rail to Riverside: 07:15 on time, platform 2, arrives 07:58" (its first good train). */
+    private fun fallbackFirst(b: TrainBoard, r: CommuteRoute, morning: Boolean, nowMs: Long, cal: LocalCalendar): String? {
+        val good = upcoming(b.copy(departures = b.fallback), nowMs, cal, n = TrainBoardCodec.MAX).firstOrNull { !bad(it) } ?: return null
+        val name = fallbackName(r, morning) ?: return null
+        return "Or $name: " + askWords(good)
+    }
+
+    /**
+     * The server's question before reading the fallback board: is the first line in trouble? A cancelled or late train
+     * among the next [SHOWN] on [departures], or TfL's last status for the first line ([firstSeverity]) not good.
+     */
+    fun needsFallback(departures: List<TrainDeparture>, firstSeverity: Int?): Boolean =
+        departures.take(SHOWN).any(::bad) || (firstSeverity != null && level(firstSeverity) != LineLevel.GOOD)
 
     // ---- Live trains, slice 3: leave-by times both ways ----
 
@@ -729,6 +785,7 @@ class LineStatusStore(private val replica: Replica) {
                 checkedMs = (e[LineStatusFields.DEPARTURES_CHECKED] as? FieldValue.Int64)?.value,
                 state = e[LineStatusFields.BOARD_STATE]?.textOrNull,
                 okAtMs = (e[LineStatusFields.BOARD_OK_AT] as? FieldValue.Int64)?.value,
+                fallback = TrainBoardCodec.decode(e[LineStatusFields.FALLBACK_DEPARTURES]?.textOrNull),
             ),
         )
     }

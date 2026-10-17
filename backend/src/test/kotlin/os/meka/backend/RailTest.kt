@@ -159,7 +159,9 @@ class RailTest {
         Household.useRoute(route)
         var asked = mutableListOf<String>()
         var answer: () -> Pair<Int, String> = { 200 to board(service("07:42", "On time"), service("07:54", "08:01"), service("08:06", "Cancelled", cancelled = true)) }
-        val rail = DarwinBoard({ "k-123456789" to null }) { url, _ -> asked += url; answer() }
+        // Slice 4: the fallback's own board (to Blackfriars) answers with its one train.
+        val fallbackAnswer = 200 to board(service("07:48", "On time", platform = "1", arrive = "BFR" to "08:40"))
+        val rail = DarwinBoard({ "k-123456789" to null }) { url, _ -> asked += url; if (url.contains("filterCrs=BFR") && answer().first == 200) fallbackAnswer else answer() }
         val tfl = TflLineStatus({ """[{"id":"south-rail","lineStatuses":[{"statusSeverity":10}]},{"id":"metro","lineStatuses":[{"statusSeverity":10}]},{"id":"north-rail","lineStatuses":[{"statusSeverity":10}]}]""" })
         val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
         val ops = InMemoryServerOpStore()
@@ -177,7 +179,10 @@ class RailTest {
         Household.set(Household.names.copy(homeStation = "Brighton"))
         now += 5 * 60_000L
         integrations.syncAll()
-        assertTrue(asked.single().contains("/BTN?") && asked.single().contains("filterCrs=LBG"))
+        assertTrue(asked.first().contains("/BTN?") && asked.first().contains("filterCrs=LBG"))
+        // The 08:06 is cancelled, so the fallback line's board is read too, from home to its station.
+        assertEquals(2, asked.size)
+        assertTrue(asked.last().contains("/BTN?") && asked.last().contains("filterCrs=BFR"))
 
         val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
         r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
@@ -186,7 +191,8 @@ class RailTest {
         assertEquals(TrainBoard.OK, snap.board.state)
         val office = PlacesRules.officeWindow(WorkHours(WorkSchedule.DEFAULT), fri, bst)
         val line = RouteRules.todayLine(snap, office, now, bst)!!
-        assertEquals("South Rail · 07:42 on time · 07:54 7 min late · 08:06 cancelled", line.text)
+        assertEquals("South Rail · 07:42 on time · 07:54 7 min late · 08:06 cancelled — or North Rail to Blackfriars · 07:48 on time", line.text)
+        assertEquals(listOf(TrainDeparture(7 * 60 + 48, 7 * 60 + 48, platform = "1", arrMin = 8 * 60 + 40)), snap.board.fallback)
         assertTrue(line.lit)
         assertEquals("Live · checked just now", RouteRules.healthRow(snap.board, now, bst)!!.line)
         assertTrue(RouteRules.askLines(snap, now, bst).last()
@@ -195,7 +201,7 @@ class RailTest {
 
         // The probe reads a public terminus, counts only.
         val report = integrations.trainsReport("home")
-        assertTrue(report.startsWith("probe OK · 3 services · via 1010-live-departure-board-dep1_2 · GetDepBoardWithDetails · board OK · 3 services · 3 kept · morning"), report)
+        assertTrue(report.startsWith("probe OK · 3 services · via 1010-live-departure-board-dep1_2 · GetDepBoardWithDetails · board OK · 3 services · 3 kept · morning · fallback 1 kept"), report)
         assertTrue(asked.last().contains("/EUS?"))
 
         // A refused key is the board's state; the last departures stay (and age out on the devices).
@@ -216,5 +222,25 @@ class RailTest {
         val s2 = Replica("home", "mac", HlcClock("mac", { now }), InMemoryReplicaStore(), MekaSchema) { "e" + System.nanoTime() }
         s2.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
         assertEquals(TrainBoard.NO_STATION, LineStatusStore(s2).snapshot().board.state)
+    }
+
+    @Test
+    fun allGoodOnTheFirstLineReadsNoFallbackBoard() {
+        Household.useRoute(route)
+        Household.set(Household.names.copy(homeStation = "Brighton"))
+        val asked = mutableListOf<String>()
+        val rail = DarwinBoard({ "k-123456789" to null }) { url, _ -> asked += url; 200 to board(service("07:42", "On time"), service("07:54", "07:55")) }
+        val tfl = TflLineStatus({ """[{"id":"south-rail","lineStatuses":[{"statusSeverity":10}]},{"id":"metro","lineStatuses":[{"statusSeverity":10}]},{"id":"north-rail","lineStatuses":[{"statusSeverity":10}]}]""" })
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val ops = InMemoryServerOpStore()
+        val integrations = Integrations(store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now },
+            lines = mapOf(tfl.id to tfl), onChanged = { }, rail = rail)
+        profile(ops, mapOf(AboutYouFields.ROUTE to FieldValue.Text(route), AboutYouFields.HOME_STATION to FieldValue.Text("Brighton")))
+        integrations.syncAll()
+        assertEquals(1, asked.size)
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        assertTrue(LineStatusStore(r).snapshot().board.fallback.isEmpty())
+        assertEquals(2, LineStatusStore(r).snapshot().board.departures.size)
     }
 }

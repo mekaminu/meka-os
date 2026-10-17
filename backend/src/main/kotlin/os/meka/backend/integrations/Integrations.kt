@@ -84,6 +84,7 @@ import os.meka.core.domain.LineStatusStore
 import os.meka.core.domain.RouteRules
 import os.meka.core.domain.TrainBoard
 import os.meka.core.domain.TrainBoardCodec
+import os.meka.core.domain.TrainDeparture
 import os.meka.core.domain.SignInFields
 import os.meka.core.domain.SignInRules
 import os.meka.core.domain.SignInState
@@ -2396,9 +2397,23 @@ class Integrations(
             }
         }
         val step = now().floorDiv(RouteRules.BOARD_STEP_MS) * RouteRules.BOARD_STEP_MS
+        // Live trains, slice 4: the fallback line's own board, only while the first line is in trouble (a bad train
+        // among the next ones on this read, or TfL's last status for it not good). A failed read just leaves it out.
+        val fbCrs = route.fallbackTo?.takeIf { route.fallback != null }?.let(RailStations::crs)
+        val fallback: List<TrainDeparture>? = if (read != null && homeCrs != null && fbCrs != null && fbCrs != homeCrs) {
+            val firstSev = runCatching {
+                LineStatusCodec.decode(reader.entity(hh, EntityTypes.CONTEXT_MODE, LineStatusStore.ENTITY_ID)?.get(LineStatusFields.LINES)?.textOrNull)
+                    .firstOrNull { it.id == route.firstId }?.severity
+            }.getOrNull()
+            if (RouteRules.needsFallback(read.departures, firstSev)) {
+                val (ff, ft) = if (dir == TrainBoard.AM) homeCrs to fbCrs else fbCrs to homeCrs
+                runCatching { rail.departures(ff, ft).departures }.getOrNull()
+            } else emptyList()
+        } else if (read != null) emptyList() else null
         if (read != null) synchronized(boardNote) {
             boardNote[hh] = "board OK · ${read.services} services · ${read.departures.size} kept · " +
-                (if (dir == TrainBoard.AM) "morning" else "evening") + (rail.endpoint?.let { " · via $it" } ?: "")
+                (if (dir == TrainBoard.AM) "morning" else "evening") +
+                (if (!fallback.isNullOrEmpty()) " · fallback ${fallback.size} kept" else "") + (rail.endpoint?.let { " · via $it" } ?: "")
         } else if (state == TrainBoard.NO_STATION) synchronized(boardNote) {
             boardNote[hh] = if (homeCrs == null) "home station not found on National Rail's list" else "change station not found on National Rail's list"
         } else if (state == TrainBoard.KEY) synchronized(boardNote) { boardNote[hh] = "rail key refused on every endpoint" }
@@ -2414,7 +2429,8 @@ class Integrations(
                     desired[LineStatusFields.DEPARTURES_CHECKED] = FieldValue.Int64(step)
                     desired[LineStatusFields.BOARD_OK_AT] = FieldValue.Int64(step)
                 }
-                val changed = listOf(LineStatusFields.DEPARTURES, LineStatusFields.DEPARTURES_DIR, LineStatusFields.BOARD_STATE)
+                if (fallback != null) desired[LineStatusFields.FALLBACK_DEPARTURES] = FieldValue.Text(TrainBoardCodec.encode(fallback))
+                val changed = listOf(LineStatusFields.DEPARTURES, LineStatusFields.DEPARTURES_DIR, LineStatusFields.BOARD_STATE, LineStatusFields.FALLBACK_DEPARTURES)
                     .any { k -> desired[k]?.let { v -> was(k) != valueKey(v) } == true }
                 write(a, LineStatusStore.ENTITY_ID, 0, 0, false, prev, desired, EntityTypes.CONTEXT_MODE)
                 changed
