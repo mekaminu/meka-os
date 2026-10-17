@@ -390,13 +390,21 @@ class SpeechTest {
         val googleUsage = InMemorySpeechUsageStore()
         val s = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = google, googleUsage = googleUsage)
         val line = s.report()
-        assertTrue(line.startsWith("Google voice on · 3 Chirp 3 HD voices (2 British) · probe clip 1 KB · 1k of 1M characters in 2026-10"), line)
+        assertTrue(line.startsWith("Google voice on · 3 Chirp 3 HD voices (2 British) · probe clip 1 KB in "), line)
+        assertTrue(line.contains(" ms · 1k of 1M characters in 2026-10 · "), line)
         assertTrue(line.endsWith("Polly ${SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }).offered().size} voices"), line)
         assertEquals(Triple(SpeechService.PROBE_LINE, "Aoede", "chirp3hd"), google.said.single())
         assertEquals(SpeechService.PROBE_LINE.length.toLong(), googleUsage.used("2026-10"))
         // No key: says so, nothing sent to Google.
         val noKey = object : SpeechEngine by FakePolly(chirp) { override fun configured() = false }
         assertTrue(SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = noKey).report().startsWith("Google voice off · no key"))
+        // Google refuses the clip: the report carries its reason words, never its message.
+        val refusing = GoogleSpeech({ "k" + "x".repeat(30) }, { _, _ -> 200 to """{"voices":[{"name":"en-GB-Chirp3-HD-Aoede","ssmlGender":"FEMALE"}]}""" }) { _, _, _ ->
+            403 to """{"error":{"code":403,"message":"Requests from project 123 are blocked.","status":"PERMISSION_DENIED","details":[{"reason":"API_KEY_SERVICE_BLOCKED"}]}}"""
+        }
+        val r = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = refusing).report()
+        assertTrue(r.contains("probe clip failed (IllegalStateException: synthesize 403 PERMISSION_DENIED API_KEY_SERVICE_BLOCKED)"), r)
+        assertFalse(r.contains("123"), r)
         // A key Google won't answer for: no voices listed.
         val down = FakePolly(chirp).apply { fail = true }
         assertTrue(SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).report().startsWith("Google voice: key read but no voices listed"))

@@ -82,7 +82,7 @@ class GoogleSpeech internal constructor(
         val k = key() ?: error("no key")
         val name = fullName(voice) ?: error("not a Google voice")
         val (status, body) = post("$BASE/text:synthesize", mapOf(KEY_HEADER to k), request(text, name))
-        check(status == 200) { "synthesize $status" }
+        check(status == 200) { "synthesize $status${errorWords(body)?.let { " $it" } ?: ""}" }
         return parseAudio(body) ?: error("no audio")
     }
 
@@ -132,6 +132,23 @@ class GoogleSpeech internal constructor(
             )
             put("audioConfig", kotlinx.serialization.json.buildJsonObject { put("audioEncoding", kotlinx.serialization.json.JsonPrimitive("MP3")) })
         }.toString()
+
+        /**
+         * Google's own words for a refusal, for the deploy report: the error's status and the first detail's reason
+         * ("PERMISSION_DENIED API_KEY_SERVICE_BLOCKED"); never its free-text message (it can name the project). Null
+         * when the body isn't Google's error shape.
+         */
+        fun errorWords(body: String): String? {
+            if (body.length > MAX_BYTES) return null
+            val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(body) as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: return null
+            val err = o["error"] as? kotlinx.serialization.json.JsonObject ?: return null
+            val word = Regex("[A-Z][A-Z_]{1,60}")
+            val status = (err["status"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { word.matches(it) }
+            val reason = (err["details"] as? kotlinx.serialization.json.JsonArray)?.firstNotNullOfOrNull { d ->
+                ((d as? kotlinx.serialization.json.JsonObject)?.get("reason") as? kotlinx.serialization.json.JsonPrimitive)?.content?.takeIf { word.matches(it) }
+            }
+            return listOfNotNull(status, reason).joinToString(" ").takeIf { it.isNotEmpty() }
+        }
 
         /** The MP3 in a `text:synthesize` answer, or null. */
         fun parseAudio(body: String): ByteArray? {
@@ -393,8 +410,20 @@ class SpeechService(
         if (list.isEmpty()) return "Google voice: key read but no voices listed (API off or not allowed on the key?) · $polly"
         val british = list.count { !it.id.endsWith("-US") }
         val m = month()
-        val clip = list.firstOrNull { !it.id.endsWith("-US") }?.let { v -> googleClip(PROBE_LINE, v.id) }
-        val probe = if (clip != null) "probe clip ${(clip.size + 1023) / 1024} KB" else "probe clip failed"
+        val voice = list.firstOrNull { !it.id.endsWith("-US") } ?: list.first()
+        val probe = if (runCatching { googleUsage.used(m) }.getOrDefault(Long.MAX_VALUE / 2) + PROBE_LINE.length > googleFallbackAt) {
+            "probe clip skipped · past the free tier's limit"
+        } else {
+            // Straight to Google (not googleClip) so a refusal's reason reaches the report.
+            val started = System.nanoTime()
+            runCatching { g.synthesize(PROBE_LINE, voice.id, voice.engine) }.fold(
+                { clip ->
+                    runCatching { googleUsage.add(m, PROBE_LINE.length.toLong()) }
+                    "probe clip ${(clip.size + 1023) / 1024} KB in ${(System.nanoTime() - started) / 1_000_000} ms"
+                },
+                { e -> googleFailedAtMs = nowMs(); "probe clip failed (${e::class.simpleName}: ${e.message?.take(80)})" },
+            )
+        }
         val used = runCatching { googleUsage.used(m) }.getOrDefault(0)
         return "Google voice on · ${list.size} Chirp 3 HD voices ($british British) · $probe · ${(used + 999) / 1000}k of 1M characters in $m · $polly"
     }
