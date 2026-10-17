@@ -34,6 +34,11 @@ struct ActivitySheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
+            if let line = model.heardTimingLine {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
             if let line = model.voiceUsageLine {
                 Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

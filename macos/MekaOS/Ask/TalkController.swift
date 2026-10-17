@@ -1,6 +1,7 @@
 @preconcurrency import MekaKit
 import AppKit
 import AVFoundation
+import Network
 import Observation
 import os
 import Speech
@@ -8,10 +9,11 @@ import Speech
 /// Talk to MEKA on the Mac (build plan V1, voice slice 3): runs the core's `TalkFlow` with the Mac's own speech, like
 /// the Fold's TalkController.
 ///
-/// Listening uses `SFSpeechRecognizer` with **on-device recognition required** (`requiresOnDeviceRecognition`):
-/// nothing is recorded, kept or sent away as audio, and a Mac without English on the device says so
-/// (`TalkProblem.noOnDevice`) rather than using Apple's servers. The Mac's recogniser doesn't decide when a question is
-/// over, so `TalkEndpoint` does (a 1.5 s pause after words; 8 s of nothing is silence). Speaking uses MEKA's voice
+/// Listening uses `SFSpeechRecognizer`: since the mic fix (steps 3–4, 2026-10-17; ADR-006 addendum, Meka's yes) Apple's
+/// online recognition whenever the Mac has a connection (`MacSignal`), on-device recognition without one
+/// (`ListenRules.engine`; a failure online before any words listens again on the device). Nothing is recorded or kept.
+/// The Mac's recogniser doesn't decide when a question is over, so `TalkEndpoint` does (a 0.8 s pause after his last
+/// word or sound; 8 s of nothing is silence). Speaking uses MEKA's voice
 /// (Amazon Polly through MEKA's own server, `MekaCore.speechClip`: only MEKA's own words are sent), piece by piece,
 /// and falls back to `AVSpeechSynthesizer` with the best installed English voice (the one chosen in the voice picker, else
 /// `TalkVoice.best`: British first, premium, then enhanced; at the Mac's speed and pitch) when MEKA's voice is off, used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as clicking a card would, with one undo bar.
@@ -58,6 +60,12 @@ final class TalkController {
     @ObservationIgnored private var task: SFSpeechRecognitionTask?
     @ObservationIgnored private var listenStarted = Date()
     @ObservationIgnored private var lastWords = Date()
+    /// When the microphone last heard his voice (the mic fix, step 3), so lagging online words don't cut him off.
+    @ObservationIgnored private var lastVoice: Date?
+    /// When his words ended (the endpoint, or the final result), for Activity's "Speech to Added" line.
+    @ObservationIgnored private var wordsEnded: Date?
+    /// Whether this listen is Apple's online recognition (else the Mac's own).
+    @ObservationIgnored private var listeningOnline = false
     @ObservationIgnored private var heardAnything = false
     @ObservationIgnored private var clock: Task<Void, Never>?
     private let meter = OSAllocatedUnfairLock<Float>(initialState: -160)
@@ -206,11 +214,17 @@ final class TalkController {
             heard = question
             level = 0
             let gen = generation
+            let ended = wordsEnded
+            let online = listeningOnline
             Task {
                 guard let model else { return }
                 let out = await model.talk(question, history: ask.history)
                 guard gen == generation else { return }
                 guard let out else { return fail(.failed) }
+                // The mic fix, step 3: his own "add …" was done at once; how long from his words ending to Added.
+                if let ended, case .answered(let a) = onEnum(of: out), !a.answer.did.isEmpty {
+                    await model.recordHeardTiming(ms: Int64(Date().timeIntervalSince(ended) * 1000), online: online)
+                }
                 onAnswer(question, out)
                 apply(TalkFlow.shared.answered(s: session, question: question, outcome: out, today: Self.today()))
             }
@@ -288,14 +302,16 @@ final class TalkController {
         return speech == .authorized
     }
 
-    private func listen() {
+    private func listen(onDevice forced: Bool = false) {
         stopListening()
         guard let recognizer else { return fail(.noOnDevice) }
-        // On the device or not at all: without English on this Mac, MEKA says so instead of using Apple's servers.
-        guard recognizer.supportsOnDeviceRecognition else { return fail(.noOnDevice) }
+        // Online with a connection, else on the device; neither: say so (the mic fix, step 4).
+        let online = !forced && MacSignal.online
+        guard online || recognizer.supportsOnDeviceRecognition else { return fail(.noOnDevice) }
         guard recognizer.isAvailable else { return fail(.busy) }
         let request = SFSpeechAudioBufferRecognitionRequest()
-        request.requiresOnDeviceRecognition = true
+        request.requiresOnDeviceRecognition = !online
+        listeningOnline = online
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         let engine = AVAudioEngine()
@@ -315,6 +331,8 @@ final class TalkController {
         heardAnything = false
         listenStarted = Date()
         lastWords = listenStarted
+        lastVoice = nil
+        wordsEnded = nil
         if openLapsed != nil && openGen == generation && openAt == nil { openAt = listenStarted } // the window starts now
         meter.withLock { $0 = -160 }
         let gen = generation
@@ -404,6 +422,7 @@ final class TalkController {
         let target = TalkOrb.shared.levelDbfs(db: meter.withLock { $0 })
         level = TalkOrb.shared.smooth(shown: level, target: target)
         let now = Date()
+        if ListenRules.shared.isVoice(level: target) { lastVoice = now }
         if let at = openAt, let lapsed = openLapsed, openGen == generation {
             if heardAnything {
                 openAt = nil
@@ -420,10 +439,14 @@ final class TalkController {
                 return
             }
         }
+        let lastSoundMs = ListenRules.shared.lastSound(
+            lastWordsMs: Int64(lastWords.timeIntervalSince1970 * 1000),
+            lastVoiceMs: lastVoice.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
+        )
         let step = TalkEndpoint.shared.step(
             startedMs: Int64(listenStarted.timeIntervalSince1970 * 1000),
             heardAnything: heardAnything,
-            lastWordsMs: Int64(lastWords.timeIntervalSince1970 * 1000),
+            lastWordsMs: lastSoundMs,
             nowMs: Int64(now.timeIntervalSince1970 * 1000)
         )
         switch step {
@@ -445,6 +468,10 @@ final class TalkController {
         if final {
             finishListening()
         } else if failed {
+            // Apple's online recognition failed before any words: listen again on the Mac itself, once.
+            if !heardAnything && listeningOnline && recognizer?.supportsOnDeviceRecognition == true {
+                return listen(onDevice: true)
+            }
             // The recogniser gave up: what was heard is the question, nothing heard is silence.
             if heardAnything { finishListening() } else {
                 stopListening()
@@ -455,6 +482,7 @@ final class TalkController {
 
     /// The question is over: what was heard goes to the flow.
     private func finishListening() {
+        if wordsEnded == nil { wordsEnded = Date() }
         let text = heard
         stopListening()
         level = 0
@@ -615,4 +643,26 @@ enum MacTalkOver {
 struct RoomSums: Sendable {
     var squares = 0.0
     var count = 0
+}
+
+/// Whether the Mac has a working connection now, for choosing Apple's online speech (the mic fix, step 4). Watched once
+/// for the app's life; read from any thread (nonisolated: the project's default isolation is the main actor).
+enum MacSignal {
+    nonisolated private static let state = OSAllocatedUnfairLock<Bool>(initialState: true)
+    nonisolated(unsafe) private static let monitor: NWPathMonitor = makeMonitor()
+
+    nonisolated private static func makeMonitor() -> NWPathMonitor {
+        let m = NWPathMonitor()
+        m.pathUpdateHandler = { @Sendable path in
+            let ok = path.status == .satisfied
+            MacSignal.state.withLock { $0 = ok }
+        }
+        m.start(queue: DispatchQueue(label: "navilife.signal"))
+        return m
+    }
+
+    nonisolated static var online: Bool {
+        _ = monitor
+        return state.withLock { $0 }
+    }
 }

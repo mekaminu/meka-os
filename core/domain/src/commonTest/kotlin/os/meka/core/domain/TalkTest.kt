@@ -213,8 +213,8 @@ class TalkTest {
         val did = TalkDid(listOf(add.proposal, timer.proposal), listOf("Added “Call the dentist”", "Timer · 20 min"), emptyList(), 0)
         assertEquals("Added “Call the dentist” · Timer · 20 min", did.barLine)
         assertEquals(TalkRules.NOT_HEARD_CARD, TalkDid(emptyList(), emptyList(), emptyList(), 1).barLine)
-        // Nothing is ever sent away to be transcribed, and the line says so.
-        assertTrue(TalkProblem.NO_ON_DEVICE.line.contains("nothing is sent away"))
+        // No signal and no offline speech: the line says it can't listen and what to do.
+        assertTrue(TalkProblem.NO_ON_DEVICE.line.contains("can't listen right now"))
         assertTrue(TalkProblem.NO_PERMISSION.line.contains("microphone"))
     }
 
@@ -227,7 +227,7 @@ class TalkTest {
             assertTrue(p.macLine.isNotBlank())
             assertTrue("This phone" !in p.macLine && "Tap" !in p.macLine && "Apps →" !in p.macLine, p.name)
         }
-        assertTrue(TalkProblem.NO_ON_DEVICE.macLine.contains("nothing is sent away"))
+        assertTrue(TalkProblem.NO_ON_DEVICE.macLine.contains("can't listen right now"))
         assertTrue(TalkProblem.NO_PERMISSION.macLine.contains("System Settings"))
         // The Mac's level comes from its own buffers in dB full scale.
         assertEquals(0f, TalkOrb.levelDbfs(-160f))
@@ -245,9 +245,9 @@ class TalkTest {
         val t0 = 1_000_000L
         assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, false, t0, t0 + 3_000))
         assertEquals(ListenStep.SILENCE, TalkEndpoint.step(t0, false, t0, t0 + TalkEndpoint.NOTHING_MS))
-        // Words came at 2 s: still talking at 3 s, done once 1.5 s pass with nothing new.
-        assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 3_000))
-        assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 3_500))
+        // Words came at 2 s: still talking at 2.5 s, done once 0.8 s pass with nothing new.
+        assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 2_500))
+        assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 2_800))
         // Once words came, a long wait is never silence: it's the end of the question.
         assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 20_000))
         // Talking on and on stops at the recogniser's limit.

@@ -1618,11 +1618,11 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// V1 voice, slice 3: the Mac's talk rules, the flow's effects and a spoken yes with one undo reach Swift.
     func testTalkToMekaOnTheMac() async throws {
         XCTAssertEqual(TalkOrb.shared.label(phase: .speaking, mac: true), "Click to interrupt")
-        XCTAssertTrue(TalkProblem.noOnDevice.macLine.contains("nothing is sent away"))
+        XCTAssertTrue(TalkProblem.noOnDevice.macLine.contains("can't listen right now"))
         XCTAssertEqual(TalkOrb.shared.levelDbfs(db: -50), 0)
         XCTAssertEqual(TalkOrb.shared.levelDbfs(db: -3), 1)
         XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: false, lastWordsMs: 0, nowMs: 9_000), .silence)
-        XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: true, lastWordsMs: 2_000, nowMs: 3_000), .keep)
+        XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: true, lastWordsMs: 2_000, nowMs: 2_500), .keep)
         XCTAssertEqual(TalkEndpoint.shared.step(startedMs: 0, heardAnything: true, lastWordsMs: 2_000, nowMs: 3_600), .finish)
         // The Mac's voice qualities: default 1, enhanced 2, premium 3; British first.
         let best = TalkVoice.shared.best(voices: [

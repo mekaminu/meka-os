@@ -11,3 +11,4 @@ what: talk to Navilife instead of typing: it answers aloud and anything it propo
 how: Tap the mic in Ask's field. Under Settings → Talk you can make the side button or your headphones' button start it, and have it listen when Navilife opens.
 mac_how: Click the mic in Ask's field or press ⌥Space; macOS asks for the microphone and speech recognition the first time.
 tip: Tap the orb while it speaks to interrupt.
+tip: With signal, Google's online speech (Apple's on the Mac) writes down what you say, so it understands you better; with no signal the device's own recogniser listens. It stops listening about a second after you finish, and Activity's "Speech to Added" line shows how quickly what you asked to add went in.

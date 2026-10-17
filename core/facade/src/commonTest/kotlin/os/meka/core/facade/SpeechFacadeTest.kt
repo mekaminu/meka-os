@@ -279,4 +279,14 @@ class SpeechFacadeTest {
         assertNull(c.speechClip("Off.", first = true))
         assertTrue(c.voiceTimingLine()!!.startsWith("Time to Navilife's voice · no answer · late · 1.8 s"))
     }
+
+    @Test
+    fun activitySaysHowQuicklyWhatHeSaidWasAdded() = runTest {
+        val c = core()
+        assertNull(c.heardTimingLine())
+        c.recordHeardTiming(640, os.meka.core.domain.ListenEngine.ONLINE)
+        c.recordHeardTiming(-5, os.meka.core.domain.ListenEngine.ONLINE) // a clock jump: dropped
+        c.recordHeardTiming(1_300, os.meka.core.domain.ListenEngine.ON_DEVICE)
+        assertEquals("Speech to Added · 1.3 s slow offline · 0.6 s", c.heardTimingLine())
+    }
 }

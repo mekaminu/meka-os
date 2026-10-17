@@ -265,6 +265,8 @@ class MekaCore(
     private var speechQuietUntilMs = 0L
     private var speechWarmed = false
     private val speechTimings = ArrayDeque<os.meka.core.domain.SpeechTiming>()
+    /** The mic fix, step 3: end of his words → "Added", the last few, in memory only. */
+    private val heardTimings = ArrayDeque<os.meka.core.domain.HeardTiming>()
 
     // Declared before Today: Today's timeline reads the booked sessions.
     private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
@@ -7435,6 +7437,20 @@ class MekaCore(
         os.meka.core.domain.HereRules.setting(on, permitted)
 
     suspend fun voiceTimingLine(): String? = onCore { os.meka.core.domain.SpeechRules.timingLine(speechTimings.toList()) }
+
+    /**
+     * The mic fix, step 3: something he said was added [ms] after his words ended, heard by [engine]. Kept in memory
+     * only (the last [os.meka.core.domain.HeardTimingRules.KEPT]), never synced or sent; Activity shows
+     * [heardTimingLine]. A negative or absurd time (a clock jump) is dropped.
+     */
+    suspend fun recordHeardTiming(ms: Long, engine: os.meka.core.domain.ListenEngine): Unit = onCore {
+        if (ms < 0 || ms > 60_000) return@onCore
+        heardTimings.addLast(os.meka.core.domain.HeardTiming(ms, engine))
+        while (heardTimings.size > os.meka.core.domain.HeardTimingRules.KEPT) heardTimings.removeFirst()
+    }
+
+    /** Activity's "Speech to Added · 0.6 s · 0.9 s · middle 0.7 s"; null before the first. */
+    suspend fun heardTimingLine(): String? = onCore { os.meka.core.domain.HeardTimingRules.timingLine(heardTimings.toList()) }
 
     private fun speechTimed(atMs: Long, ms: Long, outcome: os.meka.core.domain.SpeechTiming.Outcome) {
         speechTimings.addLast(os.meka.core.domain.SpeechTiming(atMs, ms, outcome))

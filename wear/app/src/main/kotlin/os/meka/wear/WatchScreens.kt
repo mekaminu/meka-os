@@ -728,6 +728,7 @@ private fun CaptureBlock(core: MekaCore, reduced: Boolean, listen: Int, onListen
                     else -> { recordedMs = 0L; runningSince = null; state = Capture.Said(WatchCaptureRules.failLine(f)) }
                 }
             },
+            quickEnd = false,
         )
     }.also { voice[0] = it }
 

@@ -79,10 +79,13 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
     var voiceLine by remember { mutableStateOf<String?>(null) }
     // How quickly MEKA's voice answered on this phone lately ("Time to MEKA's voice · 1.8 s · 0.9 s · late"); null: none yet.
     var timingLine by remember { mutableStateOf<String?>(null) }
+    // The mic fix, step 3: how quickly what he said was added ("Speech to Added · 0.6 s · 0.9 s"); null: none yet.
+    var heardLine by remember { mutableStateOf<String?>(null) }
     // MEKA's AI today ("MEKA's AI today · Talk 6 · Ask 2 · 3¢"); null: nothing asked today or the server can't say.
     var aiLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         timingLine = runCatching { core.voiceTimingLine() }.getOrNull()
+        heardLine = runCatching { core.heardTimingLine() }.getOrNull()
         voiceLine = runCatching { core.voiceUsageLine() }.getOrNull()
         aiLine = runCatching { core.aiTodayLine() }.getOrNull()
     }
@@ -118,6 +121,13 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
             targetState = timingLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "activity-voice-timing",
+        ) { line ->
+            if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
+        }
+        AnimatedContent(
+            targetState = heardLine,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "activity-heard-timing",
         ) { line ->
             if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) else Spacer(Modifier.height(0.dp))
         }

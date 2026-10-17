@@ -1,11 +1,9 @@
 package os.meka.android.ask
 
 import android.content.Context
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.speech.RecognitionListener
-import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -34,9 +32,10 @@ import os.meka.core.facade.MekaCore
 /**
  * Talk to MEKA on the Fold (build plan V1, voice slice 2): runs the core's [TalkFlow] with the phone's own speech.
  *
- * Listening uses Android's **on-device** recogniser only (`createOnDeviceSpeechRecognizer`): nothing is recorded, kept
- * or sent away as audio, and a phone without one says so ([TalkProblem.NO_ON_DEVICE]) rather than falling back to a
- * cloud recogniser. Speaking uses MEKA's voice (Amazon Polly through MEKA's own server, [MekaCore.speechClip]: only
+ * Listening (the mic fix, steps 3–4, 2026-10-17; ADR-006 addendum): Google's online recogniser whenever there's signal,
+ * Android's on-device one without it ([PhoneListen]; a network failure online listens again on the device); nothing is
+ * recorded or kept by Navilife. Listening ends 0.8 s after his last word or sound ([TalkEndpoint]), not at the
+ * recogniser's own longer end, and the time from his words ending to an "Added" is kept for Activity. Speaking uses MEKA's voice (Amazon Polly through MEKA's own server, [MekaCore.speechClip]: only
  * MEKA's own words are sent, never what Meka said), piece by piece, and falls back to `TextToSpeech` with the best
  * installed British voice that speaks on the device ([TalkVoice.best]; never a network voice) when MEKA's voice is off,
  * used up for the month, offline or slow. Every change still goes through `MekaCore.doTalk` exactly as tapping a card
@@ -79,6 +78,14 @@ class TalkController(
     private var generation = 0
 
     private var recognizer: SpeechRecognizer? = null
+    /** Which recogniser [recognizer] is (online with signal, else on the device). */
+    private var engine: os.meka.core.domain.ListenEngine? = null
+    /** This listen: when it began, his last new words and voice, when his words ended (elapsed ms). */
+    private var listenAt = 0L
+    private var lastWordsAt = 0L
+    private var lastVoiceAt: Long? = null
+    private var wordsEndedAt: Long? = null
+    private var endpoint: kotlinx.coroutines.Job? = null
     /** MEKA's voice (Polly through MEKA's server), else the phone's own. */
     private val speaker = MekaSpeaker(context, core, scope)
     /** Bumped by every line and every stop, so a line that was cut short doesn't move the conversation on. */
@@ -204,8 +211,10 @@ class TalkController(
     /** Ask left the screen for good: free the recogniser and the speech engine. */
     fun release() {
         stop()
+        endpoint?.cancel()
         recognizer?.destroy()
         recognizer = null
+        engine = null
         bargeIn.stop()
         speaker.release()
     }
@@ -228,9 +237,15 @@ class TalkController(
                 heard = effect.question
                 level = 0f
                 val gen = generation
+                val endedAt = wordsEndedAt
+                val heardBy = engine
                 scope.launch {
                     os.meka.android.today.HereLocation.refresh(context, core, effect.question)
                     val out = core.talk(effect.question, effect.history)
+                    // The mic fix, step 3: his own "add …" was done at once; how long from his words ending to Added.
+                    if (endedAt != null && heardBy != null && (out as? AskOutcome.Answered)?.answer?.did?.isNotEmpty() == true) {
+                        core.recordHeardTiming(android.os.SystemClock.elapsedRealtime() - endedAt, heardBy)
+                    }
                     if (gen != generation) return@launch
                     onAnswer(effect.question, out)
                     apply(TalkFlow.answered(session, effect.question, out, core.todayEpochDay()))
@@ -286,6 +301,7 @@ class TalkController(
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
+                endpoint?.cancel()
                 recognizer?.cancel()
                 stopSaying()
                 level = 0f
@@ -293,36 +309,56 @@ class TalkController(
         }
     }
 
-    // ---- Listening (on the device only) ----
+    // ---- Listening (online with signal, else on the device: [PhoneListen]) ----
 
     private fun fail(p: TalkProblem) {
+        endpoint?.cancel()
         problem = p
         generation++
         apply(TalkFlow.stop(session))
     }
 
-    private fun recognitionIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-        putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-GB")
-        putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
-    }
-
-    private fun listen() {
-        val r = recognizer ?: run {
-            if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(context)) return fail(TalkProblem.NO_ON_DEVICE)
-            SpeechRecognizer.createOnDeviceSpeechRecognizer(context).also {
-                it.setRecognitionListener(listener)
-                recognizer = it
+    private fun listen(force: os.meka.core.domain.ListenEngine? = null) {
+        val want = force ?: PhoneListen.choose(context) ?: return fail(TalkProblem.NO_ON_DEVICE)
+        if (recognizer == null || engine != want) {
+            recognizer?.destroy()
+            recognizer = try {
+                PhoneListen.create(context, want).also { it.setRecognitionListener(listener) }
+            } catch (e: Exception) {
+                null
             }
+            engine = want
         }
+        val r = recognizer ?: return fail(TalkProblem.FAILED)
         heard = ""
         level = 0f
+        val now = android.os.SystemClock.elapsedRealtime()
+        listenAt = now
+        lastWordsAt = now
+        lastVoiceAt = null
+        wordsEndedAt = null
         try {
-            r.startListening(recognitionIntent())
+            r.startListening(PhoneListen.intent(want))
         } catch (e: Exception) {
-            fail(TalkProblem.FAILED)
+            return fail(TalkProblem.FAILED)
+        }
+        // Step 3: Navilife ends it 0.8 s after his last word or sound rather than waiting for the recogniser's own end.
+        endpoint?.cancel()
+        val gen = generation
+        endpoint = scope.launch {
+            while (true) {
+                delay(os.meka.core.domain.TalkEndpoint.TICK_MS)
+                if (gen != generation || phase != TalkPhase.LISTENING) return@launch
+                val t = android.os.SystemClock.elapsedRealtime()
+                val step = os.meka.core.domain.TalkEndpoint.step(
+                    listenAt, heard.isNotBlank(), os.meka.core.domain.ListenRules.lastSound(lastWordsAt, lastVoiceAt), t,
+                )
+                if (step == os.meka.core.domain.ListenStep.FINISH) {
+                    if (wordsEndedAt == null) wordsEndedAt = t
+                    runCatching { recognizer?.stopListening() } // the words come in onResults
+                    return@launch
+                }
+            }
         }
     }
 
@@ -330,21 +366,38 @@ class TalkController(
         override fun onReadyForSpeech(params: Bundle?) {}
         override fun onBeginningOfSpeech() { speechBegan = true }
         override fun onRmsChanged(rmsdB: Float) {
-            if (phase == TalkPhase.LISTENING) level = TalkOrb.smooth(level, TalkOrb.level(rmsdB))
+            if (phase != TalkPhase.LISTENING) return
+            val l = TalkOrb.level(rmsdB)
+            if (os.meka.core.domain.ListenRules.isVoice(l)) lastVoiceAt = android.os.SystemClock.elapsedRealtime()
+            level = TalkOrb.smooth(level, l)
         }
         override fun onBufferReceived(buffer: ByteArray?) {}
-        override fun onEndOfSpeech() { level = 0f }
+        override fun onEndOfSpeech() {
+            level = 0f
+            if (wordsEndedAt == null) wordsEndedAt = android.os.SystemClock.elapsedRealtime()
+        }
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
         override fun onPartialResults(partialResults: Bundle?) {
             if (phase != TalkPhase.LISTENING) return
             partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                ?.takeIf { it.isNotBlank() }?.let { heard = it; speechBegan = true }
+                ?.takeIf { it.isNotBlank() }?.let {
+                    if (it != heard) lastWordsAt = android.os.SystemClock.elapsedRealtime()
+                    heard = it
+                    speechBegan = true
+                }
         }
 
         override fun onResults(results: Bundle?) {
             if (phase != TalkPhase.LISTENING) return
+            endpoint?.cancel()
+            if (wordsEndedAt == null) wordsEndedAt = android.os.SystemClock.elapsedRealtime()
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            took(text.ifBlank { heard })
+        }
+
+        /** What he said goes to the flow (the final result, or the words so far when the recogniser gave up after them). */
+        private fun took(text: String) {
             if (text.isNotBlank()) heard = text
             // Car and parking, slice 8: "where's the Golf?" is "where's the car?" for the car it names.
             val named = os.meka.core.domain.ParkingRules.talkCar(text, core.carsView.value)
@@ -354,6 +407,18 @@ class TalkController(
 
         override fun onError(error: Int) {
             if (phase != TalkPhase.LISTENING) return // a cancel after stopping reports ERROR_CLIENT
+            endpoint?.cancel()
+            // Words already heard (Navilife ended it, then the recogniser said no match or lost the network): take them.
+            if (heard.isNotBlank() && error != SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
+                if (wordsEndedAt == null) wordsEndedAt = android.os.SystemClock.elapsedRealtime()
+                return took(heard)
+            }
+            // Step 4: Google's online speech failed on the network: listen again with the phone's own, once.
+            val current = engine
+            if (current != null) {
+                os.meka.core.domain.ListenRules.fallback(current, PhoneListen.networkFailure(error), PhoneListen.onDeviceAvailable(context))
+                    ?.let { return listen(force = it) }
+            }
             when (error) {
                 SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                     // After the brief the window is the whole 8 s: the recogniser's own earlier timeout listens again.
@@ -366,7 +431,7 @@ class TalkController(
                 SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED, SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE -> {
                     // Ask the phone to fetch English for on-device speech (Android 13+), and say so.
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        try { recognizer?.triggerModelDownload(recognitionIntent()) } catch (_: Exception) {}
+                        try { recognizer?.triggerModelDownload(PhoneListen.intent(os.meka.core.domain.ListenEngine.ON_DEVICE)) } catch (_: Exception) {}
                     }
                     fail(TalkProblem.LANGUAGE_MISSING)
                 }

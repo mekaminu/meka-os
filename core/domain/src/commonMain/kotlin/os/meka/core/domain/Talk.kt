@@ -570,10 +570,11 @@ enum class TalkProblem(val line: String, val macLine: String) {
         "Navilife needs the microphone to hear you. Allow it when asked, or in Settings → Apps → Meka → Permissions.",
         "Navilife needs the microphone and speech recognition to hear you. Allow both in System Settings → Privacy & Security.",
     ),
+    /** No signal for the online recogniser and no on-device English (the mic fix, step 4: online first since 2026-10-17). */
     NO_ON_DEVICE(
-        "This phone can't recognise speech on the device, so Navilife won't listen: nothing is sent away to be transcribed.",
-        "This Mac can't recognise English on the device yet, so Navilife won't listen: nothing is sent away to be transcribed. " +
-            "Turning on Dictation in System Settings → Keyboard fetches it.",
+        "No signal, and this phone can't recognise speech offline, so Navilife can't listen right now. Try again with signal, or type it.",
+        "No connection, and this Mac can't recognise English offline yet, so Navilife can't listen right now. " +
+            "Turning on Dictation in System Settings → Keyboard fetches it for offline use.",
     ),
     LANGUAGE_MISSING(
         "This phone is fetching English for speech on the device. Try again in a minute.",
@@ -683,13 +684,14 @@ enum class ListenStep {
 }
 
 /**
- * When a spoken question is over, for the Mac (non-AI, pure): Android's recogniser decides that itself, the Mac's
- * doesn't, so the app asks this a few times a second. Nothing heard for [NOTHING_MS] is silence; once words came, a
- * pause of [PAUSE_MS] (no new words) ends the question, and a question is never longer than [LONGEST_MS] (the on-device
- * recogniser's own limit is about a minute).
+ * When a spoken question is over (non-AI, pure): the app asks this a few times a second. Nothing heard for
+ * [NOTHING_MS] is silence; once words came, a pause of [PAUSE_MS] (no new words and no voice on the microphone,
+ * [ListenRules.lastSound]) ends it, and a question is never longer than [LONGEST_MS] (the on-device recogniser's own
+ * limit is about a minute). The mic fix, step 3 (2026-10-17): the pause is 0.8 s (was 1.5 s), and the Fold and the
+ * watch ask it too instead of waiting for Android's recogniser's own, much longer, end.
  */
 object TalkEndpoint {
-    const val PAUSE_MS = 1_500L
+    const val PAUSE_MS = 800L
     const val NOTHING_MS = 8_000L
     const val LONGEST_MS = 55_000L
     /** How often the Mac asks. */

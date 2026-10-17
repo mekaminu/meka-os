@@ -2099,9 +2099,22 @@ final class CoreModel {
     /// asked today or the server can't say. Only a String crosses back.
     private(set) var aiTodayLine: String?
 
+    /// How quickly what he said was added lately ("Speech to Added · 0.6 s · 0.9 s"; the mic fix, step 3); nil before
+    /// the first. Kept in memory only.
+    private(set) var heardTimingLine: String?
+
+    /// The mic fix, step 3: something he said to Talk was added `ms` after his words ended. Only an Int64 and a Bool
+    /// cross; the engine is made here and sent once.
+    func recordHeardTiming(ms: Int64, online: Bool) async {
+        guard let core else { return }
+        nonisolated(unsafe) let engine: ListenEngine = online ? .online : .onDevice
+        try? await core.recordHeardTiming(ms: ms, engine: engine)
+    }
+
     func refreshVoiceUsage() async {
-        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; aiTodayLine = nil; return }
+        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; heardTimingLine = nil; aiTodayLine = nil; return }
         voiceTimingLine = (try? await core.voiceTimingLine()) ?? nil
+        heardTimingLine = (try? await core.heardTimingLine()) ?? nil
         voiceUsageLine = (try? await core.voiceUsageLine()) ?? nil
         aiTodayLine = (try? await core.aiTodayLine()) ?? nil
     }

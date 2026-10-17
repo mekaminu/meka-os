@@ -2,9 +2,7 @@ package os.meka.android.capture
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
-import android.content.Intent
 import android.os.Bundle
-import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -143,6 +141,8 @@ class CaptureActivity : ComponentActivity() {
                     // "The mic should just add it", slice 2: what he says on an empty field goes in without ↑ Add.
                     spoken = { heard -> core.spokenCapture(heard) },
                     undoSpoken = { c -> core.spokenCaptureUndo(c) },
+                    // The mic fix, step 3: end of his words → Added, for Activity's "Speech to Added" line (memory only).
+                    heardTiming = { ms, engine -> core.recordHeardTiming(ms, engine) },
                     // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
                     // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
@@ -204,6 +204,7 @@ private fun CaptureSheet(
     save: suspend (String) -> Boolean,
     spoken: suspend (String?) -> SpokenCaptured?,
     undoSpoken: suspend (SpokenCaptured) -> Boolean,
+    heardTiming: suspend (Long, os.meka.core.domain.ListenEngine) -> Unit,
     saveForTrain: suspend (String, String?) -> Boolean,
     handle: suspend (String, String?) -> HandleOutcome,
     tidyNote: suspend (String, String) -> VoiceNoteRead,
@@ -230,7 +231,10 @@ private fun CaptureSheet(
     var title by rememberSaveable { mutableStateOf(initial?.title.orEmpty()) }
     val notes = initial?.notes
     var captured by rememberSaveable { mutableStateOf(false) }
-    var voiceMissing by remember { mutableStateOf(false) }
+    // The mic fix, step 3: why the 🎙 couldn't listen (no signal and no offline speech, the microphone refused…).
+    var listenProblem by remember { mutableStateOf<String?>(null) }
+    // What was in the field when the 🎙 started listening; his words show after it as he speaks.
+    var listenBase by remember { mutableStateOf("") }
     // Slice 2: what the 🎙 just added, shown with Undo and Edit until the sheet drops away.
     var spokenAdded by remember { mutableStateOf<SpokenCaptured?>(null) }
     var spokenLine by remember { mutableStateOf<String?>(null) }
@@ -278,26 +282,48 @@ private fun CaptureSheet(
         done(saved)
     }
 
-    val listen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { r ->
-        val heard = CaptureRequests.spoken(r.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS))
+    // The mic fix, step 3: the words he said (the field showed them as he spoke). On an empty field they go straight in.
+    fun heardWords(heard: String, engine: os.meka.core.domain.ListenEngine, endedAt: Long) {
+        val base = listenBase
+        val words = CaptureRequests.spoken(arrayListOf(heard))
         when {
-            heard == null -> runCatching { focus.requestFocus() }
+            words == null -> { title = base; runCatching { focus.requestFocus() } }
             // Something already in the field (typed or shared): the words join it and ↑ Add saves, as before.
-            title.isNotBlank() -> { title = "$title $heard"; runCatching { focus.requestFocus() } }
+            base.isNotBlank() -> { title = "$base $words"; runCatching { focus.requestFocus() } }
             else -> scope.launch {
-                val c = spoken(heard)
+                title = words
+                val c = spoken(words)
                 if (c == null || c.fill) {
                     // Ask first (or paused, or only day words): the words wait in the field for ↑ Add.
-                    title = c?.words ?: heard
+                    title = c?.words ?: words
                     runCatching { focus.requestFocus() }
                 } else {
+                    heardTiming(android.os.SystemClock.elapsedRealtime() - endedAt, engine)
                     keyboard?.hide()
+                    title = ""
                     spokenLine = null
                     spokenAdded = c
                     haptics.light()
                 }
             }
         }
+    }
+
+    val listener = remember {
+        CaptureListener(
+            context, scope,
+            onHeard = { words, engine, endedAt -> heardWords(words, engine, endedAt) },
+            onNothing = { line ->
+                title = listenBase
+                listenProblem = line
+                runCatching { focus.requestFocus() }
+            },
+        )
+    }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { listener.release() } }
+    // His words in the field as he speaks.
+    LaunchedEffect(listener.partial) {
+        if (listener.listening && listener.partial.isNotBlank()) title = "$listenBase ${listener.partial}".trim()
     }
 
     fun undoSpokenAdd(edit: Boolean) {
@@ -317,12 +343,25 @@ private fun CaptureSheet(
         delay(SpokenCaptureRules.SHOW_MS)
         if (spokenAdded === c) leave(true)
     }
+    fun listenNow() {
+        listenProblem = null
+        spokenLine = null
+        listenBase = title
+        keyboard?.hide()
+        haptics.tick()
+        listener.start()
+    }
+
+    val askListenMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) listenNow() else listenProblem = os.meka.core.domain.TalkProblem.NO_PERMISSION.line
+    }
+
+    // The 🎙 tapped: listen in the sheet (tapped again while listening: take what he said so far).
     fun startListening() {
-        val i = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
-            .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            .putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true) // on-device speech; nothing leaves the phone
-            .putExtra(RecognizerIntent.EXTRA_PROMPT, "Say it and Navilife will keep it")
-        try { listen.launch(i) } catch (_: ActivityNotFoundException) { voiceMissing = true }
+        if (captured || handling) return
+        if (listener.listening) { listener.finishNow(); return }
+        if (!VoiceNoteRecorder.micAllowed(context)) { askListenMic.launch(android.Manifest.permission.RECORD_AUDIO); return }
+        listenNow()
     }
 
     fun startNote() {
@@ -648,11 +687,21 @@ private fun CaptureSheet(
                             }
                             Spacer(Modifier.width(MekaSpace.xs))
                             RoundButton(
-                                "🎙", SpokenCaptureRules.MIC_LABEL, Meka.colors.surfaceRaised, Meka.colors.textPrimary,
+                                "🎙", if (listener.listening) "Done speaking" else SpokenCaptureRules.MIC_LABEL,
+                                if (listener.listening) Meka.colors.accent else Meka.colors.surfaceRaised,
+                                if (listener.listening) Meka.colors.onAccent else Meka.colors.textPrimary,
                                 onLongClick = ::holdMic,
                             ) { startListening() }
                             Spacer(Modifier.width(MekaSpace.xs))
                             RoundButton("↑", "Add", if (title.isBlank()) Meka.colors.hairline else Meka.colors.accent, Meka.colors.onAccent) { add() }
+                        }
+                        // The mic fix, step 3: which speech is listening, with a dot that breathes with his voice.
+                        AnimatedVisibility(
+                            listener.listening,
+                            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                        ) {
+                            ListeningLine(listener.engine, listener.level, reduced)
                         }
                         val offer = parkingOffer
                         AnimatedVisibility(
@@ -716,13 +765,35 @@ private fun CaptureSheet(
                             // Slice 2: new screenshots noticed by themselves (off until turned on here).
                             ScreenshotSwitchLine(onLine = { pictureLine = it })
                         }
-                        if (voiceMissing) {
-                            Text("Voice isn't available on this phone. Type it instead.", style = MekaType.caption, color = Meka.colors.textSecondary)
+                        listenProblem?.let {
+                            Text(it, style = MekaType.caption, color = Meka.colors.textSecondary,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * The mic fix, step 3: "Listening · Google's speech" (or "· on this phone, no signal") under the field while the 🎙
+ * listens, after a brass dot that grows with his voice (still with reduced motion).
+ */
+@Composable
+private fun ListeningLine(engine: os.meka.core.domain.ListenEngine?, level: Float, reduced: Boolean) {
+    val line = os.meka.core.domain.ListenRules.listeningLine(engine ?: os.meka.core.domain.ListenEngine.ONLINE, os.meka.core.domain.ListenRules.GOOGLE)
+    Row(
+        Modifier.padding(vertical = MekaSpace.xs).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = line },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        val scale = if (reduced) 1f else 0.7f + 0.6f * level.coerceIn(0f, 1f)
+        Box(
+            Modifier.size(8.dp).graphicsLayer { scaleX = scale; scaleY = scale }
+                .clip(CircleShape).background(Meka.colors.accent),
+        )
+        Spacer(Modifier.width(MekaSpace.xs))
+        Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
     }
 }
 
