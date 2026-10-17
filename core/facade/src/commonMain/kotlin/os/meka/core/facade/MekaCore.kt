@@ -747,8 +747,29 @@ class MekaCore(
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(),
+            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(),
         )
+    }
+
+    /**
+     * Slice 7: marks [accountId] as a card ([card] false: no longer one), a charge card when [charge]; on both devices,
+     * Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneyCardKind(accountId: String, card: Boolean, charge: Boolean): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setCardKind(accountId, card, charge).also { refreshMoney() }
+    }
+
+    /**
+     * Slice 7: one card field typed off its statement ([field]: `statement` · `minimum` · `due` · `limit` · `promo`;
+     * blank clears it), on both devices; Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneyCardField(accountId: String, field: String, text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.setCardField(accountId, field, text, todayEpochDay()).also { refreshMoney() }
+    }
+
+    /** Slice 7: Paid on a card's next payment: its reminder stops until the next one. Undo by [undoMoneyCategory]. */
+    suspend fun moneyCardPaid(accountId: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.cardPaid(accountId, todayEpochDay()).also { refreshMoney() }
     }
 
     /** Slice 6: the radar's bills, subscriptions and club fees with a cost, for what's still to go out before payday. */
@@ -7833,7 +7854,7 @@ class MekaCore(
             // Kids' admin, slice 1: a due size check (lit), else the first child's shoe size.
             kidsLine = _kids.value.tile,
             // Money manager, slice 1: the accounts and the last import, never an amount.
-            moneyLine = os.meka.core.domain.MoneyRules.tile(money.accounts(), ZoneCalendar(timeZone)),
+            moneyLine = os.meka.core.domain.MoneyRules.tile(money.accounts(), ZoneCalendar(timeZone), money.cards(), todayDay),
             // Car and parking, slice 1: the Car tile's next date (where it's parked is the Fold's own, laid over it there).
             // Slice 2: a running parking timer leads it on both apps ("Paid until 15:30 · 40 min left").
             // Two cars (2026-10-14): each car on its own line, its timer or next date.
@@ -7948,6 +7969,8 @@ class MekaCore(
             mail = activity.mailItems(),
             // Meeting prep, slice 2: how early (or off), his synced choice.
             prepLeadMin = meetingPrepLead().minutes,
+            // Money manager, slice 7: card payments three days before (until Paid) and 0% periods ending.
+            cards = money.cards(),
         )
 
     /**

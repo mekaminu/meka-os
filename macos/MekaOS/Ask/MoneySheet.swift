@@ -19,6 +19,10 @@ import UniformTypeIdentifiers
 /// Slice 6: UNTIL PAYDAY — payday from his pay, what's still to go out before it and, with the pay account's balance,
 /// what's safe to spend a day (lit when it's tight).
 ///
+/// Slice 7: CARDS — each account he marks as a card: when it's due (lit three days out; Paid, Undo), the statement and
+/// minimum, the limit used (lit from 75%), 0% ending (lit within 30 days) and fees; Edit details types what the
+/// statement says. Navilife never pays.
+///
 /// Slice 5: REFUNDS ON THE WAY — each refund on Waiting for, back in his statement (Close it, Undo) or not yet, and after
 /// two weeks a chase to copy (Copy the chase marks it chased; he sends it himself).
 ///
@@ -39,6 +43,8 @@ struct MoneySheet: View {
     @State private var busy = false
     @State private var extra = ""
     @State private var balance = ""
+    @State private var editingCard: String?
+    @State private var cardTexts: [String: String] = [:]
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -108,6 +114,7 @@ struct MoneySheet: View {
                 Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             if let p = v.payday { payday(p).transition(.opacity) }
+            if let c = v.cards, !(c.rows.isEmpty && c.offers.isEmpty) { cards(c).transition(.opacity) }
             if let r = v.refunds {
                 Text(r.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -192,6 +199,97 @@ struct MoneySheet: View {
             Text(p.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: p.safe)
+    }
+
+    /// Slice 7: his cards, then the accounts he could mark as one.
+    private func cards(_ cv: MoneyCardsView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(cv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            ForEach(cv.rows, id: \.id) { c in card(c).transition(.opacity) }
+            if let l = cv.offerLine {
+                Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(cv.offers.prefix(4), id: \.id) { o in
+                HStack {
+                    Text(o.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    Button(MoneyCards.shared.MARK) {
+                        let id = o.id
+                        Task { said = await model.moneyCardKind(accountId: id, card: true, charge: false) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                    .accessibilityLabel("\(o.name) is a card")
+                }
+            }
+            if !cv.rows.isEmpty {
+                Text(cv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// Slice 7: one card — due with Paid, statement, limit used, 0% ending, fees; Edit details for the typed fields.
+    private func card(_ c: MoneyCardRow) -> some View {
+        let open = editingCard == c.id || c.statementLine == nil
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            VStack(alignment: .leading, spacing: 0) {
+                Text(c.name).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(c.kindLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(c.dueLine).font(MekaType.body).foregroundStyle(c.dueLit ? palette.accent : palette.textPrimary).contentTransition(.opacity)
+                if let p = c.paidLine { Text(p).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                if let s = c.statementLine { Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                if let u = c.useLine { Text(u).font(MekaType.caption).foregroundStyle(c.useLit ? palette.accent : palette.textSecondary) }
+                if let p = c.promoLine { Text(p).font(MekaType.caption).foregroundStyle(c.promoLit ? palette.accent : palette.textSecondary) }
+                if let f = c.feesLine { Text(f).font(MekaType.caption).foregroundStyle(palette.accent).fixedSize(horizontal: false, vertical: true) }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(c.spoken)
+            HStack(spacing: MekaSpace.m) {
+                if c.canPay {
+                    Button(MoneyCards.shared.PAID) {
+                        let id = c.id
+                        Task { said = await model.moneyCardPaid(accountId: id) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                Button(open ? "Done editing" : "Edit details") { editingCard = open ? nil : c.id }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            }
+            if open {
+                ForEach(c.fields, id: \.key) { f in
+                    TextField(f.value.isEmpty ? f.hint : "\(f.label) · now \(f.value)", text: Binding(
+                        get: { cardTexts[c.id + "|" + f.key] ?? "" },
+                        set: { cardTexts[c.id + "|" + f.key] = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .onSubmit {
+                        let key = c.id + "|" + f.key
+                        let text = cardTexts[key] ?? ""
+                        cardTexts[key] = nil
+                        let id = c.id
+                        let field = f.key
+                        Task { said = await model.moneyCardField(accountId: id, field: field, text: text) }
+                    }
+                }
+                HStack(spacing: MekaSpace.m) {
+                    Button(MoneyCards.shared.CHARGE_SWITCH + (c.charge ? " ✓" : "")) {
+                        let id = c.id
+                        let charge = !c.charge
+                        Task { said = await model.moneyCardKind(accountId: id, card: true, charge: charge) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(c.charge ? palette.accent : palette.textSecondary)
+                    Button(MoneyCards.shared.NOT_CARD) {
+                        let id = c.id
+                        Task { said = await model.moneyCardKind(accountId: id, card: false, charge: false) }
+                    }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                .transition(.opacity)
+            }
+        }
+        .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: open)
     }
 
     /// Slice 4: the forecast at his pace, with what-ifs on this Mac only (they go when Money locks).

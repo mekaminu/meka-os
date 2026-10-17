@@ -123,6 +123,11 @@ class MainActivity : ComponentActivity() {
                 app.openKids.value = true
                 app.openDestination.value = ShellDestination.ASK
             }
+            // A card's payment due or 0% ending (Money manager, slice 7): Ask with the Money pane up (it asks for the fingerprint).
+            open == OPEN_MONEY -> {
+                app.openMoney.value = true
+                app.openDestination.value = ShellDestination.ASK
+            }
             // Sunday's "Your week ahead" (Sunday week ahead, slice 1): Ask with the Week ahead pane up.
             open == OPEN_WEEK_AHEAD -> {
                 app.openWeekAhead.value = true
@@ -175,6 +180,8 @@ class MainActivity : ComponentActivity() {
         const val OPEN_WEEK_AHEAD = "week_ahead"
         /** Ask → Life → Kids, its pane up (the size-check heads-up, kids' admin slice 6). */
         const val OPEN_KIDS = "kids"
+        /** Ask → Life → Money, its pane up (a card heads-up, Money manager slice 7). */
+        const val OPEN_MONEY = "money"
         /** The same, reading itself aloud (Listen on the heads-up); [EXTRA_CANCEL] is the notification to take away. */
         const val OPEN_WEEK_AHEAD_LISTEN = "week_ahead_listen"
         const val EXTRA_CANCEL = "os.meka.cancel"

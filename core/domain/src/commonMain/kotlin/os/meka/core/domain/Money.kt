@@ -416,6 +416,8 @@ data class MoneyView(
     val refunds: MoneyRefundsView? = null,
     /** Slice 6: payday, what's still to go out before it and what's safe to spend ([MoneyPayday]), shown with this month only. */
     val payday: MoneyPaydayView? = null,
+    /** Slice 7: his cards — due dates, statements, limits, 0% ending, fees ([MoneyCards]), shown with this month only. */
+    val cards: MoneyCardsView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -480,8 +482,10 @@ object MoneyRules {
         rules[MoneyCategoryRules.merchantKey(t.text)] ?: MoneyCategoryRules.categoryOf(t.text, t.pence)
 
     /** Ask's Money tile: no amounts (it's outside the fingerprint) — "2 accounts · updated Fri 16 Oct", or null. */
-    fun tile(accounts: List<MoneyAccount>, cal: LocalCalendar): LifeTileLine? {
+    fun tile(accounts: List<MoneyAccount>, cal: LocalCalendar, cards: List<MoneyCard> = emptyList(), today: Long? = null): LifeTileLine? {
         if (accounts.isEmpty()) return null
+        // Slice 7: a card payment due within three days lights the tile (still no amounts).
+        if (today != null) MoneyCards.tileLine(cards.filter { c -> accounts.any { it.id == c.id } }, today)?.let { return it }
         val last = accounts.mapNotNull { it.importedAtMs }.maxOrNull()
         val n = accounts.size
         val head = if (n == 1) accounts.first().name else "$n accounts"
@@ -512,6 +516,7 @@ object MoneyRules {
         accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>, today: Long, cal: LocalCalendar, offset: Int,
         hiddenTips: Set<String> = emptySet(), fineAlerts: Set<String> = emptySet(), whatIf: MoneyWhatIf = MoneyWhatIf(),
         refundWaits: List<WaitingItem> = emptyList(), bills: List<MoneyBill> = emptyList(), holidays: HolidayCalendar = HolidayCalendar(),
+        cards: List<MoneyCard> = emptyList(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         // Each line's merchant and category once per view (the rules are regexes; a statement can be thousands of lines).
@@ -600,7 +605,12 @@ object MoneyRules {
             refunds = if (partial) MoneyRefunds.view(refundWaits, watch, today, cal, names) else null,
             payday = if (partial) MoneyPayday.view(
                 mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
-                accounts.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(), bills, holidays,
+                accounts.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
+                // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
+                bills + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
+            ) else null,
+            cards = if (partial) MoneyCards.view(
+                cards.filter { it.id in names }, accounts, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,
             ) else null,
         )
     }
@@ -615,7 +625,7 @@ object MoneyRules {
 class Money(private val replica: Replica, private val nowMs: () -> Long) {
     private var cache: List<MoneyTxn>? = null
 
-    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|" }
+    private companion object { const val TIPS_UNDO = "tips|"; const val ALERT_UNDO = "alert|"; const val BALANCE_UNDO = "bal|"; const val CARD_UNDO = "card|" }
 
     /** Told of every replica change (the facade's listener, before its refresh): a money line changed, re-read them. */
     fun changed(refs: Set<EntityRef>) {
@@ -649,6 +659,83 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             MoneyAccountFields.BALANCE_DAY to (b?.day?.fv() ?: FieldValue.Null),
             MoneyAccountFields.BALANCE_TYPED to (b?.typed?.fv() ?: FieldValue.Null),
         ))
+    }
+
+    /** Slice 7: the accounts marked as cards, with what he typed off their statements. */
+    fun cards(): List<MoneyCard> = replica.entities(EntityTypes.MONEY_ACCOUNT).mapNotNull { e ->
+        val kind = e[MoneyCardFields.KIND].textOrNull?.takeIf { it == MoneyCards.CREDIT || it == MoneyCards.CHARGE } ?: return@mapNotNull null
+        val name = e[MoneyAccountFields.NAME].textOrNull?.trim()?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        MoneyCard(
+            e.ref.entityId, name, kind,
+            limitPence = e[MoneyCardFields.LIMIT].longOrNull, statementPence = e[MoneyCardFields.STATEMENT].longOrNull,
+            minPence = e[MoneyCardFields.MINIMUM].longOrNull, dueDayOfMonth = e[MoneyCardFields.DUE].longOrNull?.toInt()?.takeIf { it in 1..31 },
+            promoEndDay = e[MoneyCardFields.PROMO_END].longOrNull, paidFor = e[MoneyCardFields.PAID_FOR].longOrNull,
+        )
+    }
+
+    /** The card fields as they stand, for Undo: "field=value;…" (empty values for Null). */
+    private fun cardSnapshot(accountId: String): String {
+        val e = replica.entity(EntityTypes.MONEY_ACCOUNT, accountId)
+        return MoneyCardFields.ALL.joinToString(";") { f ->
+            val v = e?.get(f)
+            "$f=" + (v?.textOrNull ?: v?.longOrNull?.toString() ?: "")
+        }
+    }
+
+    /**
+     * Slice 7: marks [accountId] as a card ([charge]: a charge card paid in full), or a card as a credit/charge card;
+     * [card] false makes it not a card (what was typed goes). Undo (by [undoCategory]) puts the fields back as they were.
+     */
+    fun setCardKind(accountId: String, card: Boolean, charge: Boolean = false): MoneySaved {
+        val a = accounts().firstOrNull { it.id == accountId } ?: return MoneySaved(MoneyRules.GONE, refused = true)
+        val token = CARD_UNDO + accountId + "|" + cardSnapshot(accountId)
+        if (!card) {
+            replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, MoneyCardFields.ALL.associateWith { FieldValue.Null })
+            return MoneySaved(MoneyCards.unmarkedSaid(a.name), undo = token)
+        }
+        val was = cards().any { it.id == accountId }
+        replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(MoneyCardFields.KIND to (if (charge) MoneyCards.CHARGE else MoneyCards.CREDIT).fv()))
+        return MoneySaved(if (was) MoneyCards.kindSaid(a.name, charge) else MoneyCards.markedSaid(a.name), undo = token)
+    }
+
+    /** Slice 7: one typed card field ([MoneyCards.FIELDS]; blank clears it), as of [today]; Undo by [undoCategory]. */
+    fun setCardField(accountId: String, field: String, text: String, today: Long): MoneySaved {
+        val c = cards().firstOrNull { it.id == accountId } ?: return MoneySaved(MoneyCards.NOT_A_CARD, refused = true)
+        val blank = text.isBlank()
+        val (name, value: FieldValue, said: String?) = when (field) {
+            MoneyCards.STATEMENT, MoneyCards.MINIMUM, MoneyCards.LIMIT -> {
+                val p = if (blank) null else MoneyCards.parseAmount(text) ?: return MoneySaved(MoneyCards.BAD_AMOUNT, refused = true)
+                val f = when (field) { MoneyCards.STATEMENT -> MoneyCardFields.STATEMENT; MoneyCards.MINIMUM -> MoneyCardFields.MINIMUM; else -> MoneyCardFields.LIMIT }
+                Triple(f, p?.fv() ?: FieldValue.Null, p?.let { MoneyRules.fmt(it) })
+            }
+            MoneyCards.DUE -> {
+                val d = if (blank) null else MoneyCards.parseDue(text) ?: return MoneySaved(MoneyCards.BAD_DUE, refused = true)
+                Triple(MoneyCardFields.DUE, d?.toLong()?.fv() ?: FieldValue.Null, d?.let { "the ${MoneyCards.ordinal(it)}" })
+            }
+            MoneyCards.PROMO -> {
+                val d = if (blank) null else MoneyCards.parsePromo(text, today) ?: return MoneySaved(MoneyCards.BAD_PROMO, refused = true)
+                Triple(MoneyCardFields.PROMO_END, d?.fv() ?: FieldValue.Null, d?.let { MoneyRules.dayMonth(it) })
+            }
+            else -> return MoneySaved(MoneyRules.GONE, refused = true)
+        }
+        val token = CARD_UNDO + accountId + "|" + cardSnapshot(accountId)
+        val writes = mutableMapOf(name to value)
+        // A new statement starts a new payment: an earlier Paid no longer covers it.
+        if (field == MoneyCards.STATEMENT && !blank) {
+            val due = MoneyCards.nextDue(c.copy(paidFor = null), today)
+            if (c.paidFor != null && due != null && c.paidFor < due) writes[MoneyCardFields.PAID_FOR] = FieldValue.Null
+        }
+        replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, writes)
+        return MoneySaved(MoneyCards.fieldSaid(c.name, field, said), undo = token)
+    }
+
+    /** Slice 7: Paid on a card's next payment (its reminder stops until the next one); Undo by [undoCategory]. */
+    fun cardPaid(accountId: String, today: Long): MoneySaved {
+        val c = cards().firstOrNull { it.id == accountId } ?: return MoneySaved(MoneyCards.NOT_A_CARD, refused = true)
+        val due = MoneyCards.nextDue(c, today) ?: return MoneySaved(MoneyCards.NO_DUE, refused = true)
+        val token = CARD_UNDO + accountId + "|" + cardSnapshot(accountId)
+        replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(MoneyCardFields.PAID_FOR to due.fv()))
+        return MoneySaved(MoneyCards.paidSaid(c.name, due), undo = token)
     }
 
     fun txns(): List<MoneyTxn> = cache ?: replica.entities(EntityTypes.MONEY_TXN).mapNotNull { e ->
@@ -749,6 +836,23 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
 
     /** Undo for [setCategory]: the merchant goes back to what it was (or to its words' own category). */
     fun undoCategory(token: String): Boolean {
+        if (token.startsWith(CARD_UNDO)) {
+            val rest = token.removePrefix(CARD_UNDO)
+            val id = rest.substringBefore('|')
+            if (accounts().none { it.id == id }) return false
+            val fields = rest.substringAfter('|', "").split(';').filter { '=' in it }.associate { kv ->
+                val f = kv.substringBefore('=')
+                val v = kv.substringAfter('=')
+                f to when {
+                    v.isEmpty() -> FieldValue.Null
+                    f == MoneyCardFields.KIND -> v.fv()
+                    else -> v.toLongOrNull()?.fv() ?: FieldValue.Null
+                }
+            }.filterKeys { it in MoneyCardFields.ALL }
+            if (fields.isEmpty()) return false
+            replica.commitLocal(EntityTypes.MONEY_ACCOUNT, id, fields)
+            return true
+        }
         if (token.startsWith(BALANCE_UNDO)) {
             val parts = token.removePrefix(BALANCE_UNDO).split('|')
             val id = parts.getOrNull(0) ?: return false
@@ -785,7 +889,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
             replica.commitLocal(EntityTypes.MONEY_ACCOUNT, accountId, mapOf(
                 os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
                 MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
-            ))
+            ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
         }
         cache = null
         return MoneySaved(MoneyRules.removedLine(a.name, ts.size))
@@ -802,7 +906,7 @@ class Money(private val replica: Replica, private val nowMs: () -> Long) {
                 replica.commitLocal(EntityTypes.MONEY_ACCOUNT, it.id, mapOf(
                     os.meka.core.sync.DELETED_FIELD to true.fv(), MoneyAccountFields.NAME to FieldValue.Null, MoneyAccountFields.IMPORTED_AT to FieldValue.Null,
                     MoneyAccountFields.BALANCE to FieldValue.Null, MoneyAccountFields.BALANCE_DAY to FieldValue.Null, MoneyAccountFields.BALANCE_TYPED to FieldValue.Null,
-                ))
+                ) + MoneyCardFields.ALL.associateWith { FieldValue.Null })
             }
             hiddenTips().forEach { replica.commitLocal(EntityTypes.MONEY_TIPS, it, mapOf(MoneyTipsFields.HIDDEN to FieldValue.Null)) }
             replica.entities(EntityTypes.MONEY_ALERT).forEach { replica.commitLocal(EntityTypes.MONEY_ALERT, it.ref.entityId, mapOf(MoneyAlertFields.FINE to FieldValue.Null)) }

@@ -229,4 +229,49 @@ class MoneyFacadeTest {
         fold.closeMoney(); fold.openMoney()
         assertEquals("put by at your pace", fold.moneyView.value.forecast!!.rows[0].line)
     }
+
+    @Test
+    fun aCardMarkedAndTypedOnTheFoldRemindsOnTheMacUntilPaid() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        val csv = "Date,Description,Amount\n05/10/2026,INTEREST CHARGED,-12.40\n06/10/2026,TESCO STORES 2041,-30.00\n"
+        assertTrue(fold.moneyCardKind("a-credit-card", card = true, charge = false).refused) // locked
+        fold.openMoney()
+        fold.importMoneyStatement("Credit card", csv)
+        val offered = fold.moneyView.value.cards!!
+        assertTrue(offered.rows.isEmpty())
+        assertEquals(listOf("Credit card"), offered.offers.map { it.name })
+        assertEquals("Credit card is a card · type what its statement says", fold.moneyCardKind("a-credit-card", card = true, charge = false).line)
+        assertEquals(os.meka.core.domain.MoneyCards.BAD_DUE, fold.moneyCardField("a-credit-card", "due", "whenever").line)
+        assertEquals("Credit card's due day is the 19th", fold.moneyCardField("a-credit-card", "due", "19th").line)
+        assertEquals("Credit card's statement balance is £640", fold.moneyCardField("a-credit-card", "statement", "£640").line)
+        fold.moneyCardField("a-credit-card", "limit", "£2,000")
+        val row = fold.moneyView.value.cards!!.rows.single()
+        assertEquals("Due Mon 19 Oct · in 3 days", row.dueLine)
+        assertEquals("32% of your £2,000 limit", row.useLine)
+        assertEquals("Interest £12.40 charged Mon 5 Oct", row.feesLine)
+        // The tile lights without an amount; the Mac gets the card and the heads-up.
+        assertEquals("Credit card due Mon 19 Oct", fold.lifeLines.value.of(LifeTile.MONEY)?.text)
+        fold.syncNow(); mac.syncNow()
+        val g = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = g.post.single { it.source == os.meka.core.domain.NoticeSource.CARDS }
+        assertEquals("Credit card payment due Mon 19 Oct", n.title)
+        mac.openMoney()
+        assertEquals("Due Mon 19 Oct · in 3 days", mac.moneyView.value.cards!!.rows.single().dueLine)
+        // Paid stops the reminder; Undo brings it back.
+        val paid = fold.moneyCardPaid("a-credit-card")
+        assertEquals("Credit card marked paid for Mon 19 Oct · no reminder until the next one", paid.line)
+        assertEquals("Due Thu 19 Nov · in 34 days", fold.moneyView.value.cards!!.rows.single().dueLine)
+        assertTrue(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).post.none { it.source == os.meka.core.domain.NoticeSource.CARDS })
+        assertTrue(fold.undoMoneyCategory(paid.undo!!))
+        assertEquals("Due Mon 19 Oct · in 3 days", fold.moneyView.value.cards!!.rows.single().dueLine)
+        // Not a card: it goes back to the offers; Undo makes it a card again with what was typed.
+        val off = fold.moneyCardKind("a-credit-card", card = false, charge = false)
+        assertTrue(fold.moneyView.value.cards!!.rows.isEmpty())
+        assertTrue(fold.undoMoneyCategory(off.undo!!))
+        assertEquals("Statement £640 · pay in full to avoid interest", fold.moneyView.value.cards!!.rows.single().statementLine)
+        // A charge card.
+        assertEquals("Credit card is a charge card · paid in full each month", fold.moneyCardKind("a-credit-card", card = true, charge = true).line)
+        assertEquals("Charge card", fold.moneyView.value.cards!!.rows.single().kindLine)
+    }
 }

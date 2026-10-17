@@ -48,7 +48,7 @@ data class MoneyBalance(val pence: Long, val day: Long, val typed: Boolean)
 object MoneyPayday {
     const val HEAD = "UNTIL PAYDAY"
     const val NOT_READY = "Navilife finds your payday from your pay coming in · import two months or more of the account it goes into."
-    const val FOOT = "From your statements and Lists → Renewals · card repayments that change each month aren't counted · not financial advice"
+    const val FOOT = "From your statements, Lists → Renewals and Cards (a card due before payday counts its statement) · not financial advice"
     const val BALANCE_HINT = "Balance now: £1,240 (−£50 if overdrawn)"
     const val BALANCE_BAD = "Type the balance, e.g. £1,240.50, or −£50 if it's overdrawn."
     const val BALANCE_CLEARED = "Balance cleared · type it again any time"

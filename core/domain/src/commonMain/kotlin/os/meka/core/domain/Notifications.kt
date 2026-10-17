@@ -35,7 +35,7 @@ enum class NoticePrecision { CLOCK, SOFT }
  * Where tapping a notification takes you. [LEAVE] is Ask → More → Annual leave with its pane up (annual leave, slice 2);
  * [WEEK_AHEAD] is Ask → More → Week ahead with its pane up (Sunday week ahead, slice 1).
  */
-enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT, KIDS }
+enum class NoticeTarget { TODAY, NEEDS_YOU, LISTS, GOALS, REVIEW, LEAVE, WEEK_AHEAD, VAULT, KIDS, MONEY }
 
 /**
  * A button on a posted notification, answered without opening the app (Gym slice 2b: "Did you go?" offers Went and
@@ -158,6 +158,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * saved — "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens oakfield.gov.uk". Never pays.
      */
     BILLS("Bills due: a few days before each payment", NoticeTier.HEADS_UP),
+    /**
+     * Money manager, slice 7 ([MoneyCards.notices]): three days before each card payment at 09:00 until it's marked
+     * Paid, and 30 and 7 days before a 0% period ends — "Credit card payment due Fri 23 Oct" · "In 3 days · pay in full
+     * to avoid interest · …". No amounts (the figures stay behind the fingerprint). Never pays.
+     */
+    CARDS("Cards: payments due and 0% ending", NoticeTier.HEADS_UP),
     /**
      * Life admin hour ([LifeAdminRules.notices]): at the week's hour, "Life admin hour · 4 jobs" · "Renew passport · Call
      * the GP · and 2 more". None when skipped or nothing is waiting.
@@ -648,6 +654,7 @@ object Governor {
         NoticeSource.CAR -> plural(n, "car date") + " coming up"
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
         NoticeSource.BILLS -> plural(n, "bill") + " due"
+        NoticeSource.CARDS -> plural(n, "card reminder")
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
         NoticeSource.DOCUMENTS -> plural(n, "document") + " to renew"
@@ -762,6 +769,8 @@ object NoticeSources {
         mail: List<MailItem> = emptyList(),
         /** Meeting prep, slice 2: his lead time in minutes (0 = off; [MeetingPrepRules.read]). */
         prepLeadMin: Int = MeetingPrepRules.LEAD_MIN,
+        /** Money manager, slice 7: his cards, for the payment and 0% heads-ups ([MoneyCards.notices]). */
+        cards: List<MoneyCard> = emptyList(),
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -900,6 +909,7 @@ object NoticeSources {
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
+        out += MoneyCards.notices(cards, nowMs, cal)
         out += MailReturnRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)
         out += DocumentRules.notices(documents, nowMs, cal)

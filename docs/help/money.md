@@ -1,7 +1,7 @@
 ---
 id: money
 title: Money
-keywords: money, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
+keywords: money, credit card, card due, card payment, charge card, minimum payment, credit limit, card limit, 0% ends, zero percent, interest charged, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
 data: yes
 fold: MONEY
 fold_where: Ask → Life → Money
@@ -25,3 +25,7 @@ tip: What if: tap Halve on one of your biggest everyday categories, or type an e
 tip: Refunds on the way lists each refund on Waiting for and checks your statements for it: when the shop's money is back, Close it takes it off Waiting for (Undo). Two weeks on with nothing back, it lights and drafts a chase; Copy the chase puts it on the clipboard for you to send in the shop's chat or email, and marks it chased. Navilife never sends it.
 tip: Until payday finds your payday from your pay coming in (two months or more of the account it goes into) and says what you've spent since and what's still to go out before it: regular payments, and the bills, subscriptions and club fees with a cost on Lists → Renewals.
 tip: With that account's balance it says what's safe to spend until payday, and a day, and lights when it's tight. A statement file with a Balance column gives it, or type it under Until payday (−£50 if overdrawn).
+tip: Cards: tap It's a card next to a card's account, then type what its statement says: the statement balance, the minimum, the day of the month it's due, the limit and when a 0% period ends (Edit details, any time).
+tip: Each card says when it's due (lit three days out), "pay in full to avoid interest" (a charge card is paid in full), how much of the limit the statement uses (lit from 75%) and any interest or late fee charged on it.
+tip: Three days before a card payment, at 9 in the morning, a heads-up says it's due (no amounts on the lock screen). Tap Paid on the card once you've paid it and the reminder stops until next month (Undo).
+tip: A 0% period gets a heads-up a month and a week before it ends. A card due before payday counts in what's still to go out. Navilife never pays anything.

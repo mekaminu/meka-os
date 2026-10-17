@@ -204,6 +204,11 @@ fun AskRoute(
     LaunchedEffect(openKids) {
         if (openKids) { pane = MoreItem.KIDS; healthApp?.openKids?.value = false }
     }
+    // A card heads-up (Money manager, slice 7) → the Money pane, which asks for the fingerprint first.
+    val openMoney by remember(healthApp) { healthApp?.openMoney ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openMoney) {
+        if (openMoney) { pane = MoreItem.MONEY; healthApp?.openMoney?.value = false }
+    }
     // Review on a Needs you clean-up card (inbox fixes, slice 2) → the Mail pane, where the plan says what goes where.
     val openMail by remember(healthApp) { healthApp?.openMail ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openMail) {

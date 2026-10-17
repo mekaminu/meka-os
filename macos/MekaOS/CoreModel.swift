@@ -3294,6 +3294,39 @@ final class CoreModel {
         }
     }
 
+    /// Slice 7: marks an account as a card (`card` false: no longer one), a charge card when `charge`; Undo with `undoMoneyCategory`.
+    func moneyCardKind(accountId: String, card: Bool, charge: Bool) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyCardKind(accountId: accountId, card: card, charge: charge))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 7: one card field typed off its statement (`statement`, `minimum`, `due`, `limit`, `promo`; blank clears it).
+    func moneyCardField(accountId: String, field: String, text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyCardField(accountId: accountId, field: field, text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 7: Paid on a card's next payment (its reminder stops until the next one); Undo with `undoMoneyCategory`.
+    func moneyCardPaid(accountId: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyCardPaid(accountId: accountId))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 3: That's fine on one watchdog alert, on both devices; Undo with `undoMoneyCategory`.
     func moneyAlertFine(alertId: String) async -> MoneySaid? {
         guard let core else { return nil }

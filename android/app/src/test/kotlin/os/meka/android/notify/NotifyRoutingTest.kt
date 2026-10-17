@@ -33,6 +33,9 @@ class NotifyRoutingTest {
         assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.WEEK_AHEAD))
         assertEquals(os.meka.android.MainActivity.OPEN_WEEK_AHEAD, NotifyRouting.openExtra(NoticeTarget.WEEK_AHEAD))
         assertEquals(os.meka.android.MainActivity.OPEN_DESTINATION_PREFIX + "LISTS", NotifyRouting.openExtra(NoticeTarget.LISTS))
+        // Money manager, slice 7: a card heads-up opens Ask with the Money pane (behind the fingerprint).
+        assertEquals(ShellDestination.ASK, NotifyRouting.destination(NoticeTarget.MONEY))
+        assertEquals(os.meka.android.MainActivity.OPEN_MONEY, NotifyRouting.openExtra(NoticeTarget.MONEY))
         // A document running out opens the Vault (V2, slice 1).
         assertEquals(ShellDestination.VAULT, NotifyRouting.destination(NoticeTarget.VAULT))
         assertEquals(os.meka.android.MainActivity.OPEN_DESTINATION_PREFIX + "VAULT", NotifyRouting.openExtra(NoticeTarget.VAULT))
