@@ -69,11 +69,14 @@ class LunchFlowFeed internal constructor(private val key: () -> String?, private
 
     override fun accounts(): List<BankAccountRead> {
         val list = call("/accounts")["accounts"] as? JsonArray ?: error("no accounts list")
-        return list.mapNotNull { it as? JsonObject }.mapNotNull { o ->
+        val read = list.mapNotNull { it as? JsonObject }.mapNotNull { o ->
             val id = o.text("id") ?: return@mapNotNull null
             BankAccountRead(id, o.text("name").orEmpty(), o.text("institution_name").orEmpty(), o.text("currency"),
                 o.text("status")?.equals("ACTIVE", ignoreCase = true) ?: true)
         }
+        // Listed but none readable: the answer's shape changed; say so rather than "0 accounts".
+        if (read.isEmpty() && list.isNotEmpty()) error("accounts unreadable")
+        return read
     }
 
     override fun transactions(accountId: String, fromDay: Long, toDay: Long): List<BankTxnRead> {

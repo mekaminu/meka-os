@@ -41,6 +41,8 @@ object MoneyBankSyncFields {
     const val RECONNECT = "reconnect"
     /** Accounts left out because they aren't in pounds. */
     const val SKIPPED = "skipped"
+    /** Accounts Lunch Flow listed for Navilife's key (before any were left out), for the report. */
+    const val LISTED = "listed"
 }
 
 object MoneyBankRefreshFields {
@@ -51,7 +53,7 @@ object MoneyBankRefreshFields {
 /** What the server last wrote in `context_mode/money_sync`. */
 data class MoneyBankSync(
     val state: String, val lastOkMs: Long?, val lastTryMs: Long?, val accounts: Int, val txns: Int,
-    val reconnect: Int = 0, val skipped: Int = 0,
+    val reconnect: Int = 0, val skipped: Int = 0, val listed: Int? = null,
 )
 
 /** One account to reconnect, as the Money screen says it. */
@@ -162,6 +164,7 @@ object MoneyBank {
             state, get(MoneyBankSyncFields.LAST_OK)?.longOrNull, get(MoneyBankSyncFields.LAST_TRY)?.longOrNull,
             get(MoneyBankSyncFields.ACCOUNTS)?.longOrNull?.toInt() ?: 0, get(MoneyBankSyncFields.TXNS)?.longOrNull?.toInt() ?: 0,
             get(MoneyBankSyncFields.RECONNECT)?.longOrNull?.toInt() ?: 0, get(MoneyBankSyncFields.SKIPPED)?.longOrNull?.toInt() ?: 0,
+            get(MoneyBankSyncFields.LISTED)?.longOrNull?.toInt(),
         )
     }
 
@@ -173,6 +176,7 @@ object MoneyBank {
         MoneyBankSyncFields.TXNS to s.txns.toLong().fv(),
         MoneyBankSyncFields.RECONNECT to s.reconnect.toLong().fv(),
         MoneyBankSyncFields.SKIPPED to s.skipped.toLong().fv(),
+        MoneyBankSyncFields.LISTED to (s.listed?.toLong()?.fv() ?: FieldValue.Null),
     )
 
     /**
@@ -242,7 +246,7 @@ object MoneyBank {
     /** The deploy report's line: counts only, never a name or an amount. */
     fun reportLine(s: MoneyBankSync?, utc: (Long) -> String): String = if (s == null) "not synced yet (no key, or the first sync hasn't run)" else
         listOfNotNull(
-            s.state, "${s.accounts} accounts · ${s.txns} transactions",
+            s.state, s.listed?.let { "Lunch Flow listed $it" }, "${s.accounts} accounts · ${s.txns} transactions",
             s.reconnect.takeIf { it > 0 }?.let { "$it to reconnect" }, s.skipped.takeIf { it > 0 }?.let { "$it not in pounds" },
             s.lastOkMs?.let { "last ok ${utc(it)}" }, s.lastTryMs?.let { "last try ${utc(it)}" },
         ).joinToString(" · ")

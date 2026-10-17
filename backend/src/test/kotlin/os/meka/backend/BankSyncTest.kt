@@ -90,6 +90,7 @@ class BankSyncTest {
         assertEquals(2, s.accounts)
         assertEquals(3, s.txns)
         assertEquals(1, s.skipped)
+        assertEquals(3, s.listed)
         // Not due again for six hours; a Refresh makes it due a minute after the last try.
         val written = ops.after("hh", 0, 100_000).size
         nowMs += 30_000

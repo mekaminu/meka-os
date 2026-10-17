@@ -117,7 +117,7 @@ class BankSync(
             val txnCount = read(hh, EntityTypes.MONEY_TXN).count { (_, f) ->
                 (f[MoneyTxnFields.ACCOUNT]?.value as? FieldValue.Text)?.value in held && (f[DELETED_FIELD]?.value as? FieldValue.Bool)?.value != true
             }
-            outcome = MoneyBankSync(if (reconnect > 0) MoneyBank.RECONNECT else MoneyBank.OK, t, t, synced, txnCount, reconnect, skipped)
+            outcome = MoneyBankSync(if (reconnect > 0) MoneyBank.RECONNECT else MoneyBank.OK, t, t, synced, txnCount, reconnect, skipped, accounts.size)
             lastReport = "ok"
         } catch (e: BankRateLimited) {
             // Not a failure: try again at the usual pace, keeping what the devices have.
