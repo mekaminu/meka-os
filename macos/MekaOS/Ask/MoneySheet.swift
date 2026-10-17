@@ -349,6 +349,8 @@ struct MoneySheet: View {
                     .accessibilityElement(children: .combine)
                 }
                 if let l = b.lastYearLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
+                // Slice 13b: YEAR-END EXPORT — a button per tax year, then a save panel.
+                if let e = b.export { tradingExport(e, business: true) }
                 ForEach(b.dates, id: \.day) { d in
                     VStack(alignment: .leading, spacing: 0) {
                         Text(d.line).font(MekaType.body).foregroundStyle(d.lit ? palette.accent : palette.textPrimary)
@@ -795,16 +797,17 @@ struct MoneySheet: View {
 
     /// Trading tracker, slice 8: EXPORT FOR TAX — a button per UK tax year; while the server reads the year they dim and
     /// the line says so, then a save panel asks where the CSV goes.
-    private func tradingExport(_ e: TradingExportView) -> some View {
+    /// Money slice 13b: the same block serves the side hustle's YEAR-END EXPORT (`business`), made on the Mac at once.
+    private func tradingExport(_ e: TradingExportView, business: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(e.head).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-            Text(exporting ? TradingExportRules.shared.WORKING : e.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Text(exporting && !business ? TradingExportRules.shared.WORKING : e.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
             HStack(spacing: MekaSpace.xs) {
                 ForEach(e.chips, id: \.key) { c in
                     Button {
                         let key = c.key
-                        exportYear(key)
+                        exportYear(key, business: business)
                     } label: {
                         Text(c.label).font(MekaType.caption).foregroundStyle(exporting ? palette.textTertiary : palette.accent)
                             .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
@@ -816,15 +819,20 @@ struct MoneySheet: View {
                 }
             }
         }
-        .padding(.top, MekaSpace.m)
+        .padding(.top, business ? MekaSpace.xs : MekaSpace.m)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: exporting)
     }
 
-    private func exportYear(_ key: String) {
+    private func exportYear(_ key: String, business: Bool = false) {
         guard !exporting else { return }
         exporting = true
         Task {
-            let file = await model.tradingExport(key: key)
+            let file: CoreModel.TradingExportFile?
+            if business {
+                file = await model.moneyBusinessExport(key: key)
+            } else {
+                file = await model.tradingExport(key: key)
+            }
             exporting = false
             guard let file else { return }
             said = file.said
@@ -832,7 +840,8 @@ struct MoneySheet: View {
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.commaSeparatedText]
             panel.nameFieldStringValue = name
-            panel.message = "Where to save the spreadsheet of your trades · for your accountant"
+            panel.message = business ? "Where to save the spreadsheet of your side hustle's money · for your accountant"
+                : "Where to save the spreadsheet of your trades · for your accountant"
             panel.prompt = "Save"
             guard panel.runModal() == .OK, let url = panel.url else { return }
             do {

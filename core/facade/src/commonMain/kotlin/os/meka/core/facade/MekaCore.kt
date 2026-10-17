@@ -927,6 +927,18 @@ class MekaCore(
     }
 
     /**
+     * Money slice 13b: YEAR-END EXPORT — the side hustle's lines for the tax year [yearKey] ("2025-26") with totals by
+     * category, as a CSV to save for an accountant. Made here from his own statements and bank lines; nothing is sent
+     * or stored. Only while Money is open.
+     */
+    suspend fun moneyBusinessExport(yearKey: String): os.meka.core.domain.TradingExportResult = onCore {
+        if (!moneyOpen) os.meka.core.domain.TradingExportResult(moneyLocked())
+        else os.meka.core.domain.MoneyBusinessExport.result(
+            yearKey, money.accounts(), money.txns(), money.rules(), money.businessAccounts(), money.businessMerchants(),
+        )
+    }
+
+    /**
      * Slice 13: Business on a payment — every line to or from [txnId]'s payer counts as the side hustle's ([on]), or is
      * kept out of it, on every account and both devices; Undo by [undoMoneyCategory]. Only while Money is open.
      */

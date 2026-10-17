@@ -217,6 +217,14 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             if (r.csv != null && r.fileName != null) { exportCsv = r.csv; runCatching { saveCsv.launch(r.fileName!!) } }
         }
     }
+    // Money slice 13b: YEAR-END EXPORT — made on the phone from his own lines, then the same save sheet.
+    val exportBusiness: (String) -> Unit = { key ->
+        if (!exporting) scope.launch {
+            val r = runCatching { core.moneyBusinessExport(key) }.getOrNull() ?: return@launch
+            say(r.said)
+            if (r.csv != null && r.fileName != null) { exportCsv = r.csv; runCatching { saveCsv.launch(r.fileName!!) } }
+        }
+    }
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -470,7 +478,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
             item(key = "business") {
                 BusinessBlock(b, Modifier.animateItem().appear(rememberAppearance(4)),
                     onAccount = { id, on -> scope.launch { runCatching { core.moneyBusinessAccount(id, on) }.getOrNull()?.let(say) } },
-                    onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } })
+                    onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } },
+                    onExport = exportBusiness)
             }
         }
         // Slice 8: net worth (this month, and before any statement is in).
@@ -912,7 +921,10 @@ private fun TxnRow(t: MoneyTxnRow, modifier: Modifier, onBusiness: (Boolean) -> 
  * account's Side hustle account switch. Figures cross-fade as they change (MekaMotion.appear honours reduced motion).
  */
 @Composable
-private fun BusinessBlock(b: MoneyBusinessView, modifier: Modifier, onAccount: (String, Boolean) -> Unit, onSetAside: (String) -> Unit) {
+private fun BusinessBlock(
+    b: MoneyBusinessView, modifier: Modifier, onAccount: (String, Boolean) -> Unit, onSetAside: (String) -> Unit,
+    onExport: (String) -> Unit = {},
+) {
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         b.intro?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
@@ -952,6 +964,8 @@ private fun BusinessBlock(b: MoneyBusinessView, modifier: Modifier, onAccount: (
                 }
             }
             b.lastYearLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            // Slice 13b: YEAR-END EXPORT — a chip per tax year, then the save sheet.
+            b.export?.let { e -> ExportBlock(e, exporting = false, onExport = onExport) }
             b.dates.forEach { d ->
                 Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
                     Text(d.line, style = MekaType.body, color = if (d.lit) Meka.colors.accent else Meka.colors.textPrimary)

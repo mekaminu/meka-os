@@ -346,6 +346,13 @@ class MoneyFacadeTest {
         assertEquals("Profit £584.80", fold.moneyView.value.business!!.profitLine)
         assertTrue(fold.undoMoneyCategory(m.undo!!))
         assertEquals("Profit £588", fold.moneyView.value.business!!.profitLine)
+        // Slice 13b: the year-end export for an accountant.
+        assertEquals(listOf("2025-26", "2026-27"), fold.moneyView.value.business!!.export!!.chips.map { it.key })
+        val e = fold.moneyBusinessExport("2026-27")
+        assertEquals("navilife-side-hustle-2026-27.csv", e.fileName)
+        assertTrue(e.csv!!.contains(",600.00,") && e.csv!!.contains("Profit,,588.00,"), e.csv)
+        assertEquals("2026–27: 2 payments · in £600 · out £12 · profit £588 · choose where to save it", e.said.line)
+        assertNull(fold.moneyBusinessExport("2025-26").csv)
         fold.moneySetAside("30")
         fold.syncNow(); mac.syncNow()
         mac.openMoney()

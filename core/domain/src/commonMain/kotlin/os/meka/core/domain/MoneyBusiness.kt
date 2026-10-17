@@ -71,6 +71,8 @@ data class MoneyBusinessView(
     val merchantsLine: String?,
     val foot: String,
     val spoken: String,
+    /** Slice 13b: YEAR-END EXPORT, a chip per tax year (last year, this one so far); null until something is marked. */
+    val export: TradingExportView? = null,
 ) {
     /** Index access for Swift. */
     fun costAt(i: Int): MoneyBusinessCost = costs[i]
@@ -205,7 +207,109 @@ object MoneyBusiness {
             dates.firstOrNull()?.let { "Next: ${it.line}, ${it.title}" }).joinToString(". ")
         return MoneyBusinessView(
             HEAD, null, yearLine, inLine, outLine, profitLine, profit > 0, setAsideLine, chips, allowanceLine, costs,
-            lastYearLine, dates, accountRows, merchantsLine, FOOT, spoken,
+            lastYearLine, dates, accountRows, merchantsLine, FOOT, spoken, MoneyBusinessExport.view(year),
         )
+    }
+}
+
+/** One side hustle line for the year-end file: the statement's own words, its account's name and its category. */
+data class MoneyBusinessExportLine(val day: Long, val account: String, val text: String, val category: MoneyCategory, val pence: Long)
+
+/**
+ * Money manager, slice 13b: **the year-end export for an accountant**. SIDE HUSTLE AND TAX → YEAR-END EXPORT saves a
+ * spreadsheet (CSV) of a UK tax year's side hustle lines — the same ones the block counts ([MoneyBusiness.counts]):
+ * date, account, the statement's words, category, money in, money out — then totals: money in, money out by category,
+ * money out, and the profit or loss. Built on the device from his own statements and bank lines (nothing sent
+ * anywhere, nothing synced or stored); pounds. Facts only, never tax advice; Navilife files nothing.
+ */
+object MoneyBusinessExport {
+    const val HEAD = "YEAR-END EXPORT"
+    const val LINE = "A spreadsheet (CSV) of a tax year's side hustle money for your accountant · every payment in and out, then totals by category · made on this device from your statements · not tax advice"
+    val COLUMNS = listOf("Date", "Account", "Description", "Category", "Money in (GBP)", "Money out (GBP)")
+    const val NOTE = "Exported by Navilife from your own statements and bank lines: the side hustle account's lines (except transfers) and the payers marked Business. Not tax advice; check it with your accountant."
+
+    /** Last tax year and this one so far (the one before first: it's the one an accountant asks for). */
+    fun view(currentYear: Int): TradingExportView = TradingExportView(HEAD, LINE, listOf(currentYear - 1, currentYear).map { y ->
+        val t = TradingTaxYear(y)
+        val label = if (y == currentYear) "${t.label} so far" else t.label
+        TradingExportChip(t.key, label, "Export the $label tax year's side hustle money as a spreadsheet")
+    })
+
+    fun fileName(year: TradingTaxYear): String = "navilife-side-hustle-${year.key}.csv"
+
+    /** The year's lines (6 April to 5 April), oldest first. */
+    fun inYear(year: TradingTaxYear, lines: List<MoneyBusinessExportLine>): List<MoneyBusinessExportLine> {
+        val from = MoneyBusiness.yearStart(year.startYear)
+        val to = MoneyBusiness.yearStart(year.startYear + 1)
+        return lines.filter { it.day in from until to }.sortedWith(compareBy({ it.day }, { it.account }, { it.text }))
+    }
+
+    private fun date(day: Long): String = CivilDate.fromEpochDay(day).let {
+        "${it.year}-${it.month.toString().padStart(2, '0')}-${it.day.toString().padStart(2, '0')}"
+    }
+
+    private fun row(cells: List<String>) = cells.joinToString(",") { TradingExportRules.field(it) }
+
+    private fun p(pence: Long) = TradingExportRules.plain(pence)
+
+    /** The file for [year]: a header, each line by date, a blank row, then the totals and a note. */
+    fun csv(year: TradingTaxYear, lines: List<MoneyBusinessExportLine>): String {
+        val ls = inYear(year, lines)
+        val out = StringBuilder()
+        fun add(cells: List<String>) { out.append(row(cells)).append("\r\n") }
+        add(COLUMNS)
+        ls.forEach { l ->
+            add(listOf(date(l.day), l.account, l.text, l.category.label, if (l.pence > 0) p(l.pence) else "", if (l.pence < 0) p(-l.pence) else ""))
+        }
+        add(List(COLUMNS.size) { "" })
+        val tag = "Tax year ${year.label}"
+        val moneyIn = ls.filter { it.pence > 0 }.sumOf { it.pence }
+        val moneyOut = -ls.filter { it.pence < 0 }.sumOf { it.pence }
+        add(listOf(tag, "", "Total money in", "", p(moneyIn), ""))
+        ls.filter { it.pence < 0 }.groupBy { it.category }.mapValues { (_, l) -> -l.sumOf { it.pence } }
+            .entries.sortedWith(compareByDescending<Map.Entry<MoneyCategory, Long>> { it.value }.thenBy { it.key.label })
+            .forEach { (c, v) -> add(listOf(tag, "", "Money out · ${c.label}", c.label, "", p(v))) }
+        add(listOf(tag, "", "Total money out", "", "", p(moneyOut)))
+        val profit = moneyIn - moneyOut
+        add(listOf(tag, "", if (profit >= 0) "Profit" else "Loss", "", if (profit >= 0) p(profit) else "", if (profit < 0) p(-profit) else ""))
+        add(listOf("", "", "Note", "", NOTE, ""))
+        return out.toString()
+    }
+
+    /** "2025–26: 84 payments · in £4,200.00 · out £1,310.00 · profit £2,890.00 · choose where to save it". */
+    fun saidReady(year: TradingTaxYear, lines: List<MoneyBusinessExportLine>): MoneySaved {
+        val ls = inYear(year, lines)
+        val i = ls.filter { it.pence > 0 }.sumOf { it.pence }
+        val o = -ls.filter { it.pence < 0 }.sumOf { it.pence }
+        val result = if (i >= o) "profit ${MoneyRules.fmt(i - o)}" else "loss ${MoneyRules.fmt(o - i)}"
+        return MoneySaved("${year.label}: ${ls.size} payment${if (ls.size == 1) "" else "s"} · in ${MoneyRules.fmt(i)} · out ${MoneyRules.fmt(o)} · $result · choose where to save it")
+    }
+
+    fun saidEmpty(year: TradingTaxYear): MoneySaved = MoneySaved("No side hustle money in ${year.label} · nothing to save")
+
+    const val NOTHING_MARKED = "Mark your side hustle's account or a payer as Business first"
+
+    /**
+     * What the export comes to: the lines the side hustle counts ([accounts] his accounts, [txns] his lines with a
+     * bank account and its statement counted once, [rules] his categories) for the tax year [yearKey].
+     */
+    fun result(
+        yearKey: String, accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>,
+        businessAccounts: Set<String>, merchants: Map<String, Boolean>,
+    ): TradingExportResult {
+        val year = TradingTaxYear.parse(yearKey) ?: return TradingExportResult(MoneySaved("That isn't a tax year", refused = true))
+        val names = accounts.associate { it.id to it.name }
+        val biz = businessAccounts.filter { it in names }.toSet()
+        if (biz.isEmpty() && merchants.none { it.value }) return TradingExportResult(MoneySaved(NOTHING_MARKED, refused = true))
+        val merged = MoneyBank.merge(accounts, txns.filter { it.account in names }).txns
+        val lines = merged.mapNotNull { t ->
+            val key = MoneyCategoryRules.merchantKey(t.text)
+            val cat = rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence)
+            val l = MoneyBusinessLine(t.account, t.day, t.pence, key, cat)
+            if (!MoneyBusiness.counts(l, biz, merchants)) null
+            else MoneyBusinessExportLine(t.day, names[t.account].orEmpty(), t.text, cat, t.pence)
+        }
+        if (inYear(year, lines).isEmpty()) return TradingExportResult(saidEmpty(year))
+        return TradingExportResult(saidReady(year, lines), csv(year, lines), fileName(year))
     }
 }

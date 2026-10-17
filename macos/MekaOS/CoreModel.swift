@@ -3397,6 +3397,19 @@ final class CoreModel {
         }
     }
 
+    /// Money slice 13b: a UK tax year ("2025-26") of the side hustle's lines with totals by category as a CSV, made from
+    /// his own statements on the Mac. Only while Money is open.
+    func moneyBusinessExport(key: String) async -> TradingExportFile? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.moneyBusinessExport(yearKey: key)
+            return TradingExportFile(said: moneySaid(r.said), csv: r.csv, fileName: r.fileName)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Trading tracker: stops following an address on every device; Undo with `undoMoneyCategory`.
     func tradingWalletRemove(id: String) async -> MoneySaid? {
         guard let core else { return nil }
