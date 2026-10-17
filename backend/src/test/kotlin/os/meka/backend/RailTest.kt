@@ -195,8 +195,9 @@ class RailTest {
         assertEquals(listOf(TrainDeparture(7 * 60 + 48, 7 * 60 + 48, platform = "1", arrMin = 8 * 60 + 40)), snap.board.fallback)
         assertTrue(line.lit)
         assertEquals("Live · checked just now", RouteRules.healthRow(snap.board, now, bst)!!.line)
-        assertTrue(RouteRules.askLines(snap, now, bst).last()
-            .startsWith("next trains from Brighton to London Bridge (live departures, checked 07:35): 07:42 on time, platform 3, arrives 08:05"))
+        val ask = RouteRules.askLines(snap, now, bst)
+        assertTrue(ask.any { it.startsWith("next trains from Brighton to London Bridge (live departures, checked 07:35): 07:42 on time, platform 3, arrives 08:05") }, ask.toString())
+        assertEquals("the fallback, North Rail from Brighton to Blackfriars (live departures, checked 07:35): 07:48 on time, platform 1, arrives 08:40", ask.last())
         assertTrue(woken.isNotEmpty())
 
         // The probe reads a public terminus, counts only.
