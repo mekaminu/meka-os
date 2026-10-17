@@ -45,6 +45,8 @@ struct MoneySheet: View {
     @State private var balance = ""
     @State private var editingCard: String?
     @State private var cardTexts: [String: String] = [:]
+    @State private var worthText = ""
+    @State private var worthBalances: [String: String] = [:]
 
     var body: some View {
         let v = model.money ?? MoneyView.companion.LOCKED
@@ -63,6 +65,7 @@ struct MoneySheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         if let m = v.month { month(m, v).staggeredAppear(2) }
+                        if let w = v.worth { worth(w).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
                         importer(v).staggeredAppear(3)
                         if !v.accounts.isEmpty { accounts(v).staggeredAppear(4) }
@@ -290,6 +293,74 @@ struct MoneySheet: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: open)
+    }
+
+    /// Slice 8: net worth — the total, have/owe, the change since last month, the month-by-month line, each account,
+    /// card and typed thing (a field for an account with no balance; Remove on a typed one), and a field to add one.
+    private func worth(_ w: MoneyWorthView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(w.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let t = w.total {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(t).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                    if let s = w.splitLine { Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                    if let c = w.changeLine { Text(c).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity) }
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(w.spoken)
+            }
+            if let e = w.empty {
+                Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if w.points.count >= 2 { MoneyWorthLine(points: w.points, palette: palette, reduced: reduceMotion) }
+            if let l = w.chartLine { Text(l).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            ForEach(w.rows, id: \.id) { r in
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(r.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Text(r.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(r.spoken)
+                        Spacer()
+                        if !r.amount.isEmpty { Text(r.amount).font(MekaType.body).foregroundStyle(palette.textPrimary).contentTransition(.opacity) }
+                        if r.removable {
+                            Button("Remove") {
+                                let id = r.id
+                                Task { said = await model.moneyWorthRemove(id: id) }
+                            }
+                            .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .accessibilityLabel("Remove \(r.name) from your net worth")
+                        }
+                    }
+                    if r.needsBalance {
+                        TextField(MoneyWorth.shared.BALANCE_HINT, text: Binding(
+                            get: { worthBalances[r.id] ?? "" },
+                            set: { worthBalances[r.id] = $0 }
+                        ))
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit {
+                            let id = r.id
+                            let text = worthBalances[id] ?? ""
+                            worthBalances[id] = nil
+                            Task { said = await model.moneyBalance(accountId: id, text: text) }
+                        }
+                    }
+                }
+                .transition(.opacity)
+            }
+            if let m = w.missingLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            TextField(w.hint, text: $worthText)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit {
+                    let text = worthText
+                    worthText = ""
+                    Task { said = await model.moneyWorthAdd(text: text) }
+                }
+            Text(w.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: w.total)
     }
 
     /// Slice 4: the forecast at his pace, with what-ifs on this Mac only (they go when Money locks).
@@ -569,7 +640,7 @@ struct MoneySheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(MoneyRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
-            if !v.accounts.isEmpty {
+            if !v.accounts.isEmpty || (v.worth?.rows.contains { $0.removable } ?? false) {
                 if deleting {
                     Text(MoneyRules.shared.DELETE_ASK).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -607,5 +678,71 @@ private struct MoneyBar: View {
         .frame(height: 4)
         .onAppear { withAnimation(reduced ? nil : MekaMotion.appear(reduced: false)) { shown = share } }
         .onChange(of: share) { _, s in withAnimation(reduced ? nil : MekaMotion.appear(reduced: false)) { shown = s } }
+    }
+}
+
+/// Slice 8: net worth month by month — one brass 2 pt line with an 8 pt dot per month (the picked one filled) over a
+/// hairline baseline, drawn left to right once (snaps with Reduce Motion); click near a month for its total.
+private struct MoneyWorthLine: View {
+    let points: [MoneyWorthPoint]
+    let palette: MekaPalette
+    let reduced: Bool
+    @State private var drawn: CGFloat = 0
+    @State private var picked: Int?
+
+    var body: some View {
+        let pick = min(picked ?? points.count - 1, points.count - 1)
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            GeometryReader { g in
+                let pad: CGFloat = 6
+                let lo = points.map { $0.pence }.min() ?? 0
+                let hi = points.map { $0.pence }.max() ?? 0
+                let span = Double(max(hi - lo, 1))
+                let step = (g.size.width - 2 * pad) / CGFloat(max(points.count - 1, 1))
+                let at: (Int) -> CGPoint = { i in
+                    CGPoint(x: pad + CGFloat(i) * step,
+                            y: pad + (g.size.height - 2 * pad) * CGFloat(1 - Double(points[i].pence - lo) / span))
+                }
+                ZStack(alignment: .topLeading) {
+                    Path { p in
+                        p.move(to: CGPoint(x: 0, y: g.size.height - 0.5))
+                        p.addLine(to: CGPoint(x: g.size.width, y: g.size.height - 0.5))
+                    }
+                    .stroke(palette.hairline, lineWidth: 1)
+                    Path { p in
+                        p.move(to: at(0))
+                        for i in 1..<points.count { p.addLine(to: at(i)) }
+                    }
+                    .trim(from: 0, to: drawn)
+                    .stroke(palette.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                    ForEach(points.indices, id: \.self) { i in
+                        Circle()
+                            .strokeBorder(palette.accent, lineWidth: i == pick ? 4 : 2)
+                            .background(Circle().fill(palette.surface))
+                            .frame(width: 8, height: 8)
+                            .position(at(i))
+                            .opacity(drawn >= CGFloat(i) / CGFloat(max(points.count - 1, 1)) ? 1 : 0)
+                    }
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { loc in
+                    let i = Int((loc.x / max(step, 1)).rounded())
+                    picked = min(max(i, 0), points.count - 1)
+                }
+            }
+            .frame(height: 96)
+            .accessibilityElement()
+            .accessibilityLabel(points.map { $0.said }.joined(separator: ", "))
+            HStack {
+                Text(points.first?.label ?? "").font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                Spacer()
+                Text(points.last?.label ?? "").font(MekaType.micro).foregroundStyle(palette.textTertiary)
+            }
+            Text(points[pick].said).font(MekaType.caption).foregroundStyle(palette.textPrimary).contentTransition(.opacity)
+                .animation(MekaMotion.appear(reduced: reduced), value: pick)
+        }
+        .onAppear {
+            if reduced { drawn = 1 } else { withAnimation(MekaMotion.appear(reduced: false)) { drawn = 1 } }
+        }
     }
 }

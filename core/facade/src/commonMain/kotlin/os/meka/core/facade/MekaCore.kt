@@ -747,8 +747,21 @@ class MekaCore(
         if (!moneyOpen) return
         _money.value = os.meka.core.domain.MoneyRules.view(
             money.accounts(), money.txns(), money.rules(), todayEpochDay(), ZoneCalendar(timeZone), moneyOffset, money.hiddenTips(), money.fineAlerts(),
-            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(),
+            moneyWhatIf, lists.waitingItems(), moneyBills(), bankHolidays.calendar(), money.cards(), money.worthItems(),
         )
+    }
+
+    /**
+     * Slice 8: one thing for his net worth typed as [text] ("Pension £42,000", "Car loan £3,200"; the same name again
+     * updates it), on both devices; Undo by [undoMoneyCategory]. Only while Money is open.
+     */
+    suspend fun moneyWorthAdd(text: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.addWorth(text, todayEpochDay()).also { refreshMoney() }
+    }
+
+    /** Slice 8: takes a typed thing off his net worth on both devices; Undo by [undoMoneyCategory]. Only while Money is open. */
+    suspend fun moneyWorthRemove(id: String): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) moneyLocked() else money.removeWorth(id).also { refreshMoney() }
     }
 
     /**

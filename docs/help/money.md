@@ -1,7 +1,7 @@
 ---
 id: money
 title: Money
-keywords: money, credit card, card due, card payment, charge card, minimum payment, credit limit, card limit, 0% ends, zero percent, interest charged, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
+keywords: money, net worth, what am i worth, my net worth, what i own and owe, pension value, savings elsewhere, loans and debts, credit card, card due, card payment, charge card, minimum payment, credit limit, card limit, 0% ends, zero percent, interest charged, payday, safe to spend, until payday, low balance, refunds on the way, refund not arrived, chase a refund, money forecast, savings forecast, left over each month, money tips, worth a look, double charge, charged twice, unusual payment, foreign transaction fees, late fee, regular payments, subscriptions total, price rise, spending habits, money manager, spending, my spending, what did i spend, spending by category, categories, bank statement, import a statement, statement file, csv statement, bank csv, transactions, delete money data, connect my bank, open banking
 data: yes
 fold: MONEY
 fold_where: Ask → Life → Money
@@ -29,3 +29,5 @@ tip: Cards: tap It's a card next to a card's account, then type what its stateme
 tip: Each card says when it's due (lit three days out), "pay in full to avoid interest" (a charge card is paid in full), how much of the limit the statement uses (lit from 75%) and any interest or late fee charged on it.
 tip: Three days before a card payment, at 9 in the morning, a heads-up says it's due (no amounts on the lock screen). Tap Paid on the card once you've paid it and the reminder stops until next month (Undo).
 tip: A 0% period gets a heads-up a month and a week before it ends. A card due before payday counts in what's still to go out. Navilife never pays anything.
+tip: Net worth adds up each account's balance, what each card's statement says you owe, and things you type that aren't in these accounts: "Pension £42,000", "Savings elsewhere 12k", "Car £8,500", "Car loan £3,200" (a loan, mortgage, debt or a minus sign counts it as owed). Type the same name again to update it; Remove takes one off (Undo).
+tip: An account with no balance isn't counted yet: type its balance in the field under it. The line under the total shows the last 12 months, each account's balance worked back through its statements (cards and what you typed stay at today's figures); tap a month for its total. Not financial advice.

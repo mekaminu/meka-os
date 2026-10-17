@@ -1822,6 +1822,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(MoneyView.companion.LOCKED.payday)
     }
 
+    func testMoneyWorthReachesSwift() {
+        // Money manager, slice 8: net worth's words and a typed line cross to Swift; a locked screen has none.
+        XCTAssertEqual(MoneyWorth.shared.HEAD, "NET WORTH")
+        let p = MoneyWorth.shared.parse(text: "Car loan £3,200")
+        XCTAssertEqual(p?.name, "Car loan")
+        XCTAssertEqual(p?.owes, true)
+        XCTAssertEqual(p?.pence, 320_000)
+        XCTAssertNil(MoneyView.companion.LOCKED.worth)
+    }
+
     func testMoneyRefundsReachSwift() {
         // Money manager, slice 5: the refunds section's words cross to Swift; a locked screen has none.
         XCTAssertEqual(MoneyRefunds.shared.HEAD, "REFUNDS ON THE WAY")

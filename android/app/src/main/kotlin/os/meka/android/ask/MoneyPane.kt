@@ -40,6 +40,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.graphics.drawscope.clipRect
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -76,6 +80,10 @@ import os.meka.core.domain.MoneyTip
 import os.meka.core.domain.MoneyTips
 import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.domain.MoneyWatch
+import os.meka.core.domain.MoneyWorth
+import os.meka.core.domain.MoneyWorthPoint
+import os.meka.core.domain.MoneyWorthRow
+import os.meka.core.domain.MoneyWorthView
 import os.meka.core.facade.MekaCore
 
 /**
@@ -96,6 +104,11 @@ import os.meka.core.facade.MekaCore
  * is due (lit three days out; Paid with Undo stops the reminder), the statement and minimum, how much of the limit it
  * uses (lit from 75%), a 0% period ending (lit within 30 days) and interest or late fees charged; Edit details types
  * what the statement says (statement, minimum, due day, limit, 0% end), all synced with Undo. Navilife never pays.
+ *
+ * Slice 8: **NET WORTH** — one total from the accounts' balances (an account with none has a field to type it), what each
+ * card's statement says he owes, and things he types ("Pension £42,000", "Car loan £3,200"; Remove with Undo), with "You
+ * have … · you owe …", the change since last month and a brass line over up to 12 months (tap a month for its total).
+ * Shown with this month, and before any statement is imported.
  *
  * Slice 5: **REFUNDS ON THE WAY** — each refund on Waiting for, back in his statement (Close it, Undo) or not yet, and after
  * two weeks a chase to copy (Copy the chase marks it chased; he sends it himself, Navilife sends nothing).
@@ -367,6 +380,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+        // Slice 8: net worth (this month, and before any statement is in).
+        v.worth?.let { w ->
+            item(key = "worth-head") {
+                Text(w.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+            }
+            item(key = "worth") {
+                WorthBlock(w, Modifier.animateItem().appear(rememberAppearance(4)),
+                    onAdd = { text -> scope.launch { runCatching { core.moneyWorthAdd(text) }.getOrNull()?.let(say) } },
+                    onRemove = { id -> scope.launch { runCatching { core.moneyWorthRemove(id) }.getOrNull()?.let(say) } },
+                    onBalance = { id, text -> scope.launch { runCatching { core.moneyBalance(id, text) }.getOrNull()?.let(say) } })
+            }
+        }
         item(key = "said") {
             val c by animateColorAsState(if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-said")
             Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "money-said-line") { s ->
@@ -438,7 +464,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         item(key = "foot") {
             Column(Modifier.animateItem().padding(top = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(MoneyRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
-                if (v.accounts.isNotEmpty()) {
+                if (v.accounts.isNotEmpty() || v.worth?.rows?.any { it.removable } == true) {
                     Crossfade(deleting, animationSpec = MekaMotion.appear(reduced), label = "money-delete") { asking ->
                         if (!asking) {
                             Text(MoneyRules.DELETE_ALL, style = MekaType.caption, color = Meka.colors.textSecondary,
@@ -785,6 +811,123 @@ private fun ForecastRow(r: MoneyForecastRow) {
         }
         Crossfade(r.amount, animationSpec = MekaMotion.appear(reduced), label = "money-forecast-amount-${r.label}") { a ->
             Text(a, style = MekaType.body, color = c)
+        }
+    }
+}
+
+/**
+ * Slice 8: NET WORTH — the total (big), have/owe, the change since last month, the month-by-month line, each account,
+ * card and typed thing (an account with no balance gets a field; a typed thing has Remove), and a field to add one.
+ */
+@Composable
+private fun WorthBlock(
+    w: MoneyWorthView, modifier: Modifier, onAdd: (String) -> Unit, onRemove: (String) -> Unit, onBalance: (String, String) -> Unit,
+) {
+    val reduced = Meka.reducedMotion
+    var adding by rememberSaveable { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        w.total?.let { t ->
+            Column(Modifier.semantics(mergeDescendants = true) { contentDescription = w.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Crossfade(t, animationSpec = MekaMotion.appear(reduced), label = "money-worth-total") { l ->
+                    Text(l, style = MekaType.upNextTitle, color = Meka.colors.textPrimary)
+                }
+                w.splitLine?.let { l ->
+                    Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-worth-split") { x ->
+                        Text(x, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+                w.changeLine?.let { l ->
+                    Crossfade(l, animationSpec = MekaMotion.appear(reduced), label = "money-worth-change") { x ->
+                        Text(x, style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+            }
+        }
+        w.empty?.let { e -> Text(e, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        if (w.points.size >= 2) WorthLine(w.points)
+        w.chartLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        w.rows.forEach { r -> WorthRow(r, onRemove = { onRemove(r.id) }, onBalance = { t -> onBalance(r.id, t) }) }
+        w.missingLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Field(w.hint, value = adding, onValue = { adding = it }) { adding = ""; onAdd(it) }
+        Text(w.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+@Composable
+private fun WorthRow(r: MoneyWorthRow, onRemove: () -> Unit, onBalance: (String) -> Unit) {
+    var balance by rememberSaveable(r.id) { mutableStateOf("") }
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+                Text(r.name, style = MekaType.body, color = Meka.colors.textPrimary)
+                Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+            if (r.amount.isNotEmpty()) Text(r.amount, style = MekaType.body, color = Meka.colors.textPrimary)
+            if (r.removable) {
+                Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
+                        .semantics { contentDescription = "Remove ${r.name} from your net worth" }.minTouch().padding(MekaSpace.xs))
+            }
+        }
+        if (r.needsBalance) Field(MoneyWorth.BALANCE_HINT, value = balance, onValue = { balance = it }) { balance = ""; onBalance(it) }
+    }
+}
+
+/**
+ * Slice 8: the month-by-month line — one brass 2 dp line with an 8 dp dot on each month (the latest filled), a hairline
+ * baseline, drawn left to right once (snaps with reduced motion); tap near a month for its total under the line.
+ */
+@Composable
+private fun WorthLine(points: List<MoneyWorthPoint>) {
+    val reduced = Meka.reducedMotion
+    val accent = Meka.colors.accent
+    val hairline = Meka.colors.hairline
+    val surface = Meka.colors.background
+    var drawn by remember { mutableStateOf(if (reduced) 1f else 0f) }
+    LaunchedEffect(points.size) { drawn = 1f }
+    val progress by animateFloatAsState(drawn, MekaMotion.appear(reduced), label = "money-worth-line")
+    var picked by remember(points) { mutableStateOf(points.size - 1) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        androidx.compose.foundation.Canvas(
+            Modifier.fillMaxWidth().height(96.dp)
+                .semantics { contentDescription = points.joinToString(", ") { it.said } }
+                .pointerInput(points) {
+                    detectTapGestures { o ->
+                        val step = if (points.size > 1) size.width / (points.size - 1).toFloat() else 0f
+                        picked = if (step > 0f) (o.x / step).roundToInt().coerceIn(0, points.size - 1) else 0
+                    }
+                },
+        ) {
+            val pad = 6.dp.toPx()
+            val lo = points.minOf { it.pence }
+            val hi = points.maxOf { it.pence }
+            val span = (hi - lo).takeIf { it > 0 } ?: 1L
+            val step = (size.width - 2 * pad) / (points.size - 1)
+            fun at(i: Int) = androidx.compose.ui.geometry.Offset(
+                pad + i * step, pad + (size.height - 2 * pad) * (1f - (points[i].pence - lo).toFloat() / span),
+            )
+            drawLine(hairline, androidx.compose.ui.geometry.Offset(0f, size.height - 1f), androidx.compose.ui.geometry.Offset(size.width, size.height - 1f), 1f)
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(at(0).x, at(0).y)
+                for (i in 1 until points.size) lineTo(at(i).x, at(i).y)
+            }
+            clipRect(right = pad + (size.width - 2 * pad) * progress + pad) {
+                drawPath(path, accent, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx(),
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+                points.indices.forEach { i ->
+                    val c = at(i)
+                    drawCircle(surface, 6.dp.toPx(), c)
+                    if (i == picked) drawCircle(accent, 4.dp.toPx(), c)
+                    else drawCircle(accent, 4.dp.toPx(), c, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth()) {
+            Text(points.first().label, style = MekaType.micro, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+            Text(points.last().label, style = MekaType.micro, color = Meka.colors.textTertiary)
+        }
+        Crossfade(points[picked.coerceIn(0, points.size - 1)].said, animationSpec = MekaMotion.appear(reduced), label = "money-worth-picked") { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textPrimary)
         }
     }
 }

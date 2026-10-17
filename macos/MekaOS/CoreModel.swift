@@ -3294,6 +3294,28 @@ final class CoreModel {
         }
     }
 
+    /// Slice 8: one thing typed for his net worth ("Pension £42,000"; the same name again updates it); Undo with `undoMoneyCategory`.
+    func moneyWorthAdd(text: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyWorthAdd(text: text))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 8: takes a typed thing off his net worth; Undo with `undoMoneyCategory`.
+    func moneyWorthRemove(id: String) async -> MoneySaid? {
+        guard let core else { return nil }
+        do {
+            return moneySaid(try await core.moneyWorthRemove(id: id))
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     /// Slice 7: marks an account as a card (`card` false: no longer one), a charge card when `charge`; Undo with `undoMoneyCategory`.
     func moneyCardKind(accountId: String, card: Bool, charge: Bool) async -> MoneySaid? {
         guard let core else { return nil }

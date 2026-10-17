@@ -1,0 +1,88 @@
+package os.meka.core.domain
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** Money manager, slice 8: net worth — typed things, balances, cards and the month-by-month line. Invented figures only. */
+class MoneyWorthTest {
+    private val today = CivilDate.toEpochDay(2026, 10, 17)
+    private fun d(m: Int, day: Int, y: Int = 2026) = CivilDate.toEpochDay(y, m, day)
+
+    @Test
+    fun typedLinesReadAsWhatYouHaveOrOwe() {
+        assertEquals(MoneyWorthParse("Pension", false, 4_200_000), MoneyWorth.parse("Pension £42,000"))
+        assertEquals(MoneyWorthParse("Savings elsewhere", false, 1_200_000), MoneyWorth.parse("savings elsewhere 12k"))
+        assertEquals(MoneyWorthParse("Car", false, 850_000), MoneyWorth.parse("Car 8.5k"))
+        assertEquals(MoneyWorthParse("Car loan", true, 320_000), MoneyWorth.parse("Car loan £3,200"))
+        assertEquals(MoneyWorthParse("Mortgage", true, 18_000_000), MoneyWorth.parse("Mortgage −£180,000"))
+        assertEquals(MoneyWorthParse("Dad", true, 50_000), MoneyWorth.parse("I owe Dad £500"))
+        assertEquals(MoneyWorthParse("ISA", false, 520_000), MoneyWorth.parse("ISA: £5.2k"))
+        assertEquals(MoneyWorthParse("Watch", true, 30_000), MoneyWorth.parse("Watch -300"))
+        assertNull(MoneyWorth.parse("Pension"))
+        assertNull(MoneyWorth.parse("£42,000"))
+        assertNull(MoneyWorth.parse("Car £0"))
+        assertEquals("n-car-loan", MoneyWorth.idFor("Car loan"))
+    }
+
+    @Test
+    fun aBalanceIsWorkedBackThroughItsStatement() {
+        // £1,000 now (17 Oct); £200 spent on 10 Oct, £2,000 paid in on 30 Sep, £150 spent on 20 Sep.
+        val a = MoneyWorthAccount("a-current", 100_000, today, listOf(d(10, 10) to -20_000L, d(9, 30) to 200_000L, d(9, 20) to -15_000L))
+        assertEquals(100_000, MoneyWorth.balanceOn(a, today))
+        assertEquals(120_000, MoneyWorth.balanceOn(a, d(9, 30)))
+        assertEquals(-65_000, MoneyWorth.balanceOn(a, d(8, 31)))
+        val pts = MoneyWorth.points(listOf(a), flat = 500_000, today = today)
+        assertEquals(listOf("Sep", "Oct"), pts.map { it.label })
+        assertEquals(listOf(620_000L, 600_000L), pts.map { it.pence })
+        assertEquals("End of Sep 2026 · £6,200", pts[0].said)
+        assertEquals("Now · £6,000", pts[1].said)
+    }
+
+    @Test
+    fun theLineStartsWhereEveryAccountIsKnownAndKeepsTwelveMonths() {
+        val old = MoneyWorthAccount("a", 0, today, listOf(d(1, 5, 2025) to -100L))
+        val newer = MoneyWorthAccount("b", 0, today, listOf(d(8, 3) to -100L))
+        assertEquals(listOf("Aug", "Sep", "Oct"), MoneyWorth.points(listOf(old, newer), 0, today).map { it.label })
+        assertEquals(12, MoneyWorth.points(listOf(old), 0, today).size)
+        assertEquals("Nov", MoneyWorth.points(listOf(old), 0, today).first().label)
+    }
+
+    @Test
+    fun theTotalCountsBalancesCardsAndTypedThingsAndSaysWhatIsMissing() {
+        val accounts = listOf(
+            MoneyAccount("a-current", "Current account", "csv", 1L, MoneyBalance(184_000, d(10, 16), typed = false)),
+            MoneyAccount("a-credit", "Credit card", "csv", 1L),
+            MoneyAccount("a-saver", "Saver", "csv", 1L),
+        )
+        val cards = listOf(MoneyCard("a-credit", "Credit card", MoneyCards.CREDIT, statementPence = 64_000))
+        val items = listOf(
+            MoneyWorthItem("n-pension", "Pension", false, 4_200_000, today),
+            MoneyWorthItem("n-car-loan", "Car loan", true, 320_000, d(10, 1)),
+        )
+        val lines = listOf(Triple("a-current", d(9, 25), -6_000L), Triple("a-current", d(10, 12), -10_000L))
+        val v = MoneyWorth.view(accounts, cards, items, lines, today)
+        // 1,840 + 42,000 − 640 − 3,200
+        assertEquals("£40,000", v.total)
+        assertEquals("You have £43,840 · you owe £3,840", v.splitLine)
+        assertEquals("1 account isn't counted yet: it has no balance", v.missingLine)
+        assertEquals(listOf("Credit card", "Current account", "Saver", "Pension", "Car loan"), v.rows.map { it.name })
+        assertEquals("−£640", v.rows[0].amount)
+        assertTrue(v.rows[2].needsBalance)
+        assertEquals("−£3,200", v.rows[4].amount)
+        assertEquals("Owed · typed 1 Oct 2026", v.rows[4].line)
+        assertTrue(v.rows[4].removable)
+        // End of Sep: 1,840 + 100 spent since = 1,940.
+        assertEquals(listOf(4_010_000L, 4_000_000L), v.points.map { it.pence })
+        assertEquals("Down £100 since the end of Sep", v.changeLine)
+    }
+
+    @Test
+    fun withNothingCountedItSaysWhatToDo() {
+        val v = MoneyWorth.view(listOf(MoneyAccount("a", "Current account", "csv", 1L)), emptyList(), emptyList(), emptyList(), today)
+        assertNull(v.total)
+        assertEquals(MoneyWorth.EMPTY, v.empty)
+        assertTrue(v.points.isEmpty())
+    }
+}

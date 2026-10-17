@@ -274,4 +274,44 @@ class MoneyFacadeTest {
         assertEquals("Credit card is a charge card · paid in full each month", fold.moneyCardKind("a-credit-card", card = true, charge = true).line)
         assertEquals("Charge card", fold.moneyView.value.cards!!.rows.single().kindLine)
     }
+
+    @Test
+    fun netWorthTypedOnTheFoldShowsOnTheMacWithUndoAndGoesWithDeleteAll() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.moneyWorthAdd("Pension £42,000").refused) // locked
+        fold.openMoney()
+        // Before any statement: the block says what to do, and typing counts.
+        assertEquals(os.meka.core.domain.MoneyWorth.EMPTY, fold.moneyView.value.worth!!.empty)
+        assertEquals("Added Pension · £42,000 · counted in your net worth", fold.moneyWorthAdd("Pension £42,000").line)
+        assertEquals(os.meka.core.domain.MoneyWorth.NO_NAME, fold.moneyWorthAdd("£300").line)
+        fold.moneyWorthAdd("Car loan £3,200")
+        assertEquals("£38,800", fold.moneyView.value.worth!!.total)
+        // A statement with a balance column counts the account and draws the line.
+        val csv = "Date,Description,Amount,Balance\n20/09/2026,TESCO STORES 2041,-50.00,1050.00\n02/10/2026,TESCO STORES 2041,-50.00,1000.00\n"
+        fold.importMoneyStatement("Current account", csv)
+        val w = fold.moneyView.value.worth!!
+        assertEquals("£39,800", w.total)
+        assertEquals(listOf("Sep", "Oct"), w.points.map { it.label })
+        assertEquals("Down £50 since the end of Sep", w.changeLine)
+        // The same name updates it; Undo puts the old value back.
+        val up = fold.moneyWorthAdd("Pension £43,000")
+        assertEquals("Pension is now £43,000 · counted in your net worth", up.line)
+        fold.syncNow(); mac.syncNow()
+        mac.openMoney()
+        assertEquals("£40,800", mac.moneyView.value.worth!!.total)
+        assertTrue(fold.undoMoneyCategory(up.undo!!))
+        fold.syncNow(); mac.syncNow()
+        assertEquals("£39,800", mac.moneyView.value.worth!!.total)
+        // Remove on the Mac, Undo brings it back.
+        val gone = mac.moneyWorthRemove("n-car-loan")
+        assertEquals("Removed Car loan from your net worth", gone.line)
+        assertEquals("£43,000", mac.moneyView.value.worth!!.total)
+        assertTrue(mac.undoMoneyCategory(gone.undo!!))
+        assertEquals("£39,800", mac.moneyView.value.worth!!.total)
+        // Delete all takes the typed things too.
+        fold.deleteAllMoney()
+        fold.syncNow(); mac.syncNow()
+        assertEquals(os.meka.core.domain.MoneyWorth.EMPTY, mac.moneyView.value.worth!!.empty)
+    }
 }
