@@ -6678,6 +6678,33 @@ class MekaCore(
     }
 
     /**
+     * "What Navilife may do" completeness: [q] (typed in Ask or said to Talk) pauses, resumes or asks about the pause
+     * switch ([os.meka.core.domain.AutonomyAskRules.request]); done now through the same synced setting as the page's
+     * button, so it holds on every device. Null for anything else.
+     */
+    private suspend fun autonomyAsk(q: String): os.meka.core.domain.AskOutcome? {
+        val want = os.meka.core.domain.AutonomyAskRules.request(q) ?: return null
+        return onCore {
+            val changed = when (want) {
+                os.meka.core.domain.AutonomyAsk.PAUSE -> autonomy.setPaused(true)
+                os.meka.core.domain.AutonomyAsk.RESUME -> autonomy.setPaused(false)
+                os.meka.core.domain.AutonomyAsk.STATUS -> false
+            }
+            if (changed) refresh()
+            val cal = ZoneCalendar(timeZone)
+            val view = os.meka.core.domain.AutonomyRules.view(
+                trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting(),
+            )
+            os.meka.core.domain.AskOutcome.Answered(
+                os.meka.core.domain.AskAnswer(
+                    os.meka.core.domain.AutonomyAskRules.answer(want, changed, view), emptyList(),
+                    help = os.meka.core.domain.AutonomyAskRules.link,
+                ),
+            )
+        }
+    }
+
+    /**
      * The Vault, slice 3: [q] asks about his documents ([os.meka.core.domain.VaultAskRules.request]); answered from
      * the Vault on this device by rules, no AI. Null when it isn't about them, or names a kind the Vault doesn't hold
      * that is the renewals radar's (insurance, a warranty).
@@ -7494,6 +7521,9 @@ class MekaCore(
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
         // Reading and learning, slice 2: "what am I reading?" is answered from his list, and "I'm on page 200",
         // "I've finished Dune", "add Dune to my reading list" are done now, before the plain adds below take them.
+        // "What Navilife may do" completeness: "pause Navilife", "resume Navilife", "is Navilife paused?" are done and
+        // answered here, no AI and no card, with Open What Navilife may do under the answer.
+        if (!beyondHelp) autonomyAsk(q)?.let { return it }
         if (!beyondHelp) readingAsk(q)?.let { return it }
         // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
         if (!beyondHelp) directAdd(q)?.let { return it }

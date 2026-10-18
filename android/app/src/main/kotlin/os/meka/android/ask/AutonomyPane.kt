@@ -174,3 +174,40 @@ private fun Pill(label: String, lit: Boolean, onClick: () -> Unit) {
         }
     }
 }
+
+/**
+ * "What Navilife may do" completeness: while Navilife is paused, Today says so under the header — "Paused since 21:40 ·
+ * Navilife asks before everything" in the accent — with **Resume** beside it (light haptic), so a pause from the watch,
+ * Talk or the other device is never forgotten. It unfolds on the expand spring and folds away on Resume (reduced
+ * motion: a fade); the line cross-fades as it changes.
+ */
+@Composable
+fun AutonomyTodayLine(core: MekaCore, modifier: Modifier = Modifier) {
+    val v by core.autonomyView.collectAsState()
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
+    val reduced = Meka.reducedMotion
+    val line = v.todayLine
+    // The last line shown, so the row folds away still showing it (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<String>(1) }
+    if (line != null) last[0] = line
+    AnimatedVisibility(
+        line != null, modifier,
+        enter = if (reduced) androidx.compose.animation.fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(MekaMotion.expand(false)) + androidx.compose.animation.fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) androidx.compose.animation.fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(MekaMotion.expand(false)) + androidx.compose.animation.fadeOut(MekaMotion.appear(false)),
+        label = "autonomy-today",
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.l), verticalAlignment = Alignment.CenterVertically) {
+            Crossfade(line ?: last[0].orEmpty(), Modifier.weight(1f), MekaMotion.appear(reduced), label = "autonomy-today-text") { t ->
+                Text(t, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.padding(vertical = MekaSpace.xs))
+            }
+            Text(
+                AutonomyRules.RESUME, style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.clickable(role = Role.Button) {
+                    haptics.light()
+                    scope.launch { runCatching { core.setAutonomyPaused(false) } }
+                }.padding(vertical = MekaSpace.xs).semantics { contentDescription = "Resume Navilife" },
+            )
+        }
+    }
+}

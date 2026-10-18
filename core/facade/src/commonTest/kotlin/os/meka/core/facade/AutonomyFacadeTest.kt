@@ -182,3 +182,62 @@ class AutonomyFacadeTest {
         assertNull(fold.archivedEmail("nothing", "te1"))
     }
 }
+
+/** "What Navilife may do" completeness: the pause switch said to Talk or typed in Ask, never sent to the AI. */
+class AutonomyAskFacadeTest {
+    private var now = 1_791_476_100_000L // Thu 8 Oct 2026, 17:15 in London
+
+    private class Server(service: SyncService) : SyncTransport, AiApi {
+        private val sync = os.meka.core.testing.FaultyTransport(service)
+        var asked = 0
+        override suspend fun aiStatus(): AiStatusReply? = AiStatusReply("on", null, 120, 2000, "ok")
+        override suspend fun push(request: PushRequest) = sync.push(request)
+        override suspend fun pull(request: PullRequest) = sync.pull(request)
+        override suspend fun ask(question: String, context: AskContext, history: List<TalkTurn>, voice: Boolean): AskReply {
+            asked++
+            return AskReply.Answered("From the AI.", emptyList())
+        }
+    }
+
+    private val server = Server(SyncService(InMemoryServerOpStore()))
+
+    private fun core(device: String = "android") = MekaCore(
+        householdId = "hh", deviceId = device, store = InMemoryReplicaStore(), transport = server,
+        secureRandom = Random(if (device == "android") 1 else 2), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+    )
+
+    @Test
+    fun talkPausesAndResumesOnEveryDeviceWithoutTheAi() = runTest {
+        val fold = core()
+        val mac = core("mac")
+        assertNull(fold.autonomyView.value.todayLine)
+
+        val paused = assertIs<AskOutcome.Answered>(fold.talk("pause Navilife", emptyList())).answer
+        assertTrue(paused.text.startsWith("Paused · Navilife asks before everything until you resume"))
+        assertEquals(os.meka.core.domain.HelpPlace.AUTONOMY, paused.help?.place)
+        assertTrue(paused.cards.isEmpty())
+        assertTrue(fold.autonomyView.value.paused)
+        assertEquals("Paused since 17:15 · Navilife asks before everything", fold.autonomyView.value.todayLine)
+
+        val again = assertIs<AskOutcome.Answered>(fold.askMeka("Pause everything")).answer
+        assertEquals("Navilife is already paused since 17:15 · it asks before everything.", again.text)
+
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.autonomyView.value.paused)
+        val status = assertIs<AskOutcome.Answered>(mac.askMeka("is Navilife paused?")).answer
+        assertTrue(status.text.startsWith("Yes · Paused since 17:15"))
+
+        val resumed = assertIs<AskOutcome.Answered>(mac.talk("resume Navilife", emptyList())).answer
+        assertEquals("Resumed · ${AutonomyRules.NONE_LINE}.", resumed.text)
+        assertFalse(mac.autonomyView.value.paused)
+        assertNull(mac.autonomyView.value.todayLine)
+        mac.syncNow(); fold.syncNow()
+        assertFalse(fold.autonomyView.value.paused)
+        assertEquals(0, server.asked)
+
+        // "pause the music" isn't about Navilife: nothing is paused, and it goes on as any question.
+        val music = fold.askMeka("pause the music")
+        assertFalse((music as? AskOutcome.Answered)?.answer?.text.orEmpty().startsWith("Paused"))
+        assertFalse(fold.autonomyView.value.paused)
+    }
+}

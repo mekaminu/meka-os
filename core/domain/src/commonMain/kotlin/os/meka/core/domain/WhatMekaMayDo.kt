@@ -54,6 +54,12 @@ data class AutonomyView(
     val pauseButton: String,
     val sections: List<AutonomySection>,
 ) {
+    /**
+     * "What Navilife may do" completeness: Today's line while paused ("Paused since 21:40 · Navilife asks before
+     * everything"), shown on both apps with **Resume** beside it; null while not paused.
+     */
+    val todayLine: String? get() = if (paused) summary else null
+
     companion object {
         val EMPTY = AutonomyView(false, AutonomyRules.NONE_LINE, AutonomyRules.PAUSE, AutonomyRules.sections(emptyMap(), false))
     }
@@ -274,5 +280,71 @@ class Autonomy(private val replica: Replica, private val nowMs: () -> Long) {
             ),
         )
         return true
+    }
+}
+
+/** What Meka asked Ask or Talk about the pause switch ([AutonomyAskRules.request]). */
+enum class AutonomyAsk { PAUSE, RESUME, STATUS }
+
+/**
+ * "What Navilife may do" completeness: the pause switch by voice and in Ask's field — "pause Navilife", "stop doing
+ * things on your own", "resume Navilife", "is Navilife paused?" — answered and done on the device by rules, no AI and
+ * no card: it is his own direct request about Navilife itself, and pausing only ever takes autonomy away (resuming puts
+ * back exactly what he had trusted it with; nothing new is granted). Words that merely contain "pause" or "stop" (the
+ * music, a timer, the talking) are not it. Plain, non-AI rules.
+ */
+object AutonomyAskRules {
+    const val BUTTON = "Open What Navilife may do"
+    val link: HelpLink get() = HelpLink("autonomy", HelpPlace.AUTONOMY, BUTTON)
+
+    /** Words that make "pause" / "resume" about Navilife acting on its own, not a song or a timer. */
+    private val ABOUT = listOf(
+        "navilife", "everything", "on your own", "on its own", "by yourself", "by itself", "automatically",
+        "automatic", "for me without asking", "without asking", "the kill switch", "autonomy",
+    )
+
+    private fun words(q: String): String = q.lowercase()
+        .replace('’', '\'')
+        .replace(Regex("[^a-z0-9' ]"), " ")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+
+    private fun clean(w: String): String = w
+        .removePrefix("please ").removePrefix("hey navilife ").removePrefix("navilife ")
+        .removeSuffix(" please").trim()
+
+    fun request(q: String): AutonomyAsk? {
+        val w = words(q)
+        val t = clean(w)
+        if (t.isEmpty() || t.length > 80) return null
+        if (Regex("\\b(music|song|timer|podcast|video|alarm|radio|playback|reading|talking|speaking|fast)\\b").containsMatchIn(t)) return null
+        // "Navilife, pause." names Navilife before the word.
+        val about = ABOUT.any { w.contains(it) }
+        // "is Navilife paused?", "are you paused?", "am I paused"
+        if (Regex("^(is|are|am) .*\\bpaused\\b").containsMatchIn(t) && (about || t.startsWith("are you"))) return AutonomyAsk.STATUS
+        if (t == "resume" || t == "unpause" || t == "un pause") return AutonomyAsk.RESUME
+        if (Regex("^(resume|unpause|un pause|restart|carry on|start doing things|go back to doing things)\\b").containsMatchIn(t) && about) return AutonomyAsk.RESUME
+        if (Regex("^(pause|hold off|stop doing things|stop doing anything|don't do anything|do not do anything|stop acting)\\b").containsMatchIn(t) && about) return AutonomyAsk.PAUSE
+        if (Regex("^(stop|pause)\\b").containsMatchIn(t) && Regex("\\b(on your own|by yourself|automatically|without asking)\\b").containsMatchIn(t)) return AutonomyAsk.PAUSE
+        if (Regex("^ask (me )?(first )?before (doing )?(everything|anything)\\b").containsMatchIn(t)) return AutonomyAsk.PAUSE
+        return null
+    }
+
+    /**
+     * The answer after the facade has acted: [changed] is false when it already was as asked; [view] is the page as
+     * it now stands.
+     */
+    fun answer(ask: AutonomyAsk, changed: Boolean, view: AutonomyView): String = when (ask) {
+        AutonomyAsk.PAUSE ->
+            if (changed) "Paused · Navilife asks before everything until you resume. Say “resume Navilife” or tap Resume on Today."
+            else view.summary.substringBefore(" · ").removePrefix("Paused").trim().let { since ->
+                "Navilife is already paused${if (since.isEmpty()) "" else " $since"} · it asks before everything."
+            }
+        AutonomyAsk.RESUME ->
+            if (changed) "Resumed · ${view.summary}."
+            else "Navilife isn't paused · ${view.summary}."
+        AutonomyAsk.STATUS ->
+            if (view.paused) "Yes · ${view.summary}. Say “resume Navilife” to carry on."
+            else "No · ${view.summary}."
     }
 }

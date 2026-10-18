@@ -2589,6 +2589,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         let trusted = rules.trustRow(k: TrustKind.addTask, s: TrustState(streak: TrustRules.shared.STREAK, trusted: true, declined: false), paused: false)
         XCTAssertEqual(trusted.action, rules.ASK_FIRST)
         XCTAssertTrue(trusted.onItsOwn)
+        // "What Navilife may do" completeness: Today's paused line, nil while not paused.
+        XCTAssertNil(empty.todayLine)
+        XCTAssertEqual(AutonomyAskRules.shared.request(q: "pause Navilife"), AutonomyAsk.pause)
     }
 
     func testApprovalsReachSwift() async throws {

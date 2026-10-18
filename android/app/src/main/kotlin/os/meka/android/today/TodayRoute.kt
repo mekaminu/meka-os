@@ -1035,6 +1035,8 @@ private fun TodayPane(
                         }, Modifier.padding(top = MekaSpace.xs))
                     }
                     if (core != null) signIn.firstOrNull()?.let { SignInLineView(it, core, Modifier.padding(top = MekaSpace.xxs)) }
+                    // "What Navilife may do" completeness: while paused, one brass line with Resume.
+                    if (core != null) os.meka.android.ask.AutonomyTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
                     // Anything else MEKA depends on that needs a look (Reliability first, item 3): one quiet line.
                     if (core != null && now == null) os.meka.android.ask.HealthTodayLine(core, Modifier.padding(top = MekaSpace.xxs))
                     // Setup checklist: a card while something is left to set up ("Not today" folds it away until tomorrow).

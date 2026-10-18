@@ -337,6 +337,20 @@ struct TodayView: View {
                         SignInLineView(line: line, palette: palette)
                             .staggeredAppear(0, play: play)
                     }
+                    // "What Navilife may do" completeness: while paused, one accent line with Resume; it folds away on Resume.
+                    if let paused = model.autonomy?.todayLine {
+                        HStack(spacing: MekaSpace.l) {
+                            Text(paused).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                                .contentTransition(.opacity)
+                            Button(AutonomyRules.shared.RESUME) { Task { await model.setAutonomyPaused(false) } }
+                                .buttonStyle(MekaPressStyle())
+                                .font(MekaType.caption)
+                                .foregroundStyle(palette.accent)
+                                .accessibilityLabel("Resume Navilife")
+                        }
+                        .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.move(edge: .top).combined(with: .opacity))
+                        .staggeredAppear(0, play: play)
+                    }
                     if !model.isConnected || model.signedOut {
                         Button(model.signedOut ? "Reconnect this Mac" : "This Mac isn't syncing yet · Connect") { model.showConnect = true }
                             .buttonStyle(MekaPressStyle())

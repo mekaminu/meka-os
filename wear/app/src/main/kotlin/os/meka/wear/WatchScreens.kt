@@ -351,7 +351,43 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
             }
         }
 
+        PauseRow(core, reduced)
+
         UnlinkRow(app, core, sync, reduced)
+    }
+}
+
+/**
+ * "What Navilife may do" completeness: the pause switch on the wrist. Running, the foot offers **Pause Navilife**
+ * (secondary); paused, the line "Paused since 21:40 · Navilife asks before everything" in the accent with **Resume
+ * Navilife** (filled, a confirm buzz). The same synced setting as the phone's page, so it holds everywhere after the
+ * next sync. The states cross-fade.
+ */
+@Composable
+private fun PauseRow(core: MekaCore, reduced: Boolean) {
+    val v by core.autonomyView.collectAsState()
+    val scope = rememberCoroutineScope()
+    AnimatedContent(
+        targetState = v.todayLine,
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+        label = "pause",
+    ) { paused ->
+        Column(
+            Modifier.fillMaxWidth().padding(top = MekaSpace.m),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            if (paused != null) {
+                Line(paused, MekaType.caption.copy(color = C.accent), maxLines = 3)
+                WatchButton("Resume Navilife", primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) {
+                    scope.launch { runCatching { core.setAutonomyPaused(false) } }
+                }
+            } else {
+                WatchButton("Pause Navilife", primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                    scope.launch { runCatching { core.setAutonomyPaused(true) } }
+                }
+            }
+        }
     }
 }
 
