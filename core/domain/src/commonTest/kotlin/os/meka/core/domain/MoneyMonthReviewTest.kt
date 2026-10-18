@@ -102,4 +102,26 @@ class MoneyMonthReviewTest {
         assertTrue(MoneyMonthReview.notices(m, cal.toEpochMs(day(2026, 10, 11), 12 * 60), cal).isEmpty())
         assertTrue(MoneyMonthReview.notices(null, cal.toEpochMs(day(2026, 10, 2), 12 * 60), cal).isEmpty())
     }
+
+    private fun b(m: Int, d: Int, pence: Long, text: String, c: MoneyCategory) =
+        MoneyBusinessLine("side", day(2026, m, d), pence, MoneyCategoryRules.merchantKey(text), c)
+
+    @Test
+    fun theSideHustleSaysWhatItMadeAgainstTheMonthBefore() {
+        val biz = listOf(
+            b(8, 5, 20_000, "STRIPE PAYOUT", MoneyCategory.INCOME),
+            b(9, 5, 42_000, "STRIPE PAYOUT", MoneyCategory.INCOME),
+            b(9, 9, -8_500, "CANVA PRO", MoneyCategory.SUBSCRIPTIONS),
+        )
+        val v = assertNotNull(MoneyMonthReview.view(lines(), month(2026, 9), day(2026, 10, 17), biz))
+        assertEquals("Your side hustle brought in £420 and cost £85, a profit of £335, up £135 on August.", v.sentences.last())
+        assertTrue(v.spoken.endsWith("up £135 on August."))
+        // A loss with nothing the month before; nothing marked or no lines that month: no sentence.
+        assertEquals("Your side hustle brought in £50 and cost £85, a loss of £35.",
+            MoneyMonthReview.sideHustle(listOf(b(9, 5, 5_000, "STRIPE PAYOUT", MoneyCategory.INCOME), b(9, 9, -8_500, "CANVA PRO", MoneyCategory.SUBSCRIPTIONS)), month(2026, 9)))
+        assertNull(MoneyMonthReview.sideHustle(null, month(2026, 9)))
+        assertNull(MoneyMonthReview.sideHustle(listOf(b(8, 5, 20_000, "STRIPE PAYOUT", MoneyCategory.INCOME)), month(2026, 9)))
+        val plain = assertNotNull(MoneyMonthReview.view(lines(), month(2026, 9), day(2026, 10, 17)))
+        assertFalse(plain.sentences.any { it.contains("side hustle") })
+    }
 }

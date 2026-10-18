@@ -14,7 +14,10 @@ package os.meka.core.domain
  *   4. what moved: the category furthest over its usual and the one furthest under;
  *   5. a new place: the biggest merchant he hadn't paid in the 6 months before (statements reaching back);
  *   6. the biggest single payment;
- *   7. the days with no everyday spending (bills, subscriptions and fees don't count against a day).
+ *   7. the days with no everyday spending (bills, subscriptions and fees don't count against a day);
+ *   8. (slice 2, 2026-10-18) **the side hustle**: once he's marked a Side hustle account or a Business payer, what it
+ *      brought in, what it cost and the profit or loss that month, against the month before when that had any (the
+ *      lines [MoneyBusiness.counts] counts, so transfers never; from statements or the bank feed alike).
  * - **A heads-up** at 09:00 on the [NOTICE_DAY]nd when last month has statements to its end ([readyMonth], [notices]; no
  *   amounts, it's outside the fingerprint). Not in January: the year in review's heads-up says it then.
  */
@@ -72,7 +75,7 @@ object MoneyMonthReview {
      * The review of [month] (finished before [today]) from every line (counted once). Null when the month has fewer
      * than [MIN_LINES] lines.
      */
-    fun view(lines: List<MoneyYearLine>, month: Int, today: Long): MoneyMonthReviewView? {
+    fun view(lines: List<MoneyYearLine>, month: Int, today: Long, business: List<MoneyBusinessLine>? = null): MoneyMonthReviewView? {
         val thisMonth = MoneyRules.monthOf(today)
         if (month >= thisMonth || lines.isEmpty()) return null
         val start = monthStart(month)
@@ -168,6 +171,9 @@ object MoneyMonthReview {
             if (quiet > 0) out += if (quiet == 1) "One day with no everyday spending." else "$quiet days of $days with no everyday spending."
         }
 
+        // 8. The side hustle's month (only once something is marked, and only when it had lines this month).
+        sideHustle(business, month)?.let { out += it }
+
         val covered = if (from <= start && lastData >= end - END_SLACK_DAYS) "all of $mo" else "${CivilDate.shortLabel(from)} – ${CivilDate.shortLabel(to)}"
         val head = "${mo.uppercase()} IN REVIEW"
         return MoneyMonthReviewView(
@@ -177,10 +183,41 @@ object MoneyMonthReview {
         )
     }
 
+    /**
+     * Sentence 8: "Your side hustle brought in £420 and cost £85, a profit of £335, up £120 on August." from the lines
+     * the side hustle counts ([business], already filtered); null when nothing is marked or the month had none.
+     */
+    fun sideHustle(business: List<MoneyBusinessLine>?, month: Int): String? {
+        if (business.isNullOrEmpty()) return null
+        fun inMonth(m: Int) = business.filter { it.day in monthStart(m)..monthEnd(m) }
+        val mine = inMonth(month)
+        if (mine.isEmpty()) return null
+        fun result(ls: List<MoneyBusinessLine>) = ls.sumOf { it.pence }
+        val moneyIn = mine.filter { it.pence > 0 }.sumOf { it.pence }
+        val moneyOut = -mine.filter { it.pence < 0 }.sumOf { it.pence }
+        val profit = moneyIn - moneyOut
+        val head = when {
+            moneyIn == 0L -> "Your side hustle had nothing in and cost ${fmt(moneyOut)}"
+            moneyOut == 0L -> "Your side hustle brought in ${fmt(moneyIn)} with no costs"
+            profit >= 0 -> "Your side hustle brought in ${fmt(moneyIn)} and cost ${fmt(moneyOut)}, a profit of ${fmt(profit)}"
+            else -> "Your side hustle brought in ${fmt(moneyIn)} and cost ${fmt(moneyOut)}, a loss of ${fmt(-profit)}"
+        }
+        val before = inMonth(month - 1)
+        val against = if (before.isEmpty()) "" else {
+            val d = profit - result(before)
+            when {
+                d >= SAME_PENCE -> ", up ${fmt(d)} on ${name(month - 1)}"
+                -d >= SAME_PENCE -> ", down ${fmt(-d)} on ${name(month - 1)}"
+                else -> ", about the same as ${name(month - 1)}"
+            }
+        }
+        return "$head$against."
+    }
+
     /** The view for the Money screen showing [shown] on [today] ([monthFor]), marked when it's last month leading this one. */
-    fun forScreen(lines: List<MoneyYearLine>, shown: Int, today: Long): MoneyMonthReviewView? {
+    fun forScreen(lines: List<MoneyYearLine>, shown: Int, today: Long, business: List<MoneyBusinessLine>? = null): MoneyMonthReviewView? {
         val m = monthFor(shown, today) ?: return null
-        return view(lines, m, today)?.copy(lastMonth = shown == MoneyRules.monthOf(today))
+        return view(lines, m, today, business)?.copy(lastMonth = shown == MoneyRules.monthOf(today))
     }
 
     /**

@@ -685,7 +685,7 @@ object MoneyRules {
             challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
             year = if (partial) MoneyYear.view(yearLines, today) else null,
-            review = MoneyMonthReview.forScreen(yearLines, shown, today),
+            review = MoneyMonthReview.forScreen(yearLines, shown, today, bizLines.filter { MoneyBusiness.counts(it, businessAccounts, businessMerchants) }),
         )
     }
 
