@@ -1815,6 +1815,54 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theMacsDragAndArrowsMoveAnEventWithTheFiveSecondUndo() = runTest {
+        // Edit your calendars, completeness slice 7: dropped on another day it keeps its time and length; ⌥⌘↓ moves it
+        // fifteen minutes later; each is an ordinary edit of this one with the five-second Undo.
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val mac = core("mac", server)
+        val start = now + 2 * 3_600_000L
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("Dentist"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(start),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(start + 40 * 60_000L),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvdg${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "evdg", f, v, clock.now(), emptyList(), "server"))
+        }
+        assertTrue(mac.syncNow())
+        val cal = ZoneCalendar { TimeZone.of("Europe/London") }
+        fun dentist() = mac.calendarView.value.sections.flatMap { it.rows }.mapNotNull { it.event }.first { it.title == "Dentist" }
+        assertFalse(mac.canMoveEvent(dentist())) // editing not read yet
+        mac.refreshCalendarAccounts()
+        assertTrue(mac.canMoveEvent(dentist()))
+        assertNull(mac.moveEventNote(dentist()))
+        val day = cal.epochDayOf(start)
+        assertTrue(mac.moveEventHint(dentist(), day + 2).startsWith("Move to "))
+
+        val drop = assertIs<os.meka.core.domain.EventEditResult.Made>(mac.moveEventToDay("evdg", day + 2)).id
+        assertEquals("Moving “Dentist” in Google", mac.eventEditLine(drop))
+        val moved = dentist()
+        assertEquals(day + 2, cal.epochDayOf(moved.startAtMs))
+        assertEquals(cal.minuteOfDay(start), cal.minuteOfDay(moved.startAtMs))
+        assertEquals(40 * 60_000L, moved.endAtMs - moved.startAtMs)
+        assertTrue(mac.undoEventEdit(drop))
+        assertEquals(start, dentist().startAtMs)
+
+        val nudge = assertIs<os.meka.core.domain.EventEditResult.Made>(mac.moveEventBy("evdg", 0, os.meka.core.domain.EventMoveRules.NUDGE_MIN)).id
+        assertEquals(start + 15 * 60_000L, dentist().startAtMs)
+        assertTrue(mac.undoEventEdit(nudge))
+        // Refused in words: its own day, and an event that's gone.
+        assertEquals(os.meka.core.domain.EventMoveRules.SAME, assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.moveEventToDay("evdg", day)).reason)
+        assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.moveEventBy("gone", 1, 0))
+    }
+
+    @Test
     fun anAddedEventShowsInTodayAndTheCalendarOnBothDevicesBeforeGoogleAnswers() = runTest {
         val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
         val fold = core("android", server)

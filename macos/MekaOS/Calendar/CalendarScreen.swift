@@ -1,5 +1,6 @@
 @preconcurrency import MekaKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// CALENDAR on the Mac (calendar redesign, slice 2), matching android/.../calendar/CalendarRoute.kt: a week strip
 /// (seven day pills with busy dots; ‹ › or ⌘[ ⌘] for other weeks) above the next 30 days grouped by day. All-day
@@ -25,6 +26,8 @@ struct CalendarScreen: View {
     @State private var topSection: String?
     /// A clicked day inside a free stretch stays lit while that stretch is at the top.
     @State private var clicked: Int64?
+    /// The day pill an event is held over (completeness slice 7).
+    @State private var dropDay: Int64?
 
     var body: some View {
         Group {
@@ -69,7 +72,8 @@ struct CalendarScreen: View {
                                 .background(Capsule().fill(palette.surfaceRaised))
                         }
                         .buttonStyle(MekaPressStyle())
-                        .help("Add an event to your calendar")
+                        .keyboardShortcut("n", modifiers: [.option, .command])
+                        .help("Add an event to your calendar (⌥⌘N)")
                     }
                 }
                 .staggeredAppear(0)
@@ -145,17 +149,37 @@ struct CalendarScreen: View {
 
             HStack(spacing: MekaSpace.xxs) {
                 ForEach(w.days, id: \.epochDay) { d in
-                    DayPillView(day: d, lit: d.epochDay == lit, palette: palette) {
-                        guard let id = d.sectionId else { return }
-                        MekaHaptics.tick()
-                        clicked = d.epochDay
-                        // The agenda springs to the day (the expand spring); Reduce Motion jumps.
-                        withAnimation(reduceMotion ? nil : MekaMotion.expand(reduced: false)) { topSection = id }
-                    }
+                    DayPillView(
+                        day: d, lit: d.epochDay == lit, dropTarget: dropDay == d.epochDay && model.draggingEvent != nil, palette: palette,
+                        tap: {
+                            guard let id = d.sectionId else { return }
+                            MekaHaptics.tick()
+                            clicked = d.epochDay
+                            // The agenda springs to the day (the expand spring); Reduce Motion jumps.
+                            withAnimation(reduceMotion ? nil : MekaMotion.expand(reduced: false)) { topSection = id }
+                        },
+                        target: { on in
+                            if on { dropDay = d.epochDay } else if dropDay == d.epochDay { dropDay = nil }
+                        },
+                        drop: {
+                            dropDay = nil
+                            return model.dropEvent(on: d.epochDay)
+                        }
+                    )
                 }
             }
             .id(w.startEpochDay)
             .transition(stripTransition)
+
+            // Completeness slice 7: where a held event would go, fading in under the strip.
+            Group {
+                if let day = dropDay, let e = model.draggingEvent {
+                    Text(model.moveEventHint(e, day: day)).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .id(day)
+                        .transition(.opacity)
+                }
+            }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: dropDay)
         }
         .clipped()
     }
@@ -171,8 +195,13 @@ private struct DayPillView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let day: DayPill
     let lit: Bool
+    /// An event is held over this day (completeness slice 7): lit with the accent ring.
+    let dropTarget: Bool
     let palette: MekaPalette
     let tap: () -> Void
+    let target: (Bool) -> Void
+    let drop: () -> Bool
+    @State private var targeted = false
 
     var body: some View {
         Button(action: tap) {
@@ -189,13 +218,19 @@ private struct DayPillView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, MekaSpace.xs)
-            .background(Capsule().fill(lit ? palette.surfaceRaised : Color.clear))
+            .background(Capsule().fill(lit || dropTarget ? palette.surfaceRaised : Color.clear))
+            .overlay(Capsule().strokeBorder(palette.accent, lineWidth: dropTarget ? 1.5 : 0))
+            .scaleEffect(dropTarget && !reduceMotion ? 1.06 : 1)
             .contentShape(Capsule())
             .opacity(day.inRange ? 1 : 0.5)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
+            .animation(MekaMotion.approve(reduced: reduceMotion), value: dropTarget)
         }
         .buttonStyle(MekaPressStyle())
         .disabled(day.sectionId == nil)
+        // Completeness slice 7: an event dropped here moves to this day (any day in reach, planned or free).
+        .onDrop(of: [UTType.text], isTargeted: $targeted) { _ in drop() }
+        .onChange(of: targeted) { _, on in target(on) }
         .accessibilityLabel(day.accessibilityLabel)
         .accessibilityAddTraits(lit ? .isSelected : [])
     }
@@ -258,6 +293,8 @@ private struct AgendaSectionView: View {
     let palette: MekaPalette
     /// "+2 more" unfolds the rest of the day's all-day rows with the expand spring.
     @State private var allDayOpen = false
+    /// An event is held over this day (completeness slice 7).
+    @State private var targeted = false
 
     var body: some View {
         let free = section.kind == .free
@@ -290,6 +327,17 @@ private struct AgendaSectionView: View {
                 }
             }
             .animation(MekaMotion.appear(reduced: reduceMotion), value: section.workLabel)
+            .overlay(alignment: .bottomTrailing) {
+                // Completeness slice 7: where a held event would go.
+                if dropping, let e = model.draggingEvent {
+                    Text(model.moveEventHint(e, day: section.firstDay)).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .padding(.horizontal, MekaSpace.xs)
+                        .background(palette.background, in: Capsule())
+                        .offset(y: MekaSpace.m)
+                        .transition(.opacity)
+                }
+            }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: dropping)
             .padding(.top, free ? MekaSpace.xs : MekaSpace.l)
             .padding(.bottom, section.commuteLine == nil ? MekaSpace.xs : 0)
 
@@ -325,7 +373,7 @@ private struct AgendaSectionView: View {
             ForEach(section.ended, id: \.id) { r in AgendaEventRow(row: r, past: true, tone: tone(r), palette: palette) }
             ForEach(section.rows, id: \.id) { r in
                 switch r.kind {
-                case .event: AgendaEventRow(row: r, past: false, tone: tone(r), palette: palette).eventActions(r.event, palette: palette)
+                case .event: AgendaEventRow(row: r, past: false, tone: tone(r), palette: palette).eventActions(r.event, palette: palette).movesEvent(r.event)
                 case .task: AgendaTaskRow(row: r, palette: palette)
                 case .now: NowLine(row: r, palette: palette)
                 default: EmptyView() // the agenda has no gaps; Today shows free time
@@ -357,7 +405,18 @@ private struct AgendaSectionView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        // Completeness slice 7: a day's section takes a dropped event (a stretch of free days doesn't: drop it on a day
+        // in the strip), lit softly while it's held over it.
+        .background(
+            RoundedRectangle(cornerRadius: MekaRadius.s).fill(dropping ? palette.surfaceRaised : Color.clear)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: dropping)
+        )
+        .onDrop(of: [UTType.text], isTargeted: $targeted) { _ in
+            section.kind != .free && model.dropEvent(on: section.firstDay)
+        }
     }
+
+    private var dropping: Bool { targeted && section.kind != .free && model.draggingEvent != nil }
 
     private func tone(_ r: TimelineRow) -> Int32? { r.event.map { view.toneOf(event: $0) } }
 }
@@ -446,4 +505,30 @@ private struct AgendaTaskRow: View {
         .padding(.vertical, MekaSpace.xs)
         .padding(.horizontal, MekaSpace.xs)
     }
+}
+
+/// Completeness slice 7: one of his own events that may move (no guests, not started, editing allowed) can be dragged
+/// onto a day; the drag carries only its id, and the Calendar remembers which event it is so a day can say where it
+/// would go. The system's drag image lifts the row; nothing else moves until it's dropped.
+private struct MovesEvent: ViewModifier {
+    @Environment(CoreModel.self) private var model
+    let event: CalendarEvent?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let e = event, model.canMoveEvent(e) {
+            content
+                .onDrag {
+                    model.draggingEvent = e
+                    return NSItemProvider(object: e.id as NSString)
+                }
+                .help("Drag onto a day to move it there · keeps its time")
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    func movesEvent(_ event: CalendarEvent?) -> some View { modifier(MovesEvent(event: event)) }
 }

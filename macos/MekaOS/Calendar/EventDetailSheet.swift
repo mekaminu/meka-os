@@ -43,6 +43,8 @@ struct EventDetailSheet: View {
                         Spacer()
                         Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
                     }
+                    // A move from the keyboard (completeness slice 7) says itself here with Undo, over the sheet.
+                    if model.eventUndo != nil { EventUndoBar(palette: palette) }
                 }
             }
             .padding(editing ? 0 : MekaSpace.l)
@@ -92,6 +94,22 @@ struct EventDetailSheet: View {
                 // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
                 if d.editable && !(d.edit?.waiting ?? false) {
                     Button("Edit") { MekaHaptics.tick(); editing = true }
+                        .keyboardShortcut("e", modifiers: .command)
+                        .help("Edit (⌘E)")
+                    // Completeness slice 7: move it from the keyboard, a day or fifteen minutes at a time, each with
+                    // the five-second Undo (this one only). The menu shows the keys; they also work with it closed.
+                    if model.canMoveEvent(event) {
+                        let id = d.id
+                        Menu("Move") {
+                            ForEach(EventMoveKey.all) { k in
+                                // The keys are said, not bound, here: EventMoveKeys holds them, so one press moves once.
+                                Button(k.label + "  " + k.glyph) { Task { await model.moveEventBy(id, days: k.days, minutes: k.minutes) } }
+                            }
+                        }
+                        .fixedSize()
+                        .help("Move it a day or 15 minutes (⌥⌘ and an arrow) · or drag it onto a day in the Calendar")
+                        .background { EventMoveKeys(eventID: id) }
+                    }
                 } else if !d.editable, let why = d.editNote {
                     // Completeness slice 3: a view-only calendar (or editing off): Edit greyed, the reason on hover
                     // and under the buttons.
@@ -482,5 +500,44 @@ private struct MatchResultView: View {
         let top = Int(FootballRules.shared.MAX_SCORE)
         if ours < 0 || theirs < 0 { ours = max(ours, 0); theirs = max(theirs, 0) }
         if side == 0 { ours = min(max(ours + by, 0), top) } else { theirs = min(max(theirs + by, 0), top) }
+    }
+}
+
+/// Completeness slice 7: ⌥⌘← / ⌥⌘→ a day earlier or later, ⌥⌘↑ / ⌥⌘↓ fifteen minutes earlier or later.
+struct EventMoveKey: Identifiable {
+    let id: Int
+    let label: String
+    let key: KeyEquivalent
+    let glyph: String
+    let days: Int32
+    let minutes: Int32
+
+    /// Computed, so nothing is kept across isolation (strict concurrency).
+    static var all: [EventMoveKey] {
+        let step = EventMoveRules.shared.NUDGE_MIN
+        return [
+            EventMoveKey(id: 0, label: "A day earlier", key: .leftArrow, glyph: "⌥⌘←", days: -1, minutes: 0),
+            EventMoveKey(id: 1, label: "A day later", key: .rightArrow, glyph: "⌥⌘→", days: 1, minutes: 0),
+            EventMoveKey(id: 2, label: "\(step) min earlier", key: .upArrow, glyph: "⌥⌘↑", days: 0, minutes: -step),
+            EventMoveKey(id: 3, label: "\(step) min later", key: .downArrow, glyph: "⌥⌘↓", days: 0, minutes: step),
+        ]
+    }
+}
+
+/// The move keys while the Move menu is closed: zero-sized buttons that only take the shortcuts.
+private struct EventMoveKeys: View {
+    @Environment(CoreModel.self) private var model
+    let eventID: String
+
+    var body: some View {
+        ZStack {
+            ForEach(EventMoveKey.all) { k in
+                Button("") { Task { await model.moveEventBy(eventID, days: k.days, minutes: k.minutes) } }
+                    .keyboardShortcut(k.key, modifiers: [.option, .command])
+            }
+        }
+        .opacity(0)
+        .frame(width: 0, height: 0)
+        .accessibilityHidden(true)
     }
 }

@@ -7005,6 +7005,50 @@ class MekaCore(
     /** Clash chooser, Keep theirs: nothing is sent and Google's version stays. False when it was already answered. */
     suspend fun keepTheirVersion(clashId: String): Boolean = onCore { calendarEdits.keepTheirs(clashId) }
 
+    // ---- Calendar editing, completeness slice 7: the Mac's drag to move and keyboard shortcuts ----
+
+    /** Whether [event] may be dragged onto another day or nudged from the keyboard ([os.meka.core.domain.EventMoveRules]). */
+    fun canMoveEvent(event: os.meka.core.domain.CalendarEvent): Boolean =
+        os.meka.core.domain.EventMoveRules.movable(event, nowMs(), ZoneCalendar(timeZone), ::accountEditable)
+
+    /** Why [event] can't be dragged or nudged (the pointer's help), or null when it can. */
+    fun moveEventNote(event: os.meka.core.domain.CalendarEvent): String? =
+        os.meka.core.domain.EventMoveRules.whyNot(event, nowMs(), ZoneCalendar(timeZone), ::accountEditable)
+
+    /** The drop's hint while [event] is held over [day] ("Move to Fri 23 Oct · 15:00"). */
+    fun moveEventHint(event: os.meka.core.domain.CalendarEvent, day: Long): String {
+        val cal = ZoneCalendar(timeZone)
+        return os.meka.core.domain.EventMoveRules.dropHint(os.meka.core.domain.EditEventRules.start(event, nowMs(), cal), day, cal.epochDayOf(nowMs()))
+    }
+
+    /**
+     * Dropped on [day]: the event [eventId] (as it is now) moves there keeping its time and length, this one only, with
+     * the five-second Undo. Refused in words. Only the id crosses from the app.
+     */
+    suspend fun moveEventToDay(eventId: String, day: Long): os.meka.core.domain.EventEditResult =
+        onCore { moveEvent(eventId) { os.meka.core.domain.EventMoveRules.toDay(it, day) } }
+
+    /** ⌥⌘ and an arrow: [eventId] moved by [days] and [minutes], this one only, with the five-second Undo. Refused in words. */
+    suspend fun moveEventBy(eventId: String, days: Int, minutes: Int): os.meka.core.domain.EventEditResult =
+        onCore { moveEvent(eventId) { os.meka.core.domain.EventMoveRules.by(it, days, minutes) } }
+
+    /** [eventId] as it shows now (Meka's own edits laid over), so an open detail can follow a move; null once gone. */
+    suspend fun currentEvent(eventId: String): os.meka.core.domain.CalendarEvent? = onCore { currentEvents().firstOrNull { it.id == eventId } }
+
+    private fun moveEvent(
+        eventId: String, move: (os.meka.core.domain.AddEventForm) -> os.meka.core.domain.AddEventForm,
+    ): os.meka.core.domain.EventEditResult {
+        val cal = ZoneCalendar(timeZone)
+        val event = currentEvents().firstOrNull { it.id == eventId }
+            ?: return os.meka.core.domain.EventEditResult.Refused("That event isn't in your calendar any more")
+        os.meka.core.domain.EventMoveRules.whyNot(event, nowMs(), cal, ::accountEditable)
+            ?.let { return os.meka.core.domain.EventEditResult.Refused(it) }
+        val opened = os.meka.core.domain.EditEventRules.start(event, nowMs(), cal)
+        val moved = move(opened)
+        os.meka.core.domain.EventMoveRules.refusal(moved, opened, nowMs(), cal)?.let { return os.meka.core.domain.EventEditResult.Refused(it) }
+        return calendarEdits.change(event, os.meka.core.domain.EditEventRules.draft(moved, event, nowMs(), cal), calendar = cal)
+    }
+
     /** The undo bar's line for a delete ("Deleting “Dentist” from Google"). */
     fun deletingLine(event: os.meka.core.domain.CalendarEvent, everyEvent: Boolean = false, fromThisOne: Boolean = false): String =
         os.meka.core.domain.EditEventRules.deletingLine(event, everyEvent, fromThisOne)

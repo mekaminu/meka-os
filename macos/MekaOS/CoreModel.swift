@@ -1278,6 +1278,73 @@ final class CoreModel {
         }
     }
 
+    // MARK: Calendar editing, completeness slice 7: drag to move and keyboard shortcuts
+
+    /// The event being dragged in the Calendar (set when the drag starts), so a day can say where it would go.
+    var draggingEvent: CalendarEvent?
+
+    /// A day took the drop: the dragged event moves there (after the five-second Undo). False with nothing dragged.
+    func dropEvent(on day: Int64) -> Bool {
+        guard let e = draggingEvent else { return false }
+        draggingEvent = nil
+        let id = e.id
+        Task { await moveEventToDay(id, day: day) }
+        return true
+    }
+
+    /// Whether an event may be dragged onto another day or nudged with ⌥⌘ and an arrow (pure, in the core).
+    func canMoveEvent(_ event: CalendarEvent) -> Bool { core?.canMoveEvent(event: event) ?? false }
+
+    /// Why it can't be (the pointer's help), or nil.
+    func moveEventNote(_ event: CalendarEvent) -> String? { core?.moveEventNote(event: event) }
+
+    /// "Move to Fri 23 Oct · 15:00" while it's held over a day.
+    func moveEventHint(_ event: CalendarEvent, day: Int64) -> String { core?.moveEventHint(event: event, day: day) ?? "Move here" }
+
+    /// Dropped on a day: it moves there keeping its time and length, after five seconds' Undo. Only the id (a String)
+    /// crosses into the core; a refusal is said on the undo bar.
+    func moveEventToDay(_ eventID: String, day: Int64) async {
+        guard let core else { return }
+        MekaHaptics.light()
+        do {
+            let result = try await core.moveEventToDay(eventId: eventID, day: day)
+            await afterMove(eventID, result, core)
+        } catch {
+            offerEventUndo(error.localizedDescription, nil)
+        }
+    }
+
+    /// ⌥⌘ and an arrow: a day earlier or later, or fifteen minutes, after five seconds' Undo. Only the id crosses.
+    func moveEventBy(_ eventID: String, days: Int32, minutes: Int32) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        do {
+            let result = try await core.moveEventBy(eventId: eventID, days: days, minutes: minutes)
+            await afterMove(eventID, result, core)
+        } catch {
+            offerEventUndo(error.localizedDescription, nil)
+        }
+    }
+
+    /// Undo of a calendar edit; an open detail follows a keyboard move back to where it was (completeness slice 7).
+    private func undoEventEdit(_ id: String) async {
+        guard let core else { return }
+        do { _ = try await core.undoEventEdit(id: id) } catch { lastError = error.localizedDescription; return }
+        if let open = openEvent?.id, let now = try? await core.currentEvent(eventId: open) { openEvent = now }
+    }
+
+    private func afterMove(_ eventID: String, _ result: EventEditResult, _ core: MekaCore) async {
+        switch onEnum(of: result) {
+        case .made(let m):
+            let id = m.id
+            offerEventUndo(core.eventEditLine(id: id) ?? "Moving it in your calendar", .eventEdit(id))
+            // An open detail follows the event to its new time.
+            if openEvent?.id == eventID, let now = try? await core.currentEvent(eventId: eventID) { openEvent = now }
+        case .refused(let r):
+            offerEventUndo(r.reason, nil)
+        }
+    }
+
     /// Clash chooser (slice 2c-iii), Keep mine: the clashed edit is sent again against Google's version after five
     /// seconds' Undo (undoing asks again). Only the edit's id (a String) crosses into the core. Returns why not, or nil.
     func keepMyVersion(_ clashId: String) async -> String? {
@@ -3195,7 +3262,7 @@ final class CoreModel {
                     junkReview = change.review
                 }
             }
-        case .eventEdit(let id): run { _ = try await $0.undoEventEdit(id: id) }
+        case .eventEdit(let id): Task { await undoEventEdit(id) }
         case .planBlocks(let ids): run { _ = try await $0.undoPlanBlocks(editIds: ids) }
         case .later(let move): run { try await $0.undoMoveLater(move: move) }
         case .ask(let done, let card):
