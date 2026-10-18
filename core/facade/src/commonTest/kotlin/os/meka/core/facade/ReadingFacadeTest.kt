@@ -98,4 +98,26 @@ class ReadingFacadeTest {
         assertTrue(fold.undoReading(added.undo!!))
         assertTrue(fold.readingView.value.upNext.isEmpty())
     }
+
+    @Test
+    fun aReadingGoalSetOnTheFoldIsTrackedInGoalsOnTheMac() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        assertEquals(null, fold.goalsView.value.reading)
+        assertTrue(fold.setReadingGoal("lots").refused)
+        assertEquals("Goal: 12 books in 2026 · Goals shows how it's going", fold.setReadingGoal("12 books").line)
+        assertEquals(12, fold.readingView.value.goalTarget)
+        val id = fold.addReading("reading Atomic Habits").let { fold.readingView.value.onTheGo.single().id }
+        fold.finishReading(id)
+        fold.syncNow(); mac.syncNow()
+        val g = mac.goalsView.value.reading!!
+        assertEquals("Read 12 books in 2026", g.title)
+        assertEquals("1 of 12", g.count)
+        assertEquals("8 behind pace · 11 to go · about 4 a month", g.line)
+        assertEquals("1 of 12", mac.readingView.value.goal?.count)
+        val cleared = mac.setReadingGoal("none")
+        assertEquals(null, mac.goalsView.value.reading)
+        assertTrue(mac.undoReading(cleared.undo!!))
+        assertEquals("1 of 12", mac.goalsView.value.reading?.count)
+    }
 }

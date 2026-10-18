@@ -4009,6 +4009,13 @@ final class CoreModel {
 
     func removeReading(_ id: String) async -> ReadingSaidLine? { await reading { try await $0.removeReading(id: id) } }
 
+    /// The reading goal (slice 4): books a year ("12", "24 books"; "none" clears it), synced so Goals tracks it.
+    func setReadingGoal(_ text: String) async -> ReadingSaidLine? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        return await reading(true) { try await $0.setReadingGoal(text: t) }
+    }
+
     /// Takes back the last reading command; false once too late.
     func undoReading(_ token: String) async -> Bool {
         guard let core else { return false }

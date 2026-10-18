@@ -68,6 +68,13 @@ struct GoalsScreen: View {
                         .transition(.opacity)
                 }
 
+                // Reading and learning (slice 4): the reading goal with its pace; a click opens Reading.
+                if let reading = model.goals?.reading {
+                    ReadingGoalSection(goal: reading, palette: palette) { model.showReading = true }
+                        .padding(.top, MekaSpace.xl)
+                        .transition(.opacity)
+                }
+
                 SectionLabel("Goals", palette).padding(.top, MekaSpace.xl).staggeredAppear(3)
                 // Goals, properly, item 6: last month looked back on, for the first week of a month.
                 if let month = model.goals?.month {
@@ -906,5 +913,35 @@ private struct MoneyStreakRow: View {
         }
         .buttonStyle(MekaPressStyle())
         .accessibilityLabel(row.spoken)
+    }
+}
+
+/// Goals' READING GOAL (reading and learning, slice 4): the year's goal, how many so far and the pace, brass on pace.
+private struct ReadingGoalSection: View {
+    let goal: ReadingGoalView
+    let palette: MekaPalette
+    let open: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            SectionLabel(ReadingGoalRules.shared.HEAD, palette)
+            Button(action: open) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    HStack {
+                        Text(goal.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Spacer()
+                        Text(goal.count).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                    }
+                    Text(goal.line).font(MekaType.itemMeta)
+                        .foregroundStyle(goal.lit ? palette.accent : palette.textSecondary)
+                        .contentTransition(.opacity)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(goal.spoken)
+            Text(ReadingGoalRules.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+        }
     }
 }

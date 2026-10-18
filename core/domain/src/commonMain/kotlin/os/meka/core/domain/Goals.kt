@@ -145,6 +145,8 @@ data class GoalsView(
     val month: GoalMonth? = null,
     /** Money manager (15): the money challenges he set, as streaks with no amounts ([MoneyChallenges.streaks]); null with none. */
     val money: MoneyStreaksView? = null,
+    /** Reading and learning (slice 4): his reading goal for the year and its pace ([ReadingGoalRules.view]); null with none. */
+    val reading: ReadingGoalView? = null,
 ) {
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }

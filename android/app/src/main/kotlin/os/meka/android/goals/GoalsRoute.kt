@@ -89,6 +89,8 @@ import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
 import os.meka.core.domain.HabitTiming
 import os.meka.core.domain.MoneyStreaksView
+import os.meka.core.domain.ReadingGoalRules
+import os.meka.core.domain.ReadingGoalView
 import os.meka.core.domain.SessionRules
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
@@ -194,6 +196,17 @@ fun GoalsRoute(core: MekaCore) {
                 MoneyStreaksSection(m, Modifier.animateItem().padding(top = MekaSpace.xl)) {
                     haptics.light()
                     app.openMoney.value = true
+                    app.openDestination.value = ShellDestination.ASK
+                }
+            }
+        }
+
+        // Reading and learning (slice 4): the reading goal for the year with its pace; a tap opens Reading.
+        view.reading?.let { g ->
+            item(key = "reading-goal") {
+                ReadingGoalSection(g, Modifier.animateItem().padding(top = MekaSpace.xl)) {
+                    haptics.light()
+                    app.openReading.value = true
                     app.openDestination.value = ShellDestination.ASK
                 }
             }
@@ -853,5 +866,28 @@ private fun MoneyStreaksSection(m: MoneyStreaksView, modifier: Modifier, open: (
         }
         m.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         Text(m.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/** Goals' READING GOAL (reading and learning, slice 4): the year's goal, how many so far and the pace, brass on pace. */
+@Composable
+private fun ReadingGoalSection(g: ReadingGoalView, modifier: Modifier, open: () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        SectionLabel(ReadingGoalRules.HEAD)
+        Column(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = open)
+                .semantics(mergeDescendants = true) { contentDescription = g.spoken },
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(g.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                AnimatedContent(g.count, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "goal-count") { c ->
+                    Text(c, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                }
+            }
+            AnimatedContent(g.line, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "goal-pace") { line ->
+                Text(line, style = MekaType.itemMeta, color = if (g.lit) Meka.colors.accent else Meka.colors.textSecondary)
+            }
+        }
+        Text(ReadingGoalRules.FOOT, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

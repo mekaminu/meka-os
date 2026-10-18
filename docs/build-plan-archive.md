@@ -1780,3 +1780,12 @@ Core + Fold + Mac, no server change, no migration, nothing new synced; Mac check
 - Mac: Services → **Add to Navilife Reading** (Info.plist `readingText`; `CaptureInbox.Kind` task · handle · reading replaces the handle flag); the bottom bar says "Added … · up next · in Ask → Daily → Reading" with Undo (`EventUndoOffer.Action.reading`, Reading's own token).
 - Help tip in docs/help/reading.md (HelpIndex regenerated); motion catalogue row "Add to Reading". No server change, nothing new synced, no migration. Mac checked nightly.
 - Tests: ReadingShareTest (4), ReadingFacadeTest +1, CaptureInboxTests (reading kind).
+
+## Reading and learning — slice 4 (2026-10-18): a reading goal in Goals
+
+- Core `ReadingGoalRules` (Reading.kt): `parse` reads the books a year ("12", "24 books", "read 20 books this year", "Goal: 30 books a year"; 1–365; "none"/"0"/"off"/"clear" clears), `view` counts books (not podcasts or courses) finished this calendar year and gives `ReadingGoalView`: "Read 12 books in 2026", "4 of 12", and the pace against how far through the year today is ("5 behind pace · 8 to go · about 3 a month", "On pace · …", "1 ahead of pace · …", "Done · 1 over · well read"; December says "by 31 Dec"), lit on pace, ahead or done, a bar fraction. `Reading.setGoal` / `goalTarget` / `goalView`, Undo through Reading's own token. One new `context_mode` entity `reading_goal` (`books`, `changedAtMs`; ADR-008 addendum, no migration). `ReadingView.goal`/`goalTarget` and `GoalsView.reading` additive.
+- Facade `setReadingGoal`; Goals' view carries the goal (refresh).
+- Fold: READING GOAL at the foot of the Reading pane (the card, a field, Clear the goal); Goals shows READING GOAL after MONEY CHALLENGES, a tap opens Ask's Reading pane (`MekaApplication.openReading`).
+- Mac: the same block in ReadingSheet (`CoreModel.setReadingGoal`) and a ReadingGoalSection in GoalsScreen opening the Reading sheet.
+- Help tips (reading, goals; HelpIndex regenerated); motion catalogue's Reading row. No server change, no AI, nothing fetched. Mac checked nightly.
+- Tests: ReadingGoalTest (3), ReadingFacadeTest +1.

@@ -8,7 +8,8 @@ import SwiftUI
 ///
 /// Motion: the sheet scale-fades (system); the summary, the month line and the answer cross-fade; rows move between
 /// sections on the expand spring; a bar grows to its new length on the same spring; a save, Start or Finished gives a
-/// light haptic, the rest a tick. Reduce Motion: cross-fades, the bar jumps.
+/// light haptic, the rest a tick. READING GOAL (slice 4): its pace line cross-fades and turns brass while on pace, its
+/// bar grows on the expand spring. Reduce Motion: cross-fades, the bar jumps.
 struct ReadingSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -16,6 +17,7 @@ struct ReadingSheet: View {
     let palette: MekaPalette
     @State private var text = ""
     @State private var said: CoreModel.ReadingSaidLine?
+    @State private var goalText = ""
 
     var body: some View {
         let v = model.reading ?? ReadingView.companion.EMPTY
@@ -41,6 +43,7 @@ struct ReadingSheet: View {
                     section("Up next", v.upNext, actions: startAction("Start"), progress: false)
                     section("Finished lately", v.finished, actions: startAction("Again"), progress: false)
                     section("Put down", v.putDown, actions: startAction("Pick up"), progress: false)
+                    goalBlock(v)
                 }
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: ids(v))
             }
@@ -79,6 +82,48 @@ struct ReadingSheet: View {
     private func ids(_ v: ReadingView) -> [String] {
         let groups: [[ReadingRow]] = [v.onTheGo, v.upNext, v.finished, v.putDown]
         return groups.flatMap { rows in rows.map { $0.id + $0.state + $0.progress } }
+    }
+
+    /// READING GOAL (slice 4): the year's goal with its pace and bar, a field for the books a year, Clear while set.
+    @ViewBuilder
+    private func goalBlock(_ v: ReadingView) -> some View {
+        Text(ReadingGoalRules.shared.HEAD)
+            .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+            .foregroundStyle(palette.textTertiary)
+            .padding(.top, MekaSpace.l)
+        if let g = v.goal {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                HStack {
+                    Text(g.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    Text(g.count).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                }
+                Text(g.line).font(MekaType.caption)
+                    .foregroundStyle(g.lit ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity)
+                ProgressBar(fraction: Double(g.fraction), palette: palette)
+                    .animation(MekaMotion.expand(reduced: reduceMotion), value: g.fraction)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(g.spoken)
+            .padding(.horizontal, MekaSpace.m)
+            .padding(.vertical, MekaSpace.xs)
+            .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+            .transition(.opacity)
+        }
+        TextField(ReadingGoalRules.shared.HINT, text: $goalText)
+            .textFieldStyle(.roundedBorder)
+            .onSubmit {
+                let t = goalText
+                goalText = ""
+                act { await model.setReadingGoal(t) }
+            }
+        if v.goalTarget > 0 {
+            Button("Clear the goal") { act { await model.setReadingGoal("none") } }
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.caption)
+                .foregroundStyle(palette.textTertiary)
+        }
     }
 
     private func add() {

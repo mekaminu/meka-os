@@ -209,6 +209,11 @@ fun AskRoute(
     LaunchedEffect(openMoney) {
         if (openMoney) { pane = MoreItem.MONEY; healthApp?.openMoney?.value = false }
     }
+    // Goals' READING GOAL row (reading and learning, slice 4) → the Reading pane.
+    val openReading by remember(healthApp) { healthApp?.openReading ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
+    LaunchedEffect(openReading) {
+        if (openReading) { pane = MoreItem.READING; healthApp?.openReading?.value = false }
+    }
     // Review on a Needs you clean-up card (inbox fixes, slice 2) → the Mail pane, where the plan says what goes where.
     val openMail by remember(healthApp) { healthApp?.openMail ?: kotlinx.coroutines.flow.MutableStateFlow(false) }.collectAsState()
     LaunchedEffect(openMail) {

@@ -125,6 +125,10 @@ data class ReadingView(
     val summary: String,
     /** "October · finished 1 · 2 moved on · next up: Atomic Habits"; null when nothing moved this month. */
     val month: String?,
+    /** Slice 4: his goal for the year and how it's going ([ReadingGoalRules.view]); null with none set. */
+    val goal: ReadingGoalView? = null,
+    /** The books a year he set (0 = none), for the goal field. */
+    val goalTarget: Int = 0,
 ) {
     val isEmpty: Boolean get() = onTheGo.isEmpty() && upNext.isEmpty() && finished.isEmpty() && putDown.isEmpty()
 
@@ -383,6 +387,102 @@ object ReadingRules {
     }
 }
 
+/** The goal's one synced setting: `context_mode/reading_goal` (ADR-008 addendum 2026-10-18), every field LWW. */
+object ReadingGoalFields {
+    /** Books to finish in a calendar year; absent (or 0) = no goal. */
+    const val BOOKS = "books"
+    const val CHANGED_AT = "changedAtMs"
+}
+
+/**
+ * The reading goal as Reading and Goals show it: [title] "Read 12 books in 2026", [count] "4 of 12", [line] the pace
+ * ("On pace · 8 to go · about 2 a month"), [fraction] for the bar, [lit] while on pace, ahead or done.
+ */
+data class ReadingGoalView(
+    val title: String,
+    val count: String,
+    val line: String,
+    val fraction: Float,
+    val lit: Boolean,
+    val spoken: String,
+)
+
+/**
+ * Reading and learning, slice 4: a reading goal ("12 books this year"), set in Reading and tracked in Goals beside the
+ * habits. Counts books finished this calendar year (podcasts and courses don't count towards it); the pace is against
+ * how far through the year today is. Pure rules, nothing fetched.
+ */
+object ReadingGoalRules {
+    const val ENTITY_ID = "reading_goal"
+    const val HEAD = "READING GOAL"
+    const val HINT = "A goal for the year, e.g. 12 books"
+    const val FOOT = "Books you finish in Reading count · tap to open Reading"
+    const val NOT_A_GOAL = "Type how many books you'd like to finish this year, e.g. 12 or \"24 books\"."
+    const val MAX_BOOKS = 365
+
+    private val GOAL = Regex(
+        """^(?:(?:my\s+)?(?:reading\s+)?goal(?:\s+is)?\s*[:\-]?\s*|(?:i\s+want\s+to\s+)?read\s+)?(\d{1,3})(?:\s+books?)?(?:\s+(?:this|a|per|each)\s+year|\s+in\s+(?:a\s+year|\d{4}))?$""",
+        RegexOption.IGNORE_CASE,
+    )
+    private val CLEAR = setOf("0", "none", "no goal", "off", "clear", "remove")
+
+    /** The books a year [text] asks for: a number 1–365, 0 to clear it; null when it isn't one. */
+    fun parse(text: String?): Int? {
+        val t = text?.trim()?.trimEnd('.')?.lowercase().orEmpty()
+        if (t.isEmpty()) return null
+        if (t in CLEAR) return 0
+        val n = GOAL.find(t)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        return n.takeIf { it in 0..MAX_BOOKS }
+    }
+
+    fun target(fields: Map<String, FieldValue>?): Int =
+        fields?.get(ReadingGoalFields.BOOKS)?.longOrNull?.toInt()?.takeIf { it in 1..MAX_BOOKS } ?: 0
+
+    fun fields(books: Int, nowMs: Long): Map<String, FieldValue> = mapOf(
+        ReadingGoalFields.BOOKS to (if (books > 0) books.toLong().fv() else FieldValue.Null),
+        ReadingGoalFields.CHANGED_AT to nowMs.fv(),
+    )
+
+    private fun books(n: Int) = ShutdownRules.count(n, "book")
+
+    /** What the line under the goal field says after he sets it. */
+    fun said(books: Int, year: Int): String =
+        if (books > 0) "Goal: ${books(books)} in $year · Goals shows how it's going" else "Reading goal cleared"
+
+    /** The goal for the year of [nowMs] with [items]; null with no [target]. */
+    fun view(target: Int, items: List<ReadingItem>, nowMs: Long, cal: LocalCalendar): ReadingGoalView? {
+        if (target <= 0) return null
+        val today = cal.epochDayOf(nowMs)
+        val ymd = CivilDate.fromEpochDay(today)
+        val year = ymd.year
+        val done = items.count {
+            !it.removed && it.kind == ReadingKind.BOOK && it.state == ReadingState.FINISHED && it.endedAtMs > 0 &&
+                CivilDate.fromEpochDay(cal.epochDayOf(it.endedAtMs)).year == year
+        }
+        val first = CivilDate.toEpochDay(year, 1, 1)
+        val daysInYear = if (CivilDate.isLeap(year)) 366 else 365
+        val expected = target.toDouble() * (today - first + 1) / daysInYear
+        val toGo = target - done
+        val monthsLeft = 12 - ymd.month + 1
+        val pace = when {
+            done >= target -> null
+            done - expected >= 1 -> "${(done - expected).toInt()} ahead of pace"
+            expected - done < 1 -> "On pace"
+            else -> "${(expected - done).toInt()} behind pace"
+        }
+        val line = if (pace == null) {
+            "Done" + (if (done > target) " · ${done - target} over" else "") + " · well read"
+        } else {
+            val rate = if (monthsLeft <= 1) "by 31 Dec" else "about ${(toGo + monthsLeft - 1) / monthsLeft} a month"
+            "$pace · $toGo to go · $rate"
+        }
+        val lit = pace == null || !pace.endsWith("behind pace")
+        val title = "Read ${books(target)} in $year"
+        val count = "$done of $target"
+        return ReadingGoalView(title, count, line, (done.toFloat() / target).coerceIn(0f, 1f), lit, "$title. $count. $line")
+    }
+}
+
 /** The reading list on a replica. Undo keeps the fields a command changed, in memory, until the next command. */
 /** What a shared book, podcast or course link (or line) offers in the share sheet: "📖 Add to Reading · Dune". */
 data class ReadingShareView(val icon: String, val line: String, val title: String, val kind: ReadingKind)
@@ -478,12 +578,34 @@ object ReadingShareRules {
 }
 
 class Reading(private val replica: Replica, private val newId: () -> String, private val nowMs: () -> Long) {
+    private companion object { const val GOAL_UNDO = "\u0000goal" }
     private val undos = mutableMapOf<String, Pair<String, Map<String, FieldValue>>>()
     private var undoSeq = 0
 
     fun items(): List<ReadingItem> = ReadingRules.items(replica.entities(EntityTypes.READING_ITEM).associate { it.ref.entityId to it.fields })
 
-    fun view(cal: LocalCalendar): ReadingView = ReadingRules.view(items(), nowMs(), cal)
+    fun view(cal: LocalCalendar): ReadingView {
+        val all = items()
+        val target = goalTarget()
+        return ReadingRules.view(all, nowMs(), cal).copy(goal = ReadingGoalRules.view(target, all, nowMs(), cal), goalTarget = target)
+    }
+
+    // ---- Slice 4: the reading goal ----
+
+    fun goalTarget(): Int = ReadingGoalRules.target(replica.entity(EntityTypes.CONTEXT_MODE, ReadingGoalRules.ENTITY_ID)?.fields)
+
+    fun goalView(cal: LocalCalendar): ReadingGoalView? = ReadingGoalRules.view(goalTarget(), items(), nowMs(), cal)
+
+    /** Sets (or, with 0 / "none", clears) the books a year from [text]; Undo puts the one before back. */
+    fun setGoal(text: String, cal: LocalCalendar): ReadingSaid {
+        val books = ReadingGoalRules.parse(text) ?: return ReadingSaid(ReadingGoalRules.NOT_A_GOAL, true)
+        val before = goalTarget()
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ReadingGoalRules.ENTITY_ID, ReadingGoalRules.fields(books, nowMs()))
+        undos.clear()
+        val token = "g${undoSeq++}"
+        undos[token] = GOAL_UNDO to mapOf(ReadingGoalFields.BOOKS to before.toLong().fv())
+        return ReadingSaid(ReadingGoalRules.said(books, CivilDate.fromEpochDay(cal.epochDayOf(nowMs())).year), false, token)
+    }
 
     private fun live(id: String): ReadingItem? = items().firstOrNull { it.id == id && !it.removed }
 
@@ -588,6 +710,11 @@ class Reading(private val replica: Replica, private val newId: () -> String, pri
     /** Puts back what the command behind [token] changed (the last one only). */
     fun undo(token: String): Boolean {
         val (id, old) = undos.remove(token) ?: return false
+        if (id == GOAL_UNDO) {
+            val books = old[ReadingGoalFields.BOOKS]?.longOrNull?.toInt() ?: 0
+            replica.commitLocal(EntityTypes.CONTEXT_MODE, ReadingGoalRules.ENTITY_ID, ReadingGoalRules.fields(books, nowMs()))
+            return true
+        }
         replica.commitLocal(EntityTypes.READING_ITEM, id, old.mapValues { (k, v) ->
             if (v == FieldValue.Null) when (k) { ReadingFields.REMOVED -> true.fv(); ReadingFields.TITLE -> "".fv(); else -> v } else v
         })

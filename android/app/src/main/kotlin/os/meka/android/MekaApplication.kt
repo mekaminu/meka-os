@@ -89,6 +89,8 @@ class MekaApplication : Application() {
     val openKids = MutableStateFlow(false)
     /** A card heads-up (Money manager, slice 7): Ask with the Money pane up (behind the fingerprint as always). */
     val openMoney = MutableStateFlow(false)
+    /** Goals' READING GOAL row (reading and learning, slice 4) → Ask's Reading pane. */
+    val openReading = MutableStateFlow(false)
     /** Review on a Needs you clean-up card (inbox fixes, slice 2): Ask with the Mail pane up. */
     val openMail = MutableStateFlow(false)
     /** Listen on Sunday's week-ahead heads-up (slice 2): the pane opens reading the week aloud; the pane clears it. */

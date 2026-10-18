@@ -3152,6 +3152,13 @@ class MekaCore(
     suspend fun addReadingFromShared(text: String, subject: String? = null): os.meka.core.domain.ReadingSaid =
         onCore { reading.addShared(text, subject) }
 
+    /**
+     * Reading and learning, slice 4: the reading goal, books a year ("12", "24 books", "none" clears it); synced, so Goals
+     * on both apps tracks it. Undo puts the one before back.
+     */
+    suspend fun setReadingGoal(text: String): os.meka.core.domain.ReadingSaid =
+        onCore { reading.setGoal(text, ZoneCalendar(timeZone)) }
+
     /** Takes back the last reading command (its [os.meka.core.domain.ReadingSaid.undo] token); false once too late. */
     suspend fun undoReading(token: String): Boolean = onCore { reading.undo(token) }
 
@@ -8304,7 +8311,7 @@ class MekaCore(
         )
         _lifeAdmin.value = lifeAdminViewNow
         val fastingNow = fasting.view()
-        val goalsNow = goals.view(all).withSessions(_sessions.value).copy(money = moneyStreaks())
+        val goalsNow = goals.view(all).withSessions(_sessions.value).copy(money = moneyStreaks(), reading = reading.goalView(cal))
         val projected = project(all, dayEvents, marks.clubChildren)
         val today = dayWindow(nowMs())
         // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.

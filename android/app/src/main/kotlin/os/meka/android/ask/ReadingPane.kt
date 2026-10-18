@@ -52,6 +52,8 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.ReadingGoalRules
+import os.meka.core.domain.ReadingGoalView
 import os.meka.core.domain.ReadingRow
 import os.meka.core.domain.ReadingRules
 import os.meka.core.domain.ReadingSaid
@@ -64,7 +66,8 @@ import os.meka.core.facade.MekaCore
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary, the month line and the
  * answer line cross-fade (the answer blends to the accent when refused, with a tick haptic; a save gives a light
- * haptic); rows stagger in 40 ms apart and move between sections with the list's item motion; a bar's fill grows on
+ * haptic); READING GOAL's pace line cross-fades and blends to the accent while on pace, its bar grows on the expand
+ * spring (slice 4); rows stagger in 40 ms apart and move between sections with the list's item motion; a bar's fill grows on
  * the expand spring to its new length. Reduced motion: cross-fades, the bar jumps.
  */
 @Composable
@@ -167,6 +170,12 @@ fun ReadingPane(core: MekaCore, onClose: () -> Unit) {
                 onRemove = { act({ core.removeReading(r.id) }) },
             )
         }
+        // Slice 4: the reading goal for the year, tracked in Goals too.
+        item(key = "goal") {
+            ReadingGoalBlock(v.goal, v.goalTarget > 0, Modifier.animateItem().padding(top = MekaSpace.l),
+                onSet = { typed -> act({ core.setReadingGoal(typed) }, light = true) },
+                onClear = { act({ core.setReadingGoal("none") }) })
+        }
         item(key = "note") {
             Text(ReadingRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
@@ -226,6 +235,47 @@ private fun ReadingCard(
             Text("Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onRemove)
                     .minTouch().semantics { contentDescription = "Remove ${row.title}" }.padding(MekaSpace.xs))
+        }
+    }
+}
+
+/**
+ * READING GOAL (slice 4): "Read 12 books in 2026", "4 of 12", the pace in brass while on pace or ahead, a bar, and a
+ * field for the books a year ("12", "none" clears it), with Clear while one is set.
+ */
+@Composable
+private fun ReadingGoalBlock(goal: ReadingGoalView?, set: Boolean, modifier: Modifier, onSet: (String) -> Unit, onClear: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    var typed by remember { mutableStateOf("") }
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        SectionLabel(ReadingGoalRules.HEAD)
+        AnimatedVisibility(goal != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+            val g = goal ?: return@AnimatedVisibility
+            val lineColor by animateColorAsState(if (g.lit) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "goal-line")
+            val shown by animateFloatAsState(g.fraction, MekaMotion.expand(reduced), label = "goal-bar")
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+                    .semantics(mergeDescendants = true) { contentDescription = g.spoken },
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(g.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                    Text(g.count, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
+                Crossfade(g.line, animationSpec = MekaMotion.appear(reduced), label = "goal-pace") { line ->
+                    Text(line, style = MekaType.caption, color = lineColor)
+                }
+                Box(Modifier.padding(vertical = MekaSpace.xxs).fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(shown.coerceIn(0f, 1f)).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+                }
+            }
+        }
+        Field(ReadingGoalRules.HINT, value = typed, onValue = { typed = it }) { onSet(it); typed = "" }
+        if (set) {
+            Text("Clear the goal", style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onClear)
+                    .minTouch().semantics { contentDescription = "Clear the reading goal" }.padding(MekaSpace.xs))
         }
     }
 }
