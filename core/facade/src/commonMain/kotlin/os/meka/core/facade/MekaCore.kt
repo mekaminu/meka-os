@@ -6658,6 +6658,18 @@ class MekaCore(
     }
 
     /**
+     * Travel mode × the Vault: [q] asks whether the documents last a trip ([os.meka.core.domain.TripDocRules.askAnswer]);
+     * answered from Trips and the Vault on this device, no AI, with Open Trips under the answer. Null when it isn't.
+     */
+    private suspend fun tripDocsAsk(q: String): os.meka.core.domain.AskOutcome? = onCore {
+        val text = os.meka.core.domain.TripDocRules.askAnswer(q, trips.items(), documents.items(), ZoneCalendar(timeZone).epochDayOf(nowMs()))
+            ?: return@onCore null
+        os.meka.core.domain.AskOutcome.Answered(
+            os.meka.core.domain.AskAnswer(text, emptyList(), help = os.meka.core.domain.TripDocRules.link),
+        )
+    }
+
+    /**
      * Reading and learning, slice 2: [q] asks about his reading list ([os.meka.core.domain.ReadingAskRules.request]).
      * A question is answered from the list here, no AI; a change (progress, finished, started, added) is his own direct
      * request, done now with Undo and kept in Activity under the same rule as [directAdd] (Ask first: the card he taps).
@@ -7453,6 +7465,8 @@ class MekaCore(
         if (!beyondHelp && os.meka.core.domain.MoneyAskRules.isAbout(q)) return onCore { moneyAnswer(q) }
         // The Vault, slice 3: "when does Alex's passport run out?", "do I have a copy of my licence?", "what's in my
         // Vault?" are answered from the Vault here, never sent to the AI, with Open the Vault under the answer.
+        // Travel mode × the Vault: "are our passports OK for Barcelona?" is answered from the trip and the Vault here.
+        if (!beyondHelp) tripDocsAsk(q)?.let { return it }
         if (!beyondHelp) vaultAsk(q)?.let { return it }
         val cal = ZoneCalendar(timeZone)
         // A question about notifications carries the phone's trace; without the AI the device answers from it itself.
@@ -9411,8 +9425,9 @@ class MekaCore(
             .copy(inset = os.meka.core.domain.SchoolTerms.insetLink(aboutYou.profile().schoolWebsite))
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
-        _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay)
-        _documents.value = os.meka.core.domain.DocumentRules.view(documents.items(), todayDay, cal, vaultName())
+        val docItems = documents.items()
+        _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems)
+        _documents.value = os.meka.core.domain.DocumentRules.view(docItems, todayDay, cal, vaultName())
         vaultKeyNow()
         val heldNow = _afterWork.value
         _people.value = os.meka.core.domain.PeopleRules.view(

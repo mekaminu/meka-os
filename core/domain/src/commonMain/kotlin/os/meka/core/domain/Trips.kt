@@ -85,6 +85,8 @@ data class TripRow(
     val statusLit: Boolean,
     val timeline: List<TripDayRow>,
     val spoken: String,
+    /** Travel documents from the Vault ([TripDocRules]); null once the trip is over or when the Vault wasn't read. */
+    val documents: TripDocs? = null,
 )
 
 data class TripsView(
@@ -338,14 +340,17 @@ object TripRules {
     }
 
     /** The Trips pane: on now, then to come soonest first, then those just ended. */
-    fun view(trips: List<TripItem>, today: Long): TripsView {
+    fun view(trips: List<TripItem>, today: Long, docs: List<DocumentItem>? = null): TripsView {
         val list = shown(trips, today)
         if (list.isEmpty()) return TripsView.EMPTY
         val ordered = list.filter { it.endDay >= today } + list.filter { it.endDay < today }.sortedByDescending { it.endDay }
         val rows = ordered.map { t ->
             val status = status(t, today)
             val line = rowLine(t)
-            TripRow(t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t), "${t.name}. $line. $status")
+            TripRow(
+                t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t), "${t.name}. $line. $status",
+                docs?.let { TripDocRules.forTrip(t, it, today) },
+            )
         }
         val now = ongoing(list, today)
         val next = upcoming(list, today)
