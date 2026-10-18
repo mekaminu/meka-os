@@ -1,7 +1,7 @@
 ---
 id: vault
 title: Vault
-keywords: vault, documents, expiry dates, document expiry, passport scan, copy of a document
+keywords: vault, documents, expiry dates, document expiry, document scan, copy of a document
 data: yes
 fold: VAULT
 fold_where: Ask → Settings → Vault
