@@ -14,6 +14,9 @@ import SwiftUI
 /// Pictures (images slice): each story shows the picture its feed names, made small by the server and fetched from it
 /// by key (`NewsThumb`); the detail leads with it. A tile with the source's initial stands in until it arrives, and the
 /// picture cross-fades in over it (Reduce Motion: a short fade).
+/// Full news hub, slice 1: a brass dot marks a story not read yet; opening it marks it read on both apps (dot and title
+/// fade to the quieter colours); "12 new · 6 read" with Mark all read (Undo for 6 s); each lane's name says "3 new";
+/// in a story, Save for the train puts its link in the train queue.
 struct NewsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -22,6 +25,8 @@ struct NewsSheet: View {
     let palette: MekaPalette
     @State private var openId: String?
     @State private var forward = true
+    @State private var marked: String?
+    @State private var trainLine: CoreModel.QueueSaid?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -67,6 +72,34 @@ struct NewsSheet: View {
         Text("Spanish sources: " + place.spanishLine + " · " + place.sourcesCaption)
             .font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
             .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: place.spanishSources)
+        if let line = place.unreadLine {
+            HStack {
+                Text(marked ?? line).font(MekaType.itemMeta)
+                    .foregroundStyle(marked != nil ? palette.accent : palette.textSecondary)
+                    .contentTransition(.opacity)
+                Spacer()
+                if marked != nil {
+                    Button("Undo") { model.newsUndoAllRead(); marked = nil }.buttonStyle(.borderless).foregroundStyle(palette.accent)
+                } else if place.canMarkAllRead {
+                    Button("Mark all read") {
+                        Task {
+                            let n = await model.newsMarkAllRead()
+                            if n > 0 { marked = "Marked \(n) read" }
+                        }
+                    }
+                    .buttonStyle(.borderless).foregroundStyle(palette.accent)
+                    .keyboardShortcut("k", modifiers: [.command, .shift])
+                    .help("Marks every story here read, on both apps (⇧⌘K)")
+                }
+            }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: marked)
+            .staggeredAppear(0)
+            .task(id: marked) {
+                guard marked != nil else { return }
+                try? await Task.sleep(for: .seconds(6))
+                marked = nil
+            }
+        }
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 if let md = place.matchday {
@@ -78,12 +111,19 @@ struct NewsSheet: View {
                 ForEach(Array(place.lanes.enumerated()), id: \.element.topicId) { i, lane in
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         if lane.isBarca {
-                            Text(lane.label.uppercased())
+                            Text(lane.label.uppercased() + (lane.unreadLabel.map { " · " + $0.uppercased() } ?? ""))
                                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                                 .foregroundStyle(palette.barca)
                                 .padding(.bottom, MekaSpace.xxs)
                         } else {
-                            SectionLabel(lane.label, palette)
+                            HStack(spacing: 0) {
+                                SectionLabel(lane.label, palette)
+                                if let u = lane.unreadLabel {
+                                    Text(" · " + u.uppercased())
+                                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                                        .foregroundStyle(palette.accent)
+                                }
+                            }
                         }
                         if !lane.sources.isEmpty {
                             Text(lane.sources).font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -153,10 +193,28 @@ struct NewsSheet: View {
                             .buttonStyle(.borderedProminent).tint(palette.accent)
                             .padding(.top, MekaSpace.m)
                             .help("Opens \(d.item.source) in your browser")
+                        // Save for the train (full news hub, slice 1): the link into the train queue, on both apps.
+                        Group {
+                            if let t = trainLine, t.refused {
+                                Text(t.line).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                            } else if d.item.queued {
+                                Text("✓ In your train queue" + (trainLine == nil ? " · Ask → Daily → Train queue" : ""))
+                                    .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            } else {
+                                Button("Save for the train") {
+                                    let id = d.item.id
+                                    Task { trainLine = await model.newsForTrain(id) }
+                                }
+                                .help("Puts this story's link in your train queue, on both apps")
+                            }
+                        }
+                        .transition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: d.item.queued)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .task(id: d.item.id) { trainLine = nil; model.newsOpened(d.item.id) }
             HStack {
                 Button("‹ Previous") { if let p = d.previousId { open(p, forward: false) } }
                     .disabled(d.previousId == nil).keyboardShortcut(.leftArrow, modifiers: [])
@@ -191,15 +249,19 @@ private struct StoryRow: View {
     let item: NewsItem
     let palette: MekaPalette
     let open: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var hovering = false
 
     var body: some View {
         HStack(alignment: .top, spacing: MekaSpace.xs) {
-            Circle().fill(item.topic == "barca" ? palette.barca : palette.textTertiary).frame(width: 6, height: 6)
+            // Full news hub, slice 1: brass (Barça's colour) while new, the quiet colour once read; the change blends.
+            Circle().fill(item.read ? palette.textTertiary.opacity(0.4) : (item.topic == "barca" ? palette.barca : palette.accent))
+                .frame(width: 6, height: 6)
                 .padding(.top, MekaSpace.xs)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: item.read)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.title).font(MekaType.body)
-                    .foregroundStyle(hovering ? palette.accent : palette.textPrimary)
+                    .foregroundStyle(hovering ? palette.accent : (item.read ? palette.textSecondary : palette.textPrimary))
                     .fixedSize(horizontal: false, vertical: true)
                 Text(item.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
@@ -213,6 +275,7 @@ private struct StoryRow: View {
         .onTapGesture { open() }
         .accessibilityAddTraits(.isButton)
         .accessibilityHint("Opens the story")
+        .accessibilityValue(item.read ? "" : "New")
     }
 }
 

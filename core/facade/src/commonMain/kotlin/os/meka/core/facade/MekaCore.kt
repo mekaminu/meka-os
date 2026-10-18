@@ -4348,6 +4348,47 @@ class MekaCore(
     /** News → Spanish sources (Fold review 2026-10-09 07:26 item 1): off = English only everywhere news shows; synced. */
     suspend fun setNewsSpanish(on: Boolean) = onCore { news.setSpanish(on) }
 
+    // ---- Full news hub (V2, slice 1: read and new, Save for the train) ----
+
+    /** The stories the last Mark all read put away, for its Undo (this device, this session). */
+    private var newsLastMarked: List<String> = emptyList()
+
+    /**
+     * Opening a story in News marks it read on both apps (synced read list, [os.meka.core.domain.NewsFields.READ]);
+     * false when it already was or isn't in the News place now.
+     */
+    suspend fun newsOpened(id: String): Boolean = onCore {
+        val item = _newsPlace.value.items.firstOrNull { it.id == id } ?: return@onCore false
+        news.markRead(listOf(item.readKey))
+    }
+
+    /** Mark all read: every new story in the News place now; the count put away (0 when none). Undo with [newsUndoAllRead]. */
+    suspend fun newsMarkAllRead(): Int = onCore {
+        val keys = _newsPlace.value.items.filter { !it.read }.map { it.readKey }
+        if (keys.isEmpty() || !news.markRead(keys)) { newsLastMarked = emptyList(); return@onCore 0 }
+        newsLastMarked = keys
+        keys.size
+    }
+
+    /** Puts the last Mark all read back: those stories show as new again. False when there is nothing to undo. */
+    suspend fun newsUndoAllRead(): Boolean = onCore {
+        val keys = newsLastMarked
+        newsLastMarked = emptyList()
+        keys.isNotEmpty() && news.markUnread(keys)
+    }
+
+    /**
+     * Save for the train from a story in News: its link and title into the train queue (both apps, offline words on
+     * Wi-Fi like any saved link), and the story marked read. A story without a link is refused, nothing written.
+     */
+    suspend fun newsForTrain(id: String): os.meka.core.domain.QueueAdded = onCore {
+        val item = _newsPlace.value.items.firstOrNull { it.id == id }
+        val url = item?.url ?: return@onCore os.meka.core.domain.QueueAdded(os.meka.core.domain.NewsRules.NO_LINK_TO_SAVE, true)
+        val added = trainQueue.add(url, item.title)
+        if (!added.refused) news.markRead(listOf(item.readKey))
+        added
+    }
+
     // ---- Weekly review ----
 
     /** Shows the week [offset] weeks from this one (0 this week, -1 last week, back to -12). */
@@ -9465,7 +9506,7 @@ class MekaCore(
                     protectedLine = os.meka.core.domain.ProtectedRules.briefLine(protectedTime.setting(), todayDay, workState.schedule, holidays),
                 )
             }
-        _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))
+        _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone), trainQueue.items())
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.
             .copy(route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal))

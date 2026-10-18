@@ -49,6 +49,13 @@ object NewsFields {
     const val KNOWN = "newsTopicsKnown"
     /** News → Spanish sources (Fold review 2026-10-09 07:26 item 1; additive, LWW): absent = off, English only. */
     const val SPANISH = "newsSpanish"
+    /**
+     * The stories Meka has read (full news hub, slice 1; additive, LWW): comma-separated [NewsRules.readKey]s, oldest
+     * first, at most [NewsRules.MAX_READ]. A story is known by its link (or title), never by its headline slot, since a
+     * slot is reused once its story drops out of the feed. Two devices marking at once: the later list wins (a story
+     * read on one may show as new again on the other: harmless).
+     */
+    const val READ = "newsRead"
 }
 
 data class NewsTopic(val id: String, val label: String)
@@ -135,7 +142,16 @@ data class NewsItem(
     val publishedAtMs: Long,
     /** The picture to fetch with `MekaCore.newsImage` ([HeadlineFields.IMAGE]); null → the source's tile. */
     val imageKey: String? = null,
+    /** Full news hub, slice 1: opened (here or on the other app), or put away with Mark all read. */
+    val read: Boolean = false,
+    /** Full news hub, slice 1: its link is waiting in the train queue. */
+    val queued: Boolean = false,
 ) {
+    /** The key the read list holds for this story ([NewsRules.readKey]). */
+    val readKey: String get() = NewsRules.readKey(url, title)
+    /** "Save for the train" is offered only for a story with a link that isn't waiting already. */
+    val canQueue: Boolean get() = url != null && !queued
+
     /** The tile shown while the picture loads or when there is none: the source's initial ("M" for Mundo Deportivo). */
     val tileInitial: String get() = NewsRules.tileInitial(source)
     /** The source's short name on its tile when there is no picture ("MD", "BBC", "TC"); see [NewsRules.tileMark]. */
@@ -146,6 +162,10 @@ data class NewsItem(
 data class NewsLane(val topicId: String, val label: String, val sources: String, val items: List<NewsItem>) {
     /** The Barça lane has its own colour (the `barca` token) on both apps. */
     val isBarca: Boolean get() = topicId == NewsTopics.BARCA.id
+    /** Full news hub, slice 1: stories not read yet in this lane. */
+    val unread: Int get() = items.count { !it.read }
+    /** "3 new" beside the lane's name, or null when everything in it is read. */
+    val unreadLabel: String? get() = unread.takeIf { it > 0 }?.let { "$it new" }
 }
 
 /**
@@ -177,6 +197,13 @@ data class NewsPlace(
     /** Every story in reading order (lane by lane), for Next/Previous. */
     val items: List<NewsItem> get() = lanes.flatMap { it.items }
 
+    /** Full news hub, slice 1: stories not read yet across the lanes. */
+    val unread: Int get() = items.count { !it.read }
+    /** The line over the lanes: "12 new · 6 read", "All read · new stories get a dot", or null with nothing to show. */
+    val unreadLine: String? get() = NewsRules.unreadLine(unread, items.size)
+    /** Mark all read is offered while something is new. */
+    val canMarkAllRead: Boolean get() = unread > 0
+
     fun detail(id: String): NewsDetail? {
         val all = items
         val i = all.indexOfFirst { it.id == id }.takeIf { it >= 0 } ?: return null
@@ -200,6 +227,52 @@ object NewsRules {
     const val MAX_AGE_IN_PLACE_MS = 48 * 3_600_000L
     /** Headlines per lane in the News place. */
     const val MAX_IN_LANE = 10
+    /** Read stories remembered (well over two days of every topic's lanes); the oldest go first. */
+    const val MAX_READ = 400
+
+    /**
+     * Full news hub, slice 1: a story's key in the read list — 12 hex characters of a 64-bit FNV-1a hash of its link
+     * (query and fragment dropped, lower-cased) or, without one, its title's [storyKey]. Short, so 400 fit in a field,
+     * and never the link itself.
+     */
+    fun readKey(url: String?, title: String): String {
+        val basis = url?.substringBefore('?')?.substringBefore('#')?.lowercase() ?: ("t:" + storyKey(title))
+        var h = -0x340d631b7bdddcdbL // FNV-1a offset basis
+        for (b in basis.encodeToByteArray()) { h = h xor (b.toLong() and 0xff); h *= 0x100000001b3L }
+        return (h ushr 16).toString(16).padStart(12, '0').takeLast(12)
+    }
+
+    /** The stored read list as keys (anything malformed dropped). */
+    fun readKeys(stored: String?): List<String> =
+        stored?.split(',')?.map { it.trim() }?.filter { k -> k.length == 12 && k.all { it in '0'..'9' || it in 'a'..'f' } } ?: emptyList()
+
+    /** [stored] with [keys] added at the end (each once), the oldest dropped past [MAX_READ]; null when nothing is new. */
+    fun withRead(stored: String?, keys: List<String>): String? {
+        val have = readKeys(stored)
+        val set = have.toHashSet()
+        val added = keys.filter { set.add(it) }
+        if (added.isEmpty()) return null
+        return (have + added).takeLast(MAX_READ).joinToString(",")
+    }
+
+    /** [stored] with [keys] taken out (Undo after Mark all read); null when none of them was there. */
+    fun withoutRead(stored: String?, keys: Collection<String>): String? {
+        val have = readKeys(stored)
+        val drop = keys.toHashSet()
+        val kept = have.filter { it !in drop }
+        return if (kept.size == have.size) null else kept.joinToString(",")
+    }
+
+    /** "12 new · 6 read" / "12 new" / "All read · new stories get a dot"; null with no stories. */
+    fun unreadLine(unread: Int, total: Int): String? = when {
+        total == 0 -> null
+        unread == 0 -> "All read · new stories get a dot"
+        unread == total -> "$unread new"
+        else -> "$unread new · ${total - unread} read"
+    }
+
+    /** What Save for the train says for a story without a link (some feeds give none). */
+    const val NO_LINK_TO_SAVE = "This story has no link to save for the train"
 
     /** Spanish-language sources, named under the switch. */
     const val SPANISH_SOURCES = "Mundo Deportivo, Sport and Spanish Google News"
@@ -313,7 +386,15 @@ object NewsRules {
      * The News place: the chosen topics only, the last [MAX_AGE_IN_PLACE_MS], newest first in each lane, each story
      * once across lanes (the same article or the same title from another source), at most [MAX_IN_LANE] per lane.
      */
-    fun place(all: List<Headline>, topics: List<NewsTopicChoice>, nowMs: Long, matchday: NewsMatchday? = null, spanish: Boolean = false): NewsPlace {
+    fun place(
+        all: List<Headline>,
+        topics: List<NewsTopicChoice>,
+        nowMs: Long,
+        matchday: NewsMatchday? = null,
+        spanish: Boolean = false,
+        read: Set<String> = emptySet(),
+        queuedLinks: Set<String> = emptySet(),
+    ): NewsPlace {
         val chosen = topics.filter { it.chosen }.map { it.id }
         val order = LEAD.filter { it in chosen } + chosen.filter { it !in LEAD }
         val seenLinks = HashSet<String>()
@@ -324,7 +405,13 @@ object NewsRules {
                 .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { it.id })
                 .filter { seenLinks.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
                 .take(MAX_IN_LANE)
-                .map { h -> NewsItem(h.id, h.title, h.url, h.source, h.topic, "${h.source} · ${age(h.publishedAtMs, nowMs)}", h.summary, h.publishedAtMs, h.imageKey) }
+                .map { h ->
+                    NewsItem(
+                        h.id, h.title, h.url, h.source, h.topic, "${h.source} · ${age(h.publishedAtMs, nowMs)}", h.summary, h.publishedAtMs, h.imageKey,
+                        read = readKey(h.url, h.title) in read,
+                        queued = h.url != null && QueueRules.key(h.url) in queuedLinks,
+                    )
+                }
             if (items.isEmpty()) null
             else NewsLane(topic, NewsTopics.byId(topic)?.label ?: topic, sourcesLine(items), items)
         }
@@ -444,9 +531,37 @@ class News(private val replica: Replica) {
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.TOPICS to encoded.fv(), NewsFields.KNOWN to known.fv()))
     }
 
-    /** The News place over the chosen topics. */
-    fun place(nowMs: Long, dayEvents: List<CalendarEvent> = emptyList(), cal: LocalCalendar = LocalCalendar.UTC): NewsPlace =
-        NewsRules.place(all(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal), spanish())
+    /**
+     * The News place over the chosen topics, each story marked read or new and whether its link waits in the train
+     * queue ([queued]: the queue's waiting items).
+     */
+    fun place(
+        nowMs: Long,
+        dayEvents: List<CalendarEvent> = emptyList(),
+        cal: LocalCalendar = LocalCalendar.UTC,
+        queued: List<QueueItem> = emptyList(),
+    ): NewsPlace = NewsRules.place(
+        all(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal), spanish(),
+        read = readKeys().toHashSet(),
+        queuedLinks = queued.filter { !it.done }.map { QueueRules.key(it.url) }.toHashSet(),
+    )
+
+    /** The read list ([NewsFields.READ]). */
+    fun readKeys(): List<String> = NewsRules.readKeys(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.READ)?.textOrNull)
+
+    /** Marks these stories read (synced); false when they all were already. */
+    fun markRead(keys: List<String>): Boolean {
+        val next = NewsRules.withRead(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.READ)?.textOrNull, keys) ?: return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.READ to next.fv()))
+        return true
+    }
+
+    /** Marks these stories new again (Undo after Mark all read); false when none was read. */
+    fun markUnread(keys: Collection<String>): Boolean {
+        val next = NewsRules.withoutRead(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.READ)?.textOrNull, keys) ?: return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.READ to next.fv()))
+        return true
+    }
 
     companion object {
         const val ENTITY_ID = "news"

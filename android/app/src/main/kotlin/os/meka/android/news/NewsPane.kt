@@ -3,6 +3,7 @@ package os.meka.android.news
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -33,6 +34,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,6 +51,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -90,6 +93,11 @@ private const val SWIPE_DP = 72f
  * Pictures (images slice): each story shows the picture its feed names, made small by the server and fetched from it
  * by key ([NewsThumb]); the detail leads with it. A tile with the source's initial stands in until it arrives.
  *
+ * Full news hub, slice 1: a brass dot marks a story not read yet (Barça's colour on Barça); opening it marks it read on
+ * both apps and its dot and title fade to the quieter colours. Over the lanes "12 new · 6 read" with **Mark all read**
+ * (Undo for 6 s); each lane's name carries "3 new". In a story, **Save for the train** puts its link in the train
+ * queue, then "✓ In your train queue".
+ *
  * Motion: lanes stagger in 40 ms apart; pictures cross-fade in over their tiles; the topic chips unfold in place and a chosen chip's colour blends with a tick
  * haptic; the detail springs up from the bottom; Previous/Next slide the story across the way you moved with a tick
  * haptic. Reduced motion: cross-fades only.
@@ -105,6 +113,9 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
     var eventOpen by remember { mutableStateOf<CalendarEvent?>(null) }
     var eventShown by remember { mutableStateOf<CalendarEvent?>(null) }
     if (eventOpen != null) eventShown = eventOpen
+    // Full news hub, slice 1: "Marked 12 read" with Undo for a few seconds after Mark all read.
+    var markedLine by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(markedLine) { if (markedLine != null) { delay(6_000); markedLine = null } }
     BackHandler(enabled = openId != null && eventOpen == null) { openId = null }
     BackHandler(enabled = eventOpen != null) { eventOpen = null }
 
@@ -155,6 +166,23 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs),
                         )
                     }
+                }
+            }
+            place.unreadLine?.let { line ->
+                item(key = "unread") {
+                    UnreadRow(line, place.canMarkAllRead, markedLine, Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(1)),
+                        markAll = {
+                            haptics.tick()
+                            scope.launch {
+                                val n = runCatching { core.newsMarkAllRead() }.getOrDefault(0)
+                                if (n > 0) markedLine = "Marked $n read"
+                            }
+                        },
+                        undo = {
+                            haptics.tick()
+                            scope.launch { runCatching { core.newsUndoAllRead() }; markedLine = null }
+                        },
+                    )
                 }
             }
             place.matchday?.let { md ->
@@ -219,12 +247,46 @@ private fun MatchdayRow(md: NewsMatchday, modifier: Modifier, open: () -> Unit) 
     }
 }
 
+/**
+ * "12 new · 6 read" with Mark all read (accent) while anything is new; after it, "Marked 12 read" with Undo. The line
+ * and the action cross-fade.
+ */
+@Composable
+private fun UnreadRow(line: String, canMark: Boolean, marked: String?, modifier: Modifier, markAll: () -> Unit, undo: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    AnimatedContent(
+        targetState = marked to (line to canMark),
+        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+        modifier = modifier.fillMaxWidth(),
+        label = "news-unread",
+    ) { (m, l) ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(m ?: l.first, style = MekaType.itemMeta, color = if (m != null) Meka.colors.accent else Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            val action = when {
+                m != null -> "Undo" to undo
+                l.second -> "Mark all read" to markAll
+                else -> null
+            }
+            action?.let { (label, go) ->
+                Text(label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clickable(role = Role.Button) { go() }.minTouch().padding(horizontal = MekaSpace.xs))
+            }
+        }
+    }
+}
+
 @Composable
 private fun LaneHeader(lane: NewsLane, modifier: Modifier) {
     Column(modifier.fillMaxWidth()) {
         if (lane.isBarca) {
-            Text(lane.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.barca, modifier = Modifier.padding(bottom = MekaSpace.xxs))
-        } else SectionLabel(lane.label)
+            Row(Modifier.padding(bottom = MekaSpace.xxs)) {
+                Text(lane.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.barca)
+                lane.unreadLabel?.let { Text(" · " + it.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.barca) }
+            }
+        } else Row(verticalAlignment = Alignment.CenterVertically) {
+            SectionLabel(lane.label)
+            lane.unreadLabel?.let { Text(" · " + it.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent) }
+        }
         if (lane.sources.isNotEmpty()) Text(lane.sources, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
@@ -241,10 +303,20 @@ private fun StoryRow(core: MekaCore, n: NewsItem, modifier: Modifier, open: () -
             .padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
+        // Full news hub, slice 1: brass (Barça's colour) while new, the quiet colour once read; the change blends.
+        val dot by animateColorAsState(
+            when {
+                n.read -> Meka.colors.textTertiary.copy(alpha = 0.4f)
+                n.topic == "barca" -> Meka.colors.barca
+                else -> Meka.colors.accent
+            },
+            MekaMotion.appear(Meka.reducedMotion), label = "news-dot",
+        )
+        val titleColour by animateColorAsState(if (n.read) Meka.colors.textSecondary else Meka.colors.textPrimary, MekaMotion.appear(Meka.reducedMotion), label = "news-title")
         Box(Modifier.padding(top = 7.dp, end = MekaSpace.xs).size(6.dp).clip(CircleShape) // rhythm: ok (centres the dot on the title's first line)
-            .background(if (n.topic == "barca") Meka.colors.barca else Meka.colors.textTertiary))
-        Column(Modifier.weight(1f)) {
-            Text(n.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            .background(dot))
+        Column(Modifier.weight(1f).semantics { if (!n.read) contentDescription = "New. ${n.title}" }) {
+            Text(n.title, style = MekaType.body, color = titleColour)
             Text(n.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         NewsThumb(core, n, Modifier.padding(start = MekaSpace.xs, top = 2.dp).size(width = 72.dp, height = 54.dp)) // rhythm: ok (lines the picture up with the title)
@@ -261,6 +333,10 @@ private fun NewsDetailSheet(core: MekaCore, d: NewsDetail, onClose: () -> Unit, 
     val reduced = Meka.reducedMotion
     var dragged by remember { mutableStateOf(0f) }
     val swipePx = SWIPE_DP
+    val scope = rememberCoroutineScope()
+    // Full news hub, slice 1: opening a story marks it read on both apps; Save for the train's answer under its button.
+    LaunchedEffect(d.item.id) { runCatching { core.newsOpened(d.item.id) } }
+    var savedLine by remember(d.item.id) { mutableStateOf<Pair<String, Boolean>?>(null) }
 
     Column(
         Modifier.fillMaxSize().padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l)
@@ -323,6 +399,31 @@ private fun NewsDetailSheet(core: MekaCore, d: NewsDetail, onClose: () -> Unit, 
                             .semantics { contentDescription = "Read full story on ${s.item.source}, opens the browser" }
                             .padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
                     )
+                }
+                // Save for the train (full news hub, slice 1): the link into the train queue, on both apps.
+                if (s.item.url != null) {
+                    AnimatedContent(
+                        targetState = s.item.queued to savedLine,
+                        transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                        modifier = Modifier.padding(top = MekaSpace.m).fillMaxWidth(),
+                        label = "news-train",
+                    ) { (queued, line) ->
+                        when {
+                            line != null && line.second -> Text(line.first, style = MekaType.itemMeta, color = Meka.colors.accent)
+                            queued -> Text("✓ In your train queue" + (line?.let { "" } ?: " · Ask → Daily → Train queue"), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                            else -> Text(
+                                "Save for the train", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                                    .clickable(role = Role.Button) {
+                                        scope.launch {
+                                            val r = runCatching { core.newsForTrain(s.item.id) }.getOrNull()
+                                            savedLine = r?.let { it.line to it.refused }
+                                        }
+                                    }
+                                    .minTouch().padding(horizontal = MekaSpace.l),
+                            )
+                        }
+                    }
                 }
             }
         }

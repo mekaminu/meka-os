@@ -1919,6 +1919,30 @@ final class CoreModel {
     /// News → Spanish sources (off = English only everywhere news shows); synced.
     func setNewsSpanish(on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsSpanish(on: on) } }
 
+    // Full news hub, slice 1: read and new (synced with the Fold), Mark all read with Undo, Save for the train.
+    /// Opening a story in News marks it read on both apps. Only the story's id crosses.
+    func newsOpened(_ id: String) { run { _ = try await $0.newsOpened(id: id) } }
+    /// Mark all read: the count put away (0 when nothing was new).
+    func newsMarkAllRead() async -> Int {
+        guard let core else { return 0 }
+        do {
+            let n = Int(try await core.newsMarkAllRead().int32Value)
+            if n > 0 { MekaHaptics.tick() }
+            return n
+        } catch { lastError = error.localizedDescription; return 0 }
+    }
+    /// Puts the last Mark all read back.
+    func newsUndoAllRead() { MekaHaptics.tick(); run { _ = try await $0.newsUndoAllRead() } }
+    /// Save for the train from a story: its link into the train queue; the line to show and whether it was refused.
+    func newsForTrain(_ id: String) async -> QueueSaid? {
+        guard let core else { return nil }
+        do {
+            let r = try await core.newsForTrain(id: id)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return QueueSaid(line: r.line, refused: r.refused)
+        } catch { lastError = error.localizedDescription; return nil }
+    }
+
     // MARK: Activity log
 
     /// Puts back what an activity entry changed (light haptic); syncs like any edit. Only a String crosses into the core.
