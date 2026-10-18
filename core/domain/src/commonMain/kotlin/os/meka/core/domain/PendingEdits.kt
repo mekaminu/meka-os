@@ -60,12 +60,15 @@ object PendingEditRules {
                         if (CalendarEditRules.clashes(EventEditKind.CHANGE, edit.changes, base, before)) continue
                     }
                     val after = CalendarEditRules.merged(before, draft, edit.changes)
-                    // Completeness slice 1: every event of the series changes the same way (each keeps its own day).
-                    if (edit.every && current.series != null) {
+                    // Completeness slice 1: every event of the series changes the same way (each keeps its own day);
+                    // slice 2: this and following, only the ones from this one's start (as MEKA saw it) on.
+                    if ((edit.every || edit.following) && current.series != null) {
                         val shift = after.startAtMs - before.startAtMs
                         val length = after.endAtMs - after.startAtMs
+                        val from = edit.base?.startAtMs ?: before.startAtMs
                         for (other in out.values.toList()) {
                             if (other.id == id || other.series != current.series || other.account != current.account) continue
+                            if (!edit.every && other.startAtMs < from) continue
                             val start = if (EventEditChange.TIME in edit.changes && !other.allDay) other.startAtMs + shift else other.startAtMs
                             out[other.id] = other.copy(
                                 title = if (EventEditChange.TITLE in edit.changes) after.title.trim().ifEmpty { other.title } else other.title,
@@ -87,9 +90,13 @@ object PendingEditRules {
                 EventEditKind.DELETE -> edit.eventId?.let { id ->
                     val series = out[id]?.series
                     val account = out[id]?.account
+                    val from = edit.base?.startAtMs ?: out[id]?.startAtMs ?: Long.MAX_VALUE
                     out.remove(id)
-                    // Completeness slice 1: every event of the series goes with it.
+                    // Completeness slice 1: every event of the series goes with it; slice 2: the ones after it.
                     if (edit.every && series != null) out.values.filter { it.series == series && it.account == account }.forEach { out.remove(it.id) }
+                    else if (edit.following && series != null) {
+                        out.values.filter { it.series == series && it.account == account && it.startAtMs >= from }.forEach { out.remove(it.id) }
+                    }
                 }
             }
         }

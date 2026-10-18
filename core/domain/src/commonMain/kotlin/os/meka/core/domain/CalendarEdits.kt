@@ -69,7 +69,8 @@ object EventEditFields {
     const val FOR_TASK = "forTask"
     /**
      * Completeness slice 1: "EVERY" when a change or delete of one event of a repeating series is for every event of
-     * it (the server writes it to the series itself); absent for this event only. Additive (ADR-008 addendum).
+     * it (the server writes it to the series itself); "FOLLOWING" (completeness slice 2) for this event and every one
+     * after it (the server splits the series there); absent for this event only. Additive (ADR-008 addendum).
      */
     const val SCOPE = "scope"
 
@@ -151,6 +152,8 @@ data class EventEdit(
     val forTask: String? = null,
     /** Completeness slice 1: a change or delete for every event of the event's repeating series. */
     val every: Boolean = false,
+    /** Completeness slice 2: a change or delete for this event and every later one of its series (never with [every]). */
+    val following: Boolean = false,
 ) {
     fun state(nowMs: Long): EventEditState = when {
         status != null -> EventEditState.valueOf(status.name)
@@ -185,6 +188,8 @@ object CalendarEditRules {
 
     /** [EventEditFields.SCOPE]'s value for every event of a series. */
     const val SCOPE_EVERY = "EVERY"
+    /** [EventEditFields.SCOPE]'s value for this event and the ones after it (completeness slice 2). */
+    const val SCOPE_FOLLOWING = "FOLLOWING"
 
     /** The providers MEKA can write to (never the fixtures feed or other public feeds). */
     val WRITABLE = setOf("google", "microsoft")
@@ -219,6 +224,28 @@ object CalendarEditRules {
             else -> null
         }
     }
+
+    /**
+     * Completeness slice 2: why a change ([merged] set) or delete ([merged] null) of [event] and every later event of
+     * its series can't be made, or null. Google only (it splits the series at this event: the earlier ones end the day
+     * before, a new series starts here), timed series only, and like Every event each keeps its own day.
+     */
+    fun followingProblem(event: CalendarEvent, base: EventDraft, merged: EventDraft?, changes: Set<EventEditChange>, calendar: LocalCalendar?): String? {
+        if (!event.repeats) return "It doesn't repeat"
+        val p = providerName(event.provider)
+        return when {
+            event.provider != "google" -> "This and following is changed in $p itself · or choose This event or Every event"
+            event.allDay || base.allDay -> "An all-day series · change it in $p, or choose This event"
+            merged == null || EventEditChange.TIME !in changes -> null
+            merged.allDay -> "An all-day series · change it in $p, or choose This event"
+            calendar != null && calendar.epochDayOf(base.startAtMs) != calendar.epochDayOf(merged.startAtMs) ->
+                "Each keeps its own day · choose This event to move just this one"
+            else -> null
+        }
+    }
+
+    /** Whether "This and following" is offered for [event] (completeness slice 2): a timed Google series. */
+    fun canSplit(event: CalendarEvent): Boolean = event.repeats && event.provider == "google" && !event.allDay
 
     /** Whether MEKA may offer editing on [event]: a Google/Outlook event of an account where editing is allowed. */
     fun editable(event: CalendarEvent, canEdit: (provider: String, account: String) -> Boolean): Boolean =
@@ -292,7 +319,8 @@ object CalendarEditRules {
     fun line(e: EventEdit, nowMs: Long): String {
         val p = providerName(e.provider)
         val title = if (e.kind == EventEditKind.ADD || EventEditChange.TITLE in e.changes) e.draft?.title else e.base?.title
-        val t = (if (e.every && e.kind != EventEditKind.ADD) "every " else "") + "“${title.orEmpty().trim().ifEmpty { "Event" }.take(60)}”"
+        val t = (if (e.every && e.kind != EventEditKind.ADD) "every " else "") + "“${title.orEmpty().trim().ifEmpty { "Event" }.take(60)}”" +
+            (if (e.following && e.kind != EventEditKind.ADD) " and the ones after" else "")
         return when (e.state(nowMs)) {
             EventEditState.WAITING, EventEditState.SENDING -> when {
                 e.kind == EventEditKind.ADD -> "Adding $t to $p"
@@ -366,6 +394,7 @@ object CalendarEditRules {
             resends = f(EventEditFields.RESENDS).textOrNull?.ifEmpty { null },
             forTask = f(EventEditFields.FOR_TASK).textOrNull?.ifEmpty { null },
             every = kind != EventEditKind.ADD && f(EventEditFields.SCOPE).textOrNull == SCOPE_EVERY,
+            following = kind != EventEditKind.ADD && f(EventEditFields.SCOPE).textOrNull == SCOPE_FOLLOWING,
         )
     }
 
@@ -416,9 +445,13 @@ class CalendarEdits(
 
     /**
      * Changes [event] to [draft] (only what differs is sent); [forTask] when it keeps a task's block in step; [every]
-     * for every event of its repeating series (completeness slice 1, [CalendarEditRules.everyProblem]).
+     * for every event of its repeating series (completeness slice 1, [CalendarEditRules.everyProblem]); [following] for
+     * this event and every later one (completeness slice 2, [CalendarEditRules.followingProblem]).
      */
-    fun change(event: CalendarEvent, draft: EventDraft, forTask: String? = null, every: Boolean = false, calendar: LocalCalendar? = null): EventEditResult {
+    fun change(
+        event: CalendarEvent, draft: EventDraft, forTask: String? = null, every: Boolean = false, calendar: LocalCalendar? = null,
+        following: Boolean = false,
+    ): EventEditResult {
         guard(event)?.let { return it }
         val base = CalendarEditRules.draftOf(event)
         val d = CalendarEditRules.clean(draft)
@@ -427,7 +460,9 @@ class CalendarEdits(
         val merged = CalendarEditRules.merged(base, d, changes)
         CalendarEditRules.problem(merged, nowMs())?.let { return EventEditResult.Refused(it) }
         if (every) CalendarEditRules.everyProblem(event, base, merged, changes, calendar)?.let { return EventEditResult.Refused(it) }
-        return EventEditResult.Made(write(EventEditKind.CHANGE, event.provider, event.account!!, event.id, changes, d, base, false, forTask = forTask, every = every))
+        val from = following && !every
+        if (from) CalendarEditRules.followingProblem(event, base, merged, changes, calendar)?.let { return EventEditResult.Refused(it) }
+        return EventEditResult.Made(write(EventEditKind.CHANGE, event.provider, event.account!!, event.id, changes, d, base, false, forTask = forTask, every = every, following = from))
     }
 
     /** Moves [event] to start at [startAtMs], keeping its length. */
@@ -438,11 +473,13 @@ class CalendarEdits(
      * Deletes [event]; [guestsOk] when Meka confirmed it cancels the event for its guests; [forTask] when a task's
      * block goes with its task.
      */
-    fun delete(event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null, every: Boolean = false): EventEditResult {
+    fun delete(event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null, every: Boolean = false, following: Boolean = false): EventEditResult {
         guard(event)?.let { return it }
         if (every && !event.repeats) return EventEditResult.Refused("It doesn't repeat")
+        val from = following && !every
+        if (from) CalendarEditRules.followingProblem(event, CalendarEditRules.draftOf(event), null, emptySet(), null)?.let { return EventEditResult.Refused(it) }
         return EventEditResult.Made(
-            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask, every = every),
+            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask, every = every, following = from),
         )
     }
 
@@ -471,7 +508,7 @@ class CalendarEdits(
         if (!canEdit(e.provider, e.account)) return refusedNotAllowed(e.provider, e.account)
         val newId = when (e.kind) {
             EventEditKind.ADD -> return EventEditResult.Refused("Already chosen")
-            EventEditKind.DELETE -> write(EventEditKind.DELETE, e.provider, e.account, e.eventId, emptySet(), null, theirs, e.guestsOk, resends = e.id, every = e.every)
+            EventEditKind.DELETE -> write(EventEditKind.DELETE, e.provider, e.account, e.eventId, emptySet(), null, theirs, e.guestsOk, resends = e.id, every = e.every, following = e.following)
             EventEditKind.CHANGE -> {
                 val draft = e.draft ?: return EventEditResult.Refused("That change isn't there any more")
                 val mine = CalendarEditRules.merged(theirs, draft, e.changes)
@@ -481,7 +518,7 @@ class CalendarEdits(
                     return EventEditResult.Refused("${CalendarEditRules.providerName(e.provider)} already has your version")
                 }
                 CalendarEditRules.problem(mine, nowMs())?.let { return EventEditResult.Refused(it) }
-                write(EventEditKind.CHANGE, e.provider, e.account, e.eventId, changes, draft, theirs, false, resends = e.id, every = e.every)
+                write(EventEditKind.CHANGE, e.provider, e.account, e.eventId, changes, draft, theirs, false, resends = e.id, every = e.every, following = e.following)
             }
         }
         resolve(e.id, ClashChoice.MINE)
@@ -519,7 +556,7 @@ class CalendarEdits(
     private fun write(
         kind: EventEditKind, provider: String, account: String, eventId: String?, changes: Set<EventEditChange>,
         draft: EventDraft?, base: EventDraft?, guestsOk: Boolean, resends: String? = null, forTask: String? = null,
-        every: Boolean = false,
+        every: Boolean = false, following: Boolean = false,
     ): String {
         val id = ids()
         val now = nowMs()
@@ -555,6 +592,7 @@ class CalendarEdits(
         resends?.let { fields[EventEditFields.RESENDS] = it.fv() }
         forTask?.let { fields[EventEditFields.FOR_TASK] = it.fv() }
         if (every && kind != EventEditKind.ADD) fields[EventEditFields.SCOPE] = CalendarEditRules.SCOPE_EVERY.fv()
+        else if (following && kind != EventEditKind.ADD) fields[EventEditFields.SCOPE] = CalendarEditRules.SCOPE_FOLLOWING.fv()
         replica.commitLocal(EntityTypes.EVENT_EDIT, id, fields)
         return id
     }

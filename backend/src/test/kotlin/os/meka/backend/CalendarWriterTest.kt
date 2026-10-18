@@ -73,6 +73,14 @@ class CalendarWriterTest {
         override fun updateSeries(accessToken: String, seriesId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
             fail?.invoke(); seriesUpdated += Triple(seriesId, draft, changes); notified += notifyGuests
         }
+        val splits = mutableListOf<Triple<String, Long, EventDraft?>>()
+        var splitAnswer: String? = null
+        override fun splitSeries(
+            accessToken: String, seriesId: String, fromStartMs: Long, draft: EventDraft?, changes: Set<EventEditChange>,
+            notifyGuests: Boolean, idemKey: String,
+        ): String? {
+            fail?.invoke(); if (splitAnswer == null) splits += Triple(seriesId, fromStartMs, draft); notified += notifyGuests; return splitAnswer
+        }
     }
 
     private class PlainCipher : TokenCipher {
@@ -482,6 +490,87 @@ class CalendarWriterTest {
         val (start, end) = g.seriesTimes("2026-03-02T09:00:00Z", "Europe/London", d)
         assertEquals("""{"dateTime":"2026-03-02T17:30:00Z","timeZone":"Europe/London"}""", start.toString())
         assertEquals("""{"dateTime":"2026-03-02T18:15:00Z","timeZone":"Europe/London"}""", end.toString())
+    }
+
+    // ---- Completeness slice 2: this and following ----
+
+    @Test
+    fun thisAndFollowingSplitsTheSeriesAtThisEvent() {
+        val (first, second) = series()
+        provider.copies["cal1/gym_2"] = RemoteCopy(CalendarEditRules.draftOf(second), true, 0, seriesId = "cal1/gym", originalStartMs = second.startAtMs)
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false, "Leisure centre"), true, 0)
+        val id = made(edits.change(second, CalendarEditRules.draftOf(second).copy(title = "Swim"), following = true))
+        assertTrue(edits.edit(id)!!.following)
+        // Only this one and the ones after change on screen; the earlier one stays.
+        val shown = os.meka.core.domain.PendingEditRules.apply(CalendarEvents(fold).all(), edits.all(), now)
+        assertEquals("Gym", shown.single { it.id == first.id }.title)
+        assertEquals("Swim", shown.single { it.id == second.id }.title)
+        assertEquals("Changing “Swim” and the ones after in Google", CalendarEditRules.line(edits.edit(id)!!, now))
+        sync()
+        now += 10_000
+        writer.sweep()
+        assertTrue(provider.updated.isEmpty() && provider.seriesUpdated.isEmpty(), "never the one event, never the whole series")
+        val (sid, from, draft) = provider.splits.single()
+        assertEquals("cal1/gym", sid)
+        assertEquals(second.startAtMs, from)
+        assertEquals("Swim", draft!!.title)
+        sync()
+        assertEquals(EventEditState.DONE, state(id))
+        assertEquals("Changed “Swim” and the ones after in Google", CalendarEditRules.line(edits.edit(id)!!, now))
+    }
+
+    @Test
+    fun thisAndFollowingFromTheFirstEventIsEveryEventAndGuestsAreGuarded() {
+        val (first, second) = series()
+        // The series starts with this event: the whole series is changed, nothing is split.
+        provider.copies["cal1/gym_1"] = RemoteCopy(CalendarEditRules.draftOf(first), true, 0, seriesId = "cal1/gym", originalStartMs = first.startAtMs)
+        provider.copies["cal1/gym"] = RemoteCopy(CalendarEditRules.draftOf(first), true, 0)
+        val whole = made(edits.change(first, CalendarEditRules.draftOf(first).copy(title = "Swim"), following = true))
+        sync(); now += 10_000; writer.sweep(); sync()
+        assertEquals(EventEditState.DONE, state(whole))
+        assertEquals("cal1/gym", provider.seriesUpdated.single().first)
+        assertTrue(provider.splits.isEmpty())
+
+        // With guests: a change would invite them again (refused); a delete needs the second tap, then cuts the series.
+        provider.copies["cal1/gym_2"] = RemoteCopy(CalendarEditRules.draftOf(second), true, 0, seriesId = "cal1/gym", originalStartMs = second.startAtMs)
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false), true, 3)
+        val renamed = made(edits.change(second, CalendarEditRules.draftOf(second).copy(title = "Run"), following = true))
+        sync(); now += 10_000; writer.sweep(); sync()
+        assertEquals(EventEditState.REFUSED, state(renamed))
+        assertEquals("Its guests would get a new invitation · change it in Google, or choose This event or Every event", CalendarEditRules.line(edits.edit(renamed)!!, now))
+        val gone = made(edits.delete(second, following = true))
+        sync(); now += 10_000; writer.sweep(); sync()
+        assertEquals("This cancels it for 3 people", CalendarEditRules.line(edits.edit(gone)!!, now))
+        assertTrue(os.meka.core.domain.EditEventRules.note(second.id, edits.all(), now)!!.followingEvents)
+        val anyway = made(edits.delete(second, guestsOk = true, following = true))
+        sync(); now += 10_000; writer.sweep(); sync()
+        assertEquals(EventEditState.DONE, state(anyway))
+        assertEquals(Triple("cal1/gym", second.startAtMs, null), provider.splits.single())
+        assertTrue(provider.deleted.isEmpty(), "the series itself stays, ending before this one")
+
+        // Google's own words when it can't be cut (a set number of times) come back as the refusal.
+        provider.splitAnswer = "It repeats a set number of times · change it in Google, or choose Every event"
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false), true, 0)
+        val counted = made(edits.change(second, CalendarEditRules.draftOf(second).copy(title = "Row"), following = true))
+        sync(); now += 10_000; writer.sweep(); sync()
+        assertEquals(EventEditState.REFUSED, state(counted))
+        assertEquals(provider.splitAnswer, CalendarEditRules.line(edits.edit(counted)!!, now))
+    }
+
+    @Test
+    fun aSeriesIsCutTheSecondBeforeThisEvent() {
+        // 2026-10-19 17:00 UTC.
+        val from = 1_792_429_200_000L
+        assertEquals("20261019T165959Z", SeriesSplit.until(from))
+        assertEquals(
+            listOf("RRULE:FREQ=WEEKLY;BYDAY=MO;UNTIL=20261019T165959Z", "EXDATE;TZID=Europe/London:20261012T180000"),
+            SeriesSplit.endBefore(listOf("RRULE:FREQ=WEEKLY;COUNT=20;BYDAY=MO", "EXDATE;TZID=Europe/London:20261012T180000"), SeriesSplit.until(from)),
+        )
+        assertEquals(listOf("RRULE:FREQ=DAILY;UNTIL=20261019T165959Z"), SeriesSplit.endBefore(listOf("RRULE:FREQ=DAILY;UNTIL=20271231T000000Z"), SeriesSplit.until(from)))
+        assertNull(SeriesSplit.endBefore(listOf("RDATE:20261020T170000Z"), "x"))
+        assertNull(SeriesSplit.problem(listOf("RRULE:FREQ=WEEKLY;BYDAY=MO", "EXDATE:20261012T170000Z")))
+        assertEquals("It repeats a set number of times · change it in Google, or choose Every event", SeriesSplit.problem(listOf("RRULE:FREQ=WEEKLY;COUNT=10")))
+        assertEquals("It has extra dates · change it in Google, or choose Every event", SeriesSplit.problem(listOf("RRULE:FREQ=WEEKLY", "RDATE:20261020T170000Z")))
     }
 
     @Test

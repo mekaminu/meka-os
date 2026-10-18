@@ -1,7 +1,7 @@
 ---
 id: calendars
 title: Calendars
-keywords: calendars, calendar, google calendar, connect calendar, weather place, weather places, barça, barca, barça match, where to watch barça, what channel is barça on, is barça on tv, kick-off time, barça score, live score, goal alerts, barça goals, full time, barça result, repeating event, every event
+keywords: calendars, calendar, google calendar, connect calendar, weather place, weather places, barça, barca, barça match, where to watch barça, what channel is barça on, is barça on tv, kick-off time, barça score, live score, goal alerts, barça goals, full time, barça result, repeating event, every event, this and following
 data: yes
 fold: CALENDARS
 fold_where: Ask → Settings → Calendars
@@ -14,3 +14,4 @@ tip: Each Barça match in the Fixtures calendar says its kick-off in UK time and
 tip: While a Barça match is on, its notes in the Calendar lead with the live score and who scored ("Live: Barça 2–1 Getafe · 67'", then "Full time: …"), News leads with it, and each goal and the final score come as a heads-up in one place that updates. For goals only or full time only, lower "Barça full time" or "Barça goals" in Ask → Settings → Notifications.
 tip: The morning brief says last night's Barça result and who scored for Barça ("Last night Barça beat Getafe two–one, with goals from Lewandowski and Yamal"), and on a match day which channel it's on. Ask or Talk "what's the score?", "did Barça win?" or "what channel is Barça on?" for the match in your calendar; without the internet Navilife answers from the match's notes itself.
 tip: Editing an event that repeats (a weekly gym session, say) asks **This event · Every event** above When: Every event renames it, changes its place, notes or time of day (each keeps its own day) and Delete every event removes the whole series, in Google, after the five-second Undo. Moving it to another day is for This event only.
+tip: **This and following** (on a timed Google series) changes or deletes this event and every one after it, leaving the earlier ones as they were: Google ends the series the day before and starts a new one from this day.

@@ -25,13 +25,13 @@ class RepeatingEventEditTest {
         val f = EditEventRules.start(e, now, bst)
         assertFalse(f.every)
         val v = EditEventRules.view(f, e, canEdit = true, now, bst)
-        assertEquals(listOf("This event", "Every event"), v.scopes.map { it.label })
-        assertEquals(listOf(true, false), v.scopes.map { it.selected })
+        assertEquals(listOf("This event", "This and following", "Every event"), v.scopes.map { it.label })
+        assertEquals(listOf(true, false, false), v.scopes.map { it.selected })
         assertEquals("Delete this event from Google", v.deleteLabel)
         assertEquals("It repeats · only this one changes", v.scopeNote)
 
         val every = EditEventRules.view(f.withEvery(true).withTitle("Swim"), e, true, now, bst)
-        assertEquals(listOf(false, true), every.scopes.map { it.selected })
+        assertEquals(listOf(false, false, true), every.scopes.map { it.selected })
         assertEquals("Delete every event from Google", every.deleteLabel)
         assertTrue(every.canAdd)
         assertEquals("Deleting every “Gym” from Google", EditEventRules.deletingLine(e, every = true))
@@ -89,5 +89,68 @@ class RepeatingEventEditTest {
             edits.change(e, CalendarEditRules.draftOf(e).let { it.copy(startAtMs = it.startAtMs + 86_400_000L, endAtMs = it.endAtMs + 86_400_000L) }, every = true, calendar = bst)
                 is EventEditResult.Refused,
         )
+    }
+
+    // ---- Completeness slice 2: this and following ----
+
+    @Test
+    fun aTimedGoogleSeriesAlsoOffersThisAndFollowing() {
+        val e = gym()
+        val f = EditEventRules.start(e, now, bst)
+        val v = EditEventRules.view(f, e, true, now, bst)
+        assertEquals(listOf("This event", "This and following", "Every event"), v.scopes.map { it.label })
+        val choice = v.scopes[1]
+        assertTrue(choice.following)
+        val from = f.withScope(choice)
+        assertTrue(from.following)
+        assertFalse(from.every)
+        val fv = EditEventRules.view(from.withTitle("Swim"), e, true, now, bst)
+        assertEquals(listOf(false, true, false), fv.scopes.map { it.selected })
+        assertEquals("Delete this and the ones after from Google", fv.deleteLabel)
+        assertEquals("This one and every one after it change · earlier ones stay as they were", fv.scopeNote)
+        assertTrue(fv.canAdd)
+        assertEquals("Deleting “Gym” and the ones after from Google", EditEventRules.deletingLine(e, following = true))
+        // Another day is for this one only; a new time of day is fine.
+        assertEquals("Each keeps its own day · choose This event to move just this one", EditEventRules.view(from.withDay(thu + 2), e, true, now, bst).problem)
+        assertNull(EditEventRules.view(from.stepTime(2), e, true, now, bst).problem)
+        // Choosing Every event drops it, and back.
+        val every = from.withScope(v.scopes[2])
+        assertTrue(every.every && !every.following)
+        assertFalse(every.withScope(v.scopes[0]).let { it.every || it.following })
+
+        // Outlook's and all-day series keep to This event · Every event.
+        val outlook = gym("microsoft")
+        assertEquals(listOf("This event", "Every event"), EditEventRules.view(EditEventRules.start(outlook, now, bst), outlook, true, now, bst).scopes.map { it.label })
+        val allDay = gym(allDay = true)
+        assertEquals(listOf("This event", "Every event"), EditEventRules.view(EditEventRules.start(allDay, now, bst), allDay, true, now, bst).scopes.map { it.label })
+    }
+
+    @Test
+    fun thisAndFollowingIsSyncedAndShowsOnlyFromThisOneOn() {
+        val world = os.meka.core.testing.SyncWorld()
+        val fold = world.device("fold")
+        var n = 0
+        val edits = CalendarEdits(fold.replica, { world.clock.nowMs }, { "edit${n++}" }) { _, _ -> true }
+        val week = 7 * 86_400_000L
+        val e = gym()
+        val earlier = e.copy(id = "ev0", startAtMs = e.startAtMs - week, endAtMs = e.endAtMs - week)
+        val later = e.copy(id = "ev2", startAtMs = e.startAtMs + week, endAtMs = e.endAtMs + week)
+        val other = e.copy(id = "ev9", title = "Dentist", series = null)
+        val id = (edits.change(e, CalendarEditRules.draftOf(e).copy(title = "Swim"), following = true, calendar = bst) as EventEditResult.Made).id
+        val edit = edits.edit(id)!!
+        assertTrue(edit.following && !edit.every)
+        val shown = PendingEditRules.apply(listOf(earlier, e, later, other), edits.all(), world.clock.nowMs).associateBy { it.id }
+        assertEquals("Gym", shown.getValue("ev0").title)
+        assertEquals("Swim", shown.getValue("ev1").title)
+        assertEquals("Swim", shown.getValue("ev2").title)
+        assertEquals("Dentist", shown.getValue("ev9").title)
+        edits.undo(id)
+
+        val del = (edits.delete(e, following = true) as EventEditResult.Made).id
+        assertTrue(edits.edit(del)!!.following)
+        assertEquals(listOf("ev0", "ev9"), PendingEditRules.apply(listOf(earlier, e, later, other), edits.all(), world.clock.nowMs).map { it.id })
+        // Outlook's series: refused before anything is written.
+        assertTrue(edits.delete(gym("microsoft"), following = true) is EventEditResult.Refused)
+        assertTrue(edits.change(gym(allDay = true), CalendarEditRules.draftOf(gym(allDay = true)).copy(title = "Swim"), following = true) is EventEditResult.Refused)
     }
 }

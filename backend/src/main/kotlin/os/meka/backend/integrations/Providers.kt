@@ -179,6 +179,48 @@ interface CalendarProvider {
      */
     fun updateSeries(accessToken: String, seriesId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean): Unit =
         throw UnsupportedOperationException("read-only provider")
+
+    /**
+     * Completeness slice 2, "this and following": the series [seriesId] ends just before [fromStartMs] (the original
+     * start of the event Meka edited) and, when [draft] is given, a new series starts there carrying the same repeat
+     * rule with [changes] from [draft] ([idemKey] makes it once on a retry). [draft] null deletes this and the ones
+     * after. Returns why it can't be done in words (nothing was changed then), or null once done.
+     */
+    fun splitSeries(
+        accessToken: String, seriesId: String, fromStartMs: Long, draft: EventDraft?, changes: Set<EventEditChange>,
+        notifyGuests: Boolean, idemKey: String,
+    ): String? = throw UnsupportedOperationException("read-only provider")
+}
+
+/**
+ * Completeness slice 2: a series' repeat lines (RFC 5545 `RRULE` / `EXDATE` / `RDATE`, as Google keeps them) cut at
+ * one event. Non-AI, pure.
+ */
+internal object SeriesSplit {
+    /** UNTIL for the earlier part: a second before [fromStartMs], in UTC (`20261019T165959Z`). */
+    fun until(fromStartMs: Long): String =
+        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC).format(Instant.ofEpochMilli(fromStartMs - 1_000))
+
+    /** The earlier part's lines: its RRULE ends at [until] (COUNT and UNTIL dropped, as RFC 5545 allows only one); null without an RRULE. */
+    fun endBefore(lines: List<String>, until: String): List<String>? {
+        if (lines.none { isRule(it) }) return null
+        return lines.map { line ->
+            if (!isRule(line)) line
+            else "RRULE:" + (parts(line).filterNot { it.startsWith("COUNT=", true) || it.startsWith("UNTIL=", true) } + "UNTIL=$until").joinToString(";")
+        }
+    }
+
+    /** Why the later part can't carry on with the same rule, or null: a set number of times, or extra dates, are Google's to cut. */
+    fun problem(lines: List<String>): String? = when {
+        lines.none { isRule(it) } -> "It doesn't repeat by a rule in Google · change it there"
+        lines.filter { isRule(it) }.any { l -> parts(l).any { it.startsWith("COUNT=", true) } } ->
+            "It repeats a set number of times · change it in Google, or choose Every event"
+        lines.any { it.startsWith("RDATE", true) } -> "It has extra dates · change it in Google, or choose Every event"
+        else -> null
+    }
+
+    private fun isRule(l: String) = l.startsWith("RRULE:", ignoreCase = true)
+    private fun parts(l: String) = l.substringAfter(':').split(';').filter { it.isNotBlank() }
 }
 
 /** The provider's copy of one event, as the clash check and the guards need it. */
@@ -190,6 +232,8 @@ data class RemoteCopy(
     val guests: Int,
     /** Completeness slice 1: the series this event is one of ([RemoteEvent.seriesId] form), or null. */
     val seriesId: String? = null,
+    /** Completeness slice 2: where the series first put this event (Google `originalStartTime`), or null. */
+    val originalStartMs: Long? = null,
 )
 
 /** The provider said no to a write (HTTP 403: the write permission was taken away, or the calendar is read-only). */
@@ -465,7 +509,12 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
             it["self"]?.jsonPrimitive?.booleanOrNull != true && it["resource"]?.jsonPrimitive?.booleanOrNull != true
         }
         val draft = EventDraft(e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), plainText(e["description"].str()))
-        return RemoteCopy(draft, mine, guests, seriesId = e["recurringEventId"].str()?.let { "${calendarPart(remoteId)}/$it" })
+        val original = (e["originalStartTime"] as? JsonObject)?.let { o ->
+            o["dateTime"].str()?.let { OffsetDateTime.parse(it).toInstant().toEpochMilli() } ?: o["date"].str()?.let(::utcMidnight)
+        }
+        return RemoteCopy(
+            draft, mine, guests, seriesId = e["recurringEventId"].str()?.let { "${calendarPart(remoteId)}/$it" }, originalStartMs = original,
+        )
     }
 
     override fun createEvent(accessToken: String, draft: EventDraft, idemKey: String): String {
@@ -506,6 +555,55 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
         }
         val a = http.call("PATCH", "${eventUrl(seriesId)}?${updates(notifyGuests)}", accessToken, body)
         if (a.status !in 200..299) throw WriteRefused("Google HTTP ${a.status}")
+    }
+
+    override fun splitSeries(
+        accessToken: String, seriesId: String, fromStartMs: Long, draft: EventDraft?, changes: Set<EventEditChange>,
+        notifyGuests: Boolean, idemKey: String,
+    ): String? {
+        val g = http.call("GET", eventUrl(seriesId), accessToken)
+        val master = g.body?.takeIf { g.status in 200..299 } ?: throw WriteRefused("Google HTTP ${g.status}")
+        val lines = (master["recurrence"] as? JsonArray).orEmpty().mapNotNull { it.str() }
+        val start = master["start"] as? JsonObject ?: throw WriteRefused("Google series has no start")
+        val startText = start["dateTime"].str() ?: return "An all-day series · change it in Google, or choose This event"
+        val earlier = SeriesSplit.endBefore(lines, SeriesSplit.until(fromStartMs)) ?: return SeriesSplit.problem(lines)
+        if (draft != null) {
+            SeriesSplit.problem(lines)?.let { return it }
+            val zone = start["timeZone"].str()
+            val z = zone?.let { runCatching { java.time.ZoneId.of(it) }.getOrNull() } ?: ZoneOffset.UTC
+            val from = java.time.Instant.ofEpochMilli(fromStartMs).atZone(z)
+            val (s, e) = if (EventEditChange.TIME in changes) {
+                seriesTimes(from.toOffsetDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME), z.id, draft)
+            } else {
+                // The series' own time and length from this event's day.
+                val masterEnd = (master["end"] as? JsonObject)?.get("dateTime").str()
+                val length = masterEnd?.let { OffsetDateTime.parse(it).toInstant().toEpochMilli() - OffsetDateTime.parse(startText).toInstant().toEpochMilli() }
+                    ?: (draft.endAtMs - draft.startAtMs)
+                fun obj(t: java.time.ZonedDateTime) = buildJsonObject {
+                    put("dateTime", t.toOffsetDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+                    put("timeZone", z.id)
+                }
+                obj(from) to obj(from.plusNanos(length * 1_000_000L))
+            }
+            val id = "meka$idemKey"
+            require(id.length in 5..1024 && id.all { it in '0'..'9' || it in 'a'..'v' }) { "edit id isn't base32hex" }
+            val body = buildJsonObject {
+                put("id", id)
+                // What the new part keeps of the series (never its guests: the caller sends none to a series with guests).
+                for (k in listOf("summary", "location", "description", "colorId", "reminders", "transparency", "visibility")) master[k]?.let { put(k, it) }
+                googleBody(draft, changes - EventEditChange.TIME, null).forEach { (k, v) -> put(k, v) }
+                put("start", s)
+                put("end", e)
+                put("recurrence", JsonArray(lines.map { JsonPrimitive(it) }))
+            }
+            // Made first, so a retry after the series was cut never loses the later part (a retry's insert finds it: 409).
+            val a = http.call("POST", "$api/calendars/${Http.enc(calendarPart(seriesId))}/events?${updates(false)}", accessToken, body)
+            if (a.status !in 200..299 && a.status != 409) throw WriteRefused("Google HTTP ${a.status}")
+        }
+        val cut = buildJsonObject { put("recurrence", JsonArray(earlier.map { JsonPrimitive(it) })) }
+        val p = http.call("PATCH", "${eventUrl(seriesId)}?${updates(notifyGuests)}", accessToken, cut)
+        if (p.status !in 200..299) throw WriteRefused("Google HTTP ${p.status}")
+        return null
     }
 
     /**

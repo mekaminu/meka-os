@@ -162,14 +162,14 @@ fun AddEventPane(
             }
         }
 
-        // Completeness slice 1: a repeating event asks This event · Every event; Save and Delete follow the choice.
+        // Completeness slices 1–2: a repeating event asks This event · This and following · Every event; Save and Delete follow the choice.
         if (v.scopes.isNotEmpty()) {
             Label("Repeats", Modifier.appear(rememberAppearance(2)))
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).appear(rememberAppearance(2)),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                v.scopes.forEach { c -> FormChip(c.label, c.selected) { if (!c.selected) { haptics.tick(); set(f.withEvery(c.every)) } } }
+                v.scopes.forEach { c -> FormChip(c.label, c.selected) { if (!c.selected) { haptics.tick(); set(f.withScope(c)) } } }
             }
             v.scopeNote?.let { note ->
                 FadeLine(note) { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
@@ -267,7 +267,7 @@ fun AddEventPane(
                             haptics.light()
                             sending = true
                             scope.launch {
-                                when (val r = runCatching { core.deleteEvent(editing, guestsOk = false, everyEvent = f.every) }.getOrNull()) {
+                                when (val r = runCatching { core.deleteEvent(editing, guestsOk = false, everyEvent = f.every, fromThisOne = f.following) }.getOrNull()) {
                                     is EventEditResult.Made -> onDeleted(r.id)
                                     is EventEditResult.Refused -> refusal = r.reason
                                     null -> refusal = "Couldn't delete it · try again"

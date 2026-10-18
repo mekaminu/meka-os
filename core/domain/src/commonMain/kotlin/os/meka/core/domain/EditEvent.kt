@@ -97,6 +97,8 @@ object EditEventRules {
         val changes = CalendarEditRules.changes(CalendarEditRules.draftOf(e), d, e.provider)
         val p = CalendarEditRules.providerName(e.provider)
         val every = form.every && e.repeats
+        // Completeness slice 2: this one and the ones after (a timed Google series).
+        val following = form.following && !every && CalendarEditRules.canSplit(e)
         val problem = when {
             !canEdit || account == null -> "Editing isn't allowed for ${e.account ?: "this calendar"} · Allow editing in Calendars"
             d.title.isBlank() -> "Give it a title"
@@ -105,6 +107,7 @@ object EditEventRules {
                 // An event long past may be renamed; only a new time is held to the past limit.
                 ?.takeUnless { EventEditChange.TIME !in changes && it == "That's more than a year ago" }
                 ?: if (every) CalendarEditRules.everyProblem(e, CalendarEditRules.draftOf(e), CalendarEditRules.merged(CalendarEditRules.draftOf(e), d, changes), changes, calendar) else null
+                ?: if (following) CalendarEditRules.followingProblem(e, CalendarEditRules.draftOf(e), CalendarEditRules.merged(CalendarEditRules.draftOf(e), d, changes), changes, calendar) else null
         }
         val summary = if (timeOk) base.summary else EventDetails.build(e, nowMs, calendar).whenLine
         return base.copy(
@@ -127,23 +130,27 @@ object EditEventRules {
             deleteLabel = when {
                 !e.repeats -> "Delete from $p"
                 every -> "Delete every event from $p"
+                following -> "Delete this and the ones after from $p"
                 else -> "Delete this event from $p"
             },
-            scopes = if (!e.repeats) emptyList() else listOf(
-                EventScopeChoice("This event", every = false, selected = !every),
+            scopes = if (!e.repeats) emptyList() else listOfNotNull(
+                EventScopeChoice("This event", every = false, selected = !every && !following),
+                EventScopeChoice("This and following", every = false, selected = following, following = true).takeIf { CalendarEditRules.canSplit(e) },
                 EventScopeChoice("Every event", every = true, selected = every),
             ),
             scopeNote = when {
                 !e.repeats -> null
                 every -> "Every event of the series changes, past ones too · each keeps its own day"
+                following -> "This one and every one after it change · earlier ones stay as they were"
                 else -> "It repeats · only this one changes"
             },
         )
     }
 
     /** The undo bar's line for a delete ("Deleting “Dentist” from Google"). */
-    fun deletingLine(e: CalendarEvent, every: Boolean = false): String =
-        "Deleting ${if (every && e.repeats) "every " else ""}“${e.title.trim().ifEmpty { "Event" }.take(60)}” from ${CalendarEditRules.providerName(e.provider)}"
+    fun deletingLine(e: CalendarEvent, every: Boolean = false, following: Boolean = false): String =
+        "Deleting ${if (every && e.repeats) "every " else ""}“${e.title.trim().ifEmpty { "Event" }.take(60)}”" +
+            "${if (following && !every && e.repeats) " and the ones after" else ""} from ${CalendarEditRules.providerName(e.provider)}"
 
     /**
      * A delete the server held back because it cancels the event for its guests and Meka hasn't confirmed: the detail
@@ -180,6 +187,7 @@ object EditEventRules {
             waiting = line.state == EventEditState.WAITING || line.state == EventEditState.SENDING,
             clash = calendar?.let { ClashRules.view(e, nowMs, it) },
             everyEvent = e.every,
+            followingEvents = e.following,
         )
     }
 }
@@ -271,4 +279,6 @@ data class EventEditNote(
     val clash: EventClashView? = null,
     /** Completeness slice 1: the edit is for every event of the series (Delete anyway keeps it so). */
     val everyEvent: Boolean = false,
+    /** Completeness slice 2: the edit is for this event and the ones after it (Delete anyway keeps it so). */
+    val followingEvents: Boolean = false,
 )

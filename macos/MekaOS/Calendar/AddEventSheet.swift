@@ -93,12 +93,12 @@ struct AddEventSheet: View {
         .padding(.top, MekaSpace.m)
         .staggeredAppear(1)
 
-        // Completeness slice 1: a repeating event asks This event · Every event; Save and Delete follow the choice.
+        // Completeness slices 1–2: a repeating event asks This event · This and following · Every event; Save and Delete follow the choice.
         if !v.scopes.isEmpty {
             label("Repeats").staggeredAppear(2)
             HStack(spacing: MekaSpace.xs) {
                 ForEach(v.scopes, id: \.label) { c in
-                    chip(c.label, lit: c.selected) { if !c.selected { MekaHaptics.tick(); set(f.withEvery(on: c.every)) } }
+                    chip(c.label, lit: c.selected) { if !c.selected { MekaHaptics.tick(); set(f.withScope(choice: c)) } }
                 }
             }
             .staggeredAppear(2)
@@ -255,9 +255,10 @@ struct AddEventSheet: View {
     private func delete() {
         guard let e = editing, !sending else { return }
         let every = form?.every ?? false
+        let following = form?.following ?? false
         sending = true
         Task {
-            let problem = await model.deleteEvent(e, guestsOk: false, everyEvent: every)
+            let problem = await model.deleteEvent(e, guestsOk: false, everyEvent: every, fromThisOne: following)
             sending = false
             if let problem { refusal = problem } else { dismiss() }
         }

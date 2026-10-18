@@ -43,6 +43,11 @@ data class AddEventForm(
     val keepWords: Boolean = false,
     /** Editing one event of a repeating series (completeness slice 1): Save and Delete are for every event of it. */
     val every: Boolean = false,
+    /**
+     * Completeness slice 2: Save and Delete are for this event and every one after it (Google, timed series); never
+     * with [every].
+     */
+    val following: Boolean = false,
 ) {
     val isAllDay: Boolean get() = minute == null
     /** For Swift: the start, or -1 for all day. */
@@ -74,7 +79,11 @@ data class AddEventForm(
     fun withNotes(text: String): AddEventForm = copy(notes = text.take(CalendarEditRules.MAX_NOTES))
     fun withAccount(key: String): AddEventForm = copy(accountKey = key)
     /** Editing a repeating event: This event (false) or Every event (true). */
-    fun withEvery(on: Boolean): AddEventForm = copy(every = on)
+    fun withEvery(on: Boolean): AddEventForm = copy(every = on, following = false)
+    /** Editing a repeating event: this event and the ones after it (completeness slice 2). */
+    fun withFollowing(on: Boolean): AddEventForm = copy(following = on, every = false)
+    /** The REPEATS chip tapped: This event · This and following · Every event. */
+    fun withScope(choice: EventScopeChoice): AddEventForm = copy(every = choice.every, following = choice.following)
     fun withLength(minutes: Int): AddEventForm = copy(lengthMin = minutes.coerceIn(AddEventRules.MIN_LENGTH, AddEventRules.MAX_LENGTH))
 
     /** Another day (never before today, at most two years ahead); a timed event keeps its time. */
@@ -126,8 +135,8 @@ data class AddEventView(
     val scopeNote: String? = null,
 )
 
-/** One of "This event" · "Every event" when editing a repeating event. */
-data class EventScopeChoice(val label: String, val every: Boolean, val selected: Boolean)
+/** One of "This event" · "This and following" · "Every event" when editing a repeating event. */
+data class EventScopeChoice(val label: String, val every: Boolean, val selected: Boolean, val following: Boolean = false)
 
 object AddEventRules {
     val LENGTHS = listOf(30, 60, 90, 120)

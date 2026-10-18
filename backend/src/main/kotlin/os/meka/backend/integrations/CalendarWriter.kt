@@ -200,7 +200,7 @@ class CalendarWriter internal constructor(
         if (CalendarEditRules.clashes(e.kind, e.changes, base, theirs.event)) {
             return Outcome(EventEditStatus.CLASH, theirs = theirs.event, guests = theirs.guests)
         }
-        if (e.every) return sendSeries(p, token, name, a, e, theirs, base)
+        if (e.every || e.following) return sendSeries(p, token, name, a, e, theirs, base)
         val notify = theirs.guests > 0
         if (e.kind == EventEditKind.DELETE) {
             if (theirs.guests > 0 && !e.guestsOk) {
@@ -230,9 +230,27 @@ class CalendarWriter internal constructor(
             return Outcome(EventEditStatus.REFUSED, "Someone else organises it · Navilife only changes your own events", guests = series.guests)
         }
         val notify = series.guests > 0
+        // Completeness slice 2: this and following. From the series' first event on it is every event.
+        val from = instance.originalStartMs ?: base.startAtMs
+        val split = e.following && from > series.event.startAtMs
+        if (e.following) {
+            val why = when {
+                a.provider != "google" -> "This and following is changed in $name itself · or choose This event or Every event"
+                series.event.allDay || base.allDay -> "An all-day series · change it in $name, or choose This event"
+                // A new series would send its guests a new invitation.
+                split && e.kind == EventEditKind.CHANGE && series.guests > 0 ->
+                    "Its guests would get a new invitation · change it in $name, or choose This event or Every event"
+                else -> null
+            }
+            if (why != null) return Outcome(EventEditStatus.REFUSED, why, guests = series.guests)
+        }
         if (e.kind == EventEditKind.DELETE) {
             if (series.guests > 0 && !e.guestsOk) {
                 return Outcome(EventEditStatus.REFUSED, CalendarEditRules.cancelsFor(series.guests), guests = series.guests)
+            }
+            if (split) {
+                p.splitSeries(token, seriesId, from, null, emptySet(), notify, idemKey(e.id))?.let { return Outcome(EventEditStatus.REFUSED, it) }
+                return Outcome(EventEditStatus.DONE, guests = series.guests)
             }
             p.deleteEvent(token, seriesId, notify)
             return Outcome(EventEditStatus.DONE, guests = series.guests)
@@ -247,10 +265,16 @@ class CalendarWriter internal constructor(
                 a.provider != "google" -> "Change every event's time in $name · or choose This event"
                 base.allDay || merged.allDay || series.event.allDay -> "An all-day series keeps its days · change it in $name, or choose This event"
                 // Each event keeps its own day: a new time of day only (a day apart in UTC is never that).
-                Math.abs(merged.startAtMs - base.startAtMs) >= DAY_MS -> "Every event keeps its own day · choose This event to move just this one"
+                Math.abs(merged.startAtMs - base.startAtMs) >= DAY_MS ->
+                    if (e.following) "Each keeps its own day · choose This event to move just this one"
+                    else "Every event keeps its own day · choose This event to move just this one"
                 else -> null
             }
             if (why != null) return Outcome(EventEditStatus.REFUSED, why)
+        }
+        if (split) {
+            p.splitSeries(token, seriesId, from, merged, changes, notify, idemKey(e.id))?.let { return Outcome(EventEditStatus.REFUSED, it) }
+            return Outcome(EventEditStatus.DONE, guests = series.guests)
         }
         p.updateSeries(token, seriesId, merged, changes, notify)
         return Outcome(EventEditStatus.DONE, guests = series.guests)

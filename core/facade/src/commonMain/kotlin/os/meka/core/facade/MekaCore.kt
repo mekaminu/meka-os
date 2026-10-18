@@ -6962,19 +6962,24 @@ class MekaCore(
         event: os.meka.core.domain.CalendarEvent, form: os.meka.core.domain.AddEventForm,
     ): os.meka.core.domain.EventEditResult = onCore {
         val cal = ZoneCalendar(timeZone)
-        // Completeness slice 1: on a repeating event, Every event changes the whole series.
-        calendarEdits.change(event, os.meka.core.domain.EditEventRules.draft(form, event, nowMs(), cal), every = form.every && event.repeats, calendar = cal)
+        // Completeness slice 1: on a repeating event, Every event changes the whole series; slice 2: This and
+        // following changes this one and the ones after.
+        calendarEdits.change(
+            event, os.meka.core.domain.EditEventRules.draft(form, event, nowMs(), cal), every = form.every && event.repeats, calendar = cal,
+            following = form.following && !form.every && event.repeats,
+        )
     }
 
     /**
      * Delete [event] from its calendar after the five-second Undo. [guestsOk] is Meka's second tap after the server
      * said it cancels the event for its guests (Delete anyway); never set otherwise. [everyEvent]: every event of its
-     * repeating series (completeness slice 1; the Edit form's choice, or the refused edit's own on Delete anyway).
+     * repeating series (completeness slice 1; the Edit form's choice, or the refused edit's own on Delete anyway);
+     * [fromThisOne]: this event and the ones after it (completeness slice 2, the same way).
      */
     suspend fun deleteEvent(
-        event: os.meka.core.domain.CalendarEvent, guestsOk: Boolean, everyEvent: Boolean = false,
+        event: os.meka.core.domain.CalendarEvent, guestsOk: Boolean, everyEvent: Boolean = false, fromThisOne: Boolean = false,
     ): os.meka.core.domain.EventEditResult =
-        onCore { calendarEdits.delete(event, guestsOk, every = everyEvent && event.repeats) }
+        onCore { calendarEdits.delete(event, guestsOk, every = everyEvent && event.repeats, following = fromThisOne && !everyEvent && event.repeats) }
 
     /**
      * Clash chooser (slice 2c-iii), Keep mine: the clashed edit [clashId] is sent again against Google's version, with
@@ -6986,8 +6991,8 @@ class MekaCore(
     suspend fun keepTheirVersion(clashId: String): Boolean = onCore { calendarEdits.keepTheirs(clashId) }
 
     /** The undo bar's line for a delete ("Deleting “Dentist” from Google"). */
-    fun deletingLine(event: os.meka.core.domain.CalendarEvent, everyEvent: Boolean = false): String =
-        os.meka.core.domain.EditEventRules.deletingLine(event, everyEvent)
+    fun deletingLine(event: os.meka.core.domain.CalendarEvent, everyEvent: Boolean = false, fromThisOne: Boolean = false): String =
+        os.meka.core.domain.EditEventRules.deletingLine(event, everyEvent, fromThisOne)
 
     /** The edit's line as it stands ("Adding “Dentist” to Google"), for the undo bar. */
     fun eventEditLine(id: String): String? = _editLines.value.firstOrNull { it.id == id }?.text

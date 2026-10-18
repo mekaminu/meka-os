@@ -143,7 +143,8 @@ struct EventDetailSheet: View {
                 if note.deleteAnyway && d.editable, let e = model.openEvent {
                     Button("Delete anyway") {
                         let every = note.everyEvent
-                        Task { if await model.deleteEvent(e, guestsOk: true, everyEvent: every) == nil { dismiss() } }
+                        let following = note.followingEvents
+                        Task { if await model.deleteEvent(e, guestsOk: true, everyEvent: every, fromThisOne: following) == nil { dismiss() } }
                     }
                     .buttonStyle(MekaPressStyle())
                     .foregroundStyle(palette.critical)
