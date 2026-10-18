@@ -184,6 +184,7 @@ private struct ArchivedEmailPreviewView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var preview: ArchivedEmailPreview?
     @State private var openLine: String?
+    @State private var vaultLine: String?
 
     var body: some View {
         Group {
@@ -232,6 +233,22 @@ private struct ArchivedEmailPreviewView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .contentTransition(.opacity)
                             .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: hint)
+                    }
+                    // Receipts → Vault: Keep in the Vault / Take it out of the Vault; the line cross-fades to what it did.
+                    if let offer = p.vault {
+                        let batchId = p.batchId, key = p.key, kept = offer.kept
+                        ArchivedPill(label: offer.action, palette: palette, quiet: kept, spoken: "\(offer.action), \(p.subject)") {
+                            Task {
+                                vaultLine = await model.receiptInVault(batchId: batchId, key: key, keep: !kept)
+                                preview = await model.archivedEmail(batchId: batchId, key: key)
+                            }
+                        }
+                        let line = vaultLine ?? offer.line
+                        Text(line).font(MekaType.itemMeta)
+                            .foregroundStyle(kept || vaultLine != nil ? palette.accent : palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: line)
                     }
                     Text(p.note).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)

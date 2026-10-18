@@ -269,6 +269,20 @@ internal fun ArchivedEmailPreviewPanel(
         AnimatedContent(openLine ?: pv.openHint, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "archived-open-line") { l ->
             if (l != null) Text(l, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
         }
+        // Receipts → Vault: Keep in the Vault / Take it out of the Vault on a receipt; the line cross-fades to what it did.
+        pv.vault?.let { offer ->
+            var vaultLine by remember(r.key) { mutableStateOf<String?>(null) }
+            ArchivedPill(offer.action, spoken = "${offer.action}, ${pv.subject}", quiet = offer.kept) {
+                scope.launch {
+                    vaultLine = if (offer.kept) runCatching { core.takeReceiptOutOfVault(r.key) }.getOrNull()
+                    else runCatching { core.keepReceiptInVault(r.batchId, r.key) }.getOrNull()?.line
+                    p = runCatching { core.archivedEmail(r.batchId, r.key) }.getOrNull() ?: p
+                }
+            }
+            AnimatedContent(vaultLine ?: offer.line, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "archived-vault-line") { l ->
+                Text(l, style = MekaType.itemMeta, color = if (offer.kept || vaultLine != null) Meka.colors.accent else Meka.colors.textTertiary)
+            }
+        }
         Text(pv.note, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
     }
 }

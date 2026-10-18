@@ -48,6 +48,8 @@ import os.meka.android.lists.Field
 import os.meka.core.domain.DocumentAdded
 import os.meka.core.domain.DocumentRow
 import os.meka.core.domain.DocumentRules
+import os.meka.core.domain.MailOpenRules
+import os.meka.core.domain.VaultReceiptRules
 import os.meka.core.domain.VaultFileOpened
 import os.meka.core.domain.VaultFileRules
 import os.meka.core.domain.VaultFileSaid
@@ -60,6 +62,7 @@ import os.meka.core.facade.MekaCore
  * Slice 2b: an opened row offers Add a copy (a photo or PDF from the system picker, sealed with the Vault key here),
  * and once there is one Open copy (shown in the app only, [VaultCopyViewer]), Replace copy and Remove copy; the row
  * says what is kept ("Photo · 412 KB · encrypted · added on this Fold, Sun 18 Oct").
+ * Receipts → Vault: a receipt kept from an email ([VaultReceiptRules]) also offers Open the email.
  *
  * Motion: the section staggers in with the screen; the summary and the line under the field cross-fade (a refused line
  * lit in the accent); rows grow in and out on the expand spring; the status blends to the accent when a renewal window
@@ -76,6 +79,7 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
     var said by remember { mutableStateOf<DocumentAdded?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
     // Slice 2b: the document a picked copy is for, what the last copy action said (by row), and the opened copy.
     var copyFor by remember { mutableStateOf<String?>(null) }
     var copySaid by remember { mutableStateOf<Pair<String, VaultFileSaid>?>(null) }
@@ -138,6 +142,14 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
                             }
                         }
                     },
+                    onOpenEmail = {
+                        scope.launch {
+                            val res = runCatching { core.vaultReceiptLink(r.id) }.getOrNull()
+                            val link = res?.link
+                            copySaid = r.id to VaultFileSaid(link?.hint ?: res?.problem ?: MailOpenRules.OFFLINE, refused = link == null)
+                            if (link != null) runCatching { uri.openUri(link.url) }
+                        }
+                    },
                     onRemoveCopy = {
                         haptics.tick()
                         scope.launch { runCatching { core.removeVaultCopy(r.id) }.getOrNull()?.let { copySaid = r.id to it } }
@@ -164,6 +176,7 @@ private fun DocumentRowView(
     onRemove: () -> Unit,
     onAddCopy: () -> Unit,
     onOpenCopy: () -> Unit,
+    onOpenEmail: () -> Unit,
     onRemoveCopy: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -197,6 +210,8 @@ private fun DocumentRowView(
             exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
         ) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                // Receipts → Vault: the email it was kept from, in Gmail or Outlook (made at the tap).
+                if (row.fromMail) CopyAction(VaultReceiptRules.OPEN, "Open the email ${row.title} came from", lit = !row.hasCopy, onClick = onOpenEmail)
                 if (row.hasCopy) {
                     CopyAction(VaultFileRules.OPEN, "Open the copy of ${row.title}", lit = true, onClick = onOpenCopy)
                     CopyAction(VaultFileRules.REPLACE, "Replace the copy of ${row.title}", lit = false, onClick = onAddCopy)

@@ -5284,8 +5284,47 @@ class MekaCore(
                 // Slice 4: the button always; its line once the account list is known (Mail's, or a tap's).
                 openLabel = os.meka.core.domain.MailOpenRules.label(b, facts),
                 openHint = facts?.let { os.meka.core.domain.MailOpenRules.link(b, key, it, cal)?.hint },
+                vault = b.emails.firstOrNull { it.key == key }?.let { os.meka.core.domain.VaultReceiptRules.offer(it, documents.items()) },
             )
         }
+    }
+
+    // ---- Receipts → Vault ----
+
+    /**
+     * Receipts → Vault: **Keep in the Vault** on a receipt's preview — a Vault document made from what the tidy holds
+     * (sender, subject, day, price; the warranty's end when the email says or Renewals has it). Returns the line to
+     * show, or null when the email isn't a receipt or has gone.
+     */
+    suspend fun keepReceiptInVault(batchId: String, key: String): os.meka.core.domain.DocumentAdded? = onCore {
+        val b = tidyBatch(batchId) ?: return@onCore null
+        val e = b.emails.firstOrNull { it.key == key } ?: return@onCore null
+        val level = os.meka.core.domain.MailWarrantyRules.read(
+            replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailWarrantyRules.ENTITY_ID)?.fields,
+        )
+        val (entry, receipt) = os.meka.core.domain.VaultReceiptRules.entry(b, e, ZoneCalendar(timeZone), level) ?: return@onCore null
+        documents.keepReceipt(entry, receipt).also { archivedChanged() }
+    }
+
+    /** Receipts → Vault: **Take it out of the Vault** on the same preview (its copy too). Returns the line, or null. */
+    suspend fun takeReceiptOutOfVault(key: String): String? {
+        val d = onCore { documents.byEmail(key) } ?: return null
+        if (!removeDocument(d.id)) return null
+        onCore { archivedChanged() }
+        return os.meka.core.domain.VaultReceiptRules.takenOutLine(d.title)
+    }
+
+    /**
+     * Receipts → Vault: **Open the email** on a kept receipt's row: the same link Archived for you makes, while the tidy
+     * is kept; after that, what to search for ([os.meka.core.domain.MailOpenResult.problem]).
+     */
+    suspend fun vaultReceiptLink(docId: String): os.meka.core.domain.MailOpenResult {
+        val r = onCore { documents.item(docId)?.receipt }
+            ?: return os.meka.core.domain.MailOpenResult(null, os.meka.core.domain.VaultReceiptRules.GONE)
+        val res = archivedEmailLink(r.batchId, r.emailKey)
+        return if (res.link == null && res.problem == os.meka.core.domain.MailTidiedAskRules.UNKNOWN)
+            os.meka.core.domain.MailOpenResult(null, os.meka.core.domain.VaultReceiptRules.searchLine(r))
+        else res
     }
 
     /**

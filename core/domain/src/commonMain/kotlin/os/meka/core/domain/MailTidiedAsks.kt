@@ -61,6 +61,8 @@ data class ArchivedEmailPreview(
     val openLabel: String? = null,
     /** Slice 4: the line under it ([MailOpenLink.hint]) once the account is known, else null. */
     val openHint: String? = null,
+    /** Receipts → Vault: Keep in the Vault / Take it out of the Vault on a receipt ([VaultReceiptRules.offer]); null otherwise. */
+    val vault: VaultReceiptOffer? = null,
 )
 
 object MailTidiedAskRules {

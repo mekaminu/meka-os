@@ -5604,6 +5604,29 @@ final class CoreModel {
         return r.problem ?? MailOpenRules.shared.OFFLINE
     }
 
+    /// Receipts → Vault: Keep in the Vault (or Take it out) on a receipt's preview. Returns the line to show; only Strings
+    /// and a Bool cross to the core.
+    func receiptInVault(batchId: String, key: String, keep: Bool) async -> String {
+        guard let core else { return MailOpenRules.shared.OFFLINE }
+        MekaHaptics.light()
+        if keep {
+            return (try? await core.keepReceiptInVault(batchId: batchId, key: key))?.line ?? VaultReceiptRules.shared.GONE
+        }
+        return (try? await core.takeReceiptOutOfVault(key: key)) ?? VaultReceiptRules.shared.GONE
+    }
+
+    /// Receipts → Vault: Open the email on a kept receipt's Vault row (the browser; the link is never kept).
+    func openVaultReceipt(docId: String) async -> String {
+        guard let core else { return MailOpenRules.shared.OFFLINE }
+        MekaHaptics.light()
+        guard let r = try? await core.vaultReceiptLink(docId: docId) else { return MailOpenRules.shared.OFFLINE }
+        if let link = r.link {
+            if let url = URL(string: link.url) { NSWorkspace.shared.open(url) }
+            return link.hint
+        }
+        return r.problem ?? MailOpenRules.shared.OFFLINE
+    }
+
     /// Slice 3: All tidied mail (every email tidied in the last 30 days), filtered to one sender's id when given.
     /// Only a String crosses to the core.
     func archivedAll(sender: String?) async -> ArchivedAllList? {

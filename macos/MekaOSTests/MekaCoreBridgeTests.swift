@@ -2783,6 +2783,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.tripsView.value.rows.isEmpty)
     }
 
+    func testVaultReceiptReachesSwift() async throws {
+        // Receipts → Vault: the preview's offer, Keep / Take out and Open the email reach the Mac (only Strings cross).
+        XCTAssertEqual(VaultReceiptRules.shared.KEEP, "Keep in the Vault")
+        XCTAssertEqual(DocumentRules.shared.kindOf(text: "TV receipt"), .receipt)
+        let core = MacCoreFactory.shared.create(
+            householdId: "test", deviceId: "mactest", syncUrl: nil, deviceSecret: nil,
+            databaseKeyHex: nil, encrypted: false,
+            databaseDirectory: NSTemporaryDirectory(), databaseName: "receipt-\(UUID().uuidString).db", deviceKey: nil
+        )
+        let kept = try await core.keepReceiptInVault(batchId: "nothing", key: "te1")
+        XCTAssertNil(kept)
+        let out = try await core.takeReceiptOutOfVault(key: "te1")
+        XCTAssertNil(out)
+        let open = try await core.vaultReceiptLink(docId: "nothing")
+        XCTAssertEqual(open.problem, VaultReceiptRules.shared.GONE)
+    }
+
     func testDocumentsReachSwift() async throws {
         // The Vault, slice 1: a typed document goes through the facade (only a String crosses) and its row, status
         // and the Vault's notice target reach the Mac.

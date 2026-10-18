@@ -71,6 +71,13 @@ struct VaultDocumentsSection: View {
                         onRemoveCopy: {
                             let id = row.id
                             Task { if let s = await model.removeVaultCopy(id) { copySaid = (id, s) } }
+                        },
+                        onOpenEmail: {
+                            let id = row.id
+                            Task {
+                                let line = await model.openVaultReceipt(docId: id)
+                                copySaid = (id, CoreModel.TripSaid(line: line, refused: false))
+                            }
                         }
                     )
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
@@ -189,6 +196,7 @@ private struct DocumentRowView: View {
     let onAddCopy: () -> Void
     let onOpenCopy: () -> Void
     let onRemoveCopy: () -> Void
+    let onOpenEmail: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -218,6 +226,10 @@ private struct DocumentRowView: View {
             if isOpen {
                 HStack(spacing: MekaSpace.xs) {
                     let rules = VaultFileRules.shared
+                    // Receipts → Vault: the email it was kept from (the browser; the link is made at the click).
+                    if row.fromMail {
+                        copyButton(VaultReceiptRules.shared.OPEN, "Open the email \(row.title) came from", lit: !row.hasCopy, action: onOpenEmail)
+                    }
                     if row.hasCopy {
                         copyButton(rules.OPEN, "Open the copy of \(row.title)", lit: true, action: onOpenCopy)
                         copyButton(rules.REPLACE + "…", "Replace the copy of \(row.title)", lit: false, action: onAddCopy)

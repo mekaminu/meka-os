@@ -26,6 +26,8 @@ object VaultDocFields {
     const val DELETED = ActionableFields.DELETED
     /** Slice 2b: the document's encrypted copy ([VaultFileRules.encode]); absent or null for none. */
     const val FILE = "file"
+    /** Receipts → Vault: what a receipt kept from an email remembers ([VaultReceiptRules.encode]); absent for a typed one. */
+    const val RECEIPT = "receipt"
 }
 
 /**
@@ -40,6 +42,8 @@ enum class DocKind(val wire: String, val label: String, val leadDays: Int, val h
     RAILCARD("railcard", "Railcard", 14, "renew it to keep the discount"),
     INSURANCE("insurance", "Insurance", 30, "compare before it renews"),
     WARRANTY("warranty", "Warranty", 30, "anything to claim, claim before then"),
+    /** Receipts → Vault: a receipt, its date the warranty's end. */
+    RECEIPT("receipt", "Receipt", 30, "anything to claim, claim before then"),
     CERTIFICATE("certificate", "Certificate", 30, "renew or replace it before then"),
     OTHER("other", "Document", 30, "renew or replace it before then");
 
@@ -55,6 +59,8 @@ data class DocumentItem(
     val addedAtMs: Long,
     /** Slice 2b: its encrypted copy, if one was added. */
     val file: VaultFileRef? = null,
+    /** Receipts → Vault: the email it was kept from, if it was. */
+    val receipt: VaultReceipt? = null,
 )
 
 /** A row in the Vault: "Theo passport" · "Passport · expires Thu 20 May 2027" · "Renew now · expires in 7 months" ([statusLit]). */
@@ -69,6 +75,8 @@ data class DocumentRow(
     val copyLine: String? = null,
     /** The copy is a PDF (opened page by page) rather than a photo. */
     val copyIsPdf: Boolean = false,
+    /** Receipts → Vault: kept from an email, so the row offers Open the email. */
+    val fromMail: Boolean = false,
 ) {
     val hasCopy: Boolean get() = copyLine != null
 }
@@ -117,6 +125,7 @@ object DocumentRules {
         listOf("insurance", "policy", "cover").forEach { put(it, DocKind.INSURANCE) }
         listOf("warranty", "guarantee").forEach { put(it, DocKind.WARRANTY) }
         listOf("certificate", "cert").forEach { put(it, DocKind.CERTIFICATE) }
+        listOf("receipt", "receipts").forEach { put(it, DocKind.RECEIPT) }
     }
     /** Words that only say "it expires": left out of the title. */
     private val EXPIRY_WORDS = setOf(
@@ -231,6 +240,7 @@ object DocumentRules {
         DocumentItem(
             id, title, DocKind.of(s.f(VaultDocFields.KIND).textOrNull), s.f(VaultDocFields.EXPIRES).longOrNull,
             s.f(VaultDocFields.ADDED_AT).longOrNull ?: 0L, VaultFileRules.decode(s.f(VaultDocFields.FILE).textOrNull),
+            VaultReceiptRules.decode(s.f(VaultDocFields.RECEIPT).textOrNull),
         )
     }.sortedWith(compareBy<DocumentItem> { it.expiresDay ?: Long.MAX_VALUE }.thenBy { it.title.lowercase() }.thenBy { it.id })
 
@@ -286,11 +296,11 @@ object DocumentRules {
         if (items.isEmpty()) return DocumentsView.EMPTY
         val ordered = items.filter { due(it, today) } + items.filterNot { due(it, today) }
         val rows = ordered.map { d ->
-            val line = rowLine(d, today)
-            val status = status(d, today)
+            val line = d.receipt?.let(VaultReceiptRules::rowLine) ?: rowLine(d, today)
+            val status = if (d.receipt != null) VaultReceiptRules.status(d, today) else status(d, today)
             val copy = d.file?.let { VaultFileRules.copyLine(it, cal, device) }
             val spoken = "${d.title}. $line. $status" + (copy?.let { ". Copy kept: $it" } ?: "")
-            DocumentRow(d.id, d.title, line, status, due(d, today), spoken, copy, d.file?.isPdf == true)
+            DocumentRow(d.id, d.title, line, status, due(d, today), spoken, copy, d.file?.isPdf == true, fromMail = d.receipt != null)
         }
         val count = if (items.size == 1) "1 document" else "${items.size} documents"
         val toRenew = items.count { due(it, today) }
@@ -328,6 +338,8 @@ object DocumentRules {
         val today = cal.epochDayOf(nowMs)
         return items.mapNotNull { d ->
             val e = d.expiresDay ?: return@mapNotNull null
+            // Receipts → Vault: Renewals already reminds about this warranty.
+            if (d.receipt?.onRenewals == true) return@mapNotNull null
             val left = e - today
             val stages = (listOf(d.kind.leadDays) + STAGES).filter { it <= d.kind.leadDays }.distinct()
             if (left !in stages.map { it.toLong() }) return@mapNotNull null
@@ -387,6 +399,20 @@ class Documents(
         val id = existing?.id ?: newId()
         replica.commitLocal(EntityTypes.VAULT_DOC, id, fields)
         return DocumentAdded(DocumentRules.addedLine(entry, today, replaced = existing != null), refused = false, id = id, updated = existing != null)
+    }
+
+    /** Receipts → Vault: the document kept from the email [emailKey], if any. */
+    fun byEmail(emailKey: String): DocumentItem? = items().firstOrNull { it.receipt?.emailKey == emailKey }
+
+    /**
+     * Receipts → Vault: keeps [entry] as a new document remembering [receipt] (never merged with one of the same title:
+     * two Currys receipts are two documents); the one already kept from that email when there is one.
+     */
+    fun keepReceipt(entry: DocumentEntry, receipt: VaultReceipt): DocumentAdded {
+        byEmail(receipt.emailKey)?.let { return DocumentAdded("“${it.title}” is already in the Vault", refused = true, id = it.id) }
+        val id = newId()
+        replica.commitLocal(EntityTypes.VAULT_DOC, id, VaultReceiptRules.fields(entry, receipt, nowMs()))
+        return DocumentAdded(VaultReceiptRules.keptLine(entry), refused = false, id = id)
     }
 
     /** Removes a document for good; false when it isn't there. */
