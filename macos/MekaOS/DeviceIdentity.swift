@@ -92,6 +92,20 @@ struct DeviceIdentity {
 
     nonisolated private static let voiceNotesKeyName = "voice_notes_key"
 
+    /// The Vault key's Secure Enclave key-agreement handle (Vault slice 2a; see MacVaultCrypto), base64. Sealed files
+    /// only: a Mac without them (no Secure Enclave) can't hold the Vault key.
+    nonisolated static func vaultAgreementKey() -> SealedKeyFiles.Lookup? {
+        guard let files else { return nil }
+        return files.read(vaultAgreementKeyName)
+    }
+
+    nonisolated static func saveVaultAgreementKey(_ value: String) -> Bool {
+        guard let files else { return false }
+        return files.write(vaultAgreementKeyName, value)
+    }
+
+    nonisolated private static let vaultAgreementKeyName = "vault_agreement_key"
+
     nonisolated static func isKeyHex(_ s: String) -> Bool {
         s.count == 64 && s.allSatisfy { $0.isHexDigit && !$0.isUppercase }
     }

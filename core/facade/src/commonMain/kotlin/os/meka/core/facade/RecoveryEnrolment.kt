@@ -23,7 +23,11 @@ import kotlin.random.Random
  */
 object RecoveryEnrolment {
     sealed class Result {
-        data class Enrolled(val householdId: String, val deviceId: String, val secret: String) : Result()
+        /**
+         * [vaultRecovery] (Vault slice 2a) is the key the words give for the Vault's recovery seal, base64, for
+         * [MekaCore.rememberVaultRecovery]; it never leaves the device.
+         */
+        data class Enrolled(val householdId: String, val deviceId: String, val secret: String, val vaultRecovery: String? = null) : Result()
         /** The words didn't read ([line] says why, e.g. "Word 3 isn't one of the key's words"); nothing was sent. */
         data class Unreadable(val line: String) : Result()
         /** The server refused ([line] in words: wrong or spent key, too many tries, this device id). */
@@ -36,12 +40,12 @@ object RecoveryEnrolment {
      * [problem] in words. The household and device id the server enrolled must be the ones this device's core was made
      * with ([householdId], [deviceId]: every op carries them), else it can't join ([device] names it: "Mac").
      */
-    class Outcome(val secret: String?, val problem: String?)
+    class Outcome(val secret: String?, val problem: String?, val vaultRecovery: String? = null)
 
     fun outcome(r: Result, householdId: String, deviceId: String, device: String): Outcome = when (r) {
         is Result.Enrolled ->
             if (r.householdId != householdId || r.deviceId != deviceId) Outcome(null, "This $device can't join that household · reinstall Navilife and try again")
-            else Outcome(r.secret, null)
+            else Outcome(r.secret, null, r.vaultRecovery)
         is Result.Unreadable -> Outcome(null, r.line)
         is Result.Refused -> Outcome(null, r.line)
         is Result.Failed -> Outcome(null, r.line)
@@ -77,7 +81,10 @@ object RecoveryEnrolment {
                 refusal != null -> Result.Refused(refusal, RecoveryKeyRules.refusal(refusal))
                 resp.status.value == 404 -> Result.Failed("This server doesn't take recovery keys yet")
                 !resp.status.isSuccess() -> Result.Failed("Server returned ${resp.status.value}")
-                else -> RecoveryCodec.decodeEnrolled(text).let { Result.Enrolled(it.householdId, it.deviceId, it.secret) }
+                else -> RecoveryCodec.decodeEnrolled(text).let {
+                    val vault = kotlin.io.encoding.Base64.encode(os.meka.core.domain.VaultKeyRules.recoveryKey(reading.entropy))
+                    Result.Enrolled(it.householdId, it.deviceId, it.secret, vault)
+                }
             }
         } catch (e: CancellationException) {
             throw e

@@ -467,6 +467,16 @@ class MekaCore(
      */
     val tripsView: StateFlow<os.meka.core.domain.TripsView> = _trips.asStateFlow()
     private val _documents = MutableStateFlow(os.meka.core.domain.DocumentsView.EMPTY)
+    // The Vault key (Vault slice 2a): declared before init's first refresh.
+    /**
+     * This phone's or Mac's platform crypto for the Vault key ([VaultCrypto]); the Fold and the Mac set it at start,
+     * the watch and tests without it never touch the key. With [aboutYouDevice] it names this device ("Fold", "Mac").
+     */
+    var vaultCrypto: VaultCrypto? = null
+        set(value) { field = value; scope.launch { vaultKeyNow() } }
+    private val vaultKeys = os.meka.core.domain.VaultKeys(replica, nowMs)
+    private val _vaultKey = MutableStateFlow(os.meka.core.domain.VaultKeyView.NONE)
+    private var vaultPublicKey: String? = null
 
     /**
      * The Vault (V2, slice 1): the household's documents with the day each runs out ("Theo passport 20 May 2027"), the
@@ -8095,6 +8105,178 @@ class MekaCore(
     private fun watchesNow(problem: String?): os.meka.core.domain.WatchLinkView =
         os.meka.core.domain.WatchLinkRules.view(linkedWatches, nowMs(), ZoneCalendar(timeZone), problem).also { _watchLink.value = it }
 
+    // ---- The Vault key (V2, Vault slice 2a; ADR-005 addendum 2026-10-18) ----
+
+
+    /** Settings → Vault's VAULT KEY block: the key's id and where it is, devices asking for it, or what this one waits for. */
+    val vaultKeyView: StateFlow<os.meka.core.domain.VaultKeyView> = _vaultKey.asStateFlow()
+
+    private fun vaultName(): String? = when (aboutYouDevice) {
+        os.meka.core.domain.AboutYouDevice.FOLD -> "Fold"
+        os.meka.core.domain.AboutYouDevice.MAC -> "Mac"
+        null -> null
+    }
+
+    private fun vaultLocal(key: String): String? = runCatching { localStore.transaction { localStore.localValue(key) } }.getOrNull()
+
+    private fun setVaultLocal(key: String, value: String?) {
+        runCatching { localStore.transaction { localStore.setLocalValue(key, value) } }
+    }
+
+    /** The Vault key this device holds: its id and the key's bytes. Caller is on the core. */
+    private fun heldVaultKey(): Pair<String, ByteArray>? {
+        val (id, b64) = os.meka.core.domain.VaultKeyRules.readLocal(vaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_KEY)) ?: return null
+        val bytes = runCatching { kotlin.io.encoding.Base64.decode(b64) }.getOrNull() ?: return null
+        return if (bytes.size == os.meka.core.domain.VaultKeyRules.KEY_BYTES && os.meka.core.domain.VaultKeyRules.keyId(bytes) == id) id to bytes else null
+    }
+
+    private fun holdVaultKey(bytes: ByteArray): String {
+        val id = os.meka.core.domain.VaultKeyRules.keyId(bytes)
+        setVaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_KEY, os.meka.core.domain.VaultKeyRules.local(id, kotlin.io.encoding.Base64.encode(bytes)))
+        return id
+    }
+
+    /** The agreement key's public half, asked of the platform once per run. Caller is on the core. */
+    private fun vaultPublic(crypto: VaultCrypto): String? =
+        vaultPublicKey ?: runCatching { crypto.agreementPublicKey() }.getOrNull()?.takeIf { it.isNotBlank() }?.also { vaultPublicKey = it }
+
+    /**
+     * After a clean sync (caller on the core): publishes this device's agreement key, makes the household's key when
+     * there is none, and opens a key sealed for this device or (after recovering) for the recovery words.
+     */
+    private fun vaultAfterSync() {
+        val crypto = vaultCrypto ?: return
+        val name = vaultName() ?: return
+        val pub = vaultPublic(crypto) ?: return
+        vaultKeys.publish(pub, name)
+        val canonical = vaultKeys.canonical()
+        var held = heldVaultKey()
+        if (canonical == null) {
+            // The first phone or Mac to finish a clean sync with no key in the household makes it.
+            val id = held?.first ?: holdVaultKey(keyRandom.nextBytes(os.meka.core.domain.VaultKeyRules.KEY_BYTES))
+            vaultKeys.setCanonical(id, name)
+            vaultKeys.markHolds(id)
+            return
+        }
+        if (held != null && held.first != canonical) {
+            // Two devices made one at once: the household's (the latest write) wins; this one is kept aside, unused.
+            setVaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_FORMER, vaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_KEY))
+            setVaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_KEY, null)
+            held = null
+        }
+        if (held == null) held = openVaultWrap(crypto, canonical)
+        if (held != null) {
+            vaultKeys.markHolds(held.first)
+            setVaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_RECOVERY, null)
+        }
+    }
+
+    /** The household's key from a wrap sealed for this device, else for the recovery words this device was given. */
+    private fun openVaultWrap(crypto: VaultCrypto, canonical: String): Pair<String, ByteArray>? {
+        fun accept(plainB64: String?): Pair<String, ByteArray>? {
+            val bytes = plainB64?.let { runCatching { kotlin.io.encoding.Base64.decode(it) }.getOrNull() } ?: return null
+            if (bytes.size != os.meka.core.domain.VaultKeyRules.KEY_BYTES || os.meka.core.domain.VaultKeyRules.keyId(bytes) != canonical) return null
+            return holdVaultKey(bytes) to bytes
+        }
+        vaultKeys.wrap(replica.deviceId)?.takeIf { it.keyId == canonical && it.ephemeralKey != null }?.let { w ->
+            val shared = runCatching { crypto.agree(w.ephemeralKey!!) }.getOrNull()
+                ?.let { runCatching { kotlin.io.encoding.Base64.decode(it) }.getOrNull() }
+            if (shared != null) {
+                val k = os.meka.core.domain.VaultKeyRules.wrapKey(shared, replica.deviceId, canonical)
+                accept(runCatching { crypto.openBox(kotlin.io.encoding.Base64.encode(k), w.sealed) }.getOrNull())?.let { return it }
+            }
+        }
+        val rk = vaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_RECOVERY) ?: return null
+        val w = vaultKeys.wrap(os.meka.core.domain.VaultKeyRules.RECOVERY)?.takeIf { it.keyId == canonical } ?: return null
+        return accept(runCatching { crypto.openBox(rk, w.sealed) }.getOrNull())
+    }
+
+    private fun vaultKeyNow() {
+        // Before the app sets the crypto (init's first refresh, the watch, tests) nothing local is read.
+        val crypto = vaultCrypto ?: run {
+            _vaultKey.value = os.meka.core.domain.VaultKeyRules.view(
+                os.meka.core.domain.VaultState(replica.deviceId, vaultName(), false, null, null, null, emptyList(), emptyList()),
+            )
+            return
+        }
+        _vaultKey.value = os.meka.core.domain.VaultKeyRules.view(
+            os.meka.core.domain.VaultState(
+                me = replica.deviceId,
+                myName = vaultName(),
+                available = vaultPublic(crypto) != null,
+                myPublicKey = vaultPublicKey,
+                heldKeyId = heldVaultKey()?.first,
+                canonical = vaultKeys.canonical(),
+                members = vaultKeys.members(),
+                wraps = vaultKeys.wraps(),
+            ),
+        )
+    }
+
+    /**
+     * Allow on a device asking for the Vault key ([deviceId]): the key is sealed for that device's agreement key and
+     * synced. Only after Meka checked the six digits match; false when this device can't (no key, no crypto).
+     */
+    suspend fun allowVaultDevice(deviceId: String): Boolean {
+        val done = onCore {
+            val crypto = vaultCrypto ?: return@onCore false
+            val name = vaultName() ?: return@onCore false
+            val (id, key) = heldVaultKey() ?: return@onCore false
+            val m = vaultKeys.member(deviceId)?.takeIf { it.deviceId != replica.deviceId } ?: return@onCore false
+            val once = runCatching { crypto.agreeOnce(m.publicKey) }.getOrNull() ?: return@onCore false
+            val shared = runCatching { kotlin.io.encoding.Base64.decode(once.shared) }.getOrNull() ?: return@onCore false
+            val k = os.meka.core.domain.VaultKeyRules.wrapKey(shared, deviceId, id)
+            val sealed = runCatching { crypto.sealBox(kotlin.io.encoding.Base64.encode(k), kotlin.io.encoding.Base64.encode(key)) }.getOrNull()
+                ?: return@onCore false
+            vaultKeys.writeWrap(deviceId, id, once.publicKey, sealed, name)
+            val at = nowMs()
+            activity.recordDevice(
+                os.meka.core.domain.VaultKeyRules.activityId(deviceId, at), at,
+                "Let the ${m.name} open your Vault documents", "You allowed it after checking the code",
+            )
+            refresh()
+            true
+        }
+        if (done) requestSync()
+        return done
+    }
+
+    /** Not this one: the device's ask is put away (it can ask again). */
+    suspend fun refuseVaultDevice(deviceId: String): Boolean {
+        val done = onCore { vaultKeys.refuse(deviceId).also { if (it) refresh() } }
+        if (done) requestSync()
+        return done
+    }
+
+    /** Ask again, on a device a holder said no to. */
+    suspend fun askVaultAgain(): Boolean {
+        val done = onCore { vaultKeys.askAgain().also { if (it) refresh() } }
+        if (done) requestSync()
+        return done
+    }
+
+    /**
+     * A device just recovered with the 24 words ([RecoveryEnrolment.Result.Enrolled.vaultRecovery]): kept on this
+     * device only until the recovery wrap opens the household's Vault key, then forgotten.
+     */
+    suspend fun rememberVaultRecovery(key: String?) {
+        if (key.isNullOrBlank()) return
+        onCore { setVaultLocal(os.meka.core.domain.VaultKeyRules.LOCAL_RECOVERY, key) }
+    }
+
+    /** A new recovery key's words also open the Vault: the key is sealed for them (caller on the core). */
+    private fun sealVaultForRecovery(words: List<String>) {
+        val crypto = vaultCrypto ?: return
+        val name = vaultName() ?: return
+        val (id, key) = heldVaultKey() ?: return
+        if (vaultKeys.canonical() != id) return
+        val read = os.meka.core.domain.RecoveryKeyRules.read(words.joinToString(" "))
+        val entropy = (read as? os.meka.core.domain.RecoveryKeyRules.Reading.Ok)?.entropy ?: return
+        val rk = os.meka.core.domain.VaultKeyRules.recoveryKey(entropy)
+        val sealed = runCatching { crypto.sealBox(kotlin.io.encoding.Base64.encode(rk), kotlin.io.encoding.Base64.encode(key)) }.getOrNull() ?: return
+        vaultKeys.writeWrap(os.meka.core.domain.VaultKeyRules.RECOVERY, id, null, sealed, name)
+    }
+
     // ---- Recovery key (V1, slice 2: Settings → Recovery key) ----
 
     /** Settings → Recovery key as last read ([refreshRecoveryKey]); null until asked once. */
@@ -8136,6 +8318,8 @@ class MekaCore(
         }
         onCore {
             recoveryStatus = saved; recoveryReadAtMs = nowMs()
+            // The Vault, slice 2a: the new words open the Vault key too (the old recovery seal is replaced).
+            sealVaultForRecovery(draft.words)
             val at = nowMs()
             activity.recordDevice(
                 os.meka.core.domain.RecoveryKeyRules.activityId(at), at,
@@ -8588,6 +8772,13 @@ class MekaCore(
             if (seedsAboutYou && report.rejected.isEmpty()) releaseOneRoute?.let { aboutYou.seedRouteOnce(it) }
             // Slice 2 (release 2's gate): this app says, once, that it holds the filled-in profile.
             if (report.rejected.isEmpty()) aboutYouDevice?.let { aboutYou.markHeld(it) }
+            // The Vault, slice 2a: this phone's or Mac's key is published, the household's made or opened, and what
+            // that wrote goes up at once (so a second device sees the household's key rather than making its own).
+            if (report.rejected.isEmpty()) {
+                val waiting = replica.pendingPushCount()
+                runCatching { vaultAfterSync() }
+                if (replica.pendingPushCount() > waiting) runCatchingNotCancel { client.syncOnce() }
+            }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
             refresh()
@@ -8905,6 +9096,7 @@ class MekaCore(
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay)
         _documents.value = os.meka.core.domain.DocumentRules.view(documents.items(), todayDay)
+        vaultKeyNow()
         val heldNow = _afterWork.value
         _people.value = os.meka.core.domain.PeopleRules.view(
             listsNow.promised, listsNow.waiting, occasionItems,

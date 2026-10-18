@@ -58,7 +58,93 @@ struct VaultDocumentsSection: View {
             .staggeredAppear(firstIndex + 3)
             Text(DocumentRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Slice 2a: the household's Vault key, and the devices asking for it.
+            VaultKeySection(palette: palette, firstIndex: firstIndex + 4)
         }
+    }
+}
+
+/// The Vault key on the Mac (Vault slice 2a), like the Fold's VaultKeySection: the key's id and where it is, whether
+/// the recovery key opens it, each device asking with its six-digit code, Allow and Not this one; or what this Mac
+/// waits for (lit) and Ask again. Only Strings cross to the core.
+///
+/// Motion: staggers in after the documents; the line and sub cross-fade, the line blending to the accent while it
+/// waits; request cards arrive and leave on the expand spring; Allow gives a light haptic, Not this one a tick.
+/// Reduce Motion: cross-fades.
+private struct VaultKeySection: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    let firstIndex: Int
+
+    var body: some View {
+        if let v = model.vaultKey, v.shown {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                Text("VAULT KEY")
+                    .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
+                    .padding(.top, MekaSpace.m)
+                    .staggeredAppear(firstIndex)
+                Text(v.line).font(MekaType.body).foregroundStyle(v.lit ? palette.accent : palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: v.line)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: v.lit)
+                    .staggeredAppear(firstIndex + 1)
+                if let sub = v.sub {
+                    Text(sub).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: sub)
+                }
+                if v.canAskAgain {
+                    Button(VaultKeyRules.shared.ASK_AGAIN) { model.askVaultAgain() }
+                        .buttonStyle(MekaPressStyle())
+                        .font(MekaType.itemMeta)
+                        .foregroundStyle(palette.accent)
+                        .accessibilityLabel("Ask again for the Vault key")
+                }
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(v.requests, id: \.deviceId) { r in
+                        VaultRequestCard(request: r, palette: palette)
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: v.requests.map(\.deviceId))
+            }
+        }
+    }
+}
+
+private struct VaultRequestCard: View {
+    @Environment(CoreModel.self) private var model
+    let request: VaultRequest
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(request.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(request.line).font(MekaType.caption).foregroundStyle(palette.accent)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: MekaSpace.xs) {
+                Button(VaultKeyRules.shared.ALLOW) { model.allowVaultDevice(request.deviceId) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("\(VaultKeyRules.shared.ALLOW): \(request.title)")
+                Button(VaultKeyRules.shared.REFUSE) { model.refuseVaultDevice(request.deviceId) }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.textSecondary)
+                    .accessibilityLabel("\(VaultKeyRules.shared.REFUSE): \(request.title)")
+            }
+        }
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.xs)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(request.spoken)
     }
 }
 

@@ -147,6 +147,12 @@ object EntityTypes {
     const val TRADING_WALLET = "trading_wallet"
     /** Reading and learning, slice 1 (2026-10-18): one book, podcast or course on his reading list, a random id (see [Reading]). */
     const val READING_ITEM = "reading_item"
+    /** The Vault, slice 2a (2026-10-18): the household's Vault key's id, one entity, id "household" (see [VaultKeys]). */
+    const val VAULT_KEY = "vault_key"
+    /** The Vault, slice 2a: one phone's or Mac's key-agreement key asking for the Vault key, id its device id. */
+    const val VAULT_MEMBER = "vault_member"
+    /** The Vault, slice 2a: the Vault key sealed for one device (id its device id) or for the recovery key (id "recovery"). */
+    const val VAULT_WRAP = "vault_wrap"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -158,7 +164,7 @@ object EntityTypes {
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
-        TRADING_WALLET, MONEY_SHARED, READING_ITEM,
+        TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP,
     )
 }
 
@@ -477,6 +483,10 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.QUEUE_ITEM && field == QueueFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.QUEUE_ITEM -> MergePolicy.Lww
         entityType == EntityTypes.READING_ITEM -> MergePolicy.Lww
+        // The Vault key's bookkeeping (slice 2a): opaque values, the latest write wins.
+        entityType == EntityTypes.VAULT_KEY -> MergePolicy.Lww
+        entityType == EntityTypes.VAULT_MEMBER -> MergePolicy.Lww
+        entityType == EntityTypes.VAULT_WRAP -> MergePolicy.Lww
         // Work wins: a win removed on any device is gone for good; its text, the latest edit wins.
         entityType == EntityTypes.WIN && field == WinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.WIN -> MergePolicy.Lww

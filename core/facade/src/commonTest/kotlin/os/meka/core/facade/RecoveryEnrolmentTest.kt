@@ -45,7 +45,10 @@ class RecoveryEnrolmentTest {
     fun theWordsConnectANewDeviceAndOnlyTheirSecretIsSent() = runTest {
         val key = Key()
         val r = RecoveryEnrolment.enrol(client(), "https://meka.example", key, words, "android00112233aabb", "Galaxy Z Fold", 1_000)
-        assertEquals(RecoveryEnrolment.Result.Enrolled("home", "android00112233aabb", "ab".repeat(32)), r)
+        // Vault slice 2a: the words' key for the Vault's recovery seal comes back with it (it is never sent).
+        val vault = kotlin.io.encoding.Base64.encode(os.meka.core.domain.VaultKeyRules.recoveryKey(entropy))
+        assertEquals(RecoveryEnrolment.Result.Enrolled("home", "android00112233aabb", "ab".repeat(32), vault), r)
+        assertTrue(!body(requests.single()).contains(vault))
         val sent = RecoveryCodec.decodeEnrol(body(requests.single()))
         assertEquals(RecoveryKeyRules.secret(entropy), sent.secret)
         assertTrue(words.split(' ').none { body(requests.single()).contains("\"$it\"") })

@@ -148,6 +148,8 @@ class MekaApplication : Application() {
         core.seedsAboutYou = true
         // Slice 2: the Fold says once that it holds the profile (release 2's gate, Health's About you row).
         core.aboutYouDevice = os.meka.core.domain.AboutYouDevice.FOLD
+        // The Vault, slice 2a: the Fold's Keystore agreement key and AES-GCM hold the household's Vault key.
+        core.vaultCrypto = os.meka.android.security.FoldVaultCrypto()
         if (transport != null) { SyncWorker.schedulePeriodic(this); ensurePush() }
         // Notifications never seen (slice 1): every channel exists from the first start, and the trace says so.
         os.meka.android.notify.MekaChannels.ensureAll(this)
@@ -324,6 +326,8 @@ class MekaApplication : Application() {
                     return "This phone can't join that household · reinstall Navilife and try again"
                 }
                 identity.saveEnrolment(url, r.secret)
+                // The Vault, slice 2a: the words' key opens the Vault's recovery seal once it syncs.
+                core.rememberVaultRecovery(r.vaultRecovery)
                 core.connect(Enrolment.transport(http, url, r.secret, deviceKey))
                 SyncWorker.schedulePeriodic(this)
                 pushPrefs.forget()

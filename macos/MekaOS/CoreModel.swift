@@ -157,6 +157,8 @@ final class CoreModel {
     var showTrips = false
     /// The Vault (V2, slice 1): the documents and when they run out.
     private(set) var documents: DocumentsView?
+    /// The Vault key (Vault slice 2a): its id and where it is, devices asking for it, or what this Mac waits for.
+    private(set) var vaultKey: VaultKeyView?
     /// Why a Booked… on a Needs you card couldn't be read, by appointment id (shown under its field).
     private(set) var appointmentRefusal: (id: String, line: String)?
     /// Annual leave (V1, slice 1): the allowance, the days booked and the school holidays (Ask → More → Annual leave).
@@ -445,6 +447,8 @@ final class CoreModel {
         self.core = core
         // Ask knows how Navilife itself works: help answers give the Mac's paths and open the Mac's sheets.
         core.helpOnMac = true
+        // The Vault, slice 2a: the Secure Enclave agreement key and CryptoKit hold the household's Vault key.
+        core.vaultCrypto = MacVaultCrypto()
         // Trading approvals, slice 2: this Mac's Touch ID-only approval key is known (synced) before the first yes, so
         // Kestrel can pin it. Nothing without Touch ID and a Secure Enclave.
         if MacBiometric.available, let approvalKey = MacApprovalKey.publicKey() {
@@ -527,6 +531,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await d in core.documentsView { self?.documents = d }
+        })
+        observers.append(Task { [weak self] in
+            for await k in core.vaultKeyView { self?.vaultKey = k }
         })
         observers.append(Task { [weak self] in
             for await c in core.carView { self?.car = c }
@@ -745,9 +752,11 @@ final class CoreModel {
                 deviceName: Host.current().localizedName ?? "Mac", deviceKey: deviceKey
             )
             // Plain Strings from here on.
-            let secret = outcome.secret, problem = outcome.problem
+            let secret = outcome.secret, problem = outcome.problem, vaultRecovery = outcome.vaultRecovery
             guard let secret else { return problem ?? "Couldn't connect" }
             DeviceIdentity.saveEnrolment(serverURL: url, secret: secret)
+            // The Vault, slice 2a: the words' key opens the Vault's recovery seal once it syncs.
+            try await core.rememberVaultRecovery(key: vaultRecovery)
             try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: secret, deviceKey: deviceKey)
             isConnected = true
             return nil
@@ -4630,6 +4639,15 @@ final class CoreModel {
     }
 
     func removeDocument(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeDocument(id: id) } }
+
+    // MARK: The Vault key (Vault slice 2a)
+
+    /// Allow on a device asking for the Vault key, once Meka checked its code; only a String crosses.
+    func allowVaultDevice(_ deviceId: String) { MekaHaptics.light(); run { _ = try await $0.allowVaultDevice(deviceId: deviceId) } }
+
+    func refuseVaultDevice(_ deviceId: String) { MekaHaptics.tick(); run { _ = try await $0.refuseVaultDevice(deviceId: deviceId) } }
+
+    func askVaultAgain() { MekaHaptics.light(); run { _ = try await $0.askVaultAgain() } }
 
     // MARK: Gift planner (slice 1)
 

@@ -97,6 +97,8 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
             }
         }
         Text(DocumentRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        // Slice 2a: the household's Vault key, and the devices asking for it.
+        VaultKeySection(core, firstIndex + 3 + v.rows.size)
     }
 }
 
