@@ -57,6 +57,12 @@ struct ShutdownSheet: View {
                         if let work = v.tomorrow.workLine {
                             Text(work).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(2)
                         }
+                        // Done for the day, the first train: "First train · the 07:42 · leave by 07:32".
+                        if let train = v.tomorrow.train {
+                            Text(train.text).font(MekaType.caption)
+                                .foregroundStyle(train.lit ? palette.accent : palette.textSecondary)
+                                .accessibilityLabel(train.spoken).staggeredAppear(2)
+                        }
                         // Tomorrow's weather (Weather slice 2).
                         if let weather = v.tomorrow.weatherLine {
                             Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)

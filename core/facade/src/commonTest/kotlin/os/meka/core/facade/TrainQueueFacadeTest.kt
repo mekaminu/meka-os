@@ -168,5 +168,14 @@ class TrainQueueFacadeTest {
         now += 15 * 60_000L // 08:15: off at the change
         fold.tick()
         assertEquals("For the train · 1 article · Dune at 25%", fold.today.value.trainQueue?.text)
+
+        // Done for the day, the first train: Friday evening, tomorrow's Saturday, so no train is named.
+        now += 12 * 60 * 60_000L // 20:15
+        fold.tick()
+        assertEquals(null, fold.shutdownView.value.tomorrow.train)
+        // Sunday evening before an office Monday: the 07:42 he caught on Friday, and when to leave for it.
+        now += 2 * 24 * 60 * 60_000L
+        fold.tick()
+        assertEquals("First train · the 07:42 · leave by 07:32", fold.shutdownView.value.tomorrow.train?.text)
     }
 }

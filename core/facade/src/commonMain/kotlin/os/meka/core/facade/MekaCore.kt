@@ -1726,8 +1726,31 @@ class MekaCore(
             val text = os.meka.core.domain.TrainRideRules.encode(seen)
             runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.TrainRideRules.KEY, text) } }
         }
+        // Done for the day, the first train: this morning's train (the leave-by's pick) joins the recent mornings.
+        val trains = os.meka.core.domain.FirstTrainRules.record(morningTrains(), seen)
+        if (trains != morningTrainsList) {
+            morningTrainsList = trains
+            val text = os.meka.core.domain.FirstTrainRules.encode(trains)
+            runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.FirstTrainRules.KEY, text) } }
+        }
         val names = os.meka.core.domain.Household.names
         return os.meka.core.domain.TrainRideRules.ride(seen, office, names.route?.change, names.homeStation, now, cal)
+    }
+
+    /**
+     * Done for the day, the first train (2026-10-18): the trains the morning leave-by picked on recent office mornings,
+     * a device-local value ([os.meka.core.domain.FirstTrainRules.KEY], never synced); read on first use.
+     */
+    private var morningTrainsList: List<os.meka.core.domain.MorningTrain>? = null
+
+    private fun morningTrains(): List<os.meka.core.domain.MorningTrain> = morningTrainsList ?: os.meka.core.domain.FirstTrainRules.decode(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.FirstTrainRules.KEY) } }.getOrNull(),
+    ).also { morningTrainsList = it }
+
+    /** Tomorrow's first train for Shut down, on an office day only. */
+    private fun firstTrainTomorrow(state: WorkModeState, tomorrow: Long, cal: os.meka.core.domain.LocalCalendar): os.meka.core.domain.FirstTrainLine? {
+        val band = os.meka.core.domain.CommuteRules.bands(hoursOf(state, tomorrow), tomorrow, cal).firstOrNull { it.toWork } ?: return null
+        return os.meka.core.domain.FirstTrainRules.line(morningTrains(), tomorrow, band.startMinute, os.meka.core.domain.Household.names.walkHomeMin)
     }
     private var savedWaitingFollows: String? = null
 
@@ -8438,6 +8461,8 @@ class MekaCore(
             tomorrow = shutdownRaw.tomorrow.copy(
                 weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay + 1, cal),
                 school = os.meka.core.domain.SchoolRules.tomorrowLine(schoolItems, todayDay, holidays),
+                // Done for the day, the first train: "First train · the 07:42 · leave by 07:32" before an office day.
+                train = firstTrainTomorrow(workState, todayDay + 1, cal),
                 // Annual leave, slice 2: "Annual leave · no work · back Mon 2 Nov" on the evening before leave.
                 // The commute counts everywhere, slice 4: "Work 09:00–17:30 · leave 07:40 · home about 18:50" before an office day.
                 workLine = os.meka.core.domain.CommuteRules.withDayLine(

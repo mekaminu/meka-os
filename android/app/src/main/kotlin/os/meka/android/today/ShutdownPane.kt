@@ -217,6 +217,9 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
         // Done for the day: tomorrow's first commitment, "Tomorrow starts at 09:30 · Standup".
         v.firstLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
         p.workLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        // Done for the day, the first train: "First train · the 07:42 · leave by 07:32", in the accent when it often runs late.
+        p.train?.let { Text(it.text, style = MekaType.caption, color = if (it.lit) Meka.colors.accent else Meka.colors.textSecondary,
+            modifier = Modifier.semantics { contentDescription = it.spoken }) }
         // Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
         p.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent so the kit gets packed.

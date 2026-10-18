@@ -53,6 +53,11 @@ data class TomorrowPreview(
     val weatherLine: String? = null,
     /** School rhythm, slice 2: "Tomorrow · Theo: PE kit" ([SchoolRules.tomorrowLine]); set by the facade. */
     val school: SchoolLine? = null,
+    /**
+     * Done for the day, the first train: "First train · the 07:42 · leave by 07:32 · on time the last 4 times" before
+     * an office day, from the trains he took on recent mornings ([FirstTrainRules.line]); set by the facade.
+     */
+    val train: FirstTrainLine? = null,
 )
 
 data class ShutdownView(
