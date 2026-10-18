@@ -142,6 +142,13 @@ class MekaCore(
     private val jitter = Random(secureRandom.nextLong())
 
     private val replica = Replica(householdId, deviceId, HlcClock(deviceId, nowMs), store, MekaSchema, ids::next)
+    /**
+     * This device's own values (never synced). Declared before init's first refresh (nightly Mac build 2026-10-18,
+     * ci run 877): declared further down, it was still unset when that refresh read the morning trains, which the JVM
+     * turned into a caught NullPointerException (and an empty list kept for the session) and Kotlin/Native into a
+     * segfault at start.
+     */
+    private val localStore = store
     private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
     private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
@@ -1794,7 +1801,6 @@ class MekaCore(
         savedWaitingFollows = saved
         WaitingFollowCodec.decode(saved).associateByTo(HashMap()) { it.taskId }
     }
-    private val localStore = store
 
     /**
      * Train-time queue (4), 2026-10-18: the departures this device saw on today's live board, kept as a device-local
