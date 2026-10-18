@@ -348,7 +348,12 @@ object TimelineRules {
             if (tl.allDayItems.isNotEmpty()) add("${tl.allDayItems.size} all day")
             tl.rows.filter { it.kind == TimelineKind.WORK }.forEach { w ->
                 val until = "until " + w.time.substringAfter('–')
-                add(if (!w.running) "${w.title} ${w.time}" else if (w.title == WorkHours.HOME_TITLE) "Working from home $until" else "At work $until")
+                add(when {
+                    !w.running -> "${w.title} ${w.time}"
+                    w.title == WorkHours.HOME_TITLE -> "Working from home $until"
+                    w.title == WorkHours.AWAY_TITLE -> "Working away $until"
+                    else -> "At work $until"
+                })
             }
             tl.rows.count { it.kind == TimelineKind.EVENT }.takeIf { it > 0 }?.let { add(if (it == 1) "1 event" else "$it events") }
             tl.rows.filter { it.kind == TimelineKind.SESSION }.forEach { s ->

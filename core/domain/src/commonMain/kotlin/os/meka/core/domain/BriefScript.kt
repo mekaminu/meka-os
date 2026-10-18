@@ -79,6 +79,8 @@ data class BriefStory(
     val weekend: Boolean = false,
     /** A work day at the office (Places item 1), so the commute is said. */
     val officeDay: Boolean = false,
+    /** Travel mode completeness: the trip he's away on today ([TripRules.awayDays]), said with the kind of day. */
+    val away: String? = null,
     /** When today's work ends (local minute), on a work day. */
     val workEndMin: Int? = null,
     /** The commute counts everywhere, slice 4: when he leaves for work on an office day (local minute), or null. */
@@ -230,13 +232,22 @@ object BriefScriptRules {
 
     /**
      * "It's Monday 12 October, an office day, finishing at half past five." · "…, working from home, finishing at …" ·
-     * "It's Saturday 17 October, no work today." · a bank holiday or leave as its line says ("Christmas Day, no work").
+     * "It's Saturday 17 October, no work today." · a bank holiday or leave as its line says ("Christmas Day, no work") ·
+     * on a trip "It's Monday 16 November, away in Barcelona, a work day, finishing at …" / "…, away in Barcelona.".
      */
     fun dayKind(v: MorningBriefView): String? {
         if (v.dateLabel.isBlank()) return null
         val date = "It's " + BriefSpeech.spokenDate(v.dateLabel)
         val s = v.story
         val work = v.workLine
+        s.away?.let { place ->
+            return when {
+                work != null && work.startsWith("Work ") ->
+                    "$date, away in $place, a work day" + (s.workEndMin?.let { ", finishing at " + clock(it) } ?: "") + "."
+                work != null -> "$date, away in $place. " + sentence(work)
+                else -> "$date, away in $place."
+            }
+        }
         return when {
             work != null && work.startsWith("Work ") -> {
                 val kind = if (s.officeDay) "an office day" else "a work day"

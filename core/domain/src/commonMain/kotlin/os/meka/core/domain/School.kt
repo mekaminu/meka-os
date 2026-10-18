@@ -495,7 +495,7 @@ object SchoolRules {
     fun covers(items: List<SchoolItem>, today: Long, hours: WorkHours): List<SchoolCover> =
         items.filter { it.kind == SchoolKind.OFF && it.cover == null && it.endDay >= today }
             .mapNotNull { o ->
-                val days = (maxOf(o.startDay, today)..o.endDay).filter { hours.isWorkDay(it) && it !in hours.homeDays }
+                val days = (maxOf(o.startDay, today)..o.endDay).filter { hours.atOffice(it) }
                 val first = days.firstOrNull() ?: return@mapNotNull null
                 if (first - today > LEAD_DAYS) return@mapNotNull null
                 val title = "${offSubject(o.who)} ${spanLabel(o.startDay, o.endDay)}"

@@ -68,7 +68,7 @@ object PlacesRules {
      * night shift isn't an office day this line knows about). Null otherwise.
      */
     fun officeWindow(hours: WorkHours, day: Long, cal: LocalCalendar): OfficeWindow? {
-        if (!hours.isWorkDay(day) || day in hours.homeDays) return null
+        if (!hours.atOffice(day)) return null
         val h = hours.hoursOn(day)
         if (h.crossesMidnight || h.startMinute == h.endMinute) return null
         return OfficeWindow(cal.toEpochMs(day, h.startMinute), cal.toEpochMs(day, h.endMinute), CommuteRules.toWorkOn(hours, day))

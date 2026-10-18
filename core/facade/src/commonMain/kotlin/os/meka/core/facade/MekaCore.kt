@@ -134,7 +134,7 @@ class MekaCore(
     private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
     // Annual leave (V1, slice 1): booked days are days off for work mode, like a bank holiday.
     private val leave = os.meka.core.domain.Leave(replica, ids::next, nowMs, ZoneCalendar(timeZone))
-    private val work = WorkMode(replica, { bankHolidays.calendar() }, leave = { leave.days() }, nowMs = nowMs)
+    private val work = WorkMode(replica, { bankHolidays.calendar() }, leave = { leave.days() }, nowMs = nowMs, away = { trips.awayDays() })
     private val lists = os.meka.core.domain.Lists(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val renewals = Renewals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val shopping = os.meka.core.domain.Shopping(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -9219,7 +9219,7 @@ class MekaCore(
                 // Appointment nudges, slice 2c: a booked visit is said once, as its Google event when it has one.
                 events = dayEvents.filterNot { os.meka.core.domain.AppointmentCalendarRules.isAppointment(it) },
                 work = os.meka.core.domain.WorkHours(workState.schedule, holidays, homeDays = work.homeDays(todayDay), leaveDays = leaveDays,
-                    commute = workState.commute),
+                    commute = workState.commute, away = trips.awayDays()),
                 holidays = holidays,
                 school = schoolItems,
                 dateNight = dateNightNow,
@@ -9366,6 +9366,8 @@ class MekaCore(
                     // A morning brief worth listening to, slice 1: the commute, both places and home and family.
                     story = it.story.copy(
                         officeDay = office != null && workLine?.startsWith("Work ") == true,
+                        // Travel mode completeness: a trip day says where he is with the kind of day.
+                        away = trips.awayDays()[todayDay],
                         placesLine = placesLine,
                         route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.spoken,
                         needsYou = _needsYouStack.value.cards.count {
@@ -9589,7 +9591,7 @@ class MekaCore(
 
     /** Work hours on [day] from the work-mode [state]: bank holidays, work-from-home days and booked leave. */
     private fun hoursOf(state: WorkModeState, day: Long): os.meka.core.domain.WorkHours =
-        os.meka.core.domain.WorkHours.of(state, bankHolidays.calendar(), day, work.homeDays(day), leave.days())
+        os.meka.core.domain.WorkHours.of(state, bankHolidays.calendar(), day, work.homeDays(day), leave.days(), trips.awayDays())
 
     /** The wake view as the shutdown shows it, or null before the first refresh worked it out. */
     private fun currentWake(): os.meka.core.domain.WakeView? = _wake.value.takeIf { it != os.meka.core.domain.WakeView.EMPTY }

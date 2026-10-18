@@ -329,6 +329,26 @@ object TripRules {
         }
     }
 
+    /** A first day whose bookings all leave from this minute on is an evening departure: he may work first. */
+    const val EVENING_DEPART_MIN = 16 * 60
+
+    /**
+     * Travel mode completeness (2026-10-18): the days he's away, each with its trip's name, for work mode
+     * ([WorkHours.away]): every day of a trip from its first to its last, so none is an office day (no commute, trains,
+     * leave-by or "who's covering?") and the brief and the week ahead say where he is. A first day whose timed
+     * bookings all start from [EVENING_DEPART_MIN] (an evening flight) isn't counted. Two trips on one day: the earlier.
+     */
+    fun awayDays(trips: List<TripItem>): Map<Long, String> {
+        val out = mutableMapOf<Long, String>()
+        for (t in trips.sortedBy { it.startDay }) {
+            val firstTimed = t.bookings.filter { it.day == t.startDay && it.minute != null }
+            val evening = firstTimed.isNotEmpty() && firstTimed.all { it.minute!! >= EVENING_DEPART_MIN }
+            val from = if (evening) t.startDay + 1 else t.startDay
+            for (d in from..t.endDay) out.getOrPut(d) { t.name }
+        }
+        return out
+    }
+
     /** The trips the pane shows: those not ended more than [KEEP_DAYS] ago. */
     private fun shown(trips: List<TripItem>, today: Long) = trips.filter { it.endDay >= today - KEEP_DAYS }
 
@@ -559,6 +579,12 @@ class Trips(
     }
 
     fun view(): TripsView = TripRules.view(items(), calendar.epochDayOf(nowMs()))
+
+    /** The days away on a trip ([TripRules.awayDays]), from a week back. */
+    fun awayDays(): Map<Long, String> {
+        val from = calendar.epochDayOf(nowMs()) - 7
+        return TripRules.awayDays(items().filter { it.endDay >= from })
+    }
 
     /** Adds a booking checked elsewhere (Ask's card); its id. */
     fun addBooking(e: BookingEntry): String {

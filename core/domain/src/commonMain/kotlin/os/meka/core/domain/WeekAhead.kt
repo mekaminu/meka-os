@@ -212,11 +212,12 @@ object WeekAheadRules {
         if (day in work.leaveDays && wouldWork) return "Annual leave"
         if (!work.isWorkDay(day)) return null
         val hours = work.hoursOn(day).label
+        work.away[day]?.let { return "Away · $it · work $hours" }
         return if (day in work.homeDays) "${WorkHours.HOME_TITLE} $hours" else "Office $hours"
     }
 
     /** An office day: a work day that isn't from home (the commute, and who's with the boys). */
-    fun isOfficeDay(work: WorkHours, day: Long): Boolean = work.isWorkDay(day) && day !in work.homeDays
+    fun isOfficeDay(work: WorkHours, day: Long): Boolean = work.atOffice(day)
 
     private fun hhmm(ms: Long, cal: LocalCalendar) = LocalClock.formatMinute(cal.minuteOfDay(ms))
 
@@ -349,7 +350,7 @@ object WeekAheadRules {
     /** "4 office days · 1 from home · 2 matches · Theo and Finn off Fri · date night Fri"; [QUIET] when there's nothing. */
     fun summary(inputs: WeekAheadInputs, days: List<WeekAheadDay>): String {
         val office = days.count { isOfficeDay(inputs.work, it.epochDay) }
-        val home = days.count { inputs.work.isWorkDay(it.epochDay) && it.epochDay in inputs.work.homeDays }
+        val home = days.count { inputs.work.isWorkDay(it.epochDay) && it.epochDay in inputs.work.homeDays && it.epochDay !in inputs.work.away }
         val matches = days.sumOf { d -> d.lines.count { it.kind == WeekAheadKind.FIXTURE } }
         val off = days.firstNotNullOfOrNull { d ->
             SchoolRules.onDay(inputs.school, d.epochDay, inputs.holidays).firstOrNull { it.kind == SchoolKind.OFF }?.let { t ->
@@ -364,6 +365,7 @@ object WeekAheadRules {
         val work = listOfNotNull(
             office.takeIf { it > 0 }?.let { ShutdownRules.count(it, "office day") },
             home.takeIf { it > 0 }?.let { "$it from home" },
+            days.count { it.epochDay in inputs.work.away }.takeIf { it > 0 }?.let { ShutdownRules.count(it, "day") + " away" },
         )
         val rest = listOfNotNull(
             matches.takeIf { it > 0 }?.let { if (it == 1) "1 match" else "$it matches" },

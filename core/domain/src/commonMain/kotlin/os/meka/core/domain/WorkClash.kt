@@ -36,7 +36,12 @@ data class WorkClash(
     private val commuteWords: String
         get() = if (against == ClashWith.HOME) "you're home about $commuteAt" else "you leave about $commuteAt"
     private val home: Boolean get() = workTitle == WorkHours.HOME_TITLE
-    private val whileAt: String get() = if (home) "while you're working from home" else "while you're at work"
+    private val awayDay: Boolean get() = workTitle == WorkHours.AWAY_TITLE
+    private val whileAt: String get() = when {
+        awayDay -> "while you're away"
+        home -> "while you're working from home"
+        else -> "while you're at work"
+    }
     private val question: String get() = if (child == null) "who's taking?" else "who's taking $child?"
 
     /**
@@ -49,7 +54,11 @@ data class WorkClash(
                 return if (needsCover) commuteWords.replaceFirstChar { it.uppercase() } + " · $question"
                 else if (against == ClashWith.HOME) "Before you're home · about $commuteAt" else "After you leave · about $commuteAt"
             }
-            val what = if (home) "Clashes with work from home" else "Clashes with work"
+            val what = when {
+                awayDay -> "While you're away"
+                home -> "Clashes with work from home"
+                else -> "Clashes with work"
+            }
             return if (needsCover) "$what · $question" else "$what until $workUntil"
         }
 

@@ -175,8 +175,8 @@ object CommuteRules {
     /** The chips for one direction: [CHOICES] plus [current] when it is his own odd time, ascending. */
     fun choices(current: Int): List<Int> = (CHOICES + current).distinct().sorted()
 
-    /** An office day: a work day that isn't from home. */
-    fun officeDay(work: WorkHours, epochDay: Long): Boolean = work.isWorkDay(epochDay) && epochDay !in work.homeDays
+    /** An office day: a work day that isn't from home or on a trip ([WorkHours.atOffice]). */
+    fun officeDay(work: WorkHours, epochDay: Long): Boolean = work.atOffice(epochDay)
 
     /** The morning commute on [epochDay] in minutes, or null when it isn't an office day. */
     fun toWorkOn(work: WorkHours, epochDay: Long): Int? = if (officeDay(work, epochDay)) work.commute.forDay(epochDay).toWorkMin else null

@@ -434,12 +434,24 @@ data class WorkHours(
     val leaveDays: Set<Long> = emptySet(),
     /** The door-to-door commute ([CommuteRules.toWorkOn]): only counted on an office day. */
     val commute: CommuteSetting = CommuteSetting.DEFAULT,
+    /**
+     * Travel mode completeness (2026-10-18): the days he's away on a trip ([TripRules.awayDays]), each with the trip's
+     * name. A work day while away is never an office day (no commute, trains or leave-by); its band reads [AWAY_TITLE].
+     */
+    val away: Map<Long, String> = emptyMap(),
 ) {
     fun isWorkDay(epochDay: Long): Boolean =
         epochDay != offDay && epochDay !in leaveDays && WorkModeRules.isWorkDay(schedule, holidays, epochDay)
 
-    /** "Work from home" on a home day, else "Work". */
-    fun title(epochDay: Long): String = if (epochDay in homeDays) HOME_TITLE else TITLE
+    /** An office day: a work day that isn't from home and isn't on a trip (the commute, the trains, who's with the boys). */
+    fun atOffice(epochDay: Long): Boolean = isWorkDay(epochDay) && epochDay !in homeDays && epochDay !in away
+
+    /** "Work while away" on a trip day, "Work from home" on a home day, else "Work". */
+    fun title(epochDay: Long): String = when (epochDay) {
+        in away -> AWAY_TITLE
+        in homeDays -> HOME_TITLE
+        else -> TITLE
+    }
 
     /** "Work 09:00–17:30" (or "Work from home 09:00–17:30") on a work day; null otherwise. */
     fun line(epochDay: Long): String? =
@@ -466,6 +478,7 @@ data class WorkHours(
     companion object {
         const val TITLE = "Work"
         const val HOME_TITLE = "Work from home"
+        const val AWAY_TITLE = "Work while away"
 
         /**
          * From the work-mode state: an active manual "Work off" during today's shift takes today's block away;
@@ -473,10 +486,10 @@ data class WorkHours(
          */
         fun of(
             state: WorkModeState, holidays: HolidayCalendar, todayEpochDay: Long, homeDays: Set<Long> = emptySet(),
-            leaveDays: Set<Long> = emptySet(),
+            leaveDays: Set<Long> = emptySet(), away: Map<Long, String> = emptyMap(),
         ): WorkHours = WorkHours(
             state.schedule, holidays, offDay = todayEpochDay.takeIf { state.switchedManually && !state.atWork },
-            homeDays = homeDays, leaveDays = leaveDays, commute = state.commute,
+            homeDays = homeDays, leaveDays = leaveDays, commute = state.commute, away = away,
         )
 
         /** [WorkFields.HOME_DAYS] read: unreadable entries skipped. */
@@ -494,6 +507,8 @@ class WorkMode(
     private val holidays: () -> HolidayCalendar = { HolidayCalendar.NONE },
     /** Booked annual leave ([Leave.days]): days off for work mode, like a bank holiday ("Off work · Annual leave"). */
     private val leave: () -> Set<Long> = { emptySet() },
+    /** The days away on a trip ([TripRules.awayDays]): never office days. */
+    private val away: () -> Map<Long, String> = { emptyMap() },
     private val nowMs: () -> Long,
 ) {
     /** The bank holidays with booked leave laid over, for deciding whether Meka is at work. */
@@ -516,13 +531,13 @@ class WorkMode(
         val base = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays())
             .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), recordingDays = recordingDays(), commute = commute())
         if (epochDay == null) return base
-        val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays())
+        val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays(), away())
         return base.copy(commuteDays = CommuteRules.dayRows(hours, epochDay))
     }
 
     /** Work hours for Today and the Calendar tab, with today's manual "Work off" (a sick day) taken into account. */
     fun hours(clock: LocalClock, epochDay: Long): WorkHours =
-        WorkHours.of(state(clock, epochDay), holidays(), epochDay, homeDays(epochDay), leaveDays())
+        WorkHours.of(state(clock, epochDay), holidays(), epochDay, homeDays(epochDay), leaveDays(), away())
 
     private fun storedHomeDays(): Set<Long> =
         WorkHours.decodeHomeDays(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.HOME_DAYS)?.textOrNull)

@@ -58,6 +58,7 @@ object CommuteAskRules {
             epochDay in work.leaveDays -> "annual leave"
             work.holidays.isHoliday(epochDay) -> "bank holiday" + (work.holidays.title(epochDay)?.let { " ($it)" } ?: "")
             epochDay == work.offDay -> "work switched off today"
+            epochDay in work.away -> "away in ${work.away.getValue(epochDay)}"
             work.isWorkDay(epochDay) && epochDay in work.homeDays -> "work from home ${work.hoursOn(epochDay).label}"
             else -> "not a work day"
         }
