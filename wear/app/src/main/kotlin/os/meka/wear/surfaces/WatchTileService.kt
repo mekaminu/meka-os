@@ -122,6 +122,11 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.inboxLit) C.accent else C.textSecondary, 1))
         }
+        // Galaxy Watch completeness slice 1: a quiet "Waiting to sync" while changes made here haven't gone yet.
+        v.syncMark?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, C.textTertiary, 1))
+        }
         // The whole tile opens MEKA; the button sits on top with its own click.
         return LayoutElementBuilders.Box.Builder()
             .setWidth(DimensionBuilders.expand())

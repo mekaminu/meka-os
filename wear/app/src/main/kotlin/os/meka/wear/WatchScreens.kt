@@ -334,9 +334,82 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         Spacer(Modifier.height(MekaSpace.m))
         FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
 
-        if (sync is SyncStatus.Offline) {
-            Spacer(Modifier.height(MekaSpace.xs))
-            Line(WatchHomeRules.OFFLINE, MekaType.caption.copy(color = C.textTertiary))
+        // Galaxy Watch completeness slice 1: what waits to sync, cross-fading as it changes.
+        val syncLine = remember(sync) { core.watchSyncLine() }
+        AnimatedContent(
+            targetState = syncLine,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "syncLine",
+        ) { line ->
+            if (line != null) {
+                Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {
+                    Line(line, MekaType.caption.copy(color = C.textTertiary))
+                }
+            }
+        }
+
+        UnlinkRow(app, core, sync, reduced)
+    }
+}
+
+/**
+ * Galaxy Watch completeness slice 1: "Unlink this watch" at the foot of the day. A tap unfolds the question (what it
+ * forgets, and that changes not yet synced would be lost) with **Unlink** and **Keep**; offline it says it needs a
+ * connection and offers only Keep. Unlink sends what waits, revokes the watch's key on Navilife's server, then the
+ * watch forgets its day and key and shows a new code. The row unfolds on the expand spring (reduced motion: a fade).
+ */
+@Composable
+private fun UnlinkRow(app: WatchApplication, core: MekaCore, sync: SyncStatus, reduced: Boolean) {
+    val R = os.meka.core.domain.WatchUnlinkRules
+    val scope = rememberCoroutineScope()
+    var asking by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
+    var working by remember { mutableStateOf(false) }
+    Column(
+        Modifier.fillMaxWidth().padding(top = MekaSpace.l),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+    ) {
+        if (!asking) {
+            WatchButton(R.OFFER, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                said = null; asking = true
+            }
+        }
+        AnimatedVisibility(
+            visible = asking,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+            label = "unlink",
+        ) {
+            val ask = remember(sync) { core.watchUnlinkAsk() }
+            Column(
+                Modifier.fillMaxWidth().semantics(mergeDescendants = true) {
+                    contentDescription = listOfNotNull(ask.title, ask.line, ask.loss, ask.blocked, said).joinToString(". ")
+                    liveRegion = LiveRegionMode.Polite
+                },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                Line(ask.title, MekaType.metaStrong.copy(color = C.textPrimary), maxLines = 1)
+                Line(ask.line, MekaType.caption.copy(color = C.textSecondary), maxLines = 4)
+                ask.loss?.let { Line(it, MekaType.caption.copy(color = C.critical), maxLines = 3) }
+                (said ?: ask.blocked)?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 3) }
+                Spacer(Modifier.height(MekaSpace.xxs))
+                if (ask.blocked == null) {
+                    WatchButton(if (working) R.WORKING else R.UNLINK, primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) {
+                        if (working) return@WatchButton
+                        working = true
+                        scope.launch {
+                            val gone = runCatching { core.unlinkThisWatch() }.getOrDefault(false)
+                            working = false
+                            if (gone) app.forgetAndRelink() else said = R.failed(core.syncStatus.value is SyncStatus.Offline)
+                        }
+                    }
+                }
+                WatchButton(R.KEEP, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                    asking = false; said = null
+                }
+            }
         }
     }
 }

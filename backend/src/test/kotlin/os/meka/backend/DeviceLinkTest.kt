@@ -90,6 +90,23 @@ class DeviceLinkTest {
         assertEquals(DeviceLinkCodec.ERR_REVOKED, DeviceLinkCodec.decodeError(refused.body))
     }
 
+    /** Galaxy Watch completeness slice 1: Unlink this watch on the watch itself revokes its own key at once. */
+    @Test
+    fun theWatchCanUnlinkItself() {
+        val watchKey = TestDeviceKey { nowMs }
+        val started = DeviceLinkCodec.decodeStarted(start(watchKey).body)
+        assertEquals(200, link.approve(fold, DeviceLinkCodec.encodeApprove(started.code)).status)
+        val got = status(watchKey, started.linkId)
+        val watch = DeviceIdentity("home", watchId)
+        assertEquals(watch, devices.authenticate(got.secret!!))
+
+        assertEquals(200, link.unlink(watch, DeviceLinkCodec.encodeUnlink(watchId)).status)
+        assertEquals(null, devices.authenticate(got.secret!!))
+        assertTrue(DeviceLinkCodec.decodeWatches(link.watches(fold).body).isEmpty())
+        // Already gone: unlinking it again is refused as unknown.
+        assertEquals(404, link.unlink(fold, DeviceLinkCodec.encodeUnlink(watchId)).status)
+    }
+
     @Test
     fun onlyTheKeyThatAskedCanReadTheLinkAndCodesRunOut() {
         val watchKey = TestDeviceKey { nowMs }

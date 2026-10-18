@@ -4949,7 +4949,16 @@ class MekaCore(
      * The watch's tile (Galaxy Watch, slice 3): Up next with its one primary button and a running fast's clock, from
      * the same "now" card as [watchHome]. Pure and cheap; nothing is stored.
      */
-    fun watchTile(): os.meka.core.domain.WatchTileView = os.meka.core.domain.WatchTileRules.tile(watchHome())
+    fun watchTile(): os.meka.core.domain.WatchTileView {
+        val t = os.meka.core.domain.WatchTileRules.tile(watchHome())
+        // Galaxy Watch completeness slice 1: "Waiting to sync" while changes made here wait to be sent.
+        val waiting = watchPending() > 0
+        val spokenMark = os.meka.core.domain.WatchSyncRules.spokenMark(waiting)
+        return t.copy(
+            syncMark = os.meka.core.domain.WatchSyncRules.tileMark(waiting),
+            spoken = if (spokenMark == null) t.spoken else "${t.spoken} $spokenMark",
+        )
+    }
 
     /**
      * A tap on the tile's button: [clickableId] is the tile's last clickable id. Does the same as the watch's own
@@ -7987,6 +7996,46 @@ class MekaCore(
             watchesNow(null)
         }
         return true
+    }
+
+    // ---- Galaxy Watch, completeness slice 1: changes waiting and unlinking from the watch itself ----
+
+    /** Field changes made on this device that wait to be sent, as the last sync round left them (0 when synced). */
+    fun watchPending(): Int = when (val s = _sync.value) {
+        is SyncStatus.Offline -> s.pending
+        is SyncStatus.Failing -> s.pending
+        else -> 0
+    }
+
+    /** The watch's day-screen foot: "Offline · your changes here wait to sync"; null when there's nothing to say. */
+    fun watchSyncLine(): String? {
+        val s = _sync.value
+        return os.meka.core.domain.WatchSyncRules.line(s is SyncStatus.Offline, s is SyncStatus.Failing, watchPending() > 0)
+    }
+
+    /** The confirm row for "Unlink this watch". */
+    fun watchUnlinkAsk(): os.meka.core.domain.WatchUnlinkAsk =
+        os.meka.core.domain.WatchUnlinkRules.ask(_sync.value is SyncStatus.Offline, watchPending() > 0)
+
+    /**
+     * Unlinks this watch from the watch itself: one last sync sends what's waiting (best effort), then Navilife's
+     * server revokes this device's key at once. True when it's unlinked (or the server had already let it go); the
+     * watch then forgets its day and key. False when it couldn't reach the server: nothing changes.
+     */
+    suspend fun unlinkThisWatch(): Boolean {
+        val api = deviceLinkApi ?: return false
+        runCatching { syncNow() }.onFailure { if (it is CancellationException) throw it }
+        return try {
+            api.unlinkWatch(replica.deviceId); true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LinkRefusedException) {
+            true // the server didn't know it any more: already unlinked
+        } catch (e: AuthRejectedException) {
+            true // already signed out
+        } catch (e: Exception) {
+            false
+        }
     }
 
     private fun watchProblem(e: Exception): String = when {

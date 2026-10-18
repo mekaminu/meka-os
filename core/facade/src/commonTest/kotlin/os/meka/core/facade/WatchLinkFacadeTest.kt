@@ -4,6 +4,8 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
 import os.meka.core.domain.ActivityKind
 import os.meka.core.domain.WatchLinkRules
+import os.meka.core.domain.WatchSyncRules
+import os.meka.core.domain.WatchUnlinkRules
 import os.meka.core.sync.InMemoryReplicaStore
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.PullRequest
@@ -25,7 +27,7 @@ class WatchLinkFacadeTest {
     private val watchId = "watch0123456789abcdef"
 
     private inner class Server(service: SyncService) : SyncTransport, DeviceLinkApi {
-        private val sync = os.meka.core.testing.FaultyTransport(service)
+        val sync = os.meka.core.testing.FaultyTransport(service)
         val watches = mutableListOf<DeviceLinkCodec.Watch>()
         val codes = mutableListOf<String>()
         var down = false
@@ -53,8 +55,8 @@ class WatchLinkFacadeTest {
     private val service = SyncService(InMemoryServerOpStore())
     private val server = Server(service)
 
-    private fun core(transport: SyncTransport? = server) = MekaCore(
-        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
+    private fun core(transport: SyncTransport? = server, deviceId: String = "android") = MekaCore(
+        householdId = "hh", deviceId = deviceId, store = InMemoryReplicaStore(), transport = transport,
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
@@ -112,5 +114,43 @@ class WatchLinkFacadeTest {
         val offline = core(transport = null)
         assertEquals(WatchLinkRules.NOT_CONNECTED, offline.refreshWatches().problem)
         assertFalse(offline.linkWatch("12345678"))
+    }
+
+    /** Galaxy Watch completeness slice 1: changes made offline are counted on the watch, then sent before it unlinks itself. */
+    @Test
+    fun theWatchCountsChangesWaitingAndUnlinksItselfAfterSendingThem() = runTest {
+        val fold = core()
+        assertTrue(fold.linkWatch("12345678"))
+        val watch = core(deviceId = watchId)
+        assertTrue(watch.syncNow())
+        assertNull(watch.watchSyncLine())
+        assertNull(watch.watchTile().syncMark)
+        assertNull(watch.watchUnlinkAsk().blocked)
+
+        // No signal on the watch: two captures wait, and the screen and the tile say so (no count: ops aren't taps).
+        server.sync.online = false
+        watch.addTask("Buy milk")
+        watch.addTask("Call the garage")
+        assertFalse(watch.syncNow())
+        assertTrue(watch.watchPending() > 0)
+        assertEquals(WatchSyncRules.OFFLINE_WAITING, watch.watchSyncLine())
+        assertEquals(WatchSyncRules.TILE_MARK, watch.watchTile().syncMark)
+        val ask = watch.watchUnlinkAsk()
+        assertEquals(WatchUnlinkRules.NEEDS_CONNECTION, ask.blocked)
+        assertEquals(WatchUnlinkRules.LOSS, ask.loss)
+        server.down = true
+        assertFalse(watch.unlinkThisWatch())
+        assertEquals(listOf(watchId), server.watches.map { it.id })
+
+        // Back online: Unlink sends what waits first, then the server lets the watch go.
+        server.sync.online = true
+        server.down = false
+        assertTrue(watch.unlinkThisWatch())
+        assertTrue(server.watches.isEmpty())
+        assertEquals(0, watch.watchPending())
+        assertTrue(fold.syncNow())
+        assertEquals(setOf("Buy milk", "Call the garage"), (listOfNotNull(fold.today.value.upNext) + fold.today.value.yourDay).map { it.title }.toSet())
+        // Already gone on the server: still fine.
+        assertTrue(watch.unlinkThisWatch())
     }
 }

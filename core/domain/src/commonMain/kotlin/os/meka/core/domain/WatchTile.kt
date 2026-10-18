@@ -52,6 +52,8 @@ data class WatchTileView(
     val matchLit: Boolean = false,
     /** Meeting prep, slice 3: "Prep · Quote review · in 12 min" (always lit); null with no prep. The inbox gives way to it. */
     val prepLine: String? = null,
+    /** Galaxy Watch completeness slice 1: "2 to sync" while changes made on the watch wait to be sent; else null. */
+    val syncMark: String? = null,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */
