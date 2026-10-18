@@ -145,7 +145,7 @@ class NotifyReportsTest {
         val reports = NotifyReports(InMemoryNotifyReportStore(), null, mailChecks = { listOf(ok, bad) }, now = { at })
         val lines = ReleasePublisherCli.mailLines(reports.latest(DeviceIdentity("hh", ReleasePublisher.ID)))
         assertEquals(
-            "::notice title=Mail · Personal::Gmail · ok · checked 2026-10-13 20:41 UTC · ok 2026-10-13 20:41 UTC · inbox 88 · 31 unread · autopilot on: planned 3, moved 3",
+            "::notice title=Mail · Personal::Personal Gmail · ok · checked 2026-10-13 20:41 UTC · ok 2026-10-13 20:41 UTC · inbox 88 · 31 unread · autopilot on: planned 3, moved 3",
             lines[0],
         )
         assertTrue(lines[1].startsWith("::warning title=Mail · Outlook::Outlook · error (busy)"), lines[1])
