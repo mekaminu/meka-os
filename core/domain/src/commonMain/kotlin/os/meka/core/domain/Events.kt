@@ -64,6 +64,13 @@ object EventFields {
      * calendars he can change and on events polled before it existed.
      */
     const val READ_ONLY = "readOnly"
+    /**
+     * Edit your calendars, completeness slice 6: the time zone the event was set in, as an IANA id ("America/New_York",
+     * "Europe/London"; Google's start time zone else its calendar's, Outlook's original start zone), so the apps can
+     * show its time there when that differs from the device's ([EventZoneRules]). Written by the server's ingestion for
+     * timed events; additive (ADR-008 addendum), absent on all-day events, unknown zones and events polled before it.
+     */
+    const val TIME_ZONE = "timeZone"
 }
 
 /** Meeting prep, slice 4: a guest's newest email in Meka's mailboxes ([EventFields.GUEST_MAIL]). */
@@ -129,6 +136,8 @@ data class CalendarEvent(
     val series: String? = null,
     /** Completeness slice 3: its calendar is view only for Meka ([EventFields.READ_ONLY]). */
     val readOnly: Boolean = false,
+    /** Completeness slice 6: the IANA time zone it was set in ([EventFields.TIME_ZONE]); null when unknown or all day. */
+    val timeZone: String? = null,
 ) {
     /** One of a repeating series: editing it asks "This event · Every event". */
     val repeats: Boolean get() = series != null
@@ -180,6 +189,7 @@ data class CalendarEvent(
                 guestMail = GuestMail.parse(s[EventFields.GUEST_MAIL].textOrNull),
                 series = s[EventFields.SERIES].textOrNull?.takeIf { it.isNotBlank() },
                 readOnly = s[EventFields.READ_ONLY].boolOrNull ?: false,
+                timeZone = s[EventFields.TIME_ZONE].textOrNull?.takeIf { EventZoneRules.validId(it) },
             )
         }
     }

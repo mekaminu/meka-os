@@ -150,6 +150,13 @@ private fun DetailContent(
                 listOfNotNull(d.whenLine, d.duration).joinToString(" · "), style = MekaType.itemMeta,
                 color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs),
             )
+            // Completeness slice 6: its time in the zone it was set in, when that clock differs from here.
+            d.zoneLine?.let {
+                Text(
+                    it, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(top = MekaSpace.xxs),
+                )
+            }
             d.status?.let {
                 Text(
                     it, style = MekaType.itemMeta,

@@ -67,7 +67,68 @@ data class RemoteEvent(
      * (Google `accessRole` reader / freeBusyReader, Outlook `canEdit` false), mirrored as event.readOnly.
      */
     val readOnly: Boolean = false,
+    /**
+     * Edit your calendars, completeness slice 6: the IANA zone the event was set in ([EventZones.iana]); null for
+     * all-day events and zones that don't parse. Mirrored as event.timeZone.
+     */
+    val timeZone: String? = null,
 )
+
+/**
+ * Completeness slice 6: an event's own time zone as an IANA id. Google gives IANA ids already; Outlook's
+ * `originalStartTimeZone` is usually a Windows name, so the common ones are mapped and anything else that isn't an
+ * IANA id is dropped (the apps then simply show no extra line).
+ */
+object EventZones {
+    private val WINDOWS = mapOf(
+        "GMT Standard Time" to "Europe/London",
+        "Greenwich Standard Time" to "Atlantic/Reykjavik",
+        "W. Europe Standard Time" to "Europe/Berlin",
+        "Romance Standard Time" to "Europe/Paris",
+        "Central Europe Standard Time" to "Europe/Budapest",
+        "Central European Standard Time" to "Europe/Warsaw",
+        "GTB Standard Time" to "Europe/Bucharest",
+        "FLE Standard Time" to "Europe/Kiev",
+        "E. Europe Standard Time" to "Europe/Chisinau",
+        "Russian Standard Time" to "Europe/Moscow",
+        "Turkey Standard Time" to "Europe/Istanbul",
+        "Israel Standard Time" to "Asia/Jerusalem",
+        "Egypt Standard Time" to "Africa/Cairo",
+        "South Africa Standard Time" to "Africa/Johannesburg",
+        "W. Central Africa Standard Time" to "Africa/Lagos",
+        "E. Africa Standard Time" to "Africa/Nairobi",
+        "Morocco Standard Time" to "Africa/Casablanca",
+        "Arabian Standard Time" to "Asia/Dubai",
+        "Arab Standard Time" to "Asia/Riyadh",
+        "India Standard Time" to "Asia/Kolkata",
+        "Pakistan Standard Time" to "Asia/Karachi",
+        "China Standard Time" to "Asia/Shanghai",
+        "Singapore Standard Time" to "Asia/Singapore",
+        "Tokyo Standard Time" to "Asia/Tokyo",
+        "Korea Standard Time" to "Asia/Seoul",
+        "AUS Eastern Standard Time" to "Australia/Sydney",
+        "New Zealand Standard Time" to "Pacific/Auckland",
+        "Eastern Standard Time" to "America/New_York",
+        "Central Standard Time" to "America/Chicago",
+        "Mountain Standard Time" to "America/Denver",
+        "US Mountain Standard Time" to "America/Phoenix",
+        "Pacific Standard Time" to "America/Los_Angeles",
+        "Atlantic Standard Time" to "America/Halifax",
+        "E. South America Standard Time" to "America/Sao_Paulo",
+        "Canada Central Standard Time" to "America/Regina",
+        "Hawaiian Standard Time" to "Pacific/Honolulu",
+        "UTC" to "UTC",
+        "Coordinated Universal Time" to "UTC",
+    )
+
+    /** [raw] as an IANA id the JVM knows, or null ("tzone://Microsoft/Utc" and "Customized Time Zone" included). */
+    fun iana(raw: String?): String? {
+        val s = raw?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        val id = WINDOWS[s] ?: s
+        if (id.length > 64 || '/' !in id && id != "UTC") return null
+        return runCatching { java.time.ZoneId.of(id).id }.getOrNull()
+    }
+}
 
 /**
  * Meeting prep, slice 1: the other people on an event, as names only (an address is never synced: a guest with no
@@ -457,6 +518,8 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
             val calName = cal["summaryOverride"].str() ?: cal["summary"].str()
             // Completeness slice 3: a calendar he may only see (a holidays calendar, someone else's shared one).
             val readOnly = cal["accessRole"].str()?.let { it != "owner" && it != "writer" } ?: false
+            // Completeness slice 6: the calendar's own zone, for events whose start names none.
+            val calZone = cal["timeZone"].str()
             buildList {
                 var page: String? = null
                 do {
@@ -487,6 +550,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                             guestAddresses = EventGuests.addresses(guestPeople),
                             seriesId = e["recurringEventId"].str()?.let { "$calId/$it" },
                             readOnly = readOnly,
+                            timeZone = if (allDay) null else EventZones.iana(start["timeZone"].str() ?: calZone),
                         ))
                     }
                     page = resp["nextPageToken"].str()
@@ -699,7 +763,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
             buildList {
                 var url: String? = "https://graph.microsoft.com/v1.0/me/calendars/${Http.enc(calId)}/calendarView?" + Http.query(mapOf(
                     "startDateTime" to rfc3339(fromMs), "endDateTime" to rfc3339(toMs), "\$top" to "500",
-                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink,attendees,organizer,seriesMasterId",
+                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink,attendees,organizer,seriesMasterId,originalStartTimeZone",
                 ))
                 while (url != null) {
                     val resp = http.getJson(url, accessToken, utc)
@@ -727,6 +791,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                             guestAddresses = EventGuests.addresses(people),
                             seriesId = e["seriesMasterId"].str()?.let { "$calId/$it" },
                             readOnly = readOnly,
+                            timeZone = if (allDay) null else EventZones.iana(e["originalStartTimeZone"].str()),
                         ))
                     }
                     url = resp["@odata.nextLink"].str()

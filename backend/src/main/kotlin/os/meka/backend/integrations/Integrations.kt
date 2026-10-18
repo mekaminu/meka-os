@@ -2847,6 +2847,8 @@ class Integrations(
                     EventFields.SERIES to (e.seriesId?.let { FieldValue.Text(seriesKey(a, it)) } ?: FieldValue.Null),
                     // Completeness slice 3: a view-only calendar, so the apps grey Edit out. Additive; written only when true.
                     EventFields.READ_ONLY to (if (e.readOnly) FieldValue.Bool(true) else FieldValue.Null),
+                    // Completeness slice 6: the zone it was set in, so the apps can show its time there. Additive.
+                    EventFields.TIME_ZONE to (e.timeZone?.let { FieldValue.Text(it) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 // A fixture whose kick-off moved while the old time was still ahead: remember the old time and when

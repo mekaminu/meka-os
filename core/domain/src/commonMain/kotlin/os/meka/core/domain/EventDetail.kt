@@ -12,6 +12,11 @@ data class EventDetailView(
     val title: String,
     /** "Tue 6 Oct · 14:00–15:00" · "Tue 6 Oct · All day" · "Tue 6 – Thu 8 Oct · All day" · "Tue 6 Oct 22:00 – Wed 7 Oct 01:00" */
     val whenLine: String,
+    /**
+     * Completeness slice 6: the event's time in the zone it was set in when that clock differs from here ("New York
+     * time · 09:00–10:00", [EventZoneRules]); null otherwise.
+     */
+    val zoneLine: String? = null,
     /** "1 h" · "45 min" · "1 h 30"; null for all-day events and events with no length. */
     val duration: String?,
     /** "In 25 min" · "Now · ends 15:00" · "Ended" · "Today" (all day) · "Tomorrow"; null further ahead. */

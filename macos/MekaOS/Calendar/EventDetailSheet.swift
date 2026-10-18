@@ -59,6 +59,10 @@ struct EventDetailSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text([d.whenLine, d.duration].compactMap { $0 }.joined(separator: " · "))
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            // Completeness slice 6: its time in the zone it was set in, when that clock differs from here.
+            if let zone = d.zoneLine {
+                Text(zone).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+            }
             if let status = d.status {
                 Text(status).font(MekaType.itemMeta)
                     .foregroundStyle(d.statusLit ? palette.accent : palette.textTertiary)

@@ -1964,10 +1964,21 @@ class MekaCore(
     /** Event detail (calendar redesign, slice 3): when, how soon, which calendar, place, notes and a Join link. Pure. */
     fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
         os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone), _eventMarks.value).copy(
+            zoneLine = eventZoneLine(event),
             editable = canEditEvent(event),
             editNote = os.meka.core.domain.CalendarEditRules.notEditableReason(event) { p, a -> _editAccounts.value.any { it.provider == p && it.email == a } },
             edit = os.meka.core.domain.EditEventRules.note(event.id, _editsSeen.value, nowMs(), ZoneCalendar(timeZone)),
         )
+
+    /**
+     * Completeness slice 6: [event]'s time in its own zone when that clock differs from this device's
+     * ([os.meka.core.domain.EventZoneRules]); null when the zone is unknown here or the clocks agree.
+     */
+    fun eventZoneLine(event: os.meka.core.domain.CalendarEvent): String? {
+        val id = event.timeZone ?: return null
+        val zone = runCatching { TimeZone.of(id) }.getOrNull() ?: return null
+        return os.meka.core.domain.EventZoneRules.line(event, ZoneCalendar(timeZone), ZoneCalendar { zone })
+    }
 
     /** Whether MEKA may change [event] in its calendar (a Google/Outlook account where editing is allowed). */
     private fun accountEditable(provider: String, account: String): Boolean =

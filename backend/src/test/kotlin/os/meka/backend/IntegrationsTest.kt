@@ -247,6 +247,28 @@ class IntegrationsTest {
     }
 
     @Test
+    fun anEventsOwnTimeZoneIsMirroredAndOutlookNamesAreMapped() {
+        // Edit your calendars, completeness slice 6: the apps show its time there when that clock differs.
+        val acc = connect()
+        provider.events = listOf(ev("a", "Call with Sam", 14).copy(timeZone = "America/New_York"), ev("b", "Dentist", 9))
+        integrations.syncAccount(acc)
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + (counter++) }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        val byTitle = CalendarEvents(r).all().associateBy { it.title }
+        assertEquals("America/New_York", byTitle.getValue("Call with Sam").timeZone)
+        assertEquals(null, byTitle.getValue("Dentist").timeZone)
+
+        assertEquals("Europe/London", os.meka.backend.integrations.EventZones.iana("GMT Standard Time"))
+        assertEquals("America/New_York", os.meka.backend.integrations.EventZones.iana("Eastern Standard Time"))
+        assertEquals("Asia/Tokyo", os.meka.backend.integrations.EventZones.iana("Asia/Tokyo"))
+        assertEquals("UTC", os.meka.backend.integrations.EventZones.iana("UTC"))
+        assertEquals(null, os.meka.backend.integrations.EventZones.iana("Customized Time Zone"))
+        assertEquals(null, os.meka.backend.integrations.EventZones.iana("tzone://Microsoft/Custom"))
+        assertEquals(null, os.meka.backend.integrations.EventZones.iana("Mars/Olympus_Mons"))
+        assertEquals(null, os.meka.backend.integrations.EventZones.iana(" "))
+    }
+
+    @Test
     fun startReportsMissingCredentialsAndUnknownProviders() {
         configured = false
         assertEquals(Integrations.StartResult.NotConfigured, integrations.start("home", "google"))
