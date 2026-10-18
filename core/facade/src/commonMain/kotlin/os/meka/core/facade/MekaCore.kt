@@ -4860,7 +4860,24 @@ class MekaCore(
             watchDraftNow,
             // Done for the day, completeness slice 2: the evening glance from this watch's own shutdown view.
             os.meka.core.domain.WatchEveningRules.view(_shutdown.value),
+            // Approve message drafts from the wrist, slice 1: the newest drafted message reply from the synced cards.
+            os.meka.core.domain.WatchMessageDraftRules.view(_triage.value),
         )
+
+    /**
+     * Approve message drafts from the wrist, slice 1: **Send** on the watch's message draft, Meka's tap. Asks the Fold to
+     * send Navilife's draft, exactly as the wrist showed it whole, through the message's own notification Reply (the
+     * Mac's Send (via your phone), [requestPhoneSend]); nothing is sent here. Only while the phone still holds the
+     * message and no request waits; else nothing is written. Returns the line to show.
+     */
+    suspend fun watchSendMessageDraft(messageId: String): String {
+        val R = os.meka.core.domain.WatchMessageDraftRules
+        val asked = onCore {
+            val words = R.sendable(triageCards.open(), messageId) ?: return@onCore false
+            triageCards.requestPhoneSend(messageId, words)
+        }
+        return if (asked) R.ASKED else R.NOT_NOW
+    }
 
     /** Done for the day, completeness slice 2: **Shut down** on the watch (the same as the pane's); what it says. */
     suspend fun watchShutDown(): String {

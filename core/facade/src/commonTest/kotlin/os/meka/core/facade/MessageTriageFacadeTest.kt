@@ -58,6 +58,48 @@ class MessageTriageFacadeTest {
     private fun msg(who: String, text: String, group: String? = null, at: Long = now - 60_000, kind: CaptureKind = CaptureKind.MESSAGE) =
         CapturedItem("wa-$who-$at-${text.length}", CaptureApp.WHATSAPP, kind, who, text, group, at)
 
+    /**
+     * Galaxy Watch: approve message drafts from the wrist, slice 1 — the watch shows the Fold's drafted reply and its
+     * Send only asks the Fold, which sends it with the message's own Reply; nothing goes while the phone lacks it.
+     */
+    @Test
+    fun theWatchShowsAMessageDraftAndItsSendOnlyAsksThePhone() = runTest {
+        val R = os.meka.core.domain.WatchMessageDraftRules
+        val fold = core()
+        val watch = MekaCore(
+            householdId = "hh", deviceId = "watch", store = InMemoryReplicaStore(), transport = server,
+            secureRandom = Random(7), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        server.reply = MessageTriageCodec.Response("answered", lane = "needs_reply", summary = "Asks if you're coming Saturday", draft = "Yes, I'll be there")
+        val item = msg("Tunde", "are you coming Saturday?")
+        assertIs<TriageRead.Read>(fold.triageMessage(item))
+        assertTrue(fold.syncNow())
+        assertTrue(watch.syncNow())
+        val kept = assertNotNull(watch.watchHome().message)
+        assertEquals(item.id, kept.messageId)
+        assertEquals("Yes, I'll be there", kept.draft)
+        assertFalse(kept.canSend, "the phone doesn't hold the message yet")
+        assertEquals(R.NEEDS_PHONE, kept.note)
+        assertEquals(R.NOT_NOW, watch.watchSendMessageDraft(item.id))
+
+        assertEquals(1, fold.notePhoneLive(setOf(item.id)))
+        assertTrue(fold.syncNow())
+        assertTrue(watch.syncNow())
+        assertTrue(watch.watchHome().message!!.canSend)
+        assertTrue(fold.phoneSendsDue().isEmpty(), "showing it asks nothing")
+        assertEquals(R.ASKED, watch.watchSendMessageDraft(item.id))
+        assertEquals(R.SENDING, watch.watchHome().message!!.note)
+        assertEquals(R.NOT_NOW, watch.watchSendMessageDraft(item.id), "one ask at a time")
+        assertTrue(watch.syncNow())
+        assertTrue(fold.syncNow())
+        val due = fold.phoneSendsDue().single()
+        assertEquals("Yes, I'll be there", due.text)
+        assertTrue(fold.phoneSendDone(due.messageId, due.atMs, sent = true))
+        assertTrue(fold.syncNow())
+        assertTrue(watch.syncNow())
+        assertNull(watch.watchHome().message)
+    }
+
     @Test
     fun aOneToOneMessageGoesOutAloneAndComesBackAsAReplyCardWithACheckedDraft() = runTest {
         val c = core()

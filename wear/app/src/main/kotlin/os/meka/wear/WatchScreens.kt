@@ -327,6 +327,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
 
         DraftRow(core, home.draft, reduced)
 
+        MessageDraftRow(core, home.message, reduced)
+
         InboxRow(home.inbox, reduced)
 
         EveningRow(core, home.evening, reduced)
@@ -495,6 +497,82 @@ private fun DraftRow(core: MekaCore, draft: os.meka.core.domain.WatchDraft?, red
                                 said = DraftSaid(line, undo = line == R.PUT_AWAY, ms = R.LINE_MS)
                             }
                         }
+                        state.more?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 1) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Galaxy Watch: approve message drafts from the wrist, slice 1. Navilife's newest drafted WhatsApp or text reply —
+ * "MESSAGE REPLY · 1 OF 2", who wrote and what they want, the draft itself — with **Send** (filled, a confirm buzz) while
+ * the Fold still holds the message: his tap asks the phone, which sends it through the message's own Reply. Otherwise
+ * the draft stays and the row says why ("Needs your phone", "Couldn't send…" in the warning colour). Edit and Not now
+ * stay on the phone. After Send the row says "Sending from your phone…" until the card leaves. The row unfolds on the
+ * expand spring (reduced motion: a fade), its states cross-fade, and it folds away when no message draft waits.
+ */
+@Composable
+private fun MessageDraftRow(core: MekaCore, draft: os.meka.core.domain.WatchMessageDraft?, reduced: Boolean) {
+    val R = os.meka.core.domain.WatchMessageDraftRules
+    val scope = rememberCoroutineScope()
+    var said by remember { mutableStateOf<DraftSaid?>(null) }
+    LaunchedEffect(said) {
+        val s = said ?: return@LaunchedEffect
+        delay(s.ms)
+        if (said == s) said = null
+    }
+    // The last draft shown, so the row folds away still showing it (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchMessageDraft>(1) }
+    if (draft != null) last[0] = draft
+    AnimatedVisibility(
+        visible = draft != null || said != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "messageDraft",
+    ) {
+        AnimatedContent(
+            targetState = said ?: draft ?: last[0],
+            contentKey = {
+                when (it) {
+                    is DraftSaid -> "said" + it.at
+                    is os.meka.core.domain.WatchMessageDraft -> it.messageId + it.note
+                    else -> ""
+                }
+            },
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "messageDraftState",
+        ) { state ->
+            Column(
+                Modifier.fillMaxWidth().padding(top = MekaSpace.m),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                when (state) {
+                    is DraftSaid -> Line(state.line, MekaType.caption.copy(color = C.textPrimary), maxLines = 3)
+                    is os.meka.core.domain.WatchMessageDraft -> {
+                        Column(
+                            Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = state.spoken },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                        ) {
+                            Line(state.label, MekaType.captionStrong.copy(color = C.accent, fontFeatureSettings = "tnum"), maxLines = 1)
+                            Line(state.from, MekaType.metaStrong.copy(color = C.textPrimary), maxLines = 2)
+                            state.wants?.let { Line(it, MekaType.caption.copy(color = C.textSecondary), maxLines = 3) }
+                            Line(state.draft, MekaType.caption.copy(color = C.textPrimary), maxLines = 14)
+                            Line(state.note, MekaType.caption.copy(color = if (state.warn) C.critical else C.textTertiary), maxLines = 3)
+                        }
+                        if (state.canSend) {
+                            Spacer(Modifier.height(MekaSpace.xxs))
+                            WatchButton(R.SEND, primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) {
+                                scope.launch {
+                                    val line = runCatching { core.watchSendMessageDraft(state.messageId) }.getOrElse { R.NOT_NOW }
+                                    said = DraftSaid(line, undo = false, ms = R.LINE_MS)
+                                }
+                            }
+                        }
+                        Line(R.EDIT_HINT, MekaType.caption.copy(color = C.textTertiary), maxLines = 1)
                         state.more?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 1) }
                     }
                 }

@@ -32,6 +32,8 @@ data class WatchHomeView(
     val draft: WatchDraft? = null,
     /** Done for the day, completeness slice 2: the evening glance with Shut down and Later ([WatchEveningRules]). */
     val evening: WatchEvening? = null,
+    /** Approve message drafts from the wrist, slice 1: the newest drafted WhatsApp or text reply ([WatchMessageDraftRules]). */
+    val message: WatchMessageDraft? = null,
 )
 
 /**
@@ -210,7 +212,7 @@ object WatchHomeRules {
     fun view(
         now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null,
         parking: List<WatchParking> = emptyList(), match: WatchMatch? = null, prep: WatchPrep? = null,
-        draft: WatchDraft? = null, evening: WatchEvening? = null,
+        draft: WatchDraft? = null, evening: WatchEvening? = null, message: WatchMessageDraft? = null,
     ): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
@@ -237,6 +239,7 @@ object WatchHomeRules {
             prep = prep,
             draft = draft,
             evening = evening,
+            message = message,
         )
     }
 
