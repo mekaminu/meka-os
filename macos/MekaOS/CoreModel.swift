@@ -4696,6 +4696,28 @@ final class CoreModel {
         }
     }
 
+    /// The Vault, slice 4: Open copy behind Touch ID (the Mac's password without it). When the copies are locked,
+    /// Touch ID first, then the core unlocks them for five minutes at most and opens this one; a no says so and shows
+    /// nothing. Only the id String crosses into the core.
+    func openVaultCopyUnlocking(_ docId: String) async -> (ViewedCopy?, TripSaid?) {
+        guard let core else { return (nil, nil) }
+        let locked = (try? await core.vaultCopiesLocked())?.boolValue ?? true
+        if locked {
+            let ok = await withCheckedContinuation { (k: CheckedContinuation<Bool, Never>) in
+                MacBiometric.unlock(reason: VaultLockRules.shared.UNLOCK_REASON) { yes in k.resume(returning: yes) }
+            }
+            guard ok else {
+                MekaHaptics.tick()
+                return (nil, TripSaid(line: VaultLockRules.shared.LOCKED, refused: true))
+            }
+            _ = try? await core.unlockVault()
+        }
+        return await openVaultCopy(docId)
+    }
+
+    /// Locks the Vault's copies again (the Vault left, the screen slept or the session went away).
+    func lockVault() { run { _ = try await $0.lockVault() } }
+
     /// Remove copy: gone from every device and the server; the document stays.
     func removeVaultCopy(_ docId: String) async -> TripSaid? {
         guard let core else { return nil }

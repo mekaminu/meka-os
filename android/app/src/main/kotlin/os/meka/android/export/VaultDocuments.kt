@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -45,6 +46,7 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.Field
+import os.meka.android.security.FoldBiometric
 import os.meka.core.domain.DocumentAdded
 import os.meka.core.domain.DocumentRow
 import os.meka.core.domain.DocumentRules
@@ -53,6 +55,7 @@ import os.meka.core.domain.VaultReceiptRules
 import os.meka.core.domain.VaultFileOpened
 import os.meka.core.domain.VaultFileRules
 import os.meka.core.domain.VaultFileSaid
+import os.meka.core.domain.VaultLockRules
 import os.meka.core.facade.MekaCore
 
 /**
@@ -63,6 +66,8 @@ import os.meka.core.facade.MekaCore
  * and once there is one Open copy (shown in the app only, [VaultCopyViewer]), Replace copy and Remove copy; the row
  * says what is kept ("Photo · 412 KB · encrypted · added on this Fold, Sun 18 Oct").
  * Receipts → Vault: a receipt kept from an email ([VaultReceiptRules]) also offers Open the email.
+ * Slice 4: Open copy asks for his fingerprint first ([VaultLockRules]); leaving the Vault or the app going to the
+ * background locks the copies again and closes a shown one.
  *
  * Motion: the section staggers in with the screen; the summary and the line under the field cross-fade (a refused line
  * lit in the accent); rows grow in and out on the expand spring; the status blends to the accent when a renewal window
@@ -134,12 +139,25 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
                             .onFailure { copyFor = null }
                     },
                     onOpenCopy = {
-                        scope.launch {
-                            val o = runCatching { core.openVaultCopy(r.id) }.getOrNull()
-                            if (o?.base64 != null) { haptics.light(); viewing = o } else {
-                                haptics.tick()
-                                copySaid = r.id to VaultFileSaid(o?.problem ?: VaultFileRules.OFFLINE, refused = true)
+                        val show: () -> Unit = {
+                            scope.launch {
+                                val o = runCatching { core.openVaultCopy(r.id) }.getOrNull()
+                                if (o?.base64 != null) { haptics.light(); viewing = o } else {
+                                    haptics.tick()
+                                    copySaid = r.id to VaultFileSaid(o?.problem ?: VaultFileRules.OFFLINE, refused = true)
+                                }
                             }
+                        }
+                        // Slice 4: a copy opens after his fingerprint (the phone's PIN with none set up).
+                        scope.launch {
+                            if (runCatching { core.vaultCopiesLocked() }.getOrDefault(true)) {
+                                FoldBiometric.unlock(context, VaultLockRules.UNLOCK_REASON, VaultLockRules.UNLOCK_SUB) { ok ->
+                                    if (ok) scope.launch { runCatching { core.unlockVault() }; show() } else {
+                                        haptics.tick()
+                                        copySaid = r.id to VaultFileSaid(VaultLockRules.LOCKED, refused = true)
+                                    }
+                                }
+                            } else show()
                         }
                     },
                     onOpenEmail = {
@@ -159,10 +177,20 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
         }
         Text(DocumentRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
         if (v.rows.any { it.hasCopy }) Text(VaultFileRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        VaultLockRules.note(v.rows)?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         // Slice 2a: the household's Vault key, and the devices asking for it.
         VaultKeySection(core, firstIndex + 3 + v.rows.size)
     }
     viewing?.let { VaultCopyViewer(it, onClose = { viewing = null }) }
+    // Slice 4: the app going to the background, or leaving the Vault, locks the copies again (and closes a shown one),
+    // on a scope that outlives this one, which is cancelled as it goes.
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+        viewing = null
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch { runCatching { core.lockVault() } }
+    }
+    DisposableEffect(Unit) {
+        onDispose { kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main.immediate).launch { runCatching { core.lockVault() } } }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -8519,16 +8519,31 @@ class MekaCore(
         }
     }
 
+    // The Vault, slice 4: the copies behind the fingerprint (VaultLockRules). Memory only, per device.
+    private var vaultUnlockedAtMs = 0L
+
+    /** After the fingerprint's (or Touch ID's) yes: copies open for [os.meka.core.domain.VaultLockRules.WINDOW_MS] at most. */
+    suspend fun unlockVault() = onCore { vaultUnlockedAtMs = nowMs() }
+
+    /** Leaving the Vault, or the app going away: copies lock again. */
+    suspend fun lockVault() = onCore { vaultUnlockedAtMs = 0L }
+
+    /** Whether Open copy needs the fingerprint first (the apps ask, then [unlockVault]). */
+    suspend fun vaultCopiesLocked(): Boolean = onCore { !os.meka.core.domain.VaultLockRules.unlocked(vaultUnlockedAtMs, nowMs()) }
+
     /**
      * Opens document [docId]'s copy for the screen: from this device's sealed copy, else fetched from the server (and
      * kept, sealed, for offline), opened with the Vault key and checked it is this copy. The bytes go only to the
-     * app's memory; a [os.meka.core.domain.VaultFileOpened.problem] says why it didn't open.
+     * app's memory; a [os.meka.core.domain.VaultFileOpened.problem] says why it didn't open. Slice 4: refused
+     * ([os.meka.core.domain.VaultFileOpened.locked]) until [unlockVault].
      */
     suspend fun openVaultCopy(docId: String): os.meka.core.domain.VaultFileOpened {
         val r = os.meka.core.domain.VaultFileRules
         val found = onCore { documents.item(docId)?.let { d -> d.file?.let { d.title to it } } }
             ?: return os.meka.core.domain.VaultFileOpened.problem("", r.GONE)
         val (title, ref) = found
+        // Slice 4: nothing is read, fetched or opened until his fingerprint unlocked the copies.
+        if (vaultCopiesLocked()) return os.meka.core.domain.VaultFileOpened.locked(title)
         var sealed = onCore { vaultLocal(r.localKey(ref.id)) }
         var fetched = false
         if (sealed == null) {

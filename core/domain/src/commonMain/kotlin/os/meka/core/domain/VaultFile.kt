@@ -36,12 +36,43 @@ data class VaultFileSaid(val line: String, val refused: Boolean)
  * to the Mac), and the document's [title]; or, when it couldn't be opened, [problem] and no bytes. The bytes are never
  * stored outside the app's memory.
  */
-data class VaultFileOpened(val title: String, val type: String, val base64: String?, val problem: String?) {
+data class VaultFileOpened(
+    val title: String,
+    val type: String,
+    val base64: String?,
+    val problem: String?,
+    /** The Vault, slice 4: true when it didn't open only because the copies are locked ([VaultLockRules]). */
+    val locked: Boolean = false,
+) {
     val isPdf: Boolean get() = type == VaultFileRules.PDF
 
     companion object {
         fun problem(title: String, line: String) = VaultFileOpened(title, "", null, line)
+        fun locked(title: String) = VaultFileOpened(title, "", null, VaultLockRules.LOCKED, locked = true)
     }
+}
+
+/**
+ * The Vault, slice 4: **the copies behind the fingerprint.** A document's name and expiry are already on the plan
+ * (Today, heads-ups), so they stay readable; what a copy holds (the passport's page, a licence) opens only after his
+ * fingerprint on the Fold (the phone's PIN with none set up) or Touch ID on the Mac (the Mac's password without it).
+ * An unlock lasts while he stays in the Vault, ends when he leaves it or the app goes away, and never outlasts
+ * [WINDOW_MS]. Held in the core's memory only, per device; nothing is stored or synced.
+ */
+object VaultLockRules {
+    /** An unlock never lasts longer than this, even with the Vault left open. */
+    const val WINDOW_MS = 5 * 60_000L
+    const val UNLOCK_REASON = "Open your Vault copies"
+    const val UNLOCK_SUB = "Your documents, on this device only"
+    const val LOCKED = "Copies open with your fingerprint. Nothing was shown."
+    const val NOTE =
+        "Copies open only after your fingerprint (Touch ID or your password on the Mac), and lock again when you leave the Vault or after 5 minutes."
+
+    /** Whether an unlock at [unlockedAtMs] (0 = none) still holds at [nowMs]. A clock gone backwards counts as locked. */
+    fun unlocked(unlockedAtMs: Long, nowMs: Long): Boolean = unlockedAtMs > 0L && nowMs >= unlockedAtMs && nowMs - unlockedAtMs < WINDOW_MS
+
+    /** The line under the documents: shown once any document holds a copy. */
+    fun note(rows: List<DocumentRow>): String? = if (rows.any { it.hasCopy }) NOTE else null
 }
 
 /** What [VaultFileRules.open] made of a downloaded or kept box. */

@@ -1,3 +1,4 @@
+import AppKit
 @preconcurrency import MekaKit
 import SwiftUI
 
@@ -6,6 +7,8 @@ import SwiftUI
 /// renew first (status lit). Click a row for Remove. Only Strings cross to the core.
 /// Slice 2b: an opened row offers Add a copy… (a photo or PDF, sealed with the Vault key on this Mac), and once there is
 /// one Open copy (a sheet, in the app only), Replace copy… and Remove copy; the row says what is kept.
+/// Slice 4: Open copy asks for Touch ID first (VaultLockRules); leaving the Vault, the screen sleeping or the session
+/// going away locks the copies again.
 ///
 /// Motion: the section staggers in with the screen; the summary and the line under the field cross-fade (a refused
 /// line lit in the accent); rows arrive and leave on the expand spring; an opened row grows on the expand spring; Add
@@ -64,7 +67,7 @@ struct VaultDocumentsSection: View {
                         onOpenCopy: {
                             let id = row.id
                             Task {
-                                let (copy, s) = await model.openVaultCopy(id)
+                                let (copy, s) = await model.openVaultCopyUnlocking(id)
                                 if let copy { viewing = copy } else if let s { copySaid = (id, s) }
                             }
                         },
@@ -92,11 +95,24 @@ struct VaultDocumentsSection: View {
                 Text(VaultFileRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if let note = VaultLockRules.shared.note(rows: rows) {
+                Text(note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // Slice 2a: the household's Vault key, and the devices asking for it.
             VaultKeySection(palette: palette, firstIndex: firstIndex + 4)
         }
         .sheet(item: $viewing) { copy in
             VaultCopyViewer(copy: copy, palette: palette) { viewing = nil }
+        }
+        // Slice 4: leaving the Vault, the screen sleeping or the session going away locks the copies again (and
+        // closes a shown one).
+        .onDisappear { model.lockVault() }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.screensDidSleepNotification)) { _ in
+            viewing = nil; model.lockVault()
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.sessionDidResignActiveNotification)) { _ in
+            viewing = nil; model.lockVault()
         }
     }
 }

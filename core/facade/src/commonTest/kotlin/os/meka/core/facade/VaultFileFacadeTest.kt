@@ -83,6 +83,8 @@ class VaultFileFacadeTest {
         fold.syncNow(); mac.syncNow(); fold.syncNow()
         assertTrue(fold.allowVaultDevice("mac"))
         fold.syncNow(); mac.syncNow(); fold.syncNow()
+        // Slice 4: copies open after the fingerprint (VaultLockFacadeTest covers the lock itself).
+        fold.unlockVault(); mac.unlockVault()
         return fold to mac
     }
 
@@ -121,6 +123,7 @@ class VaultFileFacadeTest {
         val fold = core("android", AboutYouDevice.FOLD, FakeCrypto("pk-fold"))
         val mac = core("mac", AboutYouDevice.MAC, FakeCrypto("pk-mac"))
         fold.syncNow(); mac.syncNow()
+        fold.unlockVault(); mac.unlockVault()
         mac.addDocument("Home insurance 4 Jan 2027")
         val id = mac.documentsView.value.rows.single().id
         val said = mac.addVaultCopy(id, "application/pdf", photo64, "policy.pdf")
