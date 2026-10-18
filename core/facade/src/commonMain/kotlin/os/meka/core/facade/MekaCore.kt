@@ -647,7 +647,7 @@ class MekaCore(
     private var moneyWhatIf = os.meka.core.domain.MoneyWhatIf()
 
     /** After the app's own biometric yes: the Money screen for this month. */
-    suspend fun openMoney() = onCore { moneyOpen = true; moneyOffset = 0; refreshMoney() }
+    suspend fun openMoney() = onCore { moneyOpen = true; moneyOffset = 0; syncMoneyGoals(); refreshMoney() }
 
     /** Locks Money again (the pane closed or the app went away). */
     suspend fun closeMoney() = onCore { moneyOpen = false; moneyAskUntilMs = 0L; moneyOffset = 0; moneyWhatIf = os.meka.core.domain.MoneyWhatIf(); _money.value = os.meka.core.domain.MoneyView.LOCKED }
@@ -717,7 +717,7 @@ class MekaCore(
 
     /** Imports a statement file's [text] (CSV) into [account]; only while Money is open. */
     suspend fun importMoneyStatement(account: String, text: String): os.meka.core.domain.MoneySaved = onCore {
-        if (!moneyOpen) moneyLocked() else money.import(account, text).also { if (!it.refused) moneyOffset = 0; refreshMoney() }
+        if (!moneyOpen) moneyLocked() else money.import(account, text).also { if (!it.refused) { moneyOffset = 0; syncMoneyGoals() }; refreshMoney() }
     }
 
     /** Every payment to [txnId]'s merchant goes in [category] from now on; Undo by [undoMoneyCategory]. */
@@ -728,6 +728,15 @@ class MekaCore(
     suspend fun undoMoneyCategory(token: String): Boolean = onCore {
         if (!moneyOpen) return@onCore false
         if (token.startsWith(os.meka.core.domain.TradingTracker.UNDO)) return@onCore trading.undo(token).also { refreshMoney() }
+        if (token.startsWith(moneyGoalUndoPrefix)) {
+            val parts = token.removePrefix(moneyGoalUndoPrefix).split('|')
+            val gid = parts.getOrNull(0) ?: return@onCore false
+            if (!goals.goalExists(gid)) return@onCore false
+            if (runCatching { goals.setMetricMoneyAccount(gid, parts.getOrNull(1)?.ifEmpty { null }) }.isFailure) return@onCore false
+            syncMoneyGoals()
+            refresh()
+            return@onCore true
+        }
         if (token.startsWith(moneyRefundUndoPrefix)) {
             val undo = moneyRefundUndo.takeIf { token == it.first }?.second ?: return@onCore false
             moneyRefundUndo = "" to null
@@ -827,7 +836,52 @@ class MekaCore(
             money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
             money.challenges(),
             moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), todayEpochDay()),
-        ).copy(trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()))
+        ).let { v ->
+            v.copy(
+                trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()),
+                goals = if (v.locked || moneyOffset != 0) null
+                else os.meka.core.domain.MoneyGoals.view(goals.goals(tasks.all()).first, money.accounts(), money.cards().map { it.id }.toSet()),
+            )
+        }
+    }
+
+    // ---- Money manager (6): money goals linked to Goals ----
+
+    /**
+     * Brings every £ goal that follows an account up to that account's balance (one update a day per goal, the same id on
+     * every device). Only while Money is open: it's what puts the amount into Goals, and he opened Money for it.
+     */
+    private fun syncMoneyGoals() {
+        if (!moneyOpen) return
+        val pairs = os.meka.core.domain.MoneyGoals.toSync(goals.goals(tasks.all()).first, money.accounts(), money.cards().map { it.id }.toSet())
+        var wrote = false
+        for ((goalId, pence) in pairs) if (goals.syncMoneyBalance(goalId, pence)) wrote = true
+        if (wrote) refresh()
+    }
+
+    private val moneyGoalUndoPrefix = "mgoal|"
+
+    /**
+     * MONEY GOALS: the £ goal [goalId] follows [accountId]'s balance (null stops it; the number stays where it got to),
+     * on both devices, and is brought up to it at once. Undo by [undoMoneyCategory] with the result's token. Only while
+     * Money is open.
+     */
+    suspend fun moneyGoalFollow(goalId: String, accountId: String?): os.meka.core.domain.MoneySaved = onCore {
+        if (!moneyOpen) return@onCore moneyLocked()
+        val goal = goals.goals(tasks.all()).first.firstOrNull { it.id == goalId }
+            ?: return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        val account = accountId?.let { id -> money.accounts().firstOrNull { it.id == id } }
+        if (accountId != null && (account == null || money.cards().any { it.id == accountId })) {
+            return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyRules.GONE, refused = true)
+        }
+        val before = try { goals.setMetricMoneyAccount(goalId, accountId) } catch (e: os.meka.core.domain.ValidationException) {
+            return@onCore os.meka.core.domain.MoneySaved(os.meka.core.domain.MoneyGoals.NOT_POUNDS, refused = true)
+        }
+        syncMoneyGoals()
+        refresh()
+        val said = if (account == null) os.meka.core.domain.MoneyGoals.unlinkedSaid(goal.title)
+        else os.meka.core.domain.MoneyGoals.linkedSaid(goal.title, account.name, account.balance?.pence, goal.metric)
+        os.meka.core.domain.MoneySaved(said, undo = moneyGoalUndoPrefix + goalId + "|" + before.orEmpty())
     }
 
     /**
@@ -1120,7 +1174,7 @@ class MekaCore(
      * payday view can say what's safe to spend; Undo by [undoMoneyCategory]. Only while Money is open.
      */
     suspend fun moneyBalance(accountId: String, text: String): os.meka.core.domain.MoneySaved = onCore {
-        if (!moneyOpen) moneyLocked() else money.setBalance(accountId, text, todayEpochDay()).also { refreshMoney() }
+        if (!moneyOpen) moneyLocked() else money.setBalance(accountId, text, todayEpochDay()).also { if (!it.refused) syncMoneyGoals(); refreshMoney() }
     }
 
     private val _kids = MutableStateFlow(os.meka.core.domain.KidsView.EMPTY)

@@ -815,6 +815,50 @@ class Goals(
         replica.commitLocal(EntityTypes.GOAL, goalId, mapOf(GoalFields.METRIC_HABIT_ID to (habitId?.fv() ?: FieldValue.Null)))
     }
 
+    /**
+     * Money manager (6): the £ goal [goalId] follows Money account [accountId]'s balance (null stops following; the number
+     * stays where it got to). Returns the account it followed before (for Undo), or throws for a goal without a £ number.
+     */
+    fun setMetricMoneyAccount(goalId: String, accountId: String?): String? {
+        val s = live(EntityTypes.GOAL, goalId) ?: throw ValidationException("Goal not found")
+        if (s[GoalFields.METRIC_TARGET].longOrNull == null || s[GoalFields.METRIC_UNIT].textOrNull != MoneyGoals.UNIT) {
+            throw ValidationException(MoneyGoals.NOT_POUNDS)
+        }
+        val before = s[GoalFields.METRIC_MONEY_ACCOUNT].textOrNull
+        replica.commitLocal(EntityTypes.GOAL, goalId, mapOf(GoalFields.METRIC_MONEY_ACCOUNT to (accountId?.fv() ?: FieldValue.Null)))
+        return before
+    }
+
+    /**
+     * Money manager (6): brings a followed £ goal's number to [balanceX100] (the account's balance, pence = hundredths).
+     * Today's difference is one update with a fixed id (`<goalId>.m<day>`), so the Fold and the Mac opening Money the
+     * same day write the same update, not two. Returns true when it wrote anything.
+     */
+    fun syncMoneyBalance(goalId: String, balanceX100: Long): Boolean {
+        live(EntityTypes.GOAL, goalId) ?: return false
+        val day = today()
+        val id = MoneyGoals.entryId(goalId, day)
+        val todays = live(EntityTypes.GOAL_ENTRY, id)?.get(GoalEntryFields.AMOUNT)?.longOrNull
+        val rest = metricCurrent(goalId) - (todays ?: 0L)
+        val amount = balanceX100 - rest
+        if (amount == (todays ?: 0L)) return false
+        if (amount == 0L) {
+            replica.commitLocal(EntityTypes.GOAL_ENTRY, id, mapOf(GoalEntryFields.DELETED to true.fv()))
+            return true
+        }
+        replica.commitLocal(
+            EntityTypes.GOAL_ENTRY, id,
+            linkedMapOf(
+                GoalEntryFields.GOAL_ID to goalId.fv(),
+                GoalEntryFields.DAY to day.fv(),
+                GoalEntryFields.AMOUNT to amount.fv(),
+                GoalEntryFields.AT to nowMs().fv(),
+                GoalEntryFields.DELETED to false.fv(),
+            ),
+        )
+        return true
+    }
+
     private fun metricCurrent(goalId: String): Long {
         val s = live(EntityTypes.GOAL, goalId) ?: return 0L
         return metricOf(goalId, s, completedDays(), emptyMap(), today(), null)?.currentX100 ?: 0L
@@ -843,6 +887,9 @@ class Goals(
         val since = s[GoalFields.METRIC_SINCE_DAY].longOrNull ?: today
         val mine = (entries ?: entriesByGoal())[goalId].orEmpty()
         val habitId = s[GoalFields.METRIC_HABIT_ID].textOrNull?.takeIf { live(EntityTypes.HABIT, it) != null }
+        val moneyId = s[GoalFields.METRIC_MONEY_ACCOUNT].textOrNull?.takeIf { unit == MoneyGoals.UNIT }
+        val moneyName = moneyId?.let { replica.entity(EntityTypes.MONEY_ACCOUNT, it) }?.takeIf { !it.deleted }
+            ?.get(MoneyAccountFields.NAME)?.textOrNull?.trim()?.takeIf { it.isNotEmpty() }
         val habitDays = habitId?.let { h -> ticks[h].orEmpty().filter { it in since..today } }.orEmpty()
         val changes = mine.map { it.second to it.third } + habitDays.map { it to 100L }
         val current = changes.sumOf { it.second }
@@ -855,6 +902,7 @@ class Goals(
                 GoalEntryItem(id, x, day, GoalMetricRules.entryLabel(x, unit, day, today))
             },
             paceLine = GoalMetricRules.paceLine(current, target, unit, since, due, today),
+            moneyAccountId = moneyId?.takeIf { moneyName != null }, moneyAccount = moneyName,
         )
     }
 

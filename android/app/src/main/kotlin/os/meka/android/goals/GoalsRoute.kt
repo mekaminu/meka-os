@@ -650,6 +650,10 @@ private fun GoalNumber(g: GoalItem, details: GoalDetails) {
         ) { l -> if (l != null) Text(l, style = MekaType.caption, color = if (badTarget) Meka.colors.critical else Meka.colors.textSecondary) }
         if (m == null && suggestion != null && !badTarget) Action("Count “$suggestion”") { target = suggestion; details.number(suggestion) { ok -> badTarget = !ok } }
         if (m != null) {
+            // Money manager (6): a £ goal that follows a Money account says so (linked and unlinked in Money, behind the lock).
+            AnimatedContent(m.moneyLine, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) }, label = "money-line") { l ->
+                if (l != null) Text(l, style = MekaType.caption, color = Meka.colors.accent)
+            }
             MetricChart(m, details.today)
             Field("Add to it · +200, -1 or =1200", update, { update = it.take(40) }) {
                 val typed = update

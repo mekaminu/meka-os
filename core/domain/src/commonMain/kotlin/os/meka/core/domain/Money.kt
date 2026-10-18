@@ -445,6 +445,8 @@ data class MoneyView(
     val year: MoneyYearView? = null,
     /** Money manager (7): the month in review in plain English — the finished month shown, or last month leading this one for its first days ([MoneyMonthReview]). */
     val review: MoneyMonthReviewView? = null,
+    /** Money manager (6): MONEY GOALS — his £ goals and the account each follows ([MoneyGoals]); shown with this month. */
+    val goals: MoneyGoalsView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)

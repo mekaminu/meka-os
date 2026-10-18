@@ -639,6 +639,11 @@ private struct GoalNumberView: View {
                     .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
             }
             if let m = metric {
+                // Money manager (6): a £ goal that follows a Money account says so (linked in Money, behind Touch ID).
+                if let l = m.moneyLine {
+                    Text(l).font(MekaType.caption).foregroundStyle(palette.accent).fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
+                }
                 MetricChartView(metric: m, today: model.todayEpochDay, palette: palette)
                     .frame(height: 48)
                 TextField("Add to it · +200, -1 or =1200", text: $update)

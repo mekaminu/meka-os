@@ -26,6 +26,9 @@ data class GoalMetric(
     val recent: List<GoalEntryItem> = emptyList(),
     /** "On pace", "Behind pace · £200 to catch up", "Reached"; null without a due date. */
     val paceLine: String? = null,
+    /** Money manager (6): the Money account whose balance the number follows, and its name; null for none. */
+    val moneyAccountId: String? = null,
+    val moneyAccount: String? = null,
 ) {
     /** "£800 of £2,000", "5 of 12 books". */
     val line: String get() = GoalMetricRules.line(currentX100, targetX100, unit)
@@ -33,6 +36,8 @@ data class GoalMetric(
     /** What the settings field shows: "£2,000", "12 books". */
     val targetText: String get() = GoalMetricRules.format(targetX100, unit)
     val reached: Boolean get() = currentX100 >= targetX100
+    /** Money manager (6): "Follows Savings's balance in Money · brought up to date each time you open Money"; null for none. */
+    val moneyLine: String? get() = moneyAccount?.let { MoneyGoals.followsInGoals(it) }
 }
 
 /** One point of the chart: the number on a local day. */

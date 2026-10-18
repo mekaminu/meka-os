@@ -494,6 +494,19 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                         onRemove = { key -> scope.launch { runCatching { core.moneyChallengeRemove(key) }.getOrNull()?.let(say) } })
                 }
             }
+            // Money manager (6): MONEY GOALS — a £ goal from Goals can follow an account's balance (this month only).
+            v.goals?.let { gv ->
+                item(key = "goals-head") {
+                    Text(gv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "goals") {
+                    GoalsBlock(gv, Modifier.animateItem().appear(rememberAppearance(4))) { goalId, accountId ->
+                        haptics.tick()
+                        scope.launch { runCatching { core.moneyGoalFollow(goalId, accountId) }.getOrNull()?.let(say) }
+                    }
+                }
+            }
             if (m.categories.isNotEmpty()) {
                 item(key = "cats-head") {
                     Text("BY CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -1121,6 +1134,49 @@ private fun ChallengesBlock(
         Field(ch.funHint, value = funText, onValue = { funText = it }) { funText = ""; onFun(it) }
         Field(ch.capHint, value = capText, onValue = { capText = it }) { capText = ""; onCap(it) }
         Text(ch.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Money manager (6): MONEY GOALS — each £ goal with where it stands (a bar that glides to its share), which account it
+ * follows, and a chip per account to follow (the chosen one in brass; tap it again to stop). Reduced motion honoured by
+ * MekaMotion.appear.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun GoalsBlock(gv: os.meka.core.domain.MoneyGoalsView, modifier: Modifier, onFollow: (String, String?) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        gv.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        gv.rows.forEach { r ->
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Column(Modifier.semantics(mergeDescendants = true) { contentDescription = r.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Text(r.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                    Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-goal-line-${r.id}") { l ->
+                        Text(l, style = MekaType.body, color = Meka.colors.textSecondary)
+                    }
+                    val share by animateFloatAsState(r.pct / 100f, MekaMotion.appear(reduced), label = "money-goal-bar-${r.id}")
+                    Box(Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
+                        Box(Modifier.fillMaxWidth(share.coerceIn(0f, 1f)).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+                    }
+                    Crossfade(r.follows, animationSpec = MekaMotion.appear(reduced), label = "money-goal-follows-${r.id}") { l ->
+                        Text(l ?: "Follow an account's balance:", style = MekaType.caption,
+                            color = if (l != null) Meka.colors.accent else Meka.colors.textTertiary)
+                    }
+                }
+                androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    r.choices.forEach { c ->
+                        val col by animateColorAsState(if (c.picked) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "money-goal-chip-${r.id}-${c.accountId}")
+                        Text(c.name + if (c.picked) " ✓" else "", style = MekaType.caption, color = col,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                                .clickable(role = Role.Button) { onFollow(r.id, if (c.picked) null else c.accountId) }
+                                .semantics { contentDescription = if (c.picked) "Stop following ${c.name}" else "Follow ${c.name}" }
+                                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                    }
+                }
+            }
+        }
+        Text(gv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

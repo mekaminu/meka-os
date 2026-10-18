@@ -75,6 +75,7 @@ struct MoneySheet: View {
                         if let t = v.trading { trading(t).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
                         if let ch = v.challenges { challenges(ch).staggeredAppear(3) }
+                        if let g = v.goals { moneyGoals(g).staggeredAppear(3) }
                         if let b = v.business { business(b).staggeredAppear(3) }
                         if let sh = v.shared { shared(sh).staggeredAppear(3) }
                         if let w = v.worth { worth(w).staggeredAppear(3) }
@@ -374,6 +375,60 @@ struct MoneySheet: View {
             Text(ch.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: ch.caps.count)
+    }
+
+    /// Money manager (6): MONEY GOALS — each £ goal from Goals with where it stands (a bar), which account it follows and
+    /// a chip per account (the chosen one in brass; click it again to stop following). Lines cross-fade as they change.
+    private func moneyGoals(_ gv: MoneyGoalsView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(gv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            if let e = gv.empty {
+                Text(e).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(gv.rows, id: \.id) { r in
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(r.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                        Text(r.line).font(MekaType.body).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(palette.surfaceRaised)
+                                Capsule().fill(palette.accent).frame(width: geo.size.width * CGFloat(min(max(Int(r.pct), 0), 100)) / 100)
+                            }
+                        }
+                        .frame(height: 4)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: r.pct)
+                        Text(r.follows ?? "Follow an account's balance:").font(MekaType.caption)
+                            .foregroundStyle(r.follows != nil ? palette.accent : palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .contentTransition(.opacity)
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(r.spoken)
+                    ScrollView(.horizontal) {
+                        HStack(spacing: MekaSpace.xs) {
+                            ForEach(r.choices, id: \.accountId) { c in
+                                Button {
+                                    let gid = r.id
+                                    let aid: String? = c.picked ? nil : c.accountId
+                                    Task { said = await model.moneyGoalFollow(goalId: gid, accountId: aid) }
+                                } label: {
+                                    Text(c.name + (c.picked ? " ✓" : "")).font(MekaType.caption)
+                                        .foregroundStyle(c.picked ? palette.accent : palette.textSecondary)
+                                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                        .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                                }
+                                .buttonStyle(MekaPressStyle())
+                                .accessibilityLabel(c.picked ? "Stop following \(c.name)" : "Follow \(c.name)")
+                            }
+                        }
+                    }
+                    .scrollIndicators(.never)
+                }
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: r.follows)
+            }
+            Text(gv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     /// Slice 17: PAYING ABROAD — the tip (brass when a card had no foreign fees, or he's going), then each account with

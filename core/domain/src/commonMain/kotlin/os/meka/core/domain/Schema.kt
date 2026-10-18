@@ -308,6 +308,11 @@ object GoalFields {
     /** The local epoch day the number started counting (the chart starts here; habit ticks count from it). */
     const val METRIC_SINCE_DAY = "metricSinceDay"
     /**
+     * Money manager (6), 2026-10-18 (additive, LWW): a £ goal that follows a Money account's balance — the account's id;
+     * absent or Null for none. Linked inside Money (behind the lock); brought up to date each time Money opens.
+     */
+    const val METRIC_MONEY_ACCOUNT = "metricMoneyAccount"
+    /**
      * Goals, properly, item 6 (2026-10-12, additive, LWW): the Monday (local epoch day) of the week it was picked as one
      * of that week's goals (the week ahead's pick of up to three); absent when it isn't picked.
      */
