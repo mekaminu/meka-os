@@ -11,21 +11,29 @@ final class CaptureInboxTests: XCTestCase {
         inbox.receive("Second", subject: "Subject")
         XCTAssertEqual(inbox.waitingCount, 2)
 
-        inbox.receive("Parents' evening Tue 6pm", handle: true)
+        inbox.receive("Parents' evening Tue 6pm", kind: .handle)
         XCTAssertEqual(inbox.waitingCount, 3)
 
         var got: [String] = []
         var handled: [String] = []
-        inbox.attach { text, subject, handle in
-            if handle { handled.append(text) } else { got.append(subject ?? text) }
+        var reading: [String] = []
+        inbox.receive("Dune by Frank Herbert", kind: .reading)
+        XCTAssertEqual(inbox.waitingCount, 4)
+        inbox.attach { text, subject, kind in
+            switch kind {
+            case .handle: handled.append(text)
+            case .reading: reading.append(text)
+            case .task: got.append(subject ?? text)
+            }
         }
+        XCTAssertEqual(reading, ["Dune by Frank Herbert"])
         XCTAssertEqual(got, ["First\nwith a note", "Subject"])
         XCTAssertEqual(handled, ["Parents' evening Tue 6pm"])
         XCTAssertEqual(inbox.waitingCount, 0)
 
         inbox.receive("Third")
         XCTAssertEqual(got.last, "Third")
-        inbox.receive("Reply slip by Friday", handle: true)
+        inbox.receive("Reply slip by Friday", kind: .handle)
         XCTAssertEqual(handled.last, "Reply slip by Friday")
         XCTAssertEqual(inbox.waitingCount, 0)
     }

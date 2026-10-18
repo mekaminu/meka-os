@@ -3140,6 +3140,18 @@ class MekaCore(
 
     suspend fun removeReading(id: String): os.meka.core.domain.ReadingSaid = onCore { reading.remove(id) }
 
+    /**
+     * Reading and learning, slice 3: what the share sheet offers for a shared book, podcast or course (a link from a
+     * book, podcast or course site, or a line like "Dune by Frank Herbert"); null when it isn't one. Read here, by
+     * rules; nothing is fetched. Pure and cheap.
+     */
+    fun readingFromShared(text: String, subject: String?): os.meka.core.domain.ReadingShareView? =
+        runCatching { os.meka.core.domain.ReadingShareRules.offer(text, subject) }.getOrNull()
+
+    /** Adds a share to Reading's UP NEXT on his tap (Add to Reading in the share sheet, or the Mac's Services entry). */
+    suspend fun addReadingFromShared(text: String, subject: String? = null): os.meka.core.domain.ReadingSaid =
+        onCore { reading.addShared(text, subject) }
+
     /** Takes back the last reading command (its [os.meka.core.domain.ReadingSaid.undo] token); false once too late. */
     suspend fun undoReading(token: String): Boolean = onCore { reading.undo(token) }
 

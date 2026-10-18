@@ -3153,6 +3153,7 @@ final class CoreModel {
         case .restoreTemplate(let template): run { _ = try await $0.restoreChecklistTemplate(template: template) }
         case .addDocument(let text, let subject): addDocumentFromShared(text, subject)
         case .removeDocument(let id): run { _ = try await $0.removeDocument(id: id) }
+        case .reading(let token): run { _ = try await $0.undoReading(token: token) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .unapproveBacklog(let id): run { _ = try await $0.unapproveMailBacklog(id: id) }
         case .junkKeep(let cardId, let key, let keep):
@@ -3965,6 +3966,26 @@ final class CoreModel {
         } catch {
             lastError = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Services → "Add to Navilife Reading" (reading and learning, slice 3): the selection (a title, or a book, podcast
+    /// or course link) goes under Reading's UP NEXT; the bar says where, with Undo. A plain line is taken as typed; a
+    /// link only from a book, podcast or course site. One call to the core.
+    func addReadingShared(_ text: String, subject: String? = nil) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return }
+        Task {
+            do {
+                // A plain line goes in as typed; a link only from a book, podcast or course site (the core decides).
+                let r = try await core.addReadingFromShared(text: t, subject: subject)
+                if r.refused {
+                    offerEventUndo(r.line, nil)
+                } else {
+                    MekaHaptics.light()
+                    offerEventUndo(r.line + " · in Ask → Daily → Reading", r.undo.map { EventUndoOffer.Action.reading($0) })
+                }
+            } catch { lastError = error.localizedDescription }
         }
     }
 
@@ -5655,6 +5676,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case addDocument(String, String?)
         /// Undo on "Added Alex passport · …": the row comes off again.
         case removeDocument(String)
+        /// Undo on "Added book Dune … · up next" from Services (reading and learning, slice 3): Reading's own undo token.
+        case reading(String)
     }
 
     let id = UUID()

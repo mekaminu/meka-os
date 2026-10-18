@@ -81,4 +81,21 @@ class ReadingFacadeTest {
         assertEquals("Finished Atomic Habits", done.did.single().line)
         assertEquals(listOf("Atomic Habits"), fold.readingView.value.finished.map { it.title })
     }
+
+    @Test
+    fun aShareOffersAddToReadingAndAddsItOnHisTap() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        val offer = fold.readingFromShared("https://www.goodreads.com/book/show/1", "Dune by Frank Herbert | Goodreads")
+        assertEquals("Add to Reading · Dune by Frank Herbert", offer?.line)
+        assertEquals(null, fold.readingFromShared("https://www.bbc.co.uk/news/1", "Rail fares | BBC News"))
+        // Nothing is added until he taps it.
+        assertTrue(fold.readingView.value.upNext.isEmpty())
+        val added = fold.addReadingFromShared("https://www.goodreads.com/book/show/1", "Dune by Frank Herbert | Goodreads")
+        assertEquals("Added book Dune by Frank Herbert · up next", added.line)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("Dune"), mac.readingView.value.upNext.map { it.title })
+        assertTrue(fold.undoReading(added.undo!!))
+        assertTrue(fold.readingView.value.upNext.isEmpty())
+    }
 }

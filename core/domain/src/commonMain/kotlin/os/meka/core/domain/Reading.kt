@@ -151,6 +151,7 @@ object ReadingRules {
     const val NO_TITLE = "Type its name, e.g. \"Atomic Habits by James Clear\" or \"podcast The Rest Is History\"."
     const val NOT_PROGRESS = "Type how far you've got: a page (120), a percent (45%), \"episode 4\" or \"lesson 3\"."
     const val GONE = "That isn't on your reading list any more"
+    const val NOT_A_BOOK_LINK = "That link isn't a book, podcast or course · an article can go on the train queue instead"
     const val NOTE = "Kept in your own data on both apps. Nothing is looked up or sent anywhere."
     const val MAX_TITLE = 120
     const val FINISHED_DAYS = 90
@@ -221,6 +222,15 @@ object ReadingRules {
             else -> ReadingKind.BOOK
         }
         return ReadingParsed(t.replaceFirstChar { it.titlecase() }, by, k, unit ?: ReadingUnit.default(k), total, url.orEmpty(), started)
+    }
+
+    private val SAYS_READING = Regex("""^(?:i'?m\s+|i\s+am\s+|currently\s+)?(?:reading|listening\s+to)\s+|^(?:i\s+)?(?:want\s+to\s+(?:read|listen\s+to)|to\s+read)\s+""", RegexOption.IGNORE_CASE)
+
+    /** True when [line] says itself what it is: a kind word, "reading …"/"want to read …", an author or a length. */
+    fun marked(line: String): Boolean {
+        val t = tidy(line)
+        return KIND_WORD.containsMatchIn(t) || KIND_TAIL.containsMatchIn(t) || SAYS_READING.containsMatchIn(t) || COUNT.containsMatchIn(t) ||
+            parse(t)?.by?.split(' ')?.all { w -> w.firstOrNull()?.isUpperCase() == true } == true
     }
 
     private val PROGRESS = Regex(
@@ -374,6 +384,99 @@ object ReadingRules {
 }
 
 /** The reading list on a replica. Undo keeps the fields a command changed, in memory, until the next command. */
+/** What a shared book, podcast or course link (or line) offers in the share sheet: "📖 Add to Reading · Dune". */
+data class ReadingShareView(val icon: String, val line: String, val title: String, val kind: ReadingKind)
+
+/**
+ * Reading and learning, slice 3: a share from another app (a book's page on Goodreads, Audible or a bookshop, a
+ * podcast, a course, or a line like "Dune by Frank Herbert") offers **Add to Reading** beside For the train. Read here,
+ * by rules: nothing is fetched or sent, and nothing is added until he taps it. An ordinary article link is the train
+ * queue's, not this.
+ */
+object ReadingShareRules {
+    const val ACTION = "Add to Reading"
+    const val MAX_LINE = 140
+
+    /** Hosts whose links are books (a book's page, an audiobook). */
+    private val BOOK_HOSTS = listOf(
+        "goodreads.com", "audible.co.uk", "audible.com", "bookshop.org", "uk.bookshop.org", "waterstones.com",
+        "blackwells.co.uk", "thestorygraph.com", "app.thestorygraph.com", "librarything.com", "openlibrary.org",
+        "penguin.co.uk", "hive.co.uk", "foyles.co.uk", "worldofbooks.com", "kobo.com",
+    )
+    private val COURSE_HOSTS = listOf(
+        "udemy.com", "coursera.org", "futurelearn.com", "edx.org", "skillshare.com", "pluralsight.com", "khanacademy.org",
+        "open.edu", "codecademy.com", "masterclass.com", "domestika.org", "frontendmasters.com",
+    )
+    /** "Check out this book on Goodreads: …", "I'm reading … on Kindle": the sharing app's own words before the title. */
+    private val LEAD = Regex("""^(?:check\s+out|have\s+a\s+look\s+at|look\s+at|you\s+might\s+like|thought\s+you'?d\s+like)\b[^:]{0,60}:\s*""", RegexOption.IGNORE_CASE)
+    private val LEAD_PLAIN = Regex("""^(?:check\s+out|have\s+a\s+look\s+at)\s+""", RegexOption.IGNORE_CASE)
+    /** A page title's site part: "… | Goodreads", "… : Clear, James : Amazon.co.uk: Books", "… - Audible.co.uk". */
+    private val SITE_TAIL = Regex("""\s*(?:\||[-–—]\s+(?=\S*\.\S)|:\s*Amazon\.)[^|]*$""", RegexOption.IGNORE_CASE)
+    private val AMAZON_BOOK = Regex("""\b(?:Books|Kindle(?:\s+Edition)?|Audible|Hardcover|Paperback)\b""", RegexOption.IGNORE_CASE)
+
+    private val KIND_LEAD = Regex("""^(?:book|audiobook|podcast|course|class)\b""", RegexOption.IGNORE_CASE)
+    /** Amazon's page title: "Dune: Deluxe Edition : Herbert, Frank: Amazon.co.uk: Books" → "Dune by Frank Herbert". */
+    private val AMAZON_TITLE = Regex("""^(.+?)\s+:\s+([^:,]+),\s*([^:]+?)\s*:\s*Amazon\..*$""", RegexOption.IGNORE_CASE)
+
+    private fun hosted(host: String, hosts: List<String>) = hosts.any { host == it || host.endsWith(".$it") }
+
+    private fun isBookLink(url: String, title: String): Boolean {
+        val host = QueueRules.host(url)
+        if (hosted(host, BOOK_HOSTS)) return true
+        if (host.startsWith("books.google.")) return true
+        return (host.startsWith("amazon.") || host.contains(".amazon.")) && AMAZON_BOOK.containsMatchIn(title)
+    }
+
+    private fun isCourseLink(url: String): Boolean {
+        val host = QueueRules.host(url)
+        return hosted(host, COURSE_HOSTS) || (host == "linkedin.com" && url.contains("/learning"))
+    }
+
+    private fun clean(s: String?): String {
+        val first = s.orEmpty().lineSequence().map { it.trim() }.firstOrNull { it.isNotEmpty() }.orEmpty()
+            .replace(LEAD, "").replace(LEAD_PLAIN, "")
+        AMAZON_TITLE.find(first)?.let { m ->
+            return m.groupValues[1].substringBefore(": ").trim() + " by " + m.groupValues[3].trim() + " " + m.groupValues[2].trim()
+        }
+        return first.replace(SITE_TAIL, "").trim()
+    }
+
+    /**
+     * The one line Reading adds for a share of [text] (with the page's [subject]), or null when the share isn't a book,
+     * podcast or course: a link from a book, podcast or course site, or a short single line that says what it is.
+     */
+    fun line(text: String?, subject: String?): String? {
+        val raw = text?.trim().orEmpty()
+        val url = QueueRules.link(raw) ?: QueueRules.link(subject)
+        if (url == null) {
+            if (raw.isEmpty() || raw.lines().count { it.isNotBlank() } > 1 || raw.length > MAX_LINE) return null
+            val line = clean(raw)
+            return line.takeIf { it.length >= 2 && ReadingRules.marked(it) && ReadingRules.parse(it) != null }
+        }
+        val words = clean(raw.replace(url, " ")).ifEmpty { clean(subject?.replace(url, " ")) }
+        val looks = isBookLink(url, "$raw ${subject.orEmpty()}") || isCourseLink(url) ||
+            QueueRules.kind(url, words) == QueueKind.PODCAST
+        if (!looks) return null
+        val kindWord = when {
+            KIND_LEAD.containsMatchIn(words) -> ""
+            QueueRules.kind(url, words) == QueueKind.PODCAST -> "podcast "
+            isCourseLink(url) -> "course "
+            else -> ""
+        }
+        val line = "$kindWord$words $url".trim()
+        return line.takeIf { ReadingRules.parse(it) != null }
+    }
+
+    /** What the share sheet shows for a share of [text]/[subject]; null when there's nothing to offer. */
+    fun offer(text: String?, subject: String?): ReadingShareView? {
+        val line = line(text, subject) ?: return null
+        val p = ReadingRules.parse(line) ?: return null
+        val icon = when (p.kind) { ReadingKind.BOOK -> "📖"; ReadingKind.PODCAST -> "🎧"; ReadingKind.COURSE -> "🎓" }
+        val by = if (p.by.isNotEmpty()) " by ${p.by}" else ""
+        return ReadingShareView(icon, "$ACTION · ${p.title}$by", p.title, p.kind)
+    }
+}
+
 class Reading(private val replica: Replica, private val newId: () -> String, private val nowMs: () -> Long) {
     private val undos = mutableMapOf<String, Pair<String, Map<String, FieldValue>>>()
     private var undoSeq = 0
@@ -414,6 +517,16 @@ class Reading(private val replica: Replica, private val newId: () -> String, pri
         ))
         val where = if (p.started) "on the go" else "up next"
         return ReadingSaid("Added ${p.kind.label.lowercase()} ${p.title}" + (if (p.by.isNotEmpty()) " by ${p.by}" else "") + " · $where", false, token)
+    }
+
+    /**
+     * Adds a share from another app (slice 3, [ReadingShareRules]). A link that isn't a book, podcast or course is
+     * refused (it's the train queue's); a plain line he chose to send here goes in as typed.
+     */
+    fun addShared(text: String, subject: String?): ReadingSaid {
+        ReadingShareRules.line(text, subject)?.let { return add(it) }
+        if (QueueRules.link(text) != null || QueueRules.link(subject) != null) return ReadingSaid(ReadingRules.NOT_A_BOOK_LINK, true)
+        return add(text)
     }
 
     /** Starts one from up next, or picks up one put down or finished again. */

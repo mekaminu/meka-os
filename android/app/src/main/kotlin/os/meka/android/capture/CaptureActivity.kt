@@ -145,6 +145,9 @@ class CaptureActivity : ComponentActivity() {
                     heardTiming = { ms, engine -> core.recordHeardTiming(ms, engine) },
                     // Train-time queue, slice 1: a shared link can be saved for the train instead of becoming a task.
                     saveForTrain = { text, subject -> !core.addToQueue(text, subject).refused },
+                    // Reading and learning, slice 3: a shared book, podcast or course offers Add to Reading (read here).
+                    readingOffer = { text, subject -> core.readingFromShared(text, subject) },
+                    addToReading = { text, subject -> core.addReadingFromShared(text, subject).takeUnless { it.refused }?.line },
                     // "Handle this" (V1): the shared text goes to MEKA's AI on Meka's tap only; cards come back.
                     handle = { text, subject -> core.handleThis(text, subject) },
                     // Voice notes, slice 2: a note's words (never the recording) are tidied by the AI; cards come back.
@@ -206,6 +209,8 @@ private fun CaptureSheet(
     undoSpoken: suspend (SpokenCaptured) -> Boolean,
     heardTiming: suspend (Long, os.meka.core.domain.ListenEngine) -> Unit,
     saveForTrain: suspend (String, String?) -> Boolean,
+    readingOffer: (String, String?) -> os.meka.core.domain.ReadingShareView?,
+    addToReading: suspend (String, String?) -> String?,
     handle: suspend (String, String?) -> HandleOutcome,
     tidyNote: suspend (String, String) -> VoiceNoteRead,
     formAnswers: suspend (String, String?) -> FormAnswersView,
@@ -227,6 +232,8 @@ private fun CaptureSheet(
     val initial = remember(shared) { QuickCapture.draft(shared.text, shared.subject) }
     // A shared web link offers "For the train" (train-time queue, slice 1).
     val hasLink = remember(shared) { (QueueRules.link(shared.text) ?: QueueRules.link(shared.subject)) != null }
+    // Reading and learning, slice 3: "📖 Add to Reading · Dune by Frank Herbert" for a shared book, podcast or course.
+    val readingShare = remember(shared) { readingOffer(shared.text, shared.subject) }
     var doneLabel by rememberSaveable { mutableStateOf("Captured") }
     var title by rememberSaveable { mutableStateOf(initial?.title.orEmpty()) }
     val notes = initial?.notes
@@ -414,6 +421,19 @@ private fun CaptureSheet(
                 delay(if (reduced) 250 else 520)
                 leave(true)
             }
+        }
+    }
+
+    fun toReading() {
+        if (captured) return
+        scope.launch {
+            val line = addToReading(shared.text, shared.subject) ?: return@launch
+            keyboard?.hide()
+            doneLabel = line
+            captured = true
+            haptics.light()
+            delay(if (reduced) 400 else 900) // long enough to read where it went
+            leave(true)
         }
     }
 
@@ -718,6 +738,16 @@ private fun CaptureSheet(
                             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
                         ) {
                             if (doc != null) VaultOfferRow(doc, ::vaultTapped)
+                        }
+                        if (readingShare != null) {
+                            Text(
+                                readingShare.icon + " " + readingShare.line, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                    .clickable(role = Role.Button) { toReading() }
+                                    .semantics { contentDescription = readingShare.line + ", up next in Ask, Daily, Reading" }
+                                    .padding(vertical = MekaSpace.xs),
+                            )
                         }
                         if (hasLink) {
                             Text(

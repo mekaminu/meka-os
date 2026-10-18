@@ -73,6 +73,23 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
+                <string>Add to Navilife Reading</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>readingText</string>
+            <key>NSPortName</key>
+            <string>$(PRODUCT_NAME)</string>
+            <key>NSRequiredContext</key>
+            <dict/>
+            <key>NSSendTypes</key>
+            <array>
+                <string>public.utf8-plain-text</string>
+            </array>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
                 <string>Handle this picture with Navilife</string>
             </dict>
             <key>NSMessage</key>

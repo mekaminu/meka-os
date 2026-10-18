@@ -34,8 +34,12 @@ struct MekaOSApp: App {
                     DeskNewsWidgetWriter.shared.attach(model)
                     // Services captures that arrived while the core was starting go in now.
                     let model = model
-                    CaptureInbox.shared.attach { text, subject, handle in
-                        if handle { model.handleThis(text, subject: subject) } else { model.capture(text, subject: subject) }
+                    CaptureInbox.shared.attach { text, subject, kind in
+                        switch kind {
+                        case .handle: model.handleThis(text, subject: subject)
+                        case .reading: model.addReadingShared(text, subject: subject)
+                        case .task: model.capture(text, subject: subject)
+                        }
                     }
                     // Screenshots and photos, slice 1: "Handle this picture with Navilife" from Services.
                     CaptureInbox.shared.attachPictures { model.handlePicture($0) }

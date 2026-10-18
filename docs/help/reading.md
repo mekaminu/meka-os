@@ -14,3 +14,4 @@ tip: Typing the last page (or 100%) finishes it; Finished and Put down move it o
 tip: Start a line with "reading" ("reading Dune by Frank Herbert") and it goes straight on the go.
 tip: Once anything moves in a month, the top of Reading says what you finished and what's next up.
 tip: Ask or tell Talk "what am I reading?" for the list, or just say how far you've got: "I'm on page 200", "I'm halfway through Dune", "I've finished Atomic Habits", "add Dune to my reading list". It's done at once with Undo, without the AI (Ask first in What Navilife may do makes it a card).
+tip: Share a book, podcast or course from another app (Goodreads, Audible, a bookshop, a podcast app, Udemy…) to Navilife: the sheet offers "📖 Add to Reading · …" and puts it under UP NEXT. On the Mac, select a title or link and choose Services → Add to Navilife Reading.

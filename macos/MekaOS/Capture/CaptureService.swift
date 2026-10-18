@@ -14,23 +14,27 @@ import UserNotifications
 final class CaptureInbox {
     static let shared = CaptureInbox()
 
-    private var pending: [(text: String, subject: String?, handle: Bool)] = []
-    private var sink: ((String, String?, Bool) -> Void)?
+    /// What a Services request asks for: a task ("Add to Navilife"), Handle this, or Reading's up next.
+    enum Kind: Sendable { case task, handle, reading }
+
+    private var pending: [(text: String, subject: String?, kind: Kind)] = []
+    private var sink: ((String, String?, Kind) -> Void)?
     private var pendingPictures: [MacPictureReader.Picture] = []
     private var pictureSink: ((MacPictureReader.Picture) -> Void)?
 
-    /// A capture from Services (`handle`: "Handle this with MEKA" rather than "Add to MEKA"). Empty text is ignored.
-    func receive(_ text: String, subject: String? = nil, handle: Bool = false) {
+    /// A capture from Services (`kind`: "Add to Navilife", "Handle this with Navilife" or "Add to Navilife Reading").
+    /// Empty text is ignored.
+    func receive(_ text: String, subject: String? = nil, kind: Kind = .task) {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if let sink { sink(text, subject, handle) } else { pending.append((text, subject, handle)) }
+        if let sink { sink(text, subject, kind) } else { pending.append((text, subject, kind)) }
     }
 
     /// Called once the core is running; anything that arrived earlier is captured (or handled) now, in order.
-    func attach(_ sink: @escaping (String, String?, Bool) -> Void) {
+    func attach(_ sink: @escaping (String, String?, Kind) -> Void) {
         self.sink = sink
         let waiting = pending
         pending.removeAll()
-        waiting.forEach { sink($0.text, $0.subject, $0.handle) }
+        waiting.forEach { sink($0.text, $0.subject, $0.kind) }
     }
 
     /// A picture from Services; read once the core is running.
@@ -64,7 +68,17 @@ final class CaptureServiceProvider: NSObject {
             error.pointee = "There was no text for Navilife to handle." as NSString
             return
         }
-        MainActor.assumeIsolated { CaptureInbox.shared.receive(text, handle: true) }
+        MainActor.assumeIsolated { CaptureInbox.shared.receive(text, kind: .handle) }
+    }
+
+    /// "Add to Navilife Reading" (reading and learning, slice 3): a selected book title, podcast or course (or its
+    /// link) goes under Reading's UP NEXT, with Undo on the bar.
+    @objc func readingText(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+        guard let text = pboard.string(forType: .string), !text.isEmpty else {
+            error.pointee = "There was nothing to add to your reading list." as NSString
+            return
+        }
+        MainActor.assumeIsolated { CaptureInbox.shared.receive(text, kind: .reading) }
     }
 
     /// "Handle this picture with Navilife" (screenshots and photos, slice 1): an image, or an image file from Finder, is
