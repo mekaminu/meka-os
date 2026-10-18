@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 
 /** Receipts → Vault: Keep in the Vault on a tidied receipt's preview, on both devices, and Take it out. */
 class VaultReceiptFacadeTest {
-    private var now = 1_792_225_800_000L // Wed 14 Oct 2026, 09:30 London
+    private var now = 1_792_225_800_000L // Sat 17 Oct 2026, 09:30 London
     private val serverOps = InMemoryServerOpStore()
     private val transport = os.meka.core.testing.FaultyTransport(SyncService(serverOps))
 
@@ -61,7 +61,7 @@ class VaultReceiptFacadeTest {
 
         val row = mac.documentsView.value.rows.single()
         assertEquals("Currys receipt", row.title)
-        assertEquals("Receipt · £499.00 · bought Tue 13 Oct 2026 · Personal mail", row.line)
+        assertEquals("Receipt · £499.00 · bought Fri 16 Oct 2026 · Personal mail", row.line)
         assertTrue(row.fromMail)
         assertTrue(mac.archivedEmail("mt1", receipt.key)!!.vault!!.kept)
         // Open the email: the account list isn't known offline here, so it says why rather than a link.
