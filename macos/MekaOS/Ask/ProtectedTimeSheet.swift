@@ -8,6 +8,7 @@ import SwiftUI
 ///
 /// Motion: the sheet scale-fades (system); the summary and today's line cross-fade; the sections stagger in; a chip's
 /// fill blends as it is chosen (tick haptic); today's line arrives on the expand spring. Reduce Motion: cross-fades.
+/// Slice 3: WORK MAIL (Waits till morning · Shows as it comes) arrives on the expand spring once something is protected.
 struct ProtectedTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -52,6 +53,23 @@ struct ProtectedTimeSheet: View {
                 }
             }
             .staggeredAppear(5)
+            if v.on {
+                // Slice 3: work mail waits until morning.
+                let mail = ProtectedMailRules.shared
+                label(mail.LABEL)
+                HStack(spacing: MekaSpace.xs) {
+                    chip(mail.ON, lit: v.holdMail) { model.setProtectedMail(hold: true) }
+                    chip(mail.OFF, lit: !v.holdMail) { model.setProtectedMail(hold: false) }
+                }
+                if let held = v.mailLine {
+                    Text(held).font(MekaType.caption).foregroundStyle(palette.accent)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: held)
+                        .transition(.opacity)
+                }
+                Text(mail.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Text(rules.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)
@@ -63,6 +81,8 @@ struct ProtectedTimeSheet: View {
             .padding(.top, MekaSpace.m)
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: v.todayLine)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: v.on)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: v.mailLine)
         .padding(MekaSpace.l)
         .frame(width: 560)
         .background(palette.surface)

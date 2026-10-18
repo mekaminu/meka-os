@@ -4298,6 +4298,12 @@ final class CoreModel {
         run { _ = try await $0.setProtectedTime(evenings: evenings, fromMin: fromMin, weekends: weekends) }
     }
 
+    /// Protected time, slice 3: business mail waits till morning (`hold`) or shows as it comes; only a Bool crosses.
+    func setProtectedMail(hold: Bool) {
+        MekaHaptics.tick()
+        run { _ = try await $0.setProtectedMail(hold: hold) }
+    }
+
     // MARK: Date night (slice 1)
 
     /// Every other `weekday` (ISO 1…7) from `startMin`, the first on `firstDay`; only Ints and an Int64 cross.

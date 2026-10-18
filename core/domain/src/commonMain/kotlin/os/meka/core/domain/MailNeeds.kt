@@ -234,6 +234,8 @@ data class MailNeedsCard(
     val snoozedLine: String?,
     /** Drafted replies: "3 emails need a reply · 2 drafted", or null when none does. */
     val replyLine: String? = null,
+    /** Protected time, slice 3: "2 business emails wait till tomorrow 07:00 · protected time", or null. */
+    val heldLine: String? = null,
 )
 
 object MailNeedsRules {

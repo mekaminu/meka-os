@@ -196,6 +196,8 @@ internal fun MailNeedsSection(
                 }
                 card.moreLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 card.snoozedLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                // Protected time, slice 3: the business mail that waits till morning.
+                card.heldLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
             }
         }
     }

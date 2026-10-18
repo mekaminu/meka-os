@@ -36,6 +36,7 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.LocalClock
+import os.meka.core.domain.ProtectedMailRules
 import os.meka.core.domain.ProtectedRules
 import os.meka.core.facade.MekaCore
 
@@ -48,6 +49,9 @@ import os.meka.core.facade.MekaCore
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and today's line cross-fade;
  * the sections stagger in 40 ms apart; a chip's colour blends as it is chosen (tick haptic); today's line unfolds on
  * the expand spring. Reduced motion: cross-fades.
+ *
+ * Slice 3: WORK MAIL (Waits till morning · Shows as it comes) unfolds once something is protected, with "Held now ·
+ * 2 business emails till tomorrow 07:00" cross-fading in while some wait.
  */
 @Composable
 fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
@@ -59,6 +63,11 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
     fun set(evenings: Boolean, fromMin: Int, weekends: Boolean) {
         haptics.tick()
         scope.launch { runCatching { core.setProtectedTime(evenings, fromMin, weekends) } }
+    }
+
+    fun setMail(hold: Boolean) {
+        haptics.tick()
+        scope.launch { runCatching { core.setProtectedMail(hold) } }
     }
 
     LazyColumn(
@@ -103,6 +112,24 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
                 ChipLine {
                     Chip("Open", !v.weekends) { set(v.evenings, v.fromMin, false) }
                     Chip("Protected", v.weekends) { set(v.evenings, v.fromMin, true) }
+                }
+            }
+        }
+        item(key = "mail") {
+            // Slice 3: work mail waits until morning (only while something is protected).
+            AnimatedVisibility(v.on, enter = unfold(), exit = fold()) {
+                Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SectionLabel(ProtectedMailRules.LABEL.uppercase())
+                    ChipLine {
+                        Chip(ProtectedMailRules.ON, v.holdMail) { setMail(true) }
+                        Chip(ProtectedMailRules.OFF, !v.holdMail) { setMail(false) }
+                    }
+                    AnimatedVisibility(v.mailLine != null, enter = unfold(), exit = fold()) {
+                        Crossfade(v.mailLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-mail") { line ->
+                            Text(line, style = MekaType.caption, color = Meka.colors.accent)
+                        }
+                    }
+                    Text(ProtectedMailRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
         }

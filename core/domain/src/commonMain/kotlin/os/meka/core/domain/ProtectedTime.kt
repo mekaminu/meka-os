@@ -24,17 +24,25 @@ import os.meka.core.sync.fv
  * Ask and Talk know the rules ([ProtectedRules.askLines], slice 4): the setting, today, and the next two weeks' whole
  * days and later evenings go with every question as `protected` lines.
  *
- * Later slices: work notifications wait until morning (what counts as a work notification is decided with the email
- * work), and work email waits until morning (with email triage).
+ * Slice 3 (2026-10-18, [ProtectedMailRules]): **work mail waits until morning.** While protected time is on and it is
+ * protected now (an evening from its start, a protected whole day, or the small hours after either until
+ * [ProtectedMailRules.MORNING_MIN]), the business account's emails leave "From your mail", the ten-minute inbox, its
+ * reminder and the watch's count, and the card says "2 business emails wait till tomorrow 07:00"; they come back on
+ * their own in the morning. A security alert, a reply he already sent or one that didn't send, and notes to self are
+ * never held. One more additive field, `holdMail` (Bool, absent = on); Off in the pane shows them as before.
+ *
+ * Later: work notifications (an Outlook work calendar's reminders) wait until morning too.
  */
 object ProtectedFields {
     const val EVENINGS = "evenings"
     const val FROM = "fromMin"
     const val WEEKENDS = "weekends"
+    /** Slice 3: business mail waits until morning (absent = on). */
+    const val HOLD_MAIL = "holdMail"
 }
 
 /** The setting as stored. */
-data class ProtectedSetting(val evenings: Boolean, val fromMin: Int, val weekends: Boolean) {
+data class ProtectedSetting(val evenings: Boolean, val fromMin: Int, val weekends: Boolean, val holdMail: Boolean = true) {
     val on: Boolean get() = evenings || weekends
 }
 
@@ -47,6 +55,10 @@ data class ProtectedView(
     val summary: String,
     /** "Today is protected · tasks wait for Mon 12 Oct" / "Protected from 19:00 tonight"; null when off. */
     val todayLine: String?,
+    /** Slice 3: business mail waits until morning while it's protected. */
+    val holdMail: Boolean = true,
+    /** Slice 3: "Held now · 2 business emails wait till 07:00" while some are held, else null. */
+    val mailLine: String? = null,
 ) {
     val on: Boolean get() = evenings || weekends
 
@@ -75,6 +87,7 @@ object ProtectedRules {
             evenings = fields[ProtectedFields.EVENINGS]?.boolOrNull == true,
             fromMin = from,
             weekends = fields[ProtectedFields.WEEKENDS]?.boolOrNull == true,
+            holdMail = fields[ProtectedFields.HOLD_MAIL]?.boolOrNull != false,
         )
     }
 
@@ -217,14 +230,42 @@ object ProtectedRules {
         return build(1, "").take(ASK_LINE_MAX)
     }
 
-    fun view(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): ProtectedView =
+    fun view(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar, mailLine: String? = null): ProtectedView =
         ProtectedView(
             evenings = s?.evenings == true,
             fromMin = s?.fromMin ?: DEFAULT_FROM,
             weekends = s?.weekends == true,
             summary = summary(s),
             todayLine = todayLine(s, today, schedule, holidays),
+            holdMail = s?.holdMail != false,
+            mailLine = mailLine,
         )
+
+    /**
+     * Slice 3: whether [nowMs] is in protected time, and if so when it ends for mail: the morning ([ProtectedMailRules.MORNING_MIN])
+     * of the next day that isn't wholly protected. Null when it isn't protected now (or protected time is off). The
+     * small hours after a protected evening or day count as protected until that morning.
+     */
+    fun protectedUntil(s: ProtectedSetting?, nowMs: Long, schedule: WorkSchedule, holidays: HolidayCalendar, cal: LocalCalendar): Long? {
+        if (s == null || !s.on) return null
+        val today = cal.epochDayOf(nowMs)
+        val minute = cal.minuteOfDay(nowMs)
+        val morning = ProtectedMailRules.MORNING_MIN
+        fun morningAfter(day: Long): Long {
+            val next = if (!wholeDay(s, day + 1, schedule, holidays)) day + 1 else nextOpenDay(s, day, schedule, holidays) ?: (day + 1)
+            return cal.toEpochMs(next, morning)
+        }
+        if (wholeDay(s, today, schedule, holidays)) return morningAfter(today)
+        val from = eveningFrom(s, today, schedule, holidays)
+        if (from != null && minute >= from) return morningAfter(today)
+        if (minute < morning) {
+            val yesterday = today - 1
+            if (wholeDay(s, yesterday, schedule, holidays) || eveningFrom(s, yesterday, schedule, holidays) != null) {
+                return cal.toEpochMs(today, morning)
+            }
+        }
+        return null
+    }
 }
 
 /** The protected-time setting on a replica. Every write is an op: offline-first, synced. */
@@ -235,7 +276,7 @@ class ProtectedTime(private val replica: Replica) {
     fun set(evenings: Boolean, fromMin: Int, weekends: Boolean): Boolean {
         if (fromMin !in 0 until LocalClock.MINUTES_PER_DAY) return false
         val old = setting()
-        if (old == ProtectedSetting(evenings, fromMin, weekends)) return false
+        if (old != null && old.evenings == evenings && old.fromMin == fromMin && old.weekends == weekends) return false
         replica.commitLocal(
             EntityTypes.CONTEXT_MODE, ProtectedRules.ENTITY_ID,
             mapOf(
@@ -245,5 +286,63 @@ class ProtectedTime(private val replica: Replica) {
             ),
         )
         return true
+    }
+
+    /** Slice 3: business mail waits until morning ([hold]) or shows as before. False when nothing changes. */
+    fun setHoldMail(hold: Boolean): Boolean {
+        if ((setting()?.holdMail ?: true) == hold) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ProtectedRules.ENTITY_ID, mapOf(ProtectedFields.HOLD_MAIL to hold.fv()))
+        return true
+    }
+}
+
+/**
+ * Protected time, slice 3 (Meka's item: "work email and work notifications wait until morning"): which emails in "From
+ * your mail" wait while it's protected. Work mail is the account he labelled Business. Non-AI, pure.
+ */
+object ProtectedMailRules {
+    /** "Morning": held mail comes back at 07:00 on the next day that isn't wholly protected. */
+    const val MORNING_MIN = 7 * 60
+    const val LABEL = "Work mail"
+    const val ON = "Waits till morning"
+    const val OFF = "Shows as it comes"
+    const val NOTE = "Emails to the Business account wait while it's protected and come back at 07:00 on your next " +
+        "day that isn't. Security alerts and replies you've started still show."
+
+    /** An email that waits: the business account's, not a security alert or a note to self, and no reply of his on the way or failed. */
+    fun holdable(i: MailItem): Boolean =
+        i.account == MailLabel.BUSINESS.label && i.security == null && i.note == null &&
+            !MailNeedsRules.replyWaiting(i) && !MailNeedsRules.replyFailed(i)
+
+    /** The emails held now: none unless [s] holds mail and [heldUntilMs] (from [ProtectedRules.protectedUntil]) is set. */
+    fun held(items: List<MailItem>, s: ProtectedSetting?, heldUntilMs: Long?): Set<String> {
+        if (s == null || !s.holdMail || heldUntilMs == null) return emptySet()
+        return items.filter(::holdable).map { it.id }.toSet()
+    }
+
+    /** "07:00", "tomorrow 07:00", "Mon 19 Oct 07:00". */
+    fun untilLabel(untilMs: Long, nowMs: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(untilMs)
+        val today = cal.epochDayOf(nowMs)
+        val time = LocalClock.formatMinute(cal.minuteOfDay(untilMs))
+        return when (day) {
+            today -> time
+            today + 1 -> "tomorrow $time"
+            else -> "${CivilDate.shortLabel(day)} $time"
+        }
+    }
+
+    /** The card's line: "2 business emails wait till tomorrow 07:00 · protected time"; null with none held. */
+    fun cardLine(n: Int, untilMs: Long?, nowMs: Long, cal: LocalCalendar): String? {
+        if (n <= 0 || untilMs == null) return null
+        val what = if (n == 1) "1 business email waits" else "$n business emails wait"
+        return "$what till ${untilLabel(untilMs, nowMs, cal)} · protected time"
+    }
+
+    /** The pane's line: "Held now · 2 business emails till tomorrow 07:00"; null with none held. */
+    fun paneLine(n: Int, untilMs: Long?, nowMs: Long, cal: LocalCalendar): String? {
+        if (n <= 0 || untilMs == null) return null
+        val what = if (n == 1) "1 business email" else "$n business emails"
+        return "Held now · $what till ${untilLabel(untilMs, nowMs, cal)}"
     }
 }

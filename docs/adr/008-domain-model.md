@@ -264,6 +264,8 @@ Earned trust keeps its state on `context_mode` id `trust` (LWW, additive): per k
 
 *Addendum, 2026-10-10 (protected time, slice 1):* no new entity type. The setting is one `context_mode` entity, id `protected_time`: `evenings` (Bool), `fromMin` (local minutes the protected evening starts; a shift that ends later starts it at the shift's end, a night shift has none) and `weekends` (Bool: Saturday, Sunday and bank holidays, unless the work schedule has a shift that day). All LWW, so the latest choice on any device wins; absent means off. Read by `ProtectedRules` (non-AI, pure): Plan my day and Move to later place no task in protected time. Additive; no migration. Nothing leaves Meka's own synced data.
 
+*Addendum, 2026-10-18 (protected time, slice 3):* one more field on the `protected_time` entity: `holdMail` (Bool, LWW; absent = on). While protected time is on and it is protected now (from the evening's start, a whole protected day, or the small hours after either until 07:00), the apps leave the Business-labelled account's `mail_item`s out of From your mail, the ten-minute inbox and the watch's count, and say how many wait till when (`ProtectedMailRules`, non-AI, pure). Security alerts, notes to self and emails with a reply of his on the way or failed are never held. Nothing is written to the emails; they come back at 07:00 on the next day that isn't wholly protected. Additive; no migration; no server change.
+
 ## Addendum, 2026-10-10: what a reminder was about
 `agent_action` gains one optional LWW text field, `about`, on reminder entries only (`task:<id>` or `renewal:<id>:<epoch day>`), for ADR-013's prevented misses. Additive; older apps ignore it; nothing migrates.
 

@@ -5303,9 +5303,42 @@ class MekaCore(
         os.meka.core.domain.MailUnopenedRules.keptLine(s.name)
     }
 
+    // ---- Protected time, slice 3: work mail waits until morning ----
+
+    /** When the business mail held now comes back (the morning after protected time), or null when nothing is held. */
+    private fun mailHeldUntil(): Long? {
+        val s = protectedTime.setting() ?: return null
+        if (!s.holdMail) return null
+        return os.meka.core.domain.ProtectedRules.protectedUntil(s, nowMs(), work.schedule(), bankHolidays.calendar(), ZoneCalendar(timeZone))
+    }
+
+    /** The emails "From your mail" shows now: the synced ones less the business mail protected time holds. */
+    private fun mailShown(items: List<os.meka.core.domain.MailItem> = activity.mailItems()): List<os.meka.core.domain.MailItem> {
+        val held = os.meka.core.domain.ProtectedMailRules.held(items, protectedTime.setting(), mailHeldUntil())
+        return if (held.isEmpty()) items else items.filterNot { it.id in held }
+    }
+
+    /** How many emails that would be on the card are held now. */
+    private fun mailHeldCount(items: List<os.meka.core.domain.MailItem> = activity.mailItems()): Int {
+        val held = os.meka.core.domain.ProtectedMailRules.held(items, protectedTime.setting(), mailHeldUntil())
+        if (held.isEmpty()) return 0
+        return os.meka.core.domain.MailNeedsRules.showingSorted(items.filter { it.id in held }, nowMs()).size
+    }
+
+    /** Protected time → Work mail: [hold] true waits until morning, false shows it as it comes. Null when nothing changed. */
+    suspend fun setProtectedMail(hold: Boolean): String? = onCore {
+        if (!protectedTime.setHoldMail(hold)) return@onCore null
+        refresh()
+        if (hold) os.meka.core.domain.ProtectedMailRules.ON else os.meka.core.domain.ProtectedMailRules.OFF
+    }
+
     private fun mailNeedsChanged() {
-        val items = activity.mailItems()
-        _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), ZoneCalendar(timeZone))
+        val all = activity.mailItems()
+        val items = mailShown(all)
+        val cal = ZoneCalendar(timeZone)
+        _mailNeeds.value = os.meka.core.domain.MailNeedsRules.card(items, nowMs(), cal)?.copy(
+            heldLine = os.meka.core.domain.ProtectedMailRules.cardLine(mailHeldCount(all), mailHeldUntil(), nowMs(), cal),
+        )
         // Drafted replies, slice 2: Today's count follows Send, Not needed, Done and Snooze at once on this app.
         val replies = os.meka.core.domain.MailAutoDraftRules.todayLine(items, nowMs())
         if (_today.value.mailReplies != replies) _today.value = _today.value.copy(mailReplies = replies)
@@ -6148,7 +6181,7 @@ class MekaCore(
         replica.entity(os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailMomentRules.ENTITY_ID)?.fields,
     )
 
-    private fun mailMomentChanged(items: List<os.meka.core.domain.MailItem> = activity.mailItems()) {
+    private fun mailMomentChanged(items: List<os.meka.core.domain.MailItem> = mailShown()) {
         val cal = ZoneCalendar(timeZone)
         val setting = mailMomentSetting()
         val rows = os.meka.core.domain.MailNeedsRules.allRows(items, nowMs(), cal)
@@ -6165,7 +6198,7 @@ class MekaCore(
      */
     private fun noteInboxClear() {
         val cal = ZoneCalendar(timeZone)
-        val items = activity.mailItems()
+        val items = mailShown()
         val setting = mailMomentSetting()
         val waiting = os.meka.core.domain.MailNeedsRules.showingSorted(items, nowMs()).size
         if (!os.meka.core.domain.MailMomentRules.shouldNoteClear(setting, items.isNotEmpty(), waiting, nowMs(), cal)) return
@@ -6179,7 +6212,7 @@ class MekaCore(
     suspend fun startMailMoment() = onCore {
         mailMomentRunning = true
         mailMomentSkipped.clear()
-        mailMomentStarted = os.meka.core.domain.MailNeedsRules.allRows(activity.mailItems(), nowMs(), ZoneCalendar(timeZone)).size
+        mailMomentStarted = os.meka.core.domain.MailNeedsRules.allRows(mailShown(), nowMs(), ZoneCalendar(timeZone)).size
         mailMomentChanged()
     }
 
@@ -8556,7 +8589,10 @@ class MekaCore(
             trading = os.meka.core.domain.TradingTodayRules.todayLine(trading.wallets(), tradingAlertSetting(), nowMs()),
         )
         _dateNight.value = os.meka.core.domain.DateNightRules.view(dateNightNow, todayDay, cal.minuteOfDay(nowMs()))
-        _protected.value = os.meka.core.domain.ProtectedRules.view(protectedTime.setting(), todayDay, workState.schedule, holidays)
+        _protected.value = os.meka.core.domain.ProtectedRules.view(
+            protectedTime.setting(), todayDay, workState.schedule, holidays,
+            os.meka.core.domain.ProtectedMailRules.paneLine(mailHeldCount(), mailHeldUntil(), nowMs(), cal),
+        )
         _leaving.value = os.meka.core.domain.LeavingRules.view(leavingSetting())
         _weekAheadSetting.value = os.meka.core.domain.WeekAheadRules.settingView(weekAheadSettings.setting())
         _autonomy.value = os.meka.core.domain.AutonomyRules.view(trust.states(), autonomy.setting(), cal, nowMs(), mailAutopilotSetting(), mailFindsAutoOn(), directAddSetting())
@@ -8794,7 +8830,7 @@ class MekaCore(
             trainWake = currentTrainWake(),
             trainWakeAlarmMinute = alarms.alarm(os.meka.core.domain.AlarmRules.wakeId(todayEpochDay()))?.minute,
             mailMoment = mailMomentSetting(),
-            mailWaiting = os.meka.core.domain.MailNeedsRules.allRows(activity.mailItems(), nowMs(), ZoneCalendar(timeZone)).size,
+            mailWaiting = os.meka.core.domain.MailNeedsRules.allRows(mailShown(), nowMs(), ZoneCalendar(timeZone)).size,
             protectedFromMin = protectedFromToday(),
             // Deliveries, slice 2: "Parcel out for delivery · Amazon" when a shipping email says so.
             parcels = activity.parcels(),

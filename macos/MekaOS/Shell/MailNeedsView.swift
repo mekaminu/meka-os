@@ -78,6 +78,9 @@ struct MailNeedsView: View {
                             if let snoozed = card.snoozedLine {
                                 Text(snoozed).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                             }
+                            if let held = card.heldLine {
+                                Text(held).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            }
                         }
                         .padding(.top, MekaSpace.xs)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
