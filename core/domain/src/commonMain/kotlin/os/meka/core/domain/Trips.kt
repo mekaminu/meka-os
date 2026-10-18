@@ -527,8 +527,9 @@ object TripAskRules {
                 "Trip", t.name, CalendarAgenda.spanLabel(t.startDay, t.endDay), plural(t.days, "day"),
                 TripRules.status(t, today).replaceFirstChar { it.lowercase() },
                 if (t.bookings.isEmpty()) "nothing booked yet" else plural(t.bookings.size, "booking"),
-                clocks?.local(t)?.let { z -> TripZoneRules.tripLine(t, clocks)?.let { "${z.label} time is $it; booking times are local, the way there UK time" } },
             ).joinToString(" · ")
+            // Its own short line (Ask's lines are at most 160 characters).
+            TripZoneRules.tripLine(t, clocks)?.let { out += "${t.name} · local time $it · the way there in UK time" }
             for (b in t.bookings.take(ASK_BOOKINGS)) {
                 val whenText = (if (b.endDay != null) CalendarAgenda.spanLabel(b.day, b.endDay) else CivilDate.shortLabel(b.day)) +
                     (b.minute?.let { " " + LocalClock.formatMinute(it) } ?: "")

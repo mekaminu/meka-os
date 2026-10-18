@@ -3,6 +3,7 @@ package os.meka.core.domain
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 /** Travel mode completeness, slice 2: bookings at the destination show UK time beside them. */
 class TripZoneTest {
@@ -56,9 +57,10 @@ class TripZoneTest {
 
         val ask = TripAskRules.askLines(listOf(t), sat - 3, clocks)
         assertEquals(
-            "Trip · Barcelona · Sat 14 – Wed 18 Nov · 5 days · in 3 days · 5 bookings · Barcelona time is 1 h ahead of UK time; booking times are local, the way there UK time",
-            ask[1],
+            listOf("Trip · Barcelona · Sat 14 – Wed 18 Nov · 5 days · in 3 days · 5 bookings", "Barcelona · local time 1 h ahead of UK time · the way there in UK time"),
+            ask.subList(1, 3),
         )
+        assertTrue(ask.all { it.length <= 160 })
         assertEquals("Barcelona · Flight · Wed 18 Nov 18:20 · Flight BA479 · (17:20 UK time)", ask.last())
     }
 

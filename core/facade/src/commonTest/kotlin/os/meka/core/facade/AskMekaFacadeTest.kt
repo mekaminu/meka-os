@@ -556,7 +556,7 @@ class AskMekaFacadeTest {
         val out = assertIs<AskOutcome.Answered>(c.askMeka("Add our flight BA478 on the 14th at 7:40, ref ABC123"))
         val ctx = server.asked.last().second
         assertEquals(
-            listOf("Trips · 1 on now or coming", "Trip · Barcelona · Wed 14 – Fri 16 Oct · 3 days · in 6 days · nothing booked yet · Barcelona time is 1 h ahead of UK time; booking times are local, the way there UK time"),
+            listOf("Trips · 1 on now or coming", "Trip · Barcelona · Wed 14 – Fri 16 Oct · 3 days · in 6 days · nothing booked yet", "Barcelona · local time 1 h ahead of UK time · the way there in UK time"),
             ctx.items.filter { it.kind == AskItemKind.TRIPS }.map { it.line },
         )
         assertFalse(ctx.untrusted)
