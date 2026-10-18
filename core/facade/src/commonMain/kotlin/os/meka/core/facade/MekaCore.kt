@@ -6641,6 +6641,23 @@ class MekaCore(
     }
 
     /**
+     * The Vault, slice 3: [q] asks about his documents ([os.meka.core.domain.VaultAskRules.request]); answered from
+     * the Vault on this device by rules, no AI. Null when it isn't about them, or names a kind the Vault doesn't hold
+     * that is the renewals radar's (insurance, a warranty).
+     */
+    private suspend fun vaultAsk(q: String): os.meka.core.domain.AskOutcome? {
+        val r = os.meka.core.domain.VaultAskRules.request(q) ?: return null
+        return onCore {
+            val cal = ZoneCalendar(timeZone)
+            val text = os.meka.core.domain.VaultAskRules.answer(r, documents.items(), cal.epochDayOf(nowMs()), cal, vaultName())
+                ?: return@onCore null
+            os.meka.core.domain.AskOutcome.Answered(
+                os.meka.core.domain.AskAnswer(text, emptyList(), help = os.meka.core.domain.VaultAskRules.link),
+            )
+        }
+    }
+
+    /**
      * Reading and learning, slice 2: [q] asks about his reading list ([os.meka.core.domain.ReadingAskRules.request]).
      * A question is answered from the list here, no AI; a change (progress, finished, started, added) is his own direct
      * request, done now with Undo and kept in Activity under the same rule as [directAdd] (Ask first: the card he taps).
@@ -7434,6 +7451,9 @@ class MekaCore(
         // Money manager (16): "how much did I spend on takeaways?", "can I afford £300 on Saturday?" are answered from
         // his own Money here, behind his fingerprint, and never go to the AI.
         if (!beyondHelp && os.meka.core.domain.MoneyAskRules.isAbout(q)) return onCore { moneyAnswer(q) }
+        // The Vault, slice 3: "when does Alex's passport run out?", "do I have a copy of my licence?", "what's in my
+        // Vault?" are answered from the Vault here, never sent to the AI, with Open the Vault under the answer.
+        if (!beyondHelp) vaultAsk(q)?.let { return it }
         val cal = ZoneCalendar(timeZone)
         // A question about notifications carries the phone's trace; without the AI the device answers from it itself.
         val notifyAsked = os.meka.core.domain.NotifyAskRules.isAbout(q)
