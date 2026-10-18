@@ -191,11 +191,42 @@ enum class UndoOutcome(val line: String) {
     REPLY_STOPPED(MailSentActivityRules.STOPPED),
     /** Drafted replies, slice 3: Undo on a reply the server had already sent. */
     REPLY_SENT(MailSentActivityRules.TOO_LATE),
+    /**
+     * Completeness (2026-10-18): Undo asked after [ActivityRules.UNDO_DAYS] days (or a tidy the server no longer puts
+     * back): nothing changes, and it says how to change it instead.
+     */
+    TOO_LATE(ActivityRules.TOO_LATE),
 }
 
 /** Pure rules, unit-tested without a replica. */
 object ActivityRules {
     const val DAYS_SHOWN = 30
+
+    /**
+     * Completeness (2026-10-18): how long a change Navilife made can be undone from Activity, the same as a tidy's Undo
+     * in the mailbox ([MailAutopilotRules.UNDO_DAYS]). After that its row says [TOO_LATE] instead of offering Undo.
+     */
+    const val UNDO_DAYS = 30
+    const val TOO_LATE = "Too late to undo · change it by hand"
+
+    /**
+     * Completeness (2026-10-18): entries never hold message text. Notices whose second line carries words meant for or
+     * from someone else (Leaving now's draft to send home, meeting prep's email subjects) are logged by their title only,
+     * and older entries from them are shown and exported without it.
+     */
+    val NO_TEXT_SOURCES: Set<NoticeSource> = setOf(NoticeSource.LEAVING, NoticeSource.MEETING_PREP)
+
+    /** Whether an entry from [source] ("notice:LEAVING") may keep its detail line. */
+    fun keepsDetail(source: String?): Boolean =
+        source == null || NO_TEXT_SOURCES.none { source == "notice:${it.name}" }
+
+    /** Whether [i]'s Undo has run out: a change older than [UNDO_DAYS], or a tidy the server no longer puts back. */
+    fun undoExpired(i: ActivityItem, nowMs: Long): Boolean {
+        if (i.undoneAtMs != null) return false
+        if (i.mailTidy) return i.undoAskedAtMs != null && i.undoAskedAtMs == i.atMs
+        if (i.kind != ActivityKind.CHANGED || i.changes.isEmpty() || i.source == MailSentActivityRules.SOURCE) return false
+        return nowMs - i.atMs > UNDO_DAYS * 86_400_000L
+    }
     const val EMPTY_LINE =
         "Nothing yet. When Navilife reminds you or sends a digest it shows here with why, as do the calendar edits you " +
             "make in Navilife; once it does things for you, each one shows here too and can be undone."
@@ -474,7 +505,7 @@ object ActivityRules {
         val shown = items.filter { cal.epochDayOf(it.atMs) in (today - DAYS_SHOWN + 1)..today }
             .sortedWith(compareByDescending<ActivityItem> { it.atMs }.thenBy { it.id })
         val days = shown.groupBy { cal.epochDayOf(it.atMs) }.map { (day, rows) ->
-            ActivityDay(day, SearchRules.dayLabel(day, today), rows.map { row(it, cal, today) })
+            ActivityDay(day, SearchRules.dayLabel(day, today), rows.map { row(it, cal, today, nowMs) })
         }
         val monday = today - (CivilDate.isoDayOfWeek(today) - 1)
         val week = shown.filter { cal.epochDayOf(it.atMs) >= monday }
@@ -528,8 +559,9 @@ object ActivityRules {
         return view.copy(days = days)
     }
 
-    private fun row(i: ActivityItem, cal: LocalCalendar, today: Long): ActivityRow {
-        val undone = i.undoneAtMs?.let { at ->
+    private fun row(i: ActivityItem, cal: LocalCalendar, today: Long, nowMs: Long): ActivityRow {
+        val expired = undoExpired(i, nowMs)
+        val undone = if (expired) TOO_LATE else i.undoneAtMs?.let { at ->
             val d = cal.epochDayOf(at)
             val whenText = LocalClock.formatMinute(cal.minuteOfDay(at)) + if (d != cal.epochDayOf(i.atMs)) " ${SearchRules.dayLabel(d, today).lowercaseIfRelative()}" else ""
             "Undone at $whenText" + (i.undoNote?.let { " · $it" } ?: "")
@@ -541,7 +573,7 @@ object ActivityRules {
             summary = i.summary,
             detail = i.detail,
             why = "Why: ${i.why}",
-            canUndo = i.canUndo,
+            canUndo = i.canUndo && !expired,
             undoneLine = undone,
         )
     }
@@ -728,7 +760,7 @@ class ActivityLog(
             atMs = s[ActivityFields.AT].longOrNull ?: return@mapNotNull null,
             kind = kind,
             summary = s[ActivityFields.SUMMARY].textOrNull ?: return@mapNotNull null,
-            detail = s[ActivityFields.DETAIL].textOrNull,
+            detail = s[ActivityFields.DETAIL].textOrNull.takeIf { ActivityRules.keepsDetail(s[ActivityFields.SOURCE].textOrNull) },
             why = s[ActivityFields.WHY].textOrNull.orEmpty(),
             source = s[ActivityFields.SOURCE].textOrNull,
             level = s[ActivityFields.LEVEL].textOrNull,
@@ -748,7 +780,8 @@ class ActivityLog(
             val id = ActivityRules.noticeId(n.key)
             if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) continue
             val (summary, detail, why) = ActivityRules.noticeSummary(n)
-            write(id, ActivityKind.REMINDED, summary, detail, why, "notice:${n.source.name}", about = PreventedMissRules.aboutOf(n.key))
+            val source = "notice:${n.source.name}"
+            write(id, ActivityKind.REMINDED, summary, detail.takeIf { ActivityRules.keepsDetail(source) }, why, source, about = PreventedMissRules.aboutOf(n.key))
         }
     }
 
@@ -860,9 +893,10 @@ class ActivityLog(
     fun undo(id: String): UndoOutcome {
         val item = items().firstOrNull { it.id == id } ?: return UndoOutcome.NOT_UNDOABLE
         if (item.source == MailSentActivityRules.SOURCE) return undoReply(id)
+        if (ActivityRules.undoExpired(item, nowMs())) return UndoOutcome.TOO_LATE
         if (item.mailTidy) {
             if (item.undoneAtMs != null) return UndoOutcome.UNDONE
-            if (item.undoAskedAtMs != null) return if (item.undoAskedAtMs == item.atMs) UndoOutcome.NOT_UNDOABLE else UndoOutcome.ASKED
+            if (item.undoAskedAtMs != null) return UndoOutcome.ASKED
             replica.commitLocal(EntityTypes.MAIL_TIDY, id, mapOf(MailTidyBatchFields.UNDO_ASKED_AT to nowMs().fv()))
             return UndoOutcome.ASKED
         }

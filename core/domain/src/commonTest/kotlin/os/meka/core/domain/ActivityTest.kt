@@ -336,7 +336,7 @@ class ActivityTest {
         world.clock.nowMs += 31 * dayMs
         val item = la.items().single { it.id == "mt2" }
         assertFalse(item.canUndo)
-        assertEquals(UndoOutcome.NOT_UNDOABLE, la.undo("mt2"))
+        assertEquals(UndoOutcome.TOO_LATE, la.undo("mt2"))
         assertNull(a.replica.entity(EntityTypes.MAIL_TIDY, "mt2")?.get(MailTidyBatchFields.UNDO_ASKED_AT)?.longOrNull)
     }
 }

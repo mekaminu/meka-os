@@ -4449,12 +4449,26 @@ class MekaCore(
     suspend fun undoActivity(id: String): String = onCore {
         val kind = trustKindOfEntry(id)
         val outcome = activity.undo(id)
+        val undid = outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE && outcome != os.meka.core.domain.UndoOutcome.TOO_LATE
         // Earned trust: undoing something MEKA did on its own sends that kind back to asking first.
-        if (kind != null && outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE) trust.autoUndone(kind)
+        if (kind != null && undid) trust.autoUndone(kind)
         refresh()
         activityChanged()
-        if (kind != null && outcome != os.meka.core.domain.UndoOutcome.NOT_UNDOABLE) os.meka.core.domain.TrustRules.autoUndoneLine(kind, outcome)
+        if (kind != null && undid) os.meka.core.domain.TrustRules.autoUndoneLine(kind, outcome)
         else outcome.line
+    }
+
+    /**
+     * Activity log completeness: **Export** — every entry the log holds (not just the 30 days shown), oldest first, as a
+     * CSV to save where Meka likes; made here from his own data, nothing sent or stored, message words left out.
+     */
+    suspend fun activityExport(): os.meka.core.domain.ActivityExportFile = onCore {
+        os.meka.core.domain.ActivityExportRules.file(activity.items(), nowMs(), ZoneCalendar(timeZone))
+    }
+
+    /** The line under Activity's days: how long entries are kept and shown, and what Export saves. */
+    suspend fun activityKeptLine(): String? = onCore {
+        activity.items().size.takeIf { it > 0 }?.let { os.meka.core.domain.ActivityExportRules.keptLine(it) }
     }
 
     private fun trustKindOfEntry(id: String): os.meka.core.domain.TrustKind? {

@@ -20,10 +20,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "activity",
             title = "Activity",
-            keywords = listOf("activity", "what did navilife do", "history", "undo something"),
+            keywords = listOf("activity", "what did navilife do", "history", "undo something", "export activity"),
             what = "everything Navilife did and why, with Undo where it can be taken back.",
             how = "Open it and filter by kind.",
-            tips = listOf(),
+            tips = listOf("Undo works for 30 days; after that a change says \"Too late to undo · change it by hand\".", "Export at the foot saves everything Activity holds as a spreadsheet, without any message words."),
             fold = HelpPlace.ACTIVITY,
             foldWhere = "Ask → Settings → Activity",
             mac = HelpPlace.ACTIVITY,

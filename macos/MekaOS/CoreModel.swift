@@ -1933,6 +1933,34 @@ final class CoreModel {
         }
     }
 
+    /// Activity completeness: Export — every entry the log holds as a CSV, made on the Mac from his own data. Only
+    /// Strings come back across.
+    struct ActivityExport {
+        let line: String
+        let csv: String?
+        let fileName: String?
+    }
+
+    func activityExport() async -> ActivityExport? {
+        guard let core else { return nil }
+        do {
+            let f = try await core.activityExport()
+            return ActivityExport(line: f.line, csv: f.csv, fileName: f.fileName)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// The line under Activity's days (how long things are kept, what Export saves); nil while the log is empty.
+    func activityKeptLine() async -> String? {
+        guard let core else { return nil }
+        return try? await core.activityKeptLine()
+    }
+
+    /// Activity completeness: what the last Export did, shown in the sheet.
+    func setActivityNote(_ line: String?) { activityNote = line }
+
     // MARK: Ask MEKA (V1 AI layer, slice 3b)
 
     /// MEKA's AI and the month's spend under Ask's field ("On · $1.20 of $20 this month"); nil until checked.

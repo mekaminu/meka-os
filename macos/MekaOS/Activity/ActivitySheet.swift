@@ -1,6 +1,7 @@
 @preconcurrency import MekaKit
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// What MEKA did and why (V1 activity log): every reminder and digest that reached you, and later every change MEKA
 /// makes for you, newest first by day, each with the rule or setting behind it. A change can be undone here (only what
@@ -20,6 +21,9 @@ struct ActivitySheet: View {
     @State private var filterName = ActivityRules.shared.filterNamed(name: nil).name
     /// Recent calls: the call whose detail is unfolded (this Mac only).
     @State private var openCall: String?
+    /// Completeness: how long entries are kept and what Export saves (nil while the log is empty).
+    @State private var keptLine: String?
+    @State private var exporting = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
@@ -89,6 +93,16 @@ struct ActivitySheet: View {
                             }
                             .staggeredAppear(i + 2)
                         }
+                        if let kept = keptLine {
+                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                Text(kept).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Button(ActivityExportRules.shared.LABEL + "…") { export() }
+                                    .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                                    .disabled(exporting)
+                            }
+                            .transition(.opacity)
+                        }
                     }
                     .id(filter.name)
                     .transition(.opacity)
@@ -114,6 +128,35 @@ struct ActivitySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voiceTimingLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiTodayLine)
         .task { await model.refreshVoiceUsage() }
+        .task(id: model.activity?.weekLine) { keptLine = await model.activityKeptLine() }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: keptLine)
+    }
+
+    /// Completeness: Export — the whole log as a CSV, saved where he picks.
+    private func export() {
+        guard !exporting else { return }
+        exporting = true
+        Task {
+            let file = await model.activityExport()
+            exporting = false
+            guard let file else { return }
+            model.setActivityNote(file.line)
+            guard let csv = file.csv, let name = file.fileName else { return }
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.commaSeparatedText]
+            panel.nameFieldStringValue = name
+            panel.message = "Where to save everything in Activity as a spreadsheet"
+            panel.prompt = "Save"
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            do {
+                try csv.write(to: url, atomically: true, encoding: .utf8)
+                MekaHaptics.light()
+                model.setActivityNote("Saved Activity as a spreadsheet · open it in Numbers or Excel")
+            } catch {
+                MekaHaptics.tick()
+                model.setActivityNote("Couldn't save it there · try another place")
+            }
+        }
     }
 
     /// Blocked calls: the numbers whose calls the block list stopped in the last 30 days, with Unblock / Block again.

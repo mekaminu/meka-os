@@ -1177,6 +1177,11 @@ class MekaCoreTest {
         assertTrue(rows.any { it.summary == "Sent a digest: Evening digest · 2 things" })
         assertTrue(rows.none { it.canUndo })
         assertEquals("This can't be undone", m.undoActivity(rows.first().id))
+        // Completeness: Export saves every entry as a CSV, and the kept line says so.
+        val f = m.activityExport()
+        assertEquals("${rows.size} entries · choose where to save it", f.line)
+        assertEquals(rows.size + 1, f.csv!!.trimEnd().split("\r\n").size)
+        assertTrue(m.activityKeptLine()!!.endsWith("Export saves all ${rows.size} entries"))
     }
 
     @Test

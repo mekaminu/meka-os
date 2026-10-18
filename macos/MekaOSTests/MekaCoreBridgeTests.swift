@@ -1284,6 +1284,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
     }
 
+    /// Activity completeness: the kept line, Export's label and the too-late line reach Swift.
+    func testActivityExportReachesSwift() {
+        let rules = ActivityExportRules.shared
+        XCTAssertTrue(rules.keptLine(count: 2).hasSuffix("Export saves all 2 entries"))
+        XCTAssertEqual(rules.LABEL, "Export")
+        XCTAssertEqual(UndoOutcome.tooLate.line, "Too late to undo · change it by hand")
+    }
+
     /// Activity's filter (activity log, slice 3): chips for the kinds there are, and the days narrowed to one kind.
     func testActivityFilterReachesSwift() {
         func row(_ id: String, _ kind: ActivityKind) -> ActivityRow {

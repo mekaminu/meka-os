@@ -83,6 +83,26 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
     var heardLine by remember { mutableStateOf<String?>(null) }
     // MEKA's AI today ("MEKA's AI today · Talk 6 · Ask 2 · 3¢"); null: nothing asked today or the server can't say.
     var aiLine by remember { mutableStateOf<String?>(null) }
+    // Completeness: how long entries are kept and shown, and what Export saves; null while the log is empty.
+    var keptLine by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(view) { keptLine = runCatching { core.activityKeptLine() }.getOrNull() }
+    // Completeness: Export — the whole log as a CSV, saved where he picks (the system's save sheet).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var exportCsv by remember { mutableStateOf<String?>(null) }
+    val saveCsv = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.CreateDocument(os.meka.core.domain.TradingExportRules.MIME),
+    ) { uri: android.net.Uri? ->
+        val csv = exportCsv
+        exportCsv = null
+        if (uri == null || csv == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { context.contentResolver.openOutputStream(uri)?.use { it.write(csv.encodeToByteArray()) } != null }.getOrDefault(false)
+            }
+            if (ok) haptics.light()
+            note = if (ok) "Saved Activity as a spreadsheet · open it in Sheets or Excel" else "Couldn't save it there · try another place"
+        }
+    }
     LaunchedEffect(Unit) {
         timingLine = runCatching { core.voiceTimingLine() }.getOrNull()
         heardLine = runCatching { core.heardTimingLine() }.getOrNull()
@@ -202,6 +222,23 @@ fun ActivityPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Clos
                                 }
                             }
                         }
+                    }
+                }
+                // Completeness: what's kept, and Export (the whole log, not just these days).
+                keptLine?.let { kept ->
+                    Column(Modifier.fillMaxWidth().appear(rememberAppearance(shown.days.size + 2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Spacer(Modifier.height(MekaSpace.m))
+                        Text(kept, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        Text(
+                            os.meka.core.domain.ActivityExportRules.LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                                scope.launch {
+                                    val f = runCatching { core.activityExport() }.getOrNull() ?: return@launch
+                                    note = f.line
+                                    if (f.csv != null && f.fileName != null) { exportCsv = f.csv; runCatching { saveCsv.launch(f.fileName!!) } }
+                                }
+                            }.minTouch().padding(vertical = MekaSpace.xxs),
+                        )
                     }
                 }
             }
