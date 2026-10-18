@@ -38,8 +38,6 @@ import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.sync.fv
 import os.meka.core.wire.SpeechCodec
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
 import java.net.URLDecoder
 import java.security.MessageDigest
 import java.util.Base64
@@ -1082,24 +1080,15 @@ class TwilioVoice(
         }
 
         /**
-         * Reads `{"account_sid": …, "auth_token": …}` from Secrets Manager by ARN, cached for five minutes; each is null
+         * Reads `{"account_sid": …, "auth_token": …}` from Secrets Manager by ARN through SecretCache (six hours; 15 minutes while unset); each is null
          * while unset (`{}`).
          */
         fun fromSecret(secretId: String): TwilioVoice {
-            val sm = SecretsManagerClient.builder().httpClient(UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, Map<String, String>>? = null
-            val lock = Any()
-            fun read(key: String): String? = synchronized(lock) {
-                val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 5 * 60_000 }?.second ?: run {
-                    val v = runCatching {
-                        Json.parseToJsonElement(sm.getSecretValue { it.secretId(secretId) }.secretString()).jsonObject
-                            .mapValues { (_, e) -> e.jsonPrimitive.content.trim() }
-                    }.getOrElse { emptyMap() }
-                    cached = System.currentTimeMillis() to v
-                    v
-                }
-                hit[key]?.takeIf { it.isNotEmpty() }
+            val secret = os.meka.backend.integrations.SecretCache.shared.reader(secretId) { raw ->
+                Json.parseToJsonElement(raw ?: return@reader null).jsonObject
+                    .mapValues { (_, e) -> e.jsonPrimitive.content.trim() }.takeIf { m -> m["auth_token"].orEmpty().isNotEmpty() }
             }
+            fun read(key: String): String? = secret()?.get(key)?.takeIf { it.isNotEmpty() }
             return TwilioVoice(authToken = { read("auth_token") }, accountSid = { read("account_sid") })
         }
     }

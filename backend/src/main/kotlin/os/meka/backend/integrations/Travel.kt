@@ -95,22 +95,9 @@ class GoogleRoutes internal constructor(
             return res.statusCode() to res.body()
         }
 
-        /** From the deployment's secret, read at use time and cached for a minute (pasting the key needs no restart). */
+        /** From the deployment's secret, read at use time through SecretCache (six hours; 15 minutes while unset, so pasting it needs no restart). */
         fun fromSecret(secretId: String): GoogleRoutes {
-            val sm = software.amazon.awssdk.services.secretsmanager.SecretsManagerClient.builder()
-                .httpClient(software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, String?>? = null
-            val lock = Any()
-            val key = {
-                synchronized(lock) {
-                    val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 60_000 }
-                    if (hit != null) hit.second else {
-                        val v = runCatching { GoogleMapsKey.parse(sm.getSecretValue { it.secretId(secretId) }.secretString()) }.getOrNull()
-                        cached = System.currentTimeMillis() to v
-                        v
-                    }
-                }
-            }
+            val key = os.meka.backend.integrations.SecretCache.shared.reader(secretId) { GoogleMapsKey.parse(it) }
             return GoogleRoutes(key, ::httpPost)
         }
     }

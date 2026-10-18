@@ -46,6 +46,7 @@ import os.meka.backend.integrations.GoogleRoutes
 import os.meka.backend.integrations.OpenMeteoWeather
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.KmsTokenCipher
+import os.meka.backend.integrations.CachingTokenCipher
 import os.meka.backend.integrations.MicrosoftCalendar
 import os.meka.backend.integrations.PostgresIntegrationStore
 import os.meka.backend.integrations.PostgresMailStore
@@ -1020,11 +1021,14 @@ private suspend fun ApplicationCall.releaseCaller(devices: DeviceRegistry, verif
     val name = request.header("Authorization").orEmpty().removePrefix("${ReleasePublisher.AUTH_SCHEME} ").trim()
     if (name != ReleasePublisher.ID) throw Unauthorised()
     if (request.path() !in ReleasePublisher.ROUTES) throw Forbidden()
-    val key = publisher?.let { withContext(Dispatchers.IO) { it.publicKey() } } ?: throw Forbidden()
+    publisher ?: throw Forbidden()
     val h = request.headers
-    if (!verifier.verify(key, request.httpMethod.value, request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])) {
-        throw Unauthorised()
+    val method = request.httpMethod.value
+    val path = request.path()
+    val ok = withContext(Dispatchers.IO) {
+        publisher.verifiedKey { key -> verifier.verify(key, method, path, body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"]) }
     }
+    if (!(ok ?: throw Forbidden())) throw Unauthorised()
     val household = withContext(Dispatchers.IO) { devices.soleHousehold() } ?: throw Forbidden()
     return DeviceIdentity(household, ReleasePublisher.ID)
 }
@@ -1034,11 +1038,13 @@ private suspend fun ApplicationCall.asker(routes: ApprovalRoutes, verifier: Requ
     val auth = request.header("Authorization") ?: throw Unauthorised()
     if (!auth.startsWith("${ApprovalDesk.AUTH_SCHEME} ")) throw Unauthorised()
     val asker = routes.askers[auth.removePrefix("${ApprovalDesk.AUTH_SCHEME} ").trim()] ?: throw Unauthorised()
-    val key = withContext(Dispatchers.IO) { asker.key.publicKey() } ?: throw Forbidden()
     val h = request.headers
-    if (!verifier.verify(key, request.httpMethod.value, request.path(), body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"])) {
-        throw Unauthorised()
+    val method = request.httpMethod.value
+    val path = request.path()
+    val ok = withContext(Dispatchers.IO) {
+        asker.key.verifiedKey { key -> verifier.verify(key, method, path, body, h["X-Meka-Time"], h["X-Meka-Nonce"], h["X-Meka-Signature"]) }
     }
+    if (!(ok ?: throw Forbidden())) throw Unauthorised()
     return asker
 }
 
@@ -1153,7 +1159,8 @@ fun main(args: Array<String>) {
                         trains = { hh -> integrations?.trainsReport(hh) ?: "off · integrations not running" },
                         travel = { hh -> integrations?.travelReport(hh) ?: "off · integrations not running" },
                         voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" },
-                        spam = { hh -> numberLookup?.report(hh) ?: "off · the server has no Brave secret set" }),
+                        spam = { hh -> numberLookup?.report(hh) ?: "off · the server has no Brave secret set" },
+                        kms = { os.meka.backend.integrations.KmsMeter.reportLine() }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
@@ -1178,7 +1185,7 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
     return Integrations(
         store = PostgresIntegrationStore(opStore), ops = opStore,
         providers = listOf(GoogleCalendar(), MicrosoftCalendar()).associateBy { it.id },
-        clients = SecretsManagerOAuthClients(secrets), cipher = KmsTokenCipher(key), publicUrl = publicUrl,
+        clients = SecretsManagerOAuthClients(secrets), cipher = CachingTokenCipher(KmsTokenCipher(key)), publicUrl = publicUrl,
         feeds = listOf(EspnTeamFixtures(UkTvListings())).associateBy { it.id },
         news = listOf(BbcNewsRss(), PublicNewsFeeds()).associateBy { it.id },
         holidays = listOf(GovUkBankHolidays()).associateBy { it.id },
@@ -1188,6 +1195,8 @@ fun integrationsFromEnv(opStore: PostgresOpStore, onChanged: (householdId: Strin
         ownKeys = OwnKeyReminders(opStore, onWritten = onChanged),
         reader = opStoreReader(opStore),
         lines = listOf(TflLineStatus()).associateBy { it.id },
+        // KMS free tier (2026-10-18): access tokens are reused until near expiry, not refreshed every 5 minutes.
+        reuseAccessTokens = true,
         // Live trains (Needs Meka #16): off (and nothing sent) until the rail key is in its secret.
         rail = System.getenv("MEKA_RAIL_DARWIN_SECRET")?.takeIf { it.isNotBlank() }?.let { os.meka.backend.integrations.DarwinBoard.fromSecret(it) },
         // Weekend football, slice 2b: off (and nothing sent) until Meka pastes the Google key into the secret.

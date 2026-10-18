@@ -140,22 +140,9 @@ class LunchFlowFeed internal constructor(private val key: () -> String?, private
             res.statusCode() to res.body()
         }
 
-        /** From the deployment's secret (its name or ARN), read at use time and cached for a minute: pasting a key needs no restart. */
+        /** From the deployment's secret (its name or ARN), read at use time through SecretCache (six hours; 15 minutes while unset, so pasting a key needs no restart). */
         fun fromSecret(secretId: String): LunchFlowFeed {
-            val sm = software.amazon.awssdk.services.secretsmanager.SecretsManagerClient.builder()
-                .httpClient(software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, String?>? = null
-            val lock = Any()
-            val key = {
-                synchronized(lock) {
-                    val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 60_000 }
-                    if (hit != null) hit.second else {
-                        val v = runCatching { parseKey(sm.getSecretValue { it.secretId(secretId) }.secretString()) }.getOrNull()
-                        cached = System.currentTimeMillis() to v
-                        v
-                    }
-                }
-            }
+            val key = os.meka.backend.integrations.SecretCache.shared.reader(secretId) { parseKey(it) }
             return LunchFlowFeed(key, NETWORK)
         }
     }

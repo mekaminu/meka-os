@@ -107,6 +107,8 @@ object NotifyDiagnosticsCodec {
         val voice: String? = null,
         /** Spam-call lookup (2026-10-17): the Brave key's probe and the lookups' counts; never a number. */
         val spam: String? = null,
+        /** KMS free tier (2026-10-18): the server's KMS-backed reads since it started, and its uptime; counts only. */
+        val kms: String? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -158,6 +160,7 @@ object NotifyDiagnosticsCodec {
         l.travel?.let { put("travel", clean(it, MAIL_DETAIL_MAX)) }
         l.voice?.let { put("voice", clean(it, MAIL_DETAIL_MAX)) }
         l.spam?.let { put("spam", clean(it, MAIL_DETAIL_MAX)) }
+        l.kms?.let { put("kms", clean(it, MAIL_DETAIL_MAX)) }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -183,6 +186,7 @@ object NotifyDiagnosticsCodec {
             travel = o.str("travel")?.let { clean(it, MAIL_DETAIL_MAX) },
             voice = o.str("voice")?.let { clean(it, MAIL_DETAIL_MAX) },
             spam = o.str("spam")?.let { clean(it, MAIL_DETAIL_MAX) },
+            kms = o.str("kms")?.let { clean(it, MAIL_DETAIL_MAX) },
         )
     }
 

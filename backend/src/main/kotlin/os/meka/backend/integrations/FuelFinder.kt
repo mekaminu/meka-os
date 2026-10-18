@@ -248,22 +248,9 @@ class FuelFinder internal constructor(
             )
         }
 
-        /** From the deployment's secret, read at use time and cached for a minute (pasting the keys needs no restart). */
+        /** From the deployment's secret, read at use time through SecretCache (six hours; 15 minutes while unset, so pasting it needs no restart). */
         fun fromSecret(secretId: String): FuelFinder {
-            val sm = software.amazon.awssdk.services.secretsmanager.SecretsManagerClient.builder()
-                .httpClient(software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, FuelFinderKeys?>? = null
-            val lock = Any()
-            val keys = {
-                synchronized(lock) {
-                    val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 60_000 }
-                    if (hit != null) hit.second else {
-                        val v = runCatching { FuelFinderKeys.parse(sm.getSecretValue { it.secretId(secretId) }.secretString()) }.getOrNull()
-                        cached = System.currentTimeMillis() to v
-                        v
-                    }
-                }
-            }
+            val keys = os.meka.backend.integrations.SecretCache.shared.reader(secretId) { FuelFinderKeys.parse(it) }
             return FuelFinder(keys, NETWORK)
         }
     }

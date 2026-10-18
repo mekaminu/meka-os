@@ -179,6 +179,11 @@ class Integrations(
     private val mailDrafter: MailDrafter? = null,
     /** Live trains (Needs Meka #16): National Rail's departure boards; null (no rail key secret set, tests) leaves them off. */
     private val rail: RailBoardProvider? = null,
+    /**
+     * KMS free tier (2026-10-18): reuse an access token until shortly before it expires ([freshAccess]) instead of
+     * refreshing at every check. On in the deployed server; off (a refresh each check, as before) unless a test asks.
+     */
+    private val reuseAccessTokens: Boolean = false,
 ) {
     private val rng = SecureRandom()
     private val clock = HlcClock(SERVER_DEVICE, now)
@@ -387,6 +392,7 @@ class Integrations(
             val refresh = cipher.decrypt(a.refreshTokenEnc, context(a.householdId, a.provider)).decodeToString()
             m.revoke(refresh)
         }
+        forgetAccess(a.id)
         val done = store.transaction { store.disconnect(householdId, provider, a.email) }
         // Slice 6a: its "From your mail" cards go from Needs you.
         if (done) runCatching { goneMailNeeds(a, emptySet()) }
@@ -485,22 +491,19 @@ class Integrations(
         mail[a.provider]?.let { m -> return syncMail(a, m) }
         val p = providers[a.provider] ?: return
         val client = clients.get(a.provider) ?: return
-        val ctx = context(a.householdId, a.provider)
         try {
-            val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
-            val tokens = p.refresh(client, refresh, a.canEdit)
-            if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
-                store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
-            }
+            val access = freshAccess(a, if (a.canEdit) "edit" else "read") { refresh -> p.refresh(client, refresh, a.canEdit) }
             val from = now() - WINDOW_BACK_MS
             val to = now() + WINDOW_AHEAD_MS
-            val events = p.events(tokens.accessToken, from, to)
+            val events = p.events(access, from, to)
             val wrote = apply(a, events, from, to)
             store.transaction { store.markSynced(a.id, now()) }
             if (wrote) runCatching { onChanged(a.householdId) }
         } catch (e: ReconnectRequired) {
+            forgetAccess(a.id)
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
         } catch (e: Exception) {
+            forgetAccess(a.id)
             store.transaction { store.markError(a.id, "error", e::class.simpleName ?: "error") }
             throw e
         }
@@ -512,25 +515,22 @@ class Integrations(
      */
     private fun syncMail(a: AccountRow, m: MailProvider) {
         val client = clients.get(m.oauth) ?: return
-        val ctx = context(a.householdId, a.provider)
         // Inbox fixes, slice 6: what this check did, for the report (the card reads the stored reason).
         val check = mailChecks.computeIfAbsent(a.id) { MailCheckState() }.also { it.lastCheckAtMs = now(); it.stages.clear(); it.autopilot = null }
         var signingIn = true
         try {
-            val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
-            val tokens = m.refresh(client, refresh)
-            if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
-                store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
-            }
+            val access = freshAccess(a, "mail") { refresh -> m.refresh(client, refresh) }
             signingIn = false
-            val box = m.inbox(tokens.accessToken)
+            val box = m.inbox(access)
             check.inboxTotal = box.messages; check.inboxUnread = box.unread
-            mailStore?.let { syncHeaders(a, m, tokens.accessToken, it) }
+            mailStore?.let { syncHeaders(a, m, access, it) }
             store.transaction { store.markSynced(a.id, now()) }
             check.lastOkAtMs = now()
         } catch (e: ReconnectRequired) {
+            forgetAccess(a.id)
             store.transaction { store.markError(a.id, "needs_reconnect", e.message ?: "reconnect") }
         } catch (e: Exception) {
+            forgetAccess(a.id)
             store.transaction { store.markError(a.id, "error", mailWhy(e, signingIn)) }
             throw e
         }
@@ -2222,13 +2222,42 @@ class Integrations(
     internal fun accessToken(a: AccountRow, editing: Boolean): String {
         val p = providers.getValue(a.provider)
         val client = clients.get(a.provider) ?: throw ReconnectRequired("provider not configured")
-        val ctx = context(a.householdId, a.provider)
-        val refresh = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
-        val tokens = p.refresh(client, refresh, editing)
-        if (tokens.refreshToken != null && tokens.refreshToken != refresh) {
-            store.transaction { store.updateRefreshToken(a.id, cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)) }
+        return try {
+            freshAccess(a, if (editing) "edit" else "read") { refresh -> p.refresh(client, refresh, editing) }
+        } catch (e: Exception) {
+            forgetAccess(a.id); throw e
         }
+    }
+
+    /**
+     * KMS free tier (2026-10-18): an access token the provider gave is used until [ACCESS_MARGIN_MS] before it expires,
+     * instead of refreshing (a KMS decrypt, and for Microsoft's rotating tokens a KMS encrypt) at every 5-minute
+     * check. Kept per account and [use] (calendar read, calendar edit, mail), only while the stored refresh token is
+     * the one it came from; any failure forgets it, so the next check refreshes and sees a revoked sign-in at once.
+     */
+    private class Access(val token: String, val untilMs: Long, val refreshEnc: ByteArray)
+    private val accessTokens = java.util.concurrent.ConcurrentHashMap<String, Access>()
+
+    internal fun freshAccess(a: AccountRow, use: String, refresh: (String) -> TokenSet): String {
+        val k = "${a.id}|$use"
+        val t = now()
+        if (reuseAccessTokens) accessTokens[k]?.let { c -> if (t < c.untilMs && c.refreshEnc.contentEquals(a.refreshTokenEnc)) return c.token }
+        val ctx = context(a.householdId, a.provider)
+        val old = cipher.decrypt(a.refreshTokenEnc, ctx).decodeToString()
+        val tokens = refresh(old)
+        var enc = a.refreshTokenEnc
+        if (tokens.refreshToken != null && tokens.refreshToken != old) {
+            enc = cipher.encrypt(tokens.refreshToken.toByteArray(), ctx)
+            store.transaction { store.updateRefreshToken(a.id, enc) }
+        }
+        val life = tokens.expiresInSec * 1000 - ACCESS_MARGIN_MS
+        if (reuseAccessTokens && life > 0) accessTokens[k] = Access(tokens.accessToken, t + life, enc) else accessTokens.remove(k)
         return tokens.accessToken
+    }
+
+    /** Forgets [accountId]'s access tokens (a failed check, a disconnect). */
+    internal fun forgetAccess(accountId: String) {
+        accessTokens.keys.removeIf { it.startsWith("$accountId|") }
     }
 
     private fun syncFeed(a: AccountRow, feed: FeedProvider) {
@@ -2979,6 +3008,8 @@ class Integrations(
         /** Delete mail data: what the server publishes from one mail account (Renewals, Waiting for and tasks are his). */
         val MAIL_DATA_TYPES = listOf(EntityTypes.MAIL_ITEM, EntityTypes.MAIL_TIDY, EntityTypes.MAIL_SENDER, EntityTypes.MAIL_BACKLOG, EntityTypes.PARCEL, EntityTypes.MAIL_FIND)
         const val STATE_TTL_MS = 15 * 60_000L
+        /** An access token is refreshed this long before the provider says it expires (KMS free tier, 2026-10-18). */
+        const val ACCESS_MARGIN_MS = 5 * 60_000L
         const val WINDOW_BACK_MS = 24 * 3_600_000L
         /** Inbox autopilot, slice 1c: the mail MEKA keeps headers for (Meka: the last 60 days). */
         const val MAIL_WINDOW_MS = 60 * 24 * 3_600_000L

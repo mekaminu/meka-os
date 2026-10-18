@@ -8,8 +8,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
 import java.net.URI
 import java.net.URLEncoder
 import java.net.http.HttpClient
@@ -89,8 +87,8 @@ fun interface HttpPost {
 }
 
 /**
- * Firebase Cloud Messaging HTTP v1 (ADR-004, ADR-007). The service account is read at use time (cached for five
- * minutes), so pasting the key in Secrets Manager turns push on without a redeploy; the access token is cached until
+ * Firebase Cloud Messaging HTTP v1 (ADR-004, ADR-007). The service account is read at use time through SecretCache (six
+ * hours; 15 minutes while unset), so pasting the key in Secrets Manager turns push on without a redeploy; the access token is cached until
  * five minutes before it expires. Messages are data-only `{"t":"sync"}` at normal priority with a collapse key, so
  * several wake-ups waiting for a dozing phone arrive as one; none shows anything by itself.
  */
@@ -162,21 +160,9 @@ class FcmSender(
             }
         }
 
-        /** Reads the service account from Secrets Manager by ARN, cached for five minutes; null when unset or `{}`. */
+        /** Reads the service account from Secrets Manager by ARN through SecretCache (six hours; 15 minutes while unset); null when unset or `{}`. */
         fun fromSecret(secretId: String): FcmSender {
-            val sm = SecretsManagerClient.builder().httpClient(UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, FcmServiceAccount?>? = null
-            val lock = Any()
-            return FcmSender(account = {
-                synchronized(lock) {
-                    val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 5 * 60_000 }
-                    if (hit != null) hit.second else {
-                        val v = runCatching { FcmServiceAccount.parse(sm.getSecretValue { it.secretId(secretId) }.secretString()) }.getOrNull()
-                        cached = System.currentTimeMillis() to v
-                        v
-                    }
-                }
-            })
+            return FcmSender(account = os.meka.backend.integrations.SecretCache.shared.reader(secretId) { FcmServiceAccount.parse(it) })
         }
     }
 }

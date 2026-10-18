@@ -6,8 +6,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
+import os.meka.backend.integrations.SecretCache
+import os.meka.backend.integrations.SecretReader
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -70,6 +70,8 @@ class AiHealth(
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val okForMs: Long = 6 * 3_600_000L,
     private val retryMs: Long = 10 * 60_000L,
+    /** Anthropic refused the key (401/403): the secret is read again at the next use (KMS free tier, 2026-10-18). */
+    private val onRejected: () -> Unit = { (key as? SecretReader<*>)?.rejected() },
 ) {
     private var last: Pair<String, AiStatus>? = null // key fingerprint, status
 
@@ -91,8 +93,8 @@ class AiHealth(
         }.getOrElse { return AiStatus(AiStatus.State.FAILING, at, "Couldn't reach Anthropic") }
         return when (code) {
             in 200..299 -> AiStatus(AiStatus.State.ON, at, null)
-            401 -> AiStatus(AiStatus.State.FAILING, at, "Anthropic refused the key")
-            403 -> AiStatus(AiStatus.State.FAILING, at, "The key isn't allowed to use the API")
+            401 -> AiStatus(AiStatus.State.FAILING, at, "Anthropic refused the key").also { onRejected() }
+            403 -> AiStatus(AiStatus.State.FAILING, at, "The key isn't allowed to use the API").also { onRejected() }
             429 -> AiStatus(AiStatus.State.FAILING, at, "Anthropic is limiting requests (spend cap or rate limit)")
             else -> AiStatus(AiStatus.State.FAILING, at, "Anthropic answered $code")
         }
@@ -105,25 +107,11 @@ class AiHealth(
         private fun fingerprint(k: String): String =
             MessageDigest.getInstance("SHA-256").digest(k.toByteArray()).joinToString("") { "%02x".format(it) }
 
-        /** Reads the key from Secrets Manager by ARN, cached for a minute; null when unset or `{}`. */
+        /** Reads the key from Secrets Manager by ARN through [SecretCache] (six hours; 15 minutes while unset); null when unset or `{}`. */
         fun fromSecret(secretId: String): AiHealth = AiHealth(key = secretKey(secretId))
 
-        /** The key as the service reads it at use time: from Secrets Manager, cached a minute; null when unset or `{}`. */
-        fun secretKey(secretId: String): () -> String? {
-            val sm = SecretsManagerClient.builder().httpClient(UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, String?>? = null
-            val lock = Any()
-            return {
-                synchronized(lock) {
-                    val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 60_000 }
-                    if (hit != null) hit.second else {
-                        val v = runCatching { AnthropicKey.parse(sm.getSecretValue { it.secretId(secretId) }.secretString()) }.getOrNull()
-                        cached = System.currentTimeMillis() to v
-                        v
-                    }
-                }
-            }
-        }
+        /** The key as the service reads it at use time: from Secrets Manager through [SecretCache]; null when unset or `{}`. */
+        fun secretKey(secretId: String): SecretReader<String> = SecretCache.shared.reader(secretId) { AnthropicKey.parse(it) }
     }
 }
 

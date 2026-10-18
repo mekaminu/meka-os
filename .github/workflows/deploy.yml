@@ -182,7 +182,7 @@ jobs:
               --secret-string "$(jq -cn --arg k "$PUB" '{public_key:$k}')" >/dev/null
             aws secretsmanager put-secret-value --secret-id "$SECRET" --secret-string "$(jq -cn --arg k "$PRIV" '{private_key:$k}')" >/dev/null
             echo "::notice title=Phone updates::made the GitHub publisher's key pair"
-            sleep 70 # the server re-reads the public key once a minute
+            sleep 5 # the server re-reads a missing public key at the publisher's next request (SecretCache)
           fi
           echo "::add-mask::$PRIV"
           printf '%s' "$PRIV" > "$KEYFILE"
@@ -279,6 +279,13 @@ jobs:
         if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-spam "${{ steps.decide.outputs.url }}"
+
+      # KMS free tier (2026-10-18): the server's KMS-backed reads (secrets and sign-in tokens) since it started, and its
+      # uptime, so a run sees the caches hold (a warning when the rate would pass about a fifth of the free 20,000 a month).
+      - name: AWS key reads
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-kms "${{ steps.decide.outputs.url }}"
 
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'

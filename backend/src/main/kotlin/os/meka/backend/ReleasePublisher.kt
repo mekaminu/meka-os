@@ -19,8 +19,6 @@ import os.meka.core.wire.FoldPostureCodec
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.WireCodec
-import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
-import software.amazon.awssdk.services.secretsmanager.SecretsManagerClient
 import java.io.File
 import java.net.URI
 import java.net.http.HttpClient
@@ -127,26 +125,37 @@ class ReleaseActivity(
 /** Where the server finds the publisher's public key; null while none is set (then every publisher request is refused). */
 fun interface PublisherKeySource {
     fun publicKey(): String?
+
+    /**
+     * The key was missing or a signature didn't verify with it: read it again at the next use (KMS free tier,
+     * 2026-10-18: the secret is otherwise kept six hours). True when it will be re-read (rate-limited).
+     */
+    fun rejected(): Boolean = false
 }
 
 /**
- * Reads `{"public_key": "<X.509 base64>"}` from Secrets Manager at use time (cached for a minute). The GitHub publish
- * job writes it the first time it makes the key pair, so no redeploy is needed. The CDK placeholder is `{}`.
+ * Whether [check] verifies with the key, read again once if it was missing or didn't verify (a rotated or newly pasted
+ * key is picked up at once); null when there is no key at all.
+ */
+fun PublisherKeySource.verifiedKey(check: (String) -> Boolean): Boolean? {
+    val k = publicKey()
+    if (k != null && check(k)) return true
+    if (!rejected()) return k?.let { false }
+    return publicKey()?.let(check) ?: k?.let { false }
+}
+
+/**
+ * Reads `{"public_key": "<X.509 base64>"}` from Secrets Manager at use time through the server's [SecretCache]
+ * (six hours; a missing key or a signature that doesn't verify re-reads it, at most every 15 minutes). The GitHub
+ * publish job writes it the first time it makes the key pair, so no redeploy is needed. The CDK placeholder is `{}`.
  */
 class SecretsManagerPublisherKey(private val secretId: String) : PublisherKeySource {
-    private val sm = SecretsManagerClient.builder().httpClient(UrlConnectionHttpClient.create()).build()
-    private var cached: Pair<Long, String?>? = null
-
-    @Synchronized
-    override fun publicKey(): String? {
-        cached?.let { (at, v) -> if (System.currentTimeMillis() - at < 60_000) return v }
-        val v = runCatching {
-            Json.parseToJsonElement(sm.getSecretValue { it.secretId(secretId) }.secretString()).jsonObject["public_key"]
-                ?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotEmpty() }
-        }.getOrNull()
-        cached = System.currentTimeMillis() to v
-        return v
+    private val reader = os.meka.backend.integrations.SecretCache.shared.reader(secretId) { raw ->
+        Json.parseToJsonElement(raw ?: return@reader null).jsonObject["public_key"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotEmpty() }
     }
+
+    override fun publicKey(): String? = reader()
+    override fun rejected(): Boolean = reader.rejected()
 }
 
 /** The publisher's side: sees what is published and uploads a build chunk by chunk. */
@@ -256,7 +265,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -334,6 +343,12 @@ object ReleasePublisherCli {
                     println(spamLine(l.spam))
                     0
                 }
+                "publisher-kms" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::notice title=AWS key reads::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    println(kmsLine(l.kms))
+                    0
+                }
                 "publisher-mail" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -364,6 +379,27 @@ object ReleasePublisherCli {
     }
 
     /** Spam-call lookup (2026-10-17): one notice (a warning unless the probe searched); counts only, never a number. */
+    /**
+     * KMS free tier (2026-10-18): the server's KMS-backed reads since it started, one notice; a warning when a task
+     * under a day old has made more than [KMS_WARN_PER_DAY]·(its share of a day) reads (the month's free 20,000 is
+     * about 650 a day), so a run sees whether the cache holds.
+     */
+    fun kmsLine(line: String?): String {
+        if (line == null) return "::notice title=AWS key reads::the server doesn't report it yet"
+        val reads = Regex("since start: (\\d+)").find(line)?.groupValues?.get(1)?.toLongOrNull()
+        val up = Regex("up (?:(\\d+) h )?(\\d+) min").find(line)?.let { m ->
+            (m.groupValues[1].toLongOrNull() ?: 0) * 60 + (m.groupValues[2].toLongOrNull() ?: 0)
+        }
+        // A fresh task reads each secret and token once: allow that before judging the rate.
+        val high = reads != null && up != null && reads > KMS_START_ALLOWANCE + KMS_WARN_PER_DAY * up / (24 * 60)
+        return "::${if (high) "warning" else "notice"} title=AWS key reads::$line".replace("%", "%25")
+    }
+
+    /** About a fifth of the free 20,000 a month, per day. */
+    const val KMS_WARN_PER_DAY = 130L
+    /** Each secret and each account's token read once at start. */
+    const val KMS_START_ALLOWANCE = 40L
+
     fun spamLine(line: String?): String {
         if (line == null) return "::notice title=Spam-call lookup::the server doesn't report it yet"
         val ok = line.startsWith("probe OK")

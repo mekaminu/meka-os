@@ -66,6 +66,10 @@ class NotifyDiagnosticsCodecTest {
         val bank = "ok · 6 accounts · 412 transactions"
         assertEquals(bank, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, bank = bank))).bank)
         assertEquals(null, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null))).bank)
+        // KMS free tier (2026-10-18): the server's KMS-backed reads, counts only; absent from a server before it.
+        val kms = "KMS-backed reads since start: 9 (secrets 6 · token decrypts 3 · token encrypts 0) · up 3 h 10 min"
+        assertEquals(kms, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, kms = kms))).kms)
+        assertEquals(null, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null))).kms)
         assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null}""").mail)
     }
 

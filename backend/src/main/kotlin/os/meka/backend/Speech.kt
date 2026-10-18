@@ -180,27 +180,13 @@ class GoogleSpeech internal constructor(
 
         /**
          * The key from its own secret ([speechSecret], `meka-os-dev/speech/google`), else the travel times' Google key
-         * ([mapsSecret]; the same key can be allowed for both APIs). Read at use time, cached a minute (pasting the key
+         * ([mapsSecret]; the same key can be allowed for both APIs). Read at use time through SecretCache (15 minutes while unset, so pasting the key
          * needs no restart); `{}` or absent = no Google voices.
          */
         fun fromSecrets(speechSecret: String?, mapsSecret: String?): GoogleSpeech {
-            val sm = software.amazon.awssdk.services.secretsmanager.SecretsManagerClient.builder()
-                .httpClient(UrlConnectionHttpClient.create()).build()
-            var cached: Pair<Long, String?>? = null
-            val lock = Any()
-            fun read(id: String?): String? = id?.takeIf { it.isNotBlank() }?.let { s ->
-                runCatching { os.meka.backend.integrations.GoogleMapsKey.parse(sm.getSecretValue { it.secretId(s) }.secretString()) }.getOrNull()
-            }
-            val key = {
-                synchronized(lock) {
-                    val hit = cached?.takeIf { System.currentTimeMillis() - it.first < 60_000 }
-                    if (hit != null) hit.second else {
-                        val v = read(speechSecret) ?: read(mapsSecret)
-                        cached = System.currentTimeMillis() to v
-                        v
-                    }
-                }
-            }
+            val cache = os.meka.backend.integrations.SecretCache.shared
+            fun read(id: String?): String? = id?.takeIf { it.isNotBlank() }?.let { s -> cache.read(s) { os.meka.backend.integrations.GoogleMapsKey.parse(it) } }
+            val key = { read(speechSecret) ?: read(mapsSecret) }
             return GoogleSpeech(key, ::httpGet, ::httpPost)
         }
     }
