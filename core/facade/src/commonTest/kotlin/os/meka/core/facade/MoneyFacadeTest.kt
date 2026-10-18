@@ -652,6 +652,7 @@ class MoneyFacadeTest {
         assertEquals("Your 2026 money year in review is ready", n.title)
         assertFalse(n.text.contains("£"))
     }
+
     @Test
     fun lastMonthsReviewLeadsInItsFirstDaysAndTheMacGetsTheHeadsUp() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
@@ -665,17 +666,19 @@ class MoneyFacadeTest {
             "29/09/2026,PIZZA PLACE,-22.00\n" +
             "30/09/2026,COSTA COFFEE,-3.40\n"
         fold.importMoneyStatement("Current account", september)
-        // Sat 3 Oct 2026, 10:00 in London: September's review leads this month, and the Mac gets one heads-up, no amounts.
-        now = 1_791_018_000_000L
+        // Sat 3 Oct 2026, noon in London: September's review leads this month, and the Mac gets one heads-up, no amounts.
+        now = 1_791_025_200_000L
         fold.syncNow(); mac.syncNow()
         fold.closeMoney(); fold.openMoney()
         val r = fold.moneyView.value.review!!
         assertEquals("SEPTEMBER IN REVIEW", r.head)
         assertTrue(r.lastMonth)
         assertEquals("In September you spent £133.60 and £2,500 came in, so about £2,366.40 was left over.", r.sentences.first())
-        val n = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL).post.single { it.title.contains("money review") }
-        assertEquals("Your September money review is ready", n.title)
-        assertFalse(n.text.contains("£"))
+        // On its own or folded into a digest with the day's other heads-ups.
+        val res = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = (res.post.map { "${it.title} · ${it.text}" } + res.digest?.lines.orEmpty()).single { it.contains("money review") }
+        assertTrue(n.startsWith("Your September money review is ready · "), n)
+        assertFalse(n.contains("£"))
         // Mid-month this month has none; paging back to September shows its own.
         now = 1_792_144_800_000L
         fold.closeMoney(); fold.openMoney()
