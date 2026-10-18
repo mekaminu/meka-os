@@ -55,9 +55,9 @@ class WatchLinkFacadeTest {
     private val service = SyncService(InMemoryServerOpStore())
     private val server = Server(service)
 
-    private fun core(transport: SyncTransport? = server, deviceId: String = "android") = MekaCore(
+    private fun core(transport: SyncTransport? = server, deviceId: String = "android", seed: Int = 1) = MekaCore(
         householdId = "hh", deviceId = deviceId, store = InMemoryReplicaStore(), transport = transport,
-        secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        secureRandom = Random(seed), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
     @Test
@@ -121,7 +121,7 @@ class WatchLinkFacadeTest {
     fun theWatchCountsChangesWaitingAndUnlinksItselfAfterSendingThem() = runTest {
         val fold = core()
         assertTrue(fold.linkWatch("12345678"))
-        val watch = core(deviceId = watchId)
+        val watch = core(deviceId = watchId, seed = 2) // its own ids (the same seed would repeat the Fold's op ids)
         assertTrue(watch.syncNow())
         assertNull(watch.watchSyncLine())
         assertNull(watch.watchTile().syncMark)
