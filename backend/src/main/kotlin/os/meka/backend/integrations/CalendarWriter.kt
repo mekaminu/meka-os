@@ -116,6 +116,14 @@ class CalendarWriter internal constructor(
             val dueAt = maxOf(e.sendAfterMs + CalendarEditRules.SERVER_GRACE_MS, retryAt[e.id]?.first ?: 0L)
             if (t < dueAt) { next = next?.let { minOf(it, dueAt) } ?: dueAt; continue }
             val r = runCatching { handle(householdId, e) }.getOrNull()
+            if (r != null && r.waiting) {
+                // Completeness slice 5: the sign-in lapsed. Look again each minute (no call to the provider while the
+                // account still needs reconnecting), so it goes within a minute of Meka reconnecting.
+                retryAt[e.id] = (t + RECONNECT_CHECK_MS) to 0
+                next = next?.let { minOf(it, t + RECONNECT_CHECK_MS) } ?: (t + RECONNECT_CHECK_MS)
+                if (r.wrote) wrote = true
+                continue
+            }
             if (r == null) {
                 // Try again later, waiting longer each time (30 s, 1 min, 2 min … 30 min).
                 val tries = (retryAt[e.id]?.second ?: 0) + 1
@@ -134,7 +142,8 @@ class CalendarWriter internal constructor(
         return next
     }
 
-    internal data class Handled(val wrote: Boolean, val syncAccount: String?)
+    /** [waiting]: the account's sign-in has lapsed and the edit waits for Reconnect (completeness slice 5). */
+    internal data class Handled(val wrote: Boolean, val syncAccount: String?, val waiting: Boolean = false)
 
     /**
      * Sends one due edit and writes its outcome. Returns whether an outcome was written and which account to sync
@@ -152,7 +161,10 @@ class CalendarWriter internal constructor(
         if (refusal != null || a == null) {
             return Handled(ops.transaction { answer(householdId, e.id, Outcome(EventEditStatus.REFUSED, refusal)) }, null)
         }
-        return store.transaction {
+        // Completeness slice 5: a lapsed sign-in keeps the edit (and every one after it) waiting, without a call.
+        if (a.status == NEEDS_RECONNECT) return waitForReconnect(householdId, e)
+        var lapsed = false
+        val handled = store.transaction {
             ops.transaction {
                 store.lockAccount(a.id)
                 // Another task (or an Undo that just arrived) may have settled it meanwhile.
@@ -162,7 +174,8 @@ class CalendarWriter internal constructor(
                 val outcome = try {
                     send(householdId, a, fresh)
                 } catch (x: ReconnectRequired) {
-                    Outcome(EventEditStatus.FAILED, "Reconnect $name in Calendars")
+                    lapsed = true
+                    return@transaction Handled(false, null, waiting = true)
                 } catch (x: WriteRefused) {
                     // Completeness slice 3: a 403 on a calendar shared to view only says so, not "allow editing".
                     Outcome(EventEditStatus.REFUSED, refusedLine(name, x.message))
@@ -174,6 +187,35 @@ class CalendarWriter internal constructor(
                 Handled(wrote, a.id.takeIf { outcome.status == EventEditStatus.DONE })
             }
         }
+        if (!lapsed) return handled
+        // Calendars shows Reconnect from this, and the edits after this one wait without asking the provider.
+        runCatching { store.transaction { store.markError(a.id, NEEDS_RECONNECT, "calendar edit: sign-in lapsed") } }
+        return waitForReconnect(householdId, e)
+    }
+
+    /**
+     * Completeness slice 5: notes once on the edit that it waits for the account to be reconnected (the apps say
+     * "Waiting to move “Dentist” in Google · reconnect Google in Calendars and it goes then"); after a week of waiting
+     * it fails with that reason instead.
+     */
+    private fun waitForReconnect(householdId: String, e: EventEdit): Handled = ops.transaction {
+        val fresh = reader.entity(householdId, EntityTypes.EVENT_EDIT, e.id)
+            ?.let { f -> CalendarEditRules.from(e.id) { f[it] ?: FieldValue.Null } } ?: e
+        if (fresh.status != null || fresh.undone) return@transaction Handled(false, null)
+        if (fresh.waitingReconnectAtMs != null && CalendarEditRules.reconnectGivenUp(fresh, now())) {
+            return@transaction Handled(answer(householdId, e.id, Outcome(EventEditStatus.FAILED, CalendarEditRules.reconnectFailed(e.provider))), null)
+        }
+        if (fresh.waitingReconnectAtMs != null) return@transaction Handled(false, null, waiting = true)
+        val opId = opId(e.id, EventEditFields.WAITING_RECONNECT)
+        if (ops.find(householdId, opId) != null) return@transaction Handled(false, null, waiting = true)
+        ops.append(
+            Op(
+                opId = opId, householdId = householdId, entityType = EntityTypes.EVENT_EDIT, entityId = e.id,
+                field = EventEditFields.WAITING_RECONNECT, value = now().fv(), hlc = synchronized(clock) { clock.now() },
+                baseOpIds = emptyList(), deviceId = Integrations.SERVER_DEVICE,
+            ),
+        )
+        Handled(true, null, waiting = true)
     }
 
     /** Checks the edit against the provider's copy and sends it. Throws to be tried again later. */
@@ -315,6 +357,9 @@ class CalendarWriter internal constructor(
 
     companion object {
         const val IDLE_MS = 60_000L
+        /** Completeness slice 5: how often an edit waiting on a lapsed sign-in looks again (no provider call). */
+        const val RECONNECT_CHECK_MS = 60_000L
+        private const val NEEDS_RECONNECT = "needs_reconnect"
         const val RETRY_MS = 30_000L
         const val MAX_RETRY_MS = 30 * 60_000L
         private const val DAY_MS = 86_400_000L

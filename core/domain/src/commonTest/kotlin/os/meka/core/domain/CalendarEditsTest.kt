@@ -238,4 +238,20 @@ class CalendarEditsTest {
         assertFalse(CalendarEditRules.givenUp(e, at(10) + 23 * hour))
         assertTrue(CalendarEditRules.givenUp(e, at(10) + 25 * hour))
     }
+
+    @Test
+    fun anEditWaitingForReconnectSaysSoAndItsWaitIsntCountedAsTheProvidersDay() {
+        val id = made(eFold.add("google", "meka@gmail.com", EventDraft("Gym", at(18), at(19), false)))
+        val e = eFold.edit(id)!!.copy(waitingReconnectAtMs = at(10))
+        assertEquals("Waiting to add “Gym” to Google · reconnect Google in Calendars and it goes then", CalendarEditRules.line(e, at(11)))
+        assertEquals(EventEditState.SENDING, e.state(at(11)))
+        // Five days waiting: neither given up for the provider nor for the reconnect.
+        assertFalse(CalendarEditRules.givenUp(e, at(10) + 5 * 24 * hour))
+        assertFalse(CalendarEditRules.reconnectGivenUp(e, at(10) + 5 * 24 * hour))
+        assertTrue(CalendarEditRules.reconnectGivenUp(e, at(10) + 8 * 24 * hour))
+        val moved = e.copy(kind = EventEditKind.CHANGE, changes = setOf(EventEditChange.TIME), base = EventDraft("Dentist", at(13), at(14), false))
+        assertEquals("Waiting to move “Dentist” in Google · reconnect Google in Calendars and it goes then", CalendarEditRules.line(moved, at(11)))
+        // Once answered, the usual lines.
+        assertEquals("Added “Gym” to Google", CalendarEditRules.line(e.copy(status = EventEditStatus.DONE), at(11)))
+    }
 }

@@ -90,6 +90,12 @@ object EventEditFields {
     const val THEIR_NOTES = "theirNotes"
     /** How many other people are invited (when the server looked). */
     const val GUESTS = "guests"
+    /**
+     * Completeness slice 5: when the server first found the account's sign-in had lapsed with this edit still to send.
+     * The edit stays waiting (no status) until Meka reconnects, then goes; given up after
+     * [CalendarEditRules.RECONNECT_WAIT_MS]. Additive (ADR-008 addendum).
+     */
+    const val WAITING_RECONNECT = "waitingReconnectAtMs"
 }
 
 enum class EventEditKind { ADD, CHANGE, DELETE }
@@ -154,6 +160,8 @@ data class EventEdit(
     val every: Boolean = false,
     /** Completeness slice 2: a change or delete for this event and every later one of its series (never with [every]). */
     val following: Boolean = false,
+    /** Completeness slice 5: the account's sign-in lapsed before this was sent; it waits for Reconnect (since when). */
+    val waitingReconnectAtMs: Long? = null,
 ) {
     fun state(nowMs: Long): EventEditState = when {
         status != null -> EventEditState.valueOf(status.name)
@@ -176,6 +184,8 @@ object CalendarEditRules {
     const val SERVER_GRACE_MS = 2_000L
     /** An edit the server couldn't send for this long (provider down) is given up as FAILED. */
     const val GIVE_UP_MS = 24 * 3_600_000L
+    /** Completeness slice 5: how long an edit waits for a lapsed sign-in to be reconnected before it fails. */
+    const val RECONNECT_WAIT_MS = 7 * 86_400_000L
     const val MAX_TITLE = 500
     const val MAX_LOCATION = 500
     const val MAX_NOTES = 2_000
@@ -338,7 +348,14 @@ object CalendarEditRules {
         val title = if (e.kind == EventEditKind.ADD || EventEditChange.TITLE in e.changes) e.draft?.title else e.base?.title
         val t = (if (e.every && e.kind != EventEditKind.ADD) "every " else "") + "“${title.orEmpty().trim().ifEmpty { "Event" }.take(60)}”" +
             (if (e.following && e.kind != EventEditKind.ADD) " and the ones after" else "")
-        return when (e.state(nowMs)) {
+        val state = e.state(nowMs)
+        if (state == EventEditState.SENDING && e.waitingReconnectAtMs != null) return when {
+                e.kind == EventEditKind.ADD -> "Waiting to add $t to $p"
+                e.kind == EventEditKind.DELETE -> "Waiting to delete $t from $p"
+                e.isMove -> "Waiting to move $t in $p"
+                else -> "Waiting to change $t in $p"
+            } + " · reconnect $p in Calendars and it goes then"
+        return when (state) {
             EventEditState.WAITING, EventEditState.SENDING -> when {
                 e.kind == EventEditKind.ADD -> "Adding $t to $p"
                 e.kind == EventEditKind.DELETE -> "Deleting $t from $p"
@@ -412,6 +429,7 @@ object CalendarEditRules {
             forTask = f(EventEditFields.FOR_TASK).textOrNull?.ifEmpty { null },
             every = kind != EventEditKind.ADD && f(EventEditFields.SCOPE).textOrNull == SCOPE_EVERY,
             following = kind != EventEditKind.ADD && f(EventEditFields.SCOPE).textOrNull == SCOPE_FOLLOWING,
+            waitingReconnectAtMs = f(EventEditFields.WAITING_RECONNECT).longOrNull,
         )
     }
 
@@ -420,7 +438,19 @@ object CalendarEditRules {
         e.status == null && !e.undone && serverNowMs >= e.sendAfterMs + SERVER_GRACE_MS
 
     /** Whether the server should stop trying a due edit it can't send (provider unreachable for a day). */
-    fun givenUp(e: EventEdit, serverNowMs: Long): Boolean = serverNowMs - e.sendAfterMs > GIVE_UP_MS
+    fun givenUp(e: EventEdit, serverNowMs: Long): Boolean =
+        // A wait for Reconnect doesn't count against the provider's day: that starts once it could be tried again.
+        serverNowMs - (e.waitingReconnectAtMs?.let { maxOf(e.sendAfterMs, it + RECONNECT_WAIT_MS) } ?: e.sendAfterMs) > GIVE_UP_MS
+
+    /**
+     * Completeness slice 5: whether an edit waiting on a lapsed sign-in has waited long enough to fail ("Reconnect …
+     * in Calendars · it waited a week"). Counted from when the server first found the sign-in lapsed.
+     */
+    fun reconnectGivenUp(e: EventEdit, serverNowMs: Long): Boolean =
+        serverNowMs - (e.waitingReconnectAtMs ?: serverNowMs) > RECONNECT_WAIT_MS
+
+    /** Completeness slice 5: the failure line once [reconnectGivenUp]. */
+    fun reconnectFailed(provider: String): String = "Reconnect ${providerName(provider)} in Calendars · it waited a week for you"
 }
 
 /** Why a change couldn't be made, in words (the app shows it), or the edit's id. */

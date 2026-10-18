@@ -1,7 +1,7 @@
 ---
 id: calendars
 title: Calendars
-keywords: calendars, calendar, google calendar, connect calendar, weather place, weather places, barça, barca, barça match, where to watch barça, what channel is barça on, is barça on tv, kick-off time, barça score, live score, goal alerts, barça goals, full time, barça result, repeating event, every event, this and following, view only, can't edit, greyed out
+keywords: calendars, calendar, google calendar, connect calendar, weather place, weather places, barça, barca, barça match, where to watch barça, what channel is barça on, is barça on tv, kick-off time, barça score, live score, goal alerts, barça goals, full time, barça result, repeating event, every event, this and following, view only, can't edit, greyed out, calendar change waiting
 data: yes
 fold: CALENDARS
 fold_where: Ask → Settings → Calendars
@@ -17,3 +17,4 @@ tip: Editing an event that repeats (a weekly gym session, say) asks **This event
 tip: **This and following** (on a timed Google series) changes or deletes this event and every one after it, leaving the earlier ones as they were: Google ends the series the day before and starts a new one from this day.
 tip: An event on a calendar shared with you to view only (a holidays calendar, or someone else's) shows **Edit** greyed with why under it: its owner changes it in Google or Outlook. If Edit is greyed because editing is off for that account, Allow editing in Ask → Settings → Calendars.
 tip: Ask or Talk "move the dentist to 4pm" (or "push my haircut to Friday at 10") and Navilife offers a **Move** card for that event; nothing changes until you tap Move, then it moves in Google or Outlook after the five-second Undo, keeping its length. It offers this for your own events today and in the next fortnight that have no guests; a meeting with guests is moved from its Edit.
+tip: If Google or Outlook signs you out while a change is still to send, it waits instead of failing: the event shows "Waiting to move … · reconnect Google in Calendars and it goes then", and once you Reconnect in Ask → Settings → Calendars every waiting change goes within a minute, in the order you made them. After a week of waiting it gives up and says so.

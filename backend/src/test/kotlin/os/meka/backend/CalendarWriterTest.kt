@@ -310,15 +310,61 @@ class CalendarWriterTest {
     }
 
     @Test
-    fun aLapsedSignInOrARefusalSaysWhatToDo() {
+    fun aLapsedSignInKeepsTheEditsWaitingUntilReconnectThenSendsThem() {
+        val a = made(edits.add("google", "meka@gmail.com", EventDraft("Gym", now + 8 * hour, now + 9 * hour, false)))
+        sync()
+        now += 10_000
+        provider.fail = { throw ReconnectRequired("gone") }
+        assertEquals(now + CalendarWriter.RECONNECT_CHECK_MS, writer.sweep())
+        sync()
+        assertEquals(EventEditState.SENDING, state(a))
+        assertEquals("Waiting to add “Gym” to Google · reconnect Google in Calendars and it goes then", CalendarEditRules.line(edits.edit(a)!!, now))
+        assertEquals("needs_reconnect", store.accounts("home").single { it.id == account }.status)
+
+        // A second edit made meanwhile waits too, and nothing asks the provider while the sign-in is lapsed.
+        val b = made(edits.add("google", "meka@gmail.com", EventDraft("Run", now + 10 * hour, now + 11 * hour, false)))
+        sync()
+        now += 10_000
+        val asked = provider.refreshed
+        now += CalendarWriter.RECONNECT_CHECK_MS
+        writer.sweep()
+        sync()
+        assertEquals(asked, provider.refreshed)
+        assertEquals("Waiting to add “Run” to Google · reconnect Google in Calendars and it goes then", CalendarEditRules.line(edits.edit(b)!!, now))
+        assertTrue(provider.created.isEmpty())
+
+        // Meka reconnects: within a minute both go, in the order he made them.
+        provider.fail = null
+        val url = assertIs<Integrations.StartResult.Url>(integrations.start("home", "google", editing = true)).url
+        val st = URI(url).query.split("&").first { it.startsWith("state=") }.removePrefix("state=")
+        assertIs<Integrations.CallbackResult.Connected>(integrations.callback("google", st, "code", null))
+        now += CalendarWriter.RECONNECT_CHECK_MS
+        writer.sweep()
+        sync()
+        assertEquals(listOf("Gym", "Run"), provider.created.map { it.first.title })
+        assertEquals("Added “Gym” to Google", CalendarEditRules.line(edits.edit(a)!!, now))
+        assertEquals(EventEditState.DONE, state(b))
+    }
+
+    @Test
+    fun anEditWaitingAWeekForReconnectFailsSayingSo() {
         val a = made(edits.add("google", "meka@gmail.com", EventDraft("Gym", now + 8 * hour, now + 9 * hour, false)))
         sync()
         now += 10_000
         provider.fail = { throw ReconnectRequired("gone") }
         writer.sweep()
+        now += 6 * 24 * hour
+        writer.sweep()
         sync()
-        assertEquals("Couldn't send to Google · Reconnect Google in Calendars", CalendarEditRules.line(edits.edit(a)!!, now))
+        assertEquals(EventEditState.SENDING, state(a))
+        now += 2 * 24 * hour
+        writer.sweep()
+        sync()
+        assertEquals("Couldn't send to Google · Reconnect Google in Calendars · it waited a week for you", CalendarEditRules.line(edits.edit(a)!!, now))
+    }
 
+    @Test
+    fun aRefusalSaysWhatToDo() {
         val b = made(edits.add("google", "meka@gmail.com", EventDraft("Run", now + 8 * hour, now + 9 * hour, false)))
         sync()
         now += 10_000
