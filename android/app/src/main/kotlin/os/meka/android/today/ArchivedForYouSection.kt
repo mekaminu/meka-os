@@ -95,6 +95,10 @@ internal fun ArchivedForYouSection(
                 AnimatedContent(card.headline, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "archived-headline") {
                     Text(it, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.testTag("archived-headline"))
                 }
+                // 2026-10-18: the same email again and again ("Came again · GitHub · “Run failed: ci” · 6 times since 09:10").
+                card.repeats.forEach { r ->
+                    Text(r, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.testTag("archived-repeat"))
+                }
             }
         }
         AnimatedVisibility(open, enter = unfold(), exit = fold()) {

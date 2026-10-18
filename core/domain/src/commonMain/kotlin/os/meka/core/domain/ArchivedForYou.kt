@@ -54,6 +54,11 @@ data class ArchivedForYouCard(
     val moreLine: String?,
     /** What a screen reader says for the card's header. */
     val spoken: String,
+    /**
+     * 2026-10-18: the same email that came again and again across these tidies, most first, at most
+     * [ArchivedForYouRules.REPEATS_SHOWN]: "Came again · GitHub · “[acme/app] Run failed: ci” · 6 times since 09:10".
+     */
+    val repeats: List<String> = emptyList(),
 )
 
 object ArchivedForYouRules {
@@ -69,6 +74,10 @@ object ArchivedForYouRules {
     const val ALL_PUT_BACK = "Nothing left tidied · all put back"
     /** Tidies the card lists; the rest are in Activity. */
     const val SHOWN = 8
+    /** A run of the same email shown as "Came again" once it came this often, over two tidies or more. */
+    const val REPEAT_MIN = 3
+    const val REPEATS_SHOWN = 3
+    const val REPEAT_PREFIX = "Came again"
     /** Never reaches further back than this, so a first card after a long gap stays short (Activity keeps 30 days). */
     const val WINDOW_MS = 2 * 86_400_000L
 
@@ -141,6 +150,7 @@ object ArchivedForYouRules {
         val more = sorted.size - lines.size
         val slotLabel = GroupDigestRules.slotLabel(cal.minuteOfDay(slot)) ?: "Evening digest"
         val head = headline(unseen)
+        val again = repeats(unseen.filter { it.undoneAtMs == null && it.undoAskedAtMs == null }, nowMs, cal)
         return ArchivedForYouCard(
             title = TITLE,
             slot = slotLabel,
@@ -148,7 +158,32 @@ object ArchivedForYouRules {
             note = NOTE,
             lines = lines,
             moreLine = if (more > 0) "+ $more earlier ${if (more == 1) "tidy" else "tidies"} · in ${ArchivedAllRules.TITLE}" else null,
-            spoken = "$TITLE. $head.",
+            spoken = "$TITLE. $head." + again.joinToString("") { " $it." },
+            repeats = again,
         )
+    }
+
+    /**
+     * The same email again and again across [batches] (each check tidies what came since the last, so a burst of CI
+     * failures is one email per tidy): by sender and [MailTidiedRules.repeatKey], at least [REPEAT_MIN] of them over two
+     * tidies or more, most first; "Came again · GitHub · “Run failed: ci” · 6 times since 09:10" (the newest subject, cut).
+     */
+    fun repeats(batches: List<MailTidyBatch>, nowMs: Long, cal: LocalCalendar): List<String> {
+        val today = cal.epochDayOf(nowMs)
+        val runs = batches.flatMap { b -> b.emails.map { b.id to it } }
+            .mapNotNull { (id, e) -> MailTidiedRules.repeatKey(e.subject)?.let { k -> Triple(e.from.lowercase() + "\u0000" + k, id, e) } }
+            .groupBy { it.first }.values
+            .filter { r -> r.size >= REPEAT_MIN && r.map { it.second }.distinct().size >= 2 }
+            .map { r -> r.map { it.third }.sortedByDescending { it.receivedAtMs } }
+            .sortedWith(compareByDescending<List<MailTidiedEmail>> { it.size }.thenByDescending { it.first().receivedAtMs })
+        return runs.take(REPEATS_SHOWN).map { r ->
+            val newest = r.first()
+            val first = r.last().receivedAtMs
+            val day = cal.epochDayOf(first)
+            val clock = LocalClock.formatMinute(cal.minuteOfDay(first))
+            val since = if (day == today) clock else "${CivilDate.shortLabel(day)} · $clock"
+            val subject = newest.subject.let { if (it.length <= MailTidiedRules.MAX_REPEAT_SUBJECT) it else it.take(MailTidiedRules.MAX_REPEAT_SUBJECT - 1).trimEnd() + "…" }
+            "$REPEAT_PREFIX · ${newest.from} · “$subject” · ${r.size} times since $since"
+        }
     }
 }

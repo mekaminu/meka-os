@@ -29,6 +29,11 @@ struct ArchivedForYouView: View {
                             Text(card.headline).font(MekaType.body).foregroundStyle(palette.textPrimary)
                                 .contentTransition(.opacity)
                                 .animation(MekaMotion.expand(reduced: reduceMotion), value: card.headline)
+                            // 2026-10-18: the same email again and again, one line each.
+                            ForEach(card.repeats, id: \.self) { line in
+                                Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .contentShape(Rectangle())

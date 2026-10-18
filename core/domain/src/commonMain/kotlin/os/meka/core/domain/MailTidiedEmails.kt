@@ -179,6 +179,29 @@ object MailTidiedRules {
         return if (day == today) clock else "${CivilDate.shortLabel(day)} · $clock"
     }
 
+    /** A repeat's subject on the card's Came again line, cut to this. */
+    const val MAX_REPEAT_SUBJECT = 48
+
+    /**
+     * 2026-10-18 (the inbox item: "six GitHub “Run failed: ci” emails … group them"): what makes two subjects the same
+     * email again — lower case, words only, and any word holding a digit (a run number, a commit, an order or a date)
+     * counts as one "#". Null when too little is left to tell (no word of three letters or more), so short or numeric
+     * subjects never collapse.
+     */
+    fun repeatKey(subject: String): String? {
+        val words = subject.lowercase().split(Regex("[^a-z0-9]+")).filter { it.isNotEmpty() }
+            .map { w -> if (w.any { it.isDigit() }) "#" else w }
+        if (words.none { it.length >= 3 && it != "#" }) return null
+        return words.joinToString(" ")
+    }
+
+    /** One sender's emails (newest first) in runs of the same email again; each run newest first, in order of its newest. */
+    fun repeatRuns(es: List<MailTidiedEmail>): List<List<MailTidiedEmail>> {
+        val runs = LinkedHashMap<String, MutableList<MailTidiedEmail>>()
+        es.forEach { e -> runs.getOrPut(repeatKey(e.subject) ?: ("\u0000" + e.key)) { mutableListOf() }.add(e) }
+        return runs.values.toList()
+    }
+
     /**
      * A tidy's emails as the card shows them: by sender (newest sender first), each sender's emails newest first.
      * Returns the groups shown (at most [GROUPS_SHOWN]) and, when the tidy moved more than it lists, "+ 12 more in
@@ -194,10 +217,14 @@ object MailTidiedRules {
             val first = es.first()
             val title = if (es.size == 1) first.from else "${first.from} · ${count(es)}"
             val meta = listOfNotNull(first.domain, batch.account).joinToString(" · ")
-            val rows = es.take(ROWS_SHOWN).map { e ->
-                ArchivedEmailRow(e.key, e.subject, chip(e), time(e.receivedAtMs, today, cal), MailTidiedAskRules.state(batch, e.key), batch.id)
+            // 2026-10-18: the same email again and again ("Run failed: ci" for each commit) is one row, "· 6 times".
+            val runs = repeatRuns(es).take(ROWS_SHOWN)
+            val rows = runs.map { r ->
+                val e = r.first()
+                val again = if (r.size > 1) " · ${r.size} times" else ""
+                ArchivedEmailRow(e.key, e.subject, chip(e) + again, time(e.receivedAtMs, today, cal), MailTidiedAskRules.state(batch, e.key), batch.id)
             }
-            val more = es.size - rows.size
+            val more = es.size - runs.sumOf { it.size }
             ArchivedEmailGroup(
                 id = batch.id + ":" + first.key,
                 title = title, meta = meta, rows = rows,
