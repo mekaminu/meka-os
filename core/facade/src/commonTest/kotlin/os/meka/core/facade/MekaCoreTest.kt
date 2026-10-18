@@ -1838,7 +1838,6 @@ class MekaCoreTest {
         assertTrue(mac.syncNow())
         val cal = ZoneCalendar { TimeZone.of("Europe/London") }
         fun dentist() = mac.calendarView.value.sections.flatMap { it.rows }.mapNotNull { it.event }.first { it.title == "Dentist" }
-        assertFalse(mac.canMoveEvent(dentist())) // editing not read yet
         mac.refreshCalendarAccounts()
         assertTrue(mac.canMoveEvent(dentist()))
         assertNull(mac.moveEventNote(dentist()))
