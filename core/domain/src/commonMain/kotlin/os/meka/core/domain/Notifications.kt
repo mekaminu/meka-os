@@ -161,9 +161,10 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * UK money deadlines ([MoneyDateRules.notices]): Self Assessment, the ISA allowance, energy and broadband contract
      * ends and a yearly pension check-in, a heads-up at 09:00 — "ISA allowance ends Mon 5 Apr" · "In 4 weeks · this tax
      * year's allowance doesn't carry over". Dates only, never advice. Money manager slice 18 adds the year in review's
-     * heads-up on 2 January ([MoneyYear.notices], no amounts).
+     * heads-up on 2 January ([MoneyYear.notices], no amounts); Money manager (7) the month in review's on the 2nd of
+     * the other months ([MoneyMonthReview.notices], no amounts).
      */
-    MONEY("Money dates: tax, ISA, contracts, pension, year in review", NoticeTier.HEADS_UP),
+    MONEY("Money dates: tax, ISA, contracts, pension, month and year in review", NoticeTier.HEADS_UP),
     /**
      * Bills due ([BillRules.notices]): three days before each bill at 09:00, with the amount and Pay when a pay link is
      * saved — "Council tax due Thu 15 Oct · £180" · "In 3 days · Pay opens oakfield.gov.uk". Never pays.
@@ -798,6 +799,8 @@ object NoticeSources {
         tradingAlerts: TradingAlertSetting = TradingAlertSetting.DEFAULT,
         /** Money manager, slice 18: the year whose review is ready (January only; [MoneyYear.readyYear]). */
         moneyYear: Int? = null,
+        /** Money manager (7): the month whose review is ready (its first days; [MoneyMonthReview.readyMonth]). */
+        moneyMonth: Int? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -944,6 +947,7 @@ object NoticeSources {
         out += BillRules.notices(lists.renewals.all, nowMs, cal)
         out += MoneyCards.notices(cards, nowMs, cal)
         out += MoneyYear.notices(moneyYear, nowMs, cal)
+        out += MoneyMonthReview.notices(moneyMonth, nowMs, cal)
         out += TradingAlerts.notices(trading, tradingAlerts, nowMs, cal)
         out += MailReturnRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)

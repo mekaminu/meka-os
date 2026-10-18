@@ -127,6 +127,7 @@ struct MoneySheet: View {
                 Text(b).font(MekaType.body).foregroundStyle(palette.accent).contentTransition(.opacity)
                     .fixedSize(horizontal: false, vertical: true).padding(.top, MekaSpace.xxs)
             }
+            if let rv = v.review { review(rv).transition(.opacity) }
             if !v.alerts.isEmpty {
                 Text(MoneyWatch.shared.head(n: Int32(v.alerts.count))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.xs).contentTransition(.opacity)
@@ -399,6 +400,23 @@ struct MoneySheet: View {
             Text(tv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
         }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: tv.rows.count)
+    }
+
+    /// Money manager (7): the month in review — a few plain sentences (the first in brass when more went out than came
+    /// in), then where it's from; the finished month shown, or last month leading this one for its first days.
+    private func review(_ rv: MoneyMonthReviewView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(rv.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            ForEach(Array(rv.sentences.enumerated()), id: \.offset) { i, l in
+                Text(l).font(MekaType.body)
+                    .foregroundStyle(i == 0 ? (rv.firstLit ? palette.accent : palette.textPrimary) : palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
+            }
+            Text(rv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(rv.spoken)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: rv.month)
     }
 
     /// Slice 18: the year in review — the folded line with Open/Fold (January's finished year opens by itself), then

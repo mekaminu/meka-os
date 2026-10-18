@@ -443,6 +443,8 @@ data class MoneyView(
     val travel: MoneyTravelView? = null,
     /** Slice 18: the year in review — last year in January, this year so far after ([MoneyYear]); this month only. */
     val year: MoneyYearView? = null,
+    /** Money manager (7): the month in review in plain English — the finished month shown, or last month leading this one for its first days ([MoneyMonthReview]). */
+    val review: MoneyMonthReviewView? = null,
 ) {
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
@@ -655,6 +657,7 @@ object MoneyRules {
         // Slice 2: tips and regular payments go with this month (they're about now, not the month shown).
         val lines = if (partial) mine.map { MoneyLine(it.day, it.pence, keyOf(it), cat(it)) } else emptyList()
         val regular = if (partial) MoneyTips.regular(lines, today) else emptyList()
+        val yearLines = mine.map { MoneyYearLine(it.day, it.pence, keyOf(it), cat(it)) }
         val watch = if (partial) mine.map { MoneyWatchLine(it.id, it.account, it.day, it.pence, keyOf(it), cat(it), it.text) } else emptyList()
         return MoneyView(
             false, summary, null, month, accountRows, earlier = shown > firstMonth, later = shown < thisMonth,
@@ -679,7 +682,8 @@ object MoneyRules {
             shared = shared,
             challenges = if (partial) MoneyChallenges.view(mine.map { MoneyChallengeLine(it.day, it.pence, cat(it)) }, challenges, today) else null,
             travel = if (partial) MoneyTravel.view(mine.map { MoneyTravelLine(it.account, it.day, it.pence, it.text, cat(it)) }, names, today, abroadNow, trip) else null,
-            year = if (partial) MoneyYear.view(mine.map { MoneyYearLine(it.day, it.pence, keyOf(it), cat(it)) }, today) else null,
+            year = if (partial) MoneyYear.view(yearLines, today) else null,
+            review = MoneyMonthReview.forScreen(yearLines, shown, today),
         )
     }
 

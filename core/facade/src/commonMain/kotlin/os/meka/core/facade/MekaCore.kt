@@ -834,6 +834,14 @@ class MekaCore(
      * Money manager (17): whether this device is outside UK time now (its time zone's offset isn't London's), for
      * PAYING ABROAD's banner. A zone the system can't name counts as home.
      */
+    /** Money manager (7): last month, when its review is ready (its statements reach its end; the month's first days only). */
+    private fun moneyMonthReady(): Int? {
+        val today = todayEpochDay()
+        if (os.meka.core.domain.CivilDate.fromEpochDay(today).day > os.meka.core.domain.MoneyMonthReview.LEADS_DAYS) return null
+        val ids = money.accounts().map { it.id }.toSet()
+        return os.meka.core.domain.MoneyMonthReview.readyMonth(money.txns().asSequence().filter { it.account in ids }.map { it.day }.asIterable(), today)
+    }
+
     private fun moneyYearReady(): Int? {
         val today = todayEpochDay()
         if (os.meka.core.domain.CivilDate.fromEpochDay(today).month != 1) return null
@@ -9460,6 +9468,7 @@ class MekaCore(
             trading = trading.wallets(), tradingAlerts = tradingAlertSetting(),
             // Money manager, slice 18: on 2 January, last year's review is ready (read only in January).
             moneyYear = moneyYearReady(),
+            moneyMonth = moneyMonthReady(),
         )
 
     /**

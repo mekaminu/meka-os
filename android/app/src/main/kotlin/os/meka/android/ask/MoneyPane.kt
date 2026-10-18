@@ -323,6 +323,15 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     }
                 }
             }
+            // Money manager (7): the month in review in plain sentences — the finished month shown, or last month leading
+            // this one for its first days.
+            v.review?.let { rv ->
+                item(key = "review-head-${rv.month}") {
+                    Text(rv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                        modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+                }
+                item(key = "review-${rv.month}") { ReviewBlock(rv, Modifier.animateItem().appear(rememberAppearance(3))) }
+            }
             // Slice 3: payments worth a second look (this month only), before the tips.
             if (v.alerts.isNotEmpty()) {
                 item(key = "alerts-head") {
@@ -1144,6 +1153,28 @@ private fun TravelBlock(tv: os.meka.core.domain.MoneyTravelView, modifier: Modif
             }
         }
         Text(tv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Money manager (7): the month in review — a few plain sentences, the first in brass when more went out than came in,
+ * then where it's from. Read as one paragraph by TalkBack. Appears with the month (MekaMotion.appear honours reduced
+ * motion); the sentences cross-fade when he pages to another month.
+ */
+@Composable
+private fun ReviewBlock(rv: os.meka.core.domain.MoneyMonthReviewView, modifier: Modifier) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = rv.spoken },
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Crossfade(rv.sentences, animationSpec = MekaMotion.appear(reduced), label = "money-review") { lines ->
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                lines.forEachIndexed { i, l ->
+                    Text(l, style = MekaType.body,
+                        color = if (i == 0 && rv.firstLit) Meka.colors.accent else if (i == 0) Meka.colors.textPrimary else Meka.colors.textSecondary)
+                }
+            }
+        }
+        Text(rv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
