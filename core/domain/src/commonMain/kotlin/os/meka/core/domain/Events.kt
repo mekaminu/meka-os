@@ -50,6 +50,13 @@ object EventFields {
      */
     const val GUEST_MAIL = "guestMail"
     const val MAX_GUEST_MAIL_SUBJECT = 80
+    /**
+     * Edit your calendars, completeness slice 1: the repeating series this event is one of, as an opaque key the server
+     * makes from the provider's series id (a hash, never the id itself); every event of one series carries the same
+     * key. Written by the server's ingestion; additive (ADR-008 addendum), absent on one-off events and on events
+     * polled before it existed.
+     */
+    const val SERIES = "series"
 }
 
 /** Meeting prep, slice 4: a guest's newest email in Meka's mailboxes ([EventFields.GUEST_MAIL]). */
@@ -111,7 +118,12 @@ data class CalendarEvent(
      * 2026-10-09 07:26 item 9), filled in by the facade; null for the default ([CalendarRules.name]). Never stored.
      */
     val calendarTitle: String? = null,
+    /** Completeness slice 1: the repeating series it belongs to ([EventFields.SERIES]); null for a one-off event. */
+    val series: String? = null,
 ) {
+    /** One of a repeating series: editing it asks "This event · Every event". */
+    val repeats: Boolean get() = series != null
+
     /** Every calendar this row stands for, its own first: "Personal" · "Kids" (one entry for a lone event). */
     val calendarLabels: List<String> get() = (listOf(this) + alsoOn).map { CalendarRules.label(it) }.distinct()
 
@@ -157,6 +169,7 @@ data class CalendarEvent(
                 guests = s[EventFields.GUESTS].textOrNull.orEmpty().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
                     .distinct().take(EventFields.MAX_GUESTS),
                 guestMail = GuestMail.parse(s[EventFields.GUEST_MAIL].textOrNull),
+                series = s[EventFields.SERIES].textOrNull?.takeIf { it.isNotBlank() },
             )
         }
     }

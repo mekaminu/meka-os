@@ -96,6 +96,7 @@ object EditEventRules {
         val d = draft(form, e, nowMs, calendar)
         val changes = CalendarEditRules.changes(CalendarEditRules.draftOf(e), d, e.provider)
         val p = CalendarEditRules.providerName(e.provider)
+        val every = form.every && e.repeats
         val problem = when {
             !canEdit || account == null -> "Editing isn't allowed for ${e.account ?: "this calendar"} · Allow editing in Calendars"
             d.title.isBlank() -> "Give it a title"
@@ -103,6 +104,7 @@ object EditEventRules {
             else -> CalendarEditRules.problem(CalendarEditRules.merged(CalendarEditRules.draftOf(e), d, changes), nowMs)
                 // An event long past may be renamed; only a new time is held to the past limit.
                 ?.takeUnless { EventEditChange.TIME !in changes && it == "That's more than a year ago" }
+                ?: if (every) CalendarEditRules.everyProblem(e, CalendarEditRules.draftOf(e), CalendarEditRules.merged(CalendarEditRules.draftOf(e), d, changes), changes, calendar) else null
         }
         val summary = if (timeOk) base.summary else EventDetails.build(e, nowMs, calendar).whenLine
         return base.copy(
@@ -122,13 +124,26 @@ object EditEventRules {
             },
             timeEditable = timeOk,
             notesEditable = notesEditable(e),
-            deleteLabel = "Delete from $p",
+            deleteLabel = when {
+                !e.repeats -> "Delete from $p"
+                every -> "Delete every event from $p"
+                else -> "Delete this event from $p"
+            },
+            scopes = if (!e.repeats) emptyList() else listOf(
+                EventScopeChoice("This event", every = false, selected = !every),
+                EventScopeChoice("Every event", every = true, selected = every),
+            ),
+            scopeNote = when {
+                !e.repeats -> null
+                every -> "Every event of the series changes, past ones too · each keeps its own day"
+                else -> "It repeats · only this one changes"
+            },
         )
     }
 
     /** The undo bar's line for a delete ("Deleting “Dentist” from Google"). */
-    fun deletingLine(e: CalendarEvent): String =
-        "Deleting “${e.title.trim().ifEmpty { "Event" }.take(60)}” from ${CalendarEditRules.providerName(e.provider)}"
+    fun deletingLine(e: CalendarEvent, every: Boolean = false): String =
+        "Deleting ${if (every && e.repeats) "every " else ""}“${e.title.trim().ifEmpty { "Event" }.take(60)}” from ${CalendarEditRules.providerName(e.provider)}"
 
     /**
      * A delete the server held back because it cancels the event for its guests and Meka hasn't confirmed: the detail
@@ -164,6 +179,7 @@ object EditEventRules {
             deleteAnyway = anyway,
             waiting = line.state == EventEditState.WAITING || line.state == EventEditState.SENDING,
             clash = calendar?.let { ClashRules.view(e, nowMs, it) },
+            everyEvent = e.every,
         )
     }
 }
@@ -253,4 +269,6 @@ data class EventEditNote(
     val waiting: Boolean,
     /** An unanswered clash: both versions and Keep mine · Keep theirs (slice 2c-iii). */
     val clash: EventClashView? = null,
+    /** Completeness slice 1: the edit is for every event of the series (Delete anyway keeps it so). */
+    val everyEvent: Boolean = false,
 )

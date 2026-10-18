@@ -1257,13 +1257,14 @@ final class CoreModel {
 
     /// Delete from the calendar after five seconds' Undo; `guestsOk` only for Delete anyway (Meka's second tap after
     /// the server said it cancels the event for its guests). Returns why not, or nil once it's on its way.
-    func deleteEvent(_ event: CalendarEvent, guestsOk: Bool) async -> String? {
+    func deleteEvent(_ event: CalendarEvent, guestsOk: Bool, everyEvent: Bool = false) async -> String? {
         guard let core else { return "Connect this Mac to your server first." }
         // Worked out before the event is handed to the core, which then owns it.
-        let fallback = core.deletingLine(event: event)
+        let fallback = core.deletingLine(event: event, everyEvent: everyEvent)
         MekaHaptics.light()
         do {
-            switch onEnum(of: try await core.deleteEvent(event: event, guestsOk: guestsOk)) {
+            // Completeness slice 1: everyEvent is the whole repeating series (the Edit sheet's choice).
+            switch onEnum(of: try await core.deleteEvent(event: event, guestsOk: guestsOk, everyEvent: everyEvent)) {
             case .made(let m):
                 let id = m.id
                 offerEventUndo(core.eventEditLine(id: id) ?? fallback, .eventEdit(id))

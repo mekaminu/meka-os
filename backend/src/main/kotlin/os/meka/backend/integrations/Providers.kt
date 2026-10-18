@@ -57,6 +57,11 @@ data class RemoteEvent(
      * email in Meka's own mailboxes. Kept on the server only: never synced, stored or logged.
      */
     val guestAddresses: Map<String, String> = emptyMap(),
+    /**
+     * Edit your calendars, completeness slice 1: the repeating series it is one of, in [id]'s `<calendar>/<event>`
+     * form (Google `recurringEventId`, Outlook `seriesMasterId`); null for a one-off. Synced only as a hash.
+     */
+    val seriesId: String? = null,
 )
 
 /**
@@ -166,6 +171,14 @@ interface CalendarProvider {
 
     /** Deletes [remoteId]; [notifyGuests] sends them the cancellation. Returns false when it was already gone. */
     fun deleteEvent(accessToken: String, remoteId: String, notifyGuests: Boolean): Boolean = throw UnsupportedOperationException("read-only provider")
+
+    /**
+     * Completeness slice 1: sets the [changes] fields of the whole series [seriesId] from [draft] (one event of it as
+     * Meka left it). TIME keeps each event's own day: the series keeps its first day and takes [draft]'s time of day
+     * (in the series' own time zone) and length. Only for a timed series; the caller checks that.
+     */
+    fun updateSeries(accessToken: String, seriesId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean): Unit =
+        throw UnsupportedOperationException("read-only provider")
 }
 
 /** The provider's copy of one event, as the clash check and the guards need it. */
@@ -175,6 +188,8 @@ data class RemoteCopy(
     val organisedByMe: Boolean,
     /** Other people invited (rooms and Meka himself not counted). */
     val guests: Int,
+    /** Completeness slice 1: the series this event is one of ([RemoteEvent.seriesId] form), or null. */
+    val seriesId: String? = null,
 )
 
 /** The provider said no to a write (HTTP 403: the write permission was taken away, or the calendar is read-only). */
@@ -419,6 +434,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                             webUrl = httpsOrNull(e["htmlLink"].str()),
                             guests = guestPeople.map { it.first },
                             guestAddresses = EventGuests.addresses(guestPeople),
+                            seriesId = e["recurringEventId"].str()?.let { "$calId/$it" },
                         ))
                     }
                     page = resp["nextPageToken"].str()
@@ -449,7 +465,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
             it["self"]?.jsonPrimitive?.booleanOrNull != true && it["resource"]?.jsonPrimitive?.booleanOrNull != true
         }
         val draft = EventDraft(e["summary"].str() ?: "", startMs, endMs, allDay, e["location"].str(), plainText(e["description"].str()))
-        return RemoteCopy(draft, mine, guests)
+        return RemoteCopy(draft, mine, guests, seriesId = e["recurringEventId"].str()?.let { "${calendarPart(remoteId)}/$it" })
     }
 
     override fun createEvent(accessToken: String, draft: EventDraft, idemKey: String): String {
@@ -473,6 +489,40 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
         if (a.status == 404 || a.status == 410) return false
         if (a.status !in 200..299) throw WriteRefused("Google HTTP ${a.status}")
         return true
+    }
+
+    override fun updateSeries(accessToken: String, seriesId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
+        val other = changes - EventEditChange.TIME
+        val body = buildJsonObject {
+            googleBody(draft, other, null).forEach { (k, v) -> put(k, v) }
+            if (EventEditChange.TIME in changes) {
+                val a = http.call("GET", eventUrl(seriesId), accessToken)
+                val master = a.body?.takeIf { a.status in 200..299 } ?: throw WriteRefused("Google HTTP ${a.status}")
+                val start = master["start"] as? JsonObject ?: throw WriteRefused("Google series has no start")
+                val (s, e) = seriesTimes(start["dateTime"].str() ?: throw WriteRefused("an all-day series"), start["timeZone"].str(), draft)
+                put("start", s)
+                put("end", e)
+            }
+        }
+        val a = http.call("PATCH", "${eventUrl(seriesId)}?${updates(notifyGuests)}", accessToken, body)
+        if (a.status !in 200..299) throw WriteRefused("Google HTTP ${a.status}")
+    }
+
+    /**
+     * The series' new start and end: its own first day, [draft]'s time of day in the series' time zone ([zone], UTC
+     * when it has none), and [draft]'s length.
+     */
+    internal fun seriesTimes(masterStart: String, zone: String?, draft: EventDraft): Pair<JsonObject, JsonObject> {
+        val z = zone?.let { runCatching { java.time.ZoneId.of(it) }.getOrNull() } ?: ZoneOffset.UTC
+        val day = OffsetDateTime.parse(masterStart).atZoneSameInstant(z).toLocalDate()
+        val time = java.time.Instant.ofEpochMilli(draft.startAtMs).atZone(z).toLocalTime()
+        val newStart = java.time.ZonedDateTime.of(day, time, z)
+        val newEnd = newStart.plusNanos((draft.endAtMs - draft.startAtMs) * 1_000_000L)
+        fun obj(t: java.time.ZonedDateTime) = buildJsonObject {
+            put("dateTime", t.toOffsetDateTime().format(DateTimeFormatter.ISO_OFFSET_DATE_TIME))
+            put("timeZone", z.id)
+        }
+        return obj(newStart) to obj(newEnd)
     }
 
     /** The fields of [changes] as Google writes them. An insert ([id] set) leaves the unused time form out. */
@@ -542,7 +592,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
             buildList {
                 var url: String? = "https://graph.microsoft.com/v1.0/me/calendars/${Http.enc(calId)}/calendarView?" + Http.query(mapOf(
                     "startDateTime" to rfc3339(fromMs), "endDateTime" to rfc3339(toMs), "\$top" to "500",
-                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink,attendees,organizer",
+                    "\$select" to "id,subject,start,end,isAllDay,location,isCancelled,bodyPreview,onlineMeeting,webLink,attendees,organizer,seriesMasterId",
                 ))
                 while (url != null) {
                     val resp = http.getJson(url, accessToken, utc)
@@ -568,6 +618,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                             webUrl = httpsOrNull(e["webLink"].str()),
                             guests = people.map { it.first },
                             guestAddresses = EventGuests.addresses(people),
+                            seriesId = e["seriesMasterId"].str()?.let { "$calId/$it" },
                         ))
                     }
                     url = resp["@odata.nextLink"].str()
@@ -583,7 +634,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
     override fun event(accessToken: String, remoteId: String): RemoteCopy? {
         if (eventPart(remoteId).isEmpty()) return null
         val a = http.call(
-            "GET", eventUrl(remoteId) + "?\$select=subject,start,end,isAllDay,isCancelled,isOrganizer,attendees,location,bodyPreview",
+            "GET", eventUrl(remoteId) + "?\$select=subject,start,end,isAllDay,isCancelled,isOrganizer,attendees,location,bodyPreview,seriesMasterId",
             accessToken, headers = utcPref,
         )
         if (a.status == 404 || a.status == 410) return null
@@ -595,7 +646,10 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
         val location = (e["location"] as? JsonObject)?.get("displayName").str()?.takeIf { it.isNotBlank() }
         val guests = (e["attendees"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>().count { it["type"].str() != "resource" }
         val draft = EventDraft(e["subject"].str() ?: "", graphMs(start, allDay), graphMs(end, allDay), allDay, location, plainText(e["bodyPreview"].str()))
-        return RemoteCopy(draft, organisedByMe = e["isOrganizer"]?.jsonPrimitive?.booleanOrNull != false, guests = guests)
+        return RemoteCopy(
+            draft, organisedByMe = e["isOrganizer"]?.jsonPrimitive?.booleanOrNull != false, guests = guests,
+            seriesId = e["seriesMasterId"].str()?.let { "${calendarPart(remoteId)}/$it" },
+        )
     }
 
     override fun createEvent(accessToken: String, draft: EventDraft, idemKey: String): String {
@@ -609,6 +663,13 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
     // Graph tells the guests itself when their organiser changes or cancels a meeting.
     override fun updateEvent(accessToken: String, remoteId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
         val a = http.call("PATCH", eventUrl(remoteId), accessToken, graphBody(draft, changes), utcPref)
+        if (a.status !in 200..299) throw WriteRefused("Outlook HTTP ${a.status}")
+    }
+
+    // Completeness slice 1: Outlook's series keep their time (its repeat rules live in its own time zone); the caller
+    // never sends TIME here.
+    override fun updateSeries(accessToken: String, seriesId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
+        val a = http.call("PATCH", eventUrl(seriesId), accessToken, graphBody(draft, changes - EventEditChange.TIME), utcPref)
         if (a.status !in 200..299) throw WriteRefused("Outlook HTTP ${a.status}")
     }
 

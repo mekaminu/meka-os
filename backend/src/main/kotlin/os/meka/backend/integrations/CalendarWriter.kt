@@ -200,6 +200,7 @@ class CalendarWriter internal constructor(
         if (CalendarEditRules.clashes(e.kind, e.changes, base, theirs.event)) {
             return Outcome(EventEditStatus.CLASH, theirs = theirs.event, guests = theirs.guests)
         }
+        if (e.every) return sendSeries(p, token, name, a, e, theirs, base)
         val notify = theirs.guests > 0
         if (e.kind == EventEditKind.DELETE) {
             if (theirs.guests > 0 && !e.guestsOk) {
@@ -215,6 +216,44 @@ class CalendarWriter internal constructor(
         CalendarEditRules.problem(merged, e.createdAtMs)?.let { return Outcome(EventEditStatus.REFUSED, it) }
         p.updateEvent(token, remoteId, merged, changes, notify)
         return Outcome(EventEditStatus.DONE, guests = theirs.guests)
+    }
+
+    /**
+     * Completeness slice 1: a change or delete for every event of the series [instance] is one of. The event itself was
+     * checked against what MEKA saw (no clash); the series must still be Meka's own, its guests confirmed for a delete,
+     * and a new time keeps each event's day ([CalendarEditRules.everyProblem], checked again here).
+     */
+    private fun sendSeries(p: CalendarProvider, token: String, name: String, a: AccountRow, e: EventEdit, instance: RemoteCopy, base: EventDraft): Outcome {
+        val seriesId = instance.seriesId ?: return Outcome(EventEditStatus.REFUSED, "It doesn't repeat in $name any more")
+        val series = p.event(token, seriesId) ?: return Outcome(EventEditStatus.REFUSED, "The series isn't in $name any more")
+        if (!series.organisedByMe) {
+            return Outcome(EventEditStatus.REFUSED, "Someone else organises it · Navilife only changes your own events", guests = series.guests)
+        }
+        val notify = series.guests > 0
+        if (e.kind == EventEditKind.DELETE) {
+            if (series.guests > 0 && !e.guestsOk) {
+                return Outcome(EventEditStatus.REFUSED, CalendarEditRules.cancelsFor(series.guests), guests = series.guests)
+            }
+            p.deleteEvent(token, seriesId, notify)
+            return Outcome(EventEditStatus.DONE, guests = series.guests)
+        }
+        val changes = e.changes.filterTo(LinkedHashSet()) { it != EventEditChange.NOTES || CalendarEditRules.canChangeNotes(a.provider) }
+        val draft = e.draft ?: return Outcome(EventEditStatus.REFUSED, "There was nothing to change")
+        if (changes.isEmpty()) return Outcome(EventEditStatus.REFUSED, "There was nothing to change")
+        val merged = CalendarEditRules.clean(CalendarEditRules.merged(base, draft, changes))
+        CalendarEditRules.problem(merged, e.createdAtMs)?.let { return Outcome(EventEditStatus.REFUSED, it) }
+        if (EventEditChange.TIME in changes) {
+            val why = when {
+                a.provider != "google" -> "Change every event's time in $name · or choose This event"
+                base.allDay || merged.allDay || series.event.allDay -> "An all-day series keeps its days · change it in $name, or choose This event"
+                // Each event keeps its own day: a new time of day only (a day apart in UTC is never that).
+                Math.abs(merged.startAtMs - base.startAtMs) >= DAY_MS -> "Every event keeps its own day · choose This event to move just this one"
+                else -> null
+            }
+            if (why != null) return Outcome(EventEditStatus.REFUSED, why)
+        }
+        p.updateSeries(token, seriesId, merged, changes, notify)
+        return Outcome(EventEditStatus.DONE, guests = series.guests)
     }
 
     /** Writes the outcome once (fixed op ids per edit and field). Returns whether anything was written. */
@@ -253,6 +292,7 @@ class CalendarWriter internal constructor(
         const val IDLE_MS = 60_000L
         const val RETRY_MS = 30_000L
         const val MAX_RETRY_MS = 30 * 60_000L
+        private const val DAY_MS = 86_400_000L
 
         fun opId(editId: String, field: String) =
             "srvedit" + Secrets.sha256Hex(editId).take(24) + field.lowercase().filter(Char::isLetterOrDigit)

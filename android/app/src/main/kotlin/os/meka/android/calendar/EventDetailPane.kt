@@ -237,10 +237,10 @@ private fun DetailContent(
                         modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) {
                             haptics.light()
                             scope.launch {
-                                val r = runCatching { core.deleteEvent(event, guestsOk = true) }.getOrNull()
+                                val r = runCatching { core.deleteEvent(event, guestsOk = true, everyEvent = note.everyEvent) }.getOrNull()
                                 if (r is os.meka.core.domain.EventEditResult.Made) {
                                     onClose()
-                                    undo?.show(core.eventEditLine(r.id) ?: core.deletingLine(event)) { core.undoEventEdit(r.id) }
+                                    undo?.show(core.eventEditLine(r.id) ?: core.deletingLine(event, note.everyEvent)) { core.undoEventEdit(r.id) }
                                 }
                             }
                         }.padding(vertical = MekaSpace.xs),

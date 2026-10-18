@@ -67,6 +67,11 @@ object EventEditFields {
     const val RESENDS = "resends"
     /** On an add from Plan my day (slice 2e): the task the block was made for (see [PlanCalendarRules]). */
     const val FOR_TASK = "forTask"
+    /**
+     * Completeness slice 1: "EVERY" when a change or delete of one event of a repeating series is for every event of
+     * it (the server writes it to the series itself); absent for this event only. Additive (ADR-008 addendum).
+     */
+    const val SCOPE = "scope"
 
     // Written by the server only.
     /** [EventEditStatus] name. */
@@ -144,6 +149,8 @@ data class EventEdit(
     val resends: String? = null,
     /** An add from Plan my day: the task whose block it is. */
     val forTask: String? = null,
+    /** Completeness slice 1: a change or delete for every event of the event's repeating series. */
+    val every: Boolean = false,
 ) {
     fun state(nowMs: Long): EventEditState = when {
         status != null -> EventEditState.valueOf(status.name)
@@ -176,6 +183,9 @@ object CalendarEditRules {
     const val MAX_AHEAD_MS = 2 * 366 * 86_400_000L
     private const val DAY_MS = 86_400_000L
 
+    /** [EventEditFields.SCOPE]'s value for every event of a series. */
+    const val SCOPE_EVERY = "EVERY"
+
     /** The providers MEKA can write to (never the fixtures feed or other public feeds). */
     val WRITABLE = setOf("google", "microsoft")
 
@@ -190,6 +200,25 @@ object CalendarEditRules {
      * notes are written only when adding an Outlook event.
      */
     fun canChangeNotes(provider: String): Boolean = provider == "google"
+
+    /**
+     * Completeness slice 1: why a change to every event of [event]'s series can't be made, or null. Every event keeps
+     * its own day (a series moved to another weekday is changed in the provider); a new time of day or length is
+     * fine on a timed series in Google; Outlook's series keep their time (Outlook's repeat rules are kept in its own
+     * time zone, so it's changed there).
+     */
+    fun everyProblem(event: CalendarEvent, base: EventDraft, merged: EventDraft, changes: Set<EventEditChange>, calendar: LocalCalendar?): String? {
+        if (!event.repeats) return "It doesn't repeat"
+        if (EventEditChange.TIME !in changes) return null
+        val p = providerName(event.provider)
+        return when {
+            event.provider != "google" -> "Change every event's time in $p · or choose This event"
+            base.allDay || merged.allDay -> "An all-day series keeps its days · change it in $p, or choose This event"
+            calendar != null && calendar.epochDayOf(base.startAtMs) != calendar.epochDayOf(merged.startAtMs) ->
+                "Every event keeps its own day · choose This event to move just this one"
+            else -> null
+        }
+    }
 
     /** Whether MEKA may offer editing on [event]: a Google/Outlook event of an account where editing is allowed. */
     fun editable(event: CalendarEvent, canEdit: (provider: String, account: String) -> Boolean): Boolean =
@@ -263,7 +292,7 @@ object CalendarEditRules {
     fun line(e: EventEdit, nowMs: Long): String {
         val p = providerName(e.provider)
         val title = if (e.kind == EventEditKind.ADD || EventEditChange.TITLE in e.changes) e.draft?.title else e.base?.title
-        val t = "“${title.orEmpty().trim().ifEmpty { "Event" }.take(60)}”"
+        val t = (if (e.every && e.kind != EventEditKind.ADD) "every " else "") + "“${title.orEmpty().trim().ifEmpty { "Event" }.take(60)}”"
         return when (e.state(nowMs)) {
             EventEditState.WAITING, EventEditState.SENDING -> when {
                 e.kind == EventEditKind.ADD -> "Adding $t to $p"
@@ -336,6 +365,7 @@ object CalendarEditRules {
             resolvedAtMs = f(EventEditFields.RESOLVED_AT).longOrNull,
             resends = f(EventEditFields.RESENDS).textOrNull?.ifEmpty { null },
             forTask = f(EventEditFields.FOR_TASK).textOrNull?.ifEmpty { null },
+            every = kind != EventEditKind.ADD && f(EventEditFields.SCOPE).textOrNull == SCOPE_EVERY,
         )
     }
 
@@ -384,15 +414,20 @@ class CalendarEdits(
         return EventEditResult.Made(write(EventEditKind.ADD, provider, account, null, emptySet(), d, null, false, forTask = forTask))
     }
 
-    /** Changes [event] to [draft] (only what differs is sent); [forTask] when it keeps a task's block in step. */
-    fun change(event: CalendarEvent, draft: EventDraft, forTask: String? = null): EventEditResult {
+    /**
+     * Changes [event] to [draft] (only what differs is sent); [forTask] when it keeps a task's block in step; [every]
+     * for every event of its repeating series (completeness slice 1, [CalendarEditRules.everyProblem]).
+     */
+    fun change(event: CalendarEvent, draft: EventDraft, forTask: String? = null, every: Boolean = false, calendar: LocalCalendar? = null): EventEditResult {
         guard(event)?.let { return it }
         val base = CalendarEditRules.draftOf(event)
         val d = CalendarEditRules.clean(draft)
         val changes = CalendarEditRules.changes(base, d, event.provider)
         if (changes.isEmpty()) return EventEditResult.Refused("Nothing changed")
-        CalendarEditRules.problem(CalendarEditRules.merged(base, d, changes), nowMs())?.let { return EventEditResult.Refused(it) }
-        return EventEditResult.Made(write(EventEditKind.CHANGE, event.provider, event.account!!, event.id, changes, d, base, false, forTask = forTask))
+        val merged = CalendarEditRules.merged(base, d, changes)
+        CalendarEditRules.problem(merged, nowMs())?.let { return EventEditResult.Refused(it) }
+        if (every) CalendarEditRules.everyProblem(event, base, merged, changes, calendar)?.let { return EventEditResult.Refused(it) }
+        return EventEditResult.Made(write(EventEditKind.CHANGE, event.provider, event.account!!, event.id, changes, d, base, false, forTask = forTask, every = every))
     }
 
     /** Moves [event] to start at [startAtMs], keeping its length. */
@@ -403,10 +438,11 @@ class CalendarEdits(
      * Deletes [event]; [guestsOk] when Meka confirmed it cancels the event for its guests; [forTask] when a task's
      * block goes with its task.
      */
-    fun delete(event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null): EventEditResult {
+    fun delete(event: CalendarEvent, guestsOk: Boolean = false, forTask: String? = null, every: Boolean = false): EventEditResult {
         guard(event)?.let { return it }
+        if (every && !event.repeats) return EventEditResult.Refused("It doesn't repeat")
         return EventEditResult.Made(
-            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask),
+            write(EventEditKind.DELETE, event.provider, event.account!!, event.id, emptySet(), null, CalendarEditRules.draftOf(event), guestsOk, forTask = forTask, every = every),
         )
     }
 
@@ -435,7 +471,7 @@ class CalendarEdits(
         if (!canEdit(e.provider, e.account)) return refusedNotAllowed(e.provider, e.account)
         val newId = when (e.kind) {
             EventEditKind.ADD -> return EventEditResult.Refused("Already chosen")
-            EventEditKind.DELETE -> write(EventEditKind.DELETE, e.provider, e.account, e.eventId, emptySet(), null, theirs, e.guestsOk, resends = e.id)
+            EventEditKind.DELETE -> write(EventEditKind.DELETE, e.provider, e.account, e.eventId, emptySet(), null, theirs, e.guestsOk, resends = e.id, every = e.every)
             EventEditKind.CHANGE -> {
                 val draft = e.draft ?: return EventEditResult.Refused("That change isn't there any more")
                 val mine = CalendarEditRules.merged(theirs, draft, e.changes)
@@ -445,7 +481,7 @@ class CalendarEdits(
                     return EventEditResult.Refused("${CalendarEditRules.providerName(e.provider)} already has your version")
                 }
                 CalendarEditRules.problem(mine, nowMs())?.let { return EventEditResult.Refused(it) }
-                write(EventEditKind.CHANGE, e.provider, e.account, e.eventId, changes, draft, theirs, false, resends = e.id)
+                write(EventEditKind.CHANGE, e.provider, e.account, e.eventId, changes, draft, theirs, false, resends = e.id, every = e.every)
             }
         }
         resolve(e.id, ClashChoice.MINE)
@@ -483,6 +519,7 @@ class CalendarEdits(
     private fun write(
         kind: EventEditKind, provider: String, account: String, eventId: String?, changes: Set<EventEditChange>,
         draft: EventDraft?, base: EventDraft?, guestsOk: Boolean, resends: String? = null, forTask: String? = null,
+        every: Boolean = false,
     ): String {
         val id = ids()
         val now = nowMs()
@@ -517,6 +554,7 @@ class CalendarEdits(
         if (guestsOk) fields[EventEditFields.GUESTS_OK] = true.fv()
         resends?.let { fields[EventEditFields.RESENDS] = it.fv() }
         forTask?.let { fields[EventEditFields.FOR_TASK] = it.fv() }
+        if (every && kind != EventEditKind.ADD) fields[EventEditFields.SCOPE] = CalendarEditRules.SCOPE_EVERY.fv()
         replica.commitLocal(EntityTypes.EVENT_EDIT, id, fields)
         return id
     }

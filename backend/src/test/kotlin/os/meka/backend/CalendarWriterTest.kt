@@ -69,6 +69,10 @@ class CalendarWriterTest {
         override fun deleteEvent(accessToken: String, remoteId: String, notifyGuests: Boolean): Boolean {
             fail?.invoke(); deleted += remoteId; notified += notifyGuests; return true
         }
+        val seriesUpdated = mutableListOf<Triple<String, EventDraft, Set<EventEditChange>>>()
+        override fun updateSeries(accessToken: String, seriesId: String, draft: EventDraft, changes: Set<EventEditChange>, notifyGuests: Boolean) {
+            fail?.invoke(); seriesUpdated += Triple(seriesId, draft, changes); notified += notifyGuests
+        }
     }
 
     private class PlainCipher : TokenCipher {
@@ -373,6 +377,111 @@ class CalendarWriterTest {
             MicrosoftCalendar().graphBody(d, setOf(EventEditChange.TITLE, EventEditChange.TIME)).toString(),
         )
         assertEquals("""{"location":{"displayName":""}}""", MicrosoftCalendar().graphBody(d, setOf(EventEditChange.LOCATION)).toString())
+    }
+
+    // ---- Completeness slice 1: repeating events, this one or every one ----
+
+    private val day = 24 * hour
+    private val gym1 = RemoteEvent("cal1/gym_1", "Gym", now + 10 * hour, now + 11 * hour, false, "Leisure centre", "Personal", seriesId = "cal1/gym")
+    private val gym2 = RemoteEvent("cal1/gym_2", "Gym", now + day + 10 * hour, now + day + 11 * hour, false, "Leisure centre", "Personal", seriesId = "cal1/gym")
+    private fun series(): List<os.meka.core.domain.CalendarEvent> {
+        provider.events = listOf(dentist, gym1, gym2)
+        integrations.syncAccount(account)
+        sync()
+        return CalendarEvents(fold).all().filter { it.title == "Gym" }.sortedBy { it.startAtMs }
+    }
+
+    @Test
+    fun aRepeatingEventCarriesItsSeriesAsAHashAndEveryEventIsWrittenToTheSeries() {
+        val (first, second) = series()
+        assertTrue(first.repeats)
+        assertEquals(first.series, second.series)
+        assertTrue(first.series!!.startsWith("sr") && "gym" !in first.series!!, "a hash, never the provider's id")
+        assertNull(CalendarEvents(fold).all().single { it.title == "Dentist" }.series)
+
+        provider.copies["cal1/gym_1"] = RemoteCopy(CalendarEditRules.draftOf(first), true, 0, seriesId = "cal1/gym")
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false, "Leisure centre"), true, 0)
+        val id = made(edits.change(first, CalendarEditRules.draftOf(first).copy(title = "Swim", startAtMs = first.startAtMs + hour, endAtMs = first.endAtMs + 2 * hour), every = true))
+        assertTrue(edits.edit(id)!!.every)
+        // Laid over every event of the series at once.
+        val shown = os.meka.core.domain.PendingEditRules.apply(CalendarEvents(fold).all(), edits.all(), now)
+        assertEquals(listOf("Swim", "Swim"), shown.filter { it.series == first.series }.map { it.title })
+        assertEquals(second.startAtMs + hour, shown.single { it.id == second.id }.startAtMs)
+        assertEquals(second.startAtMs + 3 * hour, shown.single { it.id == second.id }.endAtMs)
+        assertEquals("Changing every “Swim” in Google", CalendarEditRules.line(edits.edit(id)!!, now))
+        sync()
+        now += 10_000
+        writer.sweep()
+        assertTrue(provider.updated.isEmpty(), "never the one event")
+        val (sid, draft, changes) = provider.seriesUpdated.single()
+        assertEquals("cal1/gym", sid)
+        assertEquals(setOf(EventEditChange.TITLE, EventEditChange.TIME), changes)
+        assertEquals("Swim", draft.title)
+        assertEquals(first.startAtMs + hour, draft.startAtMs)
+        sync()
+        assertEquals(EventEditState.DONE, state(id))
+        assertEquals("Changed every “Swim” in Google", CalendarEditRules.line(edits.edit(id)!!, now))
+    }
+
+    @Test
+    fun everyEventKeepsItsDayAndTheSeriesMustBeHisOwn() {
+        val (first, _) = series()
+        provider.copies["cal1/gym_1"] = RemoteCopy(CalendarEditRules.draftOf(first), true, 0, seriesId = "cal1/gym")
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false), true, 0)
+        // A day later for every event: the server refuses (the apps say so before Save).
+        val moved = made(edits.change(first, CalendarEditRules.draftOf(first).copy(startAtMs = first.startAtMs + day, endAtMs = first.endAtMs + day), every = true))
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        assertEquals(EventEditState.REFUSED, state(moved))
+        assertEquals("Every event keeps its own day · choose This event to move just this one", CalendarEditRules.line(edits.edit(moved)!!, now))
+        assertTrue(provider.seriesUpdated.isEmpty())
+
+        // Someone else's series is never touched.
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false), false, 4)
+        val gone = made(edits.delete(first, guestsOk = true, every = true))
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        assertEquals(EventEditState.REFUSED, state(gone))
+        assertTrue(provider.deleted.isEmpty())
+    }
+
+    @Test
+    fun deletingEveryEventDeletesTheSeriesAfterTheGuestsAreConfirmed() {
+        val (first, second) = series()
+        provider.copies["cal1/gym_1"] = RemoteCopy(CalendarEditRules.draftOf(first), true, 0, seriesId = "cal1/gym")
+        provider.copies["cal1/gym"] = RemoteCopy(EventDraft("Gym", now - 30 * day, now - 30 * day + hour, false), true, 2)
+        val id = made(edits.delete(first, every = true))
+        val shown = os.meka.core.domain.PendingEditRules.apply(CalendarEvents(fold).all(), edits.all(), now)
+        assertTrue(shown.none { it.id == first.id || it.id == second.id }, "every event goes at once")
+        assertTrue(shown.any { it.title == "Dentist" })
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        assertEquals("This cancels it for 2 people", CalendarEditRules.line(edits.edit(id)!!, now))
+        assertTrue(os.meka.core.domain.EditEventRules.note(first.id, edits.all(), now)!!.everyEvent)
+        val anyway = made(edits.delete(first, guestsOk = true, every = true))
+        sync()
+        now += 10_000
+        writer.sweep()
+        sync()
+        assertEquals(listOf("cal1/gym"), provider.deleted)
+        assertEquals(EventEditState.DONE, state(anyway))
+        assertEquals("Deleted every “Gym” from Google", CalendarEditRules.line(edits.edit(anyway)!!, now))
+    }
+
+    @Test
+    fun aSeriesNewTimeKeepsItsFirstDayInItsOwnTimeZone() {
+        val g = GoogleCalendar()
+        // 16:30 UTC on a summer day is 17:30 in London; the series began in winter, when London is on UTC.
+        val d = EventDraft("Gym", 1_791_477_000_000L, 1_791_479_700_000L, false)
+        val (start, end) = g.seriesTimes("2026-03-02T09:00:00Z", "Europe/London", d)
+        assertEquals("""{"dateTime":"2026-03-02T17:30:00Z","timeZone":"Europe/London"}""", start.toString())
+        assertEquals("""{"dateTime":"2026-03-02T18:15:00Z","timeZone":"Europe/London"}""", end.toString())
     }
 
     @Test

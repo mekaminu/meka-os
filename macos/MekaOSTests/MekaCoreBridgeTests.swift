@@ -1588,8 +1588,11 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// Calendar editing, slice 2c: the Edit form's words and the detail's edit note reach Swift.
     func testEditEventRulesReachSwift() {
         XCTAssertTrue(EditEventRules.shared.TIME_NOTE.hasPrefix("Its time can't be changed"))
-        let note = EventEditNote(editId: "e1", text: "This cancels it for 4 people", needsMeka: true, deleteAnyway: true, waiting: false, clash: nil)
+        let note = EventEditNote(editId: "e1", text: "This cancels it for 4 people", needsMeka: true, deleteAnyway: true, waiting: false, clash: nil, everyEvent: true)
         XCTAssertTrue(note.deleteAnyway)
+        // Completeness slice 1: Delete anyway keeps the refused edit's scope (every event of a series).
+        XCTAssertTrue(note.everyEvent)
+        XCTAssertEqual(EventScopeChoice(label: "Every event", every: true, selected: true).label, "Every event")
         XCTAssertFalse(note.waiting)
     }
 

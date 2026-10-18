@@ -41,6 +41,8 @@ data class AddEventForm(
     val typed: TypedWhen? = null,
     /** Meka chose "Keep … in the title": nothing more is read until the title is cleared. */
     val keepWords: Boolean = false,
+    /** Editing one event of a repeating series (completeness slice 1): Save and Delete are for every event of it. */
+    val every: Boolean = false,
 ) {
     val isAllDay: Boolean get() = minute == null
     /** For Swift: the start, or -1 for all day. */
@@ -71,6 +73,8 @@ data class AddEventForm(
     fun withLocation(text: String): AddEventForm = copy(location = text.take(CalendarEditRules.MAX_LOCATION))
     fun withNotes(text: String): AddEventForm = copy(notes = text.take(CalendarEditRules.MAX_NOTES))
     fun withAccount(key: String): AddEventForm = copy(accountKey = key)
+    /** Editing a repeating event: This event (false) or Every event (true). */
+    fun withEvery(on: Boolean): AddEventForm = copy(every = on)
     fun withLength(minutes: Int): AddEventForm = copy(lengthMin = minutes.coerceIn(AddEventRules.MIN_LENGTH, AddEventRules.MAX_LENGTH))
 
     /** Another day (never before today, at most two years ahead); a timed event keeps its time. */
@@ -116,7 +120,14 @@ data class AddEventView(
     val typedLine: String? = null,
     /** "Keep “Fri 3pm” in the title", beside [typedLine]. */
     val keepWordsLabel: String? = null,
+    /** Editing a repeating event (completeness slice 1): This event · Every event; empty otherwise. */
+    val scopes: List<EventScopeChoice> = emptyList(),
+    /** A quiet line under the choice: what Every event changes. Null when not repeating. */
+    val scopeNote: String? = null,
 )
+
+/** One of "This event" · "Every event" when editing a repeating event. */
+data class EventScopeChoice(val label: String, val every: Boolean, val selected: Boolean)
 
 object AddEventRules {
     val LENGTHS = listOf(30, 60, 90, 120)

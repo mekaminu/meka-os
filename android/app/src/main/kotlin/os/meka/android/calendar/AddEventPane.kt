@@ -162,6 +162,20 @@ fun AddEventPane(
             }
         }
 
+        // Completeness slice 1: a repeating event asks This event · Every event; Save and Delete follow the choice.
+        if (v.scopes.isNotEmpty()) {
+            Label("Repeats", Modifier.appear(rememberAppearance(2)))
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).appear(rememberAppearance(2)),
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                v.scopes.forEach { c -> FormChip(c.label, c.selected) { if (!c.selected) { haptics.tick(); set(f.withEvery(c.every)) } } }
+            }
+            v.scopeNote?.let { note ->
+                FadeLine(note) { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+            }
+        }
+
         Label("When", Modifier.appear(rememberAppearance(2)))
         if (!v.timeEditable) {
             Text(EditEventRules.TIME_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(2)))
@@ -245,15 +259,15 @@ fun AddEventPane(
             )
             // Editing: Delete is a quiet red line with the undo bar (no dialog); guests get Delete anyway later.
             val del = v.deleteLabel
-            if (editing != null && del != null) {
+            if (editing != null && del != null) FadeLine(del) { delLabel ->
                 Text(
-                    del, style = MekaType.itemMeta, color = Meka.colors.critical,
+                    delLabel, style = MekaType.itemMeta, color = Meka.colors.critical,
                     modifier = Modifier.padding(top = MekaSpace.m)
                         .clickable(enabled = !sending, role = Role.Button) {
                             haptics.light()
                             sending = true
                             scope.launch {
-                                when (val r = runCatching { core.deleteEvent(editing, guestsOk = false) }.getOrNull()) {
+                                when (val r = runCatching { core.deleteEvent(editing, guestsOk = false, everyEvent = f.every) }.getOrNull()) {
                                     is EventEditResult.Made -> onDeleted(r.id)
                                     is EventEditResult.Refused -> refusal = r.reason
                                     null -> refusal = "Couldn't delete it · try again"

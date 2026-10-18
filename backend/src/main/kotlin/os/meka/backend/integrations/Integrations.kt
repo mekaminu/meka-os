@@ -2842,6 +2842,9 @@ class Integrations(
                     // Meeting prep, slice 4: each guest's newest email in his mailboxes, for meetings in the next day
                     // and a half (cleared after). Additive like the above.
                     EventFields.GUEST_MAIL to (guestMail[e.id]?.let { FieldValue.Text(GuestMail.format(it)) } ?: FieldValue.Null),
+                    // Edit your calendars, completeness slice 1: its repeating series, as a hash of the provider's
+                    // series id (never the id), so the apps can offer "Every event". Additive like the above.
+                    EventFields.SERIES to (e.seriesId?.let { FieldValue.Text(seriesKey(a, it)) } ?: FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 // A fixture whose kick-off moved while the old time was still ahead: remember the old time and when
@@ -3059,6 +3062,9 @@ class Integrations(
 
         /** Stable per (account, provider event): the same event always maps to the same entity. */
         fun entityId(a: AccountRow, remoteId: String): String = "ev" + Secrets.sha256Hex("${a.id}|$remoteId").take(30)
+
+        /** Completeness slice 1: the synced key of a repeating series (the same for every event of it). */
+        fun seriesKey(a: AccountRow, seriesId: String): String = "sr" + Secrets.sha256Hex("${a.id}|series|$seriesId").take(24)
 
         fun context(householdId: String, provider: String) = mapOf("household" to householdId, "provider" to provider, "purpose" to "oauth-refresh")
 

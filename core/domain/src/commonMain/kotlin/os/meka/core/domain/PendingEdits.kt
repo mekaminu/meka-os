@@ -60,6 +60,23 @@ object PendingEditRules {
                         if (CalendarEditRules.clashes(EventEditKind.CHANGE, edit.changes, base, before)) continue
                     }
                     val after = CalendarEditRules.merged(before, draft, edit.changes)
+                    // Completeness slice 1: every event of the series changes the same way (each keeps its own day).
+                    if (edit.every && current.series != null) {
+                        val shift = after.startAtMs - before.startAtMs
+                        val length = after.endAtMs - after.startAtMs
+                        for (other in out.values.toList()) {
+                            if (other.id == id || other.series != current.series || other.account != current.account) continue
+                            val start = if (EventEditChange.TIME in edit.changes && !other.allDay) other.startAtMs + shift else other.startAtMs
+                            out[other.id] = other.copy(
+                                title = if (EventEditChange.TITLE in edit.changes) after.title.trim().ifEmpty { other.title } else other.title,
+                                startAtMs = start,
+                                endAtMs = if (EventEditChange.TIME in edit.changes && !other.allDay) start + length else other.endAtMs,
+                                location = if (EventEditChange.LOCATION in edit.changes) after.location?.trim()?.ifEmpty { null } else other.location,
+                                description = if (EventEditChange.NOTES in edit.changes) after.notes?.trim()?.ifEmpty { null } else other.description,
+                                pendingEditId = if (onItsWay) edit.id else other.pendingEditId,
+                            )
+                        }
+                    }
                     out[id] = current.copy(
                         title = after.title.trim().ifEmpty { current.title }, startAtMs = after.startAtMs, endAtMs = after.endAtMs,
                         allDay = after.allDay, location = after.location?.trim()?.ifEmpty { null },
@@ -67,7 +84,13 @@ object PendingEditRules {
                         pendingEditId = if (onItsWay) edit.id else current.pendingEditId,
                     )
                 }
-                EventEditKind.DELETE -> edit.eventId?.let { out.remove(it) }
+                EventEditKind.DELETE -> edit.eventId?.let { id ->
+                    val series = out[id]?.series
+                    val account = out[id]?.account
+                    out.remove(id)
+                    // Completeness slice 1: every event of the series goes with it.
+                    if (edit.every && series != null) out.values.filter { it.series == series && it.account == account }.forEach { out.remove(it.id) }
+                }
             }
         }
         return out.values.toList()
