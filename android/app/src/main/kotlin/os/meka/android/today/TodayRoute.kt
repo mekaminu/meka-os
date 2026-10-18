@@ -875,10 +875,11 @@ private fun TodayPane(
                         }
                     }
                     // Train-time queue, slice 1: on an office day's commute, "For the train · 2 articles · 1 podcast" in the
-                    // accent; tapping it springs the queue up over Today. Cross-fades as it changes.
+                    // accent; tapping it springs the queue up over Today. Cross-fades as it changes. On the train (2026-10-18)
+                    // it leads with the minutes to the change and ends with the book on the go, so it may take two lines.
                     today.trainQueue?.let { queue ->
                         Crossfade(queue, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "train-queue-line") { l ->
-                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                            Text(l.text, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.m))
                                     .clickable(role = Role.Button) { openQueue() }

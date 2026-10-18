@@ -198,7 +198,9 @@ struct TodayView: View {
                     // accent; clicking it opens the queue. Cross-fades as it changes.
                     if let queue = model.today?.trainQueue {
                         Button { model.showTrainQueue = true } label: {
-                            Text(queue.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                            // On the train (2026-10-18): the minutes to the change and the book on the go, up to two lines.
+                            Text(queue.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2)
+                                .multilineTextAlignment(.leading)
                         }
                         .buttonStyle(MekaPressStyle())
                         .contentTransition(.opacity)

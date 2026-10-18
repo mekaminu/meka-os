@@ -1698,6 +1698,37 @@ class MekaCore(
         WaitingFollowCodec.decode(saved).associateByTo(HashMap()) { it.taskId }
     }
     private val localStore = store
+
+    /**
+     * Train-time queue (4), 2026-10-18: the departures this device saw on today's live board, kept as a device-local
+     * value ([os.meka.core.domain.TrainRideRules.KEY], never synced) because a train drops off the board once it has
+     * left; read on first use, written back when it changes.
+     */
+    private var trainRideSeen: os.meka.core.domain.TrainRideSeen? = null
+    private var trainRideLoaded = false
+
+    private fun trainRideNow(office: os.meka.core.domain.OfficeWindow?, cal: os.meka.core.domain.LocalCalendar): os.meka.core.domain.TrainRide? {
+        if (!trainRideLoaded) {
+            trainRideLoaded = true
+            trainRideSeen = os.meka.core.domain.TrainRideRules.decode(
+                runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.TrainRideRules.KEY) } }.getOrNull(),
+            )
+        }
+        val now = nowMs()
+        val snap = lineStatus.snapshot()
+        val commute = os.meka.core.domain.RouteRules.commute(office, now, cal)
+        val leave = if (office != null && commute != null) {
+            os.meka.core.domain.RouteRules.liveBoard(snap, commute, now)?.let { os.meka.core.domain.RouteRules.leaveBy(it, commute, office, now, cal) }
+        } else null
+        val seen = os.meka.core.domain.TrainRideRules.merge(trainRideSeen, snap.board, leave, now, cal)
+        if (seen != trainRideSeen) {
+            trainRideSeen = seen
+            val text = os.meka.core.domain.TrainRideRules.encode(seen)
+            runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.TrainRideRules.KEY, text) } }
+        }
+        val names = os.meka.core.domain.Household.names
+        return os.meka.core.domain.TrainRideRules.ride(seen, office, names.route?.change, names.homeStation, now, cal)
+    }
     private var savedWaitingFollows: String? = null
 
     private fun saveWaitingFollows() {
@@ -8436,7 +8467,12 @@ class MekaCore(
                 // Slice 2: once it's over, how it went ("✓ Life admin hour done · 3 jobs ticked").
                 ?: os.meka.core.domain.LifeAdminRules.closeLine(lifeAdminNow, adminThis, all, lifeAdminViewNow.jobCount, todayDay, nowMs()),
             // Train-time queue, slice 1: on an office day's commute, what's saved for the train.
-            trainQueue = os.meka.core.domain.QueueRules.trainLine(trainQueue.items(), office, nowMs(), cal),
+            // Train-time queue (4) and Reading's commute slots (2026-10-18): on the train, how long until he gets off
+            // and what's on the go to read ("On the 07:42 · 15 min to … · 2 articles · Dune at 37%").
+            trainQueue = os.meka.core.domain.QueueRules.trainLine(
+                trainQueue.items(), office, nowMs(), cal, trainRideNow(office, cal),
+                os.meka.core.domain.ReadingRules.trainPart(reading.items()),
+            ),
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
             bins = os.meka.core.domain.BinRules.tonightLine(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays),
             gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),

@@ -128,4 +128,45 @@ class TrainQueueFacadeTest {
         assertTrue(again.queueDone(id, true))
         assertTrue(again.queueOnline.value.isEmpty())
     }
+
+    @Test
+    fun onTheTrainTodaySaysHowLongToTheChangeWhatsSavedAndTheBookOnTheGo() = runTest {
+        now = 1_791_522_300_000L // Fri 9 Oct 2026, 06:05 in London: an office day
+        val fold = core("android")
+        fold.setAboutYouField(os.meka.core.domain.AboutYouFields.ROUTE, os.meka.core.testing.InventedRoute.TYPED)
+        fold.setAboutYouField(os.meka.core.domain.AboutYouFields.HOME_STATION, "Oakfield")
+        fold.setAboutYouField(os.meka.core.domain.AboutYouFields.STATION_WALK, "10, 15")
+        fold.addToQueue("https://www.bbc.co.uk/news/rail-1", "Why the trains run late")
+        fold.addReading("reading Dune by Frank Herbert, 400 pages")
+        fold.readingProgress(fold.readingView.value.onTheGo.single().id, "100")
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var n = 0
+        fun board(list: List<os.meka.core.domain.TrainDeparture>) {
+            fun put(field: String, v: os.meka.core.sync.FieldValue) = ops.append(os.meka.core.sync.Op("srv${n++}", "hh",
+                os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.LineStatusStore.ENTITY_ID, field, v, clock.now(), emptyList(), "server"))
+            put(os.meka.core.domain.LineStatusFields.DEPARTURES, os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TrainBoardCodec.encode(list)))
+            put(os.meka.core.domain.LineStatusFields.DEPARTURES_DIR, os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TrainBoard.AM))
+            put(os.meka.core.domain.LineStatusFields.DEPARTURES_CHECKED, os.meka.core.sync.FieldValue.Int64(now))
+            put(os.meka.core.domain.LineStatusFields.BOARD_STATE, os.meka.core.sync.FieldValue.Text(os.meka.core.domain.TrainBoard.OK))
+            put(os.meka.core.domain.LineStatusFields.BOARD_OK_AT, os.meka.core.sync.FieldValue.Int64(now))
+        }
+        val trains = listOf(
+            os.meka.core.domain.TrainDeparture(7 * 60 + 30, 7 * 60 + 30, arrMin = 8 * 60 + 2),
+            os.meka.core.domain.TrainDeparture(7 * 60 + 42, 7 * 60 + 42, arrMin = 8 * 60 + 14),
+            os.meka.core.domain.TrainDeparture(7 * 60 + 54, 7 * 60 + 54, arrMin = 8 * 60 + 26),
+        )
+        now += 75 * 60_000L // 07:20: leave by 07:32 for the 07:42
+        board(trains)
+        fold.syncNow()
+        assertEquals("For the train · 1 article · Dune at 25%", fold.today.value.trainQueue?.text)
+        now += 30 * 60_000L // 07:50: the 07:42 has left the board
+        board(trains.drop(2))
+        fold.syncNow()
+        now += 10 * 60_000L // 08:00
+        fold.tick()
+        assertEquals("On the 07:42 · 14 min to Oakfield Junction · 1 article · Dune at 25%", fold.today.value.trainQueue?.text)
+        now += 15 * 60_000L // 08:15: off at the change
+        fold.tick()
+        assertEquals("For the train · 1 article · Dune at 25%", fold.today.value.trainQueue?.text)
+    }
 }

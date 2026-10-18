@@ -99,6 +99,9 @@ data class ReadingItem(
     val removed: Boolean,
 )
 
+/** Reading's part of Today's train line: "Dune at 37%" ([ReadingRules.trainPart]). */
+data class ReadingTrainPart(val text: String, val spoken: String)
+
 /** One row as the pane shows it. */
 data class ReadingRow(
     val id: String,
@@ -372,6 +375,23 @@ object ReadingRules {
             moved.takeIf { it > 0 }?.let { "$it moved on" },
             next?.let { "next up: $it" },
         ).joinToString(" · ")
+    }
+
+    /**
+     * Reading's commute slots (2026-10-18): what's on the go for the train's line on Today ([QueueRules.trainLine]):
+     * the newest book, podcast or course on the go with how far ("Dune at 37%", "Swift course · lesson 3"); null with nothing on the go.
+     */
+    fun trainPart(items: List<ReadingItem>): ReadingTrainPart? {
+        val i = items.filter { !it.removed && it.state == ReadingState.READING }.maxByOrNull { it.movedAtMs } ?: return null
+        val w = where(i)
+        val how = when {
+            w == null -> null
+            w.endsWith('%') -> " at " + w.substringAfterLast(" · ")
+            else -> " · " + w.replaceFirstChar { it.lowercase() }
+        }
+        val text = i.title + how.orEmpty()
+        val spoken = "Reading ${i.title}" + (how?.let { if (it.startsWith(" at ")) ", ${it.removePrefix(" at ")}" else ", ${it.removePrefix(" · ")}" } ?: "")
+        return ReadingTrainPart(text, spoken)
     }
 
     /** Ask → Daily's row: the newest on the go with how far ("Atomic Habits · 38%"), else "3 up next"; null when empty. */

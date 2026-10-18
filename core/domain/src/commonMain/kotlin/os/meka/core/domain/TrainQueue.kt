@@ -215,11 +215,27 @@ object QueueRules {
      * Today's line while Meka is on an office day's commute ([RouteRules.commute]: from 06:00 until work starts, and
      * around the end of work) and something waits: "For the train · 2 articles · 1 podcast". Null otherwise.
      */
-    fun trainLine(items: List<QueueItem>, office: OfficeWindow?, nowMs: Long, cal: LocalCalendar): QueueLine? {
-        RouteRules.commute(office, nowMs, cal) ?: return null
+    fun trainLine(
+        items: List<QueueItem>,
+        office: OfficeWindow?,
+        nowMs: Long,
+        cal: LocalCalendar,
+        ride: TrainRide? = null,
+        reading: ReadingTrainPart? = null,
+    ): QueueLine? {
+        // Train-time queue (4), 2026-10-18: on the train, how long until he gets off leads the line, past the commute's
+        // window too (the evening's ride home can outlast it); otherwise only during the commute.
+        if (ride == null) RouteRules.commute(office, nowMs, cal) ?: return null
         val waiting = items.filter { !it.done }
-        val count = countLine(waiting.count { it.kind == QueueKind.ARTICLE }, waiting.count { it.kind == QueueKind.PODCAST }) ?: return null
-        return QueueLine("$ACTION · $count", "$ACTION: ${count.replace(" · ", " and ")} saved")
+        val count = countLine(waiting.count { it.kind == QueueKind.ARTICLE }, waiting.count { it.kind == QueueKind.PODCAST })
+        if (count == null && reading == null) return null
+        val text = listOfNotNull(ride?.let(TrainRideRules::words) ?: ACTION, count, reading?.text).joinToString(" · ")
+        val spoken = listOfNotNull(
+            ride?.let(TrainRideRules::spoken),
+            count?.let { "$ACTION: ${it.replace(" · ", " and ")} saved" },
+            reading?.spoken,
+        ).joinToString(". ")
+        return QueueLine(text, spoken)
     }
 
     /**

@@ -10,6 +10,6 @@ mac_where: Ask → Daily → Train queue
 ---
 what: links and podcasts saved for the commute, kept to read offline.
 how: Share a link to Navilife and choose For the train, or paste one in the queue; Done moves it to Done lately.
-tip: On office-day mornings Today's header says how many are waiting.
+tip: On office-day mornings Today's header says how many are waiting. Once you're on your train (with Home station and Time to the train in About you) it says how long until you change: "On the 07:42 · 16 min to … · 2 articles · Dune at 37%".
 tip: On Wi-Fi the Fold keeps up to 30 waiting articles to read without a signal and lets each go once it's done. One it couldn't keep (a paywall, an app-only page) says "Online only" and opens in the browser; podcasts open in your podcast app.
 tip: On the Mac, select a link in any app and choose Services → Save for the train with Navilife.
