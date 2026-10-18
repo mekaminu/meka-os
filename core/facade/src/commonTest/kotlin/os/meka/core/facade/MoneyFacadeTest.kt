@@ -665,9 +665,10 @@ class MoneyFacadeTest {
             "18/09/2026,TESCO STORES 2041,-45.00\n" +
             "29/09/2026,PIZZA PLACE,-22.00\n" +
             "30/09/2026,COSTA COFFEE,-3.40\n"
-        fold.importMoneyStatement("Current account", september)
-        // Sat 3 Oct 2026, noon in London: September's review leads this month, and the Mac gets one heads-up, no amounts.
+        // Sat 3 Oct 2026, noon in London (the clock set before the import, so nothing is synced from the future):
+        // September's review leads this month, and the Mac gets one heads-up, no amounts.
         now = 1_791_025_200_000L
+        fold.importMoneyStatement("Current account", september)
         fold.syncNow(); mac.syncNow()
         fold.closeMoney(); fold.openMoney()
         val r = fold.moneyView.value.review!!
