@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, reading, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -90,6 +90,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .news: "News"
         case .shutdown: "Shut down the day"
         case .trainQueue: "Train queue"
+        case .reading: ReadingRules.shared.TITLE
         case .voiceNotes: VoiceNoteRules.shared.TITLE
         case .lifeAdmin: "Life admin hour"
         case .review: "Review"
@@ -141,6 +142,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .news: "Barça, AI and the headlines · topics and sources"
         case .shutdown: "Tick off, carry over and see tomorrow"
         case .trainQueue: "Links and podcasts saved for the commute"
+        case .reading: ReadingRules.shared.ROW_LINE
         case .voiceNotes: VoiceNoteRules.shared.ROW_LINE
         case .lifeAdmin: "One hour a week for forms, calls and renewals"
         case .review: "Your week, looked back on"
@@ -170,7 +172,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
     var group: MoreGroup {
         switch self {
         case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .kids, .appointments, .leave, .gifts, .trips, .errands, .car, .money, .emergency, .facts: .life
-        case .brief, .weekAhead, .news, .shutdown, .trainQueue, .voiceNotes, .lifeAdmin, .review: .daily
+        case .brief, .weekAhead, .news, .shutdown, .trainQueue, .reading, .voiceNotes, .lifeAdmin, .review: .daily
         case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
@@ -309,6 +311,7 @@ enum ShellNav {
         case .news: .news
         case .shutdown: .shutdown
         case .trainQueue: .trainQueue
+        case .reading: .reading
         case .lifeAdmin: .lifeAdmin
         default: nil
         }

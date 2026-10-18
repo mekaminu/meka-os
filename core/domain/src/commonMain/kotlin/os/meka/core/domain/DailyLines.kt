@@ -7,7 +7,7 @@ package os.meka.core.domain
  * stories, Shut down "2 left", the Train queue "2 saved", the Life admin hour "Thu 19:00 · 3 jobs", the Bedside clock
  * "Screen saver on/off" (the Fold only). A row with nothing live keeps its fixed words. Both apps; pure, unit-tested.
  */
-enum class DailyRow { BRIEF, WEEK_AHEAD, NEWS, SHUTDOWN, TRAIN_QUEUE, VOICE_NOTES, LIFE_ADMIN, BEDSIDE }
+enum class DailyRow { BRIEF, WEEK_AHEAD, NEWS, SHUTDOWN, TRAIN_QUEUE, READING, VOICE_NOTES, LIFE_ADMIN, BEDSIDE }
 
 /** A Daily row's live line; [lit] when it's ready now or wants a look (drawn in the accent). */
 data class DailyLine(val text: String, val lit: Boolean)
@@ -40,6 +40,8 @@ data class DailyInputs(
     val shutdownOffered: Boolean = false,
     val shutdownLeft: Int = 0,
     val queueWaiting: Int = 0,
+    /** Reading and learning, slice 1 ([ReadingRules.dailyLine]): the newest on the go, else how many up next. */
+    val reading: DailyLine? = null,
     val lifeAdminOn: Boolean = false,
     /** The next hour's day (epoch day) and start minute; null with none ahead. */
     val lifeAdminDay: Long? = null,
@@ -63,6 +65,7 @@ object DailyRules {
         news(i)?.let { m[DailyRow.NEWS] = it }
         shutdown(i)?.let { m[DailyRow.SHUTDOWN] = it }
         if (i.queueWaiting > 0) m[DailyRow.TRAIN_QUEUE] = DailyLine("${i.queueWaiting} saved", false)
+        i.reading?.let { m[DailyRow.READING] = it }
         lifeAdmin(i)?.let { m[DailyRow.LIFE_ADMIN] = it }
         return DailyLines(m)
     }

@@ -41,6 +41,7 @@ enum class HelpPlace(val key: String) {
     NEWS("news"),
     SHUTDOWN("shutdown"),
     TRAIN_QUEUE("trainQueue"),
+    READING("reading"),
     LIFE_ADMIN("lifeAdmin"),
     BEDSIDE("bedside"),
     VOICE_NOTES("voiceNotes"),

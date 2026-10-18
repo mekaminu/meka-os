@@ -145,6 +145,8 @@ object EntityTypes {
     const val MONEY_SHARED = "money_shared"
     /** Trading tracker, slice 1 (2026-10-17): one Hyperliquid public address he follows, id `w<hash>`, with what the server read (see [TradingTracker]). */
     const val TRADING_WALLET = "trading_wallet"
+    /** Reading and learning, slice 1 (2026-10-18): one book, podcast or course on his reading list, a random id (see [Reading]). */
+    const val READING_ITEM = "reading_item"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -156,7 +158,7 @@ object EntityTypes {
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
-        TRADING_WALLET, MONEY_SHARED,
+        TRADING_WALLET, MONEY_SHARED, READING_ITEM,
     )
 }
 
@@ -474,6 +476,7 @@ object MekaSchema : SchemaRegistry {
         // The train queue: a link removed on any device is gone for good; done/back and the rest, the latest edit wins.
         entityType == EntityTypes.QUEUE_ITEM && field == QueueFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.QUEUE_ITEM -> MergePolicy.Lww
+        entityType == EntityTypes.READING_ITEM -> MergePolicy.Lww
         // Work wins: a win removed on any device is gone for good; its text, the latest edit wins.
         entityType == EntityTypes.WIN && field == WinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.WIN -> MergePolicy.Lww

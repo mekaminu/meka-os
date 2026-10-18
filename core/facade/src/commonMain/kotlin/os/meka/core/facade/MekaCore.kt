@@ -150,6 +150,7 @@ class MekaCore(
     private val emergency = os.meka.core.domain.EmergencyCard(replica, ids::next, nowMs)
     private val lifeFacts = os.meka.core.domain.LifeFacts(replica, ids::next, nowMs)
     private val trainQueue = os.meka.core.domain.TrainQueue(replica, ids::next, nowMs)
+    private val reading = os.meka.core.domain.Reading(replica, ids::next, nowMs)
     private val errands = os.meka.core.domain.Errands(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val templateStore = os.meka.core.domain.ChecklistTemplates(replica, ids::next, nowMs)
     private val appointments = os.meka.core.domain.Appointments(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -1268,6 +1269,13 @@ class MekaCore(
      * newest first, and the ones marked done lately (Ask → More → Train queue). Synced; nothing is fetched.
      */
     val queueView: StateFlow<os.meka.core.domain.QueueView> = _queue.asStateFlow()
+
+    private val _reading = MutableStateFlow(os.meka.core.domain.ReadingView.EMPTY)
+    /**
+     * Reading and learning (V1, slice 1): the books, podcasts and courses he wants to get to, on the go with how far,
+     * up next, and finished or put down lately (Ask → Daily → Reading). Synced; nothing is fetched.
+     */
+    val readingView: StateFlow<os.meka.core.domain.ReadingView> = _reading.asStateFlow()
 
     private val _errands = MutableStateFlow(os.meka.core.domain.ErrandView.EMPTY)
     /** Errands by location (V1, slice 1): what waits at each place, and what was ticked off lately. */
@@ -3110,6 +3118,30 @@ class MekaCore(
         if (removed) dropQueuePages(setOf(id))
         removed
     }
+
+    // ---- Reading and learning (V1, slice 1; Ask → Daily → Reading on both apps) ----
+
+    /**
+     * Adds the book, podcast or course [text] names ("Atomic Habits by James Clear, 320 pages", "podcast The Rest Is
+     * History", a link) under up next, or on the go when it starts "reading …". Refused when it names nothing.
+     */
+    suspend fun addReading(text: String, subject: String? = null): os.meka.core.domain.ReadingSaid =
+        onCore { reading.add(text, subject) }
+
+    /** Starts one from up next (or picks one up again). */
+    suspend fun startReading(id: String): os.meka.core.domain.ReadingSaid = onCore { reading.start(id) }
+
+    /** How far he's got: "120", "p 120 of 320", "45%", "episode 4"; the end finishes it. Refused when it isn't one. */
+    suspend fun readingProgress(id: String, text: String): os.meka.core.domain.ReadingSaid = onCore { reading.progress(id, text) }
+
+    suspend fun finishReading(id: String): os.meka.core.domain.ReadingSaid = onCore { reading.finish(id) }
+
+    suspend fun putDownReading(id: String): os.meka.core.domain.ReadingSaid = onCore { reading.putDown(id) }
+
+    suspend fun removeReading(id: String): os.meka.core.domain.ReadingSaid = onCore { reading.remove(id) }
+
+    /** Takes back the last reading command (its [os.meka.core.domain.ReadingSaid.undo] token); false once too late. */
+    suspend fun undoReading(token: String): Boolean = onCore { reading.undo(token) }
 
     // ---- Errands by location (V1, slice 1; Ask → More → Errands on both apps) ----
 
@@ -8335,6 +8367,7 @@ class MekaCore(
         _facts.value = lifeFacts.view()
         refreshMoney()
         _queue.value = trainQueue.view()
+        _reading.value = reading.view(ZoneCalendar(timeZone))
         _errands.value = errands.view()
         _appointments.value = appointments.view()
         _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.build(
@@ -8472,6 +8505,7 @@ class MekaCore(
             shutdownOffered = dailyShutdown.offered,
             shutdownLeft = dailyShutdown.left.size,
             queueWaiting = _queue.value.waiting.size,
+            reading = os.meka.core.domain.ReadingRules.dailyLine(reading.items()),
             lifeAdminOn = _lifeAdmin.value.on,
             lifeAdminDay = dailyAdmin?.day,
             lifeAdminMinute = dailyAdmin?.let { cal.minuteOfDay(it.startMs) },

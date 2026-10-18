@@ -102,6 +102,10 @@ final class CoreModel {
     private(set) var queue: QueueView?
     /// Ask → More → Train queue (also Today's "For the train" line).
     var showTrainQueue = false
+    /// Reading and learning (slice 1): books, podcasts and courses, on the go, up next and finished lately. Synced.
+    private(set) var reading: ReadingView?
+    /// Ask → Daily → Reading.
+    var showReading = false
     /// Voice notes into actions, slice 3: the voice note sheet (recording one) and Ask → Daily → Voice notes.
     var showVoiceNote = false
     var showVoiceNotes = false
@@ -574,6 +578,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await q in core.queueView { self?.queue = q }
+        })
+        observers.append(Task { [weak self] in
+            for await r in core.readingView { self?.reading = r }
         })
         observers.append(Task { [weak self] in
             for await e in core.errandsView { self?.errands = e }
@@ -3938,6 +3945,55 @@ final class CoreModel {
     }
 
     func removeFromQueue(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeFromQueue(id: id) } }
+
+    // MARK: Reading (reading and learning, slice 1)
+
+    /// What a reading command said: the line under the field, whether it was turned away, and its Undo token.
+    struct ReadingSaidLine: Equatable {
+        let line: String
+        let refused: Bool
+        let undo: String?
+    }
+
+    /// Runs one reading command; only Strings cross to the core and back.
+    private func reading(_ light: Bool = false, _ body: @escaping (MekaCore) async throws -> ReadingSaid) async -> ReadingSaidLine? {
+        guard let core else { return nil }
+        do {
+            let r = try await body(core)
+            if r.refused { MekaHaptics.tick() } else if light { MekaHaptics.light() } else { MekaHaptics.tick() }
+            return ReadingSaidLine(line: r.line, refused: r.refused, undo: r.undo)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    func addReading(_ text: String) async -> ReadingSaidLine? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        return await reading(true) { try await $0.addReading(text: t, subject: nil) }
+    }
+
+    func startReading(_ id: String) async -> ReadingSaidLine? { await reading(true) { try await $0.startReading(id: id) } }
+
+    func readingProgress(_ id: String, _ text: String) async -> ReadingSaidLine? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        return await reading(true) { try await $0.readingProgress(id: id, text: t) }
+    }
+
+    func finishReading(_ id: String) async -> ReadingSaidLine? { await reading(true) { try await $0.finishReading(id: id) } }
+
+    func putDownReading(_ id: String) async -> ReadingSaidLine? { await reading { try await $0.putDownReading(id: id) } }
+
+    func removeReading(_ id: String) async -> ReadingSaidLine? { await reading { try await $0.removeReading(id: id) } }
+
+    /// Takes back the last reading command; false once too late.
+    func undoReading(_ token: String) async -> Bool {
+        guard let core else { return false }
+        MekaHaptics.tick()
+        do { return try await core.undoReading(token: token).boolValue } catch { lastError = error.localizedDescription; return false }
+    }
 
     // MARK: Errands (errands by location, slice 1)
 
