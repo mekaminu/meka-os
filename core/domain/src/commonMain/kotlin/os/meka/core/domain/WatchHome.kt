@@ -30,6 +30,8 @@ data class WatchHomeView(
     val prep: WatchPrep? = null,
     /** Drafted replies, slice 4: the newest of Navilife's drafts with Send and Not needed ([WatchDraftRules]). */
     val draft: WatchDraft? = null,
+    /** Done for the day, completeness slice 2: the evening glance with Shut down and Later ([WatchEveningRules]). */
+    val evening: WatchEvening? = null,
 )
 
 /**
@@ -208,7 +210,7 @@ object WatchHomeRules {
     fun view(
         now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null,
         parking: List<WatchParking> = emptyList(), match: WatchMatch? = null, prep: WatchPrep? = null,
-        draft: WatchDraft? = null,
+        draft: WatchDraft? = null, evening: WatchEvening? = null,
     ): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
@@ -234,6 +236,7 @@ object WatchHomeRules {
             match = match,
             prep = prep,
             draft = draft,
+            evening = evening,
         )
     }
 

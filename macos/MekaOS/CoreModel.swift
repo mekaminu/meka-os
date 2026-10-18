@@ -892,6 +892,15 @@ final class CoreModel {
         showPlan = true
     }
 
+    /// "Shut down the day" said to Talk (Done for the day, completeness 2): Today opens with the shutdown sheet up,
+    /// as the evening card does; the day is shut down only by Shut down there.
+    func openShutdownFromTalk() {
+        go(to: .today, reduced: MotionSetting.reduced)
+        showBrief = false
+        showPlan = false
+        showShutdown = true
+    }
+
     /// "Take me there" said to Talk after a help answer (Ask knows how Navilife works, slice 3): Ask comes forward and
     /// opens the sheet or place, as the answer's Take me there does (AskScreen takes it on appear or on change).
     func openHelpFromTalk(_ place: HelpPlace) {

@@ -15,7 +15,7 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT }
+enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT, SHUTDOWN }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -31,20 +31,27 @@ object TalkOpenRules {
     const val OPENING_INBOX = "Here's your inbox, one email at a time."
     const val OPENED_INBOX = "Started the ten-minute inbox."
 
+    /**
+     * Done for the day, completeness slice 2: "shut down the day" opens Shut down the day (what got done, what's left,
+     * tomorrow), as the evening card does; the day is shut down by his tap there, never by the words alone.
+     */
+    const val OPENING_SHUTDOWN = "Here's your day. Shut it down when you're ready."
+    const val OPENED_SHUTDOWN = "Opened Shut down the day."
+
     /** What a device without a bedside clock (the Mac) can open. */
-    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT)
+    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT, TalkPlace.SHUTDOWN)
 
     /**
      * The Fold: the planner, the bedside clock, the ten-minute inbox and Find my car (car and parking, slice 1: where
      * the car is parked is kept on the phone only, so the Mac has nothing to open).
      */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT)
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN)
 
     /**
      * The Mac (voice notes into actions, slice 3): the planner, the ten-minute inbox and a voice note, which the Mac now
      * records too; no bedside clock and no Find my car (the parked spot stays on the phone).
      */
-    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT)
+    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN)
 
     /** The Galaxy Watch's Capture (voice notes into actions, slice 4): only a voice note opens from what it hears. */
     val WATCH: Set<TalkPlace> = setOf(TalkPlace.VOICE_NOTE)
@@ -117,6 +124,31 @@ object TalkOpenRules {
         }
     }
 
+    /**
+     * Done for the day, completeness slice 2: "shut down the day", "shut down my day", "shutdown", "close the day",
+     * "end my day", "wrap up the day", "call it a day", "I'm done for the day", "time to shut down", "open shut down"
+     * (what's left once [DROP] is gone). "Shut down the laptop" or "when does my day end?" has more in it and stays a
+     * question.
+     */
+    private val SHUTDOWN: Set<List<String>> = buildSet {
+        val verbs = listOf(
+            listOf("shut", "down"), listOf("shutdown"), listOf("close"), listOf("end"), listOf("finish"),
+            listOf("wrap", "up"), listOf("wind", "down"),
+        )
+        val days = listOf(listOf("my", "day"), listOf("the", "day"), listOf("day"), listOf("today"))
+        for (pre in listOf(emptyList(), listOf("time"), listOf("open"), listOf("start"))) {
+            for (v in verbs) {
+                days.forEach { add(pre + v + it); add(pre + v + it + "today") }
+                if (v == listOf("shut", "down") || v == listOf("shutdown")) add(pre + v)
+            }
+        }
+        for (me in listOf(emptyList(), listOf("i'm"), listOf("im"), listOf("am"), listOf("that's", "me"), listOf("thats", "me"))) {
+            add(me + listOf("done", "the", "day")); add(me + listOf("finished", "the", "day"))
+        }
+        add(listOf("call", "it", "a", "day")); add(listOf("call", "it", "day")); add(listOf("calling", "it", "a", "day"))
+        add(listOf("evening", "shutdown")); add(listOf("my", "evening", "shutdown")); add(listOf("done", "today")); add(listOf("i'm", "done", "today"))
+    }
+
     /** "Bedside clock", "open the bedside clock", "show me the bedside clock", "night clock", "bedside mode". */
     private val BEDSIDE = setOf(
         listOf("bedside", "clock"), listOf("the", "bedside", "clock"), listOf("open", "bedside", "clock"),
@@ -161,6 +193,7 @@ object TalkOpenRules {
             ws in CAR && TalkPlace.CAR in places -> TalkPlace.CAR
             ws in VOICE_NOTE && TalkPlace.VOICE_NOTE in places -> TalkPlace.VOICE_NOTE
             ws in REFLECT && TalkPlace.REFLECT in places -> TalkPlace.REFLECT
+            ws in SHUTDOWN && TalkPlace.SHUTDOWN in places -> TalkPlace.SHUTDOWN
             else -> null
         }
     }
@@ -173,6 +206,7 @@ object TalkOpenRules {
         TalkPlace.CAR -> ParkingRules.OPENING
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENING
         TalkPlace.REFLECT -> ReflectionRules.OPENING
+        TalkPlace.SHUTDOWN -> OPENING_SHUTDOWN
     }
 
     /** What the conversation remembers about opening [place]. */
@@ -183,6 +217,7 @@ object TalkOpenRules {
         TalkPlace.CAR -> ParkingRules.OPENED
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENED
         TalkPlace.REFLECT -> ReflectionRules.OPENED
+        TalkPlace.SHUTDOWN -> OPENED_SHUTDOWN
     }
 }
 

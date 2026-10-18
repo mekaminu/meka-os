@@ -1882,6 +1882,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual((said.effects.first as? TalkEffectSpeak)?.text, rules.OPENING)
         let done = TalkFlow.shared.spoke(s: said.session)
         XCTAssertEqual((done.effects.last as? TalkEffectOpen)?.place, TalkPlace.reflect)
+        // Done for the day, completeness 2: "shut down the day" said to Talk on the Mac opens the shutdown sheet.
+        let shut = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "shut down the day",
+                                         places: TalkOpenRules.shared.MAC)
+        XCTAssertEqual((shut.effects.first as? TalkEffectSpeak)?.text, TalkOpenRules.shared.OPENING_SHUTDOWN)
+        XCTAssertEqual((TalkFlow.shared.spoke(s: shut.session).effects.last as? TalkEffectOpen)?.place, TalkPlace.shutdown)
         // Slice 3: the Sunday time, as the picker shows it.
         let review = ReviewRules.shared
         XCTAssertEqual(review.whenLine(start: 19 * 60 + 30), "Comes on Sundays at 19:30 · through Monday")

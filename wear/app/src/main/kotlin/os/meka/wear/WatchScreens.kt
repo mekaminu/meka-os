@@ -265,7 +265,9 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
     val parkingTimers by core.parkingTimersView.collectAsState()
     // Barça match day, slice 4: the match near now, redrawn when a sync brings a new score.
     val barca by core.barcaNearView.collectAsState()
-    val home = remember(today, fasting, tick, mailNeeds, mailMoment, parkingTimers, barca) { core.watchHome() }
+    // Done for the day, completeness 2: the evening glance follows this watch's own shutdown view.
+    val shutdown by core.shutdownView.collectAsState()
+    val home = remember(today, fasting, tick, mailNeeds, mailMoment, parkingTimers, barca, shutdown) { core.watchHome() }
     val scope = rememberCoroutineScope()
 
     if ((sync as? SyncStatus.Failing)?.reason == MekaCore.SIGNED_OUT_MESSAGE) {
@@ -326,6 +328,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         DraftRow(core, home.draft, reduced)
 
         InboxRow(home.inbox, reduced)
+
+        EveningRow(core, home.evening, reduced)
 
         Spacer(Modifier.height(MekaSpace.m))
         FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
@@ -460,6 +464,60 @@ private fun InboxRow(inbox: os.meka.core.domain.WatchInbox?, reduced: Boolean) {
         }
     }
 }
+
+/**
+ * Done for the day, completeness slice 2: the evening glance — "DONE FOR THE DAY" (accent), "6 done · 2 left for
+ * tomorrow", tomorrow's first commitment, and **Shut down** (filled, a confirm buzz) and **Later** while it can be put
+ * off; the same taps as the phone's pane, synced to every device. After a tap the row says what it did ("Day shut down ·
+ * see you tomorrow", "Shut down the day comes back at 21:15") for a few seconds; once shut down it reads "DAY SHUT DOWN"
+ * until midnight. It unfolds on the expand spring (reduced motion: a fade); lines cross-fade.
+ */
+@Composable
+private fun EveningRow(core: MekaCore, evening: os.meka.core.domain.WatchEvening?, reduced: Boolean) {
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchEvening>(1) }
+    if (evening != null) last[0] = evening
+    val scope = rememberCoroutineScope()
+    var said by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(said) { if (said != null) { delay(EVENING_SAID_MS); said = null } }
+    AnimatedVisibility(
+        visible = evening != null || said != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "evening",
+    ) {
+        val v = evening ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = MekaSpace.m)
+                .semantics(mergeDescendants = true) { contentDescription = said ?: v.spoken },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Line(v.label, MekaType.captionStrong.copy(color = if (v.lit) C.accent else C.textSecondary), maxLines = 1)
+            AnimatedContent(
+                targetState = said ?: v.line,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "eveningLine",
+            ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
+            if (said == null) v.note?.let { Line(it, MekaType.caption.copy(color = C.textTertiary)) }
+            if (said == null && v.canShutDown) {
+                Spacer(Modifier.height(MekaSpace.xxs))
+                WatchButton(os.meka.core.domain.WatchEveningRules.SHUT_DOWN, primary = true, reduced = reduced, haptic = HapticFeedbackConstants.CONFIRM) {
+                    scope.launch { said = runCatching { core.watchShutDown() }.getOrNull() }
+                }
+                if (v.canLater) {
+                    WatchButton(os.meka.core.domain.WatchEveningRules.LATER, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                        scope.launch { said = runCatching { core.watchShutdownLater() }.getOrNull() }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** How long the evening row says what a tap did before it shows the glance (or folds away) again. */
+private const val EVENING_SAID_MS = 4_000L
 
 /**
  * Meeting prep, slice 3: from his lead time before a meeting with other people until ten minutes after its start —

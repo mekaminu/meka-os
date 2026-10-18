@@ -140,8 +140,10 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     }
     // "Plan my day" said to Talk lands on Today, which then springs the planner up.
     val openPlan by app.openPlan.collectAsState()
-    LaunchedEffect(openPlan) {
-        if (openPlan && current != ShellDestination.TODAY) {
+    // "Shut down the day" said to Talk lands on Today too, which then opens Shut down the day.
+    val openShutdown by app.openShutdown.collectAsState()
+    LaunchedEffect(openPlan, openShutdown) {
+        if ((openPlan || openShutdown) && current != ShellDestination.TODAY) {
             arrival = SharedMotion.arrivalAfterGo(ShellDestination.TODAY, arrival); current = ShellDestination.TODAY
         }
     }

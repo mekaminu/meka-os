@@ -491,6 +491,28 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theWatchsEveningGlanceShutsTheDayDownOnEveryDevice() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 18, 30).toInstant(london).toEpochMilliseconds() // a Tuesday evening
+        val w = core("android"); val m = core("mac")
+        w.addTask("Post the letter")
+        val e = w.watchHome().evening
+        assertEquals(os.meka.core.domain.WatchEveningRules.LABEL, e?.label)
+        assertEquals("Nothing ticked off · 1 left for tomorrow", e?.line)
+        assertTrue(e!!.canShutDown && e.canLater)
+        assertEquals(os.meka.core.domain.WatchEveningRules.SHUT, w.watchShutDown())
+        val done = w.watchHome().evening
+        assertEquals(os.meka.core.domain.WatchEveningRules.LABEL_DONE, done?.label)
+        assertTrue(!done!!.canShutDown)
+        w.syncNow(); m.syncNow()
+        assertTrue(m.shutdownView.value.doneToday)
+        // In the morning the wrist shows nothing for the evening.
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 23, 8, 0).toInstant(london).toEpochMilliseconds()
+        w.tick()
+        assertEquals(null, w.watchHome().evening)
+    }
+
+    @Test
     fun theMorningBriefShowsTheDayAndGotItPutsItAwayOnTheOtherDevice() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds() // a Tuesday

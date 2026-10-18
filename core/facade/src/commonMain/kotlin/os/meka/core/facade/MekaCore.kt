@@ -4830,7 +4830,18 @@ class MekaCore(
             os.meka.core.domain.WatchPrepRules.view(_today.value.meetingPrep, nowMs(), ZoneCalendar(timeZone)),
             // Drafted replies, slice 4: the newest draft, as last worked out on the core's thread.
             watchDraftNow,
+            // Done for the day, completeness slice 2: the evening glance from this watch's own shutdown view.
+            os.meka.core.domain.WatchEveningRules.view(_shutdown.value),
         )
+
+    /** Done for the day, completeness slice 2: **Shut down** on the watch (the same as the pane's); what it says. */
+    suspend fun watchShutDown(): String {
+        shutDown()
+        return os.meka.core.domain.WatchEveningRules.SHUT
+    }
+
+    /** Done for the day, completeness slice 2: **Later** on the watch's evening glance; "… comes back at 21:15" or null. */
+    suspend fun watchShutdownLater(): String? = shutdownLater(null)
 
     /**
      * Car and parking, slice 7: the cars' parking timers for the wrist, worked out again at this minute from the synced

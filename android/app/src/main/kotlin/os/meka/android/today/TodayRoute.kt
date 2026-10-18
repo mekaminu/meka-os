@@ -234,6 +234,11 @@ fun TodayRoute(
     LaunchedEffect(talkPlan) {
         if (talkPlan) { showBrief = false; showPlan = true; widgetApp?.openPlan?.value = false }
     }
+    // Done for the day, completeness 2: "shut down the day" said to Talk opens the shutdown pane over Today.
+    val talkShutdown = widgetApp?.openShutdown?.collectAsState()?.value ?: false
+    LaunchedEffect(talkShutdown) {
+        if (talkShutdown) { showBrief = false; showPlan = false; showShutdown = true; widgetApp?.openShutdown?.value = false }
+    }
     val newsPlace by core.newsPlace.collectAsState()
     // The news ticker under the header (news ticker, slice 2): the per-device choice from Appearance.
     val ticker = remember(newsPlace) { TickerRules.ticker(newsPlace) }
