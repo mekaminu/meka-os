@@ -238,6 +238,14 @@ class NotificationsTest {
         // Shut down already: no nudge.
         val done = NoticeSources.collect(lists, fast, shutdown.copy(doneToday = true), today, at(9), cal)
         assertTrue(done.none { it.source == NoticeSource.SHUTDOWN })
+        // Done for the day, completeness: Later moves it on under a fresh key; off or on leave there's none.
+        assertEquals(listOf(NoticeAction.SHUT_DOWN_LATER), notices.single { it.source == NoticeSource.SHUTDOWN }.actions)
+        val later = NoticeSources.collect(lists, fast, shutdown.copy(laterUntilMs = at(18, 45)), today, at(17, 40), cal)
+            .single { it.source == NoticeSource.SHUTDOWN }
+        assertEquals(at(18, 45), later.atMs)
+        assertEquals(ShutdownRules.laterKey(day, at(18, 45)), later.key)
+        assertTrue(NoticeSources.collect(lists, fast, shutdown.copy(cardOff = true), today, at(9), cal).none { it.source == NoticeSource.SHUTDOWN })
+        assertTrue(NoticeSources.collect(lists, fast, shutdown.copy(onLeave = true), today, at(9), cal).none { it.source == NoticeSource.SHUTDOWN })
         // The whole day end to end: 09:00 heads-up, 12:30 digest with the renewal, fasting goal rides in it.
         val r9 = eval(notices, at(9, 1))
         assertEquals(listOf(NoticeSource.RENEWAL_CANCEL_BY), r9.post.map { it.source })

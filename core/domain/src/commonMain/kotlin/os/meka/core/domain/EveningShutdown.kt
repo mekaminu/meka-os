@@ -15,6 +15,11 @@ object ShutdownFields {
     /** Local epoch day of the last shutdown. */
     const val DONE_DAY = "shutdownDay"
     const val DONE_AT = "shutdownAtMs"
+    /** Done for the day, completeness: "Later" — the local day it was put off and when the card comes back. */
+    const val LATER_DAY = "shutdownLaterDay"
+    const val LATER_UNTIL = "shutdownLaterUntilMs"
+    /** Done for the day, completeness: 1 when the evening card and its heads-up are switched off (absent = on). */
+    const val CARD_OFF = "shutdownCardOff"
 }
 
 /** One thing left from today, with what can be done with it in the shutdown. */
@@ -98,6 +103,17 @@ data class ShutdownView(
      * Activity); null when nothing was handled today. Set by the facade from the activity log ([ReceiptRules]).
      */
     val receipt: DailyReceipt? = null,
+    /**
+     * Done for the day, completeness: when "Later" brings the card back today (epoch ms), 0 when it wasn't put off.
+     * While that is ahead the card is away and the heads-up waits for it.
+     */
+    val laterUntilMs: Long = 0,
+    /** "Later" can be offered now: the card is up (or due) and the comeback would still be before 23:00. */
+    val laterOffered: Boolean = false,
+    /** The evening card and its heads-up are switched off (the pane still opens from Ask → Daily). Synced. */
+    val cardOff: Boolean = false,
+    /** Today is booked as annual leave: no evening card or heads-up unless he opens the pane himself. */
+    val onLeave: Boolean = false,
 ) {
     companion object {
         val EMPTY = ShutdownView(
@@ -116,6 +132,43 @@ object ShutdownRules {
     const val DONE_SHOWN = 6
     /** Work that ends inside this range starts the evening; outside it (early finish, late or night shift) 18:00 does. */
     val WORK_END_RANGE = 15 * 60..22 * 60
+
+    /** Done for the day, completeness: how long "Later" puts the card off, and the latest it comes back. */
+    const val LATER_MIN = 60
+    const val LATER_LATEST_MIN = 23 * 60
+    private const val LATER_AT_LEAST_MIN = 15
+    /** The button on Today's card, in the pane and on the heads-up ([NoticeAction.SHUT_DOWN_LATER]). */
+    const val LATER_LABEL = "Later"
+    /** The heads-up's keys: "shutdown:<day>", and once put off a fresh "shutdown:<day>:later:<ms>" so it posts again. */
+    const val NOTICE_PREFIX = "shutdown:"
+
+    /**
+     * When "Later" pressed at [minute] brings the card back: an hour on, rounded up to the quarter hour, never after
+     * 23:00; null when that would be less than a quarter of an hour away.
+     */
+    fun laterMinute(minute: Int): Int? {
+        val m = minOf(((minute + LATER_MIN + 14) / 15) * 15, LATER_LATEST_MIN)
+        return m.takeIf { it - minute >= LATER_AT_LEAST_MIN }
+    }
+
+    /** What pressing it says: "Shut down the day comes back at 21:15". */
+    fun laterSaid(minute: Int): String = "Shut down the day comes back at ${LocalClock.formatMinute(minute)}"
+
+    fun laterKey(day: Long, untilMs: Long): String = "$NOTICE_PREFIX$day:later:$untilMs"
+
+    /** What switching the card off or on says. */
+    fun cardSaid(on: Boolean): String = if (on) "The evening card is back · it comes at the end of each work day, or 20:00"
+    else "No evening card or heads-up · Shut down the day is still in Ask → Daily"
+
+    /** The pane's line about the card. */
+    fun cardLine(off: Boolean, onLeave: Boolean): String = when {
+        off -> "Evening card · off · open it here whenever you like"
+        onLeave -> "Evening card · on · not on annual leave days"
+        else -> "Evening card · on · with a heads-up when the evening starts"
+    }
+
+    /** A kind line when nothing was ticked off, never a bare "0". */
+    const val NOTHING_DONE = "Nothing ticked off today · some days are like that"
 
     /** The minute the shutdown is offered on local day [epochDay]: the end of work on a work day, else 20:00. */
     fun startMinute(schedule: WorkSchedule, epochDay: Long, holidays: HolidayCalendar = HolidayCalendar.NONE): Int {
@@ -207,6 +260,27 @@ class EveningShutdown(
 
     private fun doneAtMs(): Long? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(ShutdownFields.DONE_AT)?.longOrNull
 
+    /** When "Later" brings today's card back, 0 when it wasn't put off today. */
+    fun laterUntil(day: Long): Long {
+        val s = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID) ?: return 0
+        return if (s[ShutdownFields.LATER_DAY].longOrNull == day) s[ShutdownFields.LATER_UNTIL].longOrNull ?: 0 else 0
+    }
+
+    /** "Later": today's card and heads-up come back at [untilMs] on every device. */
+    fun putOff(day: Long, untilMs: Long) {
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(ShutdownFields.LATER_DAY to day.fv(), ShutdownFields.LATER_UNTIL to untilMs.fv()),
+        )
+    }
+
+    fun cardOff(): Boolean = (replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(ShutdownFields.CARD_OFF)?.longOrNull ?: 0L) == 1L
+
+    /** Switches the evening card and its heads-up off ([on] false) or back on, on every device. */
+    fun setCard(on: Boolean) {
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(ShutdownFields.CARD_OFF to (if (on) 0L else 1L).fv()))
+    }
+
     /** Calls it a day: the card is put away on every device until tomorrow evening. */
     fun shutDown() {
         val now = nowMs()
@@ -232,11 +306,15 @@ class EveningShutdown(
         tomorrow: DayWindow,
         /** Bank holidays are days off: no work hours that evening or in tomorrow's preview. */
         holidays: HolidayCalendar = HolidayCalendar.NONE,
+        /** Today is booked as annual leave (Done for the day, completeness): no card unless he opens it. */
+        onLeave: Boolean = false,
     ): ShutdownView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
         val start = ShutdownRules.startMinute(schedule, today.epochDay, holidays)
         val doneToday = doneDay() == today.epochDay
+        val later = laterUntil(today.epochDay)
+        val off = cardOff()
         val doneTasks = ShutdownRules.doneToday(all, today)
         val doneCount = doneTasks.size
 
@@ -259,12 +337,12 @@ class EveningShutdown(
         }
         val cardLine = (if (left.isEmpty()) "Nothing left" else "${left.size} left") + " · " + tomorrowBit
         return ShutdownView(
-            offered = !doneToday && !atWork && minute >= start,
+            offered = !doneToday && !atWork && minute >= start && now >= later && !off && !onLeave,
             doneToday = doneToday,
             doneLine = if (doneToday) doneAtMs()?.let { "Day shut down at ${hhmm(it)}" } ?: "Day shut down" else null,
             startMinute = start,
             doneCount = doneCount,
-            doneCountLine = if (doneCount == 0) "No tasks finished today" else "$doneCount done today",
+            doneCountLine = if (doneCount == 0) ShutdownRules.NOTHING_DONE else "$doneCount done today",
             left = left,
             leftLine = leftLine,
             tomorrow = preview,
@@ -274,6 +352,11 @@ class EveningShutdown(
             doneMore = ShutdownRules.doneMore(doneCount),
             firstLine = ShutdownRules.firstLine(preview.first),
             night = doneToday,
+            laterUntilMs = later,
+            laterOffered = !doneToday && !off && !onLeave && !atWork && now >= later && minute >= start &&
+                ShutdownRules.laterMinute(minute) != null,
+            cardOff = off,
+            onLeave = onLeave,
         )
     }
 

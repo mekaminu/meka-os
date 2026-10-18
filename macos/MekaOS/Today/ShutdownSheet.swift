@@ -11,6 +11,7 @@ struct ShutdownSheet: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     @State private var closing = false
+    @State private var cardSaid: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -101,6 +102,19 @@ struct ShutdownSheet: View {
                     }
                     .transition(reduceMotion ? AnyTransition.opacity : AnyTransition.scale(scale: 0.6).combined(with: .opacity))
                 }
+                // Done for the day, completeness: the evening card's switch (synced) and what the last click did.
+                HStack(spacing: MekaSpace.xs) {
+                    Text(ShutdownRules.shared.cardLine(off: v.cardOff, onLeave: v.onLeave))
+                        .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Spacer()
+                    Button(v.cardOff ? "Turn on" : "Turn off") { setCard(on: v.cardOff) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
+                }
+                .padding(.top, MekaSpace.xs)
+                if let said = cardSaid {
+                    Text(said).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .transition(.opacity)
+                }
             } else {
                 SkeletonRows(count: 4, palette: palette)
             }
@@ -126,6 +140,15 @@ struct ShutdownSheet: View {
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
         } else {
             Text(v.doneCountLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+        }
+    }
+
+    /// The evening card on or off, on both apps; the line under it cross-fades to what it did.
+    private func setCard(on: Bool) {
+        MekaHaptics.tick()
+        Task { @MainActor in
+            let line = await model.setShutdownCard(on: on)
+            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { cardSaid = line }
         }
     }
 
@@ -229,6 +252,16 @@ struct ShutdownCard: View {
         }
         .buttonStyle(MekaPressStyle())
         .mekaHoverLift()
+        // Done for the day, completeness: Later puts the card and its heads-up off an hour, never past 23:00.
+        .overlay(alignment: .trailing) {
+            if shutdown.laterOffered {
+                Button(ShutdownRules.shared.LATER_LABEL) { model.shutdownLater() }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .padding(.trailing, MekaSpace.l)
+            }
+        }
     }
 }
 

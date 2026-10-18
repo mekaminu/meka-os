@@ -56,6 +56,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.DailyReceipt
 import os.meka.core.domain.DoneRow
 import os.meka.core.domain.ShutdownItem
+import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.ShutdownView
 import os.meka.core.domain.SomedayKind
 import os.meka.core.domain.TomorrowRow
@@ -80,6 +81,7 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     var closing by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
     val act: (suspend () -> Unit) -> Unit = { block -> scope.launch { runCatching { block() } } }
     // Ticks reuse Today's complete button, which plays the ring and haptic before calling back.
     val tick: (String) -> Unit = { id -> act { core.complete(id) } }
@@ -177,6 +179,35 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
         }
+
+        // Done for the day, completeness: the evening card's switch (synced), and what the last tap did.
+        item(key = "card-switch") {
+            CardSwitch(v, said, Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(4))) { on ->
+                haptics.tick()
+                scope.launch { said = runCatching { core.setShutdownCard(on) }.getOrNull() }
+            }
+        }
+    }
+}
+
+/** "Evening card · on · …" with Turn off / Turn on; the line under it says what the tap did (cross-fades). */
+@Composable
+private fun CardSwitch(v: ShutdownView, said: String?, modifier: Modifier, onSet: (Boolean) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(ShutdownRules.cardLine(v.cardOff, v.onLeave), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+            Text(
+                if (v.cardOff) "Turn on" else "Turn off", style = MekaType.caption, color = Meka.colors.accent,
+                modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { onSet(v.cardOff) }.minTouch().padding(horizontal = MekaSpace.xs),
+            )
+        }
+        AnimatedContent(
+            targetState = said,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "card-switch-said",
+        ) { line -> if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textSecondary) }
     }
 }
 
@@ -301,13 +332,26 @@ private fun ShutdownButton(label: String, filled: Boolean, modifier: Modifier = 
  * evening starts (the list animates new items in) and goes once the day is shut down.
  */
 @Composable
-internal fun ShutdownCard(v: ShutdownView, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier) {
-    Column(
+internal fun ShutdownCard(
+    v: ShutdownView, onOpen: () -> Unit, modifier: Modifier = Modifier, titleModifier: Modifier = Modifier, onLater: (() -> Unit)? = null,
+) {
+    Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l)).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onOpen() }.padding(MekaSpace.l),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text("Shut down the day", style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
-        Text(v.cardLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+        Column(Modifier.weight(1f)) {
+            Text("Shut down the day", style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = titleModifier)
+            Text(v.cardLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+        }
+        // Done for the day, completeness: Later puts the card (and its heads-up) off an hour, never past 23:00.
+        if (onLater != null && v.laterOffered) {
+            Text(
+                ShutdownRules.LATER_LABEL, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.padding(start = MekaSpace.m).clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { onLater() }.minTouch().padding(horizontal = MekaSpace.xs),
+            )
+        }
     }
 }
 

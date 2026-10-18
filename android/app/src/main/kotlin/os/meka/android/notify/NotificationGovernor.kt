@@ -380,6 +380,10 @@ class NoticeActionReceiver : BroadcastReceiver() {
                             // Sunday's weekly review (weekly reflection, slice 4): back two hours on, on both apps.
                             runCatching { app.core.reviewLater(key) }
                             app.governor.cancel(key)
+                        } else if (action == NoticeAction.SHUT_DOWN_LATER) {
+                            // The evening card (Done for the day, completeness): back an hour on, on both apps.
+                            runCatching { app.core.shutdownLater(key) }
+                            app.governor.cancel(key)
                         } else if (action == NoticeAction.ALL_STILL_FIT) {
                             // The size check (kids' admin, slice 6): stamped on both apps; a quiet line says so.
                             val line = runCatching { app.core.kidsStillFit(key) }.getOrNull()

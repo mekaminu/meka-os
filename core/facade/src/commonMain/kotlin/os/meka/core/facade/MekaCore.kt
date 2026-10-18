@@ -4111,6 +4111,32 @@ class MekaCore(
     /** Calls it a day: the shutdown card is put away on every device until tomorrow evening. */
     suspend fun shutDown() = onCore { shutdown.shutDown() }
 
+    /**
+     * Done for the day, completeness: "Later" on the evening card ([key] null) or its heads-up ([key] that notice's
+     * key, which must be today's). The card leaves Today and comes back an hour on (never after 23:00) on every device.
+     * Returns "Shut down the day comes back at 21:15", or null when it can't be put off now.
+     */
+    suspend fun shutdownLater(key: String?): String? = onCore {
+        val v = _shutdown.value
+        if (!v.laterOffered) return@onCore null
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val mine = os.meka.core.domain.ShutdownRules.NOTICE_PREFIX + today
+        if (key != null && key != mine && !key.startsWith("$mine:")) return@onCore null
+        val m = os.meka.core.domain.ShutdownRules.laterMinute(cal.minuteOfDay(now)) ?: return@onCore null
+        shutdown.putOff(today, cal.toEpochMs(today, m))
+        refresh()
+        os.meka.core.domain.ShutdownRules.laterSaid(m)
+    }
+
+    /** Switches the evening card and its heads-up off ([on] false) or back on, on every device; returns what it says. */
+    suspend fun setShutdownCard(on: Boolean): String = onCore {
+        shutdown.setCard(on)
+        refresh()
+        os.meka.core.domain.ShutdownRules.cardSaid(on)
+    }
+
     // ---- Alarms ----
 
     /**
@@ -8454,7 +8480,7 @@ class MekaCore(
             nowMs(), cal, ::dayWindowOf,
         )
         _weekAhead.value = weekAheadNow
-        val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays)
+        val shutdownRaw = shutdown.view(all, dayEvents, workState.schedule, workState.atWork, today, dayWindow(today.endMs), workHolidays, onLeave = today.epochDay in leaveDays)
         val shutdownNow = shutdownRaw.copy(
             // Daily receipt: what MEKA handled today, from the activity log (Today's evening line opens Activity).
             receipt = os.meka.core.domain.ReceiptRules.receipt(activity.items(), nowMs(), cal),

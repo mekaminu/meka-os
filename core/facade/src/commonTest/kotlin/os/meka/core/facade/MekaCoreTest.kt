@@ -469,6 +469,28 @@ class MekaCoreTest {
     }
 
     @Test
+    fun laterAndTheCardSwitchPutTheEveningCardAwayOnBothDevices() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 18, 30).toInstant(london).toEpochMilliseconds() // a Tuesday evening
+        val a = core("android"); val m = core("mac")
+        a.addTask("Post the letter")
+        assertTrue(a.shutdownView.value.offered)
+        assertTrue(a.shutdownView.value.laterOffered)
+        assertEquals("Shut down the day comes back at 19:30", a.shutdownLater(null))
+        assertTrue(!a.shutdownView.value.offered)
+        a.syncNow(); m.syncNow()
+        assertTrue(!m.shutdownView.value.offered)
+        // A heads-up key from another day can't put tonight's card off.
+        assertEquals(null, m.shutdownLater("shutdown:1"))
+
+        assertEquals(os.meka.core.domain.ShutdownRules.cardSaid(false), m.setShutdownCard(false))
+        m.syncNow(); a.syncNow()
+        assertTrue(a.shutdownView.value.cardOff)
+        a.setShutdownCard(true)
+        assertTrue(!a.shutdownView.value.cardOff)
+    }
+
+    @Test
     fun theMorningBriefShowsTheDayAndGotItPutsItAwayOnTheOtherDevice() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 9, 22, 7, 45).toInstant(london).toEpochMilliseconds() // a Tuesday

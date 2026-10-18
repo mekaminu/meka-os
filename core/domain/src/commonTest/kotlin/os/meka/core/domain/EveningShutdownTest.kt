@@ -221,7 +221,53 @@ class EveningShutdownTest {
         assertEquals("Nothing planned yet", v.tomorrow.summary)
         assertEquals("Tomorrow: nothing planned yet", v.tomorrow.glance)
         assertEquals("Nothing left · nothing planned for tomorrow yet", v.cardLine)
-        assertEquals("No tasks finished today", v.doneCountLine)
+        assertEquals(ShutdownRules.NOTHING_DONE, v.doneCountLine)
+    }
+
+    @Test
+    fun laterPutsTheCardOffAnHourOnBothDevicesNeverPast23() {
+        assertEquals(19 * 60 + 30, ShutdownRules.laterMinute(18 * 60 + 30))
+        assertEquals(20 * 60 + 15, ShutdownRules.laterMinute(19 * 60 + 7)) // rounded up to the quarter
+        assertEquals(23 * 60, ShutdownRules.laterMinute(22 * 60 + 20)) // capped at 23:00
+        assertNull(ShutdownRules.laterMinute(22 * 60 + 50)) // under a quarter of an hour away
+        assertEquals("Shut down the day comes back at 19:30", ShutdownRules.laterSaid(19 * 60 + 30))
+
+        assertTrue(view().laterOffered)
+        sa.putOff(today(), at(today(), 19, 30))
+        a.sync(); m.sync()
+        val sm = shutdown(m)
+        val tm = tasks(m)
+        assertFalse(view().offered)
+        assertFalse(view(sm, tm).offered) // the Mac's card goes too
+        assertTrue(view().evening) // the quiet glance still shows
+        assertEquals(at(today(), 19, 30), view(sm, tm).laterUntilMs)
+        world.clock.nowMs = at(today(), 19, 30)
+        assertTrue(view().offered)
+        // Tomorrow's evening isn't put off by tonight's Later.
+        world.clock.nowMs = at(today() + 1, 18, 30)
+        assertTrue(view().offered)
+        assertEquals(0, view().laterUntilMs)
+    }
+
+    @Test
+    fun theCardSwitchedOffOrAnnualLeaveShowsNoCardButThePaneStillWorks() {
+        sa.setCard(on = false)
+        a.sync(); m.sync()
+        val sm = shutdown(m)
+        val off = view(sm, tasks(m))
+        assertFalse(off.offered)
+        assertTrue(off.cardOff)
+        assertFalse(off.laterOffered)
+        assertTrue(off.evening)
+        assertEquals("Evening card · off · open it here whenever you like", ShutdownRules.cardLine(off.cardOff, off.onLeave))
+        sm.setCard(on = true)
+        m.sync(); a.sync()
+        assertTrue(view().offered)
+
+        val leave = sa.view(ta.all(), emptyList(), schedule, false, window(), window(today() + 1), onLeave = true)
+        assertFalse(leave.offered)
+        assertTrue(leave.onLeave)
+        assertEquals("Evening card · on · not on annual leave days", ShutdownRules.cardLine(false, true))
     }
 
     @Test

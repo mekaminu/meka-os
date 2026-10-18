@@ -1763,6 +1763,18 @@ final class CoreModel {
     /// "Move the rest to tomorrow".
     func carryAllToTomorrow() { MekaHaptics.tick(); run { try await $0.carryAllToTomorrow() } }
 
+    /// Done for the day, completeness: "Later" on Today's evening card: it leaves and comes back an hour on (both apps).
+    func shutdownLater() {
+        MekaHaptics.light()
+        run { _ = try await $0.shutdownLater(key: nil) }
+    }
+
+    /// The evening card and its heads-up off or back on, on both apps; returns what it says.
+    func setShutdownCard(on: Bool) async -> String? {
+        guard let core else { return nil }
+        do { return try await core.setShutdownCard(on: on) } catch { lastError = error.localizedDescription; return nil }
+    }
+
     /// Calls it a day; the card is put away on the Fold too.
     func shutDown() async {
         guard let core else { return }
@@ -2409,6 +2421,14 @@ final class CoreModel {
         if name == MacNotifier.laterTonightAction {
             Task {
                 _ = try? await core.reviewLater(key: key)
+                MacNotifier.remove(key: key)
+            }
+            return
+        }
+        // The evening card: Later brings it back an hour on, on both apps (Done for the day, completeness).
+        if name == MacNotifier.shutdownLaterAction {
+            Task {
+                _ = try? await core.shutdownLater(key: key)
                 MacNotifier.remove(key: key)
             }
             return

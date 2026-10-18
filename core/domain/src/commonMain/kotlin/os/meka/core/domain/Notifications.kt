@@ -81,7 +81,12 @@ enum class NoticeAction(val label: String) {
      * Kids' admin, slice 6 ([KidsRules.notices]): the child's sizes still fit, so the check counts as done today and the
      * next one is three months on. Both apps; it changes no size.
      */
-    ALL_STILL_FIT(KidsRules.ALL_FIT);
+    ALL_STILL_FIT(KidsRules.ALL_FIT),
+    /**
+     * Done for the day, completeness ([ShutdownRules.laterMinute]): the evening card and its heads-up come back an hour
+     * on (never after 23:00), on both devices. Both apps.
+     */
+    SHUT_DOWN_LATER(ShutdownRules.LATER_LABEL);
 
     /** Whether a device that can [send] messages (the Fold) shows it: Send and Edit there, Copy elsewhere. */
     fun shownOn(send: Boolean): Boolean = when (this) {
@@ -870,11 +875,17 @@ object NoticeSources {
             }
         }
         val shutdownAt = cal.toEpochMs(day, shutdown.startMinute)
-        if (!shutdown.doneToday && (shutdown.offered || nowMs < shutdownAt)) {
+        // Done for the day, completeness: none when the card is switched off or on annual leave; "Later" moves it on
+        // under a fresh key so it posts again when it comes back.
+        val shutdownLater = shutdown.laterUntilMs.takeIf { it > shutdownAt }
+        val shutdownWhen = shutdownLater ?: shutdownAt
+        if (!shutdown.doneToday && !shutdown.cardOff && !shutdown.onLeave && (shutdown.offered || nowMs < shutdownWhen)) {
             out += Notice(
-                key = "shutdown:$day", source = NoticeSource.SHUTDOWN, tier = NoticeTier.HEADS_UP,
+                key = shutdownLater?.let { ShutdownRules.laterKey(day, it) } ?: "${ShutdownRules.NOTICE_PREFIX}$day",
+                source = NoticeSource.SHUTDOWN, tier = NoticeTier.HEADS_UP,
                 title = "Shut down the day", text = shutdown.cardLine,
-                atMs = shutdownAt, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+                atMs = shutdownWhen, target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(day + 1, 0),
+                actions = if (ShutdownRules.laterMinute(cal.minuteOfDay(maxOf(nowMs, shutdownWhen))) != null) listOf(NoticeAction.SHUT_DOWN_LATER) else emptyList(),
             )
         }
         // The morning brief: a heads-up when it starts (the end of quiet hours), until noon or until it's read.

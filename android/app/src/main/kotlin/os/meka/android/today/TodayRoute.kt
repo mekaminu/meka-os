@@ -387,6 +387,7 @@ fun TodayRoute(
                         brief = brief, openBrief = { showBrief = true }, briefOpen = showBrief,
                         reviewCard = review.card, openReviewCard = { scope.launch { runCatching { core.showReviewCardWeek() }; openReview() } },
                         laterReviewCard = { scope.launch { runCatching { core.reviewLater(null) } } },
+                        laterShutdownCard = { scope.launch { runCatching { core.shutdownLater(null) } } },
                         openEvent = { eventOpen = it }, eventHandlers = eventHandlers, undo = eventUndo,
                         now = if (twoPane) null else nowView, nowHandlers = nowHandlers,
                         upNext = upNextView, upNextHandlers = upNextHandlers,
@@ -695,6 +696,7 @@ private fun TodayPane(
     reviewCard: ReviewCard, openReviewCard: () -> Unit,
     /** Weekly reflection, slice 4: "Later tonight" on the review card (Sunday only): it leaves and comes back in two hours. */
     laterReviewCard: () -> Unit = {},
+    laterShutdownCard: () -> Unit = {},
     openEvent: (CalendarEvent) -> Unit = {},
     eventHandlers: EventActionHandlers? = null,
     /** False in the command centre, where the Needs you column beside Today shows them. */
@@ -1104,7 +1106,7 @@ private fun TodayPane(
             if (shutdown.offered) {
                 item(key = "shutdown") {
                     ShutdownCard(shutdown, openShutdown, Modifier.padding(bottom = MekaSpace.l).animateItem().appear(rememberAppearance(cardsStep, play)),
-                        titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.SHUTDOWN), !shutdownOpen))
+                        titleModifier = Modifier.sharedTitle(SharedMotion.paneKey(SharedMotion.SHUTDOWN), !shutdownOpen), onLater = laterShutdownCard)
                 }
             } else if (shutdown.evening || shutdown.doneLine != null) {
                 // Tomorrow at a glance once the evening starts (after shutting down, or while still at work); tapping
