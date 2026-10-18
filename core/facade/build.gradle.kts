@@ -52,3 +52,12 @@ kotlin {
     }
 }
 // SKIE defaults give: Flow → AsyncSequence, suspend → async throws, sealed classes → onEnum(of:) exhaustive switch.
+
+// The nightly Mac build (2026-10-18, ci run 871): a native test that ends the process says only "Unknown"; print
+// what it wrote (MekaCore's background errors with their stacks) and full failures.
+tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
+    testLogging {
+        showStandardStreams = true
+        exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+    }
+}

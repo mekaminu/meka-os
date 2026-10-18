@@ -124,7 +124,20 @@ class MekaCore(
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) {
     private val confined = Dispatchers.Default.limitedParallelism(1)
-    private val scope = CoroutineScope(SupervisorJob() + confined)
+    /**
+     * Background work never takes the app down (nightly Mac build 2026-10-18, ci run 871: on Kotlin/Native an exception
+     * escaping a `scope.launch` ends the process — the Mac app, and the native test run). It is kept as
+     * [lastBackgroundError] and printed with its stack, and the work it was doing simply stops.
+     */
+    private val backgroundErrors = kotlinx.coroutines.CoroutineExceptionHandler { _, e ->
+        lastBackgroundError = e.toString().take(300)
+        println("MekaCore background error: " + e.stackTraceToString())
+    }
+    private val scope = CoroutineScope(SupervisorJob() + confined + backgroundErrors)
+
+    /** The last exception background work hit ([backgroundErrors]); null when none. For tests and Health. */
+    var lastBackgroundError: String? = null
+        private set
     private val ids = IdGenerator(secureRandom)
     private val jitter = Random(secureRandom.nextLong())
 
