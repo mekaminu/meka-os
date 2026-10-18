@@ -84,6 +84,8 @@ data class MorningBriefView(
     val school: SchoolLine? = null,
     /** A morning brief worth listening to, slice 1: what the spoken brief adds ([BriefScriptRules.script]); set by the facade. */
     val story: BriefStory = BriefStory.EMPTY,
+    /** Protected time, slice 5: "Protected from 19:00 tonight" under the date ([ProtectedRules.briefLine]); null with none. */
+    val protectedLine: String? = null,
 ) {
     /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
     val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)

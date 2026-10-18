@@ -1837,3 +1837,9 @@ Core: `ProtectedFields.HOLD_MAIL` (`holdMail`, Bool, absent = on) on the `contex
 - **Fold:** ProtectedTimePane's brass action under today's line, cross-fading to "Undo · protect it again", with the done line unfolding under it. **Mac:** ProtectedTimeSheet's button, CoreModel `setProtectedOpenToday(open:)` (only a Bool crosses); bridge assertions.
 - Help tip (docs/help/protected-time.md, HelpIndex regenerated), motion catalogue. Tests: ProtectedOpenTodayTest (3), ProtectedMailFacadeTest (+1: lifted on the Fold, seen on the Mac, Undo on the Mac). No server change. Mac checked nightly.
 
+
+### Protected time, slice 5 (2026-10-18): the brief and the week ahead show it
+- **Core** (ProtectedTime.kt, non-AI, pure, read only; nothing new stored, no migration): `ProtectedRules.dayMark` ("Protected all day", "Protected from 19:00", "Protected from 20:00 · after the shift", "Not protected · you opened it"), `weekLine` ("Protected · Sat, Sun all day · 5 evenings from 19:00") and `weekSpoken`, `briefLine` ("Protected from 19:00 tonight", "Protected all day · tasks wait for Mon 19 Oct", "Not protected tonight · you opened it") and `briefSentence` ("Your evening is protected from 7 o'clock.", "Today is protected, so no tasks are planned."). Additive fields with defaults: `WeekAheadInputs.protectedSetting`, `WeekAheadDay.protectedLine`, `WeekAheadView.protectedLine` (its sentence read out after the mail line), `MorningBriefView.protectedLine`, `BriefStory.protectedTime` (said straight after the kind of day).
+- **Facade:** the week ahead gets the setting; the brief gets both lines.
+- **Fold:** WeekAheadPane's day hours line carries the mark, the week's line cross-fades in under the summary; BriefPane's line under the date. **Mac:** WeekAheadSheet and BriefSheet the same; bridge assertions.
+- Help tip, motion catalogue. Tests: ProtectedWeekBriefTest (3). No server change. Mac checked nightly.

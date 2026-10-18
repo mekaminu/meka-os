@@ -34,6 +34,8 @@ data class WeekAheadDay(
     /** Lines past [WeekAheadRules.MAX_LINES], left out ("and 2 more"). */
     val more: Int,
     val spoken: String,
+    /** Protected time, slice 5: "Protected all day", "Protected from 19:00" ([ProtectedRules.dayMark]); null with none. */
+    val protectedLine: String? = null,
 )
 
 /**
@@ -80,6 +82,8 @@ data class WeekAheadView(
     val mail: String? = null,
     /** Sunday's heads-up's mail words: "3 emails need you · 2 to chase" ([MailWeekRules.noticeBit]). */
     val mailNotice: String? = null,
+    /** Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00" ([ProtectedRules.weekLine]); null with none. */
+    val protectedLine: String? = null,
 ) {
     companion object {
         val EMPTY = WeekAheadView(0, "This week", "", "A quiet week so far", emptyList(), emptyList(), "")
@@ -138,6 +142,8 @@ data class WeekAheadInputs(
     val waiting: List<WaitingItem> = emptyList(),
     /** Deliveries, slice 2: the parcels read from shipping emails, on the day each is due ([ParcelRules.weekLine]). */
     val parcels: List<Parcel> = emptyList(),
+    /** Protected time, slice 5: the setting, so each day shows its protected time and the week a line. */
+    val protectedSetting: ProtectedSetting? = null,
 )
 
 /**
@@ -428,8 +434,10 @@ object WeekAheadRules {
             val shown = all.take(MAX_LINES)
             val dayLine = dayLine(inputs.work, inputs.holidays, d)
             val weather = WeatherRules.dayGlance(inputs.forecast, d, cal)
-            WeekAheadDay(d, CivilDate.shortLabel(d), dayLine, weather, shown, all.size - shown.size, spokenDay(CivilDate.shortLabel(d), dayLine, weather, shown))
+            WeekAheadDay(d, CivilDate.shortLabel(d), dayLine, weather, shown, all.size - shown.size, spokenDay(CivilDate.shortLabel(d), dayLine, weather, shown),
+                ProtectedRules.dayMark(inputs.protectedSetting, d, inputs.work.schedule, inputs.holidays))
         }
+        val protectedLine = ProtectedRules.weekLine(inputs.protectedSetting, dayList, inputs.work.schedule, inputs.holidays)
         val summary = summary(inputs, days)
         val sync = sync(inputs, dayList, window, cal)
         val goals = goalPick(inputs.goals, ws)
@@ -437,12 +445,13 @@ object WeekAheadRules {
         val spoken = buildList {
             add("Your week ahead. ${summary.replace(" · ", ", ")}.")
             mail?.let { add(MailWeekRules.spokenLine(it)) }
+            ProtectedRules.weekSpoken(protectedLine, inputs.protectedSetting)?.let { add(it) }
             days.filter { it.dayLine != null || it.lines.isNotEmpty() }.forEach { add(it.spoken) }
             if (sync.isNotEmpty()) add(syncTitle() + ": " + sync.joinToString("; ") { it.replace(" · ", ", ") } + ".")
             spokenGoals(goals).takeIf { it.isNotEmpty() }?.let { add(it) }
         }.joinToString(" ")
         return WeekAheadView(ws, title(today), ReviewRules.rangeLabel(ws), summary, days, sync, spoken, goals, mail,
-            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs))
+            MailWeekRules.noticeBit(inputs.mail, inputs.waiting, dayList, nowMs), protectedLine)
     }
 
     // ---- Slice 2: the time setting ----

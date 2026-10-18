@@ -151,6 +151,8 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                     modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.BRIEF)))
                 Text(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), style = MekaType.itemMeta,
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                // Protected time, slice 5: "Protected from 19:00 tonight" / "Protected all day · tasks wait for Mon 19 Oct".
+                v.protectedLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
                 v.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
                 // School rhythm, slice 2: "Theo: PE today".

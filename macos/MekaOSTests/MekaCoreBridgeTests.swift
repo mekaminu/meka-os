@@ -2671,6 +2671,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(ProtectedView.companion.EMPTY.openAction)
         XCTAssertFalse(ProtectedView.companion.EMPTY.openToday)
         XCTAssertNil(setting.openDay)
+        // Slice 5: the brief's and the week ahead's lines are plain optional Strings on their views.
+        XCTAssertNil(MorningBriefView.companion.EMPTY.protectedLine)
+        XCTAssertNil(WeekAheadView.companion.EMPTY.protectedLine)
     }
 
     func testDateNightNudgeReachesSwift() {

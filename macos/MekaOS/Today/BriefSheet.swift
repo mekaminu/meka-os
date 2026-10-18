@@ -28,6 +28,10 @@ struct BriefSheet: View {
                 Text([v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · "))
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)
+                // Protected time, slice 5: "Protected from 19:00 tonight" / "Protected all day · tasks wait for Mon 19 Oct".
+                if let line = v.protectedLine {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
+                }
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
                 if let weather = v.weatherLine {
                     Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)

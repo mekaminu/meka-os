@@ -8533,6 +8533,8 @@ class MekaCore(
                 waiting = lists.waitingItems(),
                 // Deliveries, slice 2: each parcel on the day it's due (lit on an office day).
                 parcels = activity.parcels(),
+                // Protected time, slice 5: each day's protected time and the week's line.
+                protectedSetting = protectedTime.setting(),
             ),
             nowMs(), cal, ::dayWindowOf,
         )
@@ -8677,7 +8679,11 @@ class MekaCore(
                         barca = os.meka.core.domain.BarcaBriefRules.briefSentences(allEvents, marks, nowMs(), ZoneCalendar(timeZone)),
                         // Trading tracker, slice 6: up or down on Hyperliquid, no amounts (Short: only when lit).
                         trading = os.meka.core.domain.TradingTodayRules.briefSentence(t.trading, it.story.length),
+                        // Protected time, slice 5: "Your evening is protected from 7 o'clock."
+                        protectedTime = os.meka.core.domain.ProtectedRules.briefSentence(protectedTime.setting(), todayDay, workState.schedule, holidays),
                     ),
+                    // Protected time, slice 5: "Protected from 19:00 tonight" under the date.
+                    protectedLine = os.meka.core.domain.ProtectedRules.briefLine(protectedTime.setting(), todayDay, workState.schedule, holidays),
                 )
             }
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone))

@@ -36,6 +36,11 @@ import os.meka.core.sync.fv
  * use it, the business mail isn't held tonight (nor in the small hours after), Ask is told; **Undo** puts it back. One
  * more additive field, `openDay` (epoch day, 0 = none); a day that has passed simply stops mattering.
  *
+ * Slice 5 (2026-10-18): **the brief and the week ahead show it.** The morning brief says today's protected time under
+ * the date ([ProtectedRules.briefLine]) and in its spoken words ([ProtectedRules.briefSentence]); each day of the week
+ * ahead carries its mark beside the hours ([ProtectedRules.dayMark]) and the week a line under its summary
+ * ([ProtectedRules.weekLine]). Read only; nothing new stored.
+ *
  * Later: work notifications (an Outlook work calendar's reminders) wait until morning too.
  */
 object ProtectedFields {
@@ -276,6 +281,71 @@ object ProtectedRules {
             build(n, "").takeIf { it.length <= ASK_LINE_MAX }?.let { return it }
         }
         return build(1, "").take(ASK_LINE_MAX)
+    }
+
+    // ---- Slice 5: the brief and the week ahead show protected time ----
+
+    /**
+     * [day]'s protected time as the week ahead marks it beside the day's hours: "Protected all day", "Protected from
+     * 19:00", "Protected from 20:00 · after the shift", "Not protected · you opened it" (a lift on that day); null with
+     * none (off, a night shift, a work day with evenings off).
+     */
+    fun dayMark(s: ProtectedSetting?, day: Long, schedule: WorkSchedule, holidays: HolidayCalendar): String? {
+        if (s == null || !s.on) return null
+        if (s.openDay == day && lifted(s, day, schedule, holidays) != null) return "Not protected · you opened it"
+        if (wholeDay(s, day, schedule, holidays)) return "Protected all day"
+        val from = eveningFrom(s, day, schedule, holidays) ?: return null
+        return "Protected from ${LocalClock.formatMinute(from)}" + if (from != s.fromMin) " · after the shift" else ""
+    }
+
+    /**
+     * The week ahead's line under its summary: "Protected · Sat, Sun all day · 5 evenings from 19:00" over [days]
+     * (evenings that start later after a shift are counted too; each day's own mark says when). Null when off or none.
+     */
+    fun weekLine(s: ProtectedSetting?, days: List<Long>, schedule: WorkSchedule, holidays: HolidayCalendar): String? {
+        if (s == null || !s.on) return null
+        val whole = days.filter { wholeDay(s, it, schedule, holidays) }
+        val evenings = days.count { !wholeDay(s, it, schedule, holidays) && eveningFrom(s, it, schedule, holidays) != null }
+        val parts = listOfNotNull(
+            whole.takeIf { it.isNotEmpty() }?.joinToString(", ") { LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(it) - 1] }?.let { "$it all day" },
+            evenings.takeIf { it > 0 }?.let { n -> (if (n == 1) "1 evening" else "$n evenings") + " from ${LocalClock.formatMinute(s.fromMin)}" },
+        )
+        return if (parts.isEmpty()) null else "Protected · " + parts.joinToString(" · ")
+    }
+
+    /** [weekLine] read out: "Protected time: Sat, Sun all day, and 5 evenings from 7 o'clock." */
+    fun weekSpoken(line: String?, s: ProtectedSetting?): String? {
+        if (line == null || s == null) return null
+        val parts = line.removePrefix("Protected · ").split(" · ").map {
+            it.replace("from ${LocalClock.formatMinute(s.fromMin)}", "from ${BriefScriptRules.clock(s.fromMin)}")
+        }
+        return "Protected time: " + parts.joinToString(", and ") + "."
+    }
+
+    /**
+     * The morning brief's line under the date: "Protected from 19:00 tonight", "Protected all day · tasks wait for Mon 19
+     * Oct", "Not protected tonight · you opened it"; null when today has none.
+     */
+    fun briefLine(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): String? {
+        if (s == null || !s.on) return null
+        if (s.openDay == today) lifted(s, today, schedule, holidays)?.let { return "${it.action} · you opened it" }
+        if (wholeDay(s, today, schedule, holidays)) return "Protected all day · tasks wait for ${openLabel(s, today, schedule, holidays)}"
+        val from = eveningFrom(s, today, schedule, holidays) ?: return null
+        return "Protected from ${LocalClock.formatMinute(from)} tonight"
+    }
+
+    /**
+     * The spoken brief's sentence, after the kind of day: "Your evening is protected from 7 o'clock.", "Today is
+     * protected, so no tasks are planned.", "You opened tonight, so it isn't protected."; null when today has none.
+     */
+    fun briefSentence(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): String? {
+        if (s == null || !s.on) return null
+        if (s.openDay == today) lifted(s, today, schedule, holidays)?.let {
+            return if (it == Lifted.DAY) "You opened today, so it isn't protected." else "You opened tonight, so it isn't protected."
+        }
+        if (wholeDay(s, today, schedule, holidays)) return "Today is protected, so no tasks are planned."
+        val from = eveningFrom(s, today, schedule, holidays) ?: return null
+        return "Your evening is protected from ${BriefScriptRules.clock(from)}."
     }
 
     fun view(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar, mailLine: String? = null): ProtectedView =

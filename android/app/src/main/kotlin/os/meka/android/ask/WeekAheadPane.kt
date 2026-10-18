@@ -145,6 +145,14 @@ fun WeekAheadPane(
                 }
             }
         }
+        // Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00" (cross-fades as it changes).
+        v.protectedLine?.let { line ->
+            item(key = "protected") {
+                Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-protected", modifier = Modifier.animateItem()) { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                }
+            }
+        }
         itemsIndexed(v.days, key = { _, d -> "day-${d.epochDay}" }) { i, d ->
             DayBlock(d, Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2 + i)))
         }
@@ -266,7 +274,8 @@ private fun HeadsUpSetting(s: WeekAheadSettingView, modifier: Modifier, onSet: (
 private fun DayBlock(d: WeekAheadDay, modifier: Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         SectionLabel(d.label, Modifier.semantics { heading() })
-        val meta = listOfNotNull(d.dayLine, d.weather).joinToString(" · ")
+        // Protected time, slice 5: "Protected all day" / "Protected from 19:00" beside the day's hours.
+        val meta = listOfNotNull(d.dayLine, d.weather, d.protectedLine).joinToString(" · ")
         if (meta.isNotEmpty()) Text(meta, style = MekaType.caption, color = Meka.colors.textSecondary)
         if (d.lines.isEmpty() && d.dayLine == null) {
             Text("Nothing in the diary", style = MekaType.caption, color = Meka.colors.textTertiary)

@@ -135,6 +135,8 @@ data class BriefStory(
      * open, never an amount ([TradingTodayRules.briefSentence]); said after habits and goals; null when there's nothing.
      */
     val trading: String? = null,
+    /** Protected time, slice 5: "Your evening is protected from 7 o'clock." ([ProtectedRules.briefSentence]), after the kind of day. */
+    val protectedTime: String? = null,
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -178,6 +180,7 @@ object BriefScriptRules {
         val out = mutableListOf<String>()
         out += "${v.greeting}, $name."
         dayKind(v)?.let { out += it }
+        s.protectedTime?.let { out += it }
 
         // Getting there and the weather.
         if (s.officeDay && !s.weekend) {

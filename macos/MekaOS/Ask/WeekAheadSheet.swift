@@ -56,6 +56,14 @@ struct WeekAheadSheet: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: mail)
                     .staggeredAppear(1)
             }
+            // Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00".
+            if let line = v.protectedLine {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                    .staggeredAppear(1)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.m) {
                     ForEach(Array(v.days.enumerated()), id: \.element.epochDay) { i, d in
@@ -200,7 +208,8 @@ private struct WeekAheadDayView: View {
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                 .foregroundStyle(palette.textTertiary)
                 .accessibilityAddTraits(.isHeader)
-            let meta = [day.dayLine, day.weather].compactMap { $0 }.joined(separator: " · ")
+            // Protected time, slice 5: "Protected all day" / "Protected from 19:00" beside the day's hours.
+            let meta = [day.dayLine, day.weather, day.protectedLine].compactMap { $0 }.joined(separator: " · ")
             if !meta.isEmpty {
                 Text(meta).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
