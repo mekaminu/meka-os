@@ -3110,12 +3110,17 @@ class MekaCore(
         onCore { trainQueue.add(text, subject) }
 
     /** Marks a saved link read or listened to ([done] true), or puts it back in the queue (false). */
-    suspend fun queueDone(id: String, done: Boolean): Boolean = onCore { trainQueue.setDone(id, done) }
+    suspend fun queueDone(id: String, done: Boolean): Boolean = onCore {
+        val changed = trainQueue.setDone(id, done)
+        // Completeness: an article's offline words go once it's done (Back fetches them again on Wi-Fi).
+        if (changed && done) { dropQueuePages(setOf(id)); setQueueFailures(queuePageFailures) }
+        changed
+    }
 
     /** Takes a saved link off the queue for good (both apps); its saved words go from this device too. */
     suspend fun removeFromQueue(id: String): Boolean = onCore {
         val removed = trainQueue.remove(id)
-        if (removed) dropQueuePages(setOf(id))
+        if (removed) { dropQueuePages(setOf(id)); setQueueFailures(queuePageFailures) }
         removed
     }
 
@@ -3281,8 +3286,18 @@ class MekaCore(
 
     private val _queuePages = MutableStateFlow<Map<String, String>>(emptyMap())
     private var queuePagesLoaded = false
-    /** Pages that couldn't be fetched or had too little to read, and when (in memory; tried again after 6 hours). */
-    private val queuePageFailedAt = HashMap<String, Long>()
+    /**
+     * Pages that couldn't be fetched or had too little to read: how often and when last (device-local, so it outlasts a
+     * restart; tried again after 6 hours, left online for good after three tries).
+     */
+    private var queuePageFailures: Map<String, os.meka.core.domain.QueueFailure> = emptyMap()
+    private val _queueOnline = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /**
+     * Train-time queue completeness: the waiting articles whose words this device couldn't keep, each with its row line
+     * ("Online only for now · tries again on Wi-Fi later", "Online only · this page can't be kept to read offline").
+     */
+    val queueOnline: StateFlow<Map<String, String>> = _queueOnline.asStateFlow()
 
     /**
      * The saved links whose words this device keeps, each with its row line ("6 min read · saved to read offline").
@@ -3296,6 +3311,31 @@ class MekaCore(
         _queuePages.value = os.meka.core.domain.ReaderCodec.decodeIndex(
             runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.ReaderCodec.INDEX_KEY) } }.getOrNull(),
         )
+        queuePageFailures = os.meka.core.domain.ReaderCodec.decodeFailures(
+            runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.ReaderCodec.FAILED_KEY) } }.getOrNull(),
+        )
+        refreshQueueOnline()
+    }
+
+    /** Keeps the failed tries for links still waiting (on this device) and redraws the rows' "online only" lines. */
+    private fun setQueueFailures(failures: Map<String, os.meka.core.domain.QueueFailure>) {
+        val live = os.meka.core.domain.ReaderRules.liveFailures(failures, trainQueue.items())
+        if (live != queuePageFailures) {
+            runCatching {
+                localStore.transaction {
+                    localStore.setLocalValue(
+                        os.meka.core.domain.ReaderCodec.FAILED_KEY,
+                        live.takeIf { it.isNotEmpty() }?.let(os.meka.core.domain.ReaderCodec::encodeFailures),
+                    )
+                }
+            }
+            queuePageFailures = live
+        }
+        refreshQueueOnline()
+    }
+
+    private fun refreshQueueOnline() {
+        _queueOnline.value = os.meka.core.domain.ReaderRules.onlineLines(trainQueue.items(), _queuePages.value.keys, queuePageFailures)
     }
 
     private fun dropQueuePages(ids: Set<String>) {
@@ -3318,7 +3358,8 @@ class MekaCore(
         loadQueuePages()
         val items = trainQueue.items()
         dropQueuePages(os.meka.core.domain.ReaderRules.stale(_queuePages.value.keys, items, nowMs()))
-        os.meka.core.domain.ReaderRules.toFetch(items, _queuePages.value.keys, queuePageFailedAt, nowMs())
+        setQueueFailures(queuePageFailures)
+        os.meka.core.domain.ReaderRules.toFetch(items, _queuePages.value.keys, queuePageFailures, nowMs())
     }
 
     /**
@@ -3331,7 +3372,7 @@ class MekaCore(
         val item = trainQueue.items().firstOrNull { it.id == id && !it.done }
         val page = item?.let { html?.let { h -> os.meka.core.domain.ReaderRules.extract(h, it.title) } }?.copy(savedAtMs = nowMs())
         if (item == null || page == null) {
-            if (item != null) queuePageFailedAt[id] = nowMs()
+            if (item != null) setQueueFailures(queuePageFailures + (id to os.meka.core.domain.ReaderRules.failed(queuePageFailures[id], nowMs())))
             false
         } else {
             val index = _queuePages.value + (id to os.meka.core.domain.ReaderRules.rowLine(page))
@@ -3340,7 +3381,7 @@ class MekaCore(
                     localStore.setLocalValue(os.meka.core.domain.ReaderCodec.key(id), os.meka.core.domain.ReaderCodec.encode(page))
                     localStore.setLocalValue(os.meka.core.domain.ReaderCodec.INDEX_KEY, os.meka.core.domain.ReaderCodec.encodeIndex(index))
                 }
-            }.onSuccess { _queuePages.value = index; queuePageFailedAt.remove(id) }.isSuccess
+            }.onSuccess { _queuePages.value = index; setQueueFailures(queuePageFailures - id) }.isSuccess
         }
     }
 

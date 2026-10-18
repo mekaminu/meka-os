@@ -38,6 +38,7 @@ struct MekaOSApp: App {
                         switch kind {
                         case .handle: model.handleThis(text, subject: subject)
                         case .reading: model.addReadingShared(text, subject: subject)
+                        case .queue: model.addToQueueShared(text, subject: subject)
                         case .task: model.capture(text, subject: subject)
                         }
                     }

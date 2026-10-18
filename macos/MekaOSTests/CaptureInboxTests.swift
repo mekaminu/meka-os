@@ -17,16 +17,20 @@ final class CaptureInboxTests: XCTestCase {
         var got: [String] = []
         var handled: [String] = []
         var reading: [String] = []
+        var queued: [String] = []
         inbox.receive("Dune by Frank Herbert", kind: .reading)
-        XCTAssertEqual(inbox.waitingCount, 4)
+        inbox.receive("https://www.bbc.co.uk/news/rail-1", kind: .queue)
+        XCTAssertEqual(inbox.waitingCount, 5)
         inbox.attach { text, subject, kind in
             switch kind {
             case .handle: handled.append(text)
             case .reading: reading.append(text)
+            case .queue: queued.append(text)
             case .task: got.append(subject ?? text)
             }
         }
         XCTAssertEqual(reading, ["Dune by Frank Herbert"])
+        XCTAssertEqual(queued, ["https://www.bbc.co.uk/news/rail-1"])
         XCTAssertEqual(got, ["First\nwith a note", "Subject"])
         XCTAssertEqual(handled, ["Parents' evening Tue 6pm"])
         XCTAssertEqual(inbox.waitingCount, 0)

@@ -80,7 +80,13 @@ data class QueueView(
 data class QueueLine(val text: String, val spoken: String)
 
 /** What saving did: the line to show and whether it was turned away (lit in the accent). */
-data class QueueAdded(val line: String, val refused: Boolean, val id: String? = null)
+data class QueueAdded(
+    val line: String,
+    val refused: Boolean,
+    val id: String? = null,
+    /** True only when this save made a new item (so Undo may take it off again); a re-save or "already" is false. */
+    val created: Boolean = false,
+)
 
 object QueueRules {
     const val MAX_TITLE = 120
@@ -94,7 +100,9 @@ object QueueRules {
     const val NO_LINK = "That has no link in it. Paste or share a web link (https://…)."
     const val ALREADY = "Already in your train queue"
     const val ACTION = "For the train"
-    const val NOTE = "Saved on both apps. On Wi-Fi the Fold keeps each article's words to read on the train without a signal; podcasts open in their own app, which keeps its downloads."
+    const val NOTE = "Saved on both apps. On Wi-Fi the Fold keeps each waiting article's words (up to ${ReaderRules.MAX_SAVED}) to read on the train without a signal, and lets them go once it's done; podcasts open in your podcast app, which keeps its downloads."
+    /** A podcast row's extra words: it plays in his podcast app, not in Navilife. */
+    const val PODCAST_OPENS = "opens in your podcast app"
 
     /** Hosts whose links are podcasts (an episode page, or a show). */
     private val PODCAST_HOSTS = listOf(
@@ -180,7 +188,9 @@ object QueueRules {
     }.sortedWith(compareByDescending<QueueItem> { it.addedAtMs }.thenBy { it.id })
 
     fun row(i: QueueItem) = QueueRow(
-        i.id, i.url, i.title, "${i.site} · ${i.kind.label}", i.kind.key, i.done,
+        i.id, i.url, i.title,
+        "${i.site} · ${i.kind.label}" + if (i.kind == QueueKind.PODCAST && !i.done) " · $PODCAST_OPENS" else "",
+        i.kind.key, i.done,
         "${i.kind.label} from ${i.site}: ${i.title}" + if (i.done) ", done" else "",
     )
 
@@ -233,7 +243,7 @@ object QueueRules {
         }
         val title = title(text, subject, url)
         val id = newId()
-        return QueueAdded("Saved for the train: $title", false, id) to (id to mapOf(
+        return QueueAdded("Saved for the train: $title", false, id, created = true) to (id to mapOf(
             QueueFields.URL to url.fv(),
             QueueFields.TITLE to title.fv(),
             QueueFields.KIND to kind(url, title).key.fv(),

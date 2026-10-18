@@ -3154,6 +3154,7 @@ final class CoreModel {
         case .addDocument(let text, let subject): addDocumentFromShared(text, subject)
         case .removeDocument(let id): run { _ = try await $0.removeDocument(id: id) }
         case .reading(let token): run { _ = try await $0.undoReading(token: token) }
+        case .unqueue(let id): run { _ = try await $0.removeFromQueue(id: id) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .unapproveBacklog(let id): run { _ = try await $0.unapproveMailBacklog(id: id) }
         case .junkKeep(let cardId, let key, let keep):
@@ -3936,6 +3937,26 @@ final class CoreModel {
         } catch {
             lastError = error.localizedDescription
             return nil
+        }
+    }
+
+    /// Services → "Save for the train with Navilife" (train-time queue completeness): the selection's first web link
+    /// goes in the train queue; the bar says so, with Undo when it made a new one. Only Strings cross to the core.
+    func addToQueueShared(_ text: String, subject: String? = nil) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !t.isEmpty else { return }
+        Task {
+            do {
+                let r = try await core.addToQueue(text: t, subject: subject)
+                if r.refused {
+                    MekaHaptics.tick()
+                    offerEventUndo(r.line, nil)
+                } else {
+                    MekaHaptics.light()
+                    let undo: EventUndoOffer.Action? = r.created ? r.id.map { EventUndoOffer.Action.unqueue($0) } : nil
+                    offerEventUndo(r.line + " · in Ask → More → Train queue", undo)
+                }
+            } catch { lastError = error.localizedDescription }
         }
     }
 
@@ -5685,6 +5706,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case removeDocument(String)
         /// Undo on "Added book Dune … · up next" from Services (reading and learning, slice 3): Reading's own undo token.
         case reading(String)
+        /// Undo on "Saved for the train: …" from Services (train-time queue completeness): the new link comes off.
+        case unqueue(String)
     }
 
     let id = UUID()

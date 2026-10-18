@@ -69,7 +69,7 @@ class TrainQueueTest {
         val v = qMac.view()
         assertEquals("1 article · 1 podcast for the train", v.summary)
         assertEquals(listOf("The Rest Is Football", "Rail fares to rise"), v.waiting.map { it.title }) // newest first
-        assertEquals("podcasts.apple.com · Podcast", v.waiting[0].meta)
+        assertEquals("podcasts.apple.com · Podcast · opens in your podcast app", v.waiting[0].meta)
         assertEquals("Article from bbc.co.uk: Rail fares to rise", v.waiting[1].spoken)
 
         val rail = v.waiting[1].id

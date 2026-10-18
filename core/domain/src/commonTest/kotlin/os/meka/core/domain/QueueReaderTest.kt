@@ -97,9 +97,43 @@ class QueueReaderTest {
             item("e", "https://ft.com/x", added = now - 3),
         )
         assertEquals(listOf("a", "e"), ReaderRules.toFetch(items, setOf("d"), emptyMap(), now).map { it.id })
-        assertEquals(listOf("e"), ReaderRules.toFetch(items, setOf("d"), mapOf("a" to now - 60_000), now).map { it.id })
-        assertEquals(listOf("a", "e"), ReaderRules.toFetch(items, setOf("d"), mapOf("a" to now - ReaderRules.RETRY_MS), now).map { it.id })
-        // Removed links lose their words; done ones keep them while they're in "Done lately".
-        assertEquals(setOf("gone"), ReaderRules.stale(setOf("a", "c", "gone"), items, now))
+        assertEquals(listOf("e"), ReaderRules.toFetch(items, setOf("d"), mapOf("a" to QueueFailure(1, now - 60_000)), now).map { it.id })
+        assertEquals(listOf("a", "e"), ReaderRules.toFetch(items, setOf("d"), mapOf("a" to QueueFailure(1, now - ReaderRules.RETRY_MS)), now).map { it.id })
+        // Removed links lose their words, and so do done ones (Back fetches them again).
+        assertEquals(setOf("c", "gone"), ReaderRules.stale(setOf("a", "c", "gone"), items, now))
+    }
+
+    @Test
+    fun aPageThatKeepsFailingIsOnlineOnlyAndTheStorageCapHolds() {
+        val now = 1_791_622_800_000L
+        fun item(id: String, done: Long = 0L, kind: QueueKind = QueueKind.ARTICLE) =
+            QueueItem(id, "https://example.com/$id", id, kind, "example.com", now - id.length, done)
+        val items = listOf(item("a"), item("bb"), item("ccc", done = now - 1), item("pod", kind = QueueKind.PODCAST))
+
+        // One failure: online for now, tried again after six hours; three: online only, never tried again.
+        val once = ReaderRules.failed(null, now)
+        assertEquals(QueueFailure(1, now), once)
+        val thrice = ReaderRules.failed(ReaderRules.failed(once, now), now)
+        assertEquals(3, thrice.count)
+        assertEquals(
+            mapOf("a" to ReaderRules.ONLINE_FOR_NOW, "bb" to ReaderRules.ONLINE_ONLY),
+            ReaderRules.onlineLines(items, emptySet(), mapOf("a" to once, "bb" to thrice, "ccc" to once)),
+        )
+        val later = now + ReaderRules.RETRY_MS
+        assertEquals(listOf("a"), ReaderRules.toFetch(items, emptySet(), mapOf("a" to once, "bb" to thrice), later).map { it.id })
+        // A page saved since is no longer "online only"; done and removed links forget their tries.
+        assertEquals(emptyMap(), ReaderRules.onlineLines(items, setOf("a"), mapOf("a" to once)))
+        assertEquals(setOf("a"), ReaderRules.liveFailures(mapOf("a" to once, "ccc" to once, "gone" to once), items).keys)
+
+        // The cap: with MAX_SAVED pages kept nothing more is fetched; one under it, one more.
+        val many = (1..ReaderRules.MAX_SAVED + 3).map { item("n$it") }
+        val full = many.take(ReaderRules.MAX_SAVED).map { it.id }.toSet()
+        assertEquals(emptyList(), ReaderRules.toFetch(many, full, emptyMap(), now))
+        assertEquals(1, ReaderRules.toFetch(many, full - "n1", emptyMap(), now).size)
+
+        // The tries survive a restart on the device.
+        val failures = mapOf("a" to once, "bb" to thrice)
+        assertEquals(failures, ReaderCodec.decodeFailures(ReaderCodec.encodeFailures(failures)))
+        assertEquals(emptyMap(), ReaderCodec.decodeFailures("junk\nx\ty"))
     }
 }

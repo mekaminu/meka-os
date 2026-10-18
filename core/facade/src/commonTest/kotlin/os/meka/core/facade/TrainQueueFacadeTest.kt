@@ -85,11 +85,47 @@ class TrainQueueFacadeTest {
         assertEquals(null, mac.queuePage(article))
         assertTrue(mac.queuePages.value.isEmpty())
 
-        // Done keeps the words (Back may bring it back); removing the link drops them.
+        // Done lets the words go (the storage stays small); Back fetches them again; removing the link drops them too.
         assertTrue(fold.queueDone(article, true))
-        assertTrue(fold.queuePage(article) != null)
+        assertEquals(null, fold.queuePage(article))
+        assertTrue(fold.queuePages.value.isEmpty())
+        assertTrue(fold.queueDone(article, false))
+        assertEquals(listOf(article), fold.queueToFetch().map { it.id })
+        assertTrue(fold.saveQueuePage(article, html))
         assertTrue(fold.removeFromQueue(article))
         assertEquals(null, fold.queuePage(article))
         assertTrue(fold.queuePages.value.isEmpty())
+    }
+
+    @Test
+    fun aPaywalledArticleIsMarkedOnlineOnlyAndTheTriesOutlastARestart() = runTest {
+        val store = InMemoryReplicaStore()
+        fun fold(seed: Int) = MekaCore(
+            householdId = "hh", deviceId = "android", store = store,
+            transport = os.meka.core.testing.FaultyTransport(SyncService(ops)),
+            secureRandom = Random(seed), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val first = fold(1)
+        val id = first.addToQueue("https://www.ft.com/content/rail", "Rail fares to rise").id!!
+        assertEquals(listOf(id), first.queueToFetch().map { it.id })
+        assertFalse(first.saveQueuePage(id, "<html><body><p>Subscribe to read.</p></body></html>"))
+        assertEquals(mapOf(id to os.meka.core.domain.ReaderRules.ONLINE_FOR_NOW), first.queueOnline.value)
+
+        // The phone restarts: the failed try is remembered, so it still waits six hours.
+        val again = fold(2)
+        assertTrue(again.queueToFetch().isEmpty())
+        assertEquals(mapOf(id to os.meka.core.domain.ReaderRules.ONLINE_FOR_NOW), again.queueOnline.value)
+        repeat(2) {
+            now += os.meka.core.domain.ReaderRules.RETRY_MS
+            assertEquals(listOf(id), again.queueToFetch().map { it.id })
+            assertFalse(again.saveQueuePage(id, null))
+        }
+        // Three tries: left online for good, never fetched again.
+        assertEquals(mapOf(id to os.meka.core.domain.ReaderRules.ONLINE_ONLY), again.queueOnline.value)
+        now += 10 * os.meka.core.domain.ReaderRules.RETRY_MS
+        assertTrue(again.queueToFetch().isEmpty())
+        // Done: it's no longer waiting, so the line goes.
+        assertTrue(again.queueDone(id, true))
+        assertTrue(again.queueOnline.value.isEmpty())
     }
 }

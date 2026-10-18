@@ -14,8 +14,8 @@ import UserNotifications
 final class CaptureInbox {
     static let shared = CaptureInbox()
 
-    /// What a Services request asks for: a task ("Add to Navilife"), Handle this, or Reading's up next.
-    enum Kind: Sendable { case task, handle, reading }
+    /// What a Services request asks for: a task ("Add to Navilife"), Handle this, Reading's up next, or the train queue.
+    enum Kind: Sendable { case task, handle, reading, queue }
 
     private var pending: [(text: String, subject: String?, kind: Kind)] = []
     private var sink: ((String, String?, Kind) -> Void)?
@@ -79,6 +79,16 @@ final class CaptureServiceProvider: NSObject {
             return
         }
         MainActor.assumeIsolated { CaptureInbox.shared.receive(text, kind: .reading) }
+    }
+
+    /// "Save for the train with Navilife" (train-time queue completeness): the selection's first web link goes in the
+    /// train queue, as the Fold's share sheet's For the train does, with Undo on the bar.
+    @objc func queueText(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+        guard let text = pboard.string(forType: .string), !text.isEmpty else {
+            error.pointee = "There was no link to save for the train." as NSString
+            return
+        }
+        MainActor.assumeIsolated { CaptureInbox.shared.receive(text, kind: .queue) }
     }
 
     /// "Handle this picture with Navilife" (screenshots and photos, slice 1): an image, or an image file from Finder, is

@@ -107,6 +107,8 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
     val context = LocalContext.current
     val v by core.queueView.collectAsState()
     val pages by core.queuePages.collectAsState()
+    // Completeness: an article whose words couldn't be kept says it opens online (and whether the phone tries again).
+    val online by core.queueOnline.collectAsState()
     var text by remember { mutableStateOf("") }
     var said by remember { mutableStateOf<QueueAdded?>(null) }
     val saidColor by animateColorAsState(
@@ -152,6 +154,7 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
             QueueRowView(
                 r, Modifier.animateItem().appear(rememberAppearance(4 + i)),
                 offline = pages[r.id],
+                onlineOnly = online[r.id],
                 onOpen = { if (pages[r.id] != null) { haptics.tick(); onRead(r.id) } else open(context, r.url) },
                 primary = "Done",
                 onPrimary = { haptics.light(); scope.launch { runCatching { core.queueDone(r.id, true) } } },
@@ -196,6 +199,7 @@ private fun QueueRowView(
     offline: String?,
     onOpen: () -> Unit,
     primary: String,
+    onlineOnly: String? = null,
     onPrimary: () -> Unit,
     onRemove: () -> Unit,
 ) {
@@ -210,7 +214,8 @@ private fun QueueRowView(
             Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onOpen)
                 .semantics(mergeDescendants = true) {
-                    contentDescription = (if (offline != null) "Read " else "Open ") + row.spoken + (offline?.let { ", $it" } ?: "")
+                    contentDescription = (if (offline != null) "Read " else "Open ") + row.spoken +
+                        ((offline ?: onlineOnly)?.let { ", $it" } ?: "")
                 },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
@@ -219,6 +224,10 @@ private fun QueueRowView(
             // "6 min read · saved to read offline" fades in once the phone has kept the article's words.
             AnimatedVisibility(offline != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
                 Text(offline.orEmpty(), style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            // "Online only for now · …" fades in (tertiary) when the phone couldn't keep the words: a paywall, an app page.
+            AnimatedVisibility(offline == null && onlineOnly != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                Text(onlineOnly.orEmpty(), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Text(

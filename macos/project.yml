@@ -64,6 +64,29 @@ targets:
             NSPortName: $(PRODUCT_NAME)
             NSRequiredContext: {}
             NSSendTypes: [public.utf8-plain-text]
+          # Reading and learning slice 3: a selected title or book link → Reading's up next. (XcodeGen writes
+          # Info.plist from these properties, so every service must be listed here, not only in the plist.)
+          - NSMenuItem:
+              default: Add to Navilife Reading
+            NSMessage: readingText
+            NSPortName: $(PRODUCT_NAME)
+            NSRequiredContext: {}
+            NSSendTypes: [public.utf8-plain-text]
+          # Train-time queue completeness: a selected link → the train queue (the Fold's For the train).
+          - NSMenuItem:
+              default: Save for the train with Navilife
+            NSMessage: queueText
+            NSPortName: $(PRODUCT_NAME)
+            NSRequiredContext: {}
+            NSSendTypes: [public.utf8-plain-text]
+          # Screenshots and photos slice 1: an image (or image file) → read on this Mac → Handle this.
+          - NSMenuItem:
+              default: Handle this picture with Navilife
+            NSMessage: handlePicture
+            NSPortName: $(PRODUCT_NAME)
+            NSRequiredContext: {}
+            NSSendTypes: [public.image, public.png, public.tiff]
+            NSSendFileTypes: [public.image]
     entitlements:
       path: MekaOS/MekaOS.entitlements
       properties:

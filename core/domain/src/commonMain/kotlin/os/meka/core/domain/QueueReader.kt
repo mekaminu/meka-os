@@ -28,6 +28,12 @@ data class ReaderPage(
 /** A waiting article whose words the phone should fetch now. */
 data class QueueFetch(val id: String, val url: String)
 
+/**
+ * Train-time queue completeness (2026-10-18): how often this device tried to keep a page's words and couldn't (the
+ * fetch failed, or a paywall or an app shell left too little to read), and when it last tried. Device-local.
+ */
+data class QueueFailure(val count: Int, val atMs: Long)
+
 object ReaderRules {
     /** The most of a page's HTML read (characters); the rest is ignored. */
     const val MAX_HTML = 2_000_000
@@ -41,6 +47,15 @@ object ReaderRules {
     const val RETRY_MS = 6 * 3_600_000L
     /** At most this many pages fetched in one go. */
     const val BATCH = 5
+    /** The storage cap: at most this many articles' words kept on the device at once (each at most [MAX_TEXT]). */
+    const val MAX_SAVED = 30
+    /** After this many failed tries a page is left online for good (a paywall, a page that needs its app). */
+    const val GIVE_UP = 3
+
+    /** A waiting article whose words couldn't be kept yet: it opens online, and the phone tries again later. */
+    const val ONLINE_FOR_NOW = "Online only for now · tries again on Wi-Fi later"
+    /** A waiting article tried [GIVE_UP] times: it opens online, and the phone stops trying. */
+    const val ONLINE_ONLY = "Online only · this page can't be kept to read offline"
 
     const val SAVED = "saved to read offline"
     const val CUT_LINE = "The rest of this article is online."
@@ -159,22 +174,52 @@ object ReaderRules {
     fun rowLine(page: ReaderPage): String = "${page.minutes} · $SAVED"
 
     /**
-     * The waiting articles to fetch now: not yet saved, not podcasts, http(s) only, and not tried and failed in the
-     * last [RETRY_MS]. Newest first, at most [BATCH].
+     * The waiting articles to fetch now: not yet saved, not podcasts, http(s) only, not tried and failed in the last
+     * [RETRY_MS], and not given up on ([GIVE_UP] failures). Newest first, at most [BATCH], and never more than
+     * [MAX_SAVED] kept at once (the storage cap: the rest wait for room, made as articles are done or removed).
      */
-    fun toFetch(items: List<QueueItem>, saved: Set<String>, failedAtMs: Map<String, Long>, nowMs: Long): List<QueueFetch> =
-        items.asSequence()
+    fun toFetch(items: List<QueueItem>, saved: Set<String>, failures: Map<String, QueueFailure>, nowMs: Long): List<QueueFetch> {
+        val room = minOf(BATCH, MAX_SAVED - saved.size)
+        if (room <= 0) return emptyList()
+        return items.asSequence()
             .filter { !it.done && it.kind == QueueKind.ARTICLE && it.id !in saved }
             .filter { it.url.startsWith("https://", true) || it.url.startsWith("http://", true) }
-            .filter { i -> failedAtMs[i.id]?.let { nowMs - it >= RETRY_MS } ?: true }
-            .take(BATCH).map { QueueFetch(it.id, it.url) }.toList()
+            .filter { i -> failures[i.id]?.let { it.count < GIVE_UP && nowMs - it.atMs >= RETRY_MS } ?: true }
+            .take(room).map { QueueFetch(it.id, it.url) }.toList()
+    }
 
-    /** Saved pages whose link has gone from the queue (removed, or done and out of "Done lately"): drop their words. */
+    /** The waiting links: the only ones whose words (and failed tries) the device keeps. */
+    private fun waitingIds(items: List<QueueItem>): Set<String> = items.filter { !it.done }.mapTo(HashSet()) { it.id }
+
+    /**
+     * Saved pages to drop: their link was removed or marked done (the offline copy goes once it's read; Back fetches it
+     * again on Wi-Fi), so only waiting articles take room on the phone.
+     */
     fun stale(saved: Set<String>, items: List<QueueItem>, nowMs: Long): Set<String> {
-        val view = QueueRules.view(items, nowMs)
-        val kept = (view.waiting + view.done).mapTo(HashSet()) { it.id }
+        val kept = waitingIds(items)
         return saved.filterTo(HashSet()) { it !in kept }
     }
+
+    /** One more failed try for a page. */
+    fun failed(before: QueueFailure?, nowMs: Long): QueueFailure = QueueFailure((before?.count ?: 0) + 1, nowMs)
+
+    /** Failed tries worth keeping: only for links still waiting. */
+    fun liveFailures(failures: Map<String, QueueFailure>, items: List<QueueItem>): Map<String, QueueFailure> {
+        val kept = waitingIds(items)
+        return failures.filterKeys { it in kept }
+    }
+
+    /** The row's line for a waiting article whose words aren't kept: "Online only for now · …" or "Online only · …". */
+    fun onlineLine(f: QueueFailure?): String? = when {
+        f == null || f.count <= 0 -> null
+        f.count >= GIVE_UP -> ONLINE_ONLY
+        else -> ONLINE_FOR_NOW
+    }
+
+    /** Each waiting article not saved on this device that failed at least once, with its [onlineLine]. */
+    fun onlineLines(items: List<QueueItem>, saved: Set<String>, failures: Map<String, QueueFailure>): Map<String, String> =
+        items.filter { !it.done && it.kind == QueueKind.ARTICLE && it.id !in saved }
+            .mapNotNull { i -> onlineLine(failures[i.id])?.let { i.id to it } }.toMap()
 }
 
 /**
@@ -184,6 +229,8 @@ object ReaderRules {
 object ReaderCodec {
     private const val HEAD = "meka-page/1"
     const val INDEX_KEY = "queue.pages"
+    /** The failed tries ([QueueFailure]): one "id<TAB>count<TAB>last try ms" per line. */
+    const val FAILED_KEY = "queue.failed"
     fun key(id: String) = "queue.page.$id"
 
     fun encode(p: ReaderPage): String = buildString {
@@ -217,5 +264,16 @@ object ReaderCodec {
     fun decodeIndex(s: String?): Map<String, String> = s.orEmpty().split('\n').mapNotNull { l ->
         val tab = l.indexOf('\t')
         if (tab <= 0) null else l.substring(0, tab) to l.substring(tab + 1)
+    }.toMap()
+
+    fun encodeFailures(failures: Map<String, QueueFailure>): String =
+        failures.entries.sortedBy { it.key }.joinToString("\n") { "${it.key}\t${it.value.count}\t${it.value.atMs}" }
+
+    fun decodeFailures(s: String?): Map<String, QueueFailure> = s.orEmpty().split('\n').mapNotNull { l ->
+        val parts = l.split('\t')
+        if (parts.size != 3 || parts[0].isEmpty()) return@mapNotNull null
+        val count = parts[1].toIntOrNull() ?: return@mapNotNull null
+        val at = parts[2].toLongOrNull() ?: return@mapNotNull null
+        parts[0] to QueueFailure(count, at)
     }.toMap()
 }
