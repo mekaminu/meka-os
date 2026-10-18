@@ -5316,6 +5316,8 @@ class MekaCore(
     }
 
     companion object {
+        /** Passes [refresh] makes at most when commits keep arriving while it runs (each pass sees them all). */
+        private const val MAX_REFRESH_PASSES = 4
         const val FOREGROUND_SYNC_MS: Long = 30_000L
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
@@ -9255,7 +9257,31 @@ class MekaCore(
 
     private suspend fun <T> onCore(block: () -> T): T = withContext(confined) { block() }
 
+    private var refreshing = false
+    private var refreshAgain = false
+
+    /**
+     * Every view from the replica. Never nested (nightly Mac build 2026-10-18): a commit made while refreshing (mail
+     * finds adding themselves, a goal following its balance…) used to call refresh again from inside itself, one
+     * refresh deep per commit, on Kotlin/Native's smaller worker stacks; now it asks for one more pass after this one,
+     * which also means the views never end on a pass that read the state from before that commit.
+     */
     private fun refresh() {
+        if (refreshing) { refreshAgain = true; return }
+        refreshing = true
+        try {
+            var passes = 0
+            do {
+                refreshAgain = false
+                refreshOnce()
+            } while (refreshAgain && ++passes < MAX_REFRESH_PASSES)
+        } finally {
+            refreshing = false
+            refreshAgain = false
+        }
+    }
+
+    private fun refreshOnce() {
         // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
         if (os.meka.core.domain.Household.use(aboutYou.profile()) && _family.value != null) familyNow(_family.value?.problem)
         // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.

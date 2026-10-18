@@ -101,6 +101,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Kotlin/Native tests + XCFramework
         run: tools/ci-run.sh ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test :core:facade:macosArm64Test :core:facade:assembleMekaKitReleaseXCFramework
+      # When the facade's native test process dies without a word ("Test running process exited unexpectedly", ci run
+      # 871), run its first test straight from the binary so the log shows the crash itself and the exit status.
+      - name: Native facade test crash (only when the step above failed)
+        if: failure()
+        run: |
+          kexe=core/facade/build/bin/macosArm64/debugTest/test.kexe
+          [ -x "$kexe" ] || { echo "no test binary"; exit 0; }
+          set +e
+          "$kexe" --ktest_logger=SIMPLE --ktest_filter='os.meka.core.facade.AboutYouFacadeTest.*' 2>&1 | tail -80
+          echo "exit status: ${PIPESTATUS[0]}"
+          exit 0
       - name: Generate Xcode project
         run: brew install xcodegen && xcodegen generate --spec macos/project.yml
       - name: Build and test SwiftUI app
