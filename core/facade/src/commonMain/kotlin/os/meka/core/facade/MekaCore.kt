@@ -4365,7 +4365,8 @@ class MekaCore(
     /** Mark all read: every new story in the News place now; the count put away (0 when none). Undo with [newsUndoAllRead]. */
     suspend fun newsMarkAllRead(): Int = onCore {
         val keys = _newsPlace.value.items.filter { !it.read }.map { it.readKey }
-        if (keys.isEmpty() || !news.markRead(keys)) { newsLastMarked = emptyList(); return@onCore 0 }
+        // Nothing new: the last Mark all read's Undo still stands.
+        if (keys.isEmpty() || !news.markRead(keys)) return@onCore 0
         newsLastMarked = keys
         keys.size
     }
