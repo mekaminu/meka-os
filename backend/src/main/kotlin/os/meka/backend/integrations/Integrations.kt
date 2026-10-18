@@ -97,6 +97,9 @@ import os.meka.core.domain.WeatherPlaceFields
 import os.meka.core.domain.WeatherPlaceRules
 import os.meka.core.domain.WeatherPlaceStore
 import os.meka.core.domain.WeatherStore
+import os.meka.core.domain.NamedZone
+import os.meka.core.domain.TripRules
+import os.meka.core.domain.TripWeatherRules
 import os.meka.core.domain.WorkPlaceFields
 import os.meka.core.domain.WorkPlaceStore
 import os.meka.core.domain.CalendarEvent
@@ -2323,8 +2326,13 @@ class Integrations(
         val wantedWork = wantedWorkPlace(a.householdId)
         val workDue = source.forecastsWork && wantedWork != null &&
             (mirror[WeatherStore.WORK_ENTITY_ID] == null || askedIn(WeatherStore.WORK_ENTITY_ID) != wantedWork)
+        // Travel mode completeness, slice 3: the trip destination's forecast while away or the day before; a new
+        // destination is followed at once, and an ended trip's forecast is cleared at once.
+        val wantedTrip = wantedTripPlace(a.householdId)
+        val askedTrip = askedIn(WeatherStore.TRIP_ENTITY_ID)
+        val tripDue = wantedTrip?.label != askedTrip
         val last = a.lastSyncAtMs
-        if (wanted == asked && !workDue && a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
+        if (wanted == asked && !workDue && !tripDue && a.status == "ok" && last != null && now() - last < WEATHER_PERIOD_MS) return
         try {
             // A name that can't be found forecasts home and says so (the apps light the line); it's not a fault.
             val at = wanted?.let { source.locate(it) }
@@ -2335,6 +2343,16 @@ class Integrations(
                 val workAt = source.locate(wantedWork)
                 applyWeather(a, workAt?.let { source.forecast(it) } ?: WeatherForecast.EMPTY, asked = wantedWork, found = workAt != null,
                     entityId = WeatherStore.WORK_ENTITY_ID)
+            }
+            // The trip's forecast never holds up home's either. No trip (or one not on the list): cleared, once.
+            runCatching {
+                if (wantedTrip == null) {
+                    if (askedTrip != null) applyWeather(a, WeatherForecast.EMPTY, entityId = WeatherStore.TRIP_ENTITY_ID)
+                } else {
+                    val tripAt = source.locateIn(wantedTrip.label, wantedTrip.id)
+                    applyWeather(a, tripAt?.let { source.forecast(it) } ?: WeatherForecast.EMPTY, asked = wantedTrip.label,
+                        found = tripAt != null, entityId = WeatherStore.TRIP_ENTITY_ID)
+                }
             }
             store.transaction { store.markSynced(a.id, now()) }
         } catch (e: Exception) {
@@ -2740,6 +2758,16 @@ class Integrations(
             ?.get(WorkPlaceFields.NAME)?.let { (it as? FieldValue.Text)?.value },
         aboutYou(householdId).work,
     )
+
+    /**
+     * Travel mode completeness, slice 3: the destination of the trip the household is away on today, else tomorrow
+     * (London's days), when it names a place on the list ([TripWeatherRules.wanted]); null otherwise.
+     */
+    internal fun wantedTripPlace(householdId: String): NamedZone? = runCatching {
+        val bookings = TripRules.bookings(reader.entities(householdId, EntityTypes.TRIP_BOOKING))
+        val trips = TripRules.items(reader.entities(householdId, EntityTypes.TRIP), bookings)
+        TripWeatherRules.wanted(trips, java.time.Instant.ofEpochMilli(now()).atZone(zone).toLocalDate().toEpochDay())
+    }.getOrNull()
 
     /** The household's own About you (empty when it can't be read). */
     private fun aboutYou(householdId: String): AboutYou = runCatching {

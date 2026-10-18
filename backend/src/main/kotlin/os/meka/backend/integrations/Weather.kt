@@ -43,6 +43,13 @@ interface WeatherProvider {
      * sent. Throws when the lookup itself fails (tried again at the next poll).
      */
     fun locate(name: String): WeatherLocation?
+
+    /**
+     * Travel mode completeness, slice 3: a trip's destination ([os.meka.core.domain.TripZoneRules]'s label) as a place to
+     * forecast, only a match in the place's own time zone [zoneId] (so "Florence" is Italy's); null when none. Only the
+     * name is sent. Providers without a geocoder have no trip forecast.
+     */
+    fun locateIn(name: String, zoneId: String): WeatherLocation? = null
 }
 
 /** A place the forecast can be for: its name as the geocoder gives it, and where it is. */
@@ -99,7 +106,18 @@ class OpenMeteoWeather internal constructor(
         return found
     }
 
-    internal fun parseLocation(body: String): WeatherLocation? {
+    override fun locateIn(name: String, zoneId: String): WeatherLocation? {
+        val key = name.trim().lowercase() + "|" + zoneId
+        synchronized(located) { located[key] }?.let { return it.orElse(null) }
+        val found = parseLocation(fetch(geocodeUrl(name.trim())), zoneId)
+        synchronized(located) {
+            if (located.size >= MAX_LOOKUPS) located.clear()
+            located[key] = Optional.ofNullable(found)
+        }
+        return found
+    }
+
+    internal fun parseLocation(body: String, zoneId: String? = null): WeatherLocation? {
         require(body.length <= MAX_BYTES) { "lookup too large" }
         val o = Json.parseToJsonElement(body).jsonObject
         val results = (o["results"] as? JsonArray)?.mapNotNull { it as? JsonObject }.orEmpty()
@@ -109,7 +127,8 @@ class OpenMeteoWeather internal constructor(
             val lat = num(r, "latitude"); val lon = num(r, "longitude")
             !str(r, "name").isNullOrBlank() && lat != null && lon != null && lat in -90.0..90.0 && lon in -180.0..180.0
         }
-        val r = usable.firstOrNull { str(it, "country_code").equals("GB", ignoreCase = true) } ?: usable.firstOrNull() ?: return null
+        val r = if (zoneId != null) usable.firstOrNull { str(it, "timezone") == zoneId } ?: return null
+        else usable.firstOrNull { str(it, "country_code").equals("GB", ignoreCase = true) } ?: usable.firstOrNull() ?: return null
         return WeatherLocation(WeatherCodec.place(str(r, "name")), num(r, "latitude")!!, num(r, "longitude")!!)
     }
 

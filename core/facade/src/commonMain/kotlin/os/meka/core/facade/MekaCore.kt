@@ -187,6 +187,8 @@ class MekaCore(
     private val weatherPlace = os.meka.core.domain.WeatherPlaceStore(replica)
     // Places item 2: the work place's forecast (server-written) and the work place setting (synced).
     private val workWeather = os.meka.core.domain.WeatherStore(replica, os.meka.core.domain.WeatherStore.WORK_ENTITY_ID)
+    /** Travel mode completeness, slice 3: the trip destination's forecast, written by the server ([os.meka.core.domain.TripWeatherRules]). */
+    private val tripWeather = os.meka.core.domain.WeatherStore(replica, os.meka.core.domain.WeatherStore.TRIP_ENTITY_ID)
     private val workPlace = os.meka.core.domain.WorkPlaceStore(replica)
     // Places item 4: the route's train lines (TfL status, server-written).
     private val lineStatus = os.meka.core.domain.LineStatusStore(replica)
@@ -7525,10 +7527,12 @@ class MekaCore(
             val hereLines = os.meka.core.domain.HereRules.askLinesFor(q, hereFix, nowMs(), cal)
             // The route's train lines (Places item 4): one line while TfL's status is fresh.
             val routeLines = os.meka.core.domain.RouteRules.askLines(lineStatus.snapshot(), nowMs(), cal, officeToday())
+            // Travel mode completeness, slice 3: the trip destination's days, while away there or the day before.
+            val tripLines = os.meka.core.domain.TripWeatherRules.askLines(tripWeather.forecast(), trips.items(), cal.epochDayOf(nowMs()), tripClocks)
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
-                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size) +
-                    hereLines + workLines + routeLines,
+                    .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size - tripLines.size) +
+                    hereLines + workLines + routeLines + tripLines,
                 shopping.view(),
                 // School rhythm, slice 2b: the school year, so "when's half term?" has an answer.
                 os.meka.core.domain.SchoolRules.askLines(school.items(), cal.epochDayOf(nowMs()), bankHolidays.calendar()),
@@ -9369,14 +9373,19 @@ class MekaCore(
                 // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
                 val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
                 val t = _today.value
+                val awayDays = trips.awayDays()
+                // Travel mode completeness, slice 3: the destination's weather while away there, and the day before.
+                val tripSky = os.meka.core.domain.TripWeatherRules.brief(tripWeather.forecast(), awayDays[todayDay], awayDays[todayDay + 1], todayDay, tripClocks)
                 it.copy(
-                    weatherLine = os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal),
+                    weatherLine = tripSky.paneLine ?: os.meka.core.domain.WeatherRules.dayGlance(forecast, todayDay, cal),
                     workLine = workLine,
                     // A morning brief worth listening to, slice 1: the commute, both places and home and family.
                     story = it.story.copy(
                         officeDay = office != null && workLine?.startsWith("Work ") == true,
                         // Travel mode completeness: a trip day says where he is with the kind of day.
-                        away = trips.awayDays()[todayDay],
+                        away = awayDays[todayDay],
+                        awayWeather = tripSky.today,
+                        tripTomorrowWeather = tripSky.tomorrow,
                         placesLine = placesLine,
                         route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.spoken,
                         needsYou = _needsYouStack.value.cards.count {

@@ -336,4 +336,75 @@ class WeatherTest {
         assertEquals("London", WeatherStore(r).forecast().place)
         assertTrue(r.conflicts(os.meka.core.domain.EntityTypes.CONTEXT_MODE).isEmpty())
     }
+
+    /** Open-Meteo's /v1/search answer for "Florence": England's first, then Italy's (each with its time zone). */
+    private val florence = """
+        {"results":[
+          {"id":1,"name":"Florence","latitude":52.98,"longitude":-2.13,"country_code":"GB","timezone":"Europe/London"},
+          {"id":2,"name":"Florence","latitude":43.77,"longitude":11.25,"country_code":"IT","timezone":"Europe/Rome"}
+        ],"generationtime_ms":0.4}"""
+
+    @Test
+    fun aTripsDestinationIsForecastInItsOwnTimeZoneWhileAwayAndClearedAfter() {
+        val forecasts = mutableListOf<String>()
+        val geocoded = mutableListOf<String>()
+        val source = OpenMeteoWeather({ url ->
+            when {
+                "geocoding" in url -> { geocoded += url; florence }
+                else -> { forecasts += url.substringAfter("latitude=").substringBefore("&"); sample() }
+            }
+        }, { now }, forecastsWork = false)
+        assertEquals(43.77, source.locateIn("Florence", "Europe/Rome")!!.latitude)
+        assertEquals(null, source.locateIn("Florence", "Asia/Tokyo"))
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val ops = InMemoryServerOpStore()
+        val integrations = Integrations(store, ops, emptyMap(), { null }, noCipher, "https://meka.example", { now }, weather = mapOf(source.id to source))
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + System.nanoTime() }
+        var cursor = 0L
+        fun pull() { val page = ops.after("home", cursor, 10_000); r.applyRemoteBatch(page.map { it.op }); page.lastOrNull()?.let { cursor = it.seq } }
+        val trip = { WeatherStore(r, WeatherStore.TRIP_ENTITY_ID).forecast() }
+
+        // No trip: home's forecast only, nothing written for a trip.
+        integrations.syncAll()
+        assertEquals(listOf("51.5072"), forecasts)
+        pull()
+        assertTrue(trip().isEmpty)
+
+        // A trip to Florence from today (invented), typed on the Fold: forecast at Italy's Florence at the next poll.
+        val clock = HlcClock("fold", { now })
+        val today = CivilDate.toEpochDay(2026, 10, 9)
+        var n = 0
+        fun tripField(field: String, v: os.meka.core.sync.FieldValue) = ops.transaction {
+            ops.append(os.meka.core.sync.Op(
+                "fold${n++}", "home", os.meka.core.domain.EntityTypes.TRIP, "t1", field, v, clock.now(), emptyList(), "fold",
+            ))
+        }
+        tripField(os.meka.core.domain.TripFields.NAME, os.meka.core.sync.FieldValue.Text("Florence weekend"))
+        tripField(os.meka.core.domain.TripFields.START, os.meka.core.sync.FieldValue.Int64(today))
+        tripField(os.meka.core.domain.TripFields.END, os.meka.core.sync.FieldValue.Int64(today + 2))
+        now += 5 * 60_000L
+        integrations.syncAll()
+        assertEquals("43.77", forecasts.last())
+        pull()
+        assertEquals("Florence", trip().asked)
+        assertTrue(trip().found)
+        assertEquals("Florence", trip().place)
+        // Home's stays home's.
+        assertEquals("London", WeatherStore(r).forecast().place)
+        // Then the half-hour rhythm: no new lookups or forecasts inside it.
+        val asked = forecasts.size
+        now += 5 * 60_000L
+        integrations.syncAll()
+        assertEquals(asked, forecasts.size)
+
+        // The trip is taken off: cleared at the next poll.
+        tripField(os.meka.core.domain.TripFields.DELETED, os.meka.core.sync.FieldValue.Bool(true))
+        now += 5 * 60_000L
+        integrations.syncAll()
+        pull()
+        assertEquals(null, trip().asked)
+        assertTrue(trip().isEmpty)
+        assertEquals("ok", store.accounts("home").single().status)
+        assertTrue(r.conflicts(os.meka.core.domain.EntityTypes.CONTEXT_MODE).isEmpty())
+    }
 }

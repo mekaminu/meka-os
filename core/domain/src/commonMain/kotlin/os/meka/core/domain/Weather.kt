@@ -502,5 +502,10 @@ class WeatherStore(private val replica: Replica, private val entityId: String = 
         const val ENTITY_ID = "weather"
         /** The work place's forecast (Places item 2), written by the server the same way; the apps never write it. */
         const val WORK_ENTITY_ID = "weather_work"
+        /**
+         * Travel mode completeness, slice 3: the trip destination's forecast ([TripWeatherRules]), written by the server
+         * while a trip on the list is on or starts tomorrow, with [WeatherFields.ASKED] naming the place; the apps never write it.
+         */
+        const val TRIP_ENTITY_ID = "weather_trip"
     }
 }

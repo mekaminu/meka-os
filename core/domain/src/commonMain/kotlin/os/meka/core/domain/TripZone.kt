@@ -15,6 +15,9 @@ package os.meka.core.domain
 class TripClocks(val home: LocalCalendar, private val zoneOf: (String) -> LocalCalendar?) {
     /** The destination's clock and its label ("Barcelona"), or null. */
     fun local(t: TripItem): TheirZone? = TripZoneRules.placeOf(t.name)?.let { z -> zoneOf(z.id)?.let { TheirZone(it, z.label) } }
+
+    /** The clock for an IANA id (null when the device doesn't know it). */
+    fun zone(id: String): LocalCalendar? = zoneOf(id)
 }
 
 object TripZoneRules {

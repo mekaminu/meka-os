@@ -81,6 +81,13 @@ data class BriefStory(
     val officeDay: Boolean = false,
     /** Travel mode completeness: the trip he's away on today ([TripRules.awayDays]), said with the kind of day. */
     val away: String? = null,
+    /**
+     * Travel mode completeness, slice 3: "In Barcelona today, 18–24°, clear." said in place of home's weather while away
+     * there ([TripWeatherRules.brief]); null without the destination's forecast.
+     */
+    val awayWeather: String? = null,
+    /** … and the day before the trip: "Tomorrow in Barcelona, 17–22°, light rain from 15:00 — take a coat.", after home's weather. */
+    val tripTomorrowWeather: String? = null,
     /** When today's work ends (local minute), on a work day. */
     val workEndMin: Int? = null,
     /** The commute counts everywhere, slice 4: when he leaves for work on an office day (local minute), or null. */
@@ -190,9 +197,12 @@ object BriefScriptRules {
             s.route?.let { out += sentence("On the trains: $it") }
             val weather = s.placesLine ?: v.weatherLine
             weather?.let { out += sentence(if (s.placesLine != null) it else "Today, $it") }
+        } else if (s.away != null && s.awayWeather != null) {
+            out += sentence(s.awayWeather)
         } else {
             v.weatherLine?.let { out += sentence("Today, $it") }
         }
+        s.tripTomorrowWeather?.let { out += sentence(it) }
 
         // The calendar.
         out += calendar(v, s)
