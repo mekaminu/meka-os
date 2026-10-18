@@ -93,8 +93,15 @@ data class TripsView(
     val rows: List<TripRow>,
     /** "On a trip: Barcelona · day 2 of 5", "Next: Barcelona · Sat 14 Nov · in 33 days", or the empty line. */
     val summary: String,
+    /**
+     * Trips that ended more than [TripRules.RECENT_DAYS] ago, newest first (completeness slice 4): kept, folded under
+     * PAST TRIPS, each still opening its timeline; at most [TripRules.PAST_MAX].
+     */
+    val past: List<TripRow> = emptyList(),
+    /** "PAST TRIPS · 4", or "" with none. */
+    val pastLabel: String = "",
 ) {
-    val isEmpty: Boolean get() = rows.isEmpty()
+    val isEmpty: Boolean get() = rows.isEmpty() && past.isEmpty()
 
     companion object { val EMPTY = TripsView(emptyList(), TripRules.EMPTY_LINE) }
 }
@@ -104,6 +111,12 @@ data class TripLine(val text: String, val spoken: String, val lit: Boolean)
 
 /** What adding a line did: the line under the field, and whether nothing was written. */
 data class TripAdded(val line: String, val refused: Boolean)
+
+/**
+ * What removing a trip or a booking did, for Undo (completeness slice 4): "Removed Barcelona and its 3 bookings" and
+ * the [token] that [Trips.undoRemove] takes to put exactly those back.
+ */
+data class TripRemoved(val line: String, val token: String)
 
 /** A typed trip ([TripRules.read]). */
 data class TripEntry(val name: String, val startDay: Long, val endDay: Long)
@@ -119,8 +132,13 @@ object TripRules {
     const val MAX_REF = 16
     /** Today's header shows a trip from this many days before it starts. */
     const val LEAD_DAYS = 7
-    /** An ended trip stays in the pane this many days. */
-    const val KEEP_DAYS = 30
+    /** An ended trip stays among YOUR TRIPS this many days, then moves to PAST TRIPS (completeness slice 4). */
+    const val RECENT_DAYS = 7
+    /** PAST TRIPS shows at most this many, newest first. */
+    const val PAST_MAX = 24
+    const val PAST_LABEL = "PAST TRIPS"
+    /** How long the Undo after a removal stays offered on both apps. */
+    const val UNDO_MS = 6_000L
     /** A booking may fall this many days either side of its trip (a night flight, a hotel the night before). */
     const val SLACK_DAYS = 1
 
@@ -285,7 +303,27 @@ object TripRules {
     fun status(t: TripItem, today: Long): String = when {
         today < t.startDay -> when (val n = t.startDay - today) { 1L -> "Tomorrow"; else -> "In $n days" }
         today <= t.endDay -> "Day ${today - t.startDay + 1} of ${t.days}"
-        else -> "Ended ${CivilDate.shortLabel(t.endDay)}"
+        else -> "Ended ${CivilDate.shortLabel(t.endDay)}" +
+            CivilDate.fromEpochDay(t.endDay).year.takeIf { it != CivilDate.fromEpochDay(today).year }?.let { " $it" }.orEmpty()
+    }
+
+    /** The undo line after × or Remove trip: "Removed Barcelona and its 3 bookings", "Removed Flight BA478 from Barcelona". */
+    fun removedLine(t: TripItem): String =
+        "Removed ${t.name}" + t.bookings.size.takeIf { it > 0 }?.let { " and its ${plural(it, "booking")}" }.orEmpty()
+
+    fun removedLine(b: TripBooking, tripName: String?): String = "Removed ${b.title}" + (tripName?.let { " from $it" } ?: "")
+
+    /** Undo's token: "trip-id;booking-id,booking-id" (an empty trip part for a booking alone). */
+    fun undoToken(tripId: String?, bookingIds: List<String>): String = (tripId ?: "") + ";" + bookingIds.joinToString(",")
+
+    /** The trip id (or null) and booking ids in [token]; null when it isn't one. */
+    fun readToken(token: String): Pair<String?, List<String>>? {
+        val parts = token.split(';')
+        if (parts.size != 2) return null
+        val trip = parts[0].takeIf { it.isNotEmpty() }
+        val bookings = parts[1].split(',').filter { it.isNotEmpty() }
+        if (trip == null && bookings.isEmpty()) return null
+        return trip to bookings
     }
 
     private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
@@ -351,8 +389,8 @@ object TripRules {
         return out
     }
 
-    /** The trips the pane shows: those not ended more than [KEEP_DAYS] ago. */
-    private fun shown(trips: List<TripItem>, today: Long) = trips.filter { it.endDay >= today - KEEP_DAYS }
+    /** The trips YOUR TRIPS shows: those not ended more than [RECENT_DAYS] ago; the rest are past trips. */
+    private fun shown(trips: List<TripItem>, today: Long) = trips.filter { it.endDay >= today - RECENT_DAYS }
 
     private fun ongoing(trips: List<TripItem>, today: Long) = trips.firstOrNull { today in it.startDay..it.endDay }
     private fun upcoming(trips: List<TripItem>, today: Long) = trips.filter { it.startDay > today }.minByOrNull { it.startDay }
@@ -364,16 +402,19 @@ object TripRules {
     /** The Trips pane: on now, then to come soonest first, then those just ended. */
     fun view(trips: List<TripItem>, today: Long, docs: List<DocumentItem>? = null, clocks: TripClocks? = null): TripsView {
         val list = shown(trips, today)
-        if (list.isEmpty()) return TripsView.EMPTY
+        val gone = trips.filter { it.endDay < today - RECENT_DAYS }.sortedWith(compareByDescending<TripItem> { it.endDay }.thenBy { it.id })
+        if (list.isEmpty() && gone.isEmpty()) return TripsView.EMPTY
         val ordered = list.filter { it.endDay >= today } + list.filter { it.endDay < today }.sortedByDescending { it.endDay }
-        val rows = ordered.map { t ->
+        fun row(t: TripItem, withDocs: Boolean): TripRow {
             val status = status(t, today)
             val line = rowLine(t, clocks)
-            TripRow(
+            return TripRow(
                 t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t, clocks), "${t.name}. $line. $status",
-                docs?.let { TripDocRules.forTrip(t, it, today) },
+                if (withDocs) docs?.let { TripDocRules.forTrip(t, it, today) } else null,
             )
         }
+        val rows = ordered.map { row(it, withDocs = true) }
+        val past = gone.take(PAST_MAX).map { row(it, withDocs = false) }
         val now = ongoing(list, today)
         val next = upcoming(list, today)
         val summary = when {
@@ -381,7 +422,7 @@ object TripRules {
             next != null -> "Next: ${next.name} · ${CivilDate.shortLabel(next.startDay)} · ${inDays(next.startDay, today)}"
             else -> "No trips coming up"
         }
-        return TripsView(rows, summary)
+        return TripsView(rows, summary, past, if (gone.isEmpty()) "" else "$PAST_LABEL · ${gone.size}")
     }
 
     /** "Flight BA478 Sat 07:40" (the day's short name only when it isn't today). */
@@ -624,17 +665,47 @@ class Trips(
     }
 
     /** Removes a trip and its bookings for good; false when it isn't there. */
-    fun remove(id: String): Boolean {
-        val trip = items().firstOrNull { it.id == id } ?: return false
-        trip.bookings.forEach { replica.commitLocal(EntityTypes.TRIP_BOOKING, it.id, mapOf(TripBookingFields.DELETED to true.fv())) }
-        replica.commitLocal(EntityTypes.TRIP, id, mapOf(TripFields.DELETED to true.fv()))
-        return true
-    }
+    fun remove(id: String): Boolean = removeForUndo(id) != null
 
     /** Removes one booking for good; false when it isn't there. */
-    fun removeBooking(id: String): Boolean {
-        replica.entity(EntityTypes.TRIP_BOOKING, id)?.takeIf { it.fields[TripBookingFields.DELETED]?.boolOrNull != true } ?: return false
+    fun removeBooking(id: String): Boolean = removeBookingForUndo(id) != null
+
+    /** Removes a trip and its bookings, saying so with Undo's token; null when it isn't there. */
+    fun removeForUndo(id: String): TripRemoved? {
+        val trip = items().firstOrNull { it.id == id } ?: return null
+        trip.bookings.forEach { replica.commitLocal(EntityTypes.TRIP_BOOKING, it.id, mapOf(TripBookingFields.DELETED to true.fv())) }
+        replica.commitLocal(EntityTypes.TRIP, id, mapOf(TripFields.DELETED to true.fv()))
+        return TripRemoved(TripRules.removedLine(trip), TripRules.undoToken(id, trip.bookings.map { it.id }))
+    }
+
+    /** Removes one booking, saying so with Undo's token; null when it isn't there. */
+    fun removeBookingForUndo(id: String): TripRemoved? {
+        replica.entity(EntityTypes.TRIP_BOOKING, id)?.takeIf { it.fields[TripBookingFields.DELETED]?.boolOrNull != true } ?: return null
+        val trips = items()
+        val trip = trips.firstOrNull { t -> t.bookings.any { it.id == id } }
+        val booking = trip?.bookings?.firstOrNull { it.id == id }
         replica.commitLocal(EntityTypes.TRIP_BOOKING, id, mapOf(TripBookingFields.DELETED to true.fv()))
-        return true
+        val line = booking?.let { TripRules.removedLine(it, trip.name) } ?: "Removed the booking"
+        return TripRemoved(line, TripRules.undoToken(null, listOf(id)))
+    }
+
+    /**
+     * Undo: puts back exactly what [token] names (the trip and the bookings removed with it, or one booking); false
+     * when nothing in it was removed.
+     */
+    fun undoRemove(token: String): Boolean {
+        val (tripId, bookingIds) = TripRules.readToken(token) ?: return false
+        var undone = false
+        if (tripId != null && replica.entity(EntityTypes.TRIP, tripId)?.fields?.get(TripFields.DELETED)?.boolOrNull == true) {
+            replica.commitLocal(EntityTypes.TRIP, tripId, mapOf(TripFields.DELETED to false.fv()))
+            undone = true
+        }
+        bookingIds.forEach { b ->
+            if (replica.entity(EntityTypes.TRIP_BOOKING, b)?.fields?.get(TripBookingFields.DELETED)?.boolOrNull == true) {
+                replica.commitLocal(EntityTypes.TRIP_BOOKING, b, mapOf(TripBookingFields.DELETED to false.fv()))
+                undone = true
+            }
+        }
+        return undone
     }
 }

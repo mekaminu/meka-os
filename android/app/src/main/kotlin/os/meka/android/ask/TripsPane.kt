@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +39,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -58,6 +60,7 @@ import os.meka.android.today.SectionLabel
 import os.meka.core.domain.TripAdded
 import os.meka.core.domain.TripDocRow
 import os.meka.core.domain.TripDocRules
+import os.meka.core.domain.TripRemoved
 import os.meka.core.domain.TripRow
 import os.meka.core.domain.TripRules
 import os.meka.core.domain.VaultFileOpened
@@ -72,11 +75,15 @@ import os.meka.core.facade.MekaCore
  * kind) and × to remove it, and Remove for the trip. Today's header shows the trip a week ahead and while it's on.
  * Under the timeline, TRAVEL DOCUMENTS from the Vault ([TripDocRules]): each passport and travel card with whether it
  * lasts the trip (lit when not) and Open copy for a kept copy, after his fingerprint, offline too (the Vault's lock).
+ * Completeness slice 4: × and Remove trip say what went with **Undo** for a few seconds ("Removed Barcelona and its 3
+ * bookings · Undo"), and a trip a week past its end moves under **PAST TRIPS · n ▾** (folded; tap to show, newest
+ * first, each still opening its timeline).
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
  * cross-fade (a refused line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with the list's
  * item motion; an opened row grows on the expand spring and its days fade in; the status blends to the accent while the
- * trip is on; Add gives a light haptic (a tick when refused), Remove and × a tick. Reduced motion: cross-fades.
+ * trip is on; Add gives a light haptic (a tick when refused), Remove and × a tick; the Undo line expands in and fades
+ * out, Undo a light haptic; past trips arrive and leave with the list's item motion. Reduced motion: cross-fades.
  */
 @Composable
 fun TripsPane(core: MekaCore, onClose: () -> Unit) {
@@ -86,6 +93,19 @@ fun TripsPane(core: MekaCore, onClose: () -> Unit) {
     val v by core.tripsView.collectAsState()
     var said by remember { mutableStateOf<TripAdded?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
+    // Completeness slice 4: what the last × or Remove trip took, offered back for a few seconds; past trips folded.
+    var removed by remember { mutableStateOf<TripRemoved?>(null) }
+    var undoShown by remember { mutableStateOf(false) }
+    var showPast by remember { mutableStateOf(false) }
+    LaunchedEffect(removed, undoShown) { if (undoShown) { delay(TripRules.UNDO_MS); undoShown = false } }
+    val removeBooking: (String) -> Unit = { id ->
+        haptics.tick()
+        scope.launch { runCatching { core.removeTripBookingForUndo(id) }.getOrNull()?.let { removed = it; undoShown = true } }
+    }
+    val removeTrip: (String) -> Unit = { id ->
+        haptics.tick(); open = null
+        scope.launch { runCatching { core.removeTripForUndo(id) }.getOrNull()?.let { removed = it; undoShown = true } }
+    }
     val context = LocalContext.current
     // Travel documents: the copy shown, and what the last Open copy said (by document).
     var viewing by remember { mutableStateOf<VaultFileOpened?>(null) }
@@ -146,6 +166,32 @@ fun TripsPane(core: MekaCore, onClose: () -> Unit) {
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "trips-added") { r ->
                     r?.let { Text(it.line, style = MekaType.caption, color = saidColor) }
                 }
+                AnimatedVisibility(
+                    visible = undoShown && removed != null,
+                    enter = if (reduced) fadeIn() else fadeIn() + expandVertically(),
+                    exit = if (reduced) fadeOut() else fadeOut() + shrinkVertically(),
+                ) {
+                    removed?.let { r ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                        ) {
+                            Text(r.line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                            Text(
+                                "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                    .clickable(role = Role.Button) {
+                                        haptics.light()
+                                        undoShown = false
+                                        scope.launch { runCatching { core.undoTripRemoval(r.token) } }
+                                    }
+                                    .semantics { contentDescription = "Undo: ${r.line}" }
+                                    .minTouch().padding(MekaSpace.xs),
+                            )
+                        }
+                    }
+                }
             }
         }
         if (v.rows.isNotEmpty()) {
@@ -159,11 +205,37 @@ fun TripsPane(core: MekaCore, onClose: () -> Unit) {
                 open = open == r.id,
                 modifier = Modifier.animateItem().appear(rememberAppearance(4 + i)),
                 onToggle = { open = if (open == r.id) null else r.id },
-                onRemoveBooking = { id -> haptics.tick(); scope.launch { runCatching { core.removeTripBooking(id) } } },
+                onRemoveBooking = removeBooking,
                 docSaid = docSaid,
                 onOpenCopy = openCopy,
-                onRemove = { haptics.tick(); open = null; scope.launch { runCatching { core.removeTrip(r.id) } } },
+                onRemove = { removeTrip(r.id) },
             )
+        }
+        if (v.past.isNotEmpty()) {
+            item(key = "past-label") {
+                SectionLabel(
+                    v.pastLabel + (if (showPast) " ▴" else " ▾"),
+                    Modifier.animateItem().padding(top = MekaSpace.m)
+                        .clip(RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Button) { haptics.tick(); showPast = !showPast }
+                        .semantics { contentDescription = if (showPast) "Hide past trips" else "Show ${v.pastLabel.lowercase()}" }
+                        .minTouch(),
+                )
+            }
+            if (showPast) {
+                itemsIndexed(v.past, key = { _, r -> "past-${r.id}" }) { _, r ->
+                    TripRowView(
+                        row = r,
+                        open = open == r.id,
+                        modifier = Modifier.animateItem(),
+                        onToggle = { open = if (open == r.id) null else r.id },
+                        onRemoveBooking = removeBooking,
+                        docSaid = docSaid,
+                        onOpenCopy = openCopy,
+                        onRemove = { removeTrip(r.id) },
+                    )
+                }
+            }
         }
         item(key = "note") {
             Text(TripRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,

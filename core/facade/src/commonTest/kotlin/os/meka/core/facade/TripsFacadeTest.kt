@@ -64,4 +64,32 @@ class TripsFacadeTest {
         assertTrue(fold.tripsView.value.isEmpty)
         assertNull(fold.today.value.trip)
     }
+
+    @Test
+    fun removingWithUndoOnTheMacAndPastTripsKept() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addTrip("Barcelona 14–16 Oct")
+        fold.addTrip("Flight BA478 Wed 14 Oct 07:40 ref ABC123")
+        fold.syncNow(); mac.syncNow()
+        val row = mac.tripsView.value.rows.single()
+        val gone = mac.removeTripForUndo(row.id)!!
+        assertEquals("Removed Barcelona and its 1 booking", gone.line)
+        assertTrue(mac.tripsView.value.isEmpty)
+        assertTrue(mac.undoTripRemoval(gone.token))
+        assertEquals(1, mac.tripsView.value.rows.single().timeline.single().lines.size)
+        val line = mac.tripsView.value.rows.single().timeline.single().lines.single()
+        val b = mac.removeTripBookingForUndo(line.bookingId)!!
+        assertEquals("Removed Flight BA478 from Barcelona", b.line)
+        assertTrue(mac.undoTripRemoval(b.token))
+        mac.syncNow(); fold.syncNow()
+        assertEquals(1, fold.tripsView.value.rows.single().timeline.single().lines.size)
+
+        // Ten days after it ended it's under PAST TRIPS on both apps.
+        now += 16 * day
+        fold.tick(); mac.tick()
+        assertTrue(fold.tripsView.value.rows.isEmpty())
+        assertEquals("PAST TRIPS · 1", fold.tripsView.value.pastLabel)
+        assertEquals("Barcelona", mac.tripsView.value.past.single().name)
+    }
 }

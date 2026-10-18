@@ -4633,6 +4633,41 @@ final class CoreModel {
 
     func removeTripBooking(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeTripBooking(id: id) } }
 
+    /// Travel mode completeness slice 4: what × or Remove trip took, with the token Undo gives back (Strings only).
+    struct TripUndo: Equatable {
+        let line: String
+        let token: String
+    }
+
+    /// Removes a trip and its bookings; "Removed Barcelona and its 3 bookings" with Undo's token. Only Strings cross.
+    func removeTripForUndo(_ id: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let r = try await core.removeTripForUndo(id: id) else { return nil }
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Removes one booking; "Removed Flight BA478 from Barcelona" with Undo's token.
+    func removeTripBookingForUndo(_ id: String) async -> TripUndo? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            guard let r = try await core.removeTripBookingForUndo(id: id) else { return nil }
+            return TripUndo(line: r.line, token: r.token)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Undo: puts back exactly what the removal took.
+    func undoTripRemoval(_ token: String) { MekaHaptics.light(); run { _ = try await $0.undoTripRemoval(token: token) } }
+
     // MARK: The Vault (V2, slice 1)
 
     /// Adds "Passport expires 3 Mar 2029" or "Railcard 05/2027"; only a String crosses. Says what it did like Trips.

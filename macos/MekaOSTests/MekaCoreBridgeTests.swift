@@ -2776,6 +2776,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         let line = row.timeline[0].lines[0]
         XCTAssertEqual(line.lead, "09:15")
         XCTAssertEqual(line.text, "Flight TP1361 · ref QX12AB")
+        // Completeness slice 4: × with Undo, then Remove trip for good.
+        let undo = try await core.removeTripBookingForUndo(id: line.bookingId)
+        XCTAssertEqual(undo?.line, "Removed Flight TP1361 from Lisbon")
+        let back = try await core.undoTripRemoval(token: undo?.token ?? "")
+        XCTAssertTrue(back.boolValue)
+        XCTAssertEqual(core.tripsView.value.rows[0].timeline.count, 1)
+        XCTAssertTrue(core.tripsView.value.past.isEmpty)
+        XCTAssertEqual(core.tripsView.value.pastLabel, "")
         let gone = try await core.removeTripBooking(id: line.bookingId)
         XCTAssertTrue(gone.boolValue)
         let removed = try await core.removeTrip(id: row.id)

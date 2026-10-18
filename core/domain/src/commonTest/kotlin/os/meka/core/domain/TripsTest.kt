@@ -115,7 +115,14 @@ class TripsTest {
         assertNull(TripRules.todayLine(trips, d(11, 19), 9 * 60))
         assertEquals("On a trip: Barcelona · day 2 of 5", TripRules.view(trips, d(11, 15)).summary)
         assertEquals("Ended Wed 18 Nov", TripRules.view(trips, d(11, 20)).rows.single().status)
-        assertTrue(TripRules.view(trips, d(12, 20)).isEmpty)
+        // A week after it ended it moves to PAST TRIPS (completeness slice 4), kept.
+        assertEquals("Ended Wed 18 Nov", TripRules.view(trips, d(11, 25)).rows.single().status)
+        val later = TripRules.view(trips, d(12, 20))
+        assertTrue(later.rows.isEmpty())
+        assertEquals(listOf("Barcelona"), later.past.map { it.name })
+        assertEquals("PAST TRIPS · 1", later.pastLabel)
+        assertEquals("No trips coming up", later.summary)
+        assertEquals("Ended Wed 18 Nov 2026", TripRules.view(trips, d(1, 5, 2027)).past.single().status)
 
         // The week ahead: the trip on its first day, the bookings on theirs.
         assertEquals(

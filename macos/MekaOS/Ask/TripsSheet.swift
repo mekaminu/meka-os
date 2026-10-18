@@ -7,11 +7,14 @@ import SwiftUI
 /// trip with its dates and status. Click a row to open its day-by-day timeline: each booking with its time (or its
 /// kind) and × to remove it, and Remove trip. Under the timeline, TRAVEL DOCUMENTS from the Vault (TripDocRules):
 /// each passport and travel card with whether it lasts the trip (lit when not) and Open copy behind Touch ID, offline
-/// too, like the Vault's. Only Strings cross to the core.
+/// too, like the Vault's. Completeness slice 4: × and Remove trip say what went with **Undo** for a few seconds, and
+/// a trip a week past its end moves under **PAST TRIPS · n** (folded; click to show, newest first, each still opening
+/// its timeline). Only Strings cross to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (a refused line lit in
 /// the accent); rows stagger in and arrive or leave on the expand spring; an opened row grows on the expand spring;
-/// Add gives a light haptic (a tick when refused), Remove and × a tick. Reduce Motion: cross-fades.
+/// Add gives a light haptic (a tick when refused), Remove and × a tick; the Undo line slides in and fades, Undo a light
+/// haptic; past trips arrive and leave on the expand spring. Reduce Motion: cross-fades.
 struct TripsSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -25,10 +28,14 @@ struct TripsSheet: View {
     /// Travel documents: the copy shown, and what the last Open copy said (by document).
     @State private var viewing: ViewedCopy?
     @State private var docSaid: (id: String, said: CoreModel.TripSaid)?
+    /// What the last × or Remove trip took, offered back for a few seconds; past trips folded.
+    @State private var removed: CoreModel.TripUndo?
+    @State private var showPast = false
 
     var body: some View {
         let v = model.trips
         let rows = v?.rows ?? []
+        let past = v?.past ?? []
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Trips").font(MekaType.upNextTitle).staggeredAppear(0)
             Text(v?.summary ?? TripRules.shared.EMPTY_LINE).font(MekaType.body).foregroundStyle(palette.textSecondary)
@@ -52,6 +59,27 @@ struct TripsSheet: View {
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
             }
+            if let removed {
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Text(removed.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer()
+                    Button("Undo") {
+                        let token = removed.token
+                        self.removed = nil
+                        model.undoTripRemoval(token)
+                    }
+                    .buttonStyle(MekaPressStyle())
+                    .font(MekaType.caption)
+                    .foregroundStyle(palette.accent)
+                    .accessibilityLabel("Undo: \(removed.line)")
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                .task(id: removed) {
+                    try? await Task.sleep(for: .milliseconds(TripRules.shared.UNDO_MS))
+                    if !Task.isCancelled { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { self.removed = nil } }
+                }
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if !rows.isEmpty {
@@ -66,18 +94,44 @@ struct TripsSheet: View {
                             row: row, palette: palette, isOpen: open == row.id,
                             docSaid: docSaid,
                             onToggle: { open = open == row.id ? nil : row.id },
-                            onOpenCopy: { docId in
-                                Task {
-                                    let (copy, s) = await model.openVaultCopyUnlocking(docId)
-                                    if let copy { docSaid = nil; viewing = copy } else if let s { docSaid = (docId, s) }
-                                }
-                            }
+                            onOpenCopy: openCopy,
+                            onRemoveBooking: removeBooking,
+                            onRemove: removeTrip
                         )
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                         .staggeredAppear(4 + i)
                     }
+                    if !past.isEmpty, let label = v?.pastLabel {
+                        Button {
+                            MekaHaptics.tick()
+                            showPast.toggle()
+                        } label: {
+                            Text(label + (showPast ? " ▴" : " ▾"))
+                                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                                .foregroundStyle(palette.textTertiary)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .padding(.top, MekaSpace.m)
+                        .accessibilityLabel(showPast ? "Hide past trips" : "Show \(label.lowercased())")
+                        if showPast {
+                            ForEach(past, id: \.id) { row in
+                                TripRowView(
+                                    row: row, palette: palette, isOpen: open == row.id,
+                                    docSaid: docSaid,
+                                    onToggle: { open = open == row.id ? nil : row.id },
+                                    onOpenCopy: openCopy,
+                                    onRemoveBooking: removeBooking,
+                                    onRemove: removeTrip
+                                )
+                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                            }
+                        }
+                    }
                 }
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: rows.map(\.id))
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: past.map(\.id))
+                .animation(MekaMotion.expand(reduced: reduceMotion), value: showPast)
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
             }
             .frame(maxHeight: 380)
@@ -89,6 +143,7 @@ struct TripsSheet: View {
             }
             .padding(.top, MekaSpace.m)
         }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: removed)
         .padding(MekaSpace.l)
         .frame(width: 500)
         .background(palette.surface)
@@ -104,16 +159,33 @@ struct TripsSheet: View {
             viewing = nil; model.lockVault()
         }
     }
+
+    private func openCopy(_ docId: String) {
+        Task {
+            let (copy, s) = await model.openVaultCopyUnlocking(docId)
+            if let copy { docSaid = nil; viewing = copy } else if let s { docSaid = (docId, s) }
+        }
+    }
+
+    private func removeBooking(_ id: String) {
+        Task { if let r = await model.removeTripBookingForUndo(id) { removed = r } }
+    }
+
+    private func removeTrip(_ id: String) {
+        open = nil
+        Task { if let r = await model.removeTripForUndo(id) { removed = r } }
+    }
 }
 
 private struct TripRowView: View {
-    @Environment(CoreModel.self) private var model
     let row: TripRow
     let palette: MekaPalette
     let isOpen: Bool
     let docSaid: (id: String, said: CoreModel.TripSaid)?
     let onToggle: () -> Void
     let onOpenCopy: (String) -> Void
+    let onRemoveBooking: (String) -> Void
+    let onRemove: (String) -> Void
 
     var body: some View {
         let days = row.timeline.filter { !$0.lines.isEmpty }
@@ -151,7 +223,7 @@ private struct TripRowView: View {
                                     .accessibilityElement(children: .combine)
                                     .accessibilityLabel(line.spoken)
                                     Spacer()
-                                    Button("×") { model.removeTripBooking(line.bookingId) }
+                                    Button("×") { onRemoveBooking(line.bookingId) }
                                         .buttonStyle(MekaPressStyle())
                                         .foregroundStyle(palette.textTertiary)
                                         .accessibilityLabel("Remove \(line.text)")
@@ -162,7 +234,7 @@ private struct TripRowView: View {
                     if let docs = row.documents {
                         TripDocsView(docs: docs, palette: palette, docSaid: docSaid, onOpenCopy: onOpenCopy)
                     }
-                    Button("Remove trip") { model.removeTrip(row.id) }
+                    Button("Remove trip") { onRemove(row.id) }
                         .buttonStyle(MekaPressStyle())
                         .font(MekaType.caption)
                         .foregroundStyle(palette.textTertiary)

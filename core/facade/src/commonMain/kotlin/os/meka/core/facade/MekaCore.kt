@@ -3807,6 +3807,18 @@ class MekaCore(
     /** Removes one booking for good (its id is a timeline line's `bookingId`). */
     suspend fun removeTripBooking(id: String): Boolean = onCore { trips.removeBooking(id) }
 
+    /**
+     * Travel mode completeness slice 4: × and Remove trip with Undo on both apps. Removes a trip and its bookings and
+     * returns "Removed Barcelona and its 3 bookings" with the token [undoTripRemoval] takes; null when it isn't there.
+     */
+    suspend fun removeTripForUndo(id: String): os.meka.core.domain.TripRemoved? = onCore { trips.removeForUndo(id) }
+
+    /** Removes one booking: "Removed Flight BA478 from Barcelona" with Undo's token; null when it isn't there. */
+    suspend fun removeTripBookingForUndo(id: String): os.meka.core.domain.TripRemoved? = onCore { trips.removeBookingForUndo(id) }
+
+    /** Undo after [removeTripForUndo] or [removeTripBookingForUndo]: exactly what was removed comes back. */
+    suspend fun undoTripRemoval(token: String): Boolean = onCore { trips.undoRemove(token) }
+
     // ---- The Vault (V2, slice 1) ----
 
     /**
