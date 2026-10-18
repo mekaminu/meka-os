@@ -1869,7 +1869,8 @@ class MekaCoreTest {
         val cal = ZoneCalendar { TimeZone.of("Europe/London") }
         val start = now + 2 * 3_600_000L
         val nudge = assertIs<os.meka.core.domain.EventEditResult.Made>(mac.moveEventBy("evdg", 0, os.meka.core.domain.EventMoveRules.NUDGE_MIN)).id
-        assertEquals(start + 15 * 60_000L, mac.currentEvent("evdg")?.startAtMs)
+        // The test clock has seconds (14:13:20); the form works in whole minutes, as the Edit sheet does.
+        assertEquals(cal.minuteOfDay(start) + 15, cal.minuteOfDay(assertNotNull(mac.currentEvent("evdg")).startAtMs))
         assertTrue(mac.undoEventEdit(nudge))
         assertEquals(
             os.meka.core.domain.EventMoveRules.SAME,
