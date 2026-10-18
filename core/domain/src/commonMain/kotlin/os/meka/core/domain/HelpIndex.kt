@@ -274,10 +274,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "goals",
             title = "Goals and habits",
-            keywords = listOf("goals", "goals and habits", "habits", "habit", "fasting", "fast", "weekly goals"),
+            keywords = listOf("goals", "goals and habits", "habits", "habit", "fasting", "fast", "weekly goals", "money streaks", "no-spend streak", "spending streak"),
             what = "your habits with the week so far, your goals with their milestones, and fasting.",
             how = "Add a habit or a goal there; Navilife can suggest milestones and first steps for a goal, and nothing is added until you tick the ones to keep.",
-            tips = listOf("Start a fast there, or ask \"start a 16-hour fast\"."),
+            tips = listOf("Start a fast there, or ask \"start a 16-hour fast\".", "Money challenges you set in Money (no-spend days, fun money, a category cap) show under MONEY CHALLENGES as streaks with no amounts; tap one to open Money."),
             fold = HelpPlace.GOALS,
             foldWhere = "Ask → Life → Goals and habits",
             mac = HelpPlace.GOALS,

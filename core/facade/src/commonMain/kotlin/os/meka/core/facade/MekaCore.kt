@@ -829,6 +829,18 @@ class MekaCore(
         return os.meka.core.domain.MoneyYear.readyYear(money.txns().asSequence().filter { it.account in ids }.map { it.day }.asIterable(), today)
     }
 
+    /**
+     * Money manager (15), the streaks in Goals: the challenges he set as streaks, from every account's lines (a statement
+     * line and the same bank line counted once). No amounts, so it doesn't wait for Money's lock; nothing when none is set.
+     */
+    private fun moneyStreaks(): os.meka.core.domain.MoneyStreaksView? {
+        val setting = money.challenges()
+        if (!setting.any) return null
+        val lines = os.meka.core.domain.MoneyRules.askLines(money.accounts(), money.txns(), money.rules())
+            .map { os.meka.core.domain.MoneyChallengeLine(it.day, it.pence, it.category) }
+        return os.meka.core.domain.MoneyChallenges.streaks(lines, setting, todayEpochDay())
+    }
+
     private fun moneyAbroadNow(): Boolean = runCatching {
         val now = Instant.fromEpochMilliseconds(nowMs())
         timeZone().offsetAt(now) != TimeZone.of(MONEY_HOME_ZONE).offsetAt(now)
@@ -8194,7 +8206,7 @@ class MekaCore(
         )
         _lifeAdmin.value = lifeAdminViewNow
         val fastingNow = fasting.view()
-        val goalsNow = goals.view(all).withSessions(_sessions.value)
+        val goalsNow = goals.view(all).withSessions(_sessions.value).copy(money = moneyStreaks())
         val projected = project(all, dayEvents, marks.clubChildren)
         val today = dayWindow(nowMs())
         // The forecast (Weather slice 2): Today's line, the brief's today, the shutdown's tomorrow, rain on the Day ring.

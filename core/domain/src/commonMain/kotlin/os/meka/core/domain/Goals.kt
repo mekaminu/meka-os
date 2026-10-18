@@ -143,6 +143,8 @@ data class GoalsView(
     val week: WeekGoals = WeekGoals.EMPTY,
     /** Last month looked back on, for the first week of a month ([GoalRhythmRules.month]); null otherwise. */
     val month: GoalMonth? = null,
+    /** Money manager (15): the money challenges he set, as streaks with no amounts ([MoneyChallenges.streaks]); null with none. */
+    val money: MoneyStreaksView? = null,
 ) {
     val behind: Int get() = habits.count { it.pace == HabitPace.BEHIND }
     val dueToday: Int get() = habits.count { it.pace == HabitPace.DUE }

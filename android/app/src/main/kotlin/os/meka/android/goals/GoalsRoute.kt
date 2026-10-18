@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -87,6 +88,7 @@ import os.meka.core.domain.Goals
 import os.meka.core.domain.HabitItem
 import os.meka.core.domain.HabitPace
 import os.meka.core.domain.HabitTiming
+import os.meka.core.domain.MoneyStreaksView
 import os.meka.core.domain.SessionRules
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
@@ -184,6 +186,17 @@ fun GoalsRoute(core: MekaCore) {
         // Health Connect, slice 3: a short night plans a lighter day (off by default; this phone only).
         item(key = "sleep") {
             SleepSection(core, Modifier.animateItem().padding(top = MekaSpace.xl))
+        }
+
+        // Money manager (15): the money challenges as streaks beside the habits, no amounts; a tap opens Money (fingerprint).
+        view.money?.let { m ->
+            item(key = "money-streaks") {
+                MoneyStreaksSection(m, Modifier.animateItem().padding(top = MekaSpace.xl)) {
+                    haptics.light()
+                    app.openMoney.value = true
+                    app.openDestination.value = ShellDestination.ASK
+                }
+            }
         }
 
         item(key = "goals-label") { SectionLabel("Goals", Modifier.padding(top = MekaSpace.xl).appear(rememberAppearance(3))) }
@@ -816,5 +829,29 @@ private fun AddGoal(add: (String, String?, GoalHorizon) -> Unit) {
                 Action("Add") { submit() }
             }
         }
+    }
+}
+
+/**
+ * Goals' MONEY CHALLENGES (Money manager 15): each challenge he set in Money with its streak, brass while a run is going.
+ * No amounts, so no fingerprint here; a tap opens Money, which asks for it.
+ */
+@Composable
+private fun MoneyStreaksSection(m: MoneyStreaksView, modifier: Modifier, open: () -> Unit) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        SectionLabel(m.head)
+        m.rows.forEach { row ->
+            Column(
+                Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(onClick = open)
+                    .semantics(mergeDescendants = true) { contentDescription = row.spoken },
+            ) {
+                Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                AnimatedContent(row.line, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "streak") { line ->
+                    Text(line, style = MekaType.itemMeta, color = if (row.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                }
+            }
+        }
+        m.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Text(m.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

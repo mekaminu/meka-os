@@ -458,7 +458,15 @@ class MoneyFacadeTest {
         assertEquals("£6.80 left · within it last month", caps[1].line)
         assertTrue(fold.undoMoneyCategory(g.undo!!))
         assertEquals(1, fold.moneyView.value.challenges!!.caps.size)
+        // The streaks in Goals: no amounts, and there whether Money is open or not.
+        fold.closeMoney()
+        val gs = fold.goalsView.value.money!!
+        assertEquals(listOf("No-spend days", "Fun money", "Coffee cap"), gs.rows.map { it.title })
+        assertEquals("2 days in a row · 3 this month", gs.rows[0].line)
+        assertTrue(gs.rows.none { '£' in it.line })
+        fold.openMoney()
         fold.syncNow(); mac.syncNow()
+        assertEquals(3, mac.goalsView.value.money!!.rows.size)
         mac.openMoney()
         val m = mac.moneyView.value.challenges!!
         assertTrue(m.noSpendOn)
@@ -474,6 +482,7 @@ class MoneyFacadeTest {
         assertEquals(1, fold.moneyView.value.challenges!!.caps.size)
         fold.deleteAllMoney()
         assertNull(fold.moneyView.value.challenges)
+        assertNull(fold.goalsView.value.money)
         fold.importMoneyStatement("Card", "Date,Description,Amount\n06/10/2026,PRET A MANGER,-5.00\n")
         assertEquals(os.meka.core.domain.MoneyChallenges.INTRO, fold.moneyView.value.challenges!!.intro)
     }

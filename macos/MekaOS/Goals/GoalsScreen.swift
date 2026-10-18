@@ -61,6 +61,13 @@ struct GoalsScreen: View {
                     .transition(.opacity)
                 }
 
+                // Money manager (15): the money challenges as streaks beside the habits, no amounts; a click opens Money (Touch ID).
+                if let streaks = model.goals?.money {
+                    MoneyStreaksSection(streaks: streaks, palette: palette) { model.showMoney = true }
+                        .padding(.top, MekaSpace.xl)
+                        .transition(.opacity)
+                }
+
                 SectionLabel("Goals", palette).padding(.top, MekaSpace.xl).staggeredAppear(3)
                 // Goals, properly, item 6: last month looked back on, for the first week of a month.
                 if let month = model.goals?.month {
@@ -858,5 +865,46 @@ struct WeekSlotsView: View {
         .animation(MekaMotion.complete(reduced: reduceMotion), value: filled)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(filled) of \(total) this week")
+    }
+}
+
+/// Goals' MONEY CHALLENGES (Money manager 15): each challenge he set in Money with its streak, brass while a run is going.
+/// No amounts, so it needs no Touch ID; clicking a row opens Money, which asks for it.
+private struct MoneyStreaksSection: View {
+    let streaks: MoneyStreaksView
+    let palette: MekaPalette
+    let open: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            SectionLabel(streaks.head, palette)
+            ForEach(streaks.rows, id: \.key) { row in
+                MoneyStreakRow(row: row, palette: palette, open: open)
+            }
+            if let note = streaks.note {
+                Text(note).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            }
+            Text(streaks.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+        }
+    }
+}
+
+private struct MoneyStreakRow: View {
+    let row: MoneyStreak
+    let palette: MekaPalette
+    let open: () -> Void
+
+    var body: some View {
+        let lineColor: Color = row.lit ? palette.accent : palette.textSecondary
+        Button(action: open) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(row.line).font(MekaType.itemMeta).foregroundStyle(lineColor).contentTransition(.opacity)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(row.spoken)
     }
 }

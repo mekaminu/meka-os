@@ -40,6 +40,8 @@ data class MoneyChallengeSetting(
 /** No-spend days this month: [days] one per day from the 1st to the last day his statements reach, true = no spending. */
 data class MoneyNoSpendView(
     val title: String, val line: String, val streakLine: String?, val lit: Boolean, val days: List<Boolean>, val spoken: String,
+    /** The run ending on the last day his statements reach, and the month's no-spend days (Goals' streak row). */
+    val streak: Int = 0, val count: Int = 0, val best: Int = 0,
 ) {
     fun dayAt(i: Int): Boolean = days[i]
 }
@@ -47,7 +49,20 @@ data class MoneyNoSpendView(
 /** One allowance or cap: [amount] "£32 of £50", [share] (0–1+, drawn up to 1) for the bar, [line] what's left and the run, [lit] near or over. */
 data class MoneyChallengeBar(
     val key: String, val title: String, val amount: String, val share: Float, val line: String, val lit: Boolean, val spoken: String,
+    /** Whole weeks (fun money) or months (a cap) in a row within it, before this one (Goals' streak row). */
+    val run: Int = 0,
 )
+
+/** One of Goals' MONEY CHALLENGES rows: [line] the streak and how this week or month is going, never an amount. */
+data class MoneyStreak(val key: String, val title: String, val line: String, val lit: Boolean, val spoken: String)
+
+/**
+ * Money manager (15), the streaks in Goals: the challenges he set, as streaks beside his habits. No amounts, so it sits
+ * outside Money's lock; a tap opens Money (behind the fingerprint). [note] when his statements stop before today.
+ */
+data class MoneyStreaksView(val head: String, val rows: List<MoneyStreak>, val note: String?, val foot: String) {
+    fun rowAt(i: Int): MoneyStreak = rows[i]
+}
 
 /**
  * CHALLENGES on the Money screen (this month only). [intro] until he sets one; [noSpend] when that's on; [funMoney] his
@@ -223,7 +238,7 @@ object MoneyChallenges {
             else -> null
         }
         return MoneyNoSpendView(SWITCH, line, streakLine, streak >= 3, days,
-            listOfNotNull("No-spend days", line, streakLine).joinToString(". "))
+            listOfNotNull("No-spend days", line, streakLine).joinToString(". "), streak, count, best)
     }
 
     private fun mondayOf(day: Long) = day - (CivilDate.isoDayOfWeek(day) - 1)
@@ -250,7 +265,7 @@ object MoneyChallenges {
         val line = listOfNotNull(head, togo, runLine).joinToString(" · ")
         val amount = "${fmt(spentNow)} of ${fmt(allowance)}"
         return MoneyChallengeBar(FUN_KEY, "Fun money this week", amount, share, line, share >= LIT_SHARE,
-            "Fun money this week, $amount, $line")
+            "Fun money this week, $amount, $line", run)
     }
 
     private fun capView(lines: List<MoneyChallengeLine>, c: MoneyCategory, cap: Long, today: Long, through: Long, first: Long): MoneyChallengeBar {
@@ -277,6 +292,52 @@ object MoneyChallenges {
         val line = listOfNotNull(head, runLine).joinToString(" · ")
         val amount = "${fmt(spentNow)} of ${fmt(cap)}"
         return MoneyChallengeBar(c.key, "${c.label} this month", amount, share, line, share >= LIT_SHARE,
-            "${c.label} this month, $amount, $line")
+            "${c.label} this month, $amount, $line", run)
+    }
+
+    const val STREAKS_HEAD = "MONEY CHALLENGES"
+    const val STREAKS_FOOT = "From your challenges in Money · no amounts here · tap one to open Money"
+    /** A run worth lighting: 3 no-spend days, 2 weeks or 2 months in a row. */
+    const val LIT_DAYS = 3
+    const val LIT_RUN = 2
+
+    /**
+     * Goals' MONEY CHALLENGES (the streaks in Goals): one row per challenge he set, the streak first ("4 days in a row ·
+     * 9 this month", "Within it 3 weeks in a row · on track this week"), lit while a run is going. Null with none set or no
+     * statements; never an amount.
+     */
+    fun streaks(lines: List<MoneyChallengeLine>, setting: MoneyChallengeSetting, today: Long): MoneyStreaksView? {
+        if (!setting.any) return null
+        val v = view(lines, setting, today) ?: return null
+        val rows = buildList {
+            v.noSpend?.takeIf { it.days.isNotEmpty() }?.let { ns ->
+                val month = CivilDate.MONTH_LONG[CivilDate.fromEpochDay(today).month - 1]
+                val line = when {
+                    ns.streak >= 1 -> "${n(ns.streak, "day")} in a row · ${ns.count} this month"
+                    ns.best >= 2 -> "${n(ns.count, "no-spend day")} in $month · best ${ns.best} in a row"
+                    else -> "${n(ns.count, "no-spend day")} in $month"
+                }
+                add(MoneyStreak("nospend", SWITCH, line, ns.streak >= LIT_DAYS, "No-spend days, $line"))
+            }
+            v.funMoney?.let { add(barStreak(it, "Fun money", "week")) }
+            v.caps.forEach { b ->
+                val c = CAPPABLE.first { it.key == b.key }
+                add(barStreak(b, "${c.label} cap", "month"))
+            }
+        }
+        if (rows.isEmpty()) return null
+        val through = minOf(today, lines.maxOf { it.day })
+        val note = if (through < today) "Counted to ${CivilDate.shortLabel(through)}, where your statements reach" else null
+        return MoneyStreaksView(STREAKS_HEAD, rows, note, STREAKS_FOOT)
+    }
+
+    private fun barStreak(b: MoneyChallengeBar, title: String, unit: String): MoneyStreak {
+        val now = if (b.share <= 1f) "on track this $unit" else "over this $unit"
+        val line = when {
+            b.run >= 2 -> "Within it ${b.run} ${unit}s in a row · $now"
+            b.run == 1 -> "Within it last $unit · $now"
+            else -> now.replaceFirstChar { it.uppercase() }
+        }
+        return MoneyStreak(b.key, title, line, b.run >= LIT_RUN && b.share <= 1f, "$title, $line")
     }
 }

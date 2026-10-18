@@ -93,4 +93,35 @@ class MoneyChallengesTest {
         assertTrue(s.noSpend)
         assertEquals(mapOf(MoneyCategory.FUEL to 8_000L), s.caps)
     }
+
+    @Test
+    fun goalsStreaksNameTheRunWithNoAmountsAndStayAwayWithNoneSet() {
+        val lines = listOf(
+            l(8, 20, -10_000, MoneyCategory.EATING_OUT), // August over a £60 cap
+            l(9, 10, -4_000, MoneyCategory.EATING_OUT),  // September within
+            l(9, 30, -3_000, MoneyCategory.COFFEE),      // week of 28 Sep: £30 fun
+            l(10, 7, -2_000, MoneyCategory.COFFEE),      // week of 5 Oct: £20
+            l(10, 9, -1_200, MoneyCategory.TAKEAWAY),
+            l(10, 13, -2_500, MoneyCategory.TAKEAWAY),   // this week
+            l(10, 14, -1_000, MoneyCategory.FUN),
+            l(10, 15, -100, MoneyCategory.SUBSCRIPTIONS),
+        )
+        assertNull(MoneyChallenges.streaks(lines, MoneyChallengeSetting(), today))
+        val s = MoneyChallenges.streaks(
+            lines, MoneyChallengeSetting(noSpend = true, funPence = 5_000, caps = mapOf(MoneyCategory.EATING_OUT to 6_000)), today,
+        )!!
+        assertEquals(MoneyChallenges.STREAKS_HEAD, s.head)
+        assertEquals(listOf("No-spend days", "Fun money", "Eating out cap"), s.rows.map { it.title })
+        assertEquals("1 day in a row · 11 this month", s.rowAt(0).line)
+        assertFalse(s.rowAt(0).lit)
+        assertEquals("Within it 7 weeks in a row · on track this week", s.rowAt(1).line)
+        assertTrue(s.rowAt(1).lit)
+        assertEquals("Within it last month · on track this month", s.rowAt(2).line)
+        assertFalse(s.rowAt(2).lit)
+        assertEquals("Counted to Thu 15 Oct, where your statements reach", s.note)
+        assertTrue(s.rows.none { '£' in it.line || '£' in it.spoken })
+        val over = MoneyChallenges.streaks(lines, MoneyChallengeSetting(funPence = 2_000), today)!!
+        assertEquals("Over this week", over.rowAt(0).line)
+        assertFalse(over.rowAt(0).lit)
+    }
 }
