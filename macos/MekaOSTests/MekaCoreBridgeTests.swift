@@ -2657,7 +2657,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(fromChoices, expectedFrom)
         XCTAssertEqual(ProtectedView.companion.EMPTY.summary, rules.OFF_LINE)
         XCTAssertNil(ProtectedView.companion.EMPTY.todayLine)
-        let setting = ProtectedSetting(evenings: true, fromMin: 19 * 60, weekends: true, holdMail: true)
+        let setting = ProtectedSetting(evenings: true, fromMin: 19 * 60, weekends: true, holdMail: true, openDay: nil)
         XCTAssertTrue(setting.on)
         // Slice 3: work mail waits until morning; the sheet's row and the card's line come from the core.
         XCTAssertTrue(setting.holdMail)
@@ -2667,6 +2667,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(ProtectedMailRules.shared.MORNING_MIN, 7 * 60)
         XCTAssertEqual(rules.summary(s: setting), "Evenings from 19:00, weekends and bank holidays · nothing is planned into them")
         XCTAssertEqual(rules.summary(s: nil), rules.OFF_LINE)
+        // Slice 4: "not protected tonight" — the sheet's button comes from the view.
+        XCTAssertNil(ProtectedView.companion.EMPTY.openAction)
+        XCTAssertFalse(ProtectedView.companion.EMPTY.openToday)
+        XCTAssertNil(setting.openDay)
     }
 
     func testDateNightNudgeReachesSwift() {

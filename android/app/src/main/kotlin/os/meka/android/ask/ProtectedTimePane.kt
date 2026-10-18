@@ -16,6 +16,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
@@ -52,6 +55,10 @@ import os.meka.core.facade.MekaCore
  *
  * Slice 3: WORK MAIL (Waits till morning · Shows as it comes) unfolds once something is protected, with "Held now ·
  * 2 business emails till tomorrow 07:00" cross-fading in while some wait.
+ *
+ * Slice 4: under today's line, "Not protected tonight" (or "… today" on a protected whole day) in the accent lifts
+ * today's protected time just this once; it cross-fades to "Undo · protect it again" with the line below saying what
+ * changed. Tick haptic; reduced motion: cross-fades.
  */
 @Composable
 fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
@@ -63,6 +70,13 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
     fun set(evenings: Boolean, fromMin: Int, weekends: Boolean) {
         haptics.tick()
         scope.launch { runCatching { core.setProtectedTime(evenings, fromMin, weekends) } }
+    }
+
+    var openLine by remember { mutableStateOf<String?>(null) }
+
+    fun setOpen(open: Boolean) {
+        haptics.tick()
+        scope.launch { runCatching { core.setProtectedOpenToday(open) }.getOrNull()?.let { openLine = it } }
     }
 
     fun setMail(hold: Boolean) {
@@ -92,6 +106,21 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
             AnimatedVisibility(v.todayLine != null, enter = unfold(), exit = fold()) {
                 Crossfade(v.todayLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-today") { line ->
                     Text(line, style = MekaType.caption, color = Meka.colors.accent)
+                }
+            }
+        }
+        item(key = "open") {
+            // Slice 4: not protected tonight, just this once (Undo puts it back).
+            val action = v.openAction ?: if (v.openToday) "Undo · protect it again" else null
+            AnimatedVisibility(action != null, enter = unfold(), exit = fold()) {
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    Crossfade(action.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-open") { label ->
+                        Text(label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                            modifier = Modifier.clickable(role = Role.Button) { setOpen(!v.openToday) }.minTouch())
+                    }
+                    AnimatedVisibility(openLine != null, enter = unfold(), exit = fold()) {
+                        Text(openLine.orEmpty(), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
                 }
             }
         }

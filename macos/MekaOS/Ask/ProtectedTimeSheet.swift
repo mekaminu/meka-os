@@ -9,6 +9,8 @@ import SwiftUI
 /// Motion: the sheet scale-fades (system); the summary and today's line cross-fade; the sections stagger in; a chip's
 /// fill blends as it is chosen (tick haptic); today's line arrives on the expand spring. Reduce Motion: cross-fades.
 /// Slice 3: WORK MAIL (Waits till morning · Shows as it comes) arrives on the expand spring once something is protected.
+/// Slice 4: "Not protected tonight" (or "… today") under today's line lifts today's protected time just this once; it
+/// cross-fades to "Undo · protect it again". Only a Bool crosses to the core.
 struct ProtectedTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -29,6 +31,16 @@ struct ProtectedTimeSheet: View {
                 Text(today).font(MekaType.caption).foregroundStyle(palette.accent)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: today)
+                    .transition(.opacity)
+            }
+            if let action = v.openAction ?? (v.openToday ? "Undo · protect it again" : nil) {
+                let open = !v.openToday
+                Button(action) { model.setProtectedOpenToday(open: open) }
+                    .buttonStyle(.plain)
+                    .font(MekaType.itemMeta)
+                    .foregroundStyle(palette.accent)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: action)
                     .transition(.opacity)
             }
             label(rules.EVENINGS_LABEL).staggeredAppear(2)
@@ -82,6 +94,7 @@ struct ProtectedTimeSheet: View {
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: v.todayLine)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: v.on)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: v.openToday)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: v.mailLine)
         .padding(MekaSpace.l)
         .frame(width: 560)

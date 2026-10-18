@@ -31,6 +31,11 @@ import os.meka.core.sync.fv
  * their own in the morning. A security alert, a reply he already sent or one that didn't send, and notes to self are
  * never held. One more additive field, `holdMail` (Bool, absent = on); Off in the pane shows them as before.
  *
+ * Slice 4 (2026-10-18): **not protected tonight, just this once.** One tap in the pane ("Not protected tonight", or
+ * "Not protected today" on a protected whole day) lifts today's protected time only: the planner and Move to later may
+ * use it, the business mail isn't held tonight (nor in the small hours after), Ask is told; **Undo** puts it back. One
+ * more additive field, `openDay` (epoch day, 0 = none); a day that has passed simply stops mattering.
+ *
  * Later: work notifications (an Outlook work calendar's reminders) wait until morning too.
  */
 object ProtectedFields {
@@ -39,10 +44,19 @@ object ProtectedFields {
     const val WEEKENDS = "weekends"
     /** Slice 3: business mail waits until morning (absent = on). */
     const val HOLD_MAIL = "holdMail"
+    /** Slice 4: the one day (epoch day) he lifted protected time for; 0 or absent = none. */
+    const val OPEN_DAY = "openDay"
 }
 
 /** The setting as stored. */
-data class ProtectedSetting(val evenings: Boolean, val fromMin: Int, val weekends: Boolean, val holdMail: Boolean = true) {
+data class ProtectedSetting(
+    val evenings: Boolean,
+    val fromMin: Int,
+    val weekends: Boolean,
+    val holdMail: Boolean = true,
+    /** Slice 4: the day he lifted protected time for ("not protected tonight"), or null. */
+    val openDay: Long? = null,
+) {
     val on: Boolean get() = evenings || weekends
 }
 
@@ -59,6 +73,10 @@ data class ProtectedView(
     val holdMail: Boolean = true,
     /** Slice 3: "Held now · 2 business emails wait till 07:00" while some are held, else null. */
     val mailLine: String? = null,
+    /** Slice 4: "Not protected tonight" / "Not protected today" while today has protected time he could lift, else null. */
+    val openAction: String? = null,
+    /** Slice 4: true when he lifted today's protected time (the pane then offers Undo). */
+    val openToday: Boolean = false,
 ) {
     val on: Boolean get() = evenings || weekends
 
@@ -88,12 +106,13 @@ object ProtectedRules {
             fromMin = from,
             weekends = fields[ProtectedFields.WEEKENDS]?.boolOrNull == true,
             holdMail = fields[ProtectedFields.HOLD_MAIL]?.boolOrNull != false,
+            openDay = fields[ProtectedFields.OPEN_DAY]?.longOrNull?.takeIf { it > 0 },
         )
     }
 
     /** Saturday, Sunday or a bank holiday with no shift in the work schedule, while weekends are protected. */
     fun wholeDay(s: ProtectedSetting?, day: Long, schedule: WorkSchedule, holidays: HolidayCalendar): Boolean {
-        if (s == null || !s.weekends) return false
+        if (s == null || !s.weekends || s.openDay == day) return false
         val weekendish = CivilDate.isoDayOfWeek(day) >= 6 || holidays.isHoliday(day)
         return weekendish && !worksOn(schedule, holidays, day)
     }
@@ -107,7 +126,7 @@ object ProtectedRules {
      * when that is later; none on a night shift or when evenings are off.
      */
     fun eveningFrom(s: ProtectedSetting?, day: Long, schedule: WorkSchedule, holidays: HolidayCalendar): Int? {
-        if (s == null || !s.evenings) return null
+        if (s == null || !s.evenings || s.openDay == day) return null
         if (!worksOn(schedule, holidays, day)) return s.fromMin
         val hours = schedule.hoursOn(CivilDate.isoDayOfWeek(day))
         if (hours.crossesMidnight) return null
@@ -161,9 +180,37 @@ object ProtectedRules {
 
     /** The pane's line about today: "Today is protected · tasks wait for Mon 12 Oct" or "Protected from 19:00 tonight". */
     fun todayLine(s: ProtectedSetting?, today: Long, schedule: WorkSchedule, holidays: HolidayCalendar): String? {
+        if (s != null && s.openDay == today) lifted(s, today, schedule, holidays)?.let { return it.line }
         if (wholeDay(s, today, schedule, holidays)) return "Today is protected · tasks wait for ${openLabel(s, today, schedule, holidays)}"
         val from = eveningFrom(s, today, schedule, holidays) ?: return null
         return "Protected from ${LocalClock.formatMinute(from)} tonight"
+    }
+
+    /** Slice 4: what lifting [day] means, worked out as if it weren't lifted. */
+    enum class Lifted(val action: String, val line: String, val done: String, val again: String) {
+        EVENING(
+            "Not protected tonight",
+            "Not protected tonight · you opened it · the planner and work mail as usual",
+            "Tonight isn't protected · the planner may use it and work mail shows · Undo puts it back",
+            "Protected again tonight",
+        ),
+        DAY(
+            "Not protected today",
+            "Not protected today · you opened it · the planner and work mail as usual",
+            "Today isn't protected · the planner may use it and work mail shows · Undo puts it back",
+            "Protected again today",
+        ),
+    }
+
+    /** Whether [day] has protected time to lift (ignoring any lift already on it): a whole day, an evening, or none. */
+    fun lifted(s: ProtectedSetting?, day: Long, schedule: WorkSchedule, holidays: HolidayCalendar): Lifted? {
+        if (s == null || !s.on) return null
+        val plain = s.copy(openDay = null)
+        return when {
+            wholeDay(plain, day, schedule, holidays) -> Lifted.DAY
+            eveningFrom(plain, day, schedule, holidays) != null -> Lifted.EVENING
+            else -> null
+        }
     }
 
     /** Days ahead (after today) the Ask lines look for whole protected days and evenings that start later. */
@@ -192,6 +239,7 @@ object ProtectedRules {
         if (s == null || !s.on) return listOf("Protected time · off · the planner may use evenings and weekends")
         val out = mutableListOf("Protected time · " + summary(s).replaceFirstChar { it.lowercase() })
         out += "Protected today · " + when {
+            s.openDay == today && lifted(s, today, schedule, holidays) != null -> "none · he opened today himself, just this once"
             wholeDay(s, today, schedule, holidays) -> "all day · tasks wait for ${openLabel(s, today, schedule, holidays)}"
             else -> eveningFrom(s, today, schedule, holidays)?.let { "from ${LocalClock.formatMinute(it)} tonight" }
                 ?: if (s.evenings) "none (a night shift)" else "none"
@@ -239,6 +287,8 @@ object ProtectedRules {
             todayLine = todayLine(s, today, schedule, holidays),
             holdMail = s?.holdMail != false,
             mailLine = mailLine,
+            openAction = lifted(s, today, schedule, holidays)?.takeIf { s?.openDay != today }?.action,
+            openToday = s?.openDay == today && lifted(s, today, schedule, holidays) != null,
         )
 
     /**
@@ -285,6 +335,13 @@ class ProtectedTime(private val replica: Replica) {
                 ProtectedFields.WEEKENDS to weekends.fv(),
             ),
         )
+        return true
+    }
+
+    /** Slice 4: lifts protected time for [day] only (null puts it back). False when nothing changes. */
+    fun setOpenDay(day: Long?): Boolean {
+        if (setting()?.openDay == day) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ProtectedRules.ENTITY_ID, mapOf(ProtectedFields.OPEN_DAY to (day ?: 0L).fv()))
         return true
     }
 

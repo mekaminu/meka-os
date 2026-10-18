@@ -77,4 +77,32 @@ class ProtectedMailFacadeTest {
         assertEquals(setOf(personal, business), fold.mailNeeds.value?.rows?.map { it.id }?.toSet())
         assertNull(fold.mailNeeds.value?.heldLine)
     }
+
+    @Test
+    fun notProtectedTodayLiftsItOnBothDevicesAndUndoPutsItBack() = runTest {
+        val business = email("m3", "Invoice question", "Business")
+        val fold = core("android")
+        val mac = core("mac")
+        fold.syncNow(); mac.syncNow()
+        // Nothing to lift while protected time is off.
+        assertNull(fold.setProtectedOpenToday(true))
+        fold.setProtectedTime(evenings = true, fromMin = 19 * 60, weekends = true)
+        assertEquals("Not protected today", fold.protectedView.value.openAction)
+        assertNull(fold.mailNeeds.value?.rows?.firstOrNull { it.id == business })
+
+        assertEquals(os.meka.core.domain.ProtectedRules.Lifted.DAY.done, fold.setProtectedOpenToday(true))
+        assertNull(fold.setProtectedOpenToday(true))
+        assertEquals(listOf(business), fold.mailNeeds.value?.rows?.map { it.id })
+        assertEquals(true, fold.protectedView.value.openToday)
+        fold.syncNow(); mac.syncNow(); mac.tick()
+        assertEquals(true, mac.protectedView.value.openToday)
+        assertEquals(listOf(business), mac.mailNeeds.value?.rows?.map { it.id })
+
+        // Undo on the Mac: protected again on both.
+        assertEquals(os.meka.core.domain.ProtectedRules.Lifted.DAY.again, mac.setProtectedOpenToday(false))
+        assertEquals("Not protected today", mac.protectedView.value.openAction)
+        mac.syncNow(); fold.syncNow(); fold.tick()
+        assertEquals(false, fold.protectedView.value.openToday)
+        assertNull(fold.mailNeeds.value?.rows?.firstOrNull { it.id == business })
+    }
 }

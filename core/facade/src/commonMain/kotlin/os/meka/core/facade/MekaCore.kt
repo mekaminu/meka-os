@@ -3572,6 +3572,19 @@ class MekaCore(
         os.meka.core.domain.ProtectedRules.summary(protectedTime.setting())
     }
 
+    /**
+     * Protected time, slice 4: "Not protected tonight" ([open] true) lifts today's protected time just this once; false
+     * (Undo) puts it back. Returns the line to show, or null when nothing changed (or today has nothing to lift).
+     */
+    suspend fun setProtectedOpenToday(open: Boolean): String? = onCore {
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        val lifted = os.meka.core.domain.ProtectedRules.lifted(protectedTime.setting(), today, work.schedule(), bankHolidays.calendar())
+            ?: return@onCore null
+        if (!protectedTime.setOpenDay(if (open) today else null)) return@onCore null
+        refresh()
+        if (open) lifted.done else lifted.again
+    }
+
     // ---- "Leaving now" (V1, slice 1; Work mode → Leaving now) ----
 
     /**

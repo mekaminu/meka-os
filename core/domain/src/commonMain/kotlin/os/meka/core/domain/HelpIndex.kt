@@ -502,10 +502,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "protected-time",
             title = "Protected time",
-            keywords = listOf("protected time", "protected evenings", "protect my evenings", "protect weekends", "protected weekends", "work mail", "business mail at night"),
+            keywords = listOf("protected time", "protected evenings", "protect my evenings", "protect weekends", "protected weekends", "work mail", "business mail at night", "not protected tonight"),
             what = "evenings and weekends kept free of tasks: the planner books nothing into them, and business mail waits until 07:00.",
             how = "Choose the time evenings start (e.g. From 19:00) and whether weekends are protected. Work mail: Waits till morning or Shows as it comes.",
-            tips = listOf("Habits and booked sessions still show in protected time."),
+            tips = listOf("Tap Not protected tonight to open just this evening (or today, at the weekend); Undo protects it again. Habits and booked sessions still show in protected time."),
             fold = HelpPlace.PROTECTED,
             foldWhere = "Ask → Settings → Protected time",
             mac = HelpPlace.PROTECTED,
