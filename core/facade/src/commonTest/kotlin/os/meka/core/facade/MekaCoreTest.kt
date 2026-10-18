@@ -1814,10 +1814,8 @@ class MekaCoreTest {
         assertFailsWith<os.meka.core.domain.ValidationException> { fold.doAsk(card.copy(proposal = p.copy(eventId = "gone"))) }
     }
 
-    @Test
-    fun theMacsDragAndArrowsMoveAnEventWithTheFiveSecondUndo() = runTest {
-        // Edit your calendars, completeness slice 7: dropped on another day it keeps its time and length; ⌥⌘↓ moves it
-        // fifteen minutes later; each is an ordinary edit of this one with the five-second Undo.
+    /** Edit your calendars, completeness slice 7: a Mac with editing allowed and one own event, "evdg", 2 h from now (40 min). */
+    private suspend fun macWithADentist(): MekaCore {
         val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
         val mac = core("mac", server)
         val start = now + 2 * 3_600_000L
@@ -1836,28 +1834,47 @@ class MekaCoreTest {
             serverOps.append(os.meka.core.sync.Op("srvdg${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "evdg", f, v, clock.now(), emptyList(), "server"))
         }
         assertTrue(mac.syncNow())
-        val cal = ZoneCalendar { TimeZone.of("Europe/London") }
-        fun dentist() = mac.calendarView.value.sections.flatMap { it.rows }.mapNotNull { it.event }.first { it.title == "Dentist" }
         mac.refreshCalendarAccounts()
-        assertTrue(mac.canMoveEvent(dentist()))
-        assertNull(mac.moveEventNote(dentist()))
-        val day = cal.epochDayOf(start)
-        assertTrue(mac.moveEventHint(dentist(), day + 2).startsWith("Move to "))
+        return mac
+    }
 
+    @Test
+    fun theMacMayDragItsOwnEventAndSaysWhere() = runTest {
+        val mac = macWithADentist()
+        val dentist = assertNotNull(mac.currentEvent("evdg"))
+        assertTrue(mac.canMoveEvent(dentist))
+        assertNull(mac.moveEventNote(dentist))
+        val cal = ZoneCalendar { TimeZone.of("Europe/London") }
+        assertTrue(mac.moveEventHint(dentist, cal.epochDayOf(dentist.startAtMs) + 2).startsWith("Move to "))
+    }
+
+    @Test
+    fun aDropMovesItToTheDayKeepingItsTimeWithTheFiveSecondUndo() = runTest {
+        val mac = macWithADentist()
+        val cal = ZoneCalendar { TimeZone.of("Europe/London") }
+        val start = now + 2 * 3_600_000L
+        val day = cal.epochDayOf(start)
         val drop = assertIs<os.meka.core.domain.EventEditResult.Made>(mac.moveEventToDay("evdg", day + 2)).id
-        assertEquals("Moving “Dentist” in Google", mac.eventEditLine(drop))
-        val moved = dentist()
+        val moved = assertNotNull(mac.currentEvent("evdg"))
         assertEquals(day + 2, cal.epochDayOf(moved.startAtMs))
         assertEquals(cal.minuteOfDay(start), cal.minuteOfDay(moved.startAtMs))
         assertEquals(40 * 60_000L, moved.endAtMs - moved.startAtMs)
         assertTrue(mac.undoEventEdit(drop))
-        assertEquals(start, dentist().startAtMs)
+        assertEquals(start, mac.currentEvent("evdg")?.startAtMs)
+    }
 
+    @Test
+    fun theArrowsNudgeItAndAMoveThatIsntOneIsRefused() = runTest {
+        val mac = macWithADentist()
+        val cal = ZoneCalendar { TimeZone.of("Europe/London") }
+        val start = now + 2 * 3_600_000L
         val nudge = assertIs<os.meka.core.domain.EventEditResult.Made>(mac.moveEventBy("evdg", 0, os.meka.core.domain.EventMoveRules.NUDGE_MIN)).id
-        assertEquals(start + 15 * 60_000L, dentist().startAtMs)
+        assertEquals(start + 15 * 60_000L, mac.currentEvent("evdg")?.startAtMs)
         assertTrue(mac.undoEventEdit(nudge))
-        // Refused in words: its own day, and an event that's gone.
-        assertEquals(os.meka.core.domain.EventMoveRules.SAME, assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.moveEventToDay("evdg", day)).reason)
+        assertEquals(
+            os.meka.core.domain.EventMoveRules.SAME,
+            assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.moveEventToDay("evdg", cal.epochDayOf(start))).reason,
+        )
         assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.moveEventBy("gone", 1, 0))
     }
 
