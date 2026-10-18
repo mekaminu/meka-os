@@ -57,6 +57,13 @@ object EventFields {
      * polled before it existed.
      */
     const val SERIES = "series"
+    /**
+     * Edit your calendars, completeness slice 3: true when the event's calendar is shared with Meka to see, not change
+     * (Google's `accessRole` reader or free/busy, Outlook's `canEdit` false: a holidays calendar, someone else's), so
+     * the apps grey Edit out and say why. Written by the server's ingestion; additive (ADR-008 addendum), absent on
+     * calendars he can change and on events polled before it existed.
+     */
+    const val READ_ONLY = "readOnly"
 }
 
 /** Meeting prep, slice 4: a guest's newest email in Meka's mailboxes ([EventFields.GUEST_MAIL]). */
@@ -120,6 +127,8 @@ data class CalendarEvent(
     val calendarTitle: String? = null,
     /** Completeness slice 1: the repeating series it belongs to ([EventFields.SERIES]); null for a one-off event. */
     val series: String? = null,
+    /** Completeness slice 3: its calendar is view only for Meka ([EventFields.READ_ONLY]). */
+    val readOnly: Boolean = false,
 ) {
     /** One of a repeating series: editing it asks "This event · Every event". */
     val repeats: Boolean get() = series != null
@@ -170,6 +179,7 @@ data class CalendarEvent(
                     .distinct().take(EventFields.MAX_GUESTS),
                 guestMail = GuestMail.parse(s[EventFields.GUEST_MAIL].textOrNull),
                 series = s[EventFields.SERIES].textOrNull?.takeIf { it.isNotBlank() },
+                readOnly = s[EventFields.READ_ONLY].boolOrNull ?: false,
             )
         }
     }

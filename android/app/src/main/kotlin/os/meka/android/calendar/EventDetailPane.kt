@@ -5,6 +5,7 @@ import android.net.Uri
 import android.provider.Settings
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.platform.LocalContext
@@ -160,8 +161,8 @@ private fun DetailContent(
 
         // Calendar actions: MEKA-only, the real event is untouched. An event just added in MEKA has none until Google
         // has it (its line below says "Adding “Dentist” to Google").
-        if (!d.provisional) Row(
-            Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1)),
+        if (!d.provisional) Column(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l).appear(rememberAppearance(1))) { Row(
+            Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -197,6 +198,12 @@ private fun DetailContent(
             }
             // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
             if (d.editable && undo != null && d.edit?.waiting != true) ActionChip("Edit") { onEdit() }
+            // Completeness slice 3: a view-only calendar (or editing off) shows Edit greyed, its reason underneath.
+            if (!d.editable && d.editNote != null) GreyedChip("Edit")
+        }
+            if (!d.editable) d.editNote?.let {
+                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
+            }
         }
         // Weekend football, slice 3: "Running late?" around kick-off; a tap drafts the message and opens the share sheet,
         // where Meka picks the chat and sends it himself (MEKA never sends it).
@@ -494,6 +501,18 @@ private fun ClashChooser(
             ActionChip(c.keepTheirsLabel, onKeepTheirs)
         }
     }
+}
+
+/** An action that can't be used here: muted, not tappable, read as unavailable (its reason is the line under it). */
+@Composable
+private fun GreyedChip(label: String) {
+    Text(
+        label, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+            .border(1.dp, Meka.colors.textTertiary.copy(alpha = 0.4f), RoundedCornerShape(MekaRadius.pill))
+            .semantics { disabled() }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
 
 @Composable

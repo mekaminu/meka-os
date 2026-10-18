@@ -62,6 +62,11 @@ data class RemoteEvent(
      * form (Google `recurringEventId`, Outlook `seriesMasterId`); null for a one-off. Synced only as a hash.
      */
     val seriesId: String? = null,
+    /**
+     * Edit your calendars, completeness slice 3: the event's calendar is shared with the owner to see, not change
+     * (Google `accessRole` reader / freeBusyReader, Outlook `canEdit` false), mirrored as event.readOnly.
+     */
+    val readOnly: Boolean = false,
 )
 
 /**
@@ -450,6 +455,8 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
         return calendars.flatMap { cal ->
             val calId = cal["id"].str() ?: return@flatMap emptyList()
             val calName = cal["summaryOverride"].str() ?: cal["summary"].str()
+            // Completeness slice 3: a calendar he may only see (a holidays calendar, someone else's shared one).
+            val readOnly = cal["accessRole"].str()?.let { it != "owner" && it != "writer" } ?: false
             buildList {
                 var page: String? = null
                 do {
@@ -479,6 +486,7 @@ class GoogleCalendar internal constructor(private val http: Http) : CalendarProv
                             guests = guestPeople.map { it.first },
                             guestAddresses = EventGuests.addresses(guestPeople),
                             seriesId = e["recurringEventId"].str()?.let { "$calId/$it" },
+                            readOnly = readOnly,
                         ))
                     }
                     page = resp["nextPageToken"].str()
@@ -682,11 +690,12 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
         val utc = mapOf("Prefer" to "outlook.timezone=\"UTC\"")
         // Meeting prep, slice 1: the account's own address, so Meka isn't listed among his own meetings' guests.
         val self = runCatching { accountEmail(accessToken) }.getOrNull()
-        val calendars = http.getJson("https://graph.microsoft.com/v1.0/me/calendars?\$select=id,name&\$top=50", accessToken)["value"]
+        val calendars = http.getJson("https://graph.microsoft.com/v1.0/me/calendars?\$select=id,name,canEdit&\$top=50", accessToken)["value"]
             ?.jsonArray.orEmpty().map { it.jsonObject }
         return calendars.flatMap { cal ->
             val calId = cal["id"].str() ?: return@flatMap emptyList()
             val calName = cal["name"].str()
+            val readOnly = cal["canEdit"]?.jsonPrimitive?.booleanOrNull == false
             buildList {
                 var url: String? = "https://graph.microsoft.com/v1.0/me/calendars/${Http.enc(calId)}/calendarView?" + Http.query(mapOf(
                     "startDateTime" to rfc3339(fromMs), "endDateTime" to rfc3339(toMs), "\$top" to "500",
@@ -717,6 +726,7 @@ class MicrosoftCalendar internal constructor(private val http: Http) : CalendarP
                             guests = people.map { it.first },
                             guestAddresses = EventGuests.addresses(people),
                             seriesId = e["seriesMasterId"].str()?.let { "$calId/$it" },
+                            readOnly = readOnly,
                         ))
                     }
                     url = resp["@odata.nextLink"].str()

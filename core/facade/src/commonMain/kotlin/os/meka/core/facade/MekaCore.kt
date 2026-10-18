@@ -1965,6 +1965,7 @@ class MekaCore(
     fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
         os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone), _eventMarks.value).copy(
             editable = canEditEvent(event),
+            editNote = os.meka.core.domain.CalendarEditRules.notEditableReason(event) { p, a -> _editAccounts.value.any { it.provider == p && it.email == a } },
             edit = os.meka.core.domain.EditEventRules.note(event.id, _editsSeen.value, nowMs(), ZoneCalendar(timeZone)),
         )
 

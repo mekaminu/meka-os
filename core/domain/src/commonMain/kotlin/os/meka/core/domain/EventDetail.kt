@@ -51,6 +51,11 @@ data class EventDetailView(
     val leaveAlarm: Boolean = false,
     /** Calendar editing (slice 2c): the account allows editing, so the pane offers Edit and Delete. */
     val editable: Boolean = false,
+    /**
+     * Completeness slice 3: why Edit is greyed out ("View only · “Holidays” is shared with you to see, not change…",
+     * "Editing is off for … · Allow editing…"); null when it isn't shown or can be used.
+     */
+    val editNote: String? = null,
     /** The event's own latest edit ("Moving “Dentist” in Google", a refusal, Delete anyway); null when none. */
     val edit: EventEditNote? = null,
     /**

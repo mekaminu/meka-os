@@ -1749,6 +1749,13 @@ class MekaCoreTest {
         assertTrue(fold.eventDetail(dentist).editable)
         assertFalse(fold.eventDetail(outlook).editable)
         assertFalse(fold.eventDetail(dentist.copy(provider = "fixtures")).editable)
+        // Completeness slice 3: a view-only calendar greys Edit out and says why; editing off says how to allow it.
+        assertNull(fold.eventDetail(dentist).editNote)
+        val holiday = fold.eventDetail(dentist.copy(id = "ev3", calendarName = "Holidays in the UK", readOnly = true))
+        assertFalse(holiday.editable)
+        assertTrue(holiday.editNote!!.startsWith("View only · “Holidays in the UK” is shared with you to see"))
+        assertEquals("Editing is off for meka@outlook.com · Allow editing in Ask → Settings → Calendars", fold.eventDetail(outlook).editNote)
+        assertNull(fold.eventDetail(dentist.copy(provider = "fixtures")).editNote)
 
         val form = fold.editEventForm(dentist).stepTime(4)
         val v = fold.editEventView(dentist, form)

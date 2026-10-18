@@ -100,6 +100,7 @@ object EditEventRules {
         // Completeness slice 2: this one and the ones after (a timed Google series).
         val following = form.following && !every && CalendarEditRules.canSplit(e)
         val problem = when {
+            e.readOnly -> CalendarEditRules.notEditableReason(e) { _, _ -> true }
             !canEdit || account == null -> "Editing isn't allowed for ${e.account ?: "this calendar"} · Allow editing in Calendars"
             d.title.isBlank() -> "Give it a title"
             changes.isEmpty() -> null

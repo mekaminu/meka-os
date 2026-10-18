@@ -2845,6 +2845,8 @@ class Integrations(
                     // Edit your calendars, completeness slice 1: its repeating series, as a hash of the provider's
                     // series id (never the id), so the apps can offer "Every event". Additive like the above.
                     EventFields.SERIES to (e.seriesId?.let { FieldValue.Text(seriesKey(a, it)) } ?: FieldValue.Null),
+                    // Completeness slice 3: a view-only calendar, so the apps grey Edit out. Additive; written only when true.
+                    EventFields.READ_ONLY to (if (e.readOnly) FieldValue.Bool(true) else FieldValue.Null),
                     EventFields.REMOVED to FieldValue.Bool(false),
                 )
                 // A fixture whose kick-off moved while the old time was still ahead: remember the old time and when

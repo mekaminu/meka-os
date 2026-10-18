@@ -15,6 +15,7 @@ import os.meka.backend.integrations.InMemoryIntegrationStore
 import os.meka.backend.integrations.Integrations
 import os.meka.backend.integrations.OAuthClient
 import os.meka.backend.integrations.RemoteEvent
+import os.meka.backend.integrations.CalendarWriter
 import os.meka.backend.integrations.TokenCipher
 import os.meka.backend.integrations.TokenSet
 import os.meka.backend.integrations.httpsOrNull
@@ -221,6 +222,28 @@ class IntegrationsTest {
         provider.events = emptyList()
         integrations.syncAccount(acc)
         assertEquals(emptyList(), deviceEvents())
+    }
+
+    @Test
+    fun aViewOnlyCalendarsEventsAreMirroredAsReadOnly() {
+        // Edit your calendars, completeness slice 3: the apps grey Edit out for these.
+        val acc = connect()
+        provider.events = listOf(ev("a", "Dentist", 9), ev("h", "Bank holiday", 0, allDay = true).copy(readOnly = true))
+        integrations.syncAccount(acc)
+        val r = Replica("home", "fold", HlcClock("fold", { now }), InMemoryReplicaStore(), MekaSchema) { "d" + (counter++) }
+        r.applyRemoteBatch(ops.after("home", 0, 10_000).map { it.op })
+        val byTitle = CalendarEvents(r).all().associateBy { it.title }
+        assertEquals(false, byTitle.getValue("Dentist").readOnly)
+        assertEquals(true, byTitle.getValue("Bank holiday").readOnly)
+        assertEquals(
+            "Google won't let Navilife change this · if the calendar is shared with you to view only, its owner changes it",
+            CalendarWriter.refusedLine("Google", "provider refused the change"),
+        )
+        assertEquals(
+            "Google refused the change · try Allow editing again in Calendars",
+            CalendarWriter.refusedLine("Google", "provider refused the change [insufficientPermissions]"),
+        )
+        assertEquals("Google refused the change · try Allow editing again in Calendars", CalendarWriter.refusedLine("Google", "Google HTTP 400"))
     }
 
     @Test

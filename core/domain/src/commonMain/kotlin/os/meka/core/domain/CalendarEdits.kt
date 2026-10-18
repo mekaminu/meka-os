@@ -250,7 +250,24 @@ object CalendarEditRules {
     /** Whether MEKA may offer editing on [event]: a Google/Outlook event of an account where editing is allowed. */
     fun editable(event: CalendarEvent, canEdit: (provider: String, account: String) -> Boolean): Boolean =
         event.provider in WRITABLE && !event.isFixture && !event.isProvisional && event.account != null &&
-            canEdit(event.provider, event.account)
+            !event.readOnly && canEdit(event.provider, event.account)
+
+    /**
+     * Completeness slice 3: why Edit is greyed out on a Google or Outlook event Meka can't change from Navilife, or
+     * null when it can (or the event isn't from a calendar Navilife edits at all, like a fixture). A view-only
+     * calendar comes first: allowing editing wouldn't help there.
+     */
+    fun notEditableReason(event: CalendarEvent, canEdit: (provider: String, account: String) -> Boolean): String? {
+        if (event.provider !in WRITABLE || event.isFixture || event.isProvisional || event.account == null) return null
+        val p = providerName(event.provider)
+        val cal = (event.calendarName?.trim()?.takeIf { it.isNotEmpty() && !it.equals(event.account, ignoreCase = true) })
+            ?.let { "“${it.take(40)}”" } ?: "This calendar"
+        return when {
+            event.readOnly -> "View only · $cal is shared with you to see, not change, so Navilife can't edit it · its owner changes it in $p"
+            !canEdit(event.provider, event.account) -> "Editing is off for ${event.account} · Allow editing in Ask → Settings → Calendars"
+            else -> null
+        }
+    }
 
     /** The draft cleaned up (trimmed, blanks to null), or null when it can't be written ([problem] says why). */
     fun clean(d: EventDraft): EventDraft = d.copy(
@@ -544,6 +561,8 @@ class CalendarEdits(
         if (event.provider !in CalendarEditRules.WRITABLE || event.isFixture || event.account == null) {
             return EventEditResult.Refused("Navilife can't change this calendar")
         }
+        // Completeness slice 3: a view-only calendar can't take a change from Navilife at all.
+        if (event.readOnly) return EventEditResult.Refused(CalendarEditRules.notEditableReason(event) { _, _ -> true } ?: "This calendar is view only")
         if (!canEdit(event.provider, event.account)) return refusedNotAllowed(event.provider, event.account)
         // Added in MEKA and not in the mirror yet (slice 2c-ii): there's no event in the provider to change.
         if (event.isProvisional) return EventEditResult.Refused("Wait until ${CalendarEditRules.providerName(event.provider)} has it")

@@ -88,6 +88,10 @@ struct EventDetailSheet: View {
                 // Calendar editing: changes the real event (after five seconds' Undo); not while an edit is on its way.
                 if d.editable && !(d.edit?.waiting ?? false) {
                     Button("Edit") { MekaHaptics.tick(); editing = true }
+                } else if !d.editable, let why = d.editNote {
+                    // Completeness slice 3: a view-only calendar (or editing off): Edit greyed, the reason on hover
+                    // and under the buttons.
+                    Button("Edit") {}.disabled(true).help(why)
                 }
                 let note = [d.prepLine, d.kitLine, d.reminderLine, d.hidden ? "Hidden from your day" : nil].compactMap { $0 }.joined(separator: " · ")
                 if !note.isEmpty {
@@ -97,6 +101,11 @@ struct EventDetailSheet: View {
             }
             .controlSize(.small)
             .staggeredAppear(1)
+            if !d.editable, let why = d.editNote {
+                Text(why).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .staggeredAppear(1)
+            }
         }
 
         // Weekend football, slice 3: "Running late?" around kick-off. Each choice opens the share menu with the drafted

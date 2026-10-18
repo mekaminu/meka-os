@@ -164,7 +164,8 @@ class CalendarWriter internal constructor(
                 } catch (x: ReconnectRequired) {
                     Outcome(EventEditStatus.FAILED, "Reconnect $name in Calendars")
                 } catch (x: WriteRefused) {
-                    Outcome(EventEditStatus.REFUSED, "$name refused the change · try Allow editing again in Calendars")
+                    // Completeness slice 3: a 403 on a calendar shared to view only says so, not "allow editing".
+                    Outcome(EventEditStatus.REFUSED, refusedLine(name, x.message))
                 } catch (x: Exception) {
                     if (!CalendarEditRules.givenUp(fresh, now())) throw x
                     Outcome(EventEditStatus.FAILED, "$name couldn't be reached for a day")
@@ -323,5 +324,19 @@ class CalendarWriter internal constructor(
 
         /** The provider's idempotency key for an add: lowercase hex, the same on every retry. */
         fun idemKey(editId: String) = Secrets.sha256Hex("event_edit|$editId").take(32)
+
+        /**
+         * Completeness slice 3: what Meka reads when [name] refuses an edit. A 403 for a missing permission (or the
+         * API being off) asks him to allow editing again; any other refusal is the calendar itself (one shared with
+         * him to view only, or an event he can't change), so it says that instead.
+         */
+        fun refusedLine(name: String, message: String?): String {
+            val reason = message?.substringAfter('[', "")?.substringBefore(']')?.takeIf { it.isNotEmpty() }
+            val scope = reason != null && (reason in os.meka.core.domain.MailCheckRules.NO_PERMISSION_REASONS ||
+                reason in os.meka.core.domain.MailCheckRules.API_OFF_REASONS)
+            return if (message?.startsWith("provider refused the change") == true && !scope) {
+                "$name won't let Navilife change this · if the calendar is shared with you to view only, its owner changes it"
+            } else "$name refused the change · try Allow editing again in Calendars"
+        }
     }
 }
