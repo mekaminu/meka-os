@@ -11,6 +11,8 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertIs
+import os.meka.core.domain.AskOutcome
 
 /** Reading and learning through the facade (slice 1): a book added on the Fold is moved on from the Mac; Daily's row follows. */
 class ReadingFacadeTest {
@@ -48,5 +50,35 @@ class ReadingFacadeTest {
         assertEquals(listOf("Atomic Habits"), fold.readingView.value.finished.map { it.title })
         assertTrue(fold.undoReading(finished.undo!!))
         assertEquals(listOf("Atomic Habits"), fold.readingView.value.onTheGo.map { it.title })
+    }
+
+    @Test
+    fun askAndTalkKnowTheListAndMoveItOnAtHisWord() = runTest {
+        val fold = core("android")
+        val empty = assertIs<AskOutcome.Answered>(fold.askMeka("What am I reading?")).answer
+        assertEquals(os.meka.core.domain.ReadingAskRules.EMPTY, empty.text)
+        fold.addReading("reading Atomic Habits by James Clear, 320 pages")
+        now += 60_000
+        fold.addReading("Dune")
+
+        val list = assertIs<AskOutcome.Answered>(fold.askMeka("what am I reading")).answer
+        assertEquals("On the go: Atomic Habits. Up next: Dune.", list.text)
+
+        // His own words: done at once, no AI (none is connected here), with Undo through Activity.
+        val page = assertIs<AskOutcome.Answered>(fold.talk("I'm on page 200", emptyList())).answer
+        assertEquals("Atomic Habits · Page 200 of 320 · 62%", page.did.single().line)
+        assertTrue(page.cards.isEmpty())
+        assertEquals("Page 200 of 320 · 62%", fold.readingView.value.onTheGo.single().progress)
+        fold.undoAutoAsk(page.did.single().activityId)
+        assertEquals("Started Sun 18 Oct", fold.readingView.value.onTheGo.single().progress)
+
+        now += 60_000
+        val added = assertIs<AskOutcome.Answered>(fold.askMeka("add the podcast The Rest Is History to my reading list")).answer
+        assertEquals("Added podcast The Rest Is History · up next", added.did.single().line)
+        assertEquals(listOf("Dune", "The Rest Is History"), fold.readingView.value.upNext.map { it.title })
+
+        val done = assertIs<AskOutcome.Answered>(fold.askMeka("I've finished Atomic Habits")).answer
+        assertEquals("Finished Atomic Habits", done.did.single().line)
+        assertEquals(listOf("Atomic Habits"), fold.readingView.value.finished.map { it.title })
     }
 }

@@ -255,6 +255,18 @@ object ReadingRules {
         return ReadingProgress(at, if (pct) 100 else total, unit, false)
     }
 
+    /**
+     * [i] with progress [p] applied (not a "finished" line): the unit typed (else its own), the total typed (else its
+     * own while the unit is the same), and how far; null when that is past the end.
+     */
+    fun moved(i: ReadingItem, p: ReadingProgress): ReadingItem? {
+        val unit = p.unit ?: i.unit
+        val total = p.total ?: if (unit == i.unit) i.total else 0L
+        val at = p.at ?: 0L
+        if (total > 0 && at > total) return null
+        return i.copy(unit = unit, at = at, total = total)
+    }
+
     private fun Map<String, FieldValue>.f(field: String): FieldValue = this[field] ?: FieldValue.Null
 
     fun items(entities: Map<String, Map<String, FieldValue>>): List<ReadingItem> = entities.mapNotNull { (id, s) ->
@@ -424,10 +436,10 @@ class Reading(private val replica: Replica, private val newId: () -> String, pri
         val i = live(id) ?: return ReadingSaid(ReadingRules.GONE, true)
         val p = ReadingRules.progress(text) ?: return ReadingSaid(ReadingRules.NOT_PROGRESS, true)
         if (p.finished) return finish(id)
-        val unit = p.unit ?: i.unit
-        val total = p.total ?: if (unit == i.unit) i.total else 0L
-        val at = p.at ?: 0L
-        if (total > 0 && at > total) return ReadingSaid(ReadingRules.NOT_PROGRESS, true)
+        val moved = ReadingRules.moved(i, p) ?: return ReadingSaid(ReadingRules.NOT_PROGRESS, true)
+        val unit = moved.unit
+        val total = moved.total
+        val at = moved.at
         val now = nowMs()
         val done = total > 0 && at >= total
         val token = write(id, buildMap {

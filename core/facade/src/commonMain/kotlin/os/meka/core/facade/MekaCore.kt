@@ -6256,6 +6256,40 @@ class MekaCore(
     }
 
     /**
+     * Reading and learning, slice 2: [q] asks about his reading list ([os.meka.core.domain.ReadingAskRules.request]).
+     * A question is answered from the list here, no AI; a change (progress, finished, started, added) is his own direct
+     * request, done now with Undo and kept in Activity under the same rule as [directAdd] (Ask first: the card he taps).
+     * Null when it names nothing on his list (the AI's, as before).
+     */
+    private suspend fun readingAsk(q: String): os.meka.core.domain.AskOutcome? {
+        val ask = os.meka.core.domain.ReadingAskRules.request(q) ?: return null
+        return onCore {
+            val cal = ZoneCalendar(timeZone)
+            when (val r = os.meka.core.domain.ReadingAskRules.resolve(ask, reading.items(), nowMs(), cal)) {
+                null -> null
+                is os.meka.core.domain.ReadingAskResult.Answer ->
+                    os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(r.text, emptyList()))
+                is os.meka.core.domain.ReadingAskResult.Do -> {
+                    val p = r.proposal
+                    val today = cal.epochDayOf(nowMs())
+                    val card = os.meka.core.domain.AskRules.cardOf(p, today)
+                    if (!directAddAllowed(p)) return@onCore os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer("", listOf(card)))
+                    val id = try {
+                        activity.actRecorded(
+                            p.line, os.meka.core.domain.DirectAddRules.WHY, os.meka.core.domain.DirectAddRules.SOURCE,
+                            AutonomyLevel.AUTO_UNDER_RULE.name, detail = os.meka.core.domain.DirectAddRules.DETAIL,
+                        ) { performAsk(card) }.second
+                    } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+                    if (id == null) return@onCore os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer("", listOf(card)))
+                    activityChanged()
+                    refresh()
+                    os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer("", emptyList(), did = listOf(os.meka.core.domain.AskAutoDone(p, p.line, id))))
+                }
+            }
+        }
+    }
+
+    /**
      * "The mic should just add it", slice 2: what Meka said into the capture sheet's 🎙 goes straight in, no ↑ Add tap
      * and no AI. "Timer 10 min" sets the timer; otherwise a task in his words with its day read from them, or (for
      * "add milk and eggs to the shopping") the shopping, through the same rule as Ask's direct add, so it is in Activity
@@ -6948,6 +6982,9 @@ class MekaCore(
     ): os.meka.core.domain.AskOutcome {
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
+        // Reading and learning, slice 2: "what am I reading?" is answered from his list, and "I'm on page 200",
+        // "I've finished Dune", "add Dune to my reading list" are done now, before the plain adds below take them.
+        if (!beyondHelp) readingAsk(q)?.let { return it }
         // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
         if (!beyondHelp) directAdd(q)?.let { return it }
         // Money manager (16): "how much did I spend on takeaways?", "can I afford £300 on Saturday?" are answered from
@@ -7242,6 +7279,19 @@ class MekaCore(
                 }
                 os.meka.core.domain.AskUndo.RemoveGoal(goals.addGoal(p.title, horizon = p.horizon, dueDay = p.dueDay))
             }
+            // Reading and learning, slice 2: checked again now by Reading itself (gone meanwhile, or past the end, is refused).
+            is os.meka.core.domain.AskProposal.ReadingUpdate -> {
+                val id = p.itemId
+                val said = when (p.change) {
+                    os.meka.core.domain.ReadingChange.ADD -> reading.add(p.text)
+                    os.meka.core.domain.ReadingChange.START -> if (id == null) null else reading.start(id)
+                    os.meka.core.domain.ReadingChange.PROGRESS -> if (id == null) null else reading.progress(id, p.text)
+                    os.meka.core.domain.ReadingChange.FINISH -> if (id == null) null else reading.finish(id)
+                }
+                val token = said?.takeIf { !it.refused }?.undo
+                    ?: throw os.meka.core.domain.ValidationException(said?.line ?: os.meka.core.domain.ReadingRules.GONE)
+                os.meka.core.domain.AskUndo.PutBackReading(token)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -7310,6 +7360,8 @@ class MekaCore(
                 val g = goals.goals(tasks.all()).first.firstOrNull { it.id == undo.goalId }
                 if (g != null && os.meka.core.domain.GoalAskRules.untouched(g)) { goals.deleteGoal(g.id); true } else false
             }
+            // Reading's own Undo: only while it is still the list's last change.
+            is os.meka.core.domain.AskUndo.PutBackReading -> reading.undo(undo.token)
         }
     }
 
@@ -7991,6 +8043,8 @@ class MekaCore(
             is os.meka.core.domain.AskProposal.AddChecklist -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Adds one of Meka's own goals (nothing is sent to anyone).
             is os.meka.core.domain.AskProposal.AddGoal -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+            // Changes Meka's own reading list, like its buttons (nothing is fetched, bought or sent).
+            is os.meka.core.domain.AskProposal.ReadingUpdate -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         }
     }
 

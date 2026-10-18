@@ -95,6 +95,12 @@ sealed interface AskProposal {
     data class AddChecklist(val taskId: String, val title: String, val items: List<String>) : AskProposal
     /** Adds the goal [title] with its [horizon] and done-by [dueDay] (Goals, properly, slice 8: "add a goal to run 5k by December"). */
     data class AddGoal(val title: String, val horizon: GoalHorizon, val dueDay: Long?) : AskProposal
+    /**
+     * Changes his reading list (Reading and learning slice 2: "I'm on page 200", "I've finished Dune", "add Dune to my
+     * reading list"): [change] on the item [itemId] called [title] (null for an add), with [text] as Reading's own
+     * field takes it (the add's line, or "page 200"); [line] is what it comes to ("Dune · Page 200 of 412 · 48%").
+     */
+    data class ReadingUpdate(val change: ReadingChange, val itemId: String?, val title: String, val text: String, val line: String) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -171,6 +177,8 @@ sealed interface AskUndo {
     data class TakeBackChecklist(val taskId: String, val added: List<String>, val revived: List<String>) : AskUndo
     /** The goal card's goal comes off while nothing has been added to it since. */
     data class RemoveGoal(val goalId: String) : AskUndo
+    /** The reading card: the list's last change ([token], Reading's own Undo) is taken back while it is still the last. */
+    data class PutBackReading(val token: String) : AskUndo
 }
 
 /**
@@ -530,6 +538,7 @@ object AskRules {
         is AskProposal.AddErrand -> ErrandAskRules.doneLine(p)
         is AskProposal.AddChecklist -> ChecklistAskRules.doneLine(p)
         is AskProposal.AddGoal -> GoalAskRules.doneLine(p)
+        is AskProposal.ReadingUpdate -> p.line
     }
 
     /** The card's words for [p]. */
@@ -557,6 +566,7 @@ object AskRules {
         is AskProposal.AddErrand -> AskCard(p, ErrandAskRules.cardLine(p), "Add")
         is AskProposal.AddChecklist -> AskCard(p, ChecklistAskRules.cardLine(p), "Add")
         is AskProposal.AddGoal -> AskCard(p, GoalAskRules.cardLine(p, today), "Add")
+        is AskProposal.ReadingUpdate -> AskCard(p, ReadingAskRules.cardLine(p), ReadingAskRules.button(p))
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */
