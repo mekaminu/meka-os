@@ -111,6 +111,31 @@ jobs:
           set +e
           "$kexe" --ktest_logger=SIMPLE --ktest_filter='os.meka.core.facade.AboutYouFacadeTest.*' 2>&1 | tail -80
           echo "exit status: ${PIPESTATUS[0]}"
+          # A segfault (139): macOS keeps a crash report with the crashing thread's stack; show its frames.
+          sleep 5
+          report=$(ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i 'test' | head -1)
+          if [ -n "$report" ]; then
+            echo "crash report: $report"
+            python3 - "$HOME/Library/Logs/DiagnosticReports/$report" <<'PY' || head -c 20000 "$HOME/Library/Logs/DiagnosticReports/$report"
+          import json, sys
+          raw = open(sys.argv[1]).read()
+          body = json.loads(raw[raw.index('\n') + 1:])
+          print("exception:", body.get("exception"), "termination:", body.get("termination", {}).get("indicator"))
+          imgs = body.get("usedImages", [])
+          for t in body.get("threads", []):
+              if not t.get("triggered"):
+                  continue
+              frames = t.get("frames", [])
+              print("crashed thread:", t.get("name") or t.get("queue") or "?", "frames:", len(frames))
+              for f in frames[:60]:
+                  img = imgs[f["imageIndex"]].get("name", "?") if f.get("imageIndex") is not None and f["imageIndex"] < len(imgs) else "?"
+                  print("  ", img, f.get("symbol", "?"))
+          PY
+          else
+            echo "no crash report"; ls -t ~/Library/Logs/DiagnosticReports/ 2>/dev/null | head
+          fi
+          # Is it the main thread's stack? Try again with the largest stack macOS allows.
+          ( ulimit -s 65520 2>/dev/null; "$kexe" --ktest_logger=SIMPLE --ktest_filter='os.meka.core.facade.AboutYouFacadeTest.*' 2>&1 | tail -20; echo "exit status with a 64 MB stack: ${PIPESTATUS[0]}" )
           exit 0
       - name: Generate Xcode project
         run: brew install xcodegen && xcodegen generate --spec macos/project.yml
