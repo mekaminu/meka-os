@@ -10,6 +10,7 @@ import os.meka.backend.integrations.MicrosoftCalendar
 import os.meka.backend.integrations.OAuthClient
 import os.meka.backend.integrations.ReconnectRequired
 import os.meka.backend.integrations.RemoteCopy
+import os.meka.backend.integrations.SeriesSplit
 import os.meka.backend.integrations.RemoteEvent
 import os.meka.backend.integrations.TokenCipher
 import os.meka.backend.integrations.TokenSet
