@@ -86,7 +86,7 @@ class MailCheckTest {
         )
         val utc = { ms: Long -> if (ms == now) "T0" else "T?" }
         assertEquals(
-            "Gmail · error (refused) · checked T0 · ok T? · inbox 88 · 31 unread · autopilot on, dry run until T?: not tidying · " +
+            "Business Gmail · error (refused) · checked T0 · ok T? · inbox 88 · 31 unread · autopilot on, dry run until T?: not tidying · " +
                 "sorted needs_you 12 · would tidy 40 · failed: backlog=down junkReview=busy",
             MailCheckRules.reportLine(r, now, utc),
         )

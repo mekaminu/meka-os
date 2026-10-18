@@ -114,11 +114,13 @@ object MailCheckRules {
         val wouldTidy: Map<String, Int>? = null,
         /** Each stage that failed on the last check ("junk", "backlog" …) with its [WHY]. */
         val stageFailures: Map<String, String> = emptyMap(),
+        /** The unread count went up (2026-10-18): [MailHealthRules.reportExtra]'s counts, or null. */
+        val extra: String? = null,
     )
 
     /** One line, for a `::notice title=Mail · Personal::…` annotation. */
     fun reportLine(r: Report, nowMs: Long, utc: (Long) -> String): String = buildList {
-        add("${MailProviders.name(r.provider)} · ${r.status}" + (read(r.why)?.let { " ($it)" } ?: ""))
+        add("${MailHealthRules.name(r.label, r.provider)} · ${r.status}" + (read(r.why)?.let { " ($it)" } ?: ""))
         add("checked " + (r.lastCheckAtMs?.let(utc) ?: "never") + " · ok " + (r.lastOkAtMs?.let(utc) ?: "never"))
         if (r.inboxTotal != null) add("inbox ${r.inboxTotal}" + (r.inboxUnread?.let { " · $it unread" } ?: ""))
         add("autopilot " + when {
@@ -131,6 +133,7 @@ object MailCheckRules {
         } + (r.autopilot?.let { ": $it" } ?: ""))
         r.sorted?.let { m -> add("sorted " + MailSort.entries.mapNotNull { s -> m[s.name]?.takeIf { it > 0 }?.let { "${s.name.lowercase()} $it" } }.joinToString(" ").ifEmpty { "none" }) }
         r.wouldTidy?.let { m -> add("would tidy " + m.filterKeys { it != MailTidy.KEEP.name }.values.sum()) }
+        r.extra?.let(::add)
         if (r.stageFailures.isNotEmpty()) add("failed: " + r.stageFailures.entries.sortedBy { it.key }.joinToString(" ") { "${it.key}=${it.value}" })
     }.joinToString(" · ")
 }

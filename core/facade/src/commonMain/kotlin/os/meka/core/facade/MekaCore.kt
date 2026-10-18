@@ -6905,7 +6905,7 @@ class MekaCore(
         }
         val connected = isConnected
         val server = fetchHealthServer()
-        val facts = onCore { healthFacts(device, connected, server.server, server.accounts, server.ai) }
+        val facts = onCore { healthFacts(device, connected, server.server, server.accounts, server.ai, server.mail) }
         val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone))
         _health.value = view
         return view
@@ -6914,7 +6914,7 @@ class MekaCore(
     /** Between server checks, Today's open re-reads this device's own facts against what the server last said. */
     private suspend fun refreshHealthLocal(device: os.meka.core.domain.DeviceHealth, last: os.meka.core.domain.HealthView): os.meka.core.domain.HealthView {
         lastHealthServer ?: return last
-        val facts = onCore { healthFacts(device, isConnected, lastHealthServer?.server, lastHealthServer?.accounts, lastHealthServer?.ai) }
+        val facts = onCore { healthFacts(device, isConnected, lastHealthServer?.server, lastHealthServer?.accounts, lastHealthServer?.ai, lastHealthServer?.mail) }
         val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone)).copy(checkedAtMs = last.checkedAtMs)
         _health.value = view
         return view
@@ -6958,6 +6958,7 @@ class MekaCore(
     private fun healthFacts(
         device: os.meka.core.domain.DeviceHealth, connected: Boolean, server: os.meka.core.domain.ServerHealth?,
         accounts: List<os.meka.core.domain.HealthAccount>?, ai: os.meka.core.domain.AiStatusView?,
+        mail: List<os.meka.core.domain.MailAccountFacts>? = null,
     ): os.meka.core.domain.HealthFacts {
         val sync = _sync.value
         val lastVoice = lastVoiceMessageMs()
@@ -6975,6 +6976,9 @@ class MekaCore(
             aboutYou = aboutYou.held(),
             bankSync = moneyBank.sync(),
             trains = lineStatus.snapshot().board,
+            mail = mail,
+            mailBacklogs = if (mail == null) emptyList() else activity.mailBacklogs(),
+            mailTidies = if (mail == null) emptyList() else activity.mailTidyBatches(),
         )
     }
 
@@ -9178,7 +9182,7 @@ class MekaCore(
             // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
             parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
             // Inbox fixes, slice 7: each account's unread mail and how much of it Navilife can tidy, counted by the server.
-            mailUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs()),
+            mailUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs(), lastHealthServer?.mail ?: lastMailFacts),
             // Drafted replies, slice 2: the emails from people waiting on his reply, and how many Navilife has drafted.
             mailReplies = os.meka.core.domain.MailAutoDraftRules.todayLine(activity.mailItems(), nowMs()),
             // Weekly reflection, slice 2: the one thing last week's reflection said matters this week.

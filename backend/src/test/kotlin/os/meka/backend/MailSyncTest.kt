@@ -508,6 +508,8 @@ class MailSyncTest {
         assertEquals("ok", ok.status)
         assertEquals(1L, ok.inboxTotal)
         assertEquals("not tidying", ok.autopilot) // Autopilot isn't on
+        // The unread count went up (2026-10-18): the account list carries the inbox's counts for Health and Today.
+        assertEquals(1L, i.accounts("home").single().inboxTotal)
     }
 
     @Test
@@ -533,6 +535,11 @@ class MailSyncTest {
         i.syncAccount(id)
         assertEquals("planned 1, moved 1", i.mailReport("home").single().autopilot)
         assertEquals(null, i.mailReport("home").single().stageFailures["headers"])
+        // The unread count went up (2026-10-18): the report counts what Autopilot tidied and any Undo, by label.
+        val extra = i.mailReport("home").single().extra!!
+        assertTrue(extra.startsWith("tidied 24h 1"), extra)
+        assertTrue(extra.endsWith("undo 72h 0"), extra)
+        assertTrue(MailCheckRules.reportLine(i.mailReport("home").single(), now) { "t" }.startsWith("Personal Gmail · ok"))
     }
 
     @Test

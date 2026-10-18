@@ -63,7 +63,12 @@ enum class MailSortReason(val line: String) {
     /** [MailScamRules.digest]: an account digest or activity summary. */
     DIGEST("An account digest or activity summary · nothing to answer"),
     /** [MailSortRules.mine]: sent from one of his own addresses. */
-    OWN("From you · a note to yourself");
+    OWN("From you · a note to yourself"),
+    /**
+     * The unread count went up (2026-10-18: six "Run failed: ci" emails unread): an automatic alert from a service's
+     * own no-reply address (a build, a favourite, a mention), a notification even when it carries a mailing-list header.
+     */
+    SERVICE_ALERT("An automatic alert from a service you use · nothing to answer");
 
     companion object {
         fun of(stored: String?): MailSortReason? = entries.firstOrNull { it.name == stored }
@@ -139,6 +144,15 @@ object MailSortRules {
 
     private fun local(address: String?): String = address?.substringBefore('@')?.trim()?.trimStart('<')?.lowercase().orEmpty()
 
+    /**
+     * Services whose no-reply mail is an automatic alert (CI runs, item favourites, mentions), sorted Notification
+     * rather than Newsletter even with a List-Id header: tidied and marked read like any notification.
+     */
+    val SERVICE_ALERT_DOMAINS = listOf(
+        "github.com", "gitlab.com", "bitbucket.org", "atlassian.net", "discord.com", "slack.com", "linear.app",
+        "vinted.co.uk", "vinted.com",
+    )
+
     /** True for a no-reply style sender ("no-reply@", "notifications@", "noreply.alerts@"…). */
     fun isAutomated(address: String?): Boolean {
         val l = local(address)
@@ -180,6 +194,8 @@ object MailSortRules {
             "CATEGORY_PROMOTIONS" in labels -> sure(MailSort.PROMO, MailSortReason.GMAIL_PROMOTIONS)
             list && hasWord(subject, PROMO_WORDS) -> sure(MailSort.PROMO, MailSortReason.PROMO_WORDS)
             MailScamRules.prize(f.subject) -> sure(MailSort.PROMO, MailSortReason.PRIZE)
+            domain != null && SERVICE_ALERT_DOMAINS.any { endsWithDomain(domain, it) } && isAutomated(f.fromAddress) ->
+                sure(MailSort.NOTIFICATION, MailSortReason.SERVICE_ALERT)
             "CATEGORY_FORUMS" in labels -> sure(MailSort.NEWSLETTER, MailSortReason.GMAIL_FORUMS)
             "CATEGORY_SOCIAL" in labels -> sure(MailSort.NOTIFICATION, MailSortReason.GMAIL_SOCIAL)
             list -> sure(MailSort.NEWSLETTER, MailSortReason.MAILING_LIST)

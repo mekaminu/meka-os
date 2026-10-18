@@ -134,6 +134,10 @@ data class HealthFacts(
     val bankSync: MoneyBankSync? = null,
     /** Live trains: the departure board as the server last wrote it ([RouteRules.healthRow]); null leaves the row out. */
     val trains: TrainBoard? = null,
+    /** The unread count went up (2026-10-18): the mail accounts as the server listed them ([MailHealthRules]); null leaves the rows out. */
+    val mail: List<MailAccountFacts>? = null,
+    val mailBacklogs: List<MailBacklog> = emptyList(),
+    val mailTidies: List<MailTidyBatch> = emptyList(),
 )
 
 object HealthRules {
@@ -162,7 +166,9 @@ object HealthRules {
     private fun isCalendar(provider: String) = provider == "google" || provider == "microsoft"
 
     /** Keys whose trouble Today already shows on its own line (battery, sign-ins), or Health keeps to itself (About you: Setup's card asks). */
-    private fun ownLine(key: String) = key == "battery" || key == AboutYouRules.HEALTH_KEY || key.startsWith("calendar:")
+    private fun ownLine(key: String) = key == "battery" || key == AboutYouRules.HEALTH_KEY || key.startsWith("calendar:") ||
+        // Mail: Today's unread line names the accounts Navilife can't read.
+        key.startsWith(MailHealthRules.KEY_PREFIX)
 
     /** "just now" · "14:05" (today) · "Thu 8 Oct 14:05". */
     fun at(ms: Long, nowMs: Long, cal: LocalCalendar): String {
@@ -189,6 +195,7 @@ object HealthRules {
             AboutYouRules.healthRow(f.aboutYou, f.nowMs, cal)?.let(::add)
             MoneyBank.healthRow(f.bankSync, f.nowMs, cal)?.let(::add)
             f.trains?.let { RouteRules.healthRow(it, f.nowMs, cal) }?.let(::add)
+            f.mail?.let { addAll(MailHealthRules.healthRows(it, f.mailBacklogs, f.mailTidies, f.nowMs, cal)) }
         }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }

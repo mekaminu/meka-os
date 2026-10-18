@@ -64,31 +64,55 @@ object MailUnreadRules {
      * Personal 412 · Outlook 82 · Business 5 · 380 Navilife can tidy"; nothing unread anywhere [NONE_UNREAD]. Never lit:
      * it's a picture of the inbox, not something to do.
      */
-    fun todayLine(backlogs: List<MailBacklog>, nowMs: Long): MailUnreadLine? {
+    fun todayLine(backlogs: List<MailBacklog>, nowMs: Long): MailUnreadLine? = todayLine(backlogs, nowMs, null)
+
+    /**
+     * The unread count went up (2026-10-18): with the server's account list, each account is named by label and
+     * provider when the label alone could mislead ("Personal Outlook · 136 unread"), the server's own fresh count is
+     * used, and the accounts Navilife can't read are named ("· Personal Gmail and Business Gmail not read yet"), so the
+     * line never reads as the whole of his mail when it isn't. With nothing countable but unreadable accounts:
+     * "Mail · Personal Gmail not read yet · see Health".
+     */
+    fun todayLine(backlogs: List<MailBacklog>, nowMs: Long, accounts: List<MailAccountFacts>?): MailUnreadLine? {
+        data class Count(val name: String, val unread: Int, val tidy: Int, val order: Int)
+        val list = accounts?.filter { MailProviders.isMail(it.provider) }
         val counted = backlogs.filter { b ->
             b.inboxUnread != null && b.unreadCountedAtMs != null && nowMs - b.unreadCountedAtMs <= STALE_MS
-        }.sortedWith(compareBy<MailBacklog> { order(it.account) }.thenBy { it.account })
-        if (counted.isEmpty()) return null
-        val total = counted.sumOf { it.inboxUnread ?: 0 }
-        if (total == 0) return MailUnreadLine(NONE_UNREAD, "Nothing unread in your mail.", false)
-        val tidy = counted.sumOf { it.tidyUnread.coerceAtMost(it.inboxUnread ?: 0) }
-        val unreadOnes = counted.filter { (it.inboxUnread ?: 0) > 0 }
+        }.map { b ->
+            val a = list?.let { MailHealthRules.accountFor(b.account, it) }
+            val live = a?.inboxUnread?.takeIf { a.lastSyncAtMs != null && nowMs - a.lastSyncAtMs <= STALE_MS }?.toInt()
+            val unread = live ?: b.inboxUnread ?: 0
+            Count(a?.let(MailHealthRules::name) ?: b.account, unread, b.tidyUnread.coerceAtMost(unread), order(b.account))
+        }.sortedWith(compareBy<Count> { it.order }.thenBy { it.name })
+        val missing = MailHealthRules.unreadableNames(list, nowMs)
+        val missingPart = missing?.let { " · $it not read yet" } ?: ""
+        val missingSpoken = missing?.let { " Navilife can't read $it yet." } ?: ""
+        if (counted.isEmpty()) {
+            return missing?.let { MailUnreadLine("Mail · $it not read yet · see Health", "Navilife can't read $it yet.", false) }
+        }
+        val total = counted.sumOf { it.unread }
+        if (total == 0) {
+            return if (missing == null) MailUnreadLine(NONE_UNREAD, "Nothing unread in your mail.", false)
+            else MailUnreadLine("Mail · nothing unread in ${counted.joinToString(", ") { it.name }}$missingPart", "Nothing unread in the mail Navilife reads.$missingSpoken", false)
+        }
+        val tidy = counted.sumOf { it.tidy }
+        val unreadOnes = counted.filter { it.unread > 0 }
         if (unreadOnes.size == 1) {
             val b = unreadOnes.single()
-            val u = b.inboxUnread ?: 0
+            val u = b.unread
             val tidyPart = if (tidy > 0) " · ${n(tidy)} ${if (tidy == 1) "is a newsletter, promo or receipt" else "are newsletters, promos or receipts"} Navilife can tidy" else ""
             val spokenTidy = if (tidy > 0) "; ${n(tidy)} of them ${if (tidy == 1) "is a newsletter, promo or receipt" else "are newsletters, promos or receipts"} Navilife can tidy" else ""
             return MailUnreadLine(
-                "${b.account} · ${n(u)} unread$tidyPart",
-                "${n(u)} unread ${if (u == 1) "email" else "emails"} in ${b.account}$spokenTidy.",
+                "${b.name} · ${n(u)} unread$tidyPart$missingPart",
+                "${n(u)} unread ${if (u == 1) "email" else "emails"} in ${b.name}$spokenTidy.$missingSpoken",
                 false,
             )
         }
-        val each = unreadOnes.joinToString(" · ") { "${it.account} ${n(it.inboxUnread ?: 0)}" }
+        val each = unreadOnes.joinToString(" · ") { "${it.name} ${n(it.unread)}" }
         val tidyPart = if (tidy > 0) " · ${n(tidy)} Navilife can tidy" else ""
-        val spokenEach = unreadOnes.map { b -> "${n(b.inboxUnread ?: 0)} in ${b.account}" }
+        val spokenEach = unreadOnes.map { b -> "${n(b.unread)} in ${b.name}" }
         val spokenList = spokenEach.dropLast(1).joinToString(", ") + " and " + spokenEach.last()
         val spokenTidy = if (tidy > 0) "; ${n(tidy)} of them are newsletters, promos or receipts Navilife can tidy" else ""
-        return MailUnreadLine("Unread mail · $each$tidyPart", "Unread mail: $spokenList$spokenTidy.", false)
+        return MailUnreadLine("Unread mail · $each$tidyPart$missingPart", "Unread mail: $spokenList$spokenTidy.$missingSpoken", false)
     }
 }

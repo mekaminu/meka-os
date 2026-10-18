@@ -52,6 +52,9 @@ data class MailAccountFacts(
     val wouldTidy: Map<String, Int>? = null,
     /** Inbox fixes, slice 6: why the last check failed (a [MailCheckRules.WHY] word), or null. */
     val why: String? = null,
+    /** The unread count went up (2026-10-18): the inbox's total and unread at the server's last check (counts only), or null. */
+    val inboxTotal: Long? = null,
+    val inboxUnread: Long? = null,
 )
 
 /** One row in Mail. */

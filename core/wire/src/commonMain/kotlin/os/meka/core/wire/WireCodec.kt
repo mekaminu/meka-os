@@ -15,6 +15,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import os.meka.core.sync.FieldValue
 import os.meka.core.sync.Hlc
@@ -156,6 +157,9 @@ object WireCodec {
         val wouldTidy: Map<String, Int>? = null,
         /** Inbox fixes, slice 6: why the last check failed (a `MailCheckRules.WHY` word). Additive: absent = none. */
         val why: String? = null,
+        /** The unread count went up (2026-10-18): a mail inbox's total and unread at the last check. Additive: absent = not known. */
+        val inboxTotal: Long? = null,
+        val inboxUnread: Long? = null,
     )
 
     /** Naming what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook. */
@@ -217,6 +221,8 @@ object WireCodec {
                 a.sorted?.let { m -> put("sorted", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
                 a.wouldTidy?.let { m -> put("tidy", buildJsonObject { m.forEach { (k, v) -> put(k, v) } }) }
                 a.why?.let { put("why", it.take(12)) }
+                a.inboxTotal?.let { put("inbox", it) }
+                a.inboxUnread?.let { put("unread", it) }
             }
         }))
     }
@@ -235,6 +241,8 @@ object WireCodec {
                 sorted = counts(a["sorted"]),
                 wouldTidy = counts(a["tidy"]),
                 why = a["why"]?.jsonPrimitive?.contentOrNull?.take(12)?.takeIf { w -> w.all { it in 'a'..'z' } },
+                inboxTotal = a["inbox"]?.jsonPrimitive?.longOrNull?.takeIf { it >= 0 },
+                inboxUnread = a["unread"]?.jsonPrimitive?.longOrNull?.takeIf { it >= 0 },
             )
         }
     }

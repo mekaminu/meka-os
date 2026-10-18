@@ -47,6 +47,7 @@ import os.meka.core.domain.MailTidiedEmail
 import os.meka.core.domain.MailTidiedRules
 import os.meka.core.domain.MailJunkClearRules
 import os.meka.core.domain.MailUnreadRules
+import os.meka.core.domain.MailHealthRules
 import os.meka.core.domain.MailMarkReadRules
 import os.meka.core.domain.MailJunkFacts
 import os.meka.core.domain.MailJunkRules
@@ -283,7 +284,10 @@ class Integrations(
             WireCodec.IntegrationAccount(it.provider, it.email, it.status, it.lastSyncAtMs, it.canEdit, it.label, sorted = sorted,
                 wouldTidy = if (sorted != null) tidyCounts(householdId, it.id, keepAddresses(householdId)) else null,
                 // Inbox fixes, slice 6: why a mail check failed, for the card (only a known word; an old exception name isn't sent).
-                why = if (it.provider in mail && it.status == "error") MailCheckRules.read(it.lastError) else null)
+                why = if (it.provider in mail && it.status == "error") MailCheckRules.read(it.lastError) else null,
+                // The unread count went up (2026-10-18): the inbox's own counts at the last check, for Health and Today.
+                inboxTotal = if (it.provider in mail) mailChecks[it.id]?.inboxTotal else null,
+                inboxUnread = if (it.provider in mail) mailChecks[it.id]?.inboxUnread else null)
         }
 
     /**
@@ -560,7 +564,15 @@ class Integrations(
         val setting = runCatching { MailAutopilotRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID)) }.getOrNull()
         val paused = runCatching { AutonomyRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, AutonomyRules.ENTITY_ID)).paused }.getOrNull()
         val listed = runCatching { accounts(householdId) }.getOrNull().orEmpty()
+        // The unread count went up (2026-10-18): what Autopilot tidied, the clean-up's state, Mark read and any Undo.
+        val tidies = runCatching { reader.entities(householdId, EntityTypes.MAIL_TIDY).mapNotNull { (id, f) -> MailAutopilotRules.readBatch(id, f) } }.getOrDefault(emptyList())
+        val nowMs = now()
         return rows.map { a ->
+            val label = MailLabel.of(a.label)?.label ?: "Mail"
+            val backlog = runCatching {
+                val id = MailBacklogRules.entityId(a.id)
+                reader.entity(householdId, EntityTypes.MAIL_BACKLOG, id)?.let { MailBacklogRules.read(id, it) }
+            }.getOrNull()
             val c = mailChecks[a.id]
             val wire = listed.firstOrNull { it.provider == a.provider && it.email == a.email }
             MailCheckRules.Report(
@@ -568,6 +580,7 @@ class Integrations(
                 lastCheckAtMs = c?.lastCheckAtMs, lastOkAtMs = a.lastSyncAtMs, inboxTotal = c?.inboxTotal, inboxUnread = c?.inboxUnread,
                 dryRunEndsAtMs = a.grantedAtMs?.plus(MailAutopilotRules.DRY_RUN_MS), autopilotOn = setting?.on, paused = paused,
                 autopilot = c?.autopilot, sorted = wire?.sorted, wouldTidy = wire?.wouldTidy, stageFailures = c?.stages?.toMap().orEmpty(),
+                extra = MailHealthRules.reportExtra(label, backlog, tidies, nowMs),
             )
         }
     }

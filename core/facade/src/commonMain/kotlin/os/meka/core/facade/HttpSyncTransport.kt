@@ -555,7 +555,7 @@ class HttpSyncTransport(
         mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/disconnect", WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect(email, deleteData = true)))))
 
     private fun mail(list: List<WireCodec.IntegrationAccount>) = list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }
-        .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, it.label, it.sorted, it.wouldTidy, it.why) }
+        .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, it.label, it.sorted, it.wouldTidy, it.why, it.inboxTotal, it.inboxUnread) }
 
     override suspend fun latestRelease(platform: String): AppRelease? {
         prepare() // release routes require the device's signing key on the server
