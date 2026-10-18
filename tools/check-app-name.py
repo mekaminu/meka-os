@@ -15,7 +15,7 @@ import sys
 NAME = re.compile(r"\bMEKA\b")
 # Wire formats and the one deliberate mention (AppUpdateRules.ICON_WHY).
 ALLOWED = [re.compile(p) for p in (
-    r"\bMEKA-APPROVAL1\b", r"\bMEKA-OS/1\b", r"\bMEKA-RECOVERY-1\b", r"\bMEKA-VAULT-(ID|CODE|WRAP|RECOVERY)-1\b", r"\bMEKA/1 \(", r"MEKA@gmail\.com",
+    r"\bMEKA-APPROVAL1\b", r"\bMEKA-OS/1\b", r"\bMEKA-RECOVERY-1\b", r"\bMEKA-VAULT-(ID|CODE|WRAP|RECOVERY|FILE)-1\b", r"\bMEKA/1 \(", r"MEKA@gmail\.com",
     r'\\"MEKA\\" still works',
 )]
 CODE_ROOTS = ["core", "android/app/src/main", "wear/app/src/main", "macos/MekaOS", "macos/NewsWidget",

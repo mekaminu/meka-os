@@ -4640,6 +4640,64 @@ final class CoreModel {
 
     func removeDocument(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeDocument(id: id) } }
 
+    // MARK: The Vault's copies (Vault slice 2b)
+
+    /// Add a copy… / Replace copy…: an open panel for one photo or PDF, prepared off the main actor and handed to the
+    /// core as Strings, which seals it with the Vault key. What it said goes under the row.
+    func chooseVaultCopy(_ docId: String) async -> TripSaid? {
+        NSApp.activate()
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.jpeg, .png, .pdf]
+        panel.allowsMultipleSelection = false
+        panel.message = "Pick a photo or PDF of the document · it's locked with your Vault key on this Mac before it leaves"
+        panel.prompt = "Add copy"
+        guard panel.runModal() == .OK, let url = panel.url else { return nil }
+        let picked = await MacVaultCopy.prepare(url: url)
+        guard let core, let b64 = picked.base64 else {
+            MekaHaptics.tick()
+            return TripSaid(line: picked.problem ?? VaultFileRules.shared.COULDNT_READ, refused: true)
+        }
+        do {
+            let r = try await core.addVaultCopy(docId: docId, type: picked.type, base64: b64, name: url.lastPathComponent)
+            if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
+            return TripSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Open copy: the copy opened by the core (from this Mac's sealed copy, else fetched), as plain Swift values; or
+    /// the line saying why it didn't open.
+    func openVaultCopy(_ docId: String) async -> (ViewedCopy?, TripSaid?) {
+        guard let core else { return (nil, nil) }
+        do {
+            let o = try await core.openVaultCopy(docId: docId)
+            if let b64 = o.base64, let data = Data(base64Encoded: b64) {
+                MekaHaptics.light()
+                return (ViewedCopy(title: o.title, isPdf: o.isPdf, data: data), nil)
+            }
+            MekaHaptics.tick()
+            return (nil, TripSaid(line: o.problem ?? VaultFileRules.shared.OFFLINE, refused: true))
+        } catch {
+            lastError = error.localizedDescription
+            return (nil, nil)
+        }
+    }
+
+    /// Remove copy: gone from every device and the server; the document stays.
+    func removeVaultCopy(_ docId: String) async -> TripSaid? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        do {
+            let r = try await core.removeVaultCopy(docId: docId)
+            return TripSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
     // MARK: The Vault key (Vault slice 2a)
 
     /// Allow on a device asking for the Vault key, once Meka checked its code; only a String crosses.

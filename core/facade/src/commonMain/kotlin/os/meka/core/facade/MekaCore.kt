@@ -251,6 +251,7 @@ class MekaCore(
     private var deviceLinkApi: DeviceLinkApi? = transport as? DeviceLinkApi
     /** Recovery key (slice 2): the household's key as the server last said, when it was read, and the pane's state. */
     private var recoveryApi: RecoveryApi? = transport as? RecoveryApi
+    private var vaultFileApi: VaultFileApi? = transport as? VaultFileApi
     private var recoveryStatus: os.meka.core.domain.RecoveryKeyRules.Status? = null
     private var recoveryReadAtMs: Long? = null
     private val _recovery = MutableStateFlow<os.meka.core.domain.RecoveryKeyView?>(null)
@@ -3741,8 +3742,17 @@ class MekaCore(
      */
     suspend fun addDocument(text: String): os.meka.core.domain.DocumentAdded = onCore { documents.add(text) }
 
-    /** Removes a document for good. */
-    suspend fun removeDocument(id: String): Boolean = onCore { documents.remove(id) }
+    /** Removes a document for good, and its encrypted copy (slice 2b) from every device and Navilife's server. */
+    suspend fun removeDocument(id: String): Boolean {
+        val gone = onCore {
+            val file = documents.item(id)?.file
+            val removed = documents.remove(id)
+            if (removed && file != null) forgetVaultCopy(file.id, deleteOnServer = true)
+            removed to file
+        }
+        gone.second?.takeIf { gone.first }?.let { deleteVaultCopiesGone() }
+        return gone.first
+    }
 
     /**
      * Screenshots and photos, slice 3: what the capture sheet (or the Mac's bar) offers for shared text or a picture's
@@ -5174,7 +5184,7 @@ class MekaCore(
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
             notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
-            recoveryApi = transport as? RecoveryApi
+            recoveryApi = transport as? RecoveryApi; vaultFileApi = transport as? VaultFileApi
         }
         startSync()
     }
@@ -8277,6 +8287,170 @@ class MekaCore(
         vaultKeys.writeWrap(os.meka.core.domain.VaultKeyRules.RECOVERY, id, null, sealed, name)
     }
 
+    // ---- The Vault, slice 2b: the document itself (a photo or PDF sealed with the Vault key) ----
+
+    private fun localIds(key: String): List<String> = os.meka.core.domain.VaultFileRules.decodeIds(vaultLocal(key))
+
+    private fun setLocalIds(key: String, ids: List<String>) = setVaultLocal(key, os.meka.core.domain.VaultFileRules.encodeIds(ids))
+
+    /** Keeps [sealed] on this device for offline (caller on the core). */
+    private fun keepVaultCopy(id: String, sealed: String) {
+        setVaultLocal(os.meka.core.domain.VaultFileRules.localKey(id), sealed)
+        setLocalIds(os.meka.core.domain.VaultFileRules.LOCAL_KEPT, localIds(os.meka.core.domain.VaultFileRules.LOCAL_KEPT) + id)
+    }
+
+    /** Lets this device's copy [id] go; with [deleteOnServer] its server copy is deleted too (now or after a sync). */
+    private fun forgetVaultCopy(id: String, deleteOnServer: Boolean) {
+        val r = os.meka.core.domain.VaultFileRules
+        setVaultLocal(r.localKey(id), null)
+        setLocalIds(r.LOCAL_KEPT, localIds(r.LOCAL_KEPT) - id)
+        setLocalIds(r.LOCAL_PENDING, localIds(r.LOCAL_PENDING) - id)
+        if (deleteOnServer) setLocalIds(r.LOCAL_GONE, localIds(r.LOCAL_GONE) + id)
+    }
+
+    /** A copy's random id: 32 hex characters from the secure random. */
+    private fun newVaultFileId(): String = keyRandom.nextBytes(16).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+
+    /**
+     * Adds (or replaces) the copy of document [docId]: [base64] is the file (a photo the app already re-encoded to
+     * [os.meka.core.domain.VaultFileRules.PHOTO_LONG_SIDE]), [type] what the system called it ([name] its file name,
+     * read only for its ending). Sealed here with the household's Vault key, kept on this device and sent up as sealed
+     * bytes only; offline it goes up after the next sync. Refused (nothing kept) without the key, too big, or not a photo or PDF.
+     */
+    suspend fun addVaultCopy(docId: String, type: String?, base64: String, name: String? = null): os.meka.core.domain.VaultFileSaid {
+        val r = os.meka.core.domain.VaultFileRules
+        fun no(line: String) = os.meka.core.domain.VaultFileSaid(line, refused = true)
+        class Made(val ref: os.meka.core.domain.VaultFileRef, val sealed: String, val old: os.meka.core.domain.VaultFileRef?)
+        val made = onCore {
+            val doc = documents.item(docId) ?: return@onCore no(r.GONE)
+            val kind = r.typeOf(type, name)
+            val bytes = runCatching { kotlin.io.encoding.Base64.decode(base64) }.getOrNull() ?: return@onCore no(r.COULDNT_READ)
+            r.refusal(kind, bytes.size.toLong())?.let { return@onCore no(it) }
+            val crypto = vaultCrypto ?: return@onCore no(r.NO_KEY)
+            val by = vaultName() ?: return@onCore no(r.NO_KEY)
+            val (keyId, key) = heldVaultKey()?.takeIf { it.first == vaultKeys.canonical() } ?: return@onCore no(r.NO_KEY)
+            val id = newVaultFileId()
+            val sealed = runCatching { crypto.sealBox(kotlin.io.encoding.Base64.encode(key), kotlin.io.encoding.Base64.encode(r.frame(id, bytes))) }
+                .getOrNull() ?: return@onCore no(r.COULDNT_SEAL)
+            if (sealed.length / 4 * 3 > r.MAX_SEALED_BYTES) return@onCore no(r.TOO_BIG)
+            val ref = os.meka.core.domain.VaultFileRef(id, kind!!, bytes.size.toLong(), keyId, nowMs(), by)
+            keepVaultCopy(id, sealed)
+            setLocalIds(r.LOCAL_PENDING, localIds(r.LOCAL_PENDING) + id)
+            documents.setFile(docId, ref)
+            doc.file?.let { forgetVaultCopy(it.id, deleteOnServer = true) }
+            refresh()
+            Made(ref, sealed, doc.file)
+        }
+        if (made !is Made) return made as os.meka.core.domain.VaultFileSaid
+        requestSync()
+        val uploaded = uploadVaultCopy(made.ref.id, made.sealed)
+        if (made.old != null) deleteVaultCopiesGone()
+        return os.meka.core.domain.VaultFileSaid(r.addedLine(made.ref, uploaded, replaced = made.old != null), refused = false)
+    }
+
+    /** Puts one sealed copy on the server; true when it's there (and no longer pending). Never throws but cancellation. */
+    private suspend fun uploadVaultCopy(id: String, sealed: String): Boolean {
+        val api = vaultFileApi ?: return false
+        val ok = runCatchingNotCancel { api.vaultFilePut(id, sealed) } == true
+        if (ok) onCore { setLocalIds(os.meka.core.domain.VaultFileRules.LOCAL_PENDING, localIds(os.meka.core.domain.VaultFileRules.LOCAL_PENDING) - id) }
+        return ok
+    }
+
+    /** Deletes the server copies this device let go of; those that fail stay listed for the next sync. */
+    private suspend fun deleteVaultCopiesGone() {
+        val api = vaultFileApi ?: return
+        val r = os.meka.core.domain.VaultFileRules
+        for (id in onCore { localIds(r.LOCAL_GONE) }) {
+            if (runCatchingNotCancel { api.vaultFileDelete(id) } == true) onCore { setLocalIds(r.LOCAL_GONE, localIds(r.LOCAL_GONE) - id) }
+        }
+    }
+
+    /**
+     * After a clean sync: copies added offline go up, server copies let go of are deleted, sealed copies no document
+     * points at any more are let go here, and up to [os.meka.core.domain.VaultFileRules.PREFETCH_PER_ROUND] copies the
+     * other devices added are fetched (still sealed) so they open offline.
+     */
+    private suspend fun vaultFilesAfterSync() {
+        val r = os.meka.core.domain.VaultFileRules
+        val api = vaultFileApi
+        class Plan(val upload: List<Pair<String, String>>, val fetch: List<String>)
+        val plan = onCore {
+            val live = documents.items().mapNotNull { it.file?.id }.toSet()
+            localIds(r.LOCAL_KEPT).filter { it !in live }.forEach { forgetVaultCopy(it, deleteOnServer = false) }
+            val upload = localIds(r.LOCAL_PENDING).mapNotNull { id -> vaultLocal(r.localKey(id))?.let { id to it } }
+            // Only a device that can open them keeps them (a watch, or a device still waiting for the key, doesn't).
+            val canOpen = vaultCrypto != null && vaultName() != null && heldVaultKey() != null
+            val kept = localIds(r.LOCAL_KEPT).toSet()
+            val fetch = if (canOpen) live.filter { it !in kept }.sorted().take(r.PREFETCH_PER_ROUND) else emptyList()
+            Plan(upload, fetch)
+        }
+        for ((id, sealed) in plan.upload) uploadVaultCopy(id, sealed)
+        deleteVaultCopiesGone()
+        if (api == null) return
+        for (id in plan.fetch) {
+            val sealed = runCatchingNotCancel { api.vaultFileGet(id) } ?: continue
+            if (sealed.length / 4 * 3 > r.MAX_SEALED_BYTES) continue
+            onCore { if (documents.items().any { it.file?.id == id }) keepVaultCopy(id, sealed) }
+        }
+    }
+
+    /**
+     * Opens document [docId]'s copy for the screen: from this device's sealed copy, else fetched from the server (and
+     * kept, sealed, for offline), opened with the Vault key and checked it is this copy. The bytes go only to the
+     * app's memory; a [os.meka.core.domain.VaultFileOpened.problem] says why it didn't open.
+     */
+    suspend fun openVaultCopy(docId: String): os.meka.core.domain.VaultFileOpened {
+        val r = os.meka.core.domain.VaultFileRules
+        val found = onCore { documents.item(docId)?.let { d -> d.file?.let { d.title to it } } }
+            ?: return os.meka.core.domain.VaultFileOpened.problem("", r.GONE)
+        val (title, ref) = found
+        var sealed = onCore { vaultLocal(r.localKey(ref.id)) }
+        var fetched = false
+        if (sealed == null) {
+            val api = vaultFileApi ?: return os.meka.core.domain.VaultFileOpened.problem(title, r.OFFLINE)
+            sealed = try {
+                api.vaultFileGet(ref.id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return os.meka.core.domain.VaultFileOpened.problem(title, r.OFFLINE)
+            } ?: return os.meka.core.domain.VaultFileOpened.problem(title, r.notUploaded(ref.by))
+            fetched = true
+        }
+        val box: String = sealed ?: return os.meka.core.domain.VaultFileOpened.problem(title, r.OFFLINE)
+        return onCore {
+            val crypto = vaultCrypto ?: return@onCore os.meka.core.domain.VaultFileOpened.problem(title, r.NO_KEY)
+            val held = heldVaultKey()
+            val res = r.open(ref, held?.first) {
+                runCatching { crypto.openBox(kotlin.io.encoding.Base64.encode(held!!.second), box) }.getOrNull()
+                    ?.let { runCatching { kotlin.io.encoding.Base64.decode(it) }.getOrNull() }
+            }
+            when (res) {
+                is os.meka.core.domain.VaultFileOpen.Refused -> os.meka.core.domain.VaultFileOpened.problem(title, res.line)
+                is os.meka.core.domain.VaultFileOpen.Opened -> {
+                    if (fetched) keepVaultCopy(ref.id, box)
+                    os.meka.core.domain.VaultFileOpened(title, ref.type, kotlin.io.encoding.Base64.encode(res.bytes), null)
+                }
+            }
+        }
+    }
+
+    /** Removes document [docId]'s copy (the document stays) from every device and Navilife's server. */
+    suspend fun removeVaultCopy(docId: String): os.meka.core.domain.VaultFileSaid {
+        val r = os.meka.core.domain.VaultFileRules
+        val ok = onCore {
+            val file = documents.item(docId)?.file ?: return@onCore false
+            documents.setFile(docId, null)
+            forgetVaultCopy(file.id, deleteOnServer = true)
+            refresh()
+            true
+        }
+        if (!ok) return os.meka.core.domain.VaultFileSaid(r.GONE, refused = true)
+        requestSync()
+        deleteVaultCopiesGone()
+        return os.meka.core.domain.VaultFileSaid(r.REMOVED, refused = false)
+    }
+
     // ---- Recovery key (V1, slice 2: Settings → Recovery key) ----
 
     /** Settings → Recovery key as last read ([refreshRecoveryKey]); null until asked once. */
@@ -8778,6 +8952,9 @@ class MekaCore(
                 val waiting = replica.pendingPushCount()
                 runCatching { vaultAfterSync() }
                 if (replica.pendingPushCount() > waiting) runCatchingNotCancel { client.syncOnce() }
+                // Slice 2b: copies added offline go up, removed ones come off the server, and copies the other
+                // devices added are fetched (still sealed) so they open offline here too.
+                runCatchingNotCancel { vaultFilesAfterSync() }
             }
             _sync.value = if (report.rejected.isEmpty()) SyncStatus.Synced(nowMs())
             else SyncStatus.Failing("${report.rejected.size} change(s) were refused by the server", replica.pendingPushCount())
@@ -9095,7 +9272,7 @@ class MekaCore(
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay)
-        _documents.value = os.meka.core.domain.DocumentRules.view(documents.items(), todayDay)
+        _documents.value = os.meka.core.domain.DocumentRules.view(documents.items(), todayDay, cal, vaultName())
         vaultKeyNow()
         val heldNow = _afterWork.value
         _people.value = os.meka.core.domain.PeopleRules.view(

@@ -357,6 +357,17 @@ interface NumberLookupApi {
 }
 
 /**
+ * The Vault's encrypted copies (Vault slice 2b): sealed bytes (base64) in and out of Navilife's server by the copy's
+ * random id. [vaultFileGet] is null when the server has none; [vaultFilePut] and [vaultFileDelete] false when an older
+ * server lacks the route. Network failures throw.
+ */
+interface VaultFileApi {
+    suspend fun vaultFilePut(id: String, sealed: String): Boolean
+    suspend fun vaultFileGet(id: String): String?
+    suspend fun vaultFileDelete(id: String): Boolean
+}
+
+/**
  * Trading tracker, slice 8: a tax year's Hyperliquid orders and daily funding for the CSV export, from Navilife's
  * server (`POST /v1/trading/export`), waiting at most [waitMs]; "pending" means ask again.
  */
@@ -482,7 +493,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -862,6 +873,46 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
         }
         return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun vaultFilePut(id: String, sealed: String): Boolean {
+        val codec = os.meka.core.wire.VaultFileCodec
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.PUT_PATH, codec.encodePut(os.meka.core.wire.VaultFileCodec.Put(id, sealed)))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.PUT_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PUT_PATH}")
+            else -> true
+        }
+    }
+
+    override suspend fun vaultFileGet(id: String): String? {
+        val codec = os.meka.core.wire.VaultFileCodec
+        prepare()
+        val resp = send(codec.GET_PATH, codec.encodeRef(id))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.GET_PATH}")
+            resp.status.value == 404 -> null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.GET_PATH}")
+            else -> try {
+                codec.decodeSealed(resp.bodyAsText())
+            } catch (e: IllegalArgumentException) {
+                throw TransportException("malformed vault copy", e)
+            }
+        }
+    }
+
+    override suspend fun vaultFileDelete(id: String): Boolean {
+        val codec = os.meka.core.wire.VaultFileCodec
+        prepare()
+        val resp = send(codec.DELETE_PATH, codec.encodeRef(id))
+        return when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.DELETE_PATH}")
+            resp.status.value == 404 || resp.status.value == 403 -> false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.DELETE_PATH}")
+            else -> true
+        }
     }
 
     override suspend fun lookUpNumber(number: String, waitMs: Long): os.meka.core.wire.NumberLookupCodec.Response {

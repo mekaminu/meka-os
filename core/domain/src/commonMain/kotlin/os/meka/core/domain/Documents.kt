@@ -24,6 +24,8 @@ object VaultDocFields {
     const val EXPIRES = "expiresDay"
     const val ADDED_AT = "addedAtMs"
     const val DELETED = ActionableFields.DELETED
+    /** Slice 2b: the document's encrypted copy ([VaultFileRules.encode]); absent or null for none. */
+    const val FILE = "file"
 }
 
 /**
@@ -45,7 +47,15 @@ enum class DocKind(val wire: String, val label: String, val leadDays: Int, val h
 }
 
 /** One stored document. */
-data class DocumentItem(val id: String, val title: String, val kind: DocKind, val expiresDay: Long?, val addedAtMs: Long)
+data class DocumentItem(
+    val id: String,
+    val title: String,
+    val kind: DocKind,
+    val expiresDay: Long?,
+    val addedAtMs: Long,
+    /** Slice 2b: its encrypted copy, if one was added. */
+    val file: VaultFileRef? = null,
+)
 
 /** A row in the Vault: "Theo passport" · "Passport · expires Thu 20 May 2027" · "Renew now · expires in 7 months" ([statusLit]). */
 data class DocumentRow(
@@ -55,7 +65,13 @@ data class DocumentRow(
     val status: String,
     val statusLit: Boolean,
     val spoken: String,
-)
+    /** Slice 2b: "Photo · 412 KB · encrypted · added on the Fold, Sun 18 Oct", or null with no copy. */
+    val copyLine: String? = null,
+    /** The copy is a PDF (opened page by page) rather than a photo. */
+    val copyIsPdf: Boolean = false,
+) {
+    val hasCopy: Boolean get() = copyLine != null
+}
 
 data class DocumentsView(
     val rows: List<DocumentRow>,
@@ -91,7 +107,7 @@ object DocumentRules {
     const val EMPTY_LINE = "No documents yet. Type each one with the date it runs out; Navilife reminds you in time to renew."
     const val NOT_READ = "Navilife couldn't read that. Try \"Passport expires 3 Mar 2029\" or \"Railcard 05/2027\"."
     const val BAD_DATE = "Navilife couldn't read that date. Try \"3 Mar 2029\" or \"05/2029\"."
-    const val NOTE = "Names and dates only: Navilife keeps no document numbers. Copies of the documents themselves, encrypted on this device first, come later."
+    const val NOTE = "Names and dates only: Navilife keeps no document numbers. Open a document to add a copy (a photo or PDF), encrypted on this device first."
 
     private val KIND_WORDS: Map<String, DocKind> = buildMap {
         listOf("passport", "passports").forEach { put(it, DocKind.PASSPORT) }
@@ -212,7 +228,10 @@ object DocumentRules {
     fun items(entities: Map<String, Map<String, FieldValue>>): List<DocumentItem> = entities.mapNotNull { (id, s) ->
         if (s.f(VaultDocFields.DELETED).boolOrNull == true) return@mapNotNull null
         val title = s.f(VaultDocFields.TITLE).textOrNull?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-        DocumentItem(id, title, DocKind.of(s.f(VaultDocFields.KIND).textOrNull), s.f(VaultDocFields.EXPIRES).longOrNull, s.f(VaultDocFields.ADDED_AT).longOrNull ?: 0L)
+        DocumentItem(
+            id, title, DocKind.of(s.f(VaultDocFields.KIND).textOrNull), s.f(VaultDocFields.EXPIRES).longOrNull,
+            s.f(VaultDocFields.ADDED_AT).longOrNull ?: 0L, VaultFileRules.decode(s.f(VaultDocFields.FILE).textOrNull),
+        )
     }.sortedWith(compareBy<DocumentItem> { it.expiresDay ?: Long.MAX_VALUE }.thenBy { it.title.lowercase() }.thenBy { it.id })
 
     fun fields(e: DocumentEntry, nowMs: Long): Map<String, FieldValue> = mapOf(
@@ -263,13 +282,15 @@ object DocumentRules {
     }
 
     /** The Vault's documents: those to renew (or run out) first, then the rest by when they run out. */
-    fun view(items: List<DocumentItem>, today: Long): DocumentsView {
+    fun view(items: List<DocumentItem>, today: Long, cal: LocalCalendar = LocalCalendar.UTC, device: String? = null): DocumentsView {
         if (items.isEmpty()) return DocumentsView.EMPTY
         val ordered = items.filter { due(it, today) } + items.filterNot { due(it, today) }
         val rows = ordered.map { d ->
             val line = rowLine(d, today)
             val status = status(d, today)
-            DocumentRow(d.id, d.title, line, status, due(d, today), "${d.title}. $line. $status")
+            val copy = d.file?.let { VaultFileRules.copyLine(it, cal, device) }
+            val spoken = "${d.title}. $line. $status" + (copy?.let { ". Copy kept: $it" } ?: "")
+            DocumentRow(d.id, d.title, line, status, due(d, today), spoken, copy, d.file?.isPdf == true)
         }
         val count = if (items.size == 1) "1 document" else "${items.size} documents"
         val toRenew = items.count { due(it, today) }
@@ -330,7 +351,16 @@ class Documents(
 ) {
     fun items(): List<DocumentItem> = DocumentRules.items(replica.entities(EntityTypes.VAULT_DOC).associate { it.ref.entityId to it.fields })
 
-    fun view(): DocumentsView = DocumentRules.view(items(), calendar.epochDayOf(nowMs()))
+    fun view(device: String? = null): DocumentsView = DocumentRules.view(items(), calendar.epochDayOf(nowMs()), calendar, device)
+
+    fun item(id: String): DocumentItem? = items().firstOrNull { it.id == id }
+
+    /** Slice 2b: the document's copy is now [ref] (a new or replaced one), or none ([ref] null). False when it's gone. */
+    fun setFile(id: String, ref: VaultFileRef?): Boolean {
+        item(id) ?: return false
+        replica.commitLocal(EntityTypes.VAULT_DOC, id, mapOf(VaultDocFields.FILE to ref?.let(VaultFileRules::encode).fv()))
+        return true
+    }
 
     /**
      * Adds what [text] says ([DocumentRules.read]); a document with the same title takes the new date (a renewed

@@ -140,6 +140,8 @@ fun Application.mekaSync(
     approvals: ApprovalRoutes? = null,
     /** The recovery key (build plan V1 "Recovery key"; ADR-005 amendment 2026-10-12); null leaves its routes out. */
     recovery: Recovery? = null,
+    /** The Vault's encrypted copies (Vault slice 2b): sealed bytes only; null leaves the routes out. */
+    vaultFiles: VaultFiles? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -234,6 +236,27 @@ fun Application.mekaSync(
                 val body = call.boundedBody()
                 val who = call.device(devices, verifier, body, requireKey = true)
                 call.linkReply(withContext(Dispatchers.IO) { deviceLink.unlink(who, body) })
+            }
+        }
+
+        if (vaultFiles != null) {
+            // The Vault's copies (slice 2b): sealed on the phone or Mac with the household's Vault key, so only
+            // ciphertext arrives; kept and handed back by the copy's random id within the device's household. Keyed
+            // phones and Macs only (never a watch or the publisher). Nothing about a copy is logged.
+            post(os.meka.core.wire.VaultFileCodec.PUT_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { vaultFiles.put(who, body) })
+            }
+            post(os.meka.core.wire.VaultFileCodec.GET_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { vaultFiles.get(who, body) })
+            }
+            post(os.meka.core.wire.VaultFileCodec.DELETE_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { vaultFiles.delete(who, body) })
             }
         }
 
@@ -1137,6 +1160,7 @@ fun main(args: Array<String>) {
                     fuel = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) },
                     numberLookup = numberLookup,
                     tradingExports = tradingExports,
+                    vaultFiles = VaultFiles.fromEnv(),
                 )
             }.start(wait = true)
         }
