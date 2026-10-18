@@ -335,7 +335,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
 
         // Galaxy Watch completeness slice 1: what waits to sync, cross-fading as it changes.
-        val syncLine = remember(sync) { core.watchSyncLine() }
+        // Galaxy Watch completeness slice 2: quiet hours join the foot line ("Quiet hours · until 07:00").
+        val syncLine = remember(sync, home) { listOfNotNull(core.watchSyncLine(), core.watchQuietLine()).joinToString("\n").ifEmpty { null } }
         AnimatedContent(
             targetState = syncLine,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
@@ -343,7 +344,7 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         ) { line ->
             if (line != null) {
                 Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {
-                    Line(line, MekaType.caption.copy(color = C.textTertiary))
+                    Line(line, MekaType.caption.copy(color = C.textTertiary), maxLines = 4)
                 }
             }
         }

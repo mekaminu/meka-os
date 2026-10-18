@@ -33,7 +33,8 @@ object WatchSurfaces {
 
     /**
      * A quarter-hourly sync while MEKA isn't on screen, so the tile and complication follow what the Fold and the Mac
-     * did (ADR-007's periodic job, like the phone's). Only once linked; [cancelSync] when the watch is unlinked.
+     * did (ADR-007's periodic job, like the phone's). Only once linked; [cancelSync] when the watch is unlinked. In
+     * quiet hours each run reaches the server at most hourly ([MekaCore.watchSyncDue]).
      */
     fun scheduleSync(context: Context) {
         val request = PeriodicWorkRequestBuilder<WatchSyncWorker>(15, TimeUnit.MINUTES)
@@ -53,9 +54,22 @@ class WatchSyncWorker(context: Context, params: WorkerParameters) : CoroutineWor
     override suspend fun doWork(): Result {
         val app = applicationContext as WatchApplication
         val core = app.core.value ?: return Result.success() // unlinked: nothing to sync
+        // Galaxy Watch completeness slice 2: in quiet hours the sync rests to hourly unless something waits or counts.
+        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val last = prefs.getLong(LAST_SYNC, 0L).takeIf { it > 0L }
+        if (!runCatching { core.watchSyncDue(last) }.getOrDefault(true)) {
+            WatchSurfaces.refresh(app)
+            return Result.success()
+        }
         val ok = runCatching { core.syncNow() }.getOrDefault(false)
+        if (ok) prefs.edit().putLong(LAST_SYNC, System.currentTimeMillis()).apply()
         runCatching { core.tick() }
         WatchSurfaces.refresh(app)
         return if (ok) Result.success() else Result.retry()
+    }
+
+    private companion object {
+        const val PREFS = "meka-watch-sync"
+        const val LAST_SYNC = "lastBackgroundSyncMs"
     }
 }

@@ -35,7 +35,7 @@ import os.meka.wear.designsystem.MekaType
  * Went on a booked session) and a running fast's clock. A tap on the button comes back here as the tile's last
  * clickable id and does what the watch's own button does, only while the watch still offers it; a tap anywhere else
  * opens MEKA. Drawn from the watch's own replica (no Data Layer, ADR-005 amendment 2026-10-10); it looks again each
- * minute while something counts and every quarter hour otherwise, and after every sync.
+ * minute while something counts and every quarter hour otherwise (calmer in quiet hours), and after every sync.
  */
 class WatchTileService : TileService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -124,6 +124,11 @@ class WatchTileService : TileService() {
         }
         // Galaxy Watch completeness slice 1: a quiet "Waiting to sync" while changes made here haven't gone yet.
         v.syncMark?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, C.textTertiary, 1))
+        }
+        // Galaxy Watch completeness slice 2: quiet hours, said quietly at the foot.
+        v.quietLine?.let {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, C.textTertiary, 1))
         }

@@ -54,6 +54,8 @@ data class WatchTileView(
     val prepLine: String? = null,
     /** Galaxy Watch completeness slice 1: "2 to sync" while changes made on the watch wait to be sent; else null. */
     val syncMark: String? = null,
+    /** Galaxy Watch completeness slice 2: "Quiet hours · until 07:00" while Navilife's quiet hours are on; else null. */
+    val quietLine: String? = null,
 )
 
 /** The complication's ring: [value] of 0…1 with a short [text] and [title] beside it. */

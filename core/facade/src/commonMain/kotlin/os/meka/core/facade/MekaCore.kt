@@ -4950,7 +4950,9 @@ class MekaCore(
      * the same "now" card as [watchHome]. Pure and cheap; nothing is stored.
      */
     fun watchTile(): os.meka.core.domain.WatchTileView {
-        val t = os.meka.core.domain.WatchTileRules.tile(watchHome())
+        val home = watchHome()
+        // Galaxy Watch completeness slice 2: quiet hours drop the inbox count and say so at the foot.
+        val t = os.meka.core.domain.WatchQuietRules.tile(os.meka.core.domain.WatchTileRules.tile(home), home, watchQuietLine())
         // Galaxy Watch completeness slice 1: "Waiting to sync" while changes made here wait to be sent.
         val waiting = watchPending() > 0
         val spokenMark = os.meka.core.domain.WatchSyncRules.spokenMark(waiting)
@@ -5022,7 +5024,31 @@ class MekaCore(
     }
 
     /** When the tile and complication should be drawn again with nothing synced in between. */
-    fun watchRefreshAfterMs(): Long = os.meka.core.domain.WatchTileRules.refreshAfterMs(watchHome(), nowMs())
+    fun watchRefreshAfterMs(): Long {
+        // Galaxy Watch completeness slice 2: calmer in quiet hours, never past their end.
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val quiet = _notifySettings.value.quiet
+        val on = quiet.isQuietAt(now, cal)
+        return os.meka.core.domain.WatchQuietRules.refreshAfterMs(watchHome(), now, on, if (on) quiet.endAfter(now, cal) else null)
+    }
+
+    /** Galaxy Watch completeness slice 2: "Quiet hours · until 07:00" while Navilife's quiet hours are on; else null. */
+    fun watchQuietLine(): String? =
+        os.meka.core.domain.WatchQuietRules.line(_notifySettings.value.quiet, nowMs(), ZoneCalendar(timeZone))
+
+    /**
+     * Galaxy Watch completeness slice 2: whether the watch's background sync should reach the server now, given the
+     * last run that went through at [lastSyncMs] (kept by the watch). At most hourly in quiet hours unless changes made
+     * here wait or something short is counting; always by day.
+     */
+    suspend fun watchSyncDue(lastSyncMs: Long?): Boolean = onCore {
+        refresh() // a fresh background process: the quiet hours and the day as synced
+        os.meka.core.domain.WatchQuietRules.syncDue(
+            lastSyncMs, nowMs(), watchQuietLine() != null, replica.pendingPushCount() > 0,
+            os.meka.core.domain.WatchQuietRules.urgent(watchHome()),
+        )
+    }
 
     /**
      * What "3 held for later" unfolds to in Needs you during work (Fold review 2026-10-09, item 5): sender · first line ·

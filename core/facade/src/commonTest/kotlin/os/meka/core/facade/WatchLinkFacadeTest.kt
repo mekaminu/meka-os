@@ -153,4 +153,37 @@ class WatchLinkFacadeTest {
         // Already gone on the server: still fine.
         assertTrue(watch.unlinkThisWatch())
     }
+
+    /** Galaxy Watch completeness slice 2: the watch keeps the quiet hours set on the Fold and rests its sync at night. */
+    @Test
+    fun theWatchKeepsTheFoldsQuietHoursAndRestsItsSyncAtNight() = runTest {
+        val fold = core()
+        assertTrue(fold.linkWatch("12345678"))
+        fold.setQuietHours(true, 22 * 60, 7 * 60)
+        assertTrue(fold.syncNow())
+        val watch = core(deviceId = watchId, seed = 2)
+        assertTrue(watch.syncNow())
+        watch.tick()
+
+        // 10:00: not quiet, the usual quarter-hourly look and every background sync goes.
+        assertNull(watch.watchQuietLine())
+        assertNull(watch.watchTile().quietLine)
+        assertEquals(os.meka.core.domain.WatchTileRules.CALM_REFRESH_MS, watch.watchRefreshAfterMs())
+        assertTrue(watch.watchSyncDue(now - 15 * 60_000L))
+
+        // 23:00 in London: quiet until 07:00, an hourly look and an hourly sync.
+        now += 13 * 3_600_000L
+        watch.tick()
+        assertEquals("Quiet hours · until 07:00", watch.watchQuietLine())
+        assertEquals("Quiet hours · until 07:00", watch.watchTile().quietLine)
+        assertEquals(os.meka.core.domain.WatchQuietRules.QUIET_REFRESH_MS, watch.watchRefreshAfterMs())
+        assertFalse(watch.watchSyncDue(now - 15 * 60_000L))
+        assertTrue(watch.watchSyncDue(now - 60 * 60_000L))
+
+        // A capture made on the watch with no signal still goes at the next run.
+        server.sync.online = false
+        watch.addTask("Buy milk")
+        assertFalse(watch.syncNow())
+        assertTrue(watch.watchSyncDue(now - 15 * 60_000L))
+    }
 }
