@@ -1954,4 +1954,4 @@ Core MoneyGoals.kt (rules only; nothing sent): `candidates` (open goals whose nu
 - **Ask/Talk:** `TripDocRules.askAnswer` (a travel-document word + an ask word + an open trip by name, or "the trip" with one open) runs before the Vault's own questions in `MekaCore.ask`; Open Trips under the answer. ADR-006 addendum.
 - **Where:** core/domain TripDocuments.kt (TripDocRules, TripDocs, TripDocRow); `TripRules.view(trips, today, docs)` fills `TripRow.documents`; facade refresh passes the Vault's items; Fold TripsPane (TripDocView, VaultCopyViewer, FoldBiometric); Mac TripsSheet (TripDocsView, openVaultCopyUnlocking); help tip in docs/help/trips.md; motion row "Trip documents".
 - **Data:** nothing stored or synced, no migration, no server change.
-- **Tests:** TripDocumentsTest (5), TripDocumentsFacadeTest (1). core-verify 2647 green.
+- **Tests:** TripDocumentsTest (5), TripDocumentsFacadeTest (1). core-verify 2647 green; 41b00c1, CI run 860 (39150736749) green first try.
