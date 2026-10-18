@@ -1970,6 +1970,9 @@ class MekaCore(
         )
 
     /** Whether MEKA may change [event] in its calendar (a Google/Outlook account where editing is allowed). */
+    private fun accountEditable(provider: String, account: String): Boolean =
+        _editAccounts.value.any { it.provider == provider && it.email == account }
+
     fun canEditEvent(event: os.meka.core.domain.CalendarEvent): Boolean =
         os.meka.core.domain.CalendarEditRules.editable(event) { p, a -> _editAccounts.value.any { it.provider == p && it.email == a } }
 
@@ -7303,7 +7306,11 @@ class MekaCore(
                 kids = if (kidsAsked) os.meka.core.domain.KidAskRules.askLines(kidsNow) else emptyList(),
                 kidsFromOthers = kidsAsked && os.meka.core.domain.KidAskRules.fromOthers(kidsNow),
                 // Barça match day, slice 3: only for a question about Barça, so "what's the score?" has an answer.
-                barca = if (barcaAsked) os.meka.core.domain.BarcaAskRules.askLines(barcaEvents, barcaMarks, nowMs(), cal) else emptyList())
+                barca = if (barcaAsked) os.meka.core.domain.BarcaAskRules.askLines(barcaEvents, barcaMarks, nowMs(), cal) else emptyList(),
+                // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
+                // to 4pm" carries the coming events it names, so the answer can offer a Move card.
+                movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
+                ahead = os.meka.core.domain.EventAskRules.ahead(q, currentEvents(), nowMs(), cal, ::accountEditable))
         }
         val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
@@ -7384,6 +7391,17 @@ class MekaCore(
                 val before = os.meka.core.domain.TaskTiming.of(openTask(p.taskId))
                 tasks.setWhen(p.taskId, p.day, p.minute); followBlocks(listOf(p.taskId))
                 tasks.get(p.taskId)?.let { os.meka.core.domain.AskUndo.PutBack(p.taskId, before, os.meka.core.domain.TaskTiming.of(it)) }
+            }
+            is os.meka.core.domain.AskProposal.MoveEvent -> {
+                // Edit your calendars, completeness slice 4: the event as it is now (it may have moved or gone since the
+                // card was made), moved like Save on its Edit sheet would (this one only), with the five-second Undo.
+                val event = currentEvents().firstOrNull { it.id == p.eventId }
+                    ?: throw os.meka.core.domain.ValidationException("That event isn't in your calendar any more")
+                val form = os.meka.core.domain.EventAskRules.moved(os.meka.core.domain.EditEventRules.start(event, nowMs(), cal), p)
+                when (val r = calendarEdits.change(event, os.meka.core.domain.EditEventRules.draft(form, event, nowMs(), cal), calendar = cal)) {
+                    is os.meka.core.domain.EventEditResult.Made -> os.meka.core.domain.AskUndo.TakeBackEventEdit(r.id)
+                    is os.meka.core.domain.EventEditResult.Refused -> throw os.meka.core.domain.ValidationException(r.reason)
+                }
             }
             is os.meka.core.domain.AskProposal.StartFast -> os.meka.core.domain.AskUndo.DiscardFast(fasting.startExtended(p.hours, 0))
             is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> {
@@ -7520,6 +7538,8 @@ class MekaCore(
             is os.meka.core.domain.AskUndo.PutBack ->
                 tasks.putBack(undo.taskId, undo.before, undo.after).also { if (it) followBlocks(listOf(undo.taskId)) }
             is os.meka.core.domain.AskUndo.DiscardFast -> fasting.discardIfOpen(undo.fastId)
+            // The move-event card's edit is taken back while it still waits (false once it may be on its way).
+            is os.meka.core.domain.AskUndo.TakeBackEventEdit -> calendarEdits.undo(undo.editId)
             is os.meka.core.domain.AskUndo.CancelAlarm -> alarms.cancel(undo.alarmId)
             is os.meka.core.domain.AskUndo.TakeBackShopping -> shopping.takeBack(undo.added, undo.revived)
             is os.meka.core.domain.AskUndo.PutBackDinner -> {
@@ -8220,6 +8240,8 @@ class MekaCore(
         return when (p) {
             is os.meka.core.domain.AskProposal.AddTask -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             is os.meka.core.domain.AskProposal.CompleteTask, is os.meka.core.domain.AskProposal.MoveTask -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
+            // Changes an event in Google or Outlook: always a card he taps (never earned trust, TrustRules.kindOf).
+            is os.meka.core.domain.AskProposal.MoveEvent -> ActionType.CREATE_CALENDAR_EVENT to PolicyDomain.CALENDAR
             is os.meka.core.domain.AskProposal.StartFast -> ActionType.CREATE_TASK to PolicyDomain.HEALTH
             is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> ActionType.CREATE_TASK to PolicyDomain.TASKS
             // Meka's own list (his wife sees it, but adding to it sends nothing to anyone).

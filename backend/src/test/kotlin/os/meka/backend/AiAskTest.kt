@@ -54,6 +54,19 @@ class AiAskTest {
     }
 
     @Test
+    fun aMoveOfAnEventItWasGivenAHandleForComesBackAndNoOther() {
+        // Edit your calendars, completeness slice 4: "move the dentist to 4pm".
+        val model = FakeModel(answered(
+            """{"answer":"I can move it to 16:00.","actions":[{"kind":"move_event","ref":"e1","time":"16:00"},{"kind":"move_event","ref":"e2","time":"17:00"}]}""",
+        ))
+        val withEvent = request.copy(items = request.items + AskCodec.Item("e1", "event", "15:00–16:00 · Dentist · Personal"))
+        val r = AskService(model).ask(withEvent)
+        assertEquals(listOf(AskCodec.Action("move_event", ref = "e1", time = "16:00")), r.actions)
+        assertTrue("event e1: 15:00–16:00 · Dentist · Personal" in model.asked.single().turns.single().text)
+        assertTrue("move_event" in AskService.KINDS && "move_event" in AskService.SYSTEM && "e1, e2" in AskService.SYSTEM)
+    }
+
+    @Test
     fun onlyMekasOwnActionsAboutTasksItWasToldOfComeBack() {
         val model = FakeModel(answered(
             """{"answer":"Done.","actions":[{"kind":"send_email","title":"files"},{"kind":"complete_task","ref":"t7"},

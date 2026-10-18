@@ -241,6 +241,7 @@ object TalkRules {
         is AskProposal.AddTask -> (if (past) "added " else "add ") + clean(p.title) + (p.day?.let { " for " + spokenWhen(it, p.minute, today) } ?: "")
         is AskProposal.CompleteTask -> (if (past) "ticked off " else "tick off ") + clean(p.title)
         is AskProposal.MoveTask -> (if (past) "moved " else "move ") + clean(p.title) + " to " + spokenWhen(p.day, p.minute, today)
+        is AskProposal.MoveEvent -> (if (past) "moving " else "move ") + clean(p.title) + " to " + spokenWhen(p.day, p.minute, today) + " in " + CalendarEditRules.providerName(p.provider)
         is AskProposal.StartFast -> (if (past) "started a " else "start a ") + fastWords(p.hours) + " fast"
         is AskProposal.Timer -> "set a timer for " + durationWords(p.minutes)
         is AskProposal.Alarm -> "set an alarm for " + LocalClock.formatMinute(p.minute)

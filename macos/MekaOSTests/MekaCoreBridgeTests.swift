@@ -2201,6 +2201,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TalkRules.shared.phrase(p: card.proposal, today: 0, past: true), "kept Closed the Henley deal in this week's wins")
     }
 
+    func testMoveEventFromAskReachesSwift() {
+        // "Move the dentist to 4pm" in Ask and Talk (Edit your calendars, completeness slice 4): the card's words reach the Mac.
+        let card = AskRules.shared.cardOf(p: AskProposalMoveEvent(eventId: "g1", title: "Dentist", day: 1, minute: 960, provider: "google"), today: 0)
+        XCTAssertEqual(card.line, "Move “Dentist” to Tomorrow · 16:00 · Google")
+        XCTAssertEqual(card.button, "Move")
+        XCTAssertNil(TrustRules.shared.kindOf(p: card.proposal))
+    }
+
     func testQueueDoneFromAskReachesSwift() {
         // "I've read the BBC one" in Ask and Talk (train-time queue, slice 3): the card's words reach the Mac.
         let card = AskRules.shared.cardOf(p: AskProposalQueueDone(id: "q1", title: "Why trains run late"), today: 0)

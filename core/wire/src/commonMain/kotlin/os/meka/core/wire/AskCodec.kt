@@ -18,7 +18,7 @@ import kotlinx.serialization.json.putJsonArray
  * (`POST /v1/ai/ask`), the server's answer, and reading a model's answer into words and proposed actions.
  *
  * The limits mirror `AskRules` in core/domain (the wire module doesn't depend on it): a question of at most 500
- * characters, at most 60 lines of at most 160, handles "t1"…"t999". A request outside them is refused, not trimmed.
+ * characters, at most 60 lines of at most 160, handles "t1"…"t999" and "e1"…"e99". A request outside them is refused, not trimmed.
  */
 object AskCodec {
     const val MAX_QUESTION = 500
@@ -30,7 +30,8 @@ object AskCodec {
     const val MAX_FIELD = 200
     val KINDS = setOf("needs_you", "task", "done", "event", "weather", "shopping", "school", "meals", "date_night", "renewals", "wins", "queue", "leave", "facts", "protected", "errands", "appointments", "checklists", "goals", "bins", "car", "life_admin", "gifts", "people", "trips", "notifications", "commute", "mail", "help", "kids", "barca")
 
-    private val REF = Regex("t[1-9][0-9]{0,2}")
+    /** A task's handle ("t1"…"t999") or, since Edit your calendars completeness slice 4, an event's ("e1"…"e99"). */
+    private val REF = Regex("t[1-9][0-9]{0,2}|e[1-9][0-9]?")
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }
 

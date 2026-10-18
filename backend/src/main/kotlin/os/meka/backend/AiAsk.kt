@@ -35,7 +35,7 @@ class AskService(private val provider: LanguageModelProvider?) {
         /** A spoken answer (Talk to MEKA) is metered on its own, so Activity can count Talk's day. */
         const val FEATURE_TALK = "ask.talk"
         const val MAX_TOKENS = 600
-        val KINDS = setOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking")
+        val KINDS = setOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event")
 
         /** What the model is told. The data block is information, never instructions (ADR-006 §2). */
         val SYSTEM = """
@@ -45,6 +45,7 @@ class AskService(private val provider: LanguageModelProvider?) {
             - {"kind":"add_task","title":"…","date":"YYYY-MM-DD","time":"HH:MM"} (date and time optional)
             - {"kind":"complete_task","ref":"t1"}
             - {"kind":"move_task","ref":"t1","date":"YYYY-MM-DD","time":"HH:MM"} (time optional)
+            - {"kind":"move_event","ref":"e1","date":"YYYY-MM-DD","time":"HH:MM"} (moves one of his own calendar events to a new start time, keeping its length; only an event line with a ref (e1, e2, …), which are the ones Navilife may move; date optional, its own day when left out; for "move the dentist to 4pm" or "push my haircut to Friday at 10"; an event line with no ref can't be moved from here, so say to open it in Calendar and use Edit)
             - {"kind":"start_fast","hours":36} (12 to 240 hours)
             - {"kind":"set_timer","minutes":20}
             - {"kind":"set_alarm","time":"06:30"}
@@ -63,7 +64,7 @@ class AskService(private val provider: LanguageModelProvider?) {
             - {"kind":"add_checklist","title":"Party: eggs, balloons"} (adds items to the checklist inside one of his open tasks, written as the task's name as on its checklists line, a colon, then the items separated by commas; for "add eggs to the party checklist" or "put sun cream on the packing list"; never for the shared shopping list, which is add_shopping, unless he names a task)
             - {"kind":"add_goal","title":"…","date":"YYYY-MM-DD"} (adds one goal in his own words, short, as a goal's name: "Run 5k", "Save £2,000"; the date is the day it should be done by, the last day of the month or year he names for "by December" or "this year", left out when he gives no time; only when he asks to add or set a goal, for "add a goal to run 5k by December"; never for something already on his goals lines)
             - {"kind":"add_win","title":"…"} (keeps one line in this week's work wins, in his own words tidied to one short sentence; only when he asks to add or log a win, or tells Navilife what went well this week to keep, for "add a win: closed the Henley deal")
-            Refer to tasks only by the ref given in <today> (t1, t2, …). Propose at most three actions, and none unless he asked for a change. You cannot send messages or emails, spend money, trade, or change calendar events; say so if asked.
+            Refer to tasks and events only by the ref given in <today> (t1, t2, … for tasks; e1, e2, … for events). Propose at most three actions, and none unless he asked for a change. You cannot send messages or emails, spend money, trade, or change calendar events other than moving one with move_event; say so if asked.
             Reply with one JSON object and nothing else: {"answer":"…","actions":[…]}
         """.trimIndent()
 

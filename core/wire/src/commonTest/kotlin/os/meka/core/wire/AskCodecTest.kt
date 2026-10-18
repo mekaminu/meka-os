@@ -77,7 +77,12 @@ class AskCodecTest {
         // The commute counts everywhere (slice 5): a kind of its own.
         val commute = req.copy(items = listOf(AskCodec.Item("", "commute", "Tomorrow · Fri 9 Oct · office day · leave 07:40 · work 09:00–17:30 · home about 18:50")))
         assertEquals(commute, AskCodec.decodeRequest(AskCodec.encodeRequest(commute)))
+        // Edit your calendars, completeness slice 4: an event Navilife may move carries its handle ("e1").
+        val movable = req.copy(items = listOf(AskCodec.Item("e1", "event", "15:00–16:00 · Dentist · Personal")))
+        assertEquals(movable, AskCodec.decodeRequest(AskCodec.encodeRequest(movable)))
         fun bad(r: AskCodec.Request) = assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(r)) }
+        bad(req.copy(items = listOf(AskCodec.Item("e100", "event", "x"))))
+        bad(req.copy(items = listOf(AskCodec.Item("e0", "event", "x"))))
         bad(req.copy(question = "  "))
         bad(req.copy(question = "q".repeat(501)))
         bad(req.copy(date = "tomorrow"))

@@ -21,6 +21,7 @@ import os.meka.core.testing.FaultyTransport
 import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotEquals
@@ -1773,6 +1774,44 @@ class MekaCoreTest {
         assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
         assertEquals(del, mac.eventDetail(dentist).edit?.editId)
         assertIs<os.meka.core.domain.EventEditResult.Refused>(mac.deleteEvent(dentist, guestsOk = false)) // the Mac hasn't read its accounts
+    }
+
+    @Test
+    fun askMovesAnEventOnHisTapWithTheFiveSecondUndo() = runTest {
+        // Edit your calendars, completeness slice 4: "move the dentist to 4pm" comes back as a Move card; the tap is an
+        // ordinary edit of this event (its length kept), and Undo takes it back while it waits.
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = core("android", server)
+        val start = now + 2 * 3_600_000L
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        var k = 0
+        mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("Dentist"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(start),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(start + 40 * 60_000L),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("meka@gmail.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (f, v) ->
+            serverOps.append(os.meka.core.sync.Op("srvmv${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "evmv", f, v, clock.now(), emptyList(), "server"))
+        }
+        assertTrue(fold.syncNow())
+        fold.refreshCalendarAccounts()
+        val cal = ZoneCalendar { TimeZone.of("Europe/London") }
+        val newStart = start + 3_600_000L
+        val p = os.meka.core.domain.AskProposal.MoveEvent("evmv", "Dentist", cal.epochDayOf(newStart), cal.minuteOfDay(newStart), "google")
+        val card = os.meka.core.domain.AskRules.cardOf(p, cal.epochDayOf(now))
+        val done = fold.doAsk(card)
+        assertTrue(done.line.startsWith("Moving “Dentist” to "), done.line)
+        assertNull(done.offer) // never earned trust
+        val undo = assertIs<os.meka.core.domain.AskUndo.TakeBackEventEdit>(done.undo)
+        assertEquals("Moving “Dentist” in Google", fold.eventEditLine(undo.editId))
+        assertTrue(fold.undoAsk(undo))
+        assertFalse(fold.undoAsk(undo)) // already taken back
+        // Gone from the calendar since the card was made: said in words.
+        assertFailsWith<os.meka.core.domain.ValidationException> { fold.doAsk(card.copy(proposal = p.copy(eventId = "gone"))) }
     }
 
     @Test

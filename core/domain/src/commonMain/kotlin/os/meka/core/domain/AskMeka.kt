@@ -27,6 +27,11 @@ data class AskContext(
     val items: List<AskItem>,
     val taskIds: Map<String, String>,
     val untrusted: Boolean,
+    /**
+     * Edit your calendars, completeness slice 4: each event handle ("e1") with the event as a card needs it, for the
+     * events Navilife may move by itself ([EventAskRules.movable]). Never leaves the device.
+     */
+    val eventRefs: Map<String, AskEventRef> = emptyMap(),
 ) {
     companion object {
         val EMPTY = AskContext("", "", emptyList(), emptyMap(), untrusted = false)
@@ -49,6 +54,11 @@ sealed interface AskProposal {
     data class AddTask(val title: String, val day: Long?, val minute: Int?) : AskProposal
     data class CompleteTask(val taskId: String, val title: String) : AskProposal
     data class MoveTask(val taskId: String, val title: String, val day: Long, val minute: Int?) : AskProposal
+    /**
+     * Edit your calendars, completeness slice 4: moves one of Meka's own calendar events ([eventId], called [title],
+     * on [provider]) to [day] at [minute], keeping its length; an ordinary edit with the five-second Undo, on his tap only.
+     */
+    data class MoveEvent(val eventId: String, val title: String, val day: Long, val minute: Int, val provider: String) : AskProposal
     data class StartFast(val hours: Int) : AskProposal
     data class Timer(val minutes: Int) : AskProposal
     data class Alarm(val minute: Int) : AskProposal
@@ -179,6 +189,8 @@ sealed interface AskUndo {
     data class RemoveGoal(val goalId: String) : AskUndo
     /** The reading card: the list's last change ([token], Reading's own Undo) is taken back while it is still the last. */
     data class PutBackReading(val token: String) : AskUndo
+    /** The move-event card: its calendar edit ([editId]) is taken back while it still waits (the five-second Undo). */
+    data class TakeBackEventEdit(val editId: String) : AskUndo
 }
 
 /**
@@ -203,6 +215,8 @@ object AskRules {
     const val MAX_ANSWER = 1200
     const val MAX_CARDS = 3
     const val MAX_TITLE = 120
+    /** Event handles one question carries at most ("e1"…"e20"). */
+    const val MAX_EVENT_REFS = 20
     /** Proposals may plan up to two years ahead, like When. */
     const val MAX_DAYS_AHEAD = 730
     const val FAST_MIN_HOURS = 12
@@ -212,7 +226,7 @@ object AskRules {
     const val MAX_SHOPPING = 10
 
     /** The kinds of proposal MEKA understands; anything else is dropped. Wire names, never renamed. */
-    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking")
+    val KINDS = listOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event")
 
     /** The question as sent: one line, trimmed, at most [MAX_QUESTION] characters; null when there's nothing to ask. */
     fun question(text: String?): String? =
@@ -234,7 +248,8 @@ object AskRules {
                 notifications: List<String> = emptyList(), commute: List<String> = emptyList(),
                 mail: List<String> = emptyList(), help: List<String> = emptyList(),
                 kids: List<String> = emptyList(), kidsFromOthers: Boolean = false,
-                barca: List<String> = emptyList()): AskContext {
+                barca: List<String> = emptyList(),
+                movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
         val dateIso = isoDate(day)
@@ -267,10 +282,22 @@ object AskRules {
             items += AskItem(ref(t), AskItemKind.TASK, line(t.title, if (t == today.upNext) "up next" else null, whenOf(t) ?: "anytime today"))
         }
         today.doneToday.forEach { t -> items += AskItem("", AskItemKind.DONE, line(t.title, "done")) }
+        // Edit your calendars, completeness slice 4: an event Navilife may move gets a handle ("e1"), so "move the
+        // dentist to 4pm" can come back as a card; a move question also carries the coming events it names ([ahead]).
+        val eventRefs = linkedMapOf<String, AskEventRef>()
+        fun eventRef(e: CalendarEvent): String {
+            if (!movable(e)) return ""
+            eventRefs.entries.firstOrNull { it.value.eventId == e.id }?.let { return it.key }
+            if (eventRefs.size >= MAX_EVENT_REFS) return ""
+            return "e${eventRefs.size + 1}".also { eventRefs[it] = EventAskRules.ref(e, cal) }
+        }
         today.events.forEach { e ->
             val time = if (e.allDay) "all day" else "${LocalClock.formatMinute(cal.minuteOfDay(e.startAtMs))}–${LocalClock.formatMinute(cal.minuteOfDay(e.endAtMs))}"
             val ended = !e.allDay && e.endAtMs <= nowMs
-            items += AskItem("", AskItemKind.EVENT, line(time, e.title, if (e.isFixture) e.calendarName else CalendarRules.name(e), e.location, if (ended) "over" else null))
+            items += AskItem(eventRef(e), AskItemKind.EVENT, line(time, e.title, if (e.isFixture) e.calendarName else CalendarRules.name(e), e.location, if (ended) "over" else null))
+        }
+        ahead.filter { a -> today.events.none { it.id == a.id } }.forEach { e ->
+            items += AskItem(eventRef(e), AskItemKind.EVENT, line(EventAskRules.aheadLine(e, cal), e.location))
         }
         // The shopping list (one line: what's to buy, oldest first), so "what's on the shopping list?" can be answered.
         val shop = shopping?.takeIf { it.toBuy.isNotEmpty() || it.got.isNotEmpty() }?.let { shoppingLine(it) }
@@ -349,7 +376,7 @@ object AskRules {
         val keptRefs = kept.map { it.ref }.toSet()
         // Things his wife added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty())
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty())
     }
 
     /** "Shopping list · 3 to buy: milk, eggs, bread" / "Shopping list · nothing to buy". */
@@ -450,6 +477,11 @@ object AskRules {
             "add_gift_idea" -> GiftAskRules.proposal(occasions, a.title) ?: return null
             "add_promise" -> PeopleAskRules.proposal(people.rows, promised, a.title, day()) ?: return null
             "add_booking" -> TripAskRules.proposal(trips, a.title, day(), minute, today, cal.minuteOfDay(nowMs)) ?: return null
+            // Edit your calendars, completeness slice 4: only an event MEKA sent a handle for; a bad day or time isn't guessed at.
+            "move_event" -> {
+                if ((a.time != null && minute == null) || (a.date != null && day() == null)) return null
+                EventAskRules.proposal(context.eventRefs[a.ref?.trim()], a.date?.let { day() }, minute, nowMs, cal) ?: return null
+            }
             else -> return null
         }
         return cardOf(proposal, today)
@@ -520,6 +552,7 @@ object AskRules {
         is AskProposal.AddTask -> "Added “${p.title}”"
         is AskProposal.CompleteTask -> "Ticked off “${p.title}”"
         is AskProposal.MoveTask -> "Moved “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)}"
+        is AskProposal.MoveEvent -> "Moving “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)} in ${CalendarEditRules.providerName(p.provider)}"
         is AskProposal.StartFast -> "Started a ${fastLabel(p.hours)} fast"
         is AskProposal.Timer -> "Timer set · ${durationLabel(p.minutes)}"
         is AskProposal.Alarm -> "Alarm set · ${LocalClock.formatMinute(p.minute)}"
@@ -546,6 +579,7 @@ object AskRules {
         is AskProposal.AddTask -> AskCard(p, "Add “${p.title}”" + (p.day?.let { " · " + TaskWhenRules.label(it, p.minute, today) } ?: ""), "Add")
         is AskProposal.CompleteTask -> AskCard(p, "Tick off “${p.title}”", "Done")
         is AskProposal.MoveTask -> AskCard(p, "Move “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)}", "Move")
+        is AskProposal.MoveEvent -> AskCard(p, "Move “${p.title}” to ${TaskWhenRules.label(p.day, p.minute, today)} · ${CalendarEditRules.providerName(p.provider)}", "Move")
         is AskProposal.StartFast -> AskCard(p, "Start a ${fastLabel(p.hours)} fast", "Start")
         is AskProposal.Timer -> AskCard(p, "Timer · ${durationLabel(p.minutes)}", "Set")
         is AskProposal.Alarm -> AskCard(p, "Alarm · ${LocalClock.formatMinute(p.minute)}", "Set")

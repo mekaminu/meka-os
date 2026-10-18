@@ -83,6 +83,9 @@ object TrustRules {
         is AskProposal.AddPromise -> null
         // A booking (Travel mode slice 2a) goes into Meka's own trip, so he always sees it before it's kept.
         is AskProposal.AddBooking -> null
+        // Moving a calendar event (Edit your calendars, completeness slice 4) changes Google or Outlook, and an event's
+        // title can be someone else's words, so Meka always taps it himself.
+        is AskProposal.MoveEvent -> null
     }
 
     fun read(fields: Map<String, FieldValue>?): Map<TrustKind, TrustState> = TrustKind.entries.associateWith { k ->
