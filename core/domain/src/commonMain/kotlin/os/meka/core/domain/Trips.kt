@@ -130,7 +130,7 @@ object TripRules {
     const val NO_DAY = "Navilife couldn't read a day in that booking. Try \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
     const val NO_TRIP = "Add the trip first, with its dates (\"Barcelona 14–18 Nov\"), then its bookings."
     const val NO_BOOKINGS = "Nothing booked yet. Type each booking above with its day: \"Hotel Arts 14–18 Nov\"."
-    const val NOTE = "Typed by you. Bookings from your email and travel documents offline come later (with mail access and the Vault)."
+    const val NOTE = "Typed by you, times as on your tickets: the way there in UK time, the rest local. Bookings from your email come with mail access."
 
     private val KINDS: Map<String, BookingKind> = buildMap {
         listOf("flight", "flights", "fly", "flying", "plane").forEach { put(it, BookingKind.FLIGHT) }
@@ -290,19 +290,21 @@ object TripRules {
 
     private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 
-    /** "Sat 14 – Wed 18 Nov · 5 days · 3 bookings". */
-    fun rowLine(t: TripItem): String = listOfNotNull(
+    /** "Sat 14 – Wed 18 Nov · 5 days · 3 bookings", then "1 h ahead of UK time" when the destination's clock differs. */
+    fun rowLine(t: TripItem, clocks: TripClocks? = null): String = listOfNotNull(
         CalendarAgenda.spanLabel(t.startDay, t.endDay),
         plural(t.days, "day"),
         t.bookings.size.takeIf { it > 0 }?.let { plural(it, "booking") },
+        TripZoneRules.tripLine(t, clocks),
     ).joinToString(" · ")
 
     /** Each booking's lines by day: its own day, and a stay's check-out (a hire car's drop-off) on its last day. */
-    private fun linesByDay(t: TripItem): Map<Long, List<TripLineRow>> {
+    private fun linesByDay(t: TripItem, clocks: TripClocks?): Map<Long, List<TripLineRow>> {
         data class K(val day: Long, val minute: Int, val line: TripLineRow)
         val out = mutableListOf<K>()
         for (b in t.bookings) {
-            val text = bookingText(b) + if (b.endDay != null) " · until ${CivilDate.shortLabel(b.endDay)}" else ""
+            val text = bookingText(b) + (if (b.endDay != null) " · until ${CivilDate.shortLabel(b.endDay)}" else "") +
+                (TripZoneRules.ukTime(b, t, clocks)?.let { " · $it" } ?: "")
             val lead = time(b.minute) ?: b.kind.label
             out += K(b.day, b.minute ?: -1, TripLineRow("bk-${b.id}", b.id, lead, text, "$lead, $text"))
             if (b.endDay != null) {
@@ -315,8 +317,8 @@ object TripRules {
     }
 
     /** The trip's days that have something booked (and its first day, always), "Sat 14 Nov · day 1". */
-    fun timeline(t: TripItem): List<TripDayRow> {
-        val byDay = linesByDay(t)
+    fun timeline(t: TripItem, clocks: TripClocks? = null): List<TripDayRow> {
+        val byDay = linesByDay(t, clocks)
         val days = (byDay.keys + t.startDay).distinct().sorted()
         return days.map { d ->
             val n = d - t.startDay + 1
@@ -360,15 +362,15 @@ object TripRules {
     }
 
     /** The Trips pane: on now, then to come soonest first, then those just ended. */
-    fun view(trips: List<TripItem>, today: Long, docs: List<DocumentItem>? = null): TripsView {
+    fun view(trips: List<TripItem>, today: Long, docs: List<DocumentItem>? = null, clocks: TripClocks? = null): TripsView {
         val list = shown(trips, today)
         if (list.isEmpty()) return TripsView.EMPTY
         val ordered = list.filter { it.endDay >= today } + list.filter { it.endDay < today }.sortedByDescending { it.endDay }
         val rows = ordered.map { t ->
             val status = status(t, today)
-            val line = rowLine(t)
+            val line = rowLine(t, clocks)
             TripRow(
-                t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t), "${t.name}. $line. $status",
+                t.id, t.name, line, status, today in t.startDay..t.endDay, timeline(t, clocks), "${t.name}. $line. $status",
                 docs?.let { TripDocRules.forTrip(t, it, today) },
             )
         }
@@ -516,20 +518,23 @@ object TripAskRules {
      * Sat 14 Nov 07:40 · Flight BA478 · ref ABC123", "Barcelona · Stay · Sat 14 – Wed 18 Nov · Hotel Arts". Trips
      * already over are left out; nothing at all while none is on or coming.
      */
-    fun askLines(trips: List<TripItem>, today: Long): List<String> {
+    fun askLines(trips: List<TripItem>, today: Long, clocks: TripClocks? = null): List<String> {
         val live = trips.filter { it.endDay >= today }.sortedBy { it.startDay }
         if (live.isEmpty()) return emptyList()
         val out = mutableListOf("Trips · ${live.size} on now or coming" + if (live.size > ASK_TRIPS) " · the first $ASK_TRIPS below" else "")
         for (t in live.take(ASK_TRIPS)) {
-            out += listOf(
+            out += listOfNotNull(
                 "Trip", t.name, CalendarAgenda.spanLabel(t.startDay, t.endDay), plural(t.days, "day"),
                 TripRules.status(t, today).replaceFirstChar { it.lowercase() },
                 if (t.bookings.isEmpty()) "nothing booked yet" else plural(t.bookings.size, "booking"),
+                clocks?.local(t)?.let { z -> TripZoneRules.tripLine(t, clocks)?.let { "${z.label} time is $it; booking times are local, the way there UK time" } },
             ).joinToString(" · ")
             for (b in t.bookings.take(ASK_BOOKINGS)) {
                 val whenText = (if (b.endDay != null) CalendarAgenda.spanLabel(b.day, b.endDay) else CivilDate.shortLabel(b.day)) +
                     (b.minute?.let { " " + LocalClock.formatMinute(it) } ?: "")
-                out += listOfNotNull(t.name, b.kind.label, whenText, b.title, b.ref?.let { "ref $it" }).joinToString(" · ")
+                out += listOfNotNull(
+                    t.name, b.kind.label, whenText, b.title, b.ref?.let { "ref $it" }, TripZoneRules.ukTime(b, t, clocks)?.let { "($it)" },
+                ).joinToString(" · ")
             }
             if (t.bookings.size > ASK_BOOKINGS) out += "${t.name} · ${t.bookings.size - ASK_BOOKINGS} more bookings"
         }

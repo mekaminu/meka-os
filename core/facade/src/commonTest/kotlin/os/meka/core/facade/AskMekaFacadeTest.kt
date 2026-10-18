@@ -556,7 +556,7 @@ class AskMekaFacadeTest {
         val out = assertIs<AskOutcome.Answered>(c.askMeka("Add our flight BA478 on the 14th at 7:40, ref ABC123"))
         val ctx = server.asked.last().second
         assertEquals(
-            listOf("Trips · 1 on now or coming", "Trip · Barcelona · Wed 14 – Fri 16 Oct · 3 days · in 6 days · nothing booked yet"),
+            listOf("Trips · 1 on now or coming", "Trip · Barcelona · Wed 14 – Fri 16 Oct · 3 days · in 6 days · nothing booked yet · Barcelona time is 1 h ahead of UK time; booking times are local, the way there UK time"),
             ctx.items.filter { it.kind == AskItemKind.TRIPS }.map { it.line },
         )
         assertFalse(ctx.untrusted)
@@ -566,12 +566,12 @@ class AskMekaFacadeTest {
 
         val done = c.doAsk(out.answer.cards.single())
         assertEquals("Added to Barcelona · Flight BA478 · Wed 14 Oct 07:40 · ref ABC123", done.line)
-        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking", c.tripsView.value.rows.single().line)
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking · 1 h ahead of UK time", c.tripsView.value.rows.single().line)
         assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
 
         // Undo takes the booking off, once.
         assertTrue(c.undoAsk(assertIs<AskUndo.RemoveBooking>(done.undo)))
-        assertEquals("Wed 14 – Fri 16 Oct · 3 days", c.tripsView.value.rows.single().line)
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 h ahead of UK time", c.tripsView.value.rows.single().line)
         assertFalse(c.undoAsk(done.undo!!))
     }
 

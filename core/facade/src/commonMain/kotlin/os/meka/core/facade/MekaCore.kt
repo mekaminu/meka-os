@@ -467,6 +467,15 @@ class MekaCore(
      * timeline; Today's header shows the trip a week ahead and while it's on.
      */
     val tripsView: StateFlow<os.meka.core.domain.TripsView> = _trips.asStateFlow()
+
+    /**
+     * Travel mode completeness, slice 2: the UK's clock and each destination's (by the trip's name), so a booking at the
+     * destination shows UK time beside it ([os.meka.core.domain.TripZoneRules]). Zones the device doesn't know add nothing.
+     */
+    private val tripClocks by lazy {
+        val uk = runCatching { TimeZone.of("Europe/London") }.getOrDefault(TimeZone.UTC)
+        os.meka.core.domain.TripClocks(ZoneCalendar { uk }) { id -> runCatching { TimeZone.of(id) }.getOrNull()?.let { z -> ZoneCalendar { z } } }
+    }
     private val _documents = MutableStateFlow(os.meka.core.domain.DocumentsView.EMPTY)
     // The Vault key (Vault slice 2a): declared before init's first refresh.
     /**
@@ -7559,7 +7568,7 @@ class MekaCore(
                 // People, slice 3: promises both ways, birthdays and last contact, so "what did I promise Jordan?" has an answer.
                 people = os.meka.core.domain.PeopleAskRules.askLines(_people.value),
                 // Travel mode, slice 2a: each trip on now or coming with its bookings, so "when do we fly?" has an answer.
-                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs())),
+                trips = os.meka.core.domain.TripAskRules.askLines(trips.items(), cal.epochDayOf(nowMs()), tripClocks),
                 // Notifications never seen, slice 4: only for a question about notifications, so "why didn't I get a notification?" has an answer.
                 notifications = if (notifyAsked) os.meka.core.domain.NotifyAskRules.askLines(notifyHealth, notifySettings, nowMs(), cal) else emptyList(),
                 // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
@@ -9428,7 +9437,7 @@ class MekaCore(
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         val docItems = documents.items()
-        _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems)
+        _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
         _documents.value = os.meka.core.domain.DocumentRules.view(docItems, todayDay, cal, vaultName())
         vaultKeyNow()
         val heldNow = _afterWork.value

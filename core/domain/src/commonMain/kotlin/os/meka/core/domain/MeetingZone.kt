@@ -20,7 +20,7 @@ object MeetingZoneRules {
     const val DAY_START_MIN = 8 * 60
     const val DAY_END_MIN = 18 * 60
 
-    private val PLACES = listOf(
+    internal val PLACES = listOf(
         "New York" to "America/New_York", "Boston" to "America/New_York", "Washington" to "America/New_York",
         "Toronto" to "America/Toronto", "Chicago" to "America/Chicago", "Denver" to "America/Denver",
         "Los Angeles" to "America/Los_Angeles", "San Francisco" to "America/Los_Angeles", "Seattle" to "America/Los_Angeles",

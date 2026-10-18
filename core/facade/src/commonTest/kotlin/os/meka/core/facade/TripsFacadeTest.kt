@@ -39,8 +39,10 @@ class TripsFacadeTest {
 
         fold.syncNow(); mac.syncNow()
         val row = mac.tripsView.value.rows.single()
-        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking", row.line)
+        // Slice 2 of completeness: Barcelona's clock is an hour ahead; the way there is UK time, so nothing beside it.
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking · 1 h ahead of UK time", row.line)
         assertEquals(listOf("07:40"), row.timeline.single().lines.map { it.lead })
+        assertEquals(listOf("Flight BA478 · ref ABC123"), row.timeline.single().lines.map { it.text })
         // The week ahead (from Saturday, next week) shows the trip and the flight on Wednesday.
         val wed = mac.weekAheadView.value.days.first { it.label.startsWith("Wed") }
         assertEquals(
