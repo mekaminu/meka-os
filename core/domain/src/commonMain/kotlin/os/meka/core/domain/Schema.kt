@@ -289,6 +289,14 @@ object ObligationFields {
      * due's one reminder covers it.
      */
     const val FOR_CHILD = "forChild"
+    /**
+     * Bills due, completeness (2026-10-19, additive, LWW): the cost in pence before Meka last changed it
+     * ([Renewals.setCost]), so this period's reminder can say the bill went up or down; Null when it hasn't changed.
+     * Only shown while the due day is still [PREV_COST_FOR] (the period the change was made in).
+     */
+    const val PREV_COST = "prevCostMinor"
+    /** The due time ([ActionableFields.DUE_AT], ms) the [PREV_COST] change belongs to; Done moving it on ends the flag. */
+    const val PREV_COST_FOR = "prevCostForMs"
 }
 
 object GoalFields {

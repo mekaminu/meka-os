@@ -673,7 +673,8 @@ object MoneyRules {
                 mine.map { MoneyPayLine(it.account, it.day, it.pence, keyOf(it), cat(it)) }, today, names,
                 counted.mapNotNull { a -> a.balance?.let { a.id to it } }.toMap(),
                 // Slice 7: a card's statement due before payday is still to go out (Paid takes it off).
-                bills + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
+                // Bills due, completeness: a radar bill that is a card's payment counts once, as the card's.
+                BillRules.withoutCards(bills, cards.filter { it.id in names }, today) + MoneyCards.bills(cards.filter { it.id in names }, today), holidays,
             ) else null,
             cards = if (partial) MoneyCards.view(
                 cards.filter { it.id in names }, counted, mine.map { MoneyCardLine(it.account, it.day, it.pence, it.text) }, today,

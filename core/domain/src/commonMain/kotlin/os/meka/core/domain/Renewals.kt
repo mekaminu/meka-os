@@ -65,6 +65,12 @@ data class RenewalItem(
     val payLink: String? = null,
     /** Kids' admin, slice 2: the child a club fee is for (the `kid_admin` id, "c-alex"), or null. */
     val forChild: String? = null,
+    /**
+     * Bills due, completeness: what the bill cost last time, when that differs from [costPence] by £1 or more — his own
+     * change of cost this period ([ObligationFields.PREV_COST]), or for a bill read from email the same payee's last
+     * paid one ([BillRules.previousCost]). Null otherwise.
+     */
+    val prevCostPence: Long? = null,
 ) {
     /** Shown in Needs you and counted in its badge. */
     val needsAttention: Boolean get() = state != RenewalState.LATER
@@ -511,15 +517,28 @@ class Renewals(
 
     /** Sets the cost from typed text; blank clears it. */
     fun setCost(id: String, cost: String?) {
-        live(id)
+        val s = live(id)
         val pence = RenewalRules.parseCost(cost)
-        replica.commitLocal(
-            EntityTypes.OBLIGATION, id,
-            mapOf(
-                ObligationFields.COST_MINOR to (pence?.fv() ?: FieldValue.Null),
-                ObligationFields.CURRENCY to (if (pence == null) FieldValue.Null else CURRENCY.fv()),
-            ),
+        val changes = linkedMapOf(
+            ObligationFields.COST_MINOR to (pence?.fv() ?: FieldValue.Null),
+            ObligationFields.CURRENCY to (if (pence == null) FieldValue.Null else CURRENCY.fv()),
         )
+        // Bills due, completeness: remember what it cost before, for this period's reminder ("£10 more than last time").
+        // A second change in the same period keeps the first "before"; changing it back, or clearing it, ends the flag.
+        val old = s[ObligationFields.COST_MINOR].longOrNull
+        val due = s[ActionableFields.DUE_AT].longOrNull
+        val keptFor = s[ObligationFields.PREV_COST_FOR].longOrNull
+        val before = s[ObligationFields.PREV_COST].longOrNull?.takeIf { keptFor != null && keptFor == due } ?: old
+        if (pence != old) {
+            if (pence != null && before != null && before != pence && due != null) {
+                changes[ObligationFields.PREV_COST] = before.fv()
+                changes[ObligationFields.PREV_COST_FOR] = due.fv()
+            } else {
+                changes[ObligationFields.PREV_COST] = FieldValue.Null
+                changes[ObligationFields.PREV_COST_FOR] = FieldValue.Null
+            }
+        }
+        replica.commitLocal(EntityTypes.OBLIGATION, id, changes)
     }
 
     fun setLead(id: String, days: Int) {
@@ -592,7 +611,16 @@ class Renewals(
 
     fun items(): List<RenewalItem> {
         val today = today()
-        return replica.entities(EntityTypes.OBLIGATION)
+        val all = replica.entities(EntityTypes.OBLIGATION)
+        // Bills due, completeness: bills he has paid (one-offs closed with Paid), for a new bill's "last time".
+        val paid = all.mapNotNull { s ->
+            if (s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) } != Lifecycle.DONE) return@mapNotNull null
+            if (s[ObligationFields.KIND].textOrNull?.let { enumOrNull<ObligationKind>(it) } != ObligationKind.BILL) return@mapNotNull null
+            val cost = s[ObligationFields.COST_MINOR].longOrNull ?: return@mapNotNull null
+            val due = dueDayOf(s) ?: return@mapNotNull null
+            PaidBill(s[ActionableFields.TITLE].textOrNull ?: return@mapNotNull null, due, cost)
+        }
+        return all
             .filter { s -> s[ActionableFields.LIFECYCLE].textOrNull?.let { enumOrNull<Lifecycle>(it) }?.isTerminal != true }
             .mapNotNull { s ->
                 val due = dueDayOf(s) ?: return@mapNotNull null
@@ -604,9 +632,14 @@ class Renewals(
                 val cost = s[ObligationFields.COST_MINOR].longOrNull
                 val repeat = if (rawRule != null && rule == null) null else RenewalRules.repeatOf(rule)
                 val returning = rule == null && MailReturnRules.isReturn(s[ActionableFields.TITLE].textOrNull)
+                val title = s[ActionableFields.TITLE].textOrNull ?: ""
+                val keptPrev = s[ObligationFields.PREV_COST].longOrNull
+                    ?.takeIf { s[ObligationFields.PREV_COST_FOR].longOrNull == s[ActionableFields.DUE_AT].longOrNull }
+                val prev = (keptPrev ?: if (kind == ObligationKind.BILL && rule == null) BillRules.previousCost(title, due, paid) else null)
+                    ?.takeIf { cost != null && BillRules.changed(it, cost) }
                 RenewalItem(
                     id = s.ref.entityId,
-                    title = s[ActionableFields.TITLE].textOrNull ?: "",
+                    title = title,
                     kind = kind,
                     subject = s[ObligationFields.SUBJECT_LABEL].textOrNull,
                     notes = s[ActionableFields.NOTES].textOrNull,
@@ -617,7 +650,8 @@ class Renewals(
                     repeats = repeat,
                     repeatLabel = repeat?.let(RenewalRules::repeatLabel) ?: rule?.describe() ?: "Repeats (set on a newer version)",
                     state = RenewalRules.state(due, cancel, lead, today),
-                    meta = RenewalRules.meta(kind, due, cancel, cost, rule, today),
+                    meta = RenewalRules.meta(kind, due, cancel, cost, rule, today) +
+                        (if (prev != null && cost != null) " · " + BillRules.changeShort(prev, cost) else ""),
                     // Returns and warranties, completeness: a return reminder reads Sent it back · Keeping it.
                     doneLabel = if (returning) MailReturnRules.SENT_BACK_LABEL else RenewalRules.doneLabel(kind),
                     stopLabel = if (returning) MailReturnRules.KEEPING_LABEL else RenewalRules.stopLabel(kind),
@@ -625,6 +659,7 @@ class Renewals(
                     nextDueDay = rule?.next(due),
                     payLink = SessionRules.cleanAppLink(s[ObligationFields.PAY_LINK].textOrNull),
                     forChild = s[ObligationFields.FOR_CHILD].textOrNull?.takeIf { it.isNotBlank() },
+                    prevCostPence = prev,
                 )
             }
     }

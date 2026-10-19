@@ -260,8 +260,12 @@ object MoneyCards {
         return if (value == null) "$name's $label cleared" else "$name's $label is $value"
     }
 
-    /** The heads-ups: three days before each payment until Paid, and 30 and 7 days before a 0% period ends. No amounts. */
-    fun notices(cards: List<MoneyCard>, nowMs: Long, cal: LocalCalendar): List<Notice> {
+    /**
+     * The heads-ups: three days before each payment until Paid, and 30 and 7 days before a 0% period ends. No amounts.
+     * Bills due, completeness: a radar bill that is this card's payment ([BillRules.cardFor], among [bills]) has no
+     * reminder of its own; its Pay link, when he saved one, comes on this one.
+     */
+    fun notices(cards: List<MoneyCard>, nowMs: Long, cal: LocalCalendar, bills: List<RenewalItem> = emptyList()): List<Notice> {
         val today = cal.epochDayOf(nowMs)
         val out = mutableListOf<Notice>()
         for (c in cards) {
@@ -270,13 +274,17 @@ object MoneyCards {
                 val left = due - today
                 val inWords = when (left) { 0L -> "Today"; 1L -> "Tomorrow"; else -> "In $left days" }
                 val dayWord = when (left) { 0L -> "today"; 1L -> "tomorrow"; else -> CivilDate.shortLabel(due) }
+                val link = bills.firstOrNull { it.payLink != null && BillRules.cardFor(it, listOf(c), today) != null }?.payLink
                 out += Notice(
                     key = "card:${c.id}:due:$due", source = NoticeSource.CARDS, tier = NoticeTier.HEADS_UP,
                     title = "${c.name} payment due $dayWord",
                     text = "$inWords · " + (if (c.charge) "a charge card is paid in full" else "pay in full to avoid interest") +
+                        (if (link != null) " · Pay opens ${BillRules.site(link)}" else "") +
                         " · the amounts are in Money · mark it Paid there",
                     atMs = cal.toEpochMs(due - REMIND_DAYS, NOTICE_MIN), target = NoticeTarget.MONEY,
                     expiresAtMs = cal.toEpochMs(due + 1, 0),
+                    actions = if (link != null) listOf(NoticeAction.PAY) else emptyList(),
+                    link = link,
                 )
             }
             val pe = c.promoEndDay

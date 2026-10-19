@@ -963,8 +963,9 @@ object NoticeSources {
         out += GiftRules.notices(occasions, nowMs, cal)
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)
-        out += BillRules.notices(lists.renewals.all, nowMs, cal)
-        out += MoneyCards.notices(cards, nowMs, cal)
+        // Bills due, completeness: a card's payment on the radar too gets one reminder, the card's.
+        out += BillRules.notices(lists.renewals.all, nowMs, cal, cards)
+        out += MoneyCards.notices(cards, nowMs, cal, lists.renewals.all)
         out += MoneyYear.notices(moneyYear, nowMs, cal)
         out += MoneyMonthReview.notices(moneyMonth, nowMs, cal)
         out += TradingAlerts.notices(trading, tradingAlerts, nowMs, cal)

@@ -733,7 +733,8 @@ class MekaCore(
             accounts, txns, rules, today, cal, 0, bills = bills, holidays = bankHolidays.calendar(), cards = cards,
         )
         val upcoming = os.meka.core.domain.MoneyAskRules.upcoming(
-            os.meka.core.domain.MoneyTips.regular(lines, today), bills + os.meka.core.domain.MoneyCards.bills(cards, today), today,
+            os.meka.core.domain.MoneyTips.regular(lines, today),
+            os.meka.core.domain.BillRules.withoutCards(bills, cards, today) + os.meka.core.domain.MoneyCards.bills(cards, today), today,
         )
         val travel = os.meka.core.domain.MoneyTravel.view(
             os.meka.core.domain.MoneyRules.travelLines(accounts, txns, rules), accounts.associate { it.id to it.name }, today,
