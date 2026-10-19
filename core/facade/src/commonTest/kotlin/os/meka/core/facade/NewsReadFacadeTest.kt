@@ -139,4 +139,19 @@ class NewsReadFacadeTest {
         assertEquals(listOf("ai-0"), fold.newsPlace.value.items.map { it.id })
         assertEquals(listOf("bitcoin"), fold.newsPlace.value.follows.map { it.name })
     }
+
+    @Test
+    fun aStoryReadOnTheFoldLeavesTheMacsBriefAndGoesToTheEndOfItsTicker() = runTest {
+        (0 until 6).forEach { headline("ai-$it", "Story $it", "https://www.theverge.com/ai/$it", 10L + it) }
+        val fold = core("android"); val mac = core("mac")
+        fold.syncNow(); mac.syncNow()
+        assertEquals((0 until 5).map { "Story $it" }, mac.briefView.value.headlines.map { it.title })
+
+        assertTrue(fold.newsOpened("ai-0"))
+        fold.syncNow(); mac.syncNow()
+        // Full news hub, slice 4: the brief says what's new; the ticker takes every new story before the read one.
+        assertEquals((1 until 6).map { "Story $it" }, mac.briefView.value.headlines.map { it.title })
+        val ticker = os.meka.core.domain.TickerRules.ticker(mac.newsPlace.value).items.map { it.id }
+        assertEquals((1 until 6).map { "ai-$it" } + "ai-0", ticker)
+    }
 }

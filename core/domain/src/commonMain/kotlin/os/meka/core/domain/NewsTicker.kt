@@ -58,20 +58,25 @@ object TickerRules {
     /**
      * The strip from the News place: the matchday line, then one story from each lane in turn (Barça, AI, then the
      * other chosen topics, the place's own order), newest first within a lane, at most [MAX_ITEMS]. Each story once
-     * (the place already shows a story once across lanes).
+     * (the place already shows a story once across lanes). Full news hub, slice 4: stories he has read are skipped
+     * while there are new ones; they only fill the strip's room after every new story (so it never goes blank just
+     * because he's read everything).
      */
     fun ticker(place: NewsPlace): NewsTicker {
-        val lanes = place.lanes.map { it.items }
         val out = ArrayList<NewsItem>()
         val seen = HashSet<String>()
-        var round = 0
-        while (out.size < MAX_ITEMS && lanes.any { round < it.size }) {
-            for (lane in lanes) {
-                val item = lane.getOrNull(round) ?: continue
-                if (out.size < MAX_ITEMS && seen.add(item.id)) out += item
+        fun take(lanes: List<List<NewsItem>>) {
+            var round = 0
+            while (out.size < MAX_ITEMS && lanes.any { round < it.size }) {
+                for (lane in lanes) {
+                    val item = lane.getOrNull(round) ?: continue
+                    if (out.size < MAX_ITEMS && seen.add(item.id)) out += item
+                }
+                round++
             }
-            round++
         }
+        take(place.lanes.map { lane -> lane.items.filter { !it.read } })
+        take(place.lanes.map { lane -> lane.items.filter { it.read } })
         return NewsTicker(place.matchday, out)
     }
 

@@ -334,6 +334,8 @@ class MorningBrief(
         children: Map<String, String> = emptyMap(),
         /** Full news hub, slice 3: the words he follows; stories naming them lead the headlines ([NewsRules.forBrief]). */
         newsFollows: List<String> = emptyList(),
+        /** Full news hub, slice 4: the stories he has read ([News.readKeys]); the brief leads with new ones. */
+        newsRead: Set<String> = emptySet(),
     ): MorningBriefView {
         val now = nowMs()
         val minute = calendar.minuteOfDay(now)
@@ -422,7 +424,7 @@ class MorningBrief(
                 school?.text,
             ),
             school = school,
-            headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now, newsFollows),
+            headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now, newsFollows, newsRead),
             newsTopics = newsTopics,
             readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,
             story = story(dayEvents, dayTasks, schedule, holidays, goals, today, now, workLine, upNextId, work, children),

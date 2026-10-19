@@ -680,9 +680,17 @@ object NewsRules {
      * The brief's headlines: the chosen topics only, from the last [MAX_AGE_MS], newest first, each story once (the
      * same article in two topic feeds, or the same title), at most [MAX_IN_BRIEF]. Full news hub, slice 3: stories naming
      * a word he [follows] come first, whatever their topic ("BBC Sport · Following Arsenal · 2 h ago"), at most three of
-     * them, so the chosen topics still have their say.
+     * them, so the chosen topics still have their say. Full news hub, slice 4: stories he has [read] (their
+     * [readKey]s, opened on either app or marked all read) come after every new one, so the brief says what's new and
+     * only falls back on read ones when there aren't enough new.
      */
-    fun forBrief(all: List<Headline>, chosen: List<String>, nowMs: Long, follows: List<String> = emptyList()): List<BriefHeadline> {
+    fun forBrief(
+        all: List<Headline>,
+        chosen: List<String>,
+        nowMs: Long,
+        follows: List<String> = emptyList(),
+        read: Set<String> = emptySet(),
+    ): List<BriefHeadline> {
         val seenStories = HashSet<String>()
         val seenTitles = HashSet<String>()
         val fresh = all.filter { it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_MS }
@@ -690,12 +698,14 @@ object NewsRules {
         val followed = fresh.mapNotNull { h -> followMatch(h, follows)?.let { h to it } }
             .sortedWith(compareBy(newest) { it.first })
             .filter { (h, _) -> seenStories.add(linkKey(h)) && seenTitles.add(storyKey(h.title)) }
+            .let { newFirst(it, read) { p -> p.first } }
             .take(MAX_FOLLOWED_IN_BRIEF)
             .map { (h, f) -> BriefHeadline(h.id, h.title, h.url, listOf(h.source, "Following $f", age(h.publishedAtMs, nowMs)).joinToString(" · ")) }
-        val rest = fresh.asSequence()
+        val rest = fresh
             .filter { it.topic in chosen }
             .sortedWith(newest)
             .filter { seenStories.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
+            .let { newFirst(it, read) { h -> h } }
             .take(MAX_IN_BRIEF - followed.size)
             .map { h ->
                 val topic = NewsTopics.byId(h.topic)?.takeIf { chosen.size > 1 }?.label
@@ -703,6 +713,13 @@ object NewsRules {
             }
             .toList()
         return followed + rest
+    }
+
+    /** [items] with the stories not in [read] first, each group keeping its order (a stable partition). */
+    private fun <T> newFirst(items: List<T>, read: Set<String>, headline: (T) -> Headline): List<T> {
+        if (read.isEmpty()) return items
+        val (old, new) = items.partition { headline(it).let { h -> readKey(h.url, h.title) in read } }
+        return new + old
     }
 
     /** Followed stories in the brief at most (the rest of [MAX_IN_BRIEF] are the chosen topics'). */

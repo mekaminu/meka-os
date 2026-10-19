@@ -9545,7 +9545,7 @@ class MekaCore(
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
             upNextId = _today.value.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
-            newsFollows = news.follows()).let {
+            newsFollows = news.follows(), newsRead = news.readKeys().toHashSet()).let {
                 // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
                 val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
                 val t = _today.value
