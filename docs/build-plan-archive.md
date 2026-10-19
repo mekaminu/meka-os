@@ -2036,7 +2036,7 @@ Core MoneyGoals.kt (rules only; nothing sent): `candidates` (open goals whose nu
 - Facade `balanceCountAs(title, area)` ("FAMILY"/"HEALTH"/"SELF"/"WORK", "NONE", "CLEAR" forgets) → the line or null; `balanceUndoCountAs()` puts the stored text back; refresh passes the choices everywhere Balance counts.
 - Fold `CountAs` (each unclear event with its chips, the list animating its height, the line with Undo) and Targets' "Counted as you chose" with Forget; ReviewRoute wires them. Mac `BalanceSection.countAs`/`choices`, `CoreModel.balanceCountAs`/`balanceUndoCountAs` (Strings only); bridge test for the codes and the key.
 - Help tip in docs/help/review.md (HelpIndex regenerated); motion row updated.
-- Tests: BalanceTest.countAsChoosesTheAreaForEventsWithNoClearAreaByTitle (listed, counted as family out of work's hours, a choice over the words, not counted, next week and the trend), choicesAreStoredAsOneShortTextNewestFirst; BalanceFacadeTest.countAsAnEventWithNoClearAreaCountsItOnBothAppsWithUndo. No migration, Mac checked nightly.
+- Tests: BalanceTest.countAsChoosesTheAreaForEventsWithNoClearAreaByTitle (listed, counted as family out of work's hours, a choice over the words, not counted, next week and the trend), choicesAreStoredAsOneShortTextNewestFirst; BalanceFacadeTest.countAsAnEventWithNoClearAreaCountsItOnBothAppsWithUndo. No migration, Mac checked nightly. ad88d77 + 2efb38a (spacing on the rhythm), CI run 894 (39210353771) green.
 
 ### Balance view — as it stood on the board before it was done
 - [~] Balance view: time across work, family, health and self against your targets
