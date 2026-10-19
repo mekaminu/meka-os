@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.Crossfade
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -90,6 +91,8 @@ import os.meka.core.domain.MoneyTxnRow
 import os.meka.core.domain.MoneyWatch
 import os.meka.core.domain.MoneyBusiness
 import os.meka.core.domain.MoneyBusinessView
+import os.meka.core.domain.MoneyBusinessMail
+import os.meka.core.domain.MoneyBusinessMailView
 import os.meka.core.domain.MoneyShared
 import os.meka.core.domain.MoneySharedView
 import os.meka.core.domain.MoneyWorth
@@ -548,7 +551,8 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 BusinessBlock(b, Modifier.animateItem().appear(rememberAppearance(4)),
                     onAccount = { id, on -> scope.launch { runCatching { core.moneyBusinessAccount(id, on) }.getOrNull()?.let(say) } },
                     onSetAside = { key -> haptics.tick(); scope.launch { runCatching { core.moneySetAside(key) }.getOrNull()?.let(say) } },
-                    onExport = exportBusiness)
+                    onExport = exportBusiness,
+                    onBusinessTxn = { txnId -> haptics.tick(); scope.launch { runCatching { core.moneyBusinessMerchant(txnId, true) }.getOrNull()?.let(say) } })
             }
         }
         // Slice 14: shared costs with his partner and who paid what (whatever month).
@@ -1020,7 +1024,7 @@ private fun TxnRow(
 @Composable
 private fun BusinessBlock(
     b: MoneyBusinessView, modifier: Modifier, onAccount: (String, Boolean) -> Unit, onSetAside: (String) -> Unit,
-    onExport: (String) -> Unit = {},
+    onExport: (String) -> Unit = {}, onBusinessTxn: (String) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -1070,6 +1074,8 @@ private fun BusinessBlock(
                 }
             }
         }
+        // Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's money in his Business mail against the statements.
+        b.mail?.let { m -> BusinessMailBlock(m, onBusinessTxn) }
         b.merchantsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         b.accounts.forEach { a ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -1082,6 +1088,42 @@ private fun BusinessBlock(
             }
         }
         Text(b.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
+}
+
+/**
+ * Slice 13c: FROM YOUR BUSINESS EMAIL — each email's money with whether the statements show it (lit when they should by
+ * now and don't), its subject as a quote, and a Business chip that counts the matched payment's payer as the side
+ * hustle's. Lines cross-fade as a match lands (MekaMotion.appear honours reduced motion).
+ */
+@Composable
+private fun BusinessMailBlock(m: MoneyBusinessMailView, onBusinessTxn: (String) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Text(m.head, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Crossfade(m.line, animationSpec = MekaMotion.appear(reduced), label = "money-biz-mail-line") { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        m.rows.forEach { r ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = r.spoken }) {
+                    Text(r.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "money-biz-mail-${r.id}") { l ->
+                        Text(l, style = MekaType.caption, color = if (r.lit) Meka.colors.accent else Meka.colors.textSecondary)
+                    }
+                    r.quote?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                }
+                r.businessTxnId?.let { txn ->
+                    Text(MoneyBusinessMail.CHIP, style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                            .clickable(role = Role.Button) { onBusinessTxn(txn) }
+                            .semantics { contentDescription = MoneyBusinessMail.chipSpoken(r) }
+                            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                }
+            }
+        }
+        m.moreLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Text(m.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 

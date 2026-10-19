@@ -1206,6 +1206,37 @@ class MailSyncTest {
     }
 
     @Test
+    fun onlyTheBusinessMailsMoneyBecomesInvoiceFinds() {
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val (gmail, store, i) = world(ms, ops = ops)
+        val id = connect(i)
+        i.syncAccount(id)
+        gmail.mailbox["b1"] = msg("b1", 0, "no-reply@invoicely.example").copy(subject = "Acme Ltd paid invoice INV-12", preview = "Amount paid: £300.00")
+        gmail.mailbox["b2"] = msg("b2", 0, "receipts@canva.example").copy(subject = "Your Canva receipt", preview = "Total: £10.99")
+        gmail.mailbox["b3"] = msg("b3", 0, "billing@hostco.example").copy(subject = "Invoice INV-90 · payment due 30 Oct", preview = "Amount due £24.00")
+        gmail.nextRound = { MailChanges(fetch = listOf("b1", "b2", "b3"), cursor = "h2") }
+        fun invoices() = EntityReader.scanning(ops).entities("home", EntityTypes.MAIL_FIND).values
+            .filter { it[os.meka.core.domain.MailFindFields.KIND] == FieldValue.Text(os.meka.core.domain.MoneyBusinessMail.KIND_INVOICE) }
+        // Not labelled Business: nothing read for Money.
+        i.syncAccount(id)
+        assertEquals(0, invoices().size)
+        val a = store.accounts("home").single()
+        store.setLabel("home", a.provider, a.email, os.meka.core.domain.MailLabel.BUSINESS.name)
+        gmail.nextRound = { MailChanges(cursor = "h3") }
+        i.syncAccount(id)
+        val found = invoices()
+        assertEquals(2, found.size)
+        val paid = found.single { it[os.meka.core.domain.MailFindFields.DIRECTION] == FieldValue.Text(os.meka.core.domain.MoneyBusinessMail.IN) }
+        assertEquals(FieldValue.Text("Acme Ltd"), paid[os.meka.core.domain.MailFindFields.MERCHANT])
+        assertEquals(FieldValue.Int64(30_000), paid[os.meka.core.domain.MailFindFields.PENCE])
+        assertEquals(FieldValue.Text("Business"), paid[os.meka.core.domain.MailFindFields.ACCOUNT])
+        gmail.nextRound = { MailChanges(cursor = "h4") }
+        i.syncAccount(id)
+        assertEquals(2, invoices().size)
+    }
+
+    @Test
     fun onlyTheSchoolsEmailsBecomeSchoolFinds() {
         val ms = InMemoryMailStore()
         val ops = InMemoryServerOpStore()

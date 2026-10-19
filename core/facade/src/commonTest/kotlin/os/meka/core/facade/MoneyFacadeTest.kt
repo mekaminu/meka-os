@@ -460,6 +460,34 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun theBusinessMailsMoneyIsCheckedAgainstTheStatementsAndItsChipMarksThePayer() = runTest(timeout = SLOW_RUNNER) {
+        val clock = HlcClock("server", { now })
+        var k = 0
+        fun serverFind(id: String, inv: os.meka.core.domain.MailInvoice, day: Long) =
+            os.meka.core.domain.MoneyBusinessMail.serverFields(inv, "Business", "Subject $id", day).forEach { (f, v) ->
+                ops.append(Op("srvinv${k++}", "hh", EntityTypes.MAIL_FIND, id, f, v, clock.now(), emptyList(), "server"))
+            }
+        serverFind("mf-in", os.meka.core.domain.MailInvoice(os.meka.core.domain.MoneyBusinessMail.IN, 60_000, "Stripe"), CivilDate.toEpochDay(2026, 8, 30))
+        serverFind("mf-out", os.meka.core.domain.MailInvoice(os.meka.core.domain.MoneyBusinessMail.OUT, 1_200, "Canva"), CivilDate.toEpochDay(2026, 9, 3))
+        val fold = core("android")
+        fold.syncNow()
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        fold.importMoneyStatement("Shop account", "Date,Description,Amount\n01/09/2026,STRIPE PAYOUT,600.00\n03/09/2026,CANVA PRO,-12.00\n")
+        val mail = fold.moneyView.value.business!!.mail!!
+        assertEquals("2 this tax year · in £600 · costs £12 · 2 in your statements", mail.line)
+        val canva = mail.rows.first { it.id == "mf-out" }
+        assertEquals("A cost · Thu 3 Sep · in your statements · not counted as business yet", canva.line)
+        // The chip marks the matched payment's payer as business: the row now counts and the chip goes.
+        fold.moneyBusinessMerchant(canva.businessTxnId!!, true)
+        val after = fold.moneyView.value.business!!.mail!!.rows.first { it.id == "mf-out" }
+        assertEquals("A cost · Thu 3 Sep · in your statements · counted", after.line)
+        assertNull(after.businessTxnId)
+        // Nothing from the email is added to the profit: only the Canva payment counts.
+        assertEquals("Loss £12", fold.moneyView.value.business!!.profitLine)
+    }
+
+    @Test
     fun challengesSetOnTheFoldShowOnTheMacWithUndoAndGoWithDeleteAll() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

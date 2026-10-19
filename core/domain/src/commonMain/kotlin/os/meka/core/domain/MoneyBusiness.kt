@@ -73,6 +73,8 @@ data class MoneyBusinessView(
     val spoken: String,
     /** Slice 13b: YEAR-END EXPORT, a chip per tax year (last year, this one so far); null until something is marked. */
     val export: TradingExportView? = null,
+    /** Slice 13c: FROM YOUR BUSINESS EMAIL ([MoneyBusinessMail]); null when the Business mail shows nothing this tax year. */
+    val mail: MoneyBusinessMailView? = null,
 ) {
     /** Index access for Swift. */
     fun costAt(i: Int): MoneyBusinessCost = costs[i]

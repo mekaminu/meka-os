@@ -622,6 +622,44 @@ struct MoneySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: sh.balanceLine)
     }
 
+    /// Slice 13c: FROM YOUR BUSINESS EMAIL — each email's money with whether the statements show it (lit when they
+    /// should by now and don't), its subject as a quote, and a Business chip that counts the matched payment's payer as
+    /// the side hustle's. Lines cross-fade as a match lands.
+    private func businessMail(_ m: MoneyBusinessMailView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(m.head).font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+            Text(m.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).contentTransition(.opacity)
+            ForEach(m.rows, id: \.id) { r in
+                HStack {
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(r.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(r.line).font(MekaType.caption).foregroundStyle(r.lit ? palette.accent : palette.textSecondary).contentTransition(.opacity)
+                        if let q = r.quote {
+                            Text(q).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1).truncationMode(.tail)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(r.spoken)
+                    Spacer()
+                    if let txn = r.businessTxnId {
+                        Button {
+                            Task { said = await model.moneyBusinessMerchant(txnId: txn, on: true) }
+                        } label: {
+                            Text(MoneyBusinessMail.shared.CHIP).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                                .background(palette.surfaceRaised, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel(MoneyBusinessMail.shared.chipSpoken(row: r))
+                    }
+                }
+            }
+            if let more = m.moreLine { Text(more).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            Text(m.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: m.line)
+    }
+
     /// Slice 13: SIDE HUSTLE AND TAX — the tax year so far (profit in brass), the share to put aside with its chips, the
     /// trading allowance, the biggest costs, last tax year, the next Self Assessment dates (lit within 30 days) and each
     /// account's Side hustle account switch.
@@ -681,6 +719,8 @@ struct MoneySheet: View {
                     .accessibilityElement(children: .combine)
                 }
             }
+            // Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's money in his Business mail against the statements.
+            if let m = b.mail { businessMail(m) }
             if let m = b.merchantsLine { Text(m).font(MekaType.caption).foregroundStyle(palette.textSecondary) }
             ForEach(b.accounts, id: \.id) { a in
                 HStack {

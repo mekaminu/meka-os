@@ -898,10 +898,20 @@ class MekaCore(
         ).let { v ->
             v.copy(
                 trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()),
+                // Slice 13c: the side hustle's money in his Business mail, checked against the statements.
+                business = v.business?.let { b -> b.copy(mail = moneyBusinessMail()) },
                 goals = if (v.locked || moneyOffset != 0) null
                 else os.meka.core.domain.MoneyGoals.view(goals.goals(tasks.all()).first, money.accounts(), money.cards().map { it.id }.toSet()),
             )
         }
+    }
+
+    /** Slice 13c: FROM YOUR BUSINESS EMAIL — this tax year's invoice finds against every statement line. Caller is on the core. */
+    private fun moneyBusinessMail(): os.meka.core.domain.MoneyBusinessMailView? {
+        val finds = activity.mailFinds().filter { os.meka.core.domain.MoneyBusinessMail.isInvoice(it) }
+        if (finds.isEmpty()) return null
+        val lines = os.meka.core.domain.MoneyRules.watchLines(money.accounts(), money.txns(), money.rules())
+        return os.meka.core.domain.MoneyBusinessMail.view(finds, lines, money.businessAccounts(), money.businessMerchants(), todayEpochDay())
     }
 
     // ---- Money manager (6): money goals linked to Goals ----

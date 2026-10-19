@@ -13,6 +13,7 @@ import os.meka.core.domain.MailSecurityRules
 import os.meka.core.domain.MailScamRules
 import os.meka.core.domain.MailReceipt
 import os.meka.core.domain.MailReceiptRules
+import os.meka.core.domain.MoneyBusinessMail
 import os.meka.core.domain.MailRefundRules
 import os.meka.core.domain.MailReturnRules
 import os.meka.core.domain.MailBillRules
@@ -664,6 +665,38 @@ class Integrations(
         stage(a, "subscriptions") { subscriptions(a, ms) }
         // Returns and warranties, completeness slice 2: refunds made, to close a refund row on Waiting for (on his tap).
         stage(a, "refunds") { refunds(a, ms) }
+        // Money slice 13c: the side hustle's money in the Business mail, for Money's SIDE HUSTLE AND TAX (read only).
+        stage(a, "businessInvoices") { businessInvoices(a, ms) }
+    }
+
+    /**
+     * Money slice 13c: only in the account he labelled Business, the emails of the last [MoneyBusinessMail.WINDOW_DAYS]
+     * days that the rules didn't sort as newsletters, promos or junk, and not from one of his own addresses, are read by
+     * [MoneyBusinessMail.read] from the sender, subject and kept preview; each that says for sure money came to him or
+     * paid for something, with its amount, becomes one `mail_find` (kind INVOICE, `direction` in/out) under an id from
+     * the account and the email, written once. Money on the devices checks them against his statements; nothing is
+     * added to the profit, paid or replied to here.
+     */
+    internal fun businessInvoices(a: AccountRow, ms: MailStore) {
+        if (MailLabel.of(a.label) != MailLabel.BUSINESS) return
+        val nowMs = now()
+        val own = store.accounts(a.householdId).map { it.email.lowercase() }.toSet() + a.email.lowercase()
+        val candidates = ms.messages(a.id).filter { h ->
+            nowMs - h.receivedAtMs <= MoneyBusinessMail.WINDOW_MS && h.receivedAtMs <= nowMs + 60_000L &&
+                (h.fromAddress?.lowercase() ?: "") !in own &&
+                MailSortRules.sort(MailSortFacts(h.fromAddress, h.fromName, h.subject, h.labels, h.listUnsubscribe, h.listId)).sort
+                    .let { it != MailSort.NEWSLETTER && it != MailSort.PROMO && it != MailSort.JUNK }
+        }
+        if (candidates.isEmpty()) return
+        val mirror = store.transaction { store.mirror(a.householdId, a.id) }
+        val fresh = candidates.filter { !mirror.containsKey(MoneyBusinessMail.findId(a.id, it.id)) }
+        if (fresh.isEmpty()) return
+        val previews = ms.previews(a.id, fresh.map { it.id })
+        for (h in fresh.sortedBy { it.receivedAtMs }) {
+            val inv = MoneyBusinessMail.read(h.fromName, h.fromAddress, h.subject, previews[h.id] ?: h.preview) ?: continue
+            writeMail(a, MoneyBusinessMail.findId(a.id, h.id),
+                MoneyBusinessMail.serverFields(inv, MailLabel.BUSINESS.label, h.subject, LONDON.epochDayOf(h.receivedAtMs)), EntityTypes.MAIL_FIND)
+        }
     }
 
     /**

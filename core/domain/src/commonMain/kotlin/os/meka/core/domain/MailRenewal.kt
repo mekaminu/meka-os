@@ -69,6 +69,8 @@ data class MailFind(
     val who: String? = null,
     /** Life audit ([LifeAuditRules]): how many payments the 60 days of mail showed; null otherwise. */
     val seen: Int? = null,
+    /** Money slice 13c ([MoneyBusinessMail]): an invoice find's way, [MoneyBusinessMail.IN] or [MoneyBusinessMail.OUT]; else null. */
+    val direction: String? = null,
 )
 
 /** The `mail_find` entity's fields (ADR-008 addendum 2026-10-15). */
@@ -110,6 +112,8 @@ object MailFindFields {
     const val WHO = "who"
     /** Life audit, slice 1 (server-written, rewritten each check): payments seen in the 60 days ([LifeAuditRules]). */
     const val SEEN = "seen"
+    /** Money slice 13c (server-written, once): an invoice find's way, "in" (paid to him) or "out" (a cost). */
+    const val DIRECTION = "direction"
 }
 
 data class MailFindRow(
@@ -332,6 +336,7 @@ object MailRenewalRules {
             schoolKind = f[MailFindFields.SCHOOL_KIND]?.textOrNull,
             who = f[MailFindFields.WHO]?.textOrNull,
             seen = f[MailFindFields.SEEN]?.longOrNull?.toInt(),
+            direction = f[MailFindFields.DIRECTION]?.textOrNull,
         )
     }
 
