@@ -259,6 +259,41 @@ class TrainBoardTest {
     }
 
     @Test
+    fun theMorningBriefSaysTheTrainToLeaveFor() {
+        walk("10, 15")
+        val board = listOf(
+            TrainDeparture(7 * 60 + 30, 7 * 60 + 30),
+            TrainDeparture(7 * 60 + 42, 7 * 60 + 42, platform = "3"),
+            TrainDeparture(7 * 60 + 54, 7 * 60 + 54),
+        )
+        val l = RouteRules.briefLeave(snap(live(list = board)), office, at(7, 10), cal)!!
+        assertEquals("Leave by 7:32 for the 7:42 train, home about 6:50.", RouteRules.briefSentence(l, 18 * 60 + 50, BriefScriptRules::clock))
+        assertEquals("Leave by 7:32 for the 7:42 train.", RouteRules.briefSentence(l, null, BriefScriptRules::clock))
+        // His usual train and the one before cancelled: the later one, said plainly.
+        val gone = listOf(TrainDeparture(7 * 60 + 30, null, cancelled = true), TrainDeparture(7 * 60 + 42, null, cancelled = true), TrainDeparture(8 * 60, 8 * 60))
+        val later = RouteRules.briefLeave(snap(live(list = gone)), office, at(7, 10), cal)!!
+        assertEquals("Your usual train isn't running well, so leave by 7:50 for the 8 o'clock train.",
+            RouteRules.briefSentence(later, null, BriefScriptRules::clock))
+        // The brief's trains sentence leaves the leave-by and the "Trains:" lead out (it's said on its own).
+        val line = RouteRules.todayLine(snap(live(list = board)), office, at(7, 10), cal)!!
+        assertEquals("South Rail, 07:30 on time, 07:42 on time, 07:54 on time", line.brief)
+        assertEquals("South Rail, Metro line, good service",
+            RouteLine("South Rail · Metro line · good service", false, "Trains: South Rail, Metro line, good service").brief)
+        // The whole brief: the leave-by in place of "Leave about", the trains once, no "Trains: Trains".
+        val story = BriefStory(epochDay = fri, officeDay = true, workEndMin = 17 * 60 + 30, leaveMin = 7 * 60 + 40, homeMin = 18 * 60 + 50,
+            route = line.brief, leaveBy = l)
+        val script = BriefScriptRules.script(MorningBriefView.EMPTY.copy(dateLabel = "Fri 9 Oct", workLine = "Work 09:00–17:30", story = story))
+        assertTrue("finishing at half past 5. Leave by 7:32 for the 7:42 train, home about 6:50. On the trains: South Rail, 7:30 on time, 7:42 on time, 7:54 on time." in script, script)
+        assertTrue("Leave about" !in script && "Trains:" !in script, script)
+        // Not without the time to the train, on the way home, on a stale board or with no office day.
+        assertNull(RouteRules.briefLeave(snap(live(list = board)), null, at(7, 10), cal))
+        assertNull(RouteRules.briefLeave(snap(live(list = board, checked = at(5, 30))), office, at(7, 10), cal))
+        assertNull(RouteRules.briefLeave(snap(live(dir = TrainBoard.PM, list = board)), office, at(17, 10), cal))
+        walk("")
+        assertNull(RouteRules.briefLeave(snap(live(list = board)), office, at(7, 10), cal))
+    }
+
+    @Test
     fun leaveWorkByTheFirstGoodTrainAfterWorkEnds() {
         walk("10, 15")
         val pm = listOf(

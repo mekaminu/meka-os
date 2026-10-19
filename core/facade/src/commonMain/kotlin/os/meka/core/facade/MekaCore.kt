@@ -9807,7 +9807,9 @@ class MekaCore(
                         awayWeather = tripSky.today,
                         tripTomorrowWeather = tripSky.tomorrow,
                         placesLine = placesLine,
-                        route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.spoken,
+                        route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal)?.brief,
+                        // A morning brief worth listening to: the train to leave for, from the live board.
+                        leaveBy = os.meka.core.domain.RouteRules.briefLeave(lineStatus.snapshot(), office, nowMs(), cal),
                         needsYou = _needsYouStack.value.cards.count {
                             it.kind == os.meka.core.domain.DecisionKind.CONFLICT || it.kind == os.meka.core.domain.DecisionKind.CREDIT
                         },

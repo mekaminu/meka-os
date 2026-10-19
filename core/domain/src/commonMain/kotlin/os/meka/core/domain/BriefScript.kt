@@ -98,6 +98,11 @@ data class BriefStory(
     val placesLine: String? = null,
     /** The trains on the route, as TfL says (already spoken): "South Rail, Metro, good service". */
     val route: String? = null,
+    /**
+     * A morning brief worth listening to, the train to leave for ([RouteRules.briefLeave]): said in place of the
+     * schedule's "Leave about …" ([leaveMin]); null without a fresh live board or the time to the train.
+     */
+    val leaveBy: LeaveBy? = null,
     /** Today's timed events, by start. */
     val events: List<BriefEvent> = emptyList(),
     /** The top 1–3 tasks by name ([BriefScriptRules.focus]). */
@@ -193,7 +198,8 @@ object BriefScriptRules {
 
         // Getting there and the weather.
         if (s.officeDay && !s.weekend) {
-            CommuteRules.briefLine(s.leaveMin, s.homeMin, ::clock)?.let { out += it }
+            (s.leaveBy?.let { RouteRules.briefSentence(it, s.homeMin, ::clock) } ?: CommuteRules.briefLine(s.leaveMin, s.homeMin, ::clock))
+                ?.let { out += it }
             s.route?.let { out += sentence("On the trains: $it") }
             val weather = s.placesLine ?: v.weatherLine
             weather?.let { out += sentence(if (s.placesLine != null) it else "Today, $it") }

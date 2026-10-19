@@ -220,8 +220,16 @@ data class CommuteRoute(
 /** How bad a status is. */
 enum class LineLevel { GOOD, MINOR, MAJOR }
 
-/** What Today shows on an office day's commute: the line and whether it needs a look (lit in the accent). */
-data class RouteLine(val text: String, val lit: Boolean, val spoken: String)
+/**
+ * What Today shows on an office day's commute: the line and whether it needs a look (lit in the accent). [brief] is
+ * what the morning brief says after "On the trains:": [spoken] without its "Trains:" lead and without the leave-by,
+ * which the brief says on its own ([BriefStory.leaveBy]).
+ */
+data class RouteLine(val text: String, val lit: Boolean, val spoken: String, val brief: String = spoken.removePrefix(SPOKEN_LEAD)) {
+    companion object {
+        const val SPOKEN_LEAD = "Trains: "
+    }
+}
 
 /**
  * Live trains, slice 3: when to leave for [train] — [leaveMin] (London minute of the day) is its expected time less
@@ -491,10 +499,11 @@ object RouteRules {
             val fbLive = fallbackLive(s, r, morning, nowMs, cal)
             val fallbackPart = if (fbLive != null && (live.any(::bad) || (first != null && level(first) != LineLevel.GOOD))) " — or $fbLive" else fallback
             val leave = office?.let { o -> liveBoard(s, commute, nowMs)?.let { leaveBy(it, commute, o, nowMs, cal) } }
-            val text = name(r.firstId, r) + " · " + (leave?.let { it.words + " · " }.orEmpty()) + live.joinToString(" · ") { words(it) } +
-                notGood.joinToString("") { (id, sev) -> " · " + part(id, sev, r) } + fallbackPart
+            val rest = live.joinToString(" · ") { words(it) } + notGood.joinToString("") { (id, sev) -> " · " + part(id, sev, r) } + fallbackPart
+            val text = name(r.firstId, r) + " · " + (leave?.let { it.words + " · " }.orEmpty()) + rest
             val lit = live.any(::bad) || notGood.isNotEmpty()
-            return RouteLine(text, lit = lit, spoken = "Trains: " + text.replace(" · ", ", ").replace(" — or ", ". Or ").replace(" — ", ". "))
+            fun say(t: String) = t.replace(" · ", ", ").replace(" — or ", ". Or ").replace(" — ", ". ")
+            return RouteLine(text, lit = lit, spoken = "Trains: " + say(text), brief = say(name(r.firstId, r) + " · " + rest))
         }
         if (legs.isEmpty()) return null
         if (legs.all { level(it.second) == LineLevel.GOOD }) {
@@ -763,6 +772,31 @@ object RouteRules {
         }
         val leave = (leavesMin(pick) - walk).mod(1440)
         return LeaveBy(leave, pick, walk, morning, later)
+    }
+
+    /**
+     * A morning brief worth listening to, the train to leave for: on an office morning's commute with a fresh live board
+     * and the time to the train in About you, [leaveBy] for the morning; null otherwise (the brief then says the
+     * schedule's "Leave about …").
+     */
+    fun briefLeave(s: LineStatusSnapshot, office: OfficeWindow?, nowMs: Long, cal: LocalCalendar): LeaveBy? {
+        if (office == null || route() == null) return null
+        val commute = commute(office, nowMs, cal)?.takeIf { it == Commute.MORNING } ?: return null
+        val board = liveBoard(s, commute, nowMs) ?: return null
+        return leaveBy(board, commute, office, nowMs, cal)
+    }
+
+    /**
+     * The brief's sentence for [l]: "Leave by 7:32 for the 7:42 train, home about 6:50." · "Your usual train isn't
+     * running well, so leave by 7:44 for the 7:54 train." ([LeaveBy.later]); [homeMin] from the schedule, as before.
+     */
+    fun briefSentence(l: LeaveBy, homeMin: Int?, clock: (Int) -> String): String {
+        val m = l.train.depMin.mod(1440)
+        val h = (m / 60 + 11) % 12 + 1
+        val train = if (m % 60 == 0) "$h o'clock" else "$h:" + (m % 60).toString().padStart(2, '0')
+        val leave = "leave by ${clock(l.leaveMin)} for the $train train"
+        val home = homeMin?.let { ", home about ${clock(it)}" }.orEmpty()
+        return if (l.later) "Your usual train isn't running well, so $leave$home." else leave.replaceFirstChar { it.uppercase() } + "$home."
     }
 
     /** The server's checked time, rounded down so a quiet line writes at most twice an hour. */
