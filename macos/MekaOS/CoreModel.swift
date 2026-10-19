@@ -168,6 +168,8 @@ final class CoreModel {
     var showLeave = false
     /// Work wins (V1, slice 1): the reviewed week's wins and this quarter's, shown in Review. Synced with the Fold.
     private(set) var wins: WinsView?
+    /// Balance view (V2, slice 1): the reviewed week across work, family, health and self against his targets. Synced.
+    private(set) var balance: BalanceView?
     /// Weekly reflection (V1, slice 1): the review week's look back and the journal, shown in Review. Synced with the Fold.
     private(set) var reflection: ReflectionView?
     /// The line after a skip or keep ("Skipped Fri 23 Oct · the evening is free to plan"), until the sheet closes.
@@ -600,6 +602,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await w in core.winsView { self?.wins = w }
+        })
+        observers.append(Task { [weak self] in
+            for await b in core.balanceView { self?.balance = b }
         })
         observers.append(Task { [weak self] in
             for await r in core.reflectionView { self?.reflection = r }
@@ -4332,6 +4337,20 @@ final class CoreModel {
             let r = try await core.addWin(text: t)
             if r.refused { MekaHaptics.tick() } else { MekaHaptics.light() }
             return WinSaid(line: r.line, refused: r.refused)
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Balance view (slice 1): sets an area's weekly target ("FAMILY", 600); only a String and an Int cross. Returns the
+    /// line to show, or nil when nothing changed.
+    func setBalanceTarget(_ area: String, minutes: Int) async -> String? {
+        guard let core else { return nil }
+        do {
+            let line = try await core.setBalanceTarget(area: area, minutes: Int32(minutes))
+            if line != nil { MekaHaptics.light() }
+            return line
         } catch {
             lastError = error.localizedDescription
             return nil

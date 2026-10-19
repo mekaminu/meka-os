@@ -1,7 +1,7 @@
 ---
 id: review
 title: Review
-keywords: review, weekly review, my week, prevented misses, reflection, weekly reflection, reflect, reflect on my week, look back, journal, what went well, what to drop, one thing that matters
+keywords: review, weekly review, my week, prevented misses, reflection, weekly reflection, reflect, reflect on my week, look back, journal, what went well, what to drop, one thing that matters, life balance, work life balance, balance view, time across work and family
 data: yes
 fold: REVIEW
 fold_where: Ask → Daily → Review
@@ -17,3 +17,4 @@ tip: Say "reflect on my week" to Talk (on the phone or the Mac) and Review opens
 tip: The one thing you said matters shows under Today's header all the next week ("This week's one thing · …", in brass on the Monday), and the morning brief says it on Monday (and every weekday on Standard and Full).
 tip: To have the review and reflection come at another time on Sunday, tap Change beside "Comes on Sundays at 18:00" at the bottom of Reflect (on the Mac, pick the time there) and choose 16:00 to 21:00. The review's heads-up and Today's card move with it, on both apps.
 tip: Not now on a Sunday? Tap "Later tonight" on Today's review card or on its notification: the card steps away and the review comes back two hours on (never after 22:00), on the phone and the Mac.
+tip: Balance (under the numbers) shows the week's time across work, family, health and yourself against your targets, from your calendar, your work hours and the habits you ticked. Targets › sets each one (Your hours for work); they follow on both apps.

@@ -74,6 +74,10 @@ struct ReviewScreen: View {
                 Text(compared).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(3)
             }
 
+            if let b = model.balance, b.weekStart == v.weekStart {
+                BalanceSection(balance: b, palette: palette).staggeredAppear(4)
+            }
+
             if let r = model.reflection, r.weekStart == v.weekStart {
                 ReflectionSection(reflection: r, palette: palette).staggeredAppear(4)
             }

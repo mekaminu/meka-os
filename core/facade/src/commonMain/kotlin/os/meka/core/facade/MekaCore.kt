@@ -181,6 +181,8 @@ class MekaCore(
     private val templateStore = os.meka.core.domain.ChecklistTemplates(replica, ids::next, nowMs)
     private val appointments = os.meka.core.domain.Appointments(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
+    /** Balance view (V2, slice 1): the targets per area, synced. */
+    private val balanceTargets = os.meka.core.domain.BalanceTargets(replica)
     private val reflections = os.meka.core.domain.Reflections(replica, nowMs)
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val lifeAdmin = os.meka.core.domain.LifeAdmin(replica, nowMs, ZoneCalendar(timeZone))
@@ -403,6 +405,13 @@ class MekaCore(
      * Shown in the Review tab on both apps; Friday at 16:00 MEKA asks "What went well this week?". Synced.
      */
     val winsView: StateFlow<os.meka.core.domain.WinsView> = _wins.asStateFlow()
+
+    private val _balance = MutableStateFlow(os.meka.core.domain.BalanceView.EMPTY)
+    /**
+     * Balance view (V2, slice 1): the week Review shows (it follows [showReviewWeek]) across work, family, health and
+     * self against his targets ([setBalanceTarget], synced), counted from the calendar, his work hours and habits.
+     */
+    val balanceView: StateFlow<os.meka.core.domain.BalanceView> = _balance.asStateFlow()
 
     private val _reflection = MutableStateFlow(os.meka.core.domain.ReflectionView.EMPTY)
     /**
@@ -4451,6 +4460,16 @@ class MekaCore(
 
     /** Shows the week [offset] weeks from this one (0 this week, -1 last week, back to -12). */
     suspend fun showReviewWeek(offset: Int) = onCore { reviewOffset = offset; refresh() }
+
+    /**
+     * Balance view, slice 1: sets [area]'s weekly target ("WORK", "FAMILY", "HEALTH", "SELF") to [minutes] (one of its
+     * choices; 0 for work's "your own hours", or the default, clears it). Returns the line to show, or null when nothing
+     * changed. Synced.
+     */
+    suspend fun setBalanceTarget(area: String, minutes: Int): String? = onCore {
+        val a = os.meka.core.domain.BalanceArea.entries.firstOrNull { it.name == area } ?: return@onCore null
+        balanceTargets.set(a, minutes)?.also { refresh() }
+    }
     /** "Done reviewing" for the week on screen; synced. */
     suspend fun reviewDone() = onCore { review.markReviewed(_review.value.weekStart) }
     /** Opens the review on the week Today's card is about (this week on Sunday, last week on Monday). */
@@ -9632,6 +9651,11 @@ class MekaCore(
             dayWindow(ZoneCalendar(timeZone).toEpochMs(day, 12 * 60))
         }
         _wins.value = wins.view(_review.value.weekStart)
+        // Balance view, slice 1: the reviewed week's time across work, family, health and self.
+        _balance.value = os.meka.core.domain.BalanceRules.view(
+            _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), hoursOf(workState, todayEpochDay()), dayEvents,
+            _review.value.habits.map { it.title to it.days }, balanceTargets.targets(),
+        ) { e -> os.meka.core.domain.ClubChildRules.child(e, marks.clubChildren, ZoneCalendar(timeZone)) ?: os.meka.core.domain.FootballRules.child(e) }
         _reflection.value = ZoneCalendar(timeZone).let { cal ->
             os.meka.core.domain.ReflectionRules.view(
                 _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,
