@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Balance view through the facade (slice 1): the review's week counted, targets set on one app reach the other. */
+/** Balance view through the facade (slices 1–2): the review's week counted, targets set on one app reach the other. */
 class BalanceFacadeTest {
     private var now = 1_792_163_100_000L // Fri 16 Oct 2026, 16:05 in London
 
@@ -36,6 +36,11 @@ class BalanceFacadeTest {
         val work = v.rows.first { it.area == BalanceArea.WORK }
         assertEquals("39 h 05 of your 40 h 30", work.line)
         assertEquals("0 of 3 targets met so far", v.line)
+        // Slice 2: four weeks of trend, this one so far; the three before were his hours each.
+        assertEquals(4, work.trend.size)
+        assertTrue(work.trend.last().current)
+        assertEquals("Last 4 weeks · never over · about 40 h 30 a week", work.trendLine)
+        assertNull(v.rows.first { it.area == BalanceArea.FAMILY }.trendLine)
 
         assertEquals("Family: 10 h a week · on both devices", fold.setBalanceTarget("FAMILY", 600))
         assertNull(fold.setBalanceTarget("FAMILY", 600))

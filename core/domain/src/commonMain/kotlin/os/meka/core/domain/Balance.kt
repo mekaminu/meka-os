@@ -23,6 +23,9 @@ import os.meka.core.sync.fv
  *
  * Targets: one synced `context_mode` entity [ENTITY_ID] (ADR-008 addendum 2026-10-19), minutes a week per area,
  * last-writer-wins per field; absent = the default ([BalanceArea.defaultMin]; work = his own hours that week).
+ *
+ * Slice 2 (2026-10-19): each row also carries a four-week trend ([BalanceRules.trendMinutes], [BalanceRules.trend]): the
+ * reviewed week and the three before, each counted the same way, with "Last 4 weeks · met in 2 · about 6 h a week".
  */
 enum class BalanceArea(val label: String, val field: String, val defaultMin: Int?, val choices: List<Int>) {
     WORK("Work", "workMin", null, listOf(35, 40, 45, 50).map { it * 60 }),
@@ -30,6 +33,13 @@ enum class BalanceArea(val label: String, val field: String, val defaultMin: Int
     HEALTH("Health", "healthMin", 3 * 60, listOf(2, 3, 4, 5, 7).map { it * 60 }),
     SELF("Self", "selfMin", 2 * 60, listOf(1, 2, 3, 5).map { it * 60 }),
 }
+
+/**
+ * One week of an area's trend (slice 2): the Monday it starts, "12 Oct", the minutes counted, [pct] of the trend's
+ * scale (the biggest week or the target, whichever is more) for its little bar, whether it met its target (work: went
+ * over), and whether it's the week in progress (counted so far).
+ */
+data class BalanceWeek(val weekStart: Long, val label: String, val minutes: Int, val pct: Int, val met: Boolean, val current: Boolean)
 
 /** One thing that counted: "Football U10s" · "Sat" · 90 min. */
 data class BalanceItem(val area: BalanceArea, val title: String, val day: Long, val minutes: Int)
@@ -55,6 +65,12 @@ data class BalanceRow(
     /** The target is the default (not set by him). */
     val defaultTarget: Boolean,
     val spoken: String,
+    /** Slice 2: the reviewed week and the [BalanceRules.TREND_WEEKS] - 1 before it, oldest first; empty without a trend. */
+    val trend: List<BalanceWeek> = emptyList(),
+    /** The target's height on the trend's scale (0–100), for its hairline. */
+    val trendTargetPct: Int = 0,
+    /** "Last 4 weeks · met in 2 · about 6 h 30 a week" (work: "over in 3"); null when all four are empty. */
+    val trendLine: String? = null,
 )
 
 data class BalanceView(
@@ -83,6 +99,8 @@ object BalanceRules {
     const val HABIT_HEALTH_MIN = 45
     const val HABIT_SELF_MIN = 30
     const val MAX_ITEMS = 3
+    /** Slice 2: how many weeks the trend shows (the reviewed one included). */
+    const val TREND_WEEKS = 4
     /** Work's chip for "his own hours" (clears the set target). */
     const val YOUR_HOURS = 0
     const val SOURCES = "From your calendar, your work hours and the habits you ticked. All-day events, matches you follow and events with no clear area aren't counted."
@@ -284,6 +302,7 @@ object BalanceRules {
         habits: List<Pair<String, List<Boolean>>>,
         targets: Map<BalanceArea, Int>,
         childOf: (CalendarEvent) -> String? = { null },
+        trendWeeks: List<Pair<Long, Map<BalanceArea, Int>>> = emptyList(),
     ): BalanceView {
         val today = cal.epochDayOf(nowMs)
         val isCurrent = today >= weekStart && today < weekStart + 7
@@ -308,11 +327,17 @@ object BalanceRules {
             }
             val mine = items.filter { it.area == a }.sortedWith(compareByDescending<BalanceItem> { it.minutes }.thenBy { it.day }.thenBy { it.title })
             val choices = if (a == BalanceArea.WORK) listOf(YOUR_HOURS) + a.choices else a.choices
+            val (weeks, targetPct, trendLine) = trend(
+                a, trendWeeks.map { (ws, m) -> ws to (if (ws == weekStart) n else m[a] ?: 0) },
+                { ws -> set ?: a.defaultMin ?: scheduledMin(work, ws) }, today,
+            )
             BalanceRow(
                 a, a.label, n, target, pct, line, status, lit,
                 mine.take(MAX_ITEMS).map(::itemLine), (mine.size - MAX_ITEMS).coerceAtLeast(0),
                 choices, set == null,
-                "${a.label}: ${spokenHours(n)} of ${spokenHours(target)}" + (status?.let { ", ${it.lowercase()}" } ?: ""),
+                "${a.label}: ${spokenHours(n)} of ${spokenHours(target)}" + (status?.let { ", ${it.lowercase()}" } ?: "") +
+                    (trendLine?.let { ". $it" } ?: ""),
+                weeks, targetPct, trendLine,
             )
         }
         val others = rows.filter { it.area != BalanceArea.WORK }
@@ -324,6 +349,56 @@ object BalanceRules {
         ).joinToString(" · ")
         val notCounted = uncounted.takeIf { it > 0 }?.let { ShutdownRules.count(it, "event") + " not counted · no clear area" }
         return BalanceView(weekStart, isCurrent, rows, line, SOURCES, notCounted)
+    }
+
+    /**
+     * Slice 2: each area's minutes in the [TREND_WEEKS] weeks ending with the one starting [weekStart], oldest first.
+     * [habitsFor] gives a week's habits (title, ticked Monday..Sunday) like the review's.
+     */
+    fun trendMinutes(
+        weekStart: Long,
+        nowMs: Long,
+        cal: LocalCalendar,
+        work: WorkHours,
+        events: List<CalendarEvent>,
+        habitsFor: (Long) -> List<Pair<String, List<Boolean>>>,
+        childOf: (CalendarEvent) -> String?,
+    ): List<Pair<Long, Map<BalanceArea, Int>>> = (TREND_WEEKS - 1 downTo 0).map { back ->
+        val ws = weekStart - 7L * back
+        ws to count(ws, nowMs, cal, work, events, habitsFor(ws), childOf).first
+    }
+
+    /** "12 Oct" for the week starting [weekStart]. */
+    fun weekLabel(weekStart: Long): String {
+        val d = CivilDate.fromEpochDay(weekStart)
+        return "${d.day} ${Recurrence.MONTH_SHORT[d.month - 1]}"
+    }
+
+    /**
+     * Slice 2: one area's trend from [weeks] (each week's start and minutes) against [targetOf] (a week's target), with
+     * [today] for the week in progress. The line averages the finished weeks only.
+     */
+    fun trend(area: BalanceArea, weeks: List<Pair<Long, Int>>, targetOf: (Long) -> Int, today: Long): Triple<List<BalanceWeek>, Int, String?> {
+        if (weeks.isEmpty()) return Triple(emptyList(), 0, null)
+        val targetNow = targetOf(weeks.last().first)
+        val scale = maxOf(weeks.maxOf { it.second }, targetNow, 1)
+        val out = weeks.map { (ws, n) ->
+            val t = targetOf(ws)
+            val current = today >= ws && today < ws + 7
+            val met = if (area == BalanceArea.WORK) t > 0 && n > t else t > 0 && n >= t
+            BalanceWeek(ws, weekLabel(ws), n, (n * 100 / scale).coerceIn(0, 100), met, current)
+        }
+        if (out.all { it.minutes == 0 }) return Triple(out, (targetNow * 100 / scale).coerceIn(0, 100), null)
+        val finished = out.filterNot { it.current }
+        val metCount = out.count { it.met }
+        val avg = finished.takeIf { it.isNotEmpty() }?.let { f -> (f.sumOf { it.minutes } / f.size / 15) * 15 }
+        val line = listOfNotNull(
+            "Last ${out.size} weeks",
+            if (area == BalanceArea.WORK) (if (metCount == 0) "never over" else "over in $metCount")
+            else (if (metCount == 0) "not met yet" else "met in $metCount"),
+            avg?.let { "about ${hours(it)} a week" },
+        ).joinToString(" · ")
+        return Triple(out, (targetNow * 100 / scale).coerceIn(0, 100), line)
     }
 
     /** The line after setting a target: "Family: 10 h a week · on both devices". */

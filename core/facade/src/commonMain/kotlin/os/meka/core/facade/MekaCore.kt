@@ -9652,10 +9652,20 @@ class MekaCore(
         }
         _wins.value = wins.view(_review.value.weekStart)
         // Balance view, slice 1: the reviewed week's time across work, family, health and self.
-        _balance.value = os.meka.core.domain.BalanceRules.view(
-            _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), hoursOf(workState, todayEpochDay()), dayEvents,
-            _review.value.habits.map { it.title to it.days }, balanceTargets.targets(),
-        ) { e -> os.meka.core.domain.ClubChildRules.child(e, marks.clubChildren, ZoneCalendar(timeZone)) ?: os.meka.core.domain.FootballRules.child(e) }
+        run {
+            val balanceHours = hoursOf(workState, todayEpochDay())
+            val childOf: (os.meka.core.domain.CalendarEvent) -> String? = { e ->
+                os.meka.core.domain.ClubChildRules.child(e, marks.clubChildren, ZoneCalendar(timeZone)) ?: os.meka.core.domain.FootballRules.child(e)
+            }
+            // Slice 2: the reviewed week and the three before it, counted the same way, for each area's trend.
+            val trendWeeks = os.meka.core.domain.BalanceRules.trendMinutes(
+                _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents, review::habitDays, childOf,
+            )
+            _balance.value = os.meka.core.domain.BalanceRules.view(
+                _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents,
+                _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks,
+            )
+        }
         _reflection.value = ZoneCalendar(timeZone).let { cal ->
             os.meka.core.domain.ReflectionRules.view(
                 _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,

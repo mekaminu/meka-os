@@ -520,6 +520,21 @@ class WeeklyReview(
         return parts.ifEmpty { listOf("Nothing in the diary yet") }
     }
 
+    /**
+     * Balance view, slice 2: the habits of the week starting [weekStart] (habits added after it left out), each with
+     * its title and Monday..Sunday ticks, for the four-week trend.
+     */
+    fun habitDays(weekStart: Long): List<Pair<String, List<Boolean>>> {
+        val ticks = habitTicks()
+        val now = nowMs()
+        return replica.entities(EntityTypes.HABIT).mapNotNull { s ->
+            val createdDay = calendar.epochDayOf(s[ActionableFields.CREATED_AT].longOrNull ?: now)
+            if (createdDay > weekStart + 6) return@mapNotNull null
+            val days = ticks[s.ref.entityId].orEmpty()
+            (s[ActionableFields.TITLE].textOrNull ?: "") to (0..6).map { (weekStart + it) in days }
+        }
+    }
+
     private fun habitTicks(): Map<String, Set<Long>> =
         replica.entities(EntityTypes.HABIT_COMPLETION)
             .filter { it[HabitCompletionFields.DONE].boolOrNull == true }

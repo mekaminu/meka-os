@@ -129,4 +129,46 @@ class BalanceTest {
         assertEquals("6 h 05", BalanceRules.hours(365))
         assertEquals("45 min", BalanceRules.hours(45))
     }
+
+    /** Slice 2: the reviewed week and the three before it, oldest first, with the line under each area. */
+    @Test
+    fun theTrendShowsFourWeeksWithHowOftenEachWasMet() {
+        val earlier = listOf(
+            ev("Gym", mon - 14, 7, 0, 10), // 3 h: health met two weeks back
+            ev("Date night", mon - 7, 19, 0, 23), // 4 h of family last week
+        )
+        val events = week + earlier
+        val habitsFor: (Long) -> List<Pair<String, List<Boolean>>> = { ws -> if (ws == mon) habits else emptyList() }
+        val weeks = BalanceRules.trendMinutes(mon, at(mon + 7, 9), cal, work, events, habitsFor, childOf)
+        assertEquals(listOf(mon - 21, mon - 14, mon - 7, mon), weeks.map { it.first })
+        val v = BalanceRules.view(mon, at(mon + 7, 9), cal, work, events, habits, emptyMap(), childOf, weeks)
+        val h = row(v, BalanceArea.HEALTH)
+        assertEquals(listOf(0, 180, 0, 180), h.trend.map { it.minutes })
+        assertEquals(listOf("21 Sep", "28 Sep", "5 Oct", "12 Oct"), h.trend.map { it.label })
+        assertEquals(listOf(false, true, false, true), h.trend.map { it.met })
+        assertEquals(100, h.trend[1].pct)
+        assertEquals("Last 4 weeks · met in 2 · about 1 h 30 a week", h.trendLine)
+        val f = row(v, BalanceArea.FAMILY)
+        assertEquals(listOf(0, 0, 240, 360), f.trend.map { it.minutes })
+        assertEquals("Last 4 weeks · not met yet · about 2 h 30 a week", f.trendLine)
+        // Target 8 h on a scale of 8 h (more than the biggest week).
+        assertEquals(100, f.trendTargetPct)
+        assertEquals(75, f.trend[3].pct)
+        // Work: his hours each week, never over.
+        val w = row(v, BalanceArea.WORK)
+        assertEquals("Last 4 weeks · never over · about 40 h a week", w.trendLine)
+        assertTrue(w.spoken.endsWith("Last 4 weeks · never over · about 40 h a week"))
+    }
+
+    @Test
+    fun aTrendWithNothingInItHasNoLine() {
+        val weeks = BalanceRules.trendMinutes(mon, at(mon + 2, 9), cal, work, emptyList(), { emptyList() }, childOf)
+        val v = BalanceRules.view(mon, at(mon + 2, 9), cal, work, emptyList(), emptyList(), emptyMap(), childOf, weeks)
+        val s = row(v, BalanceArea.SELF)
+        assertEquals(4, s.trend.size)
+        assertTrue(s.trend.last().current)
+        assertNull(s.trendLine)
+        // Without a trend (slice 1's callers) the rows carry none.
+        assertTrue(BalanceRules.view(mon, at(mon + 2, 9), cal, work, week, habits, emptyMap(), childOf).rows.all { it.trend.isEmpty() })
+    }
 }

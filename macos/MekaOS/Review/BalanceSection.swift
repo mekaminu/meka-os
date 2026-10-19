@@ -139,6 +139,12 @@ private struct BalanceRowView: View {
             if row.moreItems > 0 {
                 Text("and \(row.moreItems) more").font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
+            if let line = row.trendLine {
+                BalanceTrendView(row: row, palette: palette)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+            }
         }
         .padding(.vertical, MekaSpace.xxs)
         .accessibilityElement(children: .ignore)
@@ -147,5 +153,44 @@ private struct BalanceRowView: View {
             if reduceMotion { shown = fraction } else { withAnimation(MekaMotion.replan(reduced: false)) { shown = fraction } }
         }
         .onChange(of: row.pct) { withAnimation(MekaMotion.replan(reduced: reduceMotion)) { shown = fraction } }
+    }
+}
+
+/// Slice 2: the last four weeks as four small bars (oldest first), the met ones (work: over) in the accent, a hairline
+/// at the target and each week's Monday under its bar. Bars rise one after another on appear and glide to a new week;
+/// Reduce Motion sets them.
+private struct BalanceTrendView: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let row: BalanceRow
+    let palette: MekaPalette
+    @State private var risen = false
+
+    private let barHeight: CGFloat = 24
+
+    var body: some View {
+        let weeks = row.trend
+        HStack(alignment: .bottom, spacing: MekaSpace.xs) {
+            ForEach(Array(weeks.enumerated()), id: \.element.weekStart) { i, w in
+                VStack(spacing: MekaSpace.xxs) {
+                    ZStack(alignment: .bottom) {
+                        Rectangle().fill(palette.textTertiary.opacity(0.5)).frame(height: 1)
+                            .offset(y: -barHeight * CGFloat(row.trendTargetPct) / 100)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(w.met ? palette.accent : palette.textTertiary)
+                            .frame(width: 18, height: risen ? barHeight * CGFloat(w.pct) / 100 : 0)
+                            .animation(
+                                reduceMotion ? nil : MekaMotion.replan(reduced: false).delay(0.04 * Double(i)),
+                                value: risen
+                            )
+                            .animation(MekaMotion.replan(reduced: reduceMotion), value: w.pct)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: barHeight, maxHeight: barHeight, alignment: .bottom)
+                    Text(w.current ? "So far" : w.label).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+            }
+        }
+        .padding(.top, MekaSpace.xs)
+        .accessibilityHidden(true)
+        .onAppear { risen = true }
     }
 }

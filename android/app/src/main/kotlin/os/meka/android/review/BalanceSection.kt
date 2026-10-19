@@ -110,6 +110,49 @@ private fun BalanceLine(r: BalanceRow, modifier: Modifier) {
         Text(r.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         r.items.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         if (r.moreItems > 0) Text("and ${r.moreItems} more", style = MekaType.caption, color = Meka.colors.textTertiary)
+        r.trendLine?.let { line ->
+            TrendBars(r)
+            Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "balance-trend") {
+                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+            }
+        }
+    }
+}
+
+/**
+ * Slice 2: the last four weeks as four small bars (oldest first), the met ones (work: over) in the accent, a hairline at
+ * the target, each week's Monday under its bar. Bars rise one after another on appear and glide to a new week; reduced
+ * motion sets them.
+ */
+@Composable
+private fun TrendBars(r: BalanceRow) {
+    val reduced = Meka.reducedMotion
+    val barHeight = 24.dp
+    Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        r.trend.forEachIndexed { i, w ->
+            val rise = remember(r.area, i) { Animatable(if (reduced) w.pct / 100f else 0f) }
+            LaunchedEffect(w.weekStart, w.pct) {
+                if (!reduced && rise.value == 0f) kotlinx.coroutines.delay(40L * i)
+                rise.animateTo(w.pct / 100f, MekaMotion.replan(reduced))
+            }
+            val color by animateColorAsState(
+                if (w.met) Meka.colors.accent else Meka.colors.textTertiary, MekaMotion.themeBlend(reduced), label = "trend-bar",
+            )
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.fillMaxWidth().height(barHeight), contentAlignment = Alignment.BottomCenter) {
+                    Box(
+                        Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                            .padding(bottom = barHeight * (r.trendTargetPct.coerceAtMost(95) / 100f)).height(1.dp)
+                            .background(Meka.colors.textTertiary.copy(alpha = 0.5f)),
+                    )
+                    Box(
+                        Modifier.fillMaxWidth(0.5f).height(barHeight * rise.value.coerceIn(0f, 1f))
+                            .clip(RoundedCornerShape(topStart = MekaRadius.s, topEnd = MekaRadius.s)).background(color),
+                    )
+                }
+                Text(if (w.current) "So far" else w.label, style = MekaType.caption, color = Meka.colors.textTertiary)
+            }
+        }
     }
 }
 
