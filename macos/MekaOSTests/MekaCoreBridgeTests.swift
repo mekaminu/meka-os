@@ -1912,7 +1912,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(review.laterSaid(minute: 20 * 60 + 15), "Your weekly review comes back at 20:15")
         XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.laterTonight), "LATER_TONIGHT") // MacNotifier.laterTonightAction
         XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.allStillFit), "ALL_STILL_FIT") // MacNotifier.allStillFitAction, kids' admin, slice 6
-        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.shutDownLater), MacNotifier.shutdownLaterAction) // Done for the day, completeness
+        XCTAssertEqual(NotifyRules.shared.actionName(a: NoticeAction.shutDownLater), "SHUT_DOWN_LATER") // MacNotifier.shutdownLaterAction, Done for the day, completeness
         XCTAssertEqual(NotifyRules.shared.targetName(t: .kids), "KIDS")
         XCTAssertEqual(NoticeSource.barca.label, "Barça match day") // Barça match day, slice 1: listed in Notifications like the rest
         XCTAssertEqual(NoticeSource.barcaGoals.label, "Barça goals") // slice 2: each goal, then full time, in one place
