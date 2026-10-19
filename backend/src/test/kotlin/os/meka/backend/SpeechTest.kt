@@ -295,6 +295,53 @@ class SpeechTest {
     }
 
     @Test
+    fun afterAGoogleFailurePollyKeepsTheJobFor15MinutesThenGoogleIsTriedAgain() {
+        val google = FakePolly(chirp)
+        val polly = FakePolly(gb)
+        val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = google)
+        s.offered()
+        google.fail = true
+        assertEquals("Amy", s.speak(SpeechCodec.Request("One.", "Aoede")).voice)
+        assertTrue(s.googleSwitched())
+        // Google works again, but the next sentences (and a call line) don't ask it inside the hold: Polly at once.
+        google.fail = false
+        now += 5 * 60_000L
+        assertEquals("Amy", s.speak(SpeechCodec.Request("Two.", "Aoede")).voice)
+        assertEquals(null, s.googleClip("Three.", "Aoede"))
+        assertTrue(google.said.isEmpty())
+        assertEquals(5 * 60_000L, s.googleSwitchedForMs())
+        // Past 15 minutes the next one quietly asks Google again: it works and the switch ends, its length kept.
+        now += 11 * 60_000L
+        assertEquals("Aoede", s.speak(SpeechCodec.Request("Four.", "Aoede")).voice)
+        assertFalse(s.googleSwitched())
+        assertEquals(16 * 60_000L, s.googleSwitchedForMs())
+        // A probe that fails starts the hold over.
+        google.fail = true
+        s.speak(SpeechCodec.Request("Five.", "Aoede"))
+        now += 16 * 60_000L
+        s.speak(SpeechCodec.Request("Six.", "Aoede"))
+        google.fail = false
+        now += 1 * 60_000L
+        assertEquals("Amy", s.speak(SpeechCodec.Request("Seven.", "Aoede")).voice)
+        assertTrue(s.googleSwitched())
+    }
+
+    @Test
+    fun oneGoogleTimeoutRetriesGoogleTwoInARowSwitch() {
+        val google = object : SpeechEngine by FakePolly(chirp) {
+            override fun synthesize(text: String, voice: String, engine: String): ByteArray =
+                throw java.net.http.HttpTimeoutException("slow")
+        }
+        val s = SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = google)
+        s.speak(SpeechCodec.Request("One.", "Aoede"))
+        assertFalse(s.googleSwitched())
+        s.speak(SpeechCodec.Request("Two.", "Aoede"))
+        assertTrue(s.googleSwitched())
+        assertTrue(SpeechService.isTimeout(RuntimeException(java.net.SocketTimeoutException())))
+        assertFalse(SpeechService.isTimeout(IllegalStateException("refused")))
+    }
+
+    @Test
     fun pollysClipsAreCountedInTheAiBudgetAndStopWhenItIsSpent() {
         val google = FakePolly(chirp)
         val polly = FakePolly(gb)

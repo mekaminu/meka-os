@@ -49,6 +49,7 @@ class WatchListener(
         stop()
         val want = force ?: ListenRules.engine(
             hasSignal(), SpeechRecognizer.isRecognitionAvailable(context), SpeechRecognizer.isOnDeviceRecognitionAvailable(context),
+            latch.resting(System.currentTimeMillis()),
         ) ?: return onFail(WatchListenFailure.NO_RECOGNISER)
         val r = try {
             if (want == ListenEngine.ONLINE) SpeechRecognizer.createSpeechRecognizer(context)
@@ -128,6 +129,7 @@ class WatchListener(
         override fun onResults(results: Bundle?) {
             if (!listening) return
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().ifBlank { heardSoFar }
+            if (engine == ListenEngine.ONLINE && text.isNotBlank()) latch.worked(System.currentTimeMillis())
             finish()
             if (text.isBlank()) onFail(WatchListenFailure.NOT_HEARD) else onHeard(text)
         }
@@ -138,6 +140,9 @@ class WatchListener(
             val network = error == SpeechRecognizer.ERROR_NETWORK || error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
                 error == SpeechRecognizer.ERROR_SERVER || error == SpeechRecognizer.ERROR_SERVER_DISCONNECTED
             if (heardSoFar.isBlank()) {
+                if (engine == ListenEngine.ONLINE && network) {
+                    latch.failed(System.currentTimeMillis(), timeout = error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT)
+                }
                 ListenRules.fallback(engine, network, SpeechRecognizer.isOnDeviceRecognitionAvailable(context))?.let { start(it); return }
             }
             val r = recognizer
@@ -156,5 +161,13 @@ class WatchListener(
             finish()
             onFail(failure)
         }
+    }
+
+    companion object {
+        /**
+         * The watch's listening latch (small refinement, 2026-10-19): after online speech fails, or times out twice in
+         * a row, the watch's own recogniser listens for 15 minutes, then online is tried again. Main thread only.
+         */
+        val latch = os.meka.core.domain.ListenLatch()
     }
 }

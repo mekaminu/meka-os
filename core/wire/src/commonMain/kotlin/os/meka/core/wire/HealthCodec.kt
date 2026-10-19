@@ -42,6 +42,13 @@ object HealthCodec {
         val speechGoogle: String? = null,
         /** When a chosen Google voice last failed and Amazon Polly said the words instead; null when not since start. */
         val speechGoogleFailedAtMs: Long? = null,
+        /**
+         * How long Amazon Polly has stood in for Google's voice, now or the last time (the session latch, 2026-10-19:
+         * after a failure Polly keeps the job for at least 15 minutes); null when it never has, or an older server.
+         */
+        val speechGooglePollyForMs: Long? = null,
+        /** Polly still has Google's job now (Google is resting); false otherwise or from an older server. */
+        val speechGooglePollyNow: Boolean = false,
     ) {
         companion object {
             const val PUSH_ON = "on"
@@ -75,6 +82,8 @@ object HealthCodec {
         }
         r.speechGoogle?.let { put("speechGoogle", it) }
         r.speechGoogleFailedAtMs?.let { put("speechGoogleFailedAt", it) }
+        r.speechGooglePollyForMs?.let { put("speechGooglePollyFor", it) }
+        if (r.speechGooglePollyNow) put("speechGooglePollyNow", true)
     }.toString()
 
     /** An unknown push state reads as off (an older or newer server), never as fine. */
@@ -100,6 +109,8 @@ object HealthCodec {
                 ?.takeIf { it != SpeechCodec.Google.NO_KEY }
                 ?.let { if (it == SpeechCodec.Google.ON) it else SpeechCodec.Google.FAILED },
             speechGoogleFailedAtMs = (o["speechGoogleFailedAt"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it > 0 },
+            speechGooglePollyForMs = (o["speechGooglePollyFor"] as? JsonPrimitive)?.takeIf { !it.isString }?.longOrNull?.takeIf { it >= 0 },
+            speechGooglePollyNow = o.bool("speechGooglePollyNow"),
         )
     }
 

@@ -194,6 +194,10 @@ class HealthTest {
         val googleFailed = HealthRules.view(facts(server = g.copy(speechGoogleFailedAtMs = now - 2 * HealthRules.HOUR)), cal).row("voice")
         assertEquals("On · Google Chirp 3 HD and Amazon Polly · Google voice failed 12:05 · used Polly", googleFailed.line)
         assertEquals(HealthState.OK, googleFailed.state)
+        // The session latch: how long Polly stood in, or still does.
+        val held = g.copy(speechGoogleFailedAtMs = now - 2 * HealthRules.HOUR, speechGooglePollyForMs = 15 * 60_000L)
+        assertEquals("On · Google Chirp 3 HD and Amazon Polly · Google voice failed 12:05 · used Polly for 15 min", HealthRules.view(facts(server = held), cal).row("voice").line)
+        assertEquals("On · Google Chirp 3 HD and Amazon Polly · Google voice failed 12:05 · on Polly for 15 min so far", HealthRules.view(facts(server = held.copy(speechGooglePollyNow = true)), cal).row("voice").line)
         assertEquals("On · Google Chirp 3 HD and Amazon Polly", HealthRules.view(facts(server = g.copy(speechGoogleFailedAtMs = now - 25 * HealthRules.HOUR)), cal).row("voice").line)
         val down = HealthRules.view(facts(server = server.copy(speechGoogle = ServerHealth.GOOGLE_FAILED)), cal).row("voice")
         assertEquals("On · Amazon Polly · Google's voices can't be reached" to HealthState.OK, down.line to down.state)

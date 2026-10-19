@@ -1,5 +1,7 @@
 package os.meka.backend
 
+import os.meka.core.domain.EngineLatch
+import os.meka.core.domain.EngineLatchRules
 import os.meka.core.wire.SpeechCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.services.polly.PollyClient
@@ -287,6 +289,10 @@ class SpeechService(
     @Volatile var googleFailedAtMs: Long? = null
         private set
 
+    /** Google's voice latch: after a failure (or two timeouts in a row) Polly speaks for at least 15 minutes. */
+    @Volatile private var googleLatch = EngineLatch()
+    private val latchLock = Any()
+
     fun month(): String = Instant.ofEpochMilli(nowMs()).atOffset(ZoneOffset.UTC).let { "%04d-%02d".format(it.year, it.monthValue) }
 
     /**
@@ -362,13 +368,11 @@ class SpeechService(
         if (wanted.provider == SpeechCodec.GOOGLE && g != null) {
             val usedGoogle = runCatching { googleUsage.used(m) }.getOrDefault(Long.MAX_VALUE / 2)
             if (usedGoogle + chars <= googleFallbackAt) {
-                val audio = runCatching { g.synthesize(r.text, wanted.id, wanted.engine) }.getOrNull()
-                    ?.takeIf { it.isNotEmpty() && it.size <= SpeechCodec.MAX_AUDIO_BYTES }
+                val audio = latchedGoogle(g, r.text, wanted)
                 if (audio != null) {
                     runCatching { googleUsage.add(m, chars) }
                     return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", wanted.id, wanted.engine), audio)
                 }
-                googleFailedAtMs = nowMs()
             }
         }
         val voice = if (wanted.provider == SpeechCodec.POLLY) wanted else default
@@ -397,12 +401,35 @@ class SpeechService(
         val chars = text.length.toLong()
         val used = runCatching { googleUsage.used(m) }.getOrDefault(Long.MAX_VALUE / 2)
         if (used + chars > googleFallbackAt) return null
-        val audio = runCatching { g.synthesize(text, wanted.id, wanted.engine) }.getOrNull()
-            ?.takeIf { it.isNotEmpty() && it.size <= SpeechCodec.MAX_AUDIO_BYTES }
-        if (audio == null) { googleFailedAtMs = nowMs(); return null }
+        val audio = latchedGoogle(g, text, wanted) ?: return null
         runCatching { googleUsage.add(m, chars) }
         return audio
     }
+
+    /**
+     * Google's clip of [text] in [voice] through the latch (small refinement, Meka 2026-10-19: "engine fallback latches
+     * for the session"): while Google is switched off ([EngineLatchRules.useFallback]: a failure, or two timeouts in a
+     * row, in the last 15 minutes) Google isn't asked and null comes back at once, so Polly says it with no wait; after
+     * the hold the next clip quietly asks Google again. A failure keeps [googleFailedAtMs]. Never throws.
+     */
+    private fun latchedGoogle(g: SpeechEngine, text: String, voice: SpeechCodec.Voice): ByteArray? {
+        if (EngineLatchRules.useFallback(googleLatch, nowMs())) return null
+        val tried = runCatching { g.synthesize(text, voice.id, voice.engine) }
+        val audio = tried.getOrNull()?.takeIf { it.isNotEmpty() && it.size <= SpeechCodec.MAX_AUDIO_BYTES }
+        synchronized(latchLock) {
+            val now = nowMs()
+            googleLatch = if (audio != null) EngineLatchRules.worked(googleLatch, now)
+            else EngineLatchRules.failed(googleLatch, now, timeout = isTimeout(tried.exceptionOrNull()))
+        }
+        if (audio == null) googleFailedAtMs = nowMs()
+        return audio
+    }
+
+    /** Whether Polly has the Google voice's job now (Google is resting after a failure). */
+    fun googleSwitched(): Boolean = googleLatch.switched
+
+    /** How long Polly has stood in for Google (now, or the last time); null when it never has since the start. */
+    fun googleSwitchedForMs(): Long? = EngineLatchRules.switchedForMs(googleLatch, nowMs())
 
     /** Google's state for Health: [SpeechCodec.Google.ON] · [SpeechCodec.Google.FAILED] · null (no key). Never throws. */
     fun googleState(): String? = runCatching { runCatching { offered() }; googleInfo(month()).state }.getOrNull()?.takeIf { it != SpeechCodec.Google.NO_KEY }
@@ -487,6 +514,10 @@ class SpeechService(
     companion object {
         const val LANGUAGE = "en-GB"
         const val CAP_CHARS = 1_000_000L
+        /** A timeout anywhere in [e]'s causes (Google too slow) rather than a refusal or a broken answer. */
+        fun isTimeout(e: Throwable?): Boolean = generateSequence(e) { it.cause }.take(8)
+            .any { it is java.net.http.HttpTimeoutException || it is java.net.SocketTimeoutException || it is java.util.concurrent.TimeoutException }
+
         /** Google's free tier for Chirp 3 HD (1M characters a month); Navilife stops at [GOOGLE_FALLBACK_AT]. */
         const val GOOGLE_FREE = 1_000_000L
         const val GOOGLE_FALLBACK_AT = 900_000L

@@ -203,6 +203,7 @@ final class TalkController {
     private func apply(_ step: TalkStep) {
         session = step.session
         phase = session.phase
+        MacListen.latch.sessionOpen = phase != .ended // a switch to the Mac's own speech lasts the conversation
         step.effects.forEach(run)
     }
 
@@ -308,7 +309,9 @@ final class TalkController {
         stopListening()
         guard let recognizer else { return fail(.noOnDevice) }
         // Online with a connection, else on the device; neither: say so (the mic fix, step 4).
-        let online = !forced && MacSignal.online
+        // The latch (2026-10-19): after Apple's online speech failed, the Mac's own listens for the session or 15 min.
+        let resting = recognizer.supportsOnDeviceRecognition && MacListen.latch.resting(nowMs: MacListen.nowMs)
+        let online = !forced && MacSignal.online && !resting
         guard online || recognizer.supportsOnDeviceRecognition else { return fail(.noOnDevice) }
         guard recognizer.isAvailable else { return fail(.busy) }
         let request = SFSpeechAudioBufferRecognitionRequest()
@@ -344,7 +347,10 @@ final class TalkController {
             let text = result?.bestTranscription.formattedString
             let final = result?.isFinal ?? false
             let failed = error != nil
-            Task { @MainActor in self.recognised(text, final: final, failed: failed, gen: gen) }
+            // "No speech detected" (1110) and a cancel (216, 301) are silence or a stop, not online speech failing.
+            let code = (error as NSError?)?.code ?? 0
+            let quiet = code == 1110 || code == 216 || code == 301
+            Task { @MainActor in self.recognised(text, final: final, failed: failed, quiet: quiet, gen: gen) }
         }
         clock = Task { [weak self] in
             while !Task.isCancelled {
@@ -460,7 +466,7 @@ final class TalkController {
         }
     }
 
-    private func recognised(_ text: String?, final: Bool, failed: Bool, gen: Int) {
+    private func recognised(_ text: String?, final: Bool, failed: Bool, quiet: Bool = false, gen: Int) {
         guard gen == generation, phase == .listening else { return }
         if let text, !text.isEmpty {
             if text != heard { lastWords = Date() }
@@ -468,9 +474,11 @@ final class TalkController {
             heardAnything = true
         }
         if final {
+            if listeningOnline && heardAnything { MacListen.latch.worked(nowMs: MacListen.nowMs) }
             finishListening()
         } else if failed {
-            // Apple's online recognition failed before any words: listen again on the Mac itself, once.
+            // Apple's online recognition failed before any words: listen again on the Mac itself, and keep to it a while.
+            if !heardAnything && listeningOnline && !quiet { MacListen.latch.failed(nowMs: MacListen.nowMs, timeout: false) }
             if !heardAnything && listeningOnline && recognizer?.supportsOnDeviceRecognition == true {
                 return listen(onDevice: true)
             }
@@ -645,6 +653,14 @@ enum MacTalkOver {
 struct RoomSums: Sendable {
     var squares = 0.0
     var count = 0
+}
+
+/// The Mac's listening latch (small refinement, Meka 2026-10-19: "engine fallback latches for the session"): after
+/// Apple's online speech fails before any words, Talk listens on the Mac itself for the rest of the conversation or
+/// 15 minutes, whichever is longer (`EngineLatchRules`), then quietly tries online again. Main actor only.
+enum MacListen {
+    static let latch = ListenLatch()
+    static var nowMs: Int64 { Int64(Date().timeIntervalSince1970 * 1000) }
 }
 
 /// Whether the Mac has a working connection now, for choosing Apple's online speech (the mic fix, step 4). Watched once

@@ -64,6 +64,10 @@ data class ServerHealth(
     val speechGoogle: String? = null,
     /** When a chosen Google voice last failed and Amazon Polly said it instead (natural voice, slice 3). */
     val speechGoogleFailedAtMs: Long? = null,
+    /** How long Polly has stood in for Google's voice, now or the last time (the session latch); null: never, or not said. */
+    val speechGooglePollyForMs: Long? = null,
+    /** Polly still has Google's job now. */
+    val speechGooglePollyNow: Boolean = false,
 ) {
     companion object {
         const val GOOGLE_ON = "on"
@@ -332,11 +336,15 @@ object HealthRules {
 
     /**
      * Which voices the server speaks with (natural voice, slice 3). A Google failure in the last day is noted, never
-     * flagged: Amazon Polly already said those words, so nothing needs a look.
+     * flagged: Amazon Polly already said those words, so nothing needs a look. Since the session latch (2026-10-19) it
+     * says how long Polly stood in: "· used Polly for 15 min", or "· on Polly for 4 min so far" while it still does.
      */
     fun voiceLine(s: ServerHealth, nowMs: Long, cal: LocalCalendar): String {
+        val polly = s.speechGooglePollyForMs?.let { EngineLatchRules.duration(it) }?.let {
+            if (s.speechGooglePollyNow) "on Polly for $it so far" else "used Polly for $it"
+        } ?: "used Polly"
         val failed = s.speechGoogleFailedAtMs?.takeIf { nowMs - it in 0 until GOOGLE_FAILED_NOTE_MS }
-            ?.let { " · Google voice failed ${at(it, nowMs, cal)} · used Polly" }.orEmpty()
+            ?.let { " · Google voice failed ${at(it, nowMs, cal)} · $polly" }.orEmpty()
         return when (s.speechGoogle) {
             ServerHealth.GOOGLE_ON -> "On · Google Chirp 3 HD and Amazon Polly$failed"
             ServerHealth.GOOGLE_FAILED -> "On · Amazon Polly · Google's voices can't be reached$failed"

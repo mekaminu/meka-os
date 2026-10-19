@@ -721,7 +721,7 @@ private fun CaptureSheet(
                             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
                             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
                         ) {
-                            ListeningLine(listener.engine, listener.level, reduced)
+                            ListeningLine(listener.engine, listener.resting, listener.level, reduced)
                         }
                         val offer = parkingOffer
                         AnimatedVisibility(
@@ -807,12 +807,13 @@ private fun CaptureSheet(
 }
 
 /**
- * The mic fix, step 3: "Listening · Google's speech" (or "· on this phone, no signal") under the field while the 🎙
+ * The mic fix, step 3: "Listening · Google's speech" (or "· on this phone, no signal", or "· on this phone · Google's
+ * speech is resting" after it failed) under the field while the 🎙
  * listens, after a brass dot that grows with his voice (still with reduced motion).
  */
 @Composable
-private fun ListeningLine(engine: os.meka.core.domain.ListenEngine?, level: Float, reduced: Boolean) {
-    val line = os.meka.core.domain.ListenRules.listeningLine(engine ?: os.meka.core.domain.ListenEngine.ONLINE, os.meka.core.domain.ListenRules.GOOGLE)
+private fun ListeningLine(engine: os.meka.core.domain.ListenEngine?, resting: Boolean, level: Float, reduced: Boolean) {
+    val line = os.meka.core.domain.ListenRules.listeningLine(engine ?: os.meka.core.domain.ListenEngine.ONLINE, os.meka.core.domain.ListenRules.GOOGLE, resting = resting)
     Row(
         Modifier.padding(vertical = MekaSpace.xs).semantics { liveRegion = LiveRegionMode.Polite; contentDescription = line },
         verticalAlignment = Alignment.CenterVertically,

@@ -10,6 +10,7 @@ import android.speech.RecognitionService
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import os.meka.core.domain.ListenEngine
+import os.meka.core.domain.ListenLatch
 import os.meka.core.domain.ListenRules
 
 /**
@@ -33,12 +34,29 @@ object PhoneListen {
 
     fun onDeviceAvailable(context: Context): Boolean = SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
 
+    /**
+     * The phone's listening latch (small refinement, 2026-10-19): after Google's speech fails (or times out twice in a
+     * row) Talk and the capture sheet listen on the phone for the rest of the Talk session or 15 minutes, whichever is
+     * longer, then try Google again. Main thread only.
+     */
+    val latch = ListenLatch()
+
+    /** Whether Google's speech is resting now ([latch]). */
+    fun resting(): Boolean = latch.resting(System.currentTimeMillis())
+
     /** Which recogniser listens now; null: none can (no signal and no on-device English). */
     fun choose(context: Context): ListenEngine? = ListenRules.engine(
         hasSignal(context),
         SpeechRecognizer.isRecognitionAvailable(context),
         onDeviceAvailable(context),
+        resting(),
     )
+
+    /** Google's speech failed before any words ([error] a [networkFailure]): the latch counts it. */
+    fun onlineFailed(error: Int) = latch.failed(System.currentTimeMillis(), timeout = error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT)
+
+    /** Google's speech wrote down what he said. */
+    fun onlineWorked() = latch.worked(System.currentTimeMillis())
 
     /** Google's own recognition service, when the phone has it (Samsung's default may be its own). */
     private fun googleService(context: Context): ComponentName? = runCatching {

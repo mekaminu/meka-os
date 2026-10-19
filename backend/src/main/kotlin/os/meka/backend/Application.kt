@@ -924,6 +924,8 @@ fun Application.mekaSync(
                 lastPushAtMs = lastPush?.first, lastPushResult = lastPush?.second?.let { NotifyReports.word(it) },
                 speechGoogle = speech?.let { withContext(Dispatchers.IO) { it.googleState() } },
                 speechGoogleFailedAtMs = speech?.googleFailedAtMs,
+                speechGooglePollyForMs = speech?.googleSwitchedForMs(),
+                speechGooglePollyNow = speech?.googleSwitched() == true,
             )
             call.respondText(HealthCodec.encodeResponse(health), ContentType.Application.Json)
         }

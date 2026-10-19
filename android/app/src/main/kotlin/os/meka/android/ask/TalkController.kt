@@ -227,6 +227,7 @@ class TalkController(
     private fun apply(step: TalkStep) {
         session = step.session
         phase = session.phase
+        PhoneListen.latch.sessionOpen = active // a switch to the phone's own speech lasts the whole conversation
         step.effects.forEach(::run)
     }
 
@@ -395,6 +396,7 @@ class TalkController(
             endpoint?.cancel()
             if (wordsEndedAt == null) wordsEndedAt = android.os.SystemClock.elapsedRealtime()
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            if (engine == os.meka.core.domain.ListenEngine.ONLINE && text.isNotBlank()) PhoneListen.onlineWorked()
             took(text.ifBlank { heard })
         }
 
@@ -417,6 +419,7 @@ class TalkController(
             }
             // Step 4: Google's online speech failed on the network: listen again with the phone's own, once.
             val current = engine
+            if (current == os.meka.core.domain.ListenEngine.ONLINE && PhoneListen.networkFailure(error)) PhoneListen.onlineFailed(error)
             if (current != null) {
                 os.meka.core.domain.ListenRules.fallback(current, PhoneListen.networkFailure(error), PhoneListen.onDeviceAvailable(context))
                     ?.let { return listen(force = it) }

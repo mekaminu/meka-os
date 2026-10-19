@@ -40,6 +40,9 @@ class CaptureListener(
         private set
     var engine by mutableStateOf<ListenEngine?>(null)
         private set
+    /** Listening on the phone with signal because Google's speech is resting after a failure (the latch). */
+    var resting by mutableStateOf(false)
+        private set
     /** The microphone's level, 0 … 1, for the breathing dot. */
     var level by mutableFloatStateOf(0f)
         private set
@@ -61,6 +64,7 @@ class CaptureListener(
         }
         recognizer = r
         engine = want
+        resting = want == ListenEngine.ON_DEVICE && PhoneListen.resting() && PhoneListen.hasSignal(context)
         partial = ""
         level = 0f
         val now = SystemClock.elapsedRealtime()
@@ -147,6 +151,7 @@ class CaptureListener(
         override fun onResults(results: Bundle?) {
             if (!listening) return
             val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            if (engine == ListenEngine.ONLINE && text.isNotBlank()) PhoneListen.onlineWorked()
             done(text.ifBlank { partial })
         }
 
@@ -155,6 +160,7 @@ class CaptureListener(
             val current = engine
             val heardSoFar = partial
             if (current != null && heardSoFar.isBlank()) {
+                if (current == ListenEngine.ONLINE && PhoneListen.networkFailure(error)) PhoneListen.onlineFailed(error)
                 ListenRules.fallback(current, PhoneListen.networkFailure(error), PhoneListen.onDeviceAvailable(context))
                     ?.let { start(force = it); return }
             }

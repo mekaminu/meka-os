@@ -11,10 +11,11 @@ enum class ListenEngine { ONLINE, ON_DEVICE }
 object ListenRules {
     /**
      * Online when there is signal and an online recogniser is there; else the on-device one; null when neither can
-     * listen (no signal and no on-device English).
+     * listen (no signal and no on-device English). [onlineResting]: the online one failed and the device's own has the
+     * job for now ([EngineLatchRules.useFallback]); it still listens online when the device has no English of its own.
      */
-    fun engine(hasSignal: Boolean, onlineAvailable: Boolean, onDeviceAvailable: Boolean): ListenEngine? = when {
-        hasSignal && onlineAvailable -> ListenEngine.ONLINE
+    fun engine(hasSignal: Boolean, onlineAvailable: Boolean, onDeviceAvailable: Boolean, onlineResting: Boolean = false): ListenEngine? = when {
+        hasSignal && onlineAvailable && !(onlineResting && onDeviceAvailable) -> ListenEngine.ONLINE
         onDeviceAvailable -> ListenEngine.ON_DEVICE
         else -> null
     }
@@ -48,11 +49,13 @@ object ListenRules {
 
     /**
      * The capture sheet's line while it listens: "Listening · Google's speech" online ([onlineName] is the device's
-     * provider), "Listening · on this phone, no signal" on the device.
+     * provider), "Listening · on this phone, no signal" on the device, "Listening · on this phone · Google's speech is
+     * resting" when the device's own has the job after the online one failed ([resting]).
      */
-    fun listeningLine(engine: ListenEngine, onlineName: String, device: String = "phone"): String = when (engine) {
-        ListenEngine.ONLINE -> "Listening · $onlineName"
-        ListenEngine.ON_DEVICE -> "Listening · on this $device, no signal"
+    fun listeningLine(engine: ListenEngine, onlineName: String, device: String = "phone", resting: Boolean = false): String = when {
+        engine == ListenEngine.ONLINE -> "Listening · $onlineName"
+        resting -> "Listening · on this $device · $onlineName is resting"
+        else -> "Listening · on this $device, no signal"
     }
 
     /** The Fold's and the watch's online provider, as the lines name it. */

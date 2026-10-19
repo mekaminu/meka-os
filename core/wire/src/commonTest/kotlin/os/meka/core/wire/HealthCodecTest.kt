@@ -48,6 +48,10 @@ class HealthCodecTest {
         // Natural voice, slice 3: Google's voices on the server and when a chosen one last failed.
         val r = HealthCodec.Response(HealthCodec.Response.PUSH_ON, calls = true, speech = true, atMs = 5, speechGoogle = "on", speechGoogleFailedAtMs = 4)
         assertEquals(r, HealthCodec.decodeResponse(HealthCodec.encodeResponse(r)))
+        // The session latch's length and whether Polly still stands in.
+        val held = r.copy(speechGooglePollyForMs = 900_000, speechGooglePollyNow = true)
+        assertEquals(held, HealthCodec.decodeResponse(HealthCodec.encodeResponse(held)))
+        assertEquals(false, HealthCodec.decodeResponse(HealthCodec.encodeResponse(r)).speechGooglePollyNow)
         assertEquals("failed", HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"speechGoogle":"odd"}""").speechGoogle)
         assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5,"speechGoogle":"nokey"}""").speechGoogle)
         assertEquals(null, HealthCodec.decodeResponse("""{"w":1,"push":"on","at":5}""").speechGoogle)
