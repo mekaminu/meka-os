@@ -732,7 +732,7 @@ internal object HelpIndex {
             keywords = listOf("week ahead", "the coming week", "sunday review", "next week"),
             what = "the coming week day by day: events, office days, clashes, family, bins and parcels.",
             how = "It comes on Sunday at 18:00, or open it any time; Listen reads it aloud.",
-            tips = listOf(),
+            tips = listOf("Under the summary a Balance line says how the week looks as planned against your Balance targets (Review → Balance → Targets ›): which of family, health and your own time fall short, and whether work runs over your hours. Listen reads it too."),
             fold = HelpPlace.WEEK_AHEAD,
             foldWhere = "Ask → Daily → Week ahead",
             mac = HelpPlace.WEEK_AHEAD,

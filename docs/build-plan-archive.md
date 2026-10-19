@@ -2016,3 +2016,10 @@ Core MoneyGoals.kt (rules only; nothing sent): `candidates` (open goals whose nu
 - Facade: `refresh()` computes the trend weeks and passes them to `BalanceRules.view`.
 - Fold `TrendBars` (four bars rising 40 ms apart on the replan spring, met in the accent, a hairline at the target, "So far" under a week in progress) and the line; Mac `BalanceTrendView` the same. Help tip and the motion row updated.
 - Tests: BalanceTest (2: four weeks with met/average/scale; an empty trend has no line and slice 1's callers carry none), BalanceFacadeTest (four weeks, this one current, work's line). Nothing stored, no migration, Mac checked nightly. c656f2b, CI run 890 (39202774290) green first try.
+
+## Balance view — slice 3 (2026-10-19): the week-ahead line
+- Core `BalanceRules.weekAheadLine(weekStart, next, …)` counts the week the week ahead shows as planned (its whole calendar and work hours via `count` with the week's end as now; habits already ticked in it) and names each of family, health and self short of its target ("family 6 h of 8 h") and work over its hours ("work 2 h over"); all met: "every target met · work within your hours"; null when nothing is counted. Head "Balance as planned" (next week, from Saturday) or "Balance with what's planned" (the rest of this week).
+- `WeekAheadView.balance` + `withBalance(line)`: the line, and the spoken week reads it straight after the summary (hours said in full), so the days, sync and goals still follow.
+- Facade: after the balance view, `_weekAhead` gets the line for its week (`hoursOf` that week, `review.habitDays`, the synced targets, the children's clubs).
+- Fold `WeekAheadPane` and Mac `WeekAheadSheet`: a caption under the summary, after the mail and protected lines, cross-fading as it changes. Help tip in docs/help/week-ahead.md (HelpIndex regenerated); motion row updated.
+- Tests: BalanceTest.theWeekAheadSaysWhatThePlanLeavesShort (as planned, the rest of this week with habits, all met with work over / within, the spoken order), BalanceFacadeTest (the week ahead's line and a target set reaching it). Nothing stored, no migration, Mac checked nightly.

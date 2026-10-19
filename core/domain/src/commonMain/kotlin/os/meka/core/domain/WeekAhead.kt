@@ -84,7 +84,26 @@ data class WeekAheadView(
     val mailNotice: String? = null,
     /** Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00" ([ProtectedRules.weekLine]); null with none. */
     val protectedLine: String? = null,
+    /** Balance view, slice 3: "Balance as planned · family 6 h of 8 h · work 2 h over" ([BalanceRules.weekAheadLine]); null with nothing planned. */
+    val balance: String? = null,
 ) {
+    /**
+     * This view with its balance line, read out straight after the summary ("Your week ahead. … Balance as planned,
+     * family 6 hours of 8 hours."), so the days, the family sync and the goals still follow it.
+     */
+    fun withBalance(line: String?): WeekAheadView {
+        if (line == null) return copy(balance = null)
+        val said = line.replace(" · ", ", ").split(" ").joinToString(" ") { w ->
+            when (w) { "h" -> "hours"; "h," -> "hours,"; else -> w }
+        } + "."
+        val head = "Your week ahead. ${summary.replace(" · ", ", ")}."
+        val out = when {
+            spoken.startsWith(head) -> head + " " + said + spoken.removePrefix(head)
+            else -> (spoken + " " + said).trim()
+        }
+        return copy(balance = line, spoken = out)
+    }
+
     companion object {
         val EMPTY = WeekAheadView(0, "This week", "", "A quiet week so far", emptyList(), emptyList(), "")
     }

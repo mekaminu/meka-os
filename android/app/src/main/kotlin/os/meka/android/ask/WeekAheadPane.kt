@@ -153,6 +153,14 @@ fun WeekAheadPane(
                 }
             }
         }
+        // Balance view, slice 3: "Balance as planned · family 6 h of 8 h · work 2 h over" (cross-fades as it changes).
+        v.balance?.let { line ->
+            item(key = "balance") {
+                Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-balance", modifier = Modifier.animateItem()) { l ->
+                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                }
+            }
+        }
         itemsIndexed(v.days, key = { _, d -> "day-${d.epochDay}" }) { i, d ->
             DayBlock(d, Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2 + i)))
         }

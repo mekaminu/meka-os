@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** Balance view through the facade (slices 1–2): the review's week counted, targets set on one app reach the other. */
+/** Balance view through the facade (slices 1–3): the review's week counted, targets set on one app reach the other. */
 class BalanceFacadeTest {
     private var now = 1_792_163_100_000L // Fri 16 Oct 2026, 16:05 in London
 
@@ -41,11 +41,18 @@ class BalanceFacadeTest {
         assertTrue(work.trend.last().current)
         assertEquals("Last 4 weeks · never over · about 40 h 30 a week", work.trendLine)
         assertNull(v.rows.first { it.area == BalanceArea.FAMILY }.trendLine)
+        // Slice 3: the week ahead (the rest of this week on a Friday) says what the plan leaves short.
+        assertEquals(
+            "Balance with what's planned · family 0 h of 8 h · health 0 h of 3 h · self 0 h of 2 h",
+            fold.weekAheadView.value.balance,
+        )
+        assertTrue(fold.weekAheadView.value.spoken.contains("Balance with what's planned, family 0 hours of 8 hours, health 0 hours of 3 hours, self 0 hours of 2 hours."))
 
         assertEquals("Family: 10 h a week · on both devices", fold.setBalanceTarget("FAMILY", 600))
         assertNull(fold.setBalanceTarget("FAMILY", 600))
         assertNull(fold.setBalanceTarget("SLEEP", 600))
         assertEquals("0 h of 10 h", fold.balanceView.value.rows.first { it.area == BalanceArea.FAMILY }.line)
+        assertTrue(fold.weekAheadView.value.balance!!.contains("family 0 h of 10 h"))
 
         fold.syncNow(); mac.syncNow()
         assertEquals("0 h of 10 h", mac.balanceView.value.rows.first { it.area == BalanceArea.FAMILY }.line)

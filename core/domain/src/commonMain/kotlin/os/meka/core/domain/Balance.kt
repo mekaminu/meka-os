@@ -26,6 +26,9 @@ import os.meka.core.sync.fv
  *
  * Slice 2 (2026-10-19): each row also carries a four-week trend ([BalanceRules.trendMinutes], [BalanceRules.trend]): the
  * reviewed week and the three before, each counted the same way, with "Last 4 weeks · met in 2 · about 6 h a week".
+ *
+ * Slice 3 (2026-10-19): the week ahead carries one balance line for the week it shows, counted as planned
+ * ([BalanceRules.weekAheadLine], [WeekAheadView.balance]).
  */
 enum class BalanceArea(val label: String, val field: String, val defaultMin: Int?, val choices: List<Int>) {
     WORK("Work", "workMin", null, listOf(35, 40, 45, 50).map { it * 60 }),
@@ -399,6 +402,41 @@ object BalanceRules {
             avg?.let { "about ${hours(it)} a week" },
         ).joinToString(" · ")
         return Triple(out, (targetNow * 100 / scale).coerceIn(0, 100), line)
+    }
+
+    /**
+     * Slice 3 (2026-10-19): the week ahead's balance line for the week starting [weekStart], counted as planned: the
+     * whole week's events and work hours (not only what has happened), and the habits already ticked in it. Names each
+     * area short of its target and work over its hours: "Balance as planned · family 6 h of 8 h · health 0 h of 3 h ·
+     * work 2 h over"; with each met: "Balance as planned · every target met · work within your hours". [next] says
+     * whether it's next week (from Saturday) or the rest of this one. Null when nothing at all is planned or counted.
+     */
+    fun weekAheadLine(
+        weekStart: Long,
+        next: Boolean,
+        cal: LocalCalendar,
+        work: WorkHours,
+        events: List<CalendarEvent>,
+        habits: List<Pair<String, List<Boolean>>>,
+        targets: Map<BalanceArea, Int>,
+        childOf: (CalendarEvent) -> String? = { null },
+    ): String? {
+        val endMs = cal.toEpochMs(weekStart + 7, 0)
+        val minutes = count(weekStart, endMs, cal, work, events, habits, childOf).first
+        if (minutes.values.all { it <= 0 }) return null
+        val parts = mutableListOf<String>()
+        for (a in listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF)) {
+            val target = targets[a] ?: a.defaultMin ?: continue
+            val n = minutes.getValue(a)
+            if (n < target) parts += "${a.label.lowercase()} ${hours(n)} of ${hours(target)}"
+        }
+        val workTarget = targets[BalanceArea.WORK] ?: scheduledMin(work, weekStart)
+        val workN = minutes.getValue(BalanceArea.WORK)
+        val workOver = (workTarget > 0 && workN > workTarget).takeIf { it }?.let { "work ${hours(workN - workTarget)} over" }
+        val head = if (next) "Balance as planned" else "Balance with what's planned"
+        return if (parts.isEmpty()) {
+            listOfNotNull(head, "every target met", workOver ?: "work within your hours".takeIf { workTarget > 0 }).joinToString(" · ")
+        } else (listOf(head) + parts + listOfNotNull(workOver)).joinToString(" · ")
     }
 
     /** The line after setting a target: "Family: 10 h a week · on both devices". */

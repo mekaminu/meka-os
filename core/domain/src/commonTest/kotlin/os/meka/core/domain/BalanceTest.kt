@@ -171,4 +171,37 @@ class BalanceTest {
         // Without a trend (slice 1's callers) the rows carry none.
         assertTrue(BalanceRules.view(mon, at(mon + 2, 9), cal, work, week, habits, emptyMap(), childOf).rows.all { it.trend.isEmpty() })
     }
+
+    @Test
+    fun theWeekAheadSaysWhatThePlanLeavesShort() {
+        // Slice 3: the whole week as planned, even before it starts.
+        assertEquals(
+            "Balance as planned · family 6 h of 8 h · health 2 h 15 of 3 h",
+            BalanceRules.weekAheadLine(mon, true, cal, work, week, emptyList(), emptyMap(), childOf),
+        )
+        // The rest of this week: habits already ticked count (Friday's gym makes health 3 h).
+        assertEquals(
+            "Balance with what's planned · family 6 h of 8 h",
+            BalanceRules.weekAheadLine(mon, false, cal, work, week, habits, emptyMap(), childOf),
+        )
+        // Every target met, and work over the hours he set.
+        val targets = mapOf(BalanceArea.FAMILY to 6 * 60, BalanceArea.WORK to 35 * 60)
+        assertEquals(
+            "Balance as planned · every target met · work 5 h over",
+            BalanceRules.weekAheadLine(mon, true, cal, work, week, habits, targets, childOf),
+        )
+        assertEquals(
+            "Balance as planned · every target met · work within your hours",
+            BalanceRules.weekAheadLine(mon, true, cal, work, week, habits, mapOf(BalanceArea.FAMILY to 6 * 60), childOf),
+        )
+        // Read out after the week: hours in full.
+        val ahead = WeekAheadView.EMPTY.copy(summary = "4 office days · 2 matches", spoken = "Your week ahead. 4 office days, 2 matches. Mon 12 Oct.")
+            .withBalance("Balance as planned · family 6 h of 8 h · health 2 h 15 of 3 h")
+        assertEquals("Balance as planned · family 6 h of 8 h · health 2 h 15 of 3 h", ahead.balance)
+        assertEquals(
+            "Your week ahead. 4 office days, 2 matches. Balance as planned, family 6 hours of 8 hours, health 2 hours 15 of 3 hours. Mon 12 Oct.",
+            ahead.spoken,
+        )
+        assertNull(ahead.withBalance(null).balance)
+    }
 }

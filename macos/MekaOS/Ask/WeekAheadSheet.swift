@@ -64,6 +64,14 @@ struct WeekAheadSheet: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
                     .staggeredAppear(1)
             }
+            // Balance view, slice 3: "Balance as planned · family 6 h of 8 h · work 2 h over".
+            if let line = v.balance {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
+                    .staggeredAppear(1)
+            }
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.m) {
                     ForEach(Array(v.days.enumerated()), id: \.element.epochDay) { i, d in

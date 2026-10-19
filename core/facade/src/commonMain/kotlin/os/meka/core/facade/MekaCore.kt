@@ -9665,6 +9665,16 @@ class MekaCore(
                 _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents,
                 _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks,
             )
+            // Slice 3: the week ahead's balance line, the week it shows counted as planned.
+            val ahead = _weekAhead.value
+            if (ahead.weekStart > 0) {
+                _weekAhead.value = ahead.withBalance(
+                    os.meka.core.domain.BalanceRules.weekAheadLine(
+                        ahead.weekStart, ahead.title == "Next week", ZoneCalendar(timeZone), hoursOf(workState, ahead.weekStart),
+                        dayEvents, review.habitDays(ahead.weekStart), balanceTargets.targets(), childOf,
+                    ),
+                )
+            }
         }
         _reflection.value = ZoneCalendar(timeZone).let { cal ->
             os.meka.core.domain.ReflectionRules.view(
