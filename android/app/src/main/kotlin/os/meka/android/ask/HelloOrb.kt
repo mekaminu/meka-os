@@ -15,7 +15,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
@@ -23,10 +25,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,89 +47,142 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaSpace
-import os.meka.android.designsystem.MotionMath
+import os.meka.core.domain.Constellation
+import os.meka.core.domain.ConstellationFrame
 import os.meka.core.domain.HelloOrb
+import kotlin.math.PI
 import os.meka.core.domain.OrbState
-import os.meka.core.domain.TalkOrb
 
 /**
- * The Hello orb ("Hello, Navilife"; motion catalogue "Hello, Navilife"): a brass orb with a soft glowing core, larger
- * than the field's mic. Idle it breathes; while something needs him a faint warm halo breathes round it
- * ([HelloOrb.pulse]); listening it swells with his voice; thinking two arcs turn round the rim ([HelloOrb.swirl]);
- * speaking rings ripple out ([TalkOrb.ripple]). Battery-light: one Canvas, frames only while it moves. Reduced motion:
- * a still glow (and the halo held), with a level bar under it while listening. Drawing only; the caller gives it its
- * click and screen-reader label. [still]: drawn as with reduced motion (the bedside clock in quiet hours, no frames).
+ * The Hello orb ("Hello, Navilife"; motion catalogue "Hello, Navilife"), drawn as the **gold particle constellation**
+ * (Meka 2026-10-19 19:19): ~300 points on a slowly turning sphere, each joined to its nearest neighbours by faint lines,
+ * depth-shaded, a soft gold core and drifting dust, drawn with additive blending in Dark ([Constellation] works every
+ * frame out, the same numbers as the Mac). Idle it turns and breathes; listening the points shiver with his voice;
+ * thinking it tightens and spins, the lines brighten and three tilted orbit rings carry bright comets; speaking the
+ * points push out with the voice, the dust streams, a gold ring lights round the equator and a soft shockwave goes out
+ * on each beat; needs-you a warm halo and two amber comets. Battery-light: one Canvas, frames only while it's on screen
+ * and moving. Reduced motion (and [still]: the bedside clock in quiet hours): the constellation held still with a calm
+ * glow, and a level bar under it while listening. Drawing only; the caller gives it its click and screen-reader label.
  */
 @Composable
 fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, size: Dp = HelloOrb.SIZE.dp, still: Boolean = false) {
     val reduced = Meka.reducedMotion || still
     val accent = Meka.colors.accent
+    val amber = Meka.colors.calendar3
+    val dark = Meka.theme.isDark
+    // Dark: a brighter gold for the near points and the comets (the watch face's bright brass); Light: the accent.
+    val bright = if (dark) Color(0xFFECD79E) else accent
+    val blend = if (dark) BlendMode.Plus else BlendMode.SrcOver
+    val n = Constellation.points(size.value.toInt(), mac = false)
+    val geo = remember(n) { Constellation.geometry(n) }
+    val frame = remember(n) { ConstellationFrame(n, Constellation.dust(size.value.toInt())) }
     var elapsed by remember { mutableLongStateOf(0L) }
-    LaunchedEffect(reduced, state) {
+    var angle by remember { mutableFloatStateOf(0.6f) }
+    val currentState by rememberUpdatedState(state)
+    LaunchedEffect(reduced) {
         if (reduced) return@LaunchedEffect
-        val start = withFrameMillis { it } - elapsed
-        while (true) withFrameMillis { elapsed = it - start }
+        var last = withFrameMillis { it }
+        val start = last - elapsed
+        while (true) withFrameMillis {
+            angle = Constellation.advance(angle, it - last, currentState, reduced = false)
+            last = it
+            elapsed = it - start
+        }
     }
-    val shownLevel by animateFloatAsState(if (state == OrbState.LISTENING) level else 0f, label = "hello-level")
+    val shownLevel by animateFloatAsState(if (state == OrbState.LISTENING || state == OrbState.SPEAKING) level else 0f, label = "hello-level")
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Canvas(Modifier.size(size).clearAndSetSemantics { }) {
-            val breath = MotionMath.breath(elapsed, reduced)
-            val scale = if (reduced) 1f else HelloOrb.scale(state, shownLevel, breath)
-            val base = this.size.minDimension / 2 / (1f + TalkOrb.SWELL) // room to swell and ripple inside the box
-            val r = base * scale
-            val ring = 2.dp.toPx()
-            fun a(x: Float) = accent.copy(alpha = accent.alpha * x.coerceIn(0f, 1f))
-            // Needs you: a faint warm halo breathing outside the rim.
+            Constellation.frame(geo, frame, state, shownLevel, angle, elapsed, reduced)
+            val c = center
+            val half = this.size.minDimension / 2
+            val r = half / Constellation.EXTENT
+            val hair = (if (n <= Constellation.POINTS_SMALL) 0.5f else 0.6f).dp.toPx()
+            fun gold(x: Float) = accent.copy(alpha = (accent.alpha * x).coerceIn(0f, 1f))
+            fun shine(x: Float) = bright.copy(alpha = x.coerceIn(0f, 1f))
+            fun ellipse(phi: Float, squash: Float, radius: Float): Path = Path().apply {
+                for (k in 0..48) {
+                    val (x, y) = Constellation.ringPoint(phi, squash, (2 * PI * k / 48).toFloat(), radius)
+                    if (k == 0) moveTo(c.x + x * r, c.y + y * r) else lineTo(c.x + x * r, c.y + y * r)
+                }
+            }
+            fun comet(phi: Float, squash: Float, radius: Float, theta: Float, color: Color, head: Float) {
+                for (t in 0 until 9) { // the head, then a fading tail behind it
+                    val (x, y) = Constellation.ringPoint(phi, squash, theta - t * 0.07f, radius)
+                    val fade = 1f - t / 9f
+                    drawCircle(color.copy(alpha = (0.95f * fade * fade).coerceIn(0f, 1f)), radius = head * (0.45f + 0.55f * fade),
+                        center = Offset(c.x + x * r, c.y + y * r), blendMode = blend)
+                }
+            }
+            // Needs you: a warm amber halo breathing outside the sphere.
             if (state == OrbState.NEEDS_YOU) {
                 val p = HelloOrb.pulse(elapsed, reduced)
                 drawCircle(
-                    Brush.radialGradient(listOf(a(0.22f * (0.4f + 0.6f * p)), Color.Transparent), center, base * (1f + TalkOrb.SWELL)),
-                    radius = base * (1f + TalkOrb.SWELL),
+                    Brush.radialGradient(listOf(amber.copy(alpha = 0.20f * (0.4f + 0.6f * p)), Color.Transparent), c, half),
+                    radius = half,
                 )
             }
-            // Speaking: rings ripple out from the rim.
-            if (state == OrbState.SPEAKING && !reduced) {
-                repeat(TalkOrb.RIPPLES) { i ->
-                    val p = TalkOrb.ripple(i, elapsed)
-                    drawCircle(a(0.5f * (1f - p)), radius = base * (1f + TalkOrb.SWELL * p), style = Stroke(ring * (1f - 0.5f * p)))
+            // The core: a soft gold glow, brighter at the centre.
+            drawCircle(
+                Brush.radialGradient(listOf(shine(0.55f * frame.core), gold(0.18f * frame.core), Color.Transparent), c, r * 0.9f),
+                radius = r * 0.9f, blendMode = blend,
+            )
+            // Speaking: the soft shockwave on the beat.
+            Constellation.shock(state, elapsed, reduced)?.let { (reach, a) ->
+                drawCircle(gold(a), radius = r * reach, style = Stroke(hair * 3 * (1f - (reach - 1f))), blendMode = blend)
+            }
+            // The lines, in four bands of brightness (one path each, so a few hundred lines stay cheap).
+            val bands = Array(4) { Path() }
+            for (k in 0 until geo.linkCount) {
+                val a = geo.links[2 * k]; val b = geo.links[2 * k + 1]
+                val la = Constellation.linkAlpha(frame.depth[a], frame.depth[b], frame.linkBoost)
+                if (la < 0.02f) continue
+                val band = (la / 0.15f).toInt().coerceIn(0, 3)
+                bands[band].moveTo(c.x + frame.px[a] * r, c.y + frame.py[a] * r)
+                bands[band].lineTo(c.x + frame.px[b] * r, c.y + frame.py[b] * r)
+            }
+            bands.forEachIndexed { i, p -> drawPath(p, gold(0.075f + 0.15f * i), style = Stroke(hair), blendMode = blend) }
+            // The points, far to near; the nearest catch the bright gold.
+            for (i in 0 until n) {
+                val d = frame.depth[i]
+                drawCircle(
+                    (if (d > 0.7f) bright else accent).copy(alpha = frame.alpha[i]),
+                    radius = Constellation.dotRadius(d, n) * r,
+                    center = Offset(c.x + frame.px[i] * r, c.y + frame.py[i] * r), blendMode = blend,
+                )
+            }
+            // The dust drifting out.
+            for (k in 0 until frame.dustN) {
+                drawCircle(gold(frame.da[k]), radius = hair * 1.2f, center = Offset(c.x + frame.dx[k] * r, c.y + frame.dy[k] * r), blendMode = blend)
+            }
+            // Thinking: three tilted orbit rings, each with a bright comet.
+            if (state == OrbState.THINKING) {
+                Constellation.RINGS.forEachIndexed { k, (phi, squash) ->
+                    drawPath(ellipse(phi, squash, Constellation.RING_R), gold(0.22f), style = Stroke(hair), blendMode = blend)
+                    if (!reduced) comet(phi, squash, Constellation.RING_R, Constellation.comet(k, elapsed), bright, hair * 3.2f)
                 }
             }
-            // The core: a glow brighter at the centre, lit while he talks or it speaks.
-            val lit = state == OrbState.LISTENING || state == OrbState.SPEAKING
-            val glow = when (state) {
-                OrbState.LISTENING -> 0.45f + 0.55f * shownLevel
-                OrbState.SPEAKING -> 0.85f
-                else -> MotionMath.breathGlow(breath)
+            // Speaking: a voice-reactive gold ring round the equator.
+            if (state == OrbState.SPEAKING) {
+                val (w, a) = Constellation.equator(frame.amp)
+                drawPath(ellipse(0f, Constellation.EQUATOR_SQUASH, Constellation.EQUATOR_R), gold(a), style = Stroke(hair * w * 1.6f), blendMode = blend)
             }
-            drawCircle(
-                Brush.radialGradient(listOf(a(if (lit) 0.75f else 0.35f * glow + 0.15f), a(0.06f)), center, r),
-                radius = r,
-            )
-            drawCircle(a(0.6f + 0.4f * glow), radius = r - ring / 2, style = Stroke(ring))
-            // A fine inner hairline for depth (the watch face's bezel, smaller).
-            drawCircle(a(0.25f), radius = r * 0.72f, style = Stroke(ring / 2))
-            // Thinking: two arcs turning round the rim.
-            if (state == OrbState.THINKING) {
-                val turn = HelloOrb.swirl(elapsed, reduced) * 360f
-                val arcR = r + ring * 2.5f
-                repeat(2) { k ->
-                    drawArc(
-                        a(0.9f), startAngle = turn + 180f * k - 90f, sweepAngle = HelloOrb.ARC_DEG, useCenter = false,
-                        topLeft = Offset(center.x - arcR, center.y - arcR), size = Size(arcR * 2, arcR * 2),
-                        style = Stroke(ring * 1.5f, cap = StrokeCap.Round),
-                    )
+            // Needs you: two amber comets on faint rings.
+            if (state == OrbState.NEEDS_YOU) {
+                Constellation.AMBER_RINGS.forEachIndexed { k, (phi, squash) ->
+                    drawPath(ellipse(phi, squash, Constellation.AMBER_R), amber.copy(alpha = 0.12f), style = Stroke(hair), blendMode = blend)
+                    val theta = if (reduced) k * PI.toFloat() else Constellation.comet(k, elapsed, Constellation.AMBER_COMET_MS)
+                    comet(phi, squash, Constellation.AMBER_R, theta, amber, hair * 2.6f)
                 }
             }
         }
         if (reduced && state == OrbState.LISTENING) {
-            // Reduced motion: the voice level as a still bar instead of the swell.
+            // Reduced motion: the voice level as a still bar instead of the shiver.
             Box(Modifier.padding(top = MekaSpace.xs).width(size / 2).height(3.dp).clip(RoundedCornerShape(2.dp)).background(Meka.colors.surfaceRaised)) {
                 Box(Modifier.fillMaxHeight().fillMaxWidth(level.coerceIn(0f, 1f)).background(accent))
             }
         }
     }
 }
-
 /**
  * "Hello, Navilife" slice 2: the Hello orb on the bedside clock (the Fold on its stand), where the mic was: the resting
  * orb at [HelloOrb.BEDSIDE_SIZE], breathing (a warm halo while Needs you has cards), pressing in to 0.97 on the complete
