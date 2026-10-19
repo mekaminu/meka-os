@@ -10,11 +10,8 @@ import android.content.pm.PackageInstaller
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
-import android.os.Build
-import android.os.ParcelFileDescriptor
 import android.os.StatFs
 import android.provider.Settings
-import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
 import kotlinx.coroutines.Dispatchers
@@ -80,8 +77,6 @@ class AppUpdater(private val app: MekaApplication) {
     @Volatile private var autoRetries = 0
     /** [pendingPrompt] is Android's own installer (the fallback), not a session's prompt. */
     @Volatile private var handedOver = false
-    /** The last session read the kept file itself (Android 14+), for the report. */
-    @Volatile private var wroteFromFile = false
 
     val installedCode: Long by lazy { app.packageManager.getPackageInfo(app.packageName, 0).longVersionCode }
     val installedName: String by lazy { app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0.1.$installedCode" }
@@ -211,7 +206,7 @@ class AppUpdater(private val app: MekaApplication) {
                 return
             }
             if (InstallSessionRules.handsToAndroidsInstaller(null, words, autoRetries) && handToAndroidsInstaller(release, null, words)) return
-            fail(release, UpdateFailureRules.STAGE_INSTALL, null, InstallSessionRules.reportMessage(words, autoRetries + 1, false, wroteFromFile), 1)
+            fail(release, UpdateFailureRules.STAGE_INSTALL, null, InstallSessionRules.reportMessage(words, autoRetries + 1, false), 1)
         } finally {
             installing.unlock()
         }
@@ -268,18 +263,10 @@ class AppUpdater(private val app: MekaApplication) {
             withContext(Dispatchers.IO) {
                 // Its own name per session, and a committed session is never reopened.
                 val name = InstallSessionRules.apkName(release.versionCode, System.currentTimeMillis())
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    // Android 14+: the session reads the kept file itself, so no write stream of ours is open at commit
-                    // ("Session files in use" on every fresh session, 17 and 19 Oct).
-                    writeFromFile(session, name, file, release.sizeBytes)
-                    wroteFromFile = true
-                } else {
-                    // The stream is closed (use) before commit.
-                    session.openWrite(name, 0, release.sizeBytes).use { out ->
-                        file.inputStream().use { it.copyTo(out, 256 * 1024) }
-                        session.fsync(out)
-                    }
-                    wroteFromFile = false
+                // The stream is closed (use) before commit.
+                session.openWrite(name, 0, release.sizeBytes).use { out ->
+                    file.inputStream().use { it.copyTo(out, 256 * 1024) }
+                    session.fsync(out)
                 }
             }
             // Android checks the written file has been let go when the session is committed, and the close reaches it
@@ -300,12 +287,6 @@ class AppUpdater(private val app: MekaApplication) {
             runCatching { session.abandon() }
             throw e
         }
-    }
-
-    /** Android 14+: hands the session the kept file to read itself (nothing of ours stays open for it to find). */
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-    private fun writeFromFile(session: PackageInstaller.Session, name: String, file: File, size: Long) {
-        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd -> session.write(name, 0, size, pfd) }
     }
 
     /**
@@ -343,7 +324,7 @@ class AppUpdater(private val app: MekaApplication) {
                 }
                 // Still "in use" after every fresh session: Android's own installer takes the kept download instead.
                 if (InstallSessionRules.handsToAndroidsInstaller(status, message, autoRetries) && handToAndroidsInstaller(release, status, message)) return
-                fail(release, UpdateFailureRules.STAGE_INSTALL, status, InstallSessionRules.reportMessage(message, autoRetries + 1, false, wroteFromFile), committedAttempts)
+                fail(release, UpdateFailureRules.STAGE_INSTALL, status, InstallSessionRules.reportMessage(message, autoRetries + 1, false), committedAttempts)
             }
         }
     }
@@ -376,7 +357,7 @@ class AppUpdater(private val app: MekaApplication) {
         if (!report) return true
         val failure = UpdateFailure(
             stage = UpdateFailureRules.STAGE_INSTALL, status = status,
-            message = UpdateFailureRules.cleanMessage(InstallSessionRules.reportMessage(message, autoRetries + 1, handedOver = true, fromFile = wroteFromFile)),
+            message = UpdateFailureRules.cleanMessage(InstallSessionRules.reportMessage(message, autoRetries + 1, handedOver = true)),
             fromCode = installedCode, toCode = release.versionCode, atMs = System.currentTimeMillis(),
             storage = UpdateFailureRules.storageBand(freeBytes()), network = network(), attempts = committedAttempts,
         )

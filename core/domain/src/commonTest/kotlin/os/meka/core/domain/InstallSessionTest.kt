@@ -104,16 +104,6 @@ class InstallSessionTest {
     }
 
     @Test
-    fun fromAndroid14TheSessionReadsTheKeptFileItself() {
-        assertFalse(r.writesFromFile(31))
-        assertFalse(r.writesFromFile(33))
-        assertTrue(r.writesFromFile(34))
-        assertTrue(r.writesFromFile(36))
-        assertEquals("$msg · 4 sessions tried · written from the file", r.reportMessage(msg, 4, handedOver = false, fromFile = true))
-        assertEquals("$msg · 4 sessions tried · written from the file · handed to Android's installer", r.reportMessage(msg, 4, true, fromFile = true))
-    }
-
-    @Test
     fun aLateAnswerFromAnAbandonedSessionIsDropped() {
         // 19 Oct 03:25: after the hand-over, "Session destroyed" from an abandoned session turned the card to a failure.
         assertTrue(r.isCurrent(statusSession = 42, committedSession = 42))
@@ -127,7 +117,7 @@ class InstallSessionTest {
     fun aBuildAlreadyHandedOverGoesStraightBackToAndroidsInstaller() {
         assertTrue(r.straightToAndroidsInstaller(handedOverCode = 1589, releaseCode = 1589, fileWhole = true))
         assertFalse(r.straightToAndroidsInstaller(1589, 1589, fileWhole = false))
-        // A newer build tries its own sessions first (now written from the file).
+        // A newer build tries its own sessions first.
         assertFalse(r.straightToAndroidsInstaller(1589, 1600, true))
         assertFalse(r.straightToAndroidsInstaller(null, 1589, true))
     }
