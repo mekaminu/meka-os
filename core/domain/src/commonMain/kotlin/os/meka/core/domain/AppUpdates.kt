@@ -359,12 +359,44 @@ object InstallSessionRules {
     fun handsToAndroidsInstaller(status: Int?, message: String?, retriesSoFar: Int): Boolean =
         (status == null || status == UpdateFailureRules.STATUS_FAILURE) && isFilesInUse(message) && retriesSoFar >= AUTO_RETRIES
 
-    /** Android's words for the report, with the sessions tried ("… · 4 sessions tried · handed to Android's installer"). */
-    fun reportMessage(message: String?, sessionsTried: Int, handedOver: Boolean): String? {
+    /**
+     * Android's words for the report, with the sessions tried ("… · 4 sessions tried · written from the file · handed to
+     * Android's installer"). [fromFile]: the session read the kept file itself ([WRITES_FROM_FILE_SDK]), so a build run can
+     * tell whether "files in use" survives that.
+     */
+    fun reportMessage(message: String?, sessionsTried: Int, handedOver: Boolean, fromFile: Boolean = false): String? {
         if (message == null) return null
         val tried = if (sessionsTried > 1) " · $sessionsTried sessions tried" else ""
-        return message + tried + (if (handedOver) " · $HANDED_OVER" else "")
+        return message + tried + (if (fromFile) " · $FROM_FILE" else "") + (if (handedOver) " · $HANDED_OVER" else "")
     }
+
+    /** What the report says when the session read the kept file itself. */
+    const val FROM_FILE = "written from the file"
+
+    /**
+     * From Android 14 (API 34) a session can read the kept download itself (`Session.write` with the file's descriptor):
+     * Navilife then never holds a write stream that Android can find still open when the session is committed, which is
+     * what "Session files in use" kept saying on every fresh session (deploy 918: 17 and 19 Oct, even after 8 s).
+     */
+    const val WRITES_FROM_FILE_SDK = 34
+
+    fun writesFromFile(sdk: Int): Boolean = sdk >= WRITES_FROM_FILE_SDK
+
+    /**
+     * Whether a status Android sends belongs to the install in hand: only the session committed now counts. A late answer
+     * from a session already abandoned ("Session destroyed"), or one arriving after the build went to Android's own
+     * installer, used to turn the card to a failure and was reported as one (19 Oct 03:25). [statusSession] null: Android
+     * didn't say which, so it counts while a session is committed.
+     */
+    fun isCurrent(statusSession: Int?, committedSession: Int?): Boolean =
+        committedSession != null && (statusSession == null || statusSession == committedSession)
+
+    /**
+     * A build already handed to Android's installer goes straight back there on the next tap (its own sessions kept
+     * failing): no new round of sessions beside Android's, which is when "Failed to override installation location" came.
+     */
+    fun straightToAndroidsInstaller(handedOverCode: Long?, releaseCode: Long, fileWhole: Boolean): Boolean =
+        fileWhole && handedOverCode == releaseCode
 
     /** What the report ends with when Android's own installer took over. */
     const val HANDED_OVER = "handed to Android's installer"

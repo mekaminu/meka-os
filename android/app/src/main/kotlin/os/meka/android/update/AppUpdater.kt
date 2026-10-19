@@ -10,8 +10,11 @@ import android.content.pm.PackageInstaller
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.StatFs
 import android.provider.Settings
+import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import androidx.core.content.IntentCompat
 import kotlinx.coroutines.Dispatchers
@@ -77,6 +80,8 @@ class AppUpdater(private val app: MekaApplication) {
     @Volatile private var autoRetries = 0
     /** [pendingPrompt] is Android's own installer (the fallback), not a session's prompt. */
     @Volatile private var handedOver = false
+    /** The last session read the kept file itself (Android 14+), for the report. */
+    @Volatile private var wroteFromFile = false
 
     val installedCode: Long by lazy { app.packageManager.getPackageInfo(app.packageName, 0).longVersionCode }
     val installedName: String by lazy { app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0.1.$installedCode" }
@@ -187,6 +192,11 @@ class AppUpdater(private val app: MekaApplication) {
                     return
                 }
             }
+            // A build Android's own installer already took once goes straight back there: its sessions kept failing,
+            // and a new round beside Android's install is what "Failed to override installation location" came from.
+            if (InstallSessionRules.straightToAndroidsInstaller(handedOverCode(), release.versionCode, AppUpdateRules.isWhole(file.length(), release.sizeBytes)) &&
+                handToAndroidsInstaller(release, null, null, report = false)
+            ) return
             commit(release, file, attempts.coerceAtLeast(1))
         } catch (e: CancellationException) {
             _state.value = UpdateState.Ready(release)
@@ -201,7 +211,7 @@ class AppUpdater(private val app: MekaApplication) {
                 return
             }
             if (InstallSessionRules.handsToAndroidsInstaller(null, words, autoRetries) && handToAndroidsInstaller(release, null, words)) return
-            fail(release, UpdateFailureRules.STAGE_INSTALL, null, InstallSessionRules.reportMessage(words, autoRetries + 1, false), 1)
+            fail(release, UpdateFailureRules.STAGE_INSTALL, null, InstallSessionRules.reportMessage(words, autoRetries + 1, false, wroteFromFile), 1)
         } finally {
             installing.unlock()
         }
@@ -256,10 +266,20 @@ class AppUpdater(private val app: MekaApplication) {
         val session = installer.openSession(id)
         try {
             withContext(Dispatchers.IO) {
-                // Its own name per session; the stream is closed (use) before commit, and a committed session is never reopened.
-                session.openWrite(InstallSessionRules.apkName(release.versionCode, System.currentTimeMillis()), 0, release.sizeBytes).use { out ->
-                    file.inputStream().use { it.copyTo(out, 256 * 1024) }
-                    session.fsync(out)
+                // Its own name per session, and a committed session is never reopened.
+                val name = InstallSessionRules.apkName(release.versionCode, System.currentTimeMillis())
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    // Android 14+: the session reads the kept file itself, so no write stream of ours is open at commit
+                    // ("Session files in use" on every fresh session, 17 and 19 Oct).
+                    writeFromFile(session, name, file, release.sizeBytes)
+                    wroteFromFile = true
+                } else {
+                    // The stream is closed (use) before commit.
+                    session.openWrite(name, 0, release.sizeBytes).use { out ->
+                        file.inputStream().use { it.copyTo(out, 256 * 1024) }
+                        session.fsync(out)
+                    }
+                    wroteFromFile = false
                 }
             }
             // Android checks the written file has been let go when the session is committed, and the close reaches it
@@ -282,8 +302,19 @@ class AppUpdater(private val app: MekaApplication) {
         }
     }
 
-    /** From the install session: show Android's prompt, or say how it went (with Android's own words). */
-    internal fun onStatus(status: Int, message: String?, prompt: Intent?) {
+    /** Android 14+: hands the session the kept file to read itself (nothing of ours stays open for it to find). */
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun writeFromFile(session: PackageInstaller.Session, name: String, file: File, size: Long) {
+        ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY).use { pfd -> session.write(name, 0, size, pfd) }
+    }
+
+    /**
+     * From the install session: show Android's prompt, or say how it went (with Android's own words). Only the session
+     * committed now counts ([sessionId] from Android's own extra): a late "Session destroyed" from one already abandoned,
+     * or anything after the build went to Android's installer, is dropped instead of turning the card to a failure.
+     */
+    internal fun onStatus(status: Int, message: String?, prompt: Intent?, sessionId: Int? = null) {
+        if (!InstallSessionRules.isCurrent(sessionId, committedSession)) return
         val release = committed ?: (_state.value as? UpdateState.Confirming)?.release
         when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
@@ -312,7 +343,7 @@ class AppUpdater(private val app: MekaApplication) {
                 }
                 // Still "in use" after every fresh session: Android's own installer takes the kept download instead.
                 if (InstallSessionRules.handsToAndroidsInstaller(status, message, autoRetries) && handToAndroidsInstaller(release, status, message)) return
-                fail(release, UpdateFailureRules.STAGE_INSTALL, status, InstallSessionRules.reportMessage(message, autoRetries + 1, false), committedAttempts)
+                fail(release, UpdateFailureRules.STAGE_INSTALL, status, InstallSessionRules.reportMessage(message, autoRetries + 1, false, wroteFromFile), committedAttempts)
             }
         }
     }
@@ -320,9 +351,11 @@ class AppUpdater(private val app: MekaApplication) {
     /**
      * Hands the kept, checked download to Android's own installer (it makes its own session and shows the same Install
      * prompt), shown now if Navilife is on screen and unlocked, else when it next is. Reported to the server (not Activity
-     * or Health: nothing failed for Meka) so a build run sees how often it was needed. False if there's no whole file.
+     * or Health: nothing failed for Meka) so a build run sees how often it was needed, unless [report] is false (a later
+     * tap going straight there). False if there's no whole file. The build is remembered, so its next tap goes straight
+     * back to Android's installer ([InstallSessionRules.straightToAndroidsInstaller]).
      */
-    private fun handToAndroidsInstaller(release: AppRelease, status: Int?, message: String?): Boolean {
+    private fun handToAndroidsInstaller(release: AppRelease, status: Int?, message: String?, report: Boolean = true): Boolean {
         val file = downloadFile(release)
         if (!AppUpdateRules.isWhole(file.length(), release.sizeBytes)) return false
         val intent = runCatching {
@@ -332,21 +365,26 @@ class AppUpdater(private val app: MekaApplication) {
                 .putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
                 .putExtra(Intent.EXTRA_RETURN_RESULT, false)
         }.getOrNull() ?: return false
-        abandonOwnSessions()
+        // committedSession goes first, so the abandoned sessions' late answers are dropped (onStatus).
         committed = null; committedSession = null
+        abandonOwnSessions()
+        prefs.edit().putLong(KEY_HANDED_OVER, release.versionCode).apply()
         pendingPrompt = intent
         handedOver = true
         _state.value = UpdateState.Confirming(release)
         if (app.isOnScreen && !locked()) showPrompt(null)
-        val report = UpdateFailure(
+        if (!report) return true
+        val failure = UpdateFailure(
             stage = UpdateFailureRules.STAGE_INSTALL, status = status,
-            message = UpdateFailureRules.cleanMessage(InstallSessionRules.reportMessage(message, autoRetries + 1, handedOver = true)),
+            message = UpdateFailureRules.cleanMessage(InstallSessionRules.reportMessage(message, autoRetries + 1, handedOver = true, fromFile = wroteFromFile)),
             fromCode = installedCode, toCode = release.versionCode, atMs = System.currentTimeMillis(),
             storage = UpdateFailureRules.storageBand(freeBytes()), network = network(), attempts = committedAttempts,
         )
-        app.appScope.launch { runCatching { app.core.reportUpdateFailure(report) } }
+        app.appScope.launch { runCatching { app.core.reportUpdateFailure(failure) } }
         return true
     }
+
+    private fun handedOverCode(): Long? = prefs.getLong(KEY_HANDED_OVER, -1).takeIf { it > 0 }
 
     private fun fail(release: AppRelease, stage: String, status: Int?, message: String?, attempts: Int) {
         val f = UpdateFailure(
@@ -492,6 +530,8 @@ class AppUpdater(private val app: MekaApplication) {
         private const val KEY_ICON = "icon_noted"
         private const val KEY_SIZED_BYTES = "sized_bytes"
         private const val KEY_PREVIOUS_BYTES = "previous_bytes"
+        /** The build last handed to Android's own installer (its next tap goes straight there). */
+        private const val KEY_HANDED_OVER = "handed_over"
         const val CHECK_EVERY_MS = 10 * 60_000L
         /** A breath before a fresh session after "files in use", so Android finishes abandoning the old ones. */
         private const val RETRY_PAUSE_MS = 1_500L
@@ -522,6 +562,7 @@ class UpdateStatusReceiver : BroadcastReceiver() {
             status,
             intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE),
             IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java),
+            intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1).takeIf { it >= 0 },
         )
     }
 }
