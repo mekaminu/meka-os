@@ -289,4 +289,42 @@ class SpeechFacadeTest {
         c.recordHeardTiming(1_300, os.meka.core.domain.ListenEngine.ON_DEVICE)
         assertEquals("Speech to Added · 1.3 s slow offline · 0.6 s", c.heardTimingLine())
     }
+
+    @Test
+    fun offlineTheDeviceVoiceSaysSoOnceUntilNavilifesVoiceIsHeardAgain() = runTest {
+        val c = core()
+        // Slow isn't offline, and nothing failed yet: no note.
+        assertNull(c.speechOfflineNote(mac = false))
+        server.down = true
+        assertNull(c.speechClip("Hello.", first = true))
+        assertEquals("Using the phone's voice while offline.", c.speechOfflineNote(mac = false))
+        assertNull(c.speechOfflineNote(mac = false)) // once
+        assertNull(c.speechClip("Still offline.", first = true)) // resting: not asked, no new note
+        assertNull(c.speechOfflineNote(mac = false))
+        // Back: Navilife's voice is heard, then a later spell says it again (the Mac's words on the Mac).
+        server.down = false
+        now += os.meka.core.domain.SpeechRules.FAILED_QUIET_MS + 1
+        assertEquals("bXAz5", c.speechClip("Back.", first = true))
+        assertNull(c.speechOfflineNote(mac = true))
+        server.down = true
+        assertNull(c.speechClip("Gone again.", first = true))
+        assertEquals("Using this Mac's voice while Navilife's can't be reached.", c.speechOfflineNote(mac = true))
+        // The device's own voice chosen: never said.
+        val d = core()
+        assertNull(d.speechClip("Hi.", first = true))
+        assertTrue(d.chooseMekaVoice("device"))
+        assertNull(d.speechOfflineNote(mac = false))
+    }
+
+    @Test
+    fun clipsHeardOverBluetoothAreMarkedInTheTimingLine() = runTest {
+        val c = core()
+        c.speechRoute(bluetooth = true)
+        c.speechClip("One.", first = true)
+        c.speechRoute(bluetooth = false)
+        c.speechClip("Two.", first = true)
+        val line = c.voiceTimingLine()!!
+        assertTrue(line.contains(" + Bluetooth"), line)
+        assertTrue(line.endsWith(os.meka.core.domain.SpeechRules.BLUETOOTH_NOTE), line)
+    }
 }

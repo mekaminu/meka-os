@@ -2,6 +2,8 @@ package os.meka.android.ask
 
 import android.content.Context
 import android.media.AudioAttributes
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.MediaDataSource
 import android.media.MediaPlayer
 import android.os.Bundle
@@ -132,6 +134,7 @@ class MekaSpeaker(
      * waited for ([SpeechRules.READ_PIECE_WAIT_MS]) rather than switching voice (Meka, 2026-10-10).
      */
     private suspend fun speakNow(text: String, reading: Boolean): Unit = coroutineScope {
+        core.speechRoute(overBluetooth())
         val pieces = SpeechRules.pieces(text, reading)
         val ahead = SpeechRules.ahead(reading)
         val queue = ArrayDeque<Pending>()
@@ -174,12 +177,24 @@ class MekaSpeaker(
                 continue
             }
             if (SpeechRules.onMiss(reading, core.speechResting()) == SpeechRules.Miss.REST_ON_DEVICE) break
-            sayOnDevice(pieces[i])
+            sayOnDevice(withOfflineNote(pieces[i]))
             i++
         }
         queue.forEach { it.clip.cancel() }
-        if (i < pieces.size) sayOnDevice(pieces.drop(i).joinToString(" "))
+        if (i < pieces.size) sayOnDevice(withOfflineNote(pieces.drop(i).joinToString(" ")))
     }
+
+    /** Voice completeness: "Using the phone's voice while offline." first, once, when Navilife's voice wasn't reached. */
+    private suspend fun withOfflineNote(text: String): String = core.speechOfflineNote(mac = false)?.let { "$it $text" } ?: text
+
+    /** The phone's audio goes to Bluetooth headphones, a speaker or the car right now (Activity's timing line says so). */
+    private fun overBluetooth(): Boolean = try {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any {
+            it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                it.type == AudioDeviceInfo.TYPE_BLE_HEADSET || it.type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+        }
+    } catch (_: Exception) { false }
 
     /** One piece's clip on its way: when it was asked for, whether it is the line's first, and whether it may hold. */
     private class Pending(val clip: Deferred<String?>, val startedAt: Long, val first: Boolean, val hold: Boolean)

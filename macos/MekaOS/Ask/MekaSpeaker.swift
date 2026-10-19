@@ -137,14 +137,20 @@ final class MekaSpeaker {
                 guard !Task.isCancelled else { break }
                 let resting = await self.model?.speechResting() ?? true
                 if SpeechRules.shared.onMiss(reading: reading, resting: resting) == .restOnDevice { break }
-                await self.sayOnDevice(pieces[i])
+                await self.sayOnDevice(await self.withOfflineNote(pieces[i]))
                 guard !Task.isCancelled else { break }
                 i += 1
             }
             for p in queue { p.clip.cancel() }
             guard !Task.isCancelled else { return }
-            if i < pieces.count { await self.sayOnDevice(pieces[i...].joined(separator: " ")) }
+            if i < pieces.count { await self.sayOnDevice(await self.withOfflineNote(pieces[i...].joined(separator: " "))) }
         }
+    }
+
+    /// Voice completeness: the offline note first, once, when Navilife's voice wasn't reached.
+    private func withOfflineNote(_ text: String) async -> String {
+        guard let note = await model?.speechOfflineNote() else { return text }
+        return note + " " + text
     }
 
     /// One piece's clip on its way: when it was asked for, whether it is the line's first, and whether it may hold.

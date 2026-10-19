@@ -305,6 +305,10 @@ class MekaCore(
     private var speechQuietUntilMs = 0L
     private var speechWarmed = false
     private val speechTimings = ArrayDeque<os.meka.core.domain.SpeechTiming>()
+    /** Voice completeness: the last request couldn't reach the server, the offline note was said, clips go over Bluetooth. */
+    private var speechUnreachable = false
+    private var speechOfflineSaid = false
+    private var speechOverBluetooth = false
     /** The mic fix, step 3: end of his words → "Added", the last few, in memory only. */
     private val heardTimings = ArrayDeque<os.meka.core.domain.HeardTiming>()
 
@@ -8229,6 +8233,7 @@ class MekaCore(
         val started = nowMs()
         val r = withTimeoutOrNull(wait) {
             try { api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+                onCore { speechUnreachable = true }
                 os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED)
             }
         }
@@ -8240,6 +8245,8 @@ class MekaCore(
             val audio = r.audio
             if (r.state == os.meka.core.wire.SpeechCodec.Response.SPOKEN && !audio.isNullOrEmpty()) {
                 speechTimed(started, nowMs() - started, os.meka.core.domain.SpeechTiming.Outcome.SPOKEN)
+                speechUnreachable = false
+                speechOfflineSaid = false
                 speechClips[os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)] = audio
                 while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
                 audio
@@ -9040,8 +9047,23 @@ class MekaCore(
     /** Activity's "Speech to Added · 0.6 s · 0.9 s · middle 0.7 s"; null before the first. */
     suspend fun heardTimingLine(): String? = onCore { os.meka.core.domain.HeardTimingRules.timingLine(heardTimings.toList()) }
 
+    /**
+     * Voice completeness (2026-10-19): what the device's own voice says first when it takes over because Navilife's voice
+     * couldn't be reached ([os.meka.core.domain.SpeechRules.offlineNote]), once until Navilife's voice is heard again;
+     * null otherwise (slow, refused, the device's voice chosen, or already said). [mac]: the Mac's wording.
+     */
+    suspend fun speechOfflineNote(mac: Boolean): String? = onCore {
+        val deviceChosen = mekaVoice.chosen() == os.meka.core.domain.MekaVoiceRules.DEVICE
+        if (!os.meka.core.domain.SpeechRules.saysOfflineNote(speechUnreachable, deviceChosen, speechOfflineSaid)) return@onCore null
+        speechOfflineSaid = true
+        os.meka.core.domain.SpeechRules.offlineNote(mac)
+    }
+
+    /** The device's audio goes to Bluetooth headphones or the car now, so the next clips' timings say so (Activity). */
+    suspend fun speechRoute(bluetooth: Boolean) = onCore { speechOverBluetooth = bluetooth }
+
     private fun speechTimed(atMs: Long, ms: Long, outcome: os.meka.core.domain.SpeechTiming.Outcome) {
-        speechTimings.addLast(os.meka.core.domain.SpeechTiming(atMs, ms, outcome))
+        speechTimings.addLast(os.meka.core.domain.SpeechTiming(atMs, ms, outcome, speechOverBluetooth))
         while (speechTimings.size > os.meka.core.domain.SpeechRules.TIMINGS_KEPT) speechTimings.removeFirst()
     }
 

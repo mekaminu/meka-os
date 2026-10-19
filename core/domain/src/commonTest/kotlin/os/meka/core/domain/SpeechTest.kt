@@ -291,4 +291,27 @@ class SpeechTest {
         assertEquals("512", VoicePickerRules.short(512))
         assertEquals("1M", VoicePickerRules.short(999_700))
     }
+
+    @Test
+    fun theOfflineNoteIsSaidOnceAndNeverForTheChosenDeviceVoice() {
+        assertTrue(SpeechRules.saysOfflineNote(unreachable = true, deviceChosen = false, saidSinceHeard = false))
+        assertFalse(SpeechRules.saysOfflineNote(unreachable = true, deviceChosen = false, saidSinceHeard = true))
+        assertFalse(SpeechRules.saysOfflineNote(unreachable = true, deviceChosen = true, saidSinceHeard = false))
+        assertFalse(SpeechRules.saysOfflineNote(unreachable = false, deviceChosen = false, saidSinceHeard = false))
+        assertEquals("Using the phone's voice while offline.", SpeechRules.offlineNote(mac = false))
+    }
+
+    @Test
+    fun bluetoothClipsCountTheirDelayInTheMiddle() {
+        val t = listOf(
+            SpeechTiming(1, 1_000, SpeechTiming.Outcome.SPOKEN, bluetooth = true),
+            SpeechTiming(2, 1_000, SpeechTiming.Outcome.SPOKEN, bluetooth = true),
+            SpeechTiming(3, 1_000, SpeechTiming.Outcome.SPOKEN, bluetooth = true),
+        )
+        assertEquals(
+            "Time to Navilife's voice · 1.0 s + Bluetooth · 1.0 s + Bluetooth · 1.0 s + Bluetooth · middle 1.2 s" + SpeechRules.BLUETOOTH_NOTE,
+            SpeechRules.timingLine(t),
+        )
+        assertEquals("Time to Navilife's voice · 1.0 s", SpeechRules.timingLine(listOf(SpeechTiming(1, 1_000, SpeechTiming.Outcome.SPOKEN))))
+    }
 }

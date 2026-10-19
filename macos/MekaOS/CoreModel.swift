@@ -2276,6 +2276,13 @@ final class CoreModel {
         return Data(base64Encoded: clip)
     }
 
+    /// Voice completeness: "Using this Mac's voice while Navilife's can't be reached." once, when the Mac's own voice
+    /// takes over because Navilife's voice wasn't reached (nil otherwise). Only a String crosses back.
+    func speechOfflineNote() async -> String? {
+        guard let core else { return nil }
+        return try? await core.speechOfflineNote(mac: true)
+    }
+
     /// "One moment…" in MEKA's voice, only when already fetched with the common lines (never asks the server).
     func speechHoldClip() async -> Data? {
         guard let core else { return nil }

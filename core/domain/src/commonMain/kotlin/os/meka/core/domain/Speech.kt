@@ -106,15 +106,39 @@ object SpeechRules {
         if (last.isEmpty()) return null
         val parts = last.map { t ->
             when (t.outcome) {
-                SpeechTiming.Outcome.SPOKEN -> seconds(t.ms)
+                SpeechTiming.Outcome.SPOKEN -> seconds(t.ms) + if (t.bluetooth) " + Bluetooth" else ""
                 SpeechTiming.Outcome.LATE -> "late"
                 SpeechTiming.Outcome.FAILED -> "no answer"
             }
         }
-        val spoken = last.filter { it.outcome == SpeechTiming.Outcome.SPOKEN }.map { it.ms }.sorted()
+        val spoken = last.filter { it.outcome == SpeechTiming.Outcome.SPOKEN }.map { it.ms + if (it.bluetooth) BLUETOOTH_MS else 0L }.sorted()
         val middle = if (spoken.size >= 3) " · middle ${seconds(spoken[spoken.size / 2])}" else ""
-        return "$TIMING_LABEL · ${parts.joinToString(" · ")}$middle"
+        val bt = if (last.any { it.bluetooth && it.outcome == SpeechTiming.Outcome.SPOKEN }) BLUETOOTH_NOTE else ""
+        return "$TIMING_LABEL · ${parts.joinToString(" · ")}$middle$bt"
     }
+
+    /**
+     * Voice completeness (2026-10-19): what headphones or car audio add before he hears a clip. Android and macOS don't
+     * report a Bluetooth route's own delay to an app, so the line counts this typical figure for a clip played over
+     * Bluetooth (the middle includes it) and says it's an estimate.
+     */
+    const val BLUETOOTH_MS = 200L
+    const val BLUETOOTH_NOTE = " · Bluetooth or car audio adds about 0.2 s, counted in the middle"
+
+    /**
+     * Said once, in the device's own voice, before the rest of an answer when Navilife's voice couldn't be reached (no
+     * signal, the server unreachable), instead of switching voice without a word (voice completeness, 2026-10-19). Said
+     * again only after Navilife's voice has been heard since. [mac]: the Mac's wording.
+     */
+    fun offlineNote(mac: Boolean): String =
+        if (mac) "Using this Mac's voice while Navilife's can't be reached." else "Using the phone's voice while offline."
+
+    /**
+     * Whether [offlineNote] is said now: the voice wasn't reached ([unreachable]), it isn't the device's own voice he
+     * chose ([deviceChosen]), and the note hasn't been said since Navilife's voice was last heard ([saidSinceHeard]).
+     */
+    fun saysOfflineNote(unreachable: Boolean, deviceChosen: Boolean, saidSinceHeard: Boolean): Boolean =
+        unreachable && !deviceChosen && !saidSinceHeard
 
     /** 1834 → "1.8 s"; under a tenth reads "0.1 s". */
     fun seconds(ms: Long): String {
@@ -304,7 +328,7 @@ object SpeechRules {
  * at [atMs], answered in [ms] ([Outcome.SPOKEN]), given up after its budget ([Outcome.LATE]) or refused/unreachable
  * ([Outcome.FAILED]).
  */
-data class SpeechTiming(val atMs: Long, val ms: Long, val outcome: Outcome) {
+data class SpeechTiming(val atMs: Long, val ms: Long, val outcome: Outcome, val bluetooth: Boolean = false) {
     enum class Outcome { SPOKEN, LATE, FAILED }
 }
 

@@ -706,7 +706,7 @@ internal object HelpIndex {
             keywords = listOf("navilifes voice", "robotic voice", "voice sounds", "change voice", "spoken voice"),
             what = "how Navilife sounds in Talk, the morning brief and the call assistant.",
             how = "Pick a voice there and play a sample.",
-            tips = listOf("On a slow connection the first words can take a moment; offline it uses the phone's own voice."),
+            tips = listOf("On a slow connection the first words can take a moment; offline it says \"Using the phone's voice while offline\" once and carries on in the phone's own voice.", "Ask → More → Activity shows how quickly the voice answered; clips heard over Bluetooth or car audio are marked \"+ Bluetooth\", about 0.2 s more."),
             fold = HelpPlace.VOICE,
             foldWhere = "Ask → Settings → Navilife's voice",
             mac = HelpPlace.VOICE,
