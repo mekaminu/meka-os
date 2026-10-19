@@ -6880,6 +6880,38 @@ class MekaCore(
     }
 
     /**
+     * AI layer completeness: [q] (typed in Ask or said to Talk) ends, resumes or asks about his fast
+     * ([os.meka.core.domain.FastAskRules.request]); done now, as End fast and Resume on Today, and answered from the
+     * fast on this device, no AI and no card, with Open Goals and habits under it. Null for anything else.
+     */
+    private suspend fun fastAsk(q: String): os.meka.core.domain.AskOutcome? = onCore {
+        val before = fasting.view()
+        val want = os.meka.core.domain.FastAskRules.request(q, before.isFasting) ?: return@onCore null
+        val now = nowMs()
+        val text = when (want) {
+            os.meka.core.domain.FastAsk.STATUS -> os.meka.core.domain.FastAskRules.status(before, now)
+            os.meka.core.domain.FastAsk.END ->
+                if (before.current == null) os.meka.core.domain.FastAskRules.nothingToEnd(before)
+                else {
+                    fasting.end()
+                    refresh()
+                    os.meka.core.domain.FastAskRules.ended(fasting.view())
+                }
+            os.meka.core.domain.FastAsk.RESUME -> {
+                val last = before.last
+                if (before.current == null && last != null && last.canResume) {
+                    fasting.resume(last.id)
+                    refresh()
+                    os.meka.core.domain.FastAskRules.resumed(fasting.view(), now)
+                } else os.meka.core.domain.FastAskRules.cantResume(before, now)
+            }
+        }
+        os.meka.core.domain.AskOutcome.Answered(
+            os.meka.core.domain.AskAnswer(text, emptyList(), help = os.meka.core.domain.FastAskRules.link),
+        )
+    }
+
+    /**
      * The Vault, slice 3: [q] asks about his documents ([os.meka.core.domain.VaultAskRules.request]); answered from
      * the Vault on this device by rules, no AI. Null when it isn't about them, or names a kind the Vault doesn't hold
      * that is the renewals radar's (insurance, a warranty).
@@ -7699,6 +7731,8 @@ class MekaCore(
         // "What Navilife may do" completeness: "pause Navilife", "resume Navilife", "is Navilife paused?" are done and
         // answered here, no AI and no card, with Open What Navilife may do under the answer.
         if (!beyondHelp) autonomyAsk(q)?.let { return it }
+        // AI layer completeness: "end my fast", "resume my fast", "how long left on my fast?" are done and answered here.
+        if (!beyondHelp) fastAsk(q)?.let { return it }
         if (!beyondHelp) readingAsk(q)?.let { return it }
         // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
         if (!beyondHelp) directAdd(q)?.let { return it }
