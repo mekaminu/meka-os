@@ -150,3 +150,26 @@ fun BedsideHelloOrb(needsYou: Int, onHello: () -> Unit, modifier: Modifier = Mod
             .semantics { contentDescription = "Navilife · $line" },
     )
 }
+
+/**
+ * "Hello, Navilife" slice 3: the visible sign that Navilife is listening for its phrase on the stand: a small brass
+ * dot and "Listening for “Hello Navilife”" ([os.meka.core.domain.HelloWakeRules.LISTENING_LINE]) in the caption style.
+ * It fades in and out with [listening] (the appear spec); reduced motion: the same cross-fade, nothing moves.
+ */
+@Composable
+fun HelloWakeLine(listening: Boolean, modifier: Modifier = Modifier) {
+    val reduced = Meka.reducedMotion
+    val alpha by animateFloatAsState(if (listening) 1f else 0f, MekaMotion.appear(reduced), label = "helloWake")
+    if (alpha <= 0f) return
+    androidx.compose.foundation.layout.Row(
+        modifier.graphicsLayer { this.alpha = alpha }.semantics { contentDescription = os.meka.core.domain.HelloWakeRules.LISTENING_LINE },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+        androidx.compose.foundation.layout.Spacer(Modifier.width(MekaSpace.xs))
+        androidx.compose.material3.Text(
+            os.meka.core.domain.HelloWakeRules.LISTENING_LINE,
+            style = os.meka.android.designsystem.MekaType.caption, color = Meka.colors.textTertiary,
+        )
+    }
+}

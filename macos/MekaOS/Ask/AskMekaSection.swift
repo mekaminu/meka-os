@@ -119,6 +119,9 @@ struct AskMekaSection: View {
         .onChange(of: model.talkAfterBriefBack) { _, back in if back != nil { takeTalkAfterBrief() } }
         .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
         .onChange(of: model.helloRequested) { _, asked in if asked { takeHelloRequest() } }
+        // Slice 3: "Hello Navilife" isn't listened for over a conversation.
+        .onChange(of: talk.active) { _, active in MacHelloWake.shared.setTalking(active) }
+        .onDisappear { MacHelloWake.shared.setTalking(false) }
         .onChange(of: model.talkOnOpenRequested) { _, asked in if asked { takeTalkOnOpen() } }
         .onDisappear { talk.stop() }
         // Money manager (16): Touch ID said yes to "Unlock Money to answer": the same question again, answered here.

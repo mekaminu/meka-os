@@ -16,6 +16,10 @@ import SwiftUI
 /// "Talk over MEKA" (voice barge-in, on by default): `BargeInRules.section(mac: true)` after it, with Turn on / Turn off
 /// (kept on this Mac; `MacTalkOver`, read when a conversation starts).
 ///
+/// "Hello, Navilife" slice 3: Say “Hello Navilife” (`HelloWakeRules.section`, off by default; no switch on a Mac without
+/// on-device speech) and Welcome back (`WelcomeBackRules.section`, on by default), both kept on this Mac, after When I
+/// open Navilife (`WelcomeBackRules.macSetup`). Turning the phrase on asks for the microphone if not yet decided.
+///
 /// Motion: the sheet scale-fades (system); sections stagger in; Turn on / Turn off presses in with a tick haptic and
 /// the status line blends to the accent while on (`themeBlend`, the words cross-fade). Reduce Motion: cross-fades.
 struct TalkSheet: View {
@@ -27,12 +31,18 @@ struct TalkSheet: View {
     @AppStorage(GlobalTalkHotKey.key) private var anywhere = true
     /// "Talk over MEKA" (`BargeInRules.DEFAULT_ON`: on until switched off).
     @AppStorage(MacTalkOver.key) private var talkOver = true
+    /// Say “Hello Navilife” (`HelloWakeRules.DEFAULT_ON`: off until switched on).
+    @AppStorage(MacHelloWake.key) private var wake = false
+    /// Welcome back (`WelcomeBackRules.DEFAULT_ON`: on until switched off).
+    @AppStorage(MacWelcomeBack.key) private var welcome = true
     private let hotKey = GlobalTalkHotKey.shared
 
     var body: some View {
         // The core's Mac sheet: On the Mac, From any app, When I open MEKA, Talk over MEKA, Safety.
-        let view = TalkAnywhereRules.shared.macSetup(anywhere: anywhere, taken: hotKey.taken, listenOnOpen: listenOnOpen,
-                                                       talkOver: talkOver)
+        let view = WelcomeBackRules.shared.macSetup(
+            base: TalkAnywhereRules.shared.macSetup(anywhere: anywhere, taken: hotKey.taken, listenOnOpen: listenOnOpen,
+                                                    talkOver: talkOver),
+            wake: wake, wakeAvailable: MacHelloWake.available, welcome: welcome)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(view.title).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(view.intro).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -57,6 +67,10 @@ struct TalkSheet: View {
                         switchButton(action, "⌥Space from any app") { toggleAnywhere() }
                     } else if let action = s.action, s.label == BargeInRules.shared.LABEL {
                         switchButton(action, "talk over Navilife to interrupt") { toggleTalkOver() }
+                    } else if let action = s.action, s.label == HelloWakeRules.shared.LABEL {
+                        switchButton(action, "say Hello Navilife to start") { toggleWake() }
+                    } else if let action = s.action, s.label == WelcomeBackRules.shared.LABEL {
+                        switchButton(action, "welcome back after a while away") { toggleWelcome() }
                     }
                 }
                 .padding(.top, MekaSpace.m)
@@ -94,6 +108,25 @@ struct TalkSheet: View {
     private func toggleTalkOver() {
         MekaHaptics.tick()
         withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { talkOver.toggle() }
+    }
+
+    private func toggleWake() {
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { wake.toggle() }
+        if wake {
+            // The phrase never asks for the microphone itself, so turning it on is the moment to (only if not yet decided).
+            Task {
+                _ = await TalkController.allowed()
+                MacHelloWake.shared.apply()
+            }
+        } else {
+            MacHelloWake.shared.apply()
+        }
+    }
+
+    private func toggleWelcome() {
+        MekaHaptics.tick()
+        withAnimation(MekaMotion.themeBlend(reduced: reduceMotion)) { welcome.toggle() }
     }
 
     private func toggleListenOnOpen() {

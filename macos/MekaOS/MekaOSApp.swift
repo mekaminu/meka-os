@@ -53,6 +53,10 @@ struct MekaOSApp: App {
                     // ⌥Space from any app (on by default): MEKA comes forward on Ask listening, as the menu's Talk to MEKA.
                     // "Hello, Navilife" slice 2: after two hours with no greeting it says hello first, then listens.
                     GlobalTalkHotKey.shared.attach { model.requestTalkOrHello(reduced: MotionSetting.reduced) }
+                    // "Hello, Navilife" slice 3: "Hello Navilife" heard while Navilife is in front (off by default),
+                    // and the welcome back after two hours or more away (on by default).
+                    MacHelloWake.shared.attach { model.requestHelloFromWake(reduced: MotionSetting.reduced) }
+                    MacWelcomeBack.shared.attach { model.welcomeBack(minutesAway: $0, reduced: MotionSetting.reduced) }
                 }
                 // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…; the desktop
                 // News widget opens mekaos://news?story=<id>.

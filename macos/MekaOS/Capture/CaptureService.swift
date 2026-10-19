@@ -117,11 +117,17 @@ final class MekaAppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        MainActor.assumeIsolated { MacTalkOnOpen.shared.becameActive() }
+        MainActor.assumeIsolated {
+            MacTalkOnOpen.shared.becameActive()
+            MacHelloWake.shared.setAppActive(true)
+        }
     }
 
     func applicationDidResignActive(_ notification: Notification) {
-        MainActor.assumeIsolated { MacTalkOnOpen.shared.resignedActive() }
+        MainActor.assumeIsolated {
+            MacTalkOnOpen.shared.resignedActive()
+            MacHelloWake.shared.setAppActive(false)
+        }
     }
 
     /// A Dock click: "Listen when I open MEKA" listens when it brought MEKA forward; the window comes back as usual.

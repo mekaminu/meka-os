@@ -5154,7 +5154,7 @@ class MekaCore(
      * named on, [os.meka.core.domain.HelloRules.partnerAsks]; [partnerAsks] overrides it when given) and the tasks due
      * today with no time; quiet hours keep it to one thing. Instant and free: no AI call, nothing fetched, sent or stored.
      */
-    suspend fun hello(partnerAsks: Int = -1): os.meka.core.domain.HelloGreeting = onCore {
+    suspend fun hello(partnerAsks: Int = -1, welcome: Boolean = false): os.meka.core.domain.HelloGreeting = onCore {
         val cal = ZoneCalendar(timeZone)
         val now = nowMs()
         val minute = cal.minuteOfDay(now)
@@ -5184,7 +5184,23 @@ class MekaCore(
                 else os.meka.core.domain.HelloRules.partnerAsks(profile.partnerName, _requests.value.map { it.person }),
                 dueToday = cards.filter { it.kind == os.meka.core.domain.DecisionKind.DUE_TODAY }.map { it.title },
                 quiet = _notifySettings.value.quiet.isQuietAt(now, cal),
+                welcome = welcome,
             ),
+        )
+    }
+
+    /**
+     * "Hello, Navilife" slice 3, the Mac's welcome back: whether coming back after [awayMin] minutes away greets him
+     * ([os.meka.core.domain.WelcomeBackRules.greets]), with quiet hours and protected time read here. Pure, nothing stored.
+     */
+    fun welcomeBackGreets(on: Boolean, awayMin: Int, minutesSinceHello: Int, micAllowed: Boolean): Boolean {
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val protectedNow = os.meka.core.domain.ProtectedRules.protectedUntil(
+            protectedTime.setting(), now, work.schedule(), bankHolidays.calendar(), cal,
+        ) != null
+        return os.meka.core.domain.WelcomeBackRules.greets(
+            on, awayMin, minutesSinceHello, _notifySettings.value.quiet.isQuietAt(now, cal), protectedNow, micAllowed,
         )
     }
 

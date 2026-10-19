@@ -133,4 +133,62 @@ class HelloTest {
         assertEquals(0, HelloRules.partnerAsks("Sam", emptyList()))
         assertEquals("Sam asked you for something.", HelloRules.partnerLine("Sam Taylor", 1))
     }
+
+    @Test
+    fun theWakePhraseIsAGreetingThenTheNameOrTheNameFirst() {
+        assertTrue(HelloWakeRules.heard("Hello Navilife"))
+        assertTrue(HelloWakeRules.heard("hey navi life what's on tomorrow"))
+        assertTrue(HelloWakeRules.heard("Hi, Navy-Life!"))
+        assertTrue(HelloWakeRules.heard("Navilife, are you there"))
+        assertTrue(HelloWakeRules.heard("um hello navilife")) // the greeting needn't be first
+        // The name inside a sentence, "hello" alone, or nothing: not a wake.
+        assertEquals(false, HelloWakeRules.heard("I was telling Sam about navilife"))
+        assertEquals(false, HelloWakeRules.heard("hello there"))
+        assertEquals(false, HelloWakeRules.heard("hello"))
+        assertEquals(false, HelloWakeRules.heard(""))
+        assertEquals(false, HelloWakeRules.heard(null))
+    }
+
+    @Test
+    fun theWakePhraseListensOnlyWhereAndWhenItShould() {
+        assertTrue(HelloWakeRules.listens(on = true, micAllowed = true, place = true, talking = false, charging = true, quiet = false))
+        assertEquals(false, HelloWakeRules.listens(on = false, micAllowed = true, place = true, talking = false)) // off by default
+        assertEquals(false, HelloWakeRules.DEFAULT_ON)
+        assertEquals(false, HelloWakeRules.listens(on = true, micAllowed = false, place = true, talking = false)) // never asks
+        assertEquals(false, HelloWakeRules.listens(on = true, micAllowed = true, place = false, talking = false)) // pocket
+        assertEquals(false, HelloWakeRules.listens(on = true, micAllowed = true, place = true, talking = true))
+        assertEquals(false, HelloWakeRules.listens(on = true, micAllowed = true, place = true, talking = false, charging = false))
+        assertEquals(false, HelloWakeRules.listens(on = true, micAllowed = true, place = true, talking = false, quiet = true))
+        assertEquals(HelloWakeRules.RESTART_MS, HelloWakeRules.restartDelayMs(0))
+        assertEquals(1_600L, HelloWakeRules.restartDelayMs(2))
+        assertEquals(HelloWakeRules.MAX_DELAY_MS, HelloWakeRules.restartDelayMs(7))
+        assertEquals(null, HelloWakeRules.restartDelayMs(HelloWakeRules.MAX_ERRORS))
+        val off = HelloWakeRules.section(on = false, mac = false)
+        assertEquals(HelloWakeRules.TURN_ON, off.action)
+        assertEquals(false, off.lit)
+        assertEquals(null, HelloWakeRules.section(on = true, mac = true, available = false).action)
+    }
+
+    @Test
+    fun welcomeBackGreetsOncePerReturnAfterTwoHoursOutsideQuietAndProtectedTime() {
+        fun greets(away: Int, since: Int = -1, quiet: Boolean = false, prot: Boolean = false, on: Boolean = true) =
+            WelcomeBackRules.greets(on, away, since, quiet, prot, micAllowed = true)
+        assertTrue(greets(away = 130))
+        assertEquals(false, greets(away = 90)) // a short break
+        assertEquals(false, greets(away = 130, since = 30)) // already greeted this return
+        assertEquals(false, greets(away = 130, quiet = true))
+        assertEquals(false, greets(away = 130, prot = true))
+        assertEquals(false, greets(away = 130, on = false))
+        assertEquals(false, WelcomeBackRules.greets(true, 130, -1, false, false, micAllowed = false))
+        val g = HelloRules.greeting(HelloFacts(minuteOfDay = 14 * 60, name = "Alex", welcome = true))
+        assertEquals("Welcome back, Alex. Nothing needs you. Your afternoon's clear. Anything you'd like?", g.spoken)
+        val sheet = WelcomeBackRules.macSetup(
+            TalkAnywhereRules.macSetup(anywhere = true, taken = false, listenOnOpen = false, talkOver = true),
+            wake = false, wakeAvailable = true, welcome = true,
+        )
+        val labels = sheet.sections.map { it.label }
+        assertEquals(labels.indexOf(TalkOnOpenRules.LABEL) + 1, labels.indexOf(HelloWakeRules.LABEL))
+        assertEquals(labels.indexOf(HelloWakeRules.LABEL) + 1, labels.indexOf(WelcomeBackRules.LABEL))
+        assertEquals("Safety", labels.last())
+    }
 }

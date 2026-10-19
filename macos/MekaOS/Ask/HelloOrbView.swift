@@ -97,6 +97,8 @@ struct HelloOrbView: View {
 /// greets him (`CoreModel.requestHello`), then listens. Press style; Reduce Motion: a still glow.
 struct SayHelloButton: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    private let wake = MacHelloWake.shared
     let palette: MekaPalette
     /// Called after the request (the menu bar's window brings the main window forward with it).
     var then: () -> Void = {}
@@ -114,16 +116,28 @@ struct SayHelloButton: View {
                              size: CGFloat(HelloOrb.shared.SIDEBAR_SIZE), frameRate: 12)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Say hello").font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text(count > 0 ? line : "⌥Space").font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                        .lineLimit(1)
+                    // Slice 3: while it listens for the phrase, a brass dot and the line say so (the visible indicator).
+                    if wake.listening {
+                        HStack(spacing: MekaSpace.xxs) {
+                            Circle().fill(palette.accent).frame(width: 5, height: 5)
+                            Text(HelloWakeRules.shared.LISTENING_LINE).font(MekaType.caption)
+                                .foregroundStyle(palette.textTertiary).lineLimit(1)
+                        }
+                        .transition(.opacity)
+                    } else {
+                        Text(count > 0 ? line : "⌥Space").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .lineLimit(1)
+                            .transition(.opacity)
+                    }
                 }
                 Spacer(minLength: 0)
             }
             .contentShape(Rectangle())
         }
         .buttonStyle(MekaPressStyle())
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: wake.listening)
         .help(line)
-        .accessibilityLabel("Navilife · \(line)")
+        .accessibilityLabel(wake.listening ? "Navilife · \(line) · \(HelloWakeRules.shared.LISTENING_LINE)" : "Navilife · \(line)")
         .accessibilityIdentifier("say-hello")
     }
 }

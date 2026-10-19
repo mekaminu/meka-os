@@ -51,6 +51,7 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.BargeInRules
+import os.meka.core.domain.HelloWakeRules
 import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.domain.TalkStartRules
@@ -63,6 +64,8 @@ import os.meka.core.domain.TalkStartRules
  * and the safety line. The words are the core's [TalkStartRules]. Slice 4: "When I open MEKA" ([TalkOnOpenRules.section],
  * kept on this phone, off by default) with Turn on / Turn off; turning it on asks for the microphone if needed. "Talk
  * over MEKA" ([BargeInRules.section], kept on this phone, on by default) after it, with Turn on / Turn off.
+ * "Hello, Navilife" slice 3: Say “Hello Navilife” ([HelloWakeRules.section], kept on this phone, off by default) after
+ * When I open Navilife; turning it on asks for the microphone if needed; without on-device speech it says so, no switch.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; the side
  * button's status line blends to the accent once MEKA is the assistant; Open default apps presses in with a tick haptic.
@@ -86,12 +89,23 @@ fun TalkPane(onClose: () -> Unit) {
         listenOnOpen = on
     }
     var talkOver by remember { mutableStateOf(TalkAutoListen.talkOver(context)) }
-    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok -> if (ok) setListen(true) }
+    var wake by remember { mutableStateOf(TalkAutoListen.helloWake(context)) }
+    fun setWake(on: Boolean) {
+        TalkAutoListen.setHelloWake(context, on)
+        wake = on
+    }
+    val wakeAvailable = remember { HelloWake.available(context) }
+    // Which switch asked for the microphone, so the answer turns on the right one.
+    var micFor by remember { mutableStateOf("") }
+    val askMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) { if (micFor == HelloWakeRules.LABEL) setWake(true) else setListen(true) }
+    }
     // "When I open MEKA" sits after the side button (the other way to start without the mic).
     // "Talk over MEKA" follows it (what happens once MEKA is talking).
     val sections = view.sections.toMutableList().apply {
         add(minOf(1, size), TalkOnOpenRules.section(listenOnOpen))
-        add(minOf(2, size), BargeInRules.section(talkOver))
+        add(minOf(2, size), HelloWakeRules.section(wake, mac = false, available = wakeAvailable))
+        add(minOf(3, size), BargeInRules.section(talkOver))
     }
 
     Column(
@@ -111,10 +125,15 @@ fun TalkPane(onClose: () -> Unit) {
                         talkOver = !talkOver
                         TalkAutoListen.setTalkOver(context, talkOver)
                     }
+                    s.label == HelloWakeRules.LABEL -> when {
+                        wake -> setWake(false)
+                        TalkAutoListen.micAllowed(context) -> setWake(true)
+                        else -> { micFor = HelloWakeRules.LABEL; askMic.launch(Manifest.permission.RECORD_AUDIO) }
+                    }
                     s.label != TalkOnOpenRules.LABEL -> openDefaultApps(context)
                     listenOnOpen -> setListen(false)
                     TalkAutoListen.micAllowed(context) -> setListen(true)
-                    else -> askMic.launch(Manifest.permission.RECORD_AUDIO)
+                    else -> { micFor = TalkOnOpenRules.LABEL; askMic.launch(Manifest.permission.RECORD_AUDIO) }
                 }
             }
         }

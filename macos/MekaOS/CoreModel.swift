@@ -2246,6 +2246,27 @@ final class CoreModel {
         helloRequested = true
     }
 
+    /// Slice 3: the next greeting opens "Welcome back, …" (the Mac's welcome back); `hello()` takes it.
+    @ObservationIgnored private var welcomeNext = false
+
+    /// Slice 3, "Hello Navilife" heard (`MacHelloWake`): Ask greets him, then listens; never ends a conversation.
+    func requestHelloFromWake(reduced: Bool) {
+        guard !helloRequested else { return }
+        requestHello(reduced: reduced)
+    }
+
+    /// Slice 3, the Mac's welcome back (`MacWelcomeBack`): after `minutesAway`, the core decides (two hours or more,
+    /// once per return, not in quiet hours or protected time); then Navilife comes forward and greets him.
+    func welcomeBack(minutesAway: Int, reduced: Bool) {
+        guard let core else { return }
+        let since = lastHelloAt.map { Int32(min(Date().timeIntervalSince($0) / 60, 100_000)) } ?? -1
+        guard core.welcomeBackGreets(on: MacWelcomeBack.enabled, awayMin: Int32(min(minutesAway, 100_000)),
+                                     minutesSinceHello: since, micAllowed: MacTalkOnOpen.micAllowed) else { return }
+        welcomeNext = true
+        GlobalTalkHotKey.bringForward()
+        requestHello(reduced: reduced)
+    }
+
     /// ⌥Space and the Talk to Navilife command: a greeting when none was said in the last two hours
     /// (`HelloRules.hotkeyGreets`), else straight to listening as before.
     func requestTalkOrHello(reduced: Bool) {
@@ -2391,7 +2412,9 @@ final class CoreModel {
     /// connected or it couldn't be read.
     func hello() async -> String? {
         guard let core else { return nil }
-        guard let words = try? await core.hello(partnerAsks: -1).spoken else { return nil }
+        let welcome = welcomeNext
+        welcomeNext = false
+        guard let words = try? await core.hello(partnerAsks: -1, welcome: welcome).spoken else { return nil }
         lastHelloAt = Date()
         return words
     }

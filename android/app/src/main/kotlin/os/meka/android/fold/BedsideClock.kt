@@ -132,9 +132,12 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     val activity = LocalActivity.current
     var v by remember { mutableStateOf(core.bedside(nextAlarm(context))) }
     var charging by remember { mutableStateOf(isCharging(context)) }
+    // "Hello, Navilife" slice 3: Say “Hello Navilife” (kept on this phone, off by default) and the microphone allowed.
+    var wakeOn by remember { mutableStateOf(false) }
     LaunchedEffect(core) {
         while (true) {
             charging = isCharging(context)
+            wakeOn = os.meka.android.ask.TalkAutoListen.helloWake(context) && os.meka.android.ask.TalkAutoListen.micAllowed(context)
             v = core.bedside(nextAlarm(context))
             // Wake on the minute so the clock turns over on time, and at least every 5 s for the alarm and charger.
             val now = System.currentTimeMillis()
@@ -181,6 +184,14 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     val today by core.today.collectAsState()
     // "Hello, Navilife" slice 2: the orb's warm halo while Needs you has cards.
     val needsYouStack by core.needsYouStack.collectAsState()
+    // Slice 3: on the stand, charging, outside quiet hours and with nothing else up, it listens for "Hello Navilife"
+    // on the device; heard, the Talk pane springs up and greets him as a tap on the orb does.
+    val wakeListening = os.meka.android.ask.rememberHelloWake(
+        os.meka.core.domain.HelloWakeRules.listens(
+            on = wakeOn, micAllowed = true, place = open == null && !dayOpen && newsOpen == null,
+            talking = talkOpen, charging = charging, quiet = v.dim,
+        ),
+    ) { os.meka.android.ask.helloAtBedside(talkApp); talkOpen = true }
     Box(
         Modifier.fillMaxSize().background(Meka.colors.background)
             .onGloballyPositioned { topInWindow = it.positionInWindow().y.toInt(); heightPx = it.size.height; widthPx = it.size.width },
@@ -198,6 +209,7 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
             DayHalf(
                 v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 needsYou = needsYouStack.cards.size,
+                wakeListening = wakeListening,
                 onHello = { os.meka.android.ask.helloAtBedside(talkApp); talkOpen = true },
             ) {
                 open = it
@@ -304,7 +316,7 @@ private fun RollingTime(time: String, color: androidx.compose.ui.graphics.Color,
 }
 
 @Composable
-private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, onHello: () -> Unit, onOpen: (BedsideOpens) -> Unit) {
+private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, wakeListening: Boolean, onHello: () -> Unit, onOpen: (BedsideOpens) -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val text by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "day")
@@ -318,6 +330,8 @@ private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, onHello: 
             // "Hello, Navilife" slice 2: the Hello orb where the mic was; a tap greets him, then listens.
             os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim)
         }
+        // Slice 3: while it listens for the phrase, a brass dot and the line say so (the visible indicator).
+        os.meka.android.ask.HelloWakeLine(wakeListening, Modifier.align(Alignment.End))
         val opens = v.opens
         Column(
             Modifier.fillMaxWidth().appear(rememberAppearance(3)).clip(RoundedCornerShape(MekaRadius.m))

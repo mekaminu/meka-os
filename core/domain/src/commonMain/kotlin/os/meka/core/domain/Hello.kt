@@ -27,6 +27,8 @@ data class HelloFacts(
     val partnerAsks: Int = 0,
     val dueToday: List<String> = emptyList(),
     val quiet: Boolean = false,
+    /** Slice 3: the Mac's welcome back after a while away ([WelcomeBackRules]): "Welcome back, Meka." opens it. */
+    val welcome: Boolean = false,
 )
 
 enum class HelloKind { NEEDS_YOU, EVENT, TRAIN, PARTNER, DUE }
@@ -91,7 +93,7 @@ object HelloRules {
 
     fun greeting(f: HelloFacts): HelloGreeting {
         val name = firstName(f.name)
-        val opening = salutation(f.minuteOfDay) + (name?.let { ", $it." } ?: ".")
+        val opening = (if (f.welcome) WelcomeBackRules.OPENING else salutation(f.minuteOfDay)) + (name?.let { ", $it." } ?: ".")
         val points = points(f)
         val closing = if (points.isEmpty()) "Nothing needs you. Your ${partOfDay(f.minuteOfDay)}'s clear. $CLOSING" else CLOSING
         return HelloGreeting(opening, points, closing)
@@ -229,5 +231,143 @@ object HelloOrb {
             needsYou == 1 -> "1 thing needs you · $press to say hello"
             else -> "$needsYou things need you · $press to say hello"
         }
+    }
+}
+
+// ---- "Hello, Navilife" slice 3: the wake phrase and the Mac's welcome back ----
+
+/**
+ * "Hello Navilife" said aloud starts the greeting (slice 3). Off until he turns it on (kept on each device, never
+ * synced), and it listens only where it's clearly wanted: the Fold on its stand (the bedside clock on screen, charging,
+ * outside quiet hours) or the Mac with Navilife the app in front. Recognised on the device only (the phone's on-device
+ * recogniser, the Mac's on-device speech): the words never leave it and nothing is kept. While it listens a small brass
+ * dot and [LISTENING_LINE] show beside the orb. Never in the pocket, never while a conversation is already running.
+ * (Non-AI, pure.)
+ */
+object HelloWakeRules {
+    const val LABEL = "Say “Hello Navilife”"
+    const val DEFAULT_ON = false
+    const val TURN_ON = "Turn on"
+    const val TURN_OFF = "Turn off"
+    /** Beside the orb while it listens for the phrase (the visible indicator). */
+    const val LISTENING_LINE = "Listening for “Hello Navilife”"
+
+    /** The Mac's on-device speech stops a task after about a minute: a fresh one starts each window. */
+    const val MAC_WINDOW_MS = 50_000L
+    /** After a result or an error the next listen starts after this, doubling with errors in a row up to [MAX_DELAY_MS]. */
+    const val RESTART_MS = 400L
+    const val MAX_DELAY_MS = 30_000L
+    /** This many errors in a row (the recogniser busy or missing) and it stops until the stand or the app comes back. */
+    const val MAX_ERRORS = 8
+
+    private val GREETINGS = setOf("hello", "hey", "hi", "hiya", "ok", "okay")
+
+    /** How the recogniser writes "Navilife" (one word or two; its common mishearings of a new name). */
+    private val NAMES: List<List<String>> = listOf(
+        listOf("navilife"), listOf("navi", "life"), listOf("navy", "life"), listOf("navie", "life"), listOf("navvy", "life"),
+        listOf("navalife"), listOf("navelife"), listOf("navylife"), listOf("navi", "live"), listOf("nav", "e", "life"),
+        listOf("navi", "lyfe"), listOf("navilyfe"), listOf("navigate", "life"),
+    )
+
+    /** The words, lower case, letters and digits only, split on everything else ("Hey, Navi-life!" → hey navi life). */
+    fun words(text: String): List<String> =
+        text.lowercase().map { if (it.isLetterOrDigit() || it == '\'') it else ' ' }.joinToString("")
+            .replace("'", "").split(' ').filter { it.isNotEmpty() }
+
+    /**
+     * Whether [transcript] (a partial or final result) holds the phrase: a greeting word straight before the name, or
+     * the name alone as the first thing said ("Navilife, …"). Anything else (the name in the middle of a sentence on
+     * the radio, "hello" alone) isn't a wake.
+     */
+    fun heard(transcript: String?): Boolean {
+        val w = words(transcript ?: return false)
+        if (w.isEmpty()) return false
+        for (i in w.indices) {
+            val nameAt = i + if (w[i] in GREETINGS) 1 else 0
+            if (nameAt == i && i != 0) continue
+            if (NAMES.any { n -> nameAt + n.size <= w.size && n.indices.all { w[nameAt + it] == n[it] } }) return true
+        }
+        return false
+    }
+
+    /**
+     * Whether to listen for the phrase now: switched on ([on]), the microphone already allowed (never asked for by this),
+     * the right place ([place]: the Fold on its stand, the Mac's Navilife in front), no conversation running
+     * ([talking]), and the Fold [charging] (battery-light: the Mac passes true) outside [quiet] hours.
+     */
+    fun listens(on: Boolean, micAllowed: Boolean, place: Boolean, talking: Boolean, charging: Boolean = true, quiet: Boolean = false): Boolean =
+        on && micAllowed && place && !talking && charging && !quiet
+
+    /** The wait before the next listen, after [errorsInRow] errors in a row (0 after a plain result). Null: give up. */
+    fun restartDelayMs(errorsInRow: Int): Long? = when {
+        errorsInRow <= 0 -> RESTART_MS
+        errorsInRow >= MAX_ERRORS -> null
+        else -> minOf(MAX_DELAY_MS, RESTART_MS shl errorsInRow)
+    }
+
+    /** The Talk pane's section (the Fold's, [mac] false) and the Mac's sheet's, with its switch; lit while on. */
+    fun section(on: Boolean, mac: Boolean, available: Boolean = true): TalkSetupSection = TalkSetupSection(
+        LABEL,
+        when {
+            !available -> "This ${if (mac) "Mac" else "phone"} can't recognise speech on the device, so the phrase can't be listened for."
+            on && mac -> "On: while Navilife is the app in front, say “Hello Navilife” and it greets you."
+            on -> "On: with the phone on its stand (the bedside clock, charging), say “Hello Navilife” and it greets you."
+            else -> "Off: tap the orb to say hello."
+        },
+        lit = on && available,
+        steps = listOf(
+            if (mac) "It listens only while Navilife is in front, never in the background, and stops while you talk to it."
+            else "It listens only on the stand while charging, never in your pocket, and not in quiet hours.",
+            "Your words are recognised on this ${if (mac) "Mac" else "phone"} only: never sent anywhere, never kept.",
+            "While it listens the orb shows “$LISTENING_LINE”.",
+            if (mac) "Allow the microphone once by clicking the orb." else "Allow the microphone once by tapping the orb.",
+        ),
+        action = if (!available) null else if (on) TURN_OFF else TURN_ON,
+    )
+}
+
+/**
+ * The Mac's welcome back (slice 3): when the Mac wakes or unlocks after [AWAY_MIN] or more away, Navilife comes forward
+ * and greets him ("Welcome back, Meka. …"), then listens, once per return (a greeting in the last two hours counts).
+ * Never in quiet hours or protected time; on by default, kept on the Mac, switched in Ask → More → Talk; Esc or ⌥Space
+ * skips it. (Non-AI, pure.)
+ */
+object WelcomeBackRules {
+    const val LABEL = "Welcome back"
+    const val DEFAULT_ON = true
+    const val OPENING = "Welcome back"
+    const val AWAY_MIN = 120
+    const val TURN_ON = "Turn on"
+    const val TURN_OFF = "Turn off"
+
+    /**
+     * Whether this return greets: on, away [awayMin] (from the lock or sleep to now) at least [AWAY_MIN], no greeting in
+     * the last two hours ([minutesSinceHello], negative for none: [HelloRules.hotkeyGreets]), not [quiet] hours, not
+     * [protectedNow] (his evenings and weekends stay his), and the microphone already allowed ([micAllowed]).
+     */
+    fun greets(on: Boolean, awayMin: Int, minutesSinceHello: Int, quiet: Boolean, protectedNow: Boolean, micAllowed: Boolean): Boolean =
+        on && awayMin >= AWAY_MIN && HelloRules.hotkeyGreets(minutesSinceHello) && !quiet && !protectedNow && micAllowed
+
+    fun section(on: Boolean): TalkSetupSection = TalkSetupSection(
+        LABEL,
+        if (on) "On: back at the Mac after two hours or more, Navilife says hello and what matters now."
+        else "Off: Navilife waits for you to say hello.",
+        lit = on,
+        steps = listOf(
+            "Once per return, never in quiet hours or protected time.",
+            "Press Esc or ⌥Space to skip it.",
+        ),
+        action = if (on) TURN_OFF else TURN_ON,
+    )
+
+    /**
+     * The Mac's whole Talk sheet with slice 3's two sections after When I open Navilife: Say “Hello Navilife” and
+     * Welcome back.
+     */
+    fun macSetup(base: TalkSetupView, wake: Boolean, wakeAvailable: Boolean, welcome: Boolean): TalkSetupView {
+        val at = base.sections.indexOfFirst { it.label == TalkOnOpenRules.LABEL }.let { if (it < 0) base.sections.size - 1 else it + 1 }
+        val s = base.sections.toMutableList()
+        s.addAll(at.coerceIn(0, s.size), listOf(HelloWakeRules.section(wake, mac = true, available = wakeAvailable), section(welcome)))
+        return base.copy(sections = s)
     }
 }

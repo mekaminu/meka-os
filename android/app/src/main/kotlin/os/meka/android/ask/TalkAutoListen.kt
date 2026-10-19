@@ -68,6 +68,17 @@ object TalkAutoListen {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_LISTEN_ON_OPEN, on).apply()
     }
 
+    // ---- "Hello, Navilife" slice 3: Say “Hello Navilife” on the stand; kept on this phone, off by default ----
+
+    private const val KEY_HELLO_WAKE = "hello_wake"
+
+    fun helloWake(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_HELLO_WAKE, os.meka.core.domain.HelloWakeRules.DEFAULT_ON)
+
+    fun setHelloWake(context: Context, on: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_HELLO_WAKE, on).apply()
+    }
+
     // ---- "Talk over MEKA" (voice barge-in): kept on this phone, on by default (BargeInRules.DEFAULT_ON) ----
 
     private const val KEY_TALK_OVER = "talk_over"
