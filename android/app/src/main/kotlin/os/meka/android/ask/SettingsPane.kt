@@ -69,7 +69,7 @@ fun SettingsPane(
             val step = Modifier.appear(rememberAppearance(i + 1))
             when {
                 ShellNav.unfoldsInPlace(item) -> AppearanceRow(appearanceOpen, step, openTopics = openTopics, playOpening = playOpening, toggle = toggleAppearance)
-                item == MoreItem.AI -> MoreRow(item, ai?.line ?: "Checking…", ai?.lit == true, false, step) {}
+                item == MoreItem.AI -> AiSpendRow(ai, step)
                 else -> MoreRow(
                     item, ShellNav.moreLine(item, lists.dueCount, work.atWork, health?.summary, setup?.summary),
                     ShellNav.moreLit(item, lists.dueCount, health?.attention ?: 0, setup?.toDo ?: 0), pane == item, step,

@@ -36,7 +36,7 @@ internal object HelpIndex {
             keywords = listOf("navilifes ai", "ai budget", "ai cost", "ai spend", "ai off"),
             what = "whether the AI is on and what it has cost this month against its budget.",
             how = "When it's off or the budget is used, Ask's field only searches and answers come from the device.",
-            tips = listOf(),
+            tips = listOf("Tap Navilife's AI in Settings to unfold this month's spend by feature (Talk, Ask, Mail, Messages…), the costliest first, each with its calls and cost.", "If Anthropic refuses the key (revoked or expired), the row and Health turn red: make a new key in Anthropic's Console and paste it into Secrets Manager; nothing else changes."),
             fold = HelpPlace.AI,
             foldWhere = "Ask → Settings → Navilife's AI",
             mac = HelpPlace.AI,

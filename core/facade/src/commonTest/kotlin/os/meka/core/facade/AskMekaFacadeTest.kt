@@ -1046,6 +1046,15 @@ class AskMekaFacadeTest {
         assertEquals(AiStatusView("On · $1.20 of $20 this month", lit = false, canAsk = true), c.aiStatus())
         server.status = AiStatusReply("on", null, 2000, 2000, "over")
         assertFalse(c.aiStatus().canAsk)
+        // AI layer completeness slice 2: the month per feature unfolds in Settings; a refused key reads red in Health.
+        server.status = AiStatusReply("on", null, 205, 2000, "ok", month = listOf(
+            os.meka.core.domain.AiMonthUse("mail.sort", 300, 60), os.meka.core.domain.AiMonthUse("ask.talk", 40, 145),
+        ))
+        val spend = c.aiStatus()
+        assertEquals(listOf("Talk", "Mail"), spend.spend.map { it.label })
+        assertEquals("This month by feature · $2.05 in all", spend.spendHeading)
+        server.status = AiStatusReply("failing", "Anthropic refused the key", 205, 2000, "ok", keyRefused = true)
+        assertTrue(c.aiStatus().refused)
         server.status = null
         assertEquals(AskRules.STATUS_UNKNOWN, c.aiStatus())
         server.down = true

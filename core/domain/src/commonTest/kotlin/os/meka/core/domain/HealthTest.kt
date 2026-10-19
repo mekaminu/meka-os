@@ -180,6 +180,12 @@ class HealthTest {
         val over = HealthRules.view(facts(ai = AiStatusView("Used up · $20 of $20 this month", lit = true, canAsk = false)), cal).row("ai")
         assertEquals(HealthState.WARN, over.state)
         assertEquals(HealthState.UNKNOWN, HealthRules.view(facts(ai = AskRules.STATUS_UNKNOWN), cal).row("ai").state)
+        // AI layer completeness slice 2: a key Anthropic refuses is red, with what to do; a rate limit stays amber.
+        val refused = HealthRules.view(facts(ai = AskRules.statusView("failing", "Anthropic refused the key", 0, 2000, "ok", keyRefused = true)), cal)
+        assertEquals(HealthState.BAD, refused.row("ai").state)
+        assertEquals(AiSpendRules.REFUSED_LINE, refused.row("ai").line)
+        val limited = HealthRules.view(facts(ai = AskRules.statusView("failing", "Anthropic is limiting requests", 0, 2000, "ok")), cal)
+        assertEquals(HealthState.WARN, limited.row("ai").state)
         assertEquals(HealthState.WARN, HealthRules.view(facts(server = server.copy(speech = false)), cal).row("voice").state)
         // Natural voice, slice 3: which voices the server has, and a Google failure noted for a day (Polly said it).
         assertEquals("On · Amazon Polly", HealthRules.view(facts(), cal).row("voice").line)

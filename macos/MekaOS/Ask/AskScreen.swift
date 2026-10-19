@@ -70,7 +70,7 @@ struct AskScreen: View {
                                 if ShellNav.unfoldsInPlace(item) {
                                     AppearanceRow(palette: palette)
                                 } else if item == .ai {
-                                    MoreRow(item: item, line: model.aiStatus?.line ?? "Checking…", lit: model.aiStatus?.lit == true, palette: palette) {}
+                                    AiSpendRow(ai: model.aiStatus, palette: palette)
                                 } else {
                                     MoreRow(item: item, line: ShellNav.moreLine(item, listsDue: model.listsDue, atWork: model.work?.atWork == true,
                                                                                 health: model.health?.summary, setup: model.setup?.summary),
@@ -208,6 +208,80 @@ struct AskScreen: View {
         case .setup: model.showSetup = true
         case .lists, .goals, .review, .vault, .appearance, .ai, .settings: break
         }
+    }
+}
+
+/// Settings → Navilife's AI (AI layer completeness slice 2): the status line as before, or "Key refused by Anthropic · …"
+/// in the accent; once the server has metered something this month a click unfolds "This month by feature" with a row
+/// per kind of use ("Talk · 40 calls · $1.20") and a thin accent bar for its share. Rows stagger in, bars grow from the
+/// left, the chevron turns. Reduce Motion: they appear at once, bars full.
+private struct AiSpendRow: View {
+    let ai: AiStatusView?
+    let palette: MekaPalette
+    @State private var open = false
+    @State private var shown = false
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    private var lines: [AiSpendLine] { ai?.spend ?? [] }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button {
+                guard !lines.isEmpty else { return }
+                withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }
+                shown = false
+                if open { withAnimation(MekaMotion.expand(reduced: reduceMotion).delay(reduceMotion ? 0 : 0.04)) { shown = true } }
+            } label: {
+                HStack {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(MoreItem.ai.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                        Text(ai?.line ?? "Checking…")
+                            .font(MekaType.caption)
+                            .foregroundStyle(ai?.lit == true ? palette.accent : palette.textSecondary)
+                            .contentTransition(.opacity)
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: ai?.line)
+                    }
+                    Spacer()
+                    if !lines.isEmpty {
+                        Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .rotationEffect(.degrees(open ? 90 : 0))
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: open)
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(lines.isEmpty ? "" : (open ? "Folds away this month's spend" : "Shows this month's spend by feature"))
+            if open && !lines.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    if let heading = ai?.spendHeading {
+                        Text(heading).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    ForEach(Array(lines.enumerated()), id: \.offset) { i, s in
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            HStack {
+                                Text(s.label).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                                Spacer()
+                                Text(s.detail).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            }
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(palette.surfaceRaised)
+                                    Capsule().fill(palette.accent)
+                                        .frame(width: geo.size.width * CGFloat(shown || reduceMotion ? max(0.02, min(1, s.share)) : 0))
+                                }
+                            }
+                            .frame(height: 3)
+                        }
+                        .staggeredAppear(i)
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.horizontal, MekaSpace.m)
+        .padding(.vertical, MekaSpace.xs)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
     }
 }
 

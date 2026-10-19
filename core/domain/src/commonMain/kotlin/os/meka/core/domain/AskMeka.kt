@@ -204,7 +204,15 @@ data class AskDone(val line: String, val undo: AskUndo?, val offer: TrustOffer? 
  * needs a look (most of the month's budget used, used up, not answering); [canAsk] false when asking can't work (off,
  * used up, not connected), so Ask leads with Search instead.
  */
-data class AiStatusView(val line: String, val lit: Boolean, val canAsk: Boolean)
+data class AiStatusView(
+    val line: String, val lit: Boolean, val canAsk: Boolean,
+    /** Anthropic refused the key itself (revoked or expired): Health shows it red with what to do. */
+    val refused: Boolean = false,
+    /** This month's spend per feature, most first ([AiSpendRules.lines]); empty from an older server or before any call. */
+    val spend: List<AiSpendLine> = emptyList(),
+    /** Over [spend]: "This month by feature · $2.05 in all"; null when there's nothing to show. */
+    val spendHeading: String? = null,
+)
 
 object AskRules {
     const val MAX_QUESTION = 500
@@ -499,7 +507,20 @@ object AskRules {
      * [level] ok · alert · over for the month's budget, [spentCents]/[budgetCents] when the server meters (null on an
      * older server). Money is in US dollars, as Anthropic bills it.
      */
-    fun statusView(state: String, reason: String?, spentCents: Long?, budgetCents: Long?, level: String?): AiStatusView {
+    fun statusView(
+        state: String, reason: String?, spentCents: Long?, budgetCents: Long?, level: String?,
+        month: List<AiMonthUse> = emptyList(), keyRefused: Boolean = false,
+    ): AiStatusView {
+        val base = statusLine(state, reason, spentCents, budgetCents, level)
+        val lines = AiSpendRules.lines(month)
+        val heading = AiSpendRules.heading(lines, spentCents)
+        return when {
+            keyRefused && state != "off" -> AiStatusView(AiSpendRules.REFUSED_LINE, lit = true, canAsk = true, refused = true, spend = lines, spendHeading = heading)
+            else -> base.copy(spend = lines, spendHeading = heading)
+        }
+    }
+
+    private fun statusLine(state: String, reason: String?, spentCents: Long?, budgetCents: Long?, level: String?): AiStatusView {
         val spend = if (spentCents != null && budgetCents != null && budgetCents > 0) "${dollars(spentCents)} of ${dollars(budgetCents)} this month" else null
         return when {
             state == "off" -> AiStatusView("Off · Search still finds everything", lit = false, canAsk = false)

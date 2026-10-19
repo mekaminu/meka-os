@@ -9145,7 +9145,7 @@ class MekaCore(
         val r = try { api.aiStatus() } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskRules.STATUS_UNKNOWN
         } ?: return os.meka.core.domain.AskRules.STATUS_UNKNOWN
-        return os.meka.core.domain.AskRules.statusView(r.state, r.reason, r.spentCents, r.budgetCents, r.level)
+        return os.meka.core.domain.AskRules.statusView(r.state, r.reason, r.spentCents, r.budgetCents, r.level, r.month, r.keyRefused)
     }
 
     /**

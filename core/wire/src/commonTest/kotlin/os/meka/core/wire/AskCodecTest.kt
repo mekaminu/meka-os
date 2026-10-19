@@ -3,6 +3,7 @@ package os.meka.core.wire
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /** Ask MEKA on the wire (build plan V1, AI layer slice 3). */
@@ -155,7 +156,7 @@ class AskCodecTest {
         val on = AskCodec.decodeStatus(
             """{"state":"on","checkedAtMs":1,"budget":{"month":"2026-10","spentCents":120,"budgetCents":2000,"level":"ok","features":[{"feature":"ask","calls":3,"cents":120}]}}""",
         )
-        assertEquals(AskCodec.Status("on", null, 120, 2000, "ok"), on)
+        assertEquals(AskCodec.Status("on", null, 120, 2000, "ok", month = listOf(AskCodec.MonthUse("ask", 3, 120))), on)
         assertEquals(AskCodec.Status("off", "No AI key set", null, null, null), AskCodec.decodeStatus("""{"state":"off","reason":"No AI key set"}"""))
         assertFailsWith<WireFormatException> { AskCodec.decodeStatus("""{"reason":"x"}""") }
         assertFailsWith<WireFormatException> { AskCodec.decodeStatus("not json") }
@@ -170,5 +171,17 @@ class AskCodecTest {
         )
         assertEquals(listOf(AskCodec.DayUse("ask.talk", 6, 4200), AskCodec.DayUse("ask", 2, 0)), st.today)
         assertEquals(emptyList(), AskCodec.decodeStatus("""{"state":"on","budget":{"spentCents":1,"budgetCents":2,"level":"ok"}}""").today)
+    }
+
+    @Test
+    fun theStatusReadsTheMonthPerFeatureAndARefusedKey() {
+        val st = AskCodec.decodeStatus(
+            """{"state":"failing","reason":"Anthropic refused the key","keyRefused":true,"budget":{"spentCents":205,"budgetCents":2000,"level":"ok",
+               "features":[{"feature":"ask.talk","calls":40,"cents":120},{"feature":"mail.sort","calls":9},{"feature":"","calls":1},{"calls":2},"junk"]}}""",
+        )
+        assertEquals(listOf(AskCodec.MonthUse("ask.talk", 40, 120), AskCodec.MonthUse("mail.sort", 9, 0)), st.month)
+        assertTrue(st.keyRefused)
+        assertFalse(AskCodec.decodeStatus("""{"state":"on","keyRefused":"yes"}""").keyRefused)
+        assertFalse(AskCodec.decodeStatus("""{"state":"on"}""").keyRefused)
     }
 }

@@ -87,10 +87,14 @@ class AiHealthTest {
         val ai = AiHealth(key = { goodKey }, http = http, nowMs = { now })
         assertEquals("Anthropic refused the key", ai.status().reason)
         assertEquals(AiStatus.State.FAILING, ai.status().state)
+        assertTrue(ai.status().keyRefused)
+        assertEquals("true", ai.status().toJson()["keyRefused"].toString())
         assertEquals(1, http.calls.size)
         now += 10 * 60_000L
         http.status = 429
         assertEquals("Anthropic is limiting requests (spend cap or rate limit)", ai.status().reason)
+        assertFalse(ai.status().keyRefused) // a spend cap or rate limit isn't the key's fault
+        assertFalse("keyRefused" in ai.status().toJson())
         now += 10 * 60_000L
         http.fail = true
         assertEquals("Couldn't reach Anthropic", ai.status().reason)

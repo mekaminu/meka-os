@@ -92,6 +92,10 @@ sealed class AskReply {
 data class AiStatusReply(
     val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?,
     val today: List<os.meka.core.domain.AiDayUse> = emptyList(),
+    /** The month's calls and cost per feature (Settings → Navilife's AI); empty from an older server. */
+    val month: List<os.meka.core.domain.AiMonthUse> = emptyList(),
+    /** Anthropic refused the key itself (Health red). */
+    val keyRefused: Boolean = false,
 )
 
 /** Ask MEKA (V1 AI layer, slice 3), available once the device is connected. */
@@ -682,6 +686,8 @@ class HttpSyncTransport(
         return AiStatusReply(
             st.state, st.reason, st.spentCents, st.budgetCents, st.level,
             st.today.map { os.meka.core.domain.AiDayUse(it.feature, it.calls, it.microUsd) },
+            st.month.map { os.meka.core.domain.AiMonthUse(it.feature, it.calls, it.cents) },
+            st.keyRefused,
         )
     }
 

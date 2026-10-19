@@ -317,6 +317,7 @@ object HealthRules {
         val ai = f.ai ?: return HealthRow("ai", "Navilife's AI", "Couldn't check", HealthState.UNKNOWN)
         val state = when {
             ai == AskRules.STATUS_UNKNOWN -> HealthState.UNKNOWN
+            ai.refused -> HealthState.BAD // a revoked or expired key never fixes itself: red, with what to do
             ai.canAsk && !ai.lit -> HealthState.OK
             else -> HealthState.WARN
         }

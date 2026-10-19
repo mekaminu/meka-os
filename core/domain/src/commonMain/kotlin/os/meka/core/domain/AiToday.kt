@@ -47,3 +47,45 @@ object AiTodayRules {
         }
     }
 }
+
+/** One AI feature's calls and cost (whole cents) this month, as Navilife's server metered them. */
+data class AiMonthUse(val feature: String, val calls: Long, val cents: Long)
+
+/** One row of the month's spend: "Mail" · "340 calls · 85¢" with its [share] of the month (0–1) for a thin bar. */
+data class AiSpendLine(val label: String, val detail: String, val share: Float)
+
+/**
+ * Settings → Navilife's AI, unfolded (build plan V1, AI layer completeness: "per-feature spend in Settings"): the month's
+ * calls and cost by what they were for, in [AiTodayRules]' groups, the costliest first ("Mail · 340 calls · 85¢",
+ * "Talk · 120 calls · $1.20"). Non-AI, pure; nothing is stored on the device.
+ */
+object AiSpendRules {
+    /** Health and Settings when Anthropic refuses the key itself (revoked, expired or not allowed to use the API). */
+    const val REFUSED_LINE = "Key refused by Anthropic · make a new key in Anthropic's Console and paste it into Secrets Manager"
+
+    fun lines(month: List<AiMonthUse>): List<AiSpendLine> {
+        val used = month.filter { it.calls > 0 || it.cents > 0 }
+        if (used.isEmpty()) return emptyList()
+        val total = used.sumOf { it.cents }
+        return used.groupBy { AiTodayRules.groupOf(it.feature) }
+            .map { (g, rows) -> Triple(g, rows.sumOf { it.calls }, rows.sumOf { it.cents }) }
+            .sortedWith(compareByDescending<Triple<AiTodayRules.Group, Long, Long>> { it.third }.thenByDescending { it.second }.thenBy { it.first.ordinal })
+            .map { (g, calls, cents) ->
+                val c = if (calls == 1L) "1 call" else "$calls calls"
+                AiSpendLine(g.label, "$c · ${cost(cents)}", if (total > 0) (cents.toFloat() / total).coerceIn(0f, 1f) else 0f)
+            }
+    }
+
+    /** "under 1¢" for nothing metered, "85¢" below a dollar, else "$1.20". */
+    fun cost(cents: Long): String = when {
+        cents <= 0 -> "under 1¢"
+        cents < 100 -> "$cents¢"
+        else -> AskRules.dollars(cents)
+    }
+
+    /** The unfolded row's heading line: "This month by feature · $2.05 in all". */
+    fun heading(lines: List<AiSpendLine>, spentCents: Long?): String? {
+        if (lines.isEmpty()) return null
+        return listOfNotNull("This month by feature", spentCents?.let { "${cost(it)} in all" }).joinToString(" · ")
+    }
+}

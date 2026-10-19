@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
@@ -188,11 +189,18 @@ object AskCodec {
     data class Status(
         val state: String, val reason: String?, val spentCents: Long?, val budgetCents: Long?, val level: String?,
         val today: List<DayUse> = emptyList(),
+        /** The month's calls and cost per feature (`budget.features`); empty from an older server. */
+        val month: List<MonthUse> = emptyList(),
+        /** Anthropic refused the key itself (revoked, expired or not allowed), not just a failed check. */
+        val keyRefused: Boolean = false,
     )
+
+    /** One feature's calls and cost (whole cents) this month ("mail.sort" · 340 calls · 85¢). */
+    data class MonthUse(val feature: String, val calls: Long, val cents: Long)
 
     /**
      * Reads `{"state", "reason"?, "budget": {"spentCents", "budgetCents", "level", "today": [{"feature", "calls",
-     * "microUsd"}]?}?}` (the status carries no wire version: it is a small read-only answer, and unknown fields are
+     * "microUsd"}]?, "features": [{"feature", "calls", "cents"}]?}?, "keyRefused"?}` (the status carries no wire version: it is a small read-only answer, and unknown fields are
      * ignored; a malformed day entry is skipped, never the whole status).
      */
     fun decodeStatus(body: String): Status = wrap("ai status") {
@@ -205,7 +213,14 @@ object AskCodec {
             val calls = d.long("calls")?.takeIf { it >= 0 } ?: return@mapNotNull null
             DayUse(feature, calls, d.long("microUsd")?.coerceAtLeast(0) ?: 0)
         }
-        Status(o.str("state"), o.optStr("reason"), b?.long("spentCents"), b?.long("budgetCents"), b?.optStr("level"), today)
+        val month = (b?.get("features") as? JsonArray).orEmpty().mapNotNull { e ->
+            val d = e as? JsonObject ?: return@mapNotNull null
+            val feature = d.optStr("feature")?.takeIf { it.isNotBlank() && it.length <= 40 } ?: return@mapNotNull null
+            val calls = d.long("calls")?.takeIf { it >= 0 } ?: return@mapNotNull null
+            MonthUse(feature, calls, d.long("cents")?.coerceAtLeast(0) ?: 0)
+        }
+        val refused = (o["keyRefused"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+        Status(o.str("state"), o.optStr("reason"), b?.long("spentCents"), b?.long("budgetCents"), b?.optStr("level"), today, month, refused)
     }
 
     private fun actionsOf(o: JsonObject): List<Action> =

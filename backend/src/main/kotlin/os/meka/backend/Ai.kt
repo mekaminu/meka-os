@@ -49,13 +49,15 @@ fun interface HttpGet {
 }
 
 /** What the apps may know about the AI layer: whether it's on, never the key. */
-data class AiStatus(val state: State, val checkedAtMs: Long?, val reason: String?) {
+/** [keyRefused]: Anthropic answered 401/403, so the key itself is revoked, expired or not allowed (Health shows it red). */
+data class AiStatus(val state: State, val checkedAtMs: Long?, val reason: String?, val keyRefused: Boolean = false) {
     enum class State(val wire: String) { OFF("off"), ON("on"), FAILING("failing") }
 
     fun toJson(): JsonObject = buildJsonObject {
         put("state", state.wire)
         checkedAtMs?.let { put("checkedAtMs", it) }
         reason?.let { put("reason", it) }
+        if (keyRefused) put("keyRefused", true)
     }
 }
 
@@ -93,8 +95,8 @@ class AiHealth(
         }.getOrElse { return AiStatus(AiStatus.State.FAILING, at, "Couldn't reach Anthropic") }
         return when (code) {
             in 200..299 -> AiStatus(AiStatus.State.ON, at, null)
-            401 -> AiStatus(AiStatus.State.FAILING, at, "Anthropic refused the key").also { onRejected() }
-            403 -> AiStatus(AiStatus.State.FAILING, at, "The key isn't allowed to use the API").also { onRejected() }
+            401 -> AiStatus(AiStatus.State.FAILING, at, "Anthropic refused the key", keyRefused = true).also { onRejected() }
+            403 -> AiStatus(AiStatus.State.FAILING, at, "The key isn't allowed to use the API", keyRefused = true).also { onRejected() }
             429 -> AiStatus(AiStatus.State.FAILING, at, "Anthropic is limiting requests (spend cap or rate limit)")
             else -> AiStatus(AiStatus.State.FAILING, at, "Anthropic answered $code")
         }
