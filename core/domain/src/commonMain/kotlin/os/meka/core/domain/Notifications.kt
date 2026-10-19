@@ -177,6 +177,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      */
     CARDS("Cards: payments due and 0% ending", NoticeTier.HEADS_UP),
     /**
+     * Money manager, nudges ([MoneyNudges.notices]): something new worth a look in Money because of recent payments —
+     * the watchdog's (possibly charged twice, bigger than usual, fees) and the tips from his own numbers — from 09:00,
+     * "Possibly charged twice · Amazon" · "Worth a look · in Money, behind your fingerprint". No amounts.
+     */
+    MONEY_LOOK("Money: worth a look and tips from your numbers", NoticeTier.HEADS_UP),
+    /**
      * Trading tracker, slice 3 ([TradingAlerts.notices]): a position near liquidation (Critical: it comes in quiet hours)
      * and an account well below this month's high (a heads-up), at his levels — "ETH long near liquidation" · "8% from
      * liquidation · Main account · …". No amounts. Lowering it here lowers both. Slice 7 adds a big order and a day's
@@ -686,6 +692,7 @@ object Governor {
         NoticeSource.MONEY -> plural(n, "money date") + " coming up"
         NoticeSource.BILLS -> plural(n, "bill") + " due"
         NoticeSource.CARDS -> plural(n, "card reminder")
+        NoticeSource.MONEY_LOOK -> if (n == 1) "one thing worth a look in Money" else "$n things worth a look in Money"
         NoticeSource.TRADING -> plural(n, "trading alert")
         NoticeSource.LIFE_ADMIN -> "your life admin hour"
         NoticeSource.TRIPS -> if (n == 1) "a trip tomorrow" else "$n trips tomorrow"
@@ -815,6 +822,8 @@ object NoticeSources {
         moneyYear: Int? = null,
         /** Money manager (7): the month whose review is ready (its first days; [MoneyMonthReview.readyMonth]). */
         moneyMonth: Int? = null,
+        /** Money manager, nudges: what's newly worth a look in Money ([MoneyNudges.items]). */
+        moneyLook: List<MoneyNudges.Item> = emptyList(),
         /** Balance view, slice 4: this week's nudge as planned, if an area is well short ([BalanceRules.notices]). */
         balance: BalanceNudge? = null,
         /** Protected time, slice 6: the setting and the work schedule, for the morning note on what waited. */
@@ -968,6 +977,7 @@ object NoticeSources {
         out += MoneyCards.notices(cards, nowMs, cal, lists.renewals.all)
         out += MoneyYear.notices(moneyYear, nowMs, cal)
         out += MoneyMonthReview.notices(moneyMonth, nowMs, cal)
+        out += MoneyNudges.notices(moneyLook, nowMs, cal)
         out += TradingAlerts.notices(trading, tradingAlerts, nowMs, cal)
         out += MailReturnRules.notices(lists.renewals.all, nowMs, cal)
         out += TripRules.notices(trips, nowMs, cal)

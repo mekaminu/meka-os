@@ -702,6 +702,15 @@ object MoneyRules {
         }
     }
 
+    /** Money manager, nudges: every account's lines as the watchdog sees them, counted once ([MoneyBank.merge]). */
+    fun watchLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyWatchLine> {
+        val ids = accounts.map { it.id }.toSet()
+        return MoneyBank.merge(accounts, txns.filter { it.account in ids }).txns.map { t ->
+            val key = MoneyCategoryRules.merchantKey(t.text)
+            MoneyWatchLine(t.id, t.account, t.day, t.pence, key, rules[key] ?: MoneyCategoryRules.categoryOf(t.text, t.pence), t.text)
+        }
+    }
+
     /** Money manager (17): every account's lines for PAYING ABROAD in Ask's answer, counted once, with text and category. */
     fun travelLines(accounts: List<MoneyAccount>, txns: List<MoneyTxn>, rules: Map<String, MoneyCategory>): List<MoneyTravelLine> {
         val ids = accounts.map { it.id }.toSet()

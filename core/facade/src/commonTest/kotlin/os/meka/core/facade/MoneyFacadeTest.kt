@@ -352,6 +352,32 @@ class MoneyFacadeTest {
     }
 
     @Test
+    fun aDoubleChargeThisWeekIsAHeadsUpOnBothAppsWithoutAmountsUntilPutAway() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        // Money manager, nudges: the same £23.40 twice yesterday, on top of September's lines.
+        val csv = "Date,Description,Amount\n10/09/2026,TESCO STORES 2041,-60.00\n" +
+            "15/10/2026,AMAZON MARKETPLACE,-23.40\n15/10/2026,AMAZON MARKETPLACE,-23.40\n"
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", csv)
+        fold.closeMoney()
+        fold.syncNow(); mac.syncNow()
+        // Money stays locked: the heads-up names what and where, never the amount.
+        // On its own or folded into a digest with the day's other heads-ups.
+        val res = mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = (res.post.map { "${it.title} · ${it.text}" } + res.digest?.lines.orEmpty()).single { it.contains("charged twice") }
+        assertEquals("Possibly charged twice · Amazon Marketplace · " + os.meka.core.domain.MoneyNudges.ALERT_TEXT, n)
+        assertFalse(n.contains("£"))
+        // Put away on the Fold: it doesn't come there (or on the Mac after a sync).
+        fold.openMoney()
+        fold.moneyAlertFine(fold.moneyView.value.alerts.single().id)
+        fun told(g: os.meka.core.domain.GovernorResult) = (g.post.map { it.title } + g.digest?.lines.orEmpty()).any { it.contains("charged twice") }
+        assertFalse(told(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)))
+        fold.syncNow(); mac.syncNow()
+        assertFalse(told(mac.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)))
+    }
+
+    @Test
     fun aCardMarkedAndTypedOnTheFoldRemindsOnTheMacUntilPaid() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

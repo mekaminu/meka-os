@@ -955,6 +955,28 @@ class MekaCore(
         return os.meka.core.domain.MoneyMonthReview.readyMonth(money.txns().asSequence().filter { it.account in ids }.map { it.day }.asIterable(), today)
     }
 
+    // Money manager, nudges: the last answer and what it was worked out from (the lines are re-read only when they change).
+    private var moneyLookMemo: Triple<List<os.meka.core.domain.MoneyTxn>, List<Any?>, List<os.meka.core.domain.MoneyNudges.Item>>? = null
+
+    /** Money manager, nudges: what recent payments made newly worth a look in Money ([os.meka.core.domain.MoneyNudges.items]). Caller is on the core. */
+    private fun moneyLookItems(): List<os.meka.core.domain.MoneyNudges.Item> {
+        val accounts = money.accounts()
+        if (accounts.isEmpty()) return emptyList()
+        val txns = money.txns()
+        val rules = money.rules()
+        val today = todayEpochDay()
+        val hidden = money.hiddenTips()
+        val fine = money.fineAlerts()
+        val names = accounts.associate { it.id to it.name }
+        val inputs = listOf(accounts, rules, today, hidden, fine)
+        moneyLookMemo?.let { (t, k, v) -> if (t === txns && k == inputs) return v }
+        val items = os.meka.core.domain.MoneyNudges.items(
+            os.meka.core.domain.MoneyRules.watchLines(accounts, txns, rules), today, names, hidden, fine,
+        )
+        moneyLookMemo = Triple(txns, inputs, items)
+        return items
+    }
+
     private fun moneyYearReady(): Int? {
         val today = todayEpochDay()
         if (os.meka.core.domain.CivilDate.fromEpochDay(today).month != 1) return null
@@ -10061,6 +10083,8 @@ class MekaCore(
             // Money manager, slice 18: on 2 January, last year's review is ready (read only in January).
             moneyYear = moneyYearReady(),
             moneyMonth = moneyMonthReady(),
+            // Money manager, nudges: a heads-up when recent payments make something worth a look in Money.
+            moneyLook = moneyLookItems(),
             // Balance view, slice 4: Thursday evening's nudge when an area is well short as planned.
             balance = balanceNudge,
             // Protected time, slice 6: at 07:00 the morning it ends, one note for the business mail that waited.
