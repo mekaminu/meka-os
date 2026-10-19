@@ -29,6 +29,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** Ask MEKA through the facade (build plan V1, AI layer slice 3): handles stay here, cards do nothing until tapped. */
@@ -1060,6 +1061,26 @@ class AskMekaFacadeTest {
         server.down = true
         assertEquals(AskRules.STATUS_UNKNOWN, c.aiStatus())
         assertEquals(AskRules.STATUS_NOT_CONNECTED, core(transport = null).aiStatus())
+    }
+
+    @Test
+    fun eachAiFeatureSaysWhatHappensWhileTheAiIsOff() = runTest {
+        val c = core()
+        val brief = os.meka.core.domain.AiFeature.BRIEF
+        assertNull(c.aiFeatureLine(brief))
+        // Within two minutes the status last asked is reused; after them it is asked again.
+        server.status = AiStatusReply("off", "No AI key set", 0, 2000, "ok")
+        assertNull(c.aiFeatureLine(brief))
+        now += MekaCore.AI_SEEN_MS
+        assertEquals("Navilife's AI is off · read from your day as it is, in Navilife's own words", c.aiFeatureLine(brief))
+        // Settings asking refreshes it at once.
+        server.status = AiStatusReply("on", null, 2000, 2000, "over")
+        assertEquals("Until the 1st", c.aiStatus().fallbackHeading)
+        assertTrue(c.aiFeatureLine(os.meka.core.domain.AiFeature.DRAFTS)!!.startsWith("This month's AI budget is used up till the 1st · "))
+        server.down = true
+        now += MekaCore.AI_SEEN_MS
+        assertTrue(c.aiFeatureLine(brief)!!.startsWith("Can't reach Navilife's AI just now · "))
+        assertTrue(core(transport = null).aiFeatureLine(brief)!!.startsWith("Navilife's AI works once this device is connected · "))
     }
 
     @Test

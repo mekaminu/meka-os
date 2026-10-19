@@ -174,15 +174,18 @@ class AskMekaTest {
             AiStatusView("On · $14.05 of $20 this month · most of the month's budget used", lit = true, canAsk = true),
             AskRules.statusView("on", null, 1405, 2000, "alert"),
         )
-        assertEquals(AiStatusView("This month's budget is used up · back on the 1st", lit = true, canAsk = false), AskRules.statusView("on", null, 2000, 2000, "over"))
-        assertEquals(AiStatusView("Off · Search still finds everything", lit = false, canAsk = false), AskRules.statusView("off", "No AI key set", 0, 2000, "ok"))
-        assertEquals(AiStatusView("Not answering · Anthropic refused the key", lit = true, canAsk = true), AskRules.statusView("failing", "Anthropic refused the key", 0, 2000, "ok"))
+        assertEquals(AiStatusView("This month's budget is used up · back on the 1st", lit = true, canAsk = false), AskRules.statusView("on", null, 2000, 2000, "over").bare())
+        assertEquals(AiStatusView("Off · Search still finds everything", lit = false, canAsk = false), AskRules.statusView("off", "No AI key set", 0, 2000, "ok").bare())
+        assertEquals(AiStatusView("Not answering · Anthropic refused the key", lit = true, canAsk = true), AskRules.statusView("failing", "Anthropic refused the key", 0, 2000, "ok").bare())
         assertEquals("Not answering", AskRules.statusView("weird", "  ", null, null, null).line)
         assertFalse(AskRules.STATUS_NOT_CONNECTED.canAsk)
         assertEquals("$0", AskRules.dollars(-5))
         assertEquals("$0.07", AskRules.dollars(7))
         assertEquals("$40", AskRules.dollars(4000))
     }
+
+    /** The view without its mode and fallbacks (checked in AiFeatureTest). */
+    private fun AiStatusView.bare() = copy(mode = AiMode.ON, fallbackHeading = null, fallbacks = emptyList())
 
     @Test
     fun theAnswerFadesInAsParagraphsAndSentences() {

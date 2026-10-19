@@ -5411,6 +5411,8 @@ class MekaCore(
         const val FOREGROUND_SYNC_MS: Long = 30_000L
         /** Full news hub, slice 5: how often opening News asks the server which feeds aren't coming through. */
         const val NEWS_DOWN_EVERY_MS: Long = 10 * 60_000L
+        /** AI layer completeness slice 3: how long an AI feature's line reuses the AI status last asked. */
+        const val AI_SEEN_MS: Long = 2 * 60_000L
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
         const val DIGEST_KEY = "meka.digest"
@@ -9140,12 +9142,27 @@ class MekaCore(
      * What Ask says about MEKA's AI under its field ([os.meka.core.domain.AskRules.statusView]): on with the month's
      * spend, off, used up or not answering, from the server's `POST /v1/ai/status`. Never throws.
      */
-    suspend fun aiStatus(): os.meka.core.domain.AiStatusView {
+    suspend fun aiStatus(): os.meka.core.domain.AiStatusView = aiStatusAsked().also { aiSeen = nowMs() to it }
+
+    private suspend fun aiStatusAsked(): os.meka.core.domain.AiStatusView {
         val api = aiApi ?: return os.meka.core.domain.AskRules.STATUS_NOT_CONNECTED
         val r = try { api.aiStatus() } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return os.meka.core.domain.AskRules.STATUS_UNKNOWN
         } ?: return os.meka.core.domain.AskRules.STATUS_UNKNOWN
         return os.meka.core.domain.AskRules.statusView(r.state, r.reason, r.spentCents, r.budgetCents, r.level, r.month, r.keyRefused)
+    }
+
+    /** The AI's status as last asked, and when; [aiFeatureLine] reuses it for [AI_SEEN_MS]. */
+    private var aiSeen: Pair<Long, os.meka.core.domain.AiStatusView>? = null
+
+    /**
+     * AI layer completeness slice 3: the line an AI feature shows while Navilife's AI can't answer ("Navilife's AI is
+     * off · read from your day as it is, in Navilife's own words"), from the status asked in the last two minutes or
+     * asked now. Null while it answers. Never throws.
+     */
+    suspend fun aiFeatureLine(feature: os.meka.core.domain.AiFeature): String? {
+        val seen = aiSeen?.takeIf { nowMs() - it.first in 0 until AI_SEEN_MS }?.second ?: aiStatus()
+        return os.meka.core.domain.AiFeatureRules.line(feature, seen)
     }
 
     /**

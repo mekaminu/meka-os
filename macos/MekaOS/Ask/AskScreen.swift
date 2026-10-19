@@ -214,7 +214,8 @@ struct AskScreen: View {
 /// Settings → Navilife's AI (AI layer completeness slice 2): the status line as before, or "Key refused by Anthropic · …"
 /// in the accent; once the server has metered something this month a click unfolds "This month by feature" with a row
 /// per kind of use ("Talk · 40 calls · $1.20") and a thin accent bar for its share. Rows stagger in, bars grow from the
-/// left, the chevron turns. Reduce Motion: they appear at once, bars full.
+/// left, the chevron turns. Reduce Motion: they appear at once, bars full. While the AI can't answer (slice 3) a list
+/// under the line says what each AI feature does instead ("While it's off · Morning brief · read from your day…").
 private struct AiSpendRow: View {
     let ai: AiStatusView?
     let palette: MekaPalette
@@ -252,6 +253,23 @@ private struct AiSpendRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint(lines.isEmpty ? "" : (open ? "Folds away this month's spend" : "Shows this month's spend by feature"))
+            // AI layer completeness slice 3: while it can't answer, what each AI feature does instead, always shown.
+            if let fallbacks = ai?.fallbacks, !fallbacks.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    if let heading = ai?.fallbackHeading {
+                        Text(heading).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    ForEach(Array(fallbacks.enumerated()), id: \.offset) { _, f in
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(f.label).font(MekaType.caption).foregroundStyle(palette.textPrimary)
+                            Text(f.detail).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .accessibilityElement(children: .combine)
+                    }
+                }
+                .transition(.opacity)
+            }
             if open && !lines.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     if let heading = ai?.spendHeading {

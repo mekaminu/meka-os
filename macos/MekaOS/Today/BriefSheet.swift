@@ -65,6 +65,12 @@ struct BriefSheet: View {
                 .pickerStyle(.segmented).labelsHidden().fixedSize()
                 .help("How long the spoken brief is")
                 .staggeredAppear(0)
+                // AI layer completeness slice 3: while Navilife's AI can't write it, how the brief is read instead.
+                if let aiLine = AiFeatureRules.shared.line(feature: .brief, view: model.aiStatus) {
+                    Text(aiLine).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
+                }
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         // Slice 3: the focus the spoken brief names, with why, the smaller ones counted, Needs you.
@@ -202,6 +208,8 @@ struct BriefSheet: View {
         .padding(MekaSpace.l)
         .frame(width: 480)
         .onAppear { speaker.attach(model); openedAt = Date(); readIfAsked() }
+        .task { await model.refreshAiStatus() }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiStatus?.line)
         // Listen to the Brief or the wake alarm: read once the day is in (and again when asked with the sheet open).
         .onChange(of: model.brief?.dateLabel) { readIfAsked() }
         .onChange(of: model.readBriefOnOpen) { readIfAsked() }

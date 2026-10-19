@@ -97,6 +97,7 @@ struct MailNeedsView: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailNeeds == nil)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: model.mailNeeds?.rows.map(\.id) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: open)
+        .task { await model.refreshAiStatus() }
     }
 }
 
@@ -106,7 +107,8 @@ extension MailNeedsView {
     @ViewBuilder
     fileprivate func sendAllBar(card: MailNeedsCard, draftLabel: String) -> some View {
         let all = MailSendAllRules.shared.sendAll(rows: card.rows, texts: texts)
-        let shown = all != nil ? MailSendAllRules.shared.LINE : allLine
+        // AI layer completeness slice 3: while Navilife's AI can't draft, the bar says so and what still works.
+        let shown = all != nil ? MailSendAllRules.shared.LINE : (allLine ?? AiFeatureRules.shared.line(feature: .drafts, view: model.aiStatus))
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack(spacing: MekaSpace.xs) {
                 if let all {

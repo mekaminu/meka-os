@@ -1,6 +1,7 @@
 package os.meka.android.ask
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -40,6 +41,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.shell.MoreItem
+import os.meka.core.domain.AiFallbackLine
 import os.meka.core.domain.AiSpendLine
 import os.meka.core.domain.AiStatusView
 
@@ -48,7 +50,8 @@ import os.meka.core.domain.AiStatusView
  * or "Key refused by Anthropic · …" in the accent), and once the server has metered something this month a tap unfolds
  * "This month by feature" with a row per kind of use ("Talk · 40 calls · $1.20") and a thin accent bar for its share.
  * The rows stagger in under the heading and each bar grows from the left; the chevron turns. Reduced motion: the rows
- * appear at once and the bars are drawn full.
+ * appear at once and the bars are drawn full. While the AI can't answer (slice 3) a list under the line says what each
+ * AI feature does instead ("While it's off · Morning brief · read from your day as it is…"), fading in.
  */
 @Composable
 internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
@@ -87,6 +90,17 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
                     modifier = Modifier.padding(start = MekaSpace.xs).rotate(turn))
             }
         }
+        // AI layer completeness slice 3: while it can't answer, what each AI feature does instead, always shown.
+        val fallbacks = ai?.fallbacks.orEmpty()
+        AnimatedVisibility(fallbacks.isNotEmpty(), enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
+            Column(
+                Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                ai?.fallbackHeading?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                fallbacks.forEach { f -> FallbackLine(f) }
+            }
+        }
         if (open && ai != null && canOpen) {
             Column(
                 Modifier.padding(start = MekaSpace.m, end = MekaSpace.m, bottom = MekaSpace.m),
@@ -96,6 +110,14 @@ internal fun AiSpendRow(ai: AiStatusView?, modifier: Modifier = Modifier) {
                 ai.spend.forEachIndexed { i, s -> SpendLine(s, i, reduced) }
             }
         }
+    }
+}
+
+@Composable
+private fun FallbackLine(f: AiFallbackLine) {
+    Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+        Text(f.label, style = MekaType.caption, color = Meka.colors.textPrimary)
+        Text(f.detail, style = MekaType.caption, color = Meka.colors.textSecondary)
     }
 }
 

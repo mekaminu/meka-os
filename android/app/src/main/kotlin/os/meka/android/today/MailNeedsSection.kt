@@ -49,6 +49,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import os.meka.core.domain.AiFeature
 import os.meka.core.domain.MailChaseCard
 import os.meka.core.domain.MailChaseDraftRules
 import os.meka.core.domain.MailChaseRow
@@ -100,6 +101,9 @@ internal fun MailNeedsSection(
     var seq by remember { mutableStateOf(0) }
     var draftingAll by remember { mutableStateOf(false) }
     var allLine by rememberSaveable { mutableStateOf<String?>(null) }
+    // AI layer completeness slice 3: while Navilife's AI can't draft, the bar says so and what still works.
+    var aiLine by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { aiLine = runCatching { core.aiFeatureLine(AiFeature.DRAFTS) }.getOrNull() }
     val draftAll = MailSendAllRules.draftLabel(card.rows.size)
     val sendAll = MailSendAllRules.sendAll(card.rows, texts.toMap())
     Column(
@@ -131,7 +135,7 @@ internal fun MailNeedsSection(
                     MailSendAllBar(
                         draftLabel = if (draftingAll) MailSendAllRules.DRAFTING else draftAll, drafting = draftingAll,
                         draftSpoken = MailSendAllRules.draftSpoken(card.rows.size),
-                        sendLabel = sendAll?.label, sendSpoken = sendAll?.spoken, line = allLine,
+                        sendLabel = sendAll?.label, sendSpoken = sendAll?.spoken, line = allLine ?: aiLine,
                         onDraft = {
                             haptics.light()
                             draftingAll = true

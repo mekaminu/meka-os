@@ -68,6 +68,7 @@ import os.meka.android.ask.MekaSpeaker
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
+import os.meka.core.domain.AiFeature
 import os.meka.core.domain.BriefDayLine
 import os.meka.core.domain.BriefFollowOnRules
 import os.meka.core.domain.BriefHeadline
@@ -131,6 +132,8 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             listen()
         }
     }
+    var aiLine by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { aiLine = runCatching { core.aiFeatureLine(AiFeature.BRIEF) }.getOrNull() }
     var closing by remember { mutableStateOf(false) }
     var topicsOpen by remember { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
@@ -164,6 +167,11 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                         preparing != null -> { haptics.tick(); preparing?.cancel(); preparing = null }
                         else -> { haptics.light(); listen() }
                     }
+                }
+                // AI layer completeness slice 3: while Navilife's AI can't write it, the brief says how it's read instead.
+                AnimatedVisibility(aiLine != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                    Text(aiLine ?: "", style = MekaType.caption, color = Meka.colors.textSecondary,
+                        modifier = Modifier.padding(top = MekaSpace.xs).testTag("brief-ai-line"))
                 }
                 // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
                 Box(Modifier.padding(top = MekaSpace.xs)) {

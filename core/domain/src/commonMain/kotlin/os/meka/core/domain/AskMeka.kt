@@ -212,6 +212,12 @@ data class AiStatusView(
     val spend: List<AiSpendLine> = emptyList(),
     /** Over [spend]: "This month by feature · $2.05 in all"; null when there's nothing to show. */
     val spendHeading: String? = null,
+    /** Where the AI stands ([AiFeatureRules.mode]); each AI feature's own line follows it ([AiFeatureRules.line]). */
+    val mode: AiMode = AiMode.ON,
+    /** Over [fallbacks]: "While it's off"; null while it answers. */
+    val fallbackHeading: String? = null,
+    /** What each AI feature does instead while it can't answer ([AiFeatureRules.fallbacks]); empty while it answers. */
+    val fallbacks: List<AiFallbackLine> = emptyList(),
 )
 
 object AskRules {
@@ -514,10 +520,11 @@ object AskRules {
         val base = statusLine(state, reason, spentCents, budgetCents, level)
         val lines = AiSpendRules.lines(month)
         val heading = AiSpendRules.heading(lines, spentCents)
-        return when {
+        val view = when {
             keyRefused && state != "off" -> AiStatusView(AiSpendRules.REFUSED_LINE, lit = true, canAsk = true, refused = true, spend = lines, spendHeading = heading)
             else -> base.copy(spend = lines, spendHeading = heading)
         }
+        return AiFeatureRules.withMode(view, AiFeatureRules.mode(state, level, keyRefused))
     }
 
     private fun statusLine(state: String, reason: String?, spentCents: Long?, budgetCents: Long?, level: String?): AiStatusView {
@@ -535,8 +542,8 @@ object AskRules {
     }
 
     /** Before the server has said (offline, or this device isn't connected). */
-    val STATUS_UNKNOWN = AiStatusView("Couldn't check just now", lit = false, canAsk = true)
-    val STATUS_NOT_CONNECTED = AiStatusView("Ask works once this device is connected", lit = false, canAsk = false)
+    val STATUS_UNKNOWN = AiFeatureRules.withMode(AiStatusView("Couldn't check just now", lit = false, canAsk = true), AiMode.OFFLINE)
+    val STATUS_NOT_CONNECTED = AiFeatureRules.withMode(AiStatusView("Ask works once this device is connected", lit = false, canAsk = false), AiMode.NOT_CONNECTED)
 
     /** Cents → "$1.20"; whole dollars → "$20". */
     fun dollars(cents: Long): String {
