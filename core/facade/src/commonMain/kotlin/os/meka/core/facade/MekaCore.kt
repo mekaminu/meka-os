@@ -6949,6 +6949,19 @@ class MekaCore(
     }
 
     /**
+     * Deliveries completeness: [q] asks about his parcels ([os.meka.core.domain.ParcelAskRules.answer]); answered from the
+     * parcels the server read from shipping emails, on this device, no AI. Null when it isn't about parcels.
+     */
+    private suspend fun parcelAsk(q: String): os.meka.core.domain.AskOutcome? {
+        if (!os.meka.core.domain.ParcelAskRules.isAbout(q)) return null
+        return onCore {
+            val text = os.meka.core.domain.ParcelAskRules.answer(q, activity.parcels(), ZoneCalendar(timeZone).epochDayOf(nowMs()))
+                ?: return@onCore null
+            os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(text, emptyList()))
+        }
+    }
+
+    /**
      * Reading and learning, slice 2: [q] asks about his reading list ([os.meka.core.domain.ReadingAskRules.request]).
      * A question is answered from the list here, no AI; a change (progress, finished, started, added) is his own direct
      * request, done now with Undo and kept in Activity under the same rule as [directAdd] (Ask first: the card he taps).
@@ -7751,6 +7764,8 @@ class MekaCore(
         // Vault?" are answered from the Vault here, never sent to the AI, with Open the Vault under the answer.
         // Travel mode × the Vault: "are our passports OK for Barcelona?" is answered from the trip and the Vault here.
         if (!beyondHelp) tripDocsAsk(q)?.let { return it }
+        // Deliveries completeness: "any parcels coming?", "where's my Amazon parcel?" answered from the parcels here.
+        if (!beyondHelp) parcelAsk(q)?.let { return it }
         if (!beyondHelp) vaultAsk(q)?.let { return it }
         val cal = ZoneCalendar(timeZone)
         // A question about notifications carries the phone's trace; without the AI the device answers from it itself.
@@ -9648,7 +9663,8 @@ class MekaCore(
             gifts = os.meka.core.domain.GiftRules.todayLine(occasionItems, todayDay),
             trip = os.meka.core.domain.TripRules.todayLine(tripItems, todayDay, cal.minuteOfDay(nowMs())),
             // Inbox autopilot, slice 3g: parcels arriving today, read by the server from the shipping emails.
-            parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay),
+            // Deliveries completeness: lit with "you're at the office" on an office day, and yesterday's that didn't show.
+            parcels = os.meka.core.domain.ParcelRules.todayLine(activity.parcels(), todayDay, officeDay = office != null),
             // Inbox fixes, slice 7: each account's unread mail and how much of it Navilife can tidy, counted by the server.
             mailUnread = os.meka.core.domain.MailUnreadRules.todayLine(activity.mailBacklogs(), nowMs(), lastHealthServer?.mail ?: lastMailFacts),
             // Drafted replies, slice 2: the emails from people waiting on his reply, and how many Navilife has drafted.
@@ -9738,7 +9754,8 @@ class MekaCore(
                         needsYou = _needsYouStack.value.cards.count {
                             it.kind == os.meka.core.domain.DecisionKind.CONFLICT || it.kind == os.meka.core.domain.DecisionKind.CREDIT
                         },
-                        family = listOfNotNull(t.bins?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
+                        // Deliveries completeness: today's parcels (and yesterday's that didn't show) with home and family.
+                        family = listOfNotNull(t.bins?.spoken, t.parcels?.spoken, t.dateNight?.spoken, t.gifts?.spoken, t.trip?.spoken),
                         // Slice 4: urgent voice messages and requests from watched people, waiting on you.
                         asks = os.meka.core.domain.BriefScriptRules.asks(requestCards.open(), held.items(), today) { cal.minuteOfDay(it) },
                         // Inbox autopilot, slice 9a: how many emails need him and who from.

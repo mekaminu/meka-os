@@ -10,6 +10,7 @@ mac_where: Ask → Settings → Mail
 what: connects Gmail and Outlook: newsletters, receipts and promos are tidied away, what needs you comes to Needs you, and bills and parcels are picked up.
 how: Tap Connect and sign in with Google or Microsoft. Each tidy has Undo, and Autopilot can be paused per account.
 tip: Nothing is sent or deleted without your tap.
+tip: Parcels from shipping emails show on Today on their day (with "you're at the office" on an office day), and one due yesterday that no email called delivered shows as "Not arrived?" for a day; ask "any parcels coming?" or "where's my Amazon parcel?" and the morning brief says them too.
 tip: Disconnect can also delete that account's mail data.
 tip: In Needs you, Draft replies drafts a reply to each email for you to read; Send all then sends the short ones, each from its own account, with Undo.
 tip: A renewal email (a subscription or policy about to renew) shows in Needs you under Renewals from your mail; Add puts it on Lists → Renewals with its day and price, Not needed clears it.

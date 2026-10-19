@@ -290,27 +290,55 @@ object ParcelRules {
      * Today's line, or null when nothing is due today: "Parcel arriving today · Amazon · 10:15–11:15", "Parcel out
      * for delivery · DPD", "3 parcels arriving today · Amazon, Next + 1" (" · 1 delivered" once one of today's has
      * come). Delivered parcels and ones due another day aren't counted; lit while one is out for delivery.
+     *
+     * Deliveries completeness: on an office day it adds "· you're at the office" and is lit, so someone can be asked to
+     * be in; and a parcel due yesterday that no email has called delivered is asked about for one day ("Not arrived? ·
+     * Amazon was due yesterday", or " · Amazon was due yesterday" after today's), then counts as come.
      */
-    fun todayLine(parcels: List<Parcel>, todayDay: Long): ParcelLine? {
+    fun todayLine(parcels: List<Parcel>, todayDay: Long, officeDay: Boolean = false): ParcelLine? {
         val due = parcels.filter { it.state != ParcelState.DELIVERED && it.day == todayDay }
             .sortedWith(compareBy<Parcel> { it.state != ParcelState.OUT_FOR_DELIVERY }.thenBy { it.window ?: "~" }.thenBy { it.lastAtMs })
-        if (due.isEmpty()) return null
+        val late = late(parcels, todayDay)
+        val lateNames = late.map { it.name ?: "A parcel" }.distinct()
+        val lateShown = lateNames.take(NAMES_SHOWN).joinToString(", ") + if (lateNames.size > NAMES_SHOWN) " + ${lateNames.size - NAMES_SHOWN}" else ""
+        val lateVerb = if (late.size == 1) "was" else "were"
+        val lateSpoken = if (late.isEmpty()) "" else
+            (if (late.size == 1) "Your parcel" + (late.single().name?.let { " from $it" } ?: "") + " was due yesterday"
+            else "${late.size} parcels from yesterday, from ${lateNames.joinToString(", ")},") +
+                " and no email has said it's delivered, so check it came."
+        if (due.isEmpty()) {
+            if (late.isEmpty()) return null
+            return ParcelLine("Not arrived? · $lateShown $lateVerb due yesterday", lateSpoken, lit = false, parcelCount = 0)
+        }
         val delivered = parcels.count { it.state == ParcelState.DELIVERED && it.day == todayDay }
         val out = due.count { it.state == ParcelState.OUT_FOR_DELIVERY }
-        val doneSuffix = if (delivered > 0) " · $delivered delivered" else ""
+        val doneSuffix = (if (delivered > 0) " · $delivered delivered" else "") +
+            (if (officeDay) " · you're at the office" else "") +
+            (if (late.isNotEmpty()) " · $lateShown $lateVerb due yesterday" else "")
+        val spokenOffice = if (officeDay) ", while you're at the office" else ""
+        val spokenLate = if (lateSpoken.isEmpty()) "" else " $lateSpoken"
         if (due.size == 1) {
             val p = due.single()
             val head = if (p.state == ParcelState.OUT_FOR_DELIVERY) "Parcel out for delivery" else "Parcel arriving today"
             val text = listOfNotNull(head, p.name, p.window).joinToString(" · ") + doneSuffix
-            val spoken = head + (p.name?.let { " from $it" } ?: "") + (p.window?.let { ", between ${it.replace("–", " and ")}" } ?: "") + "."
-            return ParcelLine(text, spoken, lit = p.state == ParcelState.OUT_FOR_DELIVERY, parcelCount = 1)
+            val spoken = head + (p.name?.let { " from $it" } ?: "") + (p.window?.let { ", between ${it.replace("–", " and ")}" } ?: "") +
+                spokenOffice + "." + spokenLate
+            return ParcelLine(text, spoken, lit = p.state == ParcelState.OUT_FOR_DELIVERY || officeDay, parcelCount = 1)
         }
         val names = due.mapNotNull { it.name }.distinct()
         val shown = names.take(NAMES_SHOWN).joinToString(", ") + if (names.size > NAMES_SHOWN) " + ${names.size - NAMES_SHOWN}" else ""
         val text = "${due.size} parcels arriving today" + (if (shown.isNotEmpty()) " · $shown" else "") + doneSuffix
-        val spoken = "${due.size} parcels arriving today" + (if (names.isNotEmpty()) ", from ${names.joinToString(", ")}" else "") + "."
-        return ParcelLine(text, spoken, lit = out > 0, parcelCount = due.size)
+        val spoken = "${due.size} parcels arriving today" + (if (names.isNotEmpty()) ", from ${names.joinToString(", ")}" else "") +
+            spokenOffice + "." + spokenLate
+        return ParcelLine(text, spoken, lit = out > 0 || officeDay, parcelCount = due.size)
     }
+
+    /**
+     * Deliveries completeness: the parcels due yesterday that no email has called delivered (a missed "delivered" email,
+     * or one that didn't come). Asked about for that one day only; after it a parcel counts as come.
+     */
+    fun late(parcels: List<Parcel>, todayDay: Long): List<Parcel> =
+        parcels.filter { it.state != ParcelState.DELIVERED && it.day == todayDay - 1 }.sortedBy { it.lastAtMs }
 
     // ---- Deliveries, slice 2: the week ahead and the out-for-delivery heads-up ----
 
@@ -362,5 +390,81 @@ object ParcelRules {
                     atMs = maxOf(p.lastAtMs, start), target = NoticeTarget.TODAY, expiresAtMs = cal.toEpochMs(today + 1, 0),
                 )
             }
+    }
+}
+
+/**
+ * Deliveries completeness: "any parcels coming?", "where's my Amazon parcel?", "is anything being delivered today?"
+ * answered on the device from the parcels the server read from shipping emails (no AI, nothing sent). The shop's and
+ * carrier's names are someone else's words (ADR-006): they are only repeated, never acted on.
+ */
+object ParcelAskRules {
+    /** Parcels said at most; the rest are counted. */
+    const val MAX_SAID = 4
+    /** How far ahead a parcel is said. */
+    const val AHEAD_DAYS = 14
+
+    private val NOUN = Regex("""\b(parcels?|packages?|deliver(?:y|ies|ed|ing)?|couriers?)\b""", RegexOption.IGNORE_CASE)
+    private val ASKING = Regex(
+        """(\?|\b(any|anything|where|when|what|which|is|are|has|have|did|coming|arriving|arrive|due|expect(?:ing)?|today|tomorrow|this week|my)\b)""",
+        RegexOption.IGNORE_CASE,
+    )
+    /** Questions about Navilife or a scam, not his parcels. */
+    private val NOT = Regex("""\b(how do i|how does|set ?up|turn (?:on|off)|scam|fake|free delivery|delivery fee|deliveroo|uber eats|just eat)\b""", RegexOption.IGNORE_CASE)
+
+    fun isAbout(question: String): Boolean =
+        NOUN.containsMatchIn(question) && ASKING.containsMatchIn(question) && !NOT.containsMatchIn(question)
+
+    /** "today", "tomorrow", "Thu 22 Oct". */
+    fun dayLabel(day: Long, today: Long): String = when (day) {
+        today -> "today"
+        today + 1 -> "tomorrow"
+        today - 1 -> "yesterday"
+        else -> "on " + CivilDate.shortLabel(day)
+    }
+
+    /**
+     * The answer, or null when [question] isn't about his parcels. A shop or carrier named in the question narrows it
+     * ("where's my Amazon parcel?"); otherwise every parcel on its way in the next [AHEAD_DAYS] days, out for delivery
+     * first, then by day, with yesterday's that no email called delivered and today's delivered ones after.
+     */
+    fun answer(question: String, parcels: List<Parcel>, todayDay: Long): String? {
+        if (!isAbout(question)) return null
+        val q = " " + question.lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("") + " "
+        fun nameIn(n: String): Boolean {
+            val w = n.lowercase().map { if (it.isLetterOrDigit()) it else ' ' }.joinToString("").trim()
+            return w.isNotEmpty() && " $w " in q
+        }
+        val narrowed = parcels.filter { p -> listOfNotNull(p.merchant, p.carrier).any(::nameIn) }
+        val pool = narrowed.ifEmpty { parcels }
+        val who = narrowed.firstOrNull()?.let { p -> listOfNotNull(p.merchant, p.carrier).firstOrNull(::nameIn) }
+        val coming = pool.filter { it.state != ParcelState.DELIVERED && it.day in todayDay..(todayDay + AHEAD_DAYS) }
+            .sortedWith(compareBy<Parcel> { it.day }.thenBy { it.state != ParcelState.OUT_FOR_DELIVERY }.thenBy { it.window ?: "~" })
+        val late = ParcelRules.late(pool, todayDay)
+        val delivered = pool.filter { it.state == ParcelState.DELIVERED && it.day >= todayDay - 1 }.sortedByDescending { it.day }
+        if (coming.isEmpty() && late.isEmpty() && delivered.isEmpty()) {
+            return if (who != null) "There's no $who parcel on its way in your shipping emails from the last two weeks."
+            else "No parcels on their way in your shipping emails from the last two weeks."
+        }
+        val out = mutableListOf<String>()
+        if (coming.isNotEmpty()) {
+            val said = coming.take(MAX_SAID).map { p ->
+                val name = p.name ?: "A parcel"
+                val win = p.window?.let { " between ${it.replace("–", " and ")}" } ?: ""
+                if (p.state == ParcelState.OUT_FOR_DELIVERY) "$name is out for delivery${if (p.day == todayDay) " today" else " " + dayLabel(p.day, todayDay)}$win"
+                else "$name ${dayLabel(p.day, todayDay)}$win"
+            }
+            val head = if (coming.size == 1) "One parcel on its way: " else "${coming.size} parcels on their way: "
+            out += head + said.joinToString("; ") + (if (coming.size > MAX_SAID) "; and ${coming.size - MAX_SAID} more" else "") + "."
+        }
+        if (late.isNotEmpty()) {
+            val names = late.map { it.name ?: "a parcel" }.distinct().joinToString(", ")
+            out += (if (late.size == 1) "$names was due yesterday" else "$names were due yesterday") +
+                " and no email has said it's delivered, so check it came."
+        }
+        if (delivered.isNotEmpty()) {
+            out += "Delivered: " + delivered.take(MAX_SAID).joinToString(", ") { "${it.name ?: "a parcel"} ${dayLabel(it.day, todayDay)}" } + "."
+        }
+        return out.joinToString(" ")
     }
 }

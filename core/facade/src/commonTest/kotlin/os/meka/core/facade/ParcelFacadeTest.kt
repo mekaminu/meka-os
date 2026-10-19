@@ -56,4 +56,28 @@ class ParcelFacadeTest {
         assertNull(fold.today.value.parcels)
         assertTrue(fold.noticesNow().none { it.source == os.meka.core.domain.NoticeSource.PARCELS })
     }
+
+    @Test
+    fun yesterdaysParcelIsAskedAboutAndAskAndTheBriefKnowTheParcels() = runTest {
+        val today = CivilDate.toEpochDay(2026, 10, 17)
+        serverWrite(ParcelRules.entityId("acc1", "late"), ParcelRules.fields(ParcelFolded("late", ParcelState.COMING, today - 1, null, null, "Shop", now - 86_400_000L), "Personal"))
+        serverWrite(ParcelRules.entityId("acc1", "next"), ParcelRules.fields(ParcelFolded("next", ParcelState.COMING, today + 1, "09:00–13:00", "Evri", "Other", now), "Personal"))
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        assertEquals("Not arrived? · Shop was due yesterday", fold.today.value.parcels?.text)
+        assertEquals("Not arrived? · Shop was due yesterday", mac.today.value.parcels?.text)
+        assertTrue(fold.briefView.value.story.family.any { it.startsWith("Your parcel from Shop was due yesterday") })
+        val said = (fold.askMeka("any parcels coming?") as os.meka.core.domain.AskOutcome.Answered).answer.text
+        assertEquals(
+            "One parcel on its way: Other tomorrow between 09:00 and 13:00. Shop was due yesterday and no email has said it's delivered, so check it came.",
+            said,
+        )
+        val narrowed = (mac.askMeka("where's my Other parcel?") as os.meka.core.domain.AskOutcome.Answered).answer.text
+        assertEquals("One parcel on its way: Other tomorrow between 09:00 and 13:00.", narrowed)
+        // The day after, it counts as come.
+        now += 86_400_000L
+        assertTrue(fold.syncNow())
+        assertTrue(fold.today.value.parcels?.text?.startsWith("Parcel arriving today · Other") == true)
+    }
 }
