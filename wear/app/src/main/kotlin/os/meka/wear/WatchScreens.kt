@@ -319,6 +319,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         Spacer(Modifier.height(MekaSpace.xs))
         CaptureBlock(core, reduced, listen, onListen)
 
+        CommuteRow(home.commute, reduced)
+
         PrepRow(home.prep, reduced)
 
         MatchRow(home.match, reduced)
@@ -706,6 +708,49 @@ private fun EveningRow(core: MekaCore, evening: os.meka.core.domain.WatchEvening
 
 /** How long the evening row says what a tap did before it shows the glance (or folds away) again. */
 private const val EVENING_SAID_MS = 4_000L
+
+/**
+ * The commute counts everywhere, completeness: on an office day's commute, when to leave — "LEAVE BY 07:32 · IN 12
+ * MIN", "For the 07:42 · on time" and what's wrong on the route, lit in the accent for trouble or the last ten minutes;
+ * "ON THE 07:42" once he's on it; "HOME ABOUT 18:50" in the evening. It unfolds on the expand spring (reduced motion: a
+ * fade) when the commute starts and folds away when it ends; the label and line cross-fade as the minutes count down.
+ */
+@Composable
+private fun CommuteRow(commute: os.meka.core.domain.WatchCommute?, reduced: Boolean) {
+    // The last row shown, so it folds away still showing itself (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchCommute>(1) }
+    if (commute != null) last[0] = commute
+    AnimatedVisibility(
+        visible = commute != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "commute",
+    ) {
+        val v = commute ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = MekaSpace.m)
+                .semantics(mergeDescendants = true) { contentDescription = v.spoken },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            AnimatedContent(
+                targetState = v.label,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "commuteWhen",
+            ) { label ->
+                Line(label, MekaType.captionStrong.copy(color = if (v.lit) C.accent else C.textSecondary, fontFeatureSettings = "tnum"), maxLines = 1)
+            }
+            AnimatedContent(
+                targetState = v.line,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "commuteLine",
+            ) { line -> Line(line, MekaType.metaStrong.copy(color = C.textPrimary, fontFeatureSettings = "tnum"), maxLines = 2) }
+            v.note?.let { Line(it, MekaType.caption.copy(color = C.accent), maxLines = 3) }
+        }
+    }
+}
 
 /**
  * Meeting prep, slice 3: from his lead time before a meeting with other people until ten minutes after its start —

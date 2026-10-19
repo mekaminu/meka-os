@@ -52,6 +52,12 @@ data class WatchTileView(
     val matchLit: Boolean = false,
     /** Meeting prep, slice 3: "Prep · Quote review · in 12 min" (always lit); null with no prep. The inbox gives way to it. */
     val prepLine: String? = null,
+    /**
+     * The commute counts everywhere, completeness: "Leave by 07:32 · the 07:42" · "Home about 18:50" on an office day's
+     * commute (lit like the screen's row); null otherwise. The inbox gives way to it.
+     */
+    val commuteLine: String? = null,
+    val commuteLit: Boolean = false,
     /** Galaxy Watch completeness slice 1: "2 to sync" while changes made on the watch wait to be sent; else null. */
     val syncMark: String? = null,
     /** Galaxy Watch completeness slice 2: "Quiet hours · until 07:00" while Navilife's quiet hours are on; else null. */
@@ -125,8 +131,8 @@ object WatchTileRules {
             if (f.running) add("${f.title}, ${spokenClock(f.clock)}")
             button?.let { add("Double tap ${it.label} to ${it.label.lowercase()}") }
         }.joinToString(". ") + "." + (home.prep?.let { " " + it.spoken } ?: "") + (home.match?.let { " " + it.spoken } ?: "") +
-            (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
-        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null && home.prep == null }
+            (home.commute?.let { " " + it.spoken } ?: "") + (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
+        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null && home.prep == null && home.commute == null }
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
@@ -134,6 +140,7 @@ object WatchTileRules {
             parkingLine = parking?.short, parkingLit = parking?.lit == true,
             matchLine = home.match?.short, matchLit = home.match?.lit == true,
             prepLine = home.prep?.short,
+            commuteLine = home.commute?.short, commuteLit = home.commute?.lit == true,
         )
     }
 
@@ -142,7 +149,7 @@ object WatchTileRules {
      * fast's clock runs or something is starting ("IN 12 MIN" counts down), else a quarter hour.
      */
     fun refreshAfterMs(home: WatchHomeView?, nowMs: Long): Long {
-        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended } || home.match?.lit == true || home.prep != null)
+        val counting = home != null && (home.fast.running || home.lit || home.parking.any { !it.ended } || home.match?.lit == true || home.prep != null || home.commute != null)
         return if (counting) WatchHomeRules.nextTickMs(nowMs) - nowMs else CALM_REFRESH_MS
     }
 

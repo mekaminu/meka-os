@@ -102,6 +102,11 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.fastReached) C.success else C.accent, 1))
         }
+        // The commute counts everywhere, completeness: when to leave, lit for trouble or the last ten minutes.
+        v.commuteLine?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, if (v.commuteLit) C.accent else C.textSecondary, 1))
+        }
         // Meeting prep, slice 3: the meeting about to start, lit (the inbox gives way).
         v.prepLine?.let {
             column.addContent(gap(MekaSpace.xs.value))

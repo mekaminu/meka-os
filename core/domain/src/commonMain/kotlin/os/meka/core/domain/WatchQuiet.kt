@@ -42,7 +42,7 @@ object WatchQuietRules {
      * money), a meeting about to start, a match under way.
      */
     fun urgent(home: WatchHomeView?): Boolean =
-        home != null && (home.parking.any { !it.ended } || home.prep != null || home.match?.lit == true)
+        home != null && (home.parking.any { !it.ended } || home.prep != null || home.match?.lit == true || home.commute?.lit == true)
 
     /**
      * When the tile and complication should look again. By day [WatchTileRules.refreshAfterMs]. In quiet hours: the

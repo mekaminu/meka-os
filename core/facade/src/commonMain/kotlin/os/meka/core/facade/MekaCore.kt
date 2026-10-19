@@ -5127,7 +5127,12 @@ class MekaCore(
             os.meka.core.domain.WatchEveningRules.view(_shutdown.value),
             // Approve message drafts from the wrist, slice 1: the newest drafted message reply from the synced cards.
             os.meka.core.domain.WatchMessageDraftRules.view(_triage.value),
+            // The commute counts everywhere, completeness: when to leave, as last worked out on the core's thread.
+            watchCommuteNow,
         )
+
+    /** The watch's leave-by row, worked out with each refresh (each minute while the watch's screen is on). */
+    private var watchCommuteNow: os.meka.core.domain.WatchCommute? = null
 
     /**
      * Approve message drafts from the wrist, slice 1: **Send** on the watch's message draft, Meka's tap. Asks the Fold to
@@ -9613,6 +9618,7 @@ class MekaCore(
         // The live tiles under the Day ring: next event, a running fast, habits today, renewals due.
         // A running fast also shows as the Day ring's inner arc (Living Today, slice 3); once the day is shut down the
         // ring looks ahead to tomorrow's first commitment (Living Today, item 1).
+        val rideNow = trainRideNow(office, cal)
         _today.value = projected.copy(
             dayRing = projected.dayRing.copy(
                 fast = os.meka.core.domain.DayRingRules.fastArc(fastingNow.current, nowMs(), cal),
@@ -9634,7 +9640,7 @@ class MekaCore(
             // Train-time queue (4) and Reading's commute slots (2026-10-18): on the train, how long until he gets off
             // and what's on the go to read ("On the 07:42 · 15 min to … · 2 articles · Dune at 37%").
             trainQueue = os.meka.core.domain.QueueRules.trainLine(
-                trainQueue.items(), office, nowMs(), cal, trainRideNow(office, cal),
+                trainQueue.items(), office, nowMs(), cal, rideNow,
                 os.meka.core.domain.ReadingRules.trainPart(reading.items()),
             ),
             weekAhead = os.meka.core.domain.WeekAheadRules.todayLine(weekAheadNow, nowMs(), cal, weekAheadSettings.setting()),
@@ -9751,9 +9757,21 @@ class MekaCore(
                 )
             }
         _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone), trainQueue.items(), newsDown)
+        val lineSnap = lineStatus.snapshot()
+        val routeNow = os.meka.core.domain.RouteRules.todayLine(lineSnap, office, nowMs(), cal)
+        // The commute counts everywhere, completeness: the watch's leave-by row from the same board and commute.
+        watchCommuteNow = run {
+            val commute = os.meka.core.domain.RouteRules.commute(office, nowMs(), cal)
+            val leave = if (office != null && commute != null) {
+                os.meka.core.domain.RouteRules.liveBoard(lineSnap, commute, nowMs())?.let { os.meka.core.domain.RouteRules.leaveBy(it, commute, office, nowMs(), cal) }
+            } else null
+            os.meka.core.domain.WatchCommuteRules.view(
+                office, os.meka.core.domain.CommuteRules.bands(hoursOf(workState, todayDay), todayDay, cal), leave, routeNow, rideNow, nowMs(), cal,
+            )
+        }
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.
-            .copy(route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal))
+            .copy(route = routeNow)
         // Away from home and work with a fresh fix (Places item 3): Today's line says where Meka is.
         val hereLine = os.meka.core.domain.HereRules.todayLine(hereFix, nowMs(), cal)
         _signIn.value = listOfNotNull(os.meka.core.domain.SignInRules.line(signIns.all(), nowMs(), cal))
