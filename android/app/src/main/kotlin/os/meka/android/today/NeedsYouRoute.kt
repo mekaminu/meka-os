@@ -206,6 +206,12 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     val r = runCatching { core.approveMailBacklog(card.id) }.getOrNull() ?: return@launch
                     undo.show(r.line) { core.unapproveMailBacklog(card.id); Unit }
                 }
+                // Clean-ups (2026-10-19): Allow or Not this one on a new phone or Mac asking to join; the server answers,
+                // the card leaves on every device as the ask's state syncs. Nothing to undo (revoke from the server).
+                DecisionEffect.ALLOW_DEVICE, DecisionEffect.REFUSE_DEVICE -> scope.launch {
+                    val line = core.answerDeviceJoin(card.id, effect == DecisionEffect.ALLOW_DEVICE)
+                    undo.show(line, null)
+                }
                 // Review: Ask with Mail up, where the plan lists what goes where.
                 DecisionEffect.OPEN_MAIL -> (context as? os.meka.android.MekaApplication)?.let { app ->
                     app.openMail.value = true

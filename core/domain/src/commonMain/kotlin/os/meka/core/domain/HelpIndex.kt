@@ -583,10 +583,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "setup",
             title = "Setup",
-            keywords = listOf("setup checklist", "set up navilife", "getting started", "onboarding"),
+            keywords = listOf("setup checklist", "set up navilife", "getting started", "onboarding", "connect a new mac", "add another device", "allow a new device", "a new mac wants to join"),
             what = "everything Navilife can do and what's left to set up, step by step.",
             how = "Work down the list; each step opens where it's done.",
-            tips = listOf(),
+            tips = listOf("Connecting a new phone or Mac while your Fold or Mac is in use: the new one shows a six-digit code and \"Allow this Mac from your phone\", and your Fold (or other Mac) shows \"A new Mac wants to join\" on top of Needs you with the same code. Check the codes match, then Allow; Not this one turns it away. Nobody answering in 10 minutes means connecting again."),
             fold = HelpPlace.SETUP,
             foldWhere = "Ask → Settings → Setup",
             mac = HelpPlace.SETUP,

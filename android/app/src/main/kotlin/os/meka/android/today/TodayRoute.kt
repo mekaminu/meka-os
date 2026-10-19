@@ -517,6 +517,8 @@ data class ConnectHook(
     val connect: suspend (url: String, code: String) -> String?,
     /** Recovery key, slice 2: connect with the 24 words instead of the code (null: not offered). */
     val recover: (suspend (url: String, words: String) -> String?)? = null,
+    /** Clean-ups (2026-10-19): the ask while this new phone waits for Allow on the household's other device. */
+    val waiting: kotlinx.coroutines.flow.StateFlow<os.meka.core.facade.EnrolmentResult.Waiting?>? = null,
 )
 
 /** The commands every task list (Today, Needs you) offers, wired to [core]. Selection is owned by the caller. */
@@ -1027,7 +1029,7 @@ private fun TodayPane(
                         )
                     }
                     }
-                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs), recover = connect.recover)
+                    if (connect != null) ConnectCard(connect.defaultUrl, connect.connect, Modifier.padding(top = MekaSpace.xs), recover = connect.recover, waiting = connect.waiting)
                     if (battery.line != null) {
                         BatteryCareLine(battery, onDismiss = {
                             battery.gap?.let { BatteryCare.dismiss(batteryContext, it.endMs) }

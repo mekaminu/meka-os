@@ -357,6 +357,9 @@ final class CoreModel {
     var focusCapture = false
     var lastError: String?
     private(set) var isConnected = false
+    /// Clean-ups (2026-10-19): while this new Mac waits for Allow on the household's phone or other Mac, the code to
+    /// compare there and when the ask runs out (plain values); nil otherwise.
+    private(set) var joinWaiting: (code: String, expiresAtMs: Int64)?
     var showConnect = false
     var showCalendars = false
     /// Ask → More → Settings → Mail (Inbox autopilot, slice 1): connect Gmail and Outlook, label each account.
@@ -730,15 +733,27 @@ final class CoreModel {
                 serverUrl: serverURL, enrolCode: code, householdId: identity.householdID,
                 deviceId: identity.deviceID, deviceName: Host.current().localizedName ?? "Mac"
             )
-            switch onEnum(of: result) {
+            var outcome = result
+            if case .waiting(let w) = onEnum(of: result) {
+                // Clean-ups: a new Mac waits for Allow on the phone; only plain values cross back to the core.
+                let requestId = w.requestId, joinCode = w.code, expires = w.expiresAtMs
+                joinWaiting = (joinCode, expires)
+                defer { joinWaiting = nil }
+                outcome = try await MacCoreFactory.shared.awaitApproval(
+                    serverUrl: serverURL, enrolCode: code, requestId: requestId, code: joinCode, expiresAtMs: expires
+                )
+            }
+            switch onEnum(of: outcome) {
             case .enrolled(let e):
                 let url = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
-                DeviceIdentity.saveEnrolment(serverURL: url, secret: e.deviceSecret)
-                try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: e.deviceSecret, deviceKey: deviceKey)
+                let secret = e.deviceSecret
+                DeviceIdentity.saveEnrolment(serverURL: url, secret: secret)
+                try await MacCoreFactory.shared.connect(core: core, serverUrl: url, deviceSecret: secret, deviceKey: deviceKey)
                 isConnected = true
                 return nil
             case .rejected: return "That enrolment code wasn't accepted."
             case .failed(let f): return f.reason
+            case .waiting: return DeviceJoinRules.shared.EXPIRED_LINE
             }
         } catch {
             return error.localizedDescription
@@ -5895,6 +5910,16 @@ final class CoreModel {
             Task {
                 guard let r = try? await core.approveMailBacklog(id: id) else { return }
                 offerEventUndo(r.line, .unapproveBacklog(id))
+            }
+        case .allowDevice, .refuseDevice:
+            // Clean-ups (2026-10-19): Allow or Not this one on a new phone or Mac asking to join; the card leaves on
+            // every device as the ask's state syncs. Nothing to undo (an allowed device is revoked from the server).
+            guard let core else { return }
+            MekaHaptics.medium()
+            let id = card.id, allow = effect == .allowDevice
+            Task {
+                guard let line = try? await core.answerDeviceJoin(requestId: id, allow: allow) else { return }
+                offerEventUndo(line, nil)
             }
         case .openMail:
             // Review: Mail, where the plan lists what goes where.

@@ -33,9 +33,13 @@ enum class DecisionEffect { COMPLETE_TASK, SNOOZE_TASK, OPEN_TASK, OPEN_LISTS, S
      * Review opens its own list (Meka, 2026-10-17): opens the card's own review sheet — what would move, grouped by
      * sender, with a tick per sender and Approve inside ([MailJunkReviewRules.review] for Empty Junk).
      */
-    OPEN_REVIEW }
+    OPEN_REVIEW,
+    /** Clean-ups (2026-10-19): Allow on a new phone or Mac asking to join ([DeviceJoinRules]); the card's id is the ask. */
+    ALLOW_DEVICE,
+    /** Not this one on a new device's ask: the server refuses it. */
+    REFUSE_DEVICE }
 
-enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT, MAIL_CLEANUP }
+enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT, MAIL_CLEANUP, DEVICE_JOIN }
 
 data class DecisionCard(
     /** The task's id, or [NeedsYouStackRules.LISTS_ID]. */
@@ -105,10 +109,13 @@ object NeedsYouStackRules {
     fun build(
         today: Today, listsDueLine: String?, nowMs: Long, calendar: LocalCalendar, credit: DecisionCard? = null,
         mail: List<DecisionCard> = emptyList(),
+        devices: List<DecisionCard> = emptyList(),
     ): NeedsYouStack {
         val todayDay = calendar.epochDayOf(nowMs)
         val cards = today.needsYou.map { card(it, todayDay, calendar) }.toMutableList()
         if (credit != null) { if (credit.urgent) cards.add(0, credit) else cards += credit }
+        // Clean-ups (2026-10-19): a new device asking to join goes on top; its ask runs out in minutes.
+        cards.addAll(0, devices)
         // Inbox fixes, slice 2: each account's backlog clean-up waiting for Approve, after the tasks.
         cards += mail
         if (listsDueLine != null) {
@@ -182,6 +189,8 @@ object NeedsYouStackRules {
         DecisionEffect.SNOOZE_TASK -> "Tomorrow · ${card.title}"
         DecisionEffect.SET_ASIDE -> "Set aside for later"
         DecisionEffect.APPROVE_BACKLOG -> MailBacklogRules.APPROVED_BAR
+        DecisionEffect.ALLOW_DEVICE -> DeviceJoinRules.ALLOWED_BAR
+        DecisionEffect.REFUSE_DEVICE -> DeviceJoinRules.REFUSED_BAR
         DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK, DecisionEffect.OPEN_MAIL, DecisionEffect.OPEN_REVIEW -> card.title
     }
 

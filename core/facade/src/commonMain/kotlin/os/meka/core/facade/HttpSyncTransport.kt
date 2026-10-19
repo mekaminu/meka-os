@@ -448,6 +448,8 @@ interface DeviceLinkApi {
     suspend fun linkWatch(code: String): os.meka.core.wire.DeviceLinkCodec.Linked
     suspend fun linkedWatches(): List<os.meka.core.wire.DeviceLinkCodec.Watch>
     suspend fun unlinkWatch(id: String)
+    /** Clean-ups (2026-10-19): Allow or Not this one on a new phone or Mac asking to join; the server's allowed · refused · gone. */
+    suspend fun answerDeviceJoin(requestId: String, allow: Boolean): String
 }
 
 /**
@@ -1055,6 +1057,10 @@ class HttpSyncTransport(
     override suspend fun unlinkWatch(id: String) {
         deviceLink("/v1/devices/unlink", os.meka.core.wire.DeviceLinkCodec.encodeUnlink(id))
     }
+
+    override suspend fun answerDeviceJoin(requestId: String, allow: Boolean): String = os.meka.core.wire.DeviceJoinCodec.decodeAnswered(
+        deviceLink(os.meka.core.wire.DeviceJoinCodec.ANSWER_PATH, os.meka.core.wire.DeviceJoinCodec.encodeAnswer(os.meka.core.wire.DeviceJoinCodec.Answer(requestId, allow))),
+    )
 
     override suspend fun recoveryStatus(): os.meka.core.wire.RecoveryCodec.Status =
         os.meka.core.wire.RecoveryCodec.decodeStatus(deviceLink("/v1/recovery/status", "{}"))

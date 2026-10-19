@@ -153,6 +153,8 @@ object EntityTypes {
     const val VAULT_MEMBER = "vault_member"
     /** The Vault, slice 2a: the Vault key sealed for one device (id its device id) or for the recovery key (id "recovery"). */
     const val VAULT_WRAP = "vault_wrap"
+    /** Clean-ups (2026-10-19): a new phone or Mac asking to join, id the ask's request id; written only by the server (see [DeviceJoinRules]). */
+    const val DEVICE_JOIN = "device_join"
 
     val ALL = listOf(
         HOUSEHOLD, PERSON, TASK, CHECKLIST_ITEM, COMMITMENT, OBLIGATION, DECISION,
@@ -164,7 +166,7 @@ object EntityTypes {
         APPROVAL_KEY, VAULT_DOC, CLUB_SERIES, HOUSEHOLD_PROFILE, MAIL_TIDY, MAIL_SENDER, MAIL_ITEM,
         MAIL_BACKLOG, PARCEL, REFLECTION, KID_ADMIN, KID_CHORE, KID_CHORE_TICK, MAIL_FIND,
         FOLLOW_UP_WAIT, DISCORD_POST, MONEY_ACCOUNT, MONEY_TXN, MONEY_RULE, MONEY_TIPS, MONEY_ALERT, MONEY_WORTH,
-        TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP,
+        TRADING_WALLET, MONEY_SHARED, READING_ITEM, VAULT_KEY, VAULT_MEMBER, VAULT_WRAP, DEVICE_JOIN,
     )
 }
 
@@ -492,6 +494,7 @@ object MekaSchema : SchemaRegistry {
         entityType == EntityTypes.VAULT_KEY -> MergePolicy.Lww
         entityType == EntityTypes.VAULT_MEMBER -> MergePolicy.Lww
         entityType == EntityTypes.VAULT_WRAP -> MergePolicy.Lww
+        entityType == EntityTypes.DEVICE_JOIN -> MergePolicy.Lww
         // Work wins: a win removed on any device is gone for good; its text, the latest edit wins.
         entityType == EntityTypes.WIN && field == WinFields.DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.WIN -> MergePolicy.Lww

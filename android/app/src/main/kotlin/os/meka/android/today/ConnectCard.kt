@@ -23,11 +23,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.core.domain.DeviceJoinRules
 import os.meka.core.domain.RecoveryKeyRules
 
 /**
@@ -41,6 +43,8 @@ fun ConnectCard(
     connect: suspend (url: String, code: String) -> String?,
     modifier: Modifier = Modifier,
     recover: (suspend (url: String, words: String) -> String?)? = null,
+    /** Clean-ups (2026-10-19): the ask while this new phone waits for Allow on the household's other device. */
+    waiting: kotlinx.coroutines.flow.StateFlow<os.meka.core.facade.EnrolmentResult.Waiting?>? = null,
 ) {
     var open by rememberSaveable { mutableStateOf(false) }
     var url by rememberSaveable { mutableStateOf(defaultUrl) }
@@ -78,6 +82,20 @@ fun ConnectCard(
             Field("Enrolment code", code, { code = it }, KeyboardType.Password, secret = true)
         }
         error?.let { Text(it, style = MekaType.caption, color = Meka.colors.critical) }
+        // Clean-ups: waiting for Allow on the Mac — the code to compare there, minutes left (fades in on the appear spring).
+        val ask = waiting?.collectAsState()?.value
+        androidx.compose.animation.AnimatedVisibility(
+            ask != null,
+            enter = androidx.compose.animation.fadeIn(os.meka.android.designsystem.MekaMotion.appear(Meka.reducedMotion)),
+            exit = androidx.compose.animation.fadeOut(os.meka.android.designsystem.MekaMotion.appear(Meka.reducedMotion)),
+        ) {
+            var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
+            androidx.compose.runtime.LaunchedEffect(ask) { while (true) { nowMs = System.currentTimeMillis(); kotlinx.coroutines.delay(15_000) } }
+            if (ask != null) Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(DeviceJoinRules.waitingTitle(DeviceJoinRules.PHONE), style = MekaType.body, color = Meka.colors.textPrimary)
+                Text(DeviceJoinRules.waitingLine(ask.code, ask.expiresAtMs, nowMs), style = MekaType.caption, color = Meka.colors.accent)
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
             val ready = if (recovering) reading is RecoveryKeyRules.Reading.Ok else code.isNotBlank()
             Text(

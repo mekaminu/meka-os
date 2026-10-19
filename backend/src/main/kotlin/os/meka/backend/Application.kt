@@ -131,6 +131,8 @@ fun Application.mekaSync(
     family: FamilyShare? = null,
     /** Linking a watch without the enrolment code (Galaxy Watch, slice 1); null leaves its routes out. */
     deviceLink: DeviceLink? = DeviceLink(devices, verifier),
+    /** Clean-ups (2026-10-19): a new phone or Mac waits for Meka's Allow on a connected one; null keeps the code's old path. */
+    enrolApproval: EnrolApproval? = enrolApprovalFor(devices, opStore, push),
     /** Phone update failures reported by the Fold (build plan: phone updates sometimes fail to install); null leaves the routes out. */
     updateFailures: UpdateFailures? = null,
     /** The Fold's posture changes (bedside clock, slice 2); null leaves the routes out. */
@@ -175,10 +177,19 @@ fun Application.mekaSync(
         // One-time device enrolment (ADR-005 M0). Disabled unless MEKA_ENROL_TOKEN is configured.
         post("/v1/enrol") {
             if (call.isPublisher()) throw Forbidden()
-            val token = enrolToken?.takeIf { it.length >= 32 } ?: throw Unauthorised()
-            val auth = call.request.header("Authorization") ?: throw Unauthorised()
-            if (!auth.startsWith("Enrol ") || !Secrets.constantTimeEquals(auth.removePrefix("Enrol ").trim(), token)) throw Unauthorised()
+            call.requireEnrolCode(enrolToken)
             val req = WireCodec.decodeEnrolRequest(call.boundedBody())
+            // Clean-ups (2026-10-19): a new phone or Mac waits for Allow on one already connected and in use.
+            if (enrolApproval != null && withContext(Dispatchers.IO) { enrolApproval.needed(req) }) {
+                val waiting = withContext(Dispatchers.IO) { enrolApproval.ask(req) }
+                if (waiting == null) {
+                    call.respondText(os.meka.core.wire.DeviceLinkCodec.encodeError(os.meka.core.wire.DeviceLinkCodec.ERR_BUSY), ContentType.Application.Json, HttpStatusCode.TooManyRequests)
+                } else {
+                    call.application.environment.log.info("device asked to join") // no identifiers in logs
+                    call.respondText(os.meka.core.wire.DeviceJoinCodec.encodeWaiting(waiting), ContentType.Application.Json, HttpStatusCode.Accepted)
+                }
+                return@post
+            }
             when (val r = withContext(Dispatchers.IO) { devices.enrolWithCode(req.householdId, req.deviceId, req.name) }) {
                 is EnrolOutcome.Enrolled -> {
                     call.application.environment.log.info("device enrolled") // no identifiers in logs
@@ -188,6 +199,23 @@ fun Application.mekaSync(
                     call.application.environment.log.warn("enrolment refused: ${r.reason}")
                     call.respondText(r.reason, status = HttpStatusCode.Forbidden)
                 }
+            }
+        }
+
+        if (enrolApproval != null) {
+            // The asking device looks for Meka's answer with the same enrolment code; its secret comes once.
+            post(os.meka.core.wire.DeviceJoinCodec.STATUS_PATH) {
+                if (call.isPublisher()) throw Forbidden()
+                call.requireEnrolCode(enrolToken)
+                val r = withContext(Dispatchers.IO) { enrolApproval.status(call.boundedBody()) }
+                if (r.body.contains("\"enrolled\"")) call.application.environment.log.info("device allowed and enrolled") // no identifiers in logs
+                call.linkReply(r)
+            }
+            // Allow or Not this one, from a keyed phone or Mac of the household (Needs you's card).
+            post(os.meka.core.wire.DeviceJoinCodec.ANSWER_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                call.linkReply(withContext(Dispatchers.IO) { enrolApproval.answer(who, body) })
             }
         }
 
@@ -984,6 +1012,22 @@ private suspend fun ApplicationCall.familyGuest(family: FamilyShare, body: Strin
 }
 
 private fun ApplicationCall.isPublisher(): Boolean = request.header("Authorization")?.startsWith("${ReleasePublisher.AUTH_SCHEME} ") == true
+
+/** The enrolment code in `Authorization: Enrol <code>`; refused when none is configured or it doesn't match. */
+private fun ApplicationCall.requireEnrolCode(enrolToken: String?) {
+    val token = enrolToken?.takeIf { it.length >= 32 } ?: throw Unauthorised()
+    val auth = request.header("Authorization") ?: throw Unauthorised()
+    if (!auth.startsWith("Enrol ") || !Secrets.constantTimeEquals(auth.removePrefix("Enrol ").trim(), token)) throw Unauthorised()
+}
+
+/** The enrol route's approval step, reading an ask's heads by index on Postgres. */
+internal fun enrolApprovalFor(devices: DeviceRegistry, opStore: ServerOpStore, push: Push?): EnrolApproval {
+    val onAsked: (String) -> Unit = { hh -> push?.urgent(hh) }
+    val pg = opStore as? PostgresOpStore ?: return EnrolApproval(devices, opStore, onAsked = onAsked)
+    return EnrolApproval(devices, opStore, onAsked = onAsked, heads = { hh, id ->
+        pg.latestFieldOps(hh, os.meka.core.domain.EntityTypes.DEVICE_JOIN, id)[id].orEmpty()
+    })
+}
 
 private fun ApplicationCall.bearer(devices: DeviceRegistry): DeviceIdentity {
     if (isPublisher()) throw Forbidden() // the release-only publisher may call nothing that takes a device

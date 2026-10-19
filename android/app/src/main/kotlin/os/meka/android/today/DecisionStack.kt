@@ -143,7 +143,7 @@ private fun TopCard(card: DecisionCard, widthPx: Float, onMove: (DecisionMove, B
         haptics.light()
         val effect = card.effect(move)
         val leaves = effect == DecisionEffect.COMPLETE_TASK || effect == DecisionEffect.SNOOZE_TASK || effect == DecisionEffect.SET_ASIDE ||
-            effect == DecisionEffect.APPROVE_BACKLOG
+            effect == DecisionEffect.APPROVE_BACKLOG || effect == DecisionEffect.ALLOW_DEVICE || effect == DecisionEffect.REFUSE_DEVICE
         scope.launch {
             if (leaves) {
                 if (reduced) {

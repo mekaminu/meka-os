@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
                     app.defaultServerUrl,
                     connect = { url, code -> app.connect(url, code).also { if (it == null) connected = true } },
                     recover = { url, words -> app.recover(url, words).also { if (it == null) connected = true } },
+                    waiting = app.joinWaiting,
                 )
                 AppShell(app.core, hook)
             }

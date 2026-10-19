@@ -1346,6 +1346,19 @@ private struct ConnectSheet: View {
                     .transition(.opacity)
             }
             if let error { Text(error).font(MekaType.caption).foregroundStyle(palette.critical) }
+            if let ask = model.joinWaiting {
+                // Clean-ups (2026-10-19): waiting for Allow on the phone — the code to compare there, minutes left.
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(DeviceJoinRules.shared.waitingTitle(kind: DeviceJoinRules.shared.MAC)).font(MekaType.body)
+                    TimelineView(.periodic(from: .now, by: 15)) { context in
+                        Text(DeviceJoinRules.shared.waitingLine(
+                            code: ask.code, expiresAtMs: ask.expiresAtMs, nowMs: Int64(context.date.timeIntervalSince1970 * 1000)
+                        ))
+                        .font(MekaType.caption).foregroundStyle(palette.accent)
+                    }
+                }
+                .transition(.opacity)
+            }
             HStack {
                 Button(recovering ? "Use an enrolment code instead" : RecoveryKeyRules.shared.RECOVER) {
                     recovering.toggle(); error = nil; words = ""
@@ -1377,6 +1390,7 @@ private struct ConnectSheet: View {
         .frame(width: 460)
         .background(HiddenFromCapture(hidden: recovering))
         .animation(MekaMotion.appear(reduced: reduceMotion), value: recovering)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.joinWaiting?.code)
         .onAppear { url = model.defaultServerURL }
         .onDisappear { words = "" }
     }

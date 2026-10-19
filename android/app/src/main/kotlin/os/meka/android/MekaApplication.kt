@@ -291,10 +291,28 @@ class MekaApplication : Application() {
 
     val defaultServerUrl: String get() = identity.serverUrl() ?: BuildConfig.SYNC_URL
 
-    /** One-time enrolment from the Connect card. Returns a user-facing error, or null on success. */
+    /**
+     * Clean-ups (2026-10-19): while this new phone waits for Allow on the household's Mac or other phone, the ask (its
+     * code and when it runs out) for the Connect card; null otherwise.
+     */
+    val joinWaiting = kotlinx.coroutines.flow.MutableStateFlow<EnrolmentResult.Waiting?>(null)
+
+    /**
+     * One-time enrolment from the Connect card. Returns a user-facing error, or null on success. A new phone in a
+     * household whose Mac is in use waits here for Allow there ([joinWaiting] says the code meanwhile).
+     */
     suspend fun connect(serverUrl: String, enrolCode: String): String? {
         val url = serverUrl.trim().trimEnd('/')
-        return when (val r = Enrolment.enrol(http, url, enrolCode, identity.householdId(), identity.deviceId(), Build.MODEL ?: "Android")) {
+        val first = Enrolment.enrol(http, url, enrolCode, identity.householdId(), identity.deviceId(), Build.MODEL ?: "Android")
+        val result = if (first is EnrolmentResult.Waiting) {
+            joinWaiting.value = first
+            try {
+                Enrolment.awaitApproval(http, url, enrolCode, first, { System.currentTimeMillis() })
+            } finally {
+                joinWaiting.value = null
+            }
+        } else first
+        return when (val r = result) {
             is EnrolmentResult.Enrolled -> {
                 identity.saveEnrolment(url, r.deviceSecret)
                 core.connect(Enrolment.transport(http, url, r.deviceSecret, deviceKey))
@@ -305,6 +323,7 @@ class MekaApplication : Application() {
             }
             EnrolmentResult.Rejected -> "That enrolment code wasn't accepted."
             is EnrolmentResult.Failed -> r.reason
+            is EnrolmentResult.Waiting -> os.meka.core.domain.DeviceJoinRules.EXPIRED_LINE
         }
     }
 

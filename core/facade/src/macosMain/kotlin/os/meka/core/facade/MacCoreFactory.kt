@@ -83,6 +83,17 @@ object MacCoreFactory {
         Enrolment.enrol(http, serverUrl.trim().trimEnd('/'), enrolCode, householdId, deviceId, deviceName)
 
     /**
+     * Clean-ups (2026-10-19): waits for Allow on the household's phone or other Mac after [enrol] answered Waiting
+     * (plain values in, so nothing Kotlin crosses from the main actor twice); Enrolled, or Failed with the words.
+     */
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    suspend fun awaitApproval(serverUrl: String, enrolCode: String, requestId: String, code: String, expiresAtMs: Long): EnrolmentResult =
+        Enrolment.awaitApproval(
+            http, serverUrl.trim().trimEnd('/'), enrolCode, EnrolmentResult.Waiting(requestId, code, expiresAtMs),
+            { kotlin.time.Clock.System.now().toEpochMilliseconds() },
+        )
+
+    /**
      * Recovery key, slice 3: this Mac joins the household with the 24 words instead of the enrolment code (both devices
      * lost). Signed with the Mac's own key; only the words' secret is sent. The outcome's secret is then saved and used
      * with [connect] exactly like an enrolment's.

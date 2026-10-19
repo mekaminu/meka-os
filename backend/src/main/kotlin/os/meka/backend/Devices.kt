@@ -72,6 +72,18 @@ interface DeviceRegistry {
      * device that is still connected. Refusals: [REFUSED_TAKEN] · [REFUSED_REVOKED].
      */
     fun enrolRecovered(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome
+
+    /**
+     * Clean-ups (2026-10-19, [EnrolApproval]): whether [householdId] exists and has never had [deviceId] (connected or
+     * revoked). A known id re-enrols with the code as before ("Reconnect"); a revoked one is refused as before.
+     */
+    fun isNewDevice(householdId: String, deviceId: String): Boolean
+
+    /**
+     * Whether [householdId] has a phone or Mac that could allow a new device: connected (not revoked), holding its
+     * signing key, and that sent something since [seenSinceMs]. With none (both lost), the code alone still enrols.
+     */
+    fun hasApprover(householdId: String, seenSinceMs: Long): Boolean
 }
 
 object Secrets {
@@ -222,6 +234,27 @@ class PostgresDeviceRegistry(private val ds: DataSource) : DeviceRegistry {
         return EnrolOutcome.Enrolled(secret)
     }
 
+    override fun isNewDevice(householdId: String, deviceId: String): Boolean = ds.connection.use { c ->
+        c.prepareStatement(
+            "SELECT EXISTS (SELECT 1 FROM household WHERE id = ?), EXISTS (SELECT 1 FROM device WHERE household_id = ? AND id = ?)",
+        ).use { st ->
+            st.setString(1, householdId); st.setString(2, householdId); st.setString(3, deviceId)
+            st.executeQuery().use { rs -> rs.next() && rs.getBoolean(1) && !rs.getBoolean(2) }
+        }
+    }
+
+    /** "Sent something" is an op it pushed (the Fold and the Mac push as they're used); enrolment is rare, so a scan is fine. */
+    override fun hasApprover(householdId: String, seenSinceMs: Long): Boolean = ds.connection.use { c ->
+        c.prepareStatement(
+            """SELECT EXISTS (SELECT 1 FROM device d WHERE d.household_id = ? AND d.revoked_at IS NULL AND d.public_key IS NOT NULL
+                 AND (d.id LIKE 'android%' OR d.id LIKE 'mac%')
+                 AND EXISTS (SELECT 1 FROM op_log o WHERE o.household_id = d.household_id AND o.device_id = d.id AND o.received_at > ?))""",
+        ).use { st ->
+            st.setString(1, householdId); st.setTimestamp(2, java.sql.Timestamp(seenSinceMs))
+            st.executeQuery().use { rs -> rs.next() && rs.getBoolean(1) }
+        }
+    }
+
     fun revoke(householdId: String, deviceId: String) = ds.connection.use { c: Connection ->
         c.prepareStatement("UPDATE device SET revoked_at = now() WHERE household_id = ? AND id = ?").use {
             it.setString(1, householdId); it.setString(2, deviceId); it.executeUpdate()
@@ -290,6 +323,20 @@ class InMemoryDeviceRegistry : DeviceRegistry {
 
     override fun name(device: DeviceIdentity): String? =
         if (device in revoked || byHash.values.none { it == device }) null else names[device]?.first ?: device.deviceId
+
+    /** When each device last sent something (tests set it; a device not listed counts as in use now). */
+    val lastSeen = HashMap<DeviceIdentity, Long>()
+
+    override fun isNewDevice(householdId: String, deviceId: String): Boolean {
+        val who = DeviceIdentity(householdId, deviceId)
+        return householdId in households && who !in names && who !in revoked && byHash.values.none { it == who }
+    }
+
+    override fun hasApprover(householdId: String, seenSinceMs: Long): Boolean =
+        byHash.values.distinct().any { d ->
+            d.householdId == householdId && d !in revoked && keys[d] != null &&
+                (d.deviceId.startsWith("android") || d.deviceId.startsWith("mac")) && (lastSeen[d] ?: Long.MAX_VALUE) > seenSinceMs
+        }
 
     override fun enrolRecovered(householdId: String, deviceId: String, name: String, publicKeyB64: String): EnrolOutcome {
         val who = DeviceIdentity(householdId, deviceId)

@@ -227,6 +227,8 @@ class MekaCore(
     private val signIns = os.meka.core.domain.SignInStore(replica)
     // The call assistant's credit (low-balance guard, server-written).
     private val callCredit = os.meka.core.domain.CallCreditStore(replica)
+    /** Clean-ups (2026-10-19): new phones or Macs asking to join, written by the server. */
+    private val deviceJoins = os.meka.core.domain.DeviceJoinStore(replica)
     private val review = WeeklyReview(replica, nowMs, ZoneCalendar(timeZone))
     /** The week the review screen shows (null: the default for today); a screen choice, not synced. */
     private var reviewOffset: Int? = null
@@ -8442,6 +8444,37 @@ class MekaCore(
         return true
     }
 
+    /**
+     * Clean-ups (2026-10-19): Allow ([allow] true) or Not this one on a new phone or Mac asking to join (Needs you's
+     * card, id the ask's request id). The server enrols it or refuses it and writes the ask's state, which syncs the card
+     * away on every device; noted in Activity. Returns the undo bar's line (nothing to undo: an allowed device is revoked
+     * from the server instead).
+     */
+    suspend fun answerDeviceJoin(requestId: String, allow: Boolean): String {
+        val api = deviceLinkApi ?: return os.meka.core.domain.DeviceJoinRules.OFFLINE_BAR
+        val state = try {
+            api.answerDeviceJoin(requestId, allow)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LinkRefusedException) {
+            os.meka.core.wire.DeviceJoinCodec.GONE
+        } catch (e: Exception) {
+            null
+        }
+        if (state != null) onCore {
+            val join = deviceJoins.all().firstOrNull { it.id == requestId }
+            if (join != null && state != os.meka.core.wire.DeviceJoinCodec.GONE) {
+                activity.recordDevice(
+                    os.meka.core.domain.DeviceJoinRules.activityId(requestId), nowMs(),
+                    os.meka.core.domain.DeviceJoinRules.activitySummary(join.name, state == os.meka.core.wire.DeviceJoinCodec.ALLOWED),
+                    os.meka.core.domain.DeviceJoinRules.WHY_YOU,
+                )
+            }
+            refresh()
+        }
+        return os.meka.core.domain.DeviceJoinRules.answeredLine(state)
+    }
+
     // ---- Galaxy Watch, completeness slice 1: changes waiting and unlinking from the watch itself ----
 
     /** Field changes made on this device that wait to be sent, as the last sync round left them (0 when synced). */
@@ -9607,6 +9640,8 @@ class MekaCore(
             credit = os.meka.core.domain.CallCreditRules.card(credit, workState.callAssistant),
             // Inbox fixes, slice 2: each account's backlog clean-up ready for his Approve.
             mail = os.meka.core.domain.MailBacklogRules.cards(activity.mailBacklogs(), autonomy.paused(), nowMs()),
+            // Clean-ups: a new phone or Mac asking to join, on top with Allow and Not this one.
+            devices = os.meka.core.domain.DeviceJoinRules.cards(deviceJoins.all(), nowMs()),
         )
         _fasting.value = fastingNow
         _goals.value = goalsNow

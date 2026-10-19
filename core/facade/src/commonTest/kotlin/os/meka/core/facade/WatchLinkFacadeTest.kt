@@ -50,6 +50,12 @@ class WatchLinkFacadeTest {
             if (watches.none { it.id == id }) throw LinkRefusedException(DeviceLinkCodec.ERR_UNKNOWN)
             watches.removeAll { it.id == id }
         }
+        val answers = mutableListOf<Pair<String, Boolean>>()
+        override suspend fun answerDeviceJoin(requestId: String, allow: Boolean): String {
+            check()
+            answers += requestId to allow
+            return if (allow) os.meka.core.wire.DeviceJoinCodec.ALLOWED else os.meka.core.wire.DeviceJoinCodec.REFUSED
+        }
     }
 
     private val service = SyncService(InMemoryServerOpStore())
