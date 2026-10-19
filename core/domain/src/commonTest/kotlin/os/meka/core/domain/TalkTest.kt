@@ -336,4 +336,19 @@ class TalkTest {
         assertEquals(null, asked.session.help)
         assertIs<TalkEffect.Ask>(asked.effects.single())
     }
+
+    @Test
+    fun theFirstPieceTheServerSaysIsTheOneTheDeviceSaysFirst() {
+        // Voice completeness, slice 3: the server says it with the answer; the device's first piece must be the same.
+        listOf(
+            AskAnswer("Sure", listOf(add)),
+            AskAnswer("It's on Friday · 10:00–11:00. Bring your kit.", listOf(timer, fast)),
+            AskAnswer("- Milk\n- Eggs", emptyList()),
+            AskAnswer("You've got “three” things today! Two are overdue.", emptyList()),
+        ).forEach { a ->
+            assertEquals(SpeechRules.pieces(TalkRules.spoken(a, today)).first(), TalkRules.firstPiece(a.text), a.text)
+        }
+        assertEquals("It's on Friday, 10:00 to 11:00.", TalkRules.firstPiece("It's on Friday · 10:00–11:00. Bring your kit."))
+        assertEquals("No answer.", TalkRules.firstPiece("  "))
+    }
 }

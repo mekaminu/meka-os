@@ -628,7 +628,13 @@ fun Application.mekaSync(
                 call.respondText(status.toString(), ContentType.Application.Json)
             }
             // Ask MEKA: a question with the device's picture of today; words and proposed actions back. Nothing is kept.
-            val askService = AskService(ai.provider)
+            // Voice completeness, slice 3: a spoken answer brings its first piece's clip in the chosen voice.
+            val askService = AskService(ai.provider, speech?.let { sp ->
+                { text: String, voice: String? ->
+                    val said = sp.say(SpeechCodec.Request(text, voice))
+                    said.mp3?.takeIf { said.response.state == SpeechCodec.Response.SPOKEN }?.let { AskService.FirstClip(it, said.response.voice) }
+                }
+            })
             post("/v1/ai/ask") {
                 val body = call.boundedBody()
                 call.device(devices, verifier, body, requireKey = true)

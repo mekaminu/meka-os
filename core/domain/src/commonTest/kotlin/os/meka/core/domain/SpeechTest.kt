@@ -197,6 +197,11 @@ class SpeechTest {
             ),
         )
         assertEquals("Time to Navilife's voice · 1.3 s · no answer · 2.4 s · late · 0.9 s · middle 1.3 s", line)
+        // Voice completeness, slice 3: a first piece that came with the answer is named, and left out of the middle.
+        assertEquals(
+            "Time to Navilife's voice · with the answer · 1.3 s · 2.4 s",
+            SpeechRules.timingLine(listOf(SpeechTiming(1, 2_400, spoken), SpeechTiming(2, 1_250, spoken), SpeechTiming(3, 0, SpeechTiming.Outcome.WITH_ANSWER))),
+        )
         // Only the last ten.
         val many = (1..14).map { SpeechTiming(it.toLong(), it * 100L, spoken) }
         val ten = SpeechRules.timingLine(many)!!

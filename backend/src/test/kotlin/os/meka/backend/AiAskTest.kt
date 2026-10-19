@@ -186,4 +186,30 @@ class AiAskTest {
         assertEquals(HttpStatusCode.Forbidden, client.post("/v1/ai/ask") { header("Authorization", "Bearer $bare"); setBody(body) }.status)
         assertEquals(HttpStatusCode.Forbidden, client.post("/v1/ai/ask") { header("Authorization", "Publisher github-build"); setBody(body) }.status)
     }
+
+    @Test
+    fun aSpokenAnswerBringsItsFirstPieceSaidInTheAskedVoice() {
+        // Voice completeness, slice 3: only when asked, only Navilife's words, within the wait, or not at all.
+        val model = FakeModel(answered("""{"answer":"It's on Friday · 10:00–11:00. Bring your kit.","actions":[]}"""))
+        val said = mutableListOf<Pair<String, String?>>()
+        val service = AskService(model, { text, voice -> said += text to voice; AskService.FirstClip(byteArrayOf(1, 2, 3), voice ?: "Amy") })
+        val spoken = request.copy(voice = true, speak = true, speakVoice = "Aoede")
+        val r = service.ask(spoken)
+        assertEquals("It's on Friday, 10:00 to 11:00.", r.firstText)
+        assertEquals("AQID", r.firstAudio)
+        assertEquals("Aoede", r.firstVoice)
+        assertEquals(listOf<Pair<String, String?>>("It's on Friday, 10:00 to 11:00." to "Aoede"), said)
+        // Not asked (typed, or spoken without speak): nothing said.
+        assertEquals(null, service.ask(request).firstAudio)
+        assertEquals(null, service.ask(request.copy(voice = true)).firstAudio)
+        assertEquals(1, said.size)
+        // The voice refused, or too slow: the answer goes without it.
+        assertEquals(null, AskService(model, { _, _ -> null }).ask(spoken).firstAudio)
+        val slow = AskService(model, { _, _ -> Thread.sleep(500); AskService.FirstClip(byteArrayOf(1), null) }, firstClipWaitMs = 50)
+        val late = slow.ask(spoken)
+        assertEquals(AskCodec.Response.ANSWERED, late.state)
+        assertEquals(null, late.firstAudio)
+        // AI off: no answer, nothing said.
+        assertEquals(null, AskService(null, { _, _ -> error("not asked") }).ask(spoken).firstAudio)
+    }
 }

@@ -1,6 +1,7 @@
 package os.meka.backend
 
 import os.meka.core.wire.AskCodec
+import os.meka.core.wire.SpeechCodec
 
 /**
  * Ask MEKA on the server (build plan V1, AI layer slice 3; ADR-006 §2–4). A keyed device sends a question with a short
@@ -9,7 +10,18 @@ import os.meka.core.wire.AskCodec
  * it. Nothing of the question or answer is stored or logged; the meter counts the call under the feature `ask`
  * (`ask.talk` when the answer will be spoken).
  */
-class AskService(private val provider: LanguageModelProvider?) {
+class AskService(
+    private val provider: LanguageModelProvider?,
+    /**
+     * Voice completeness, slice 3 (the first words sooner): says one piece of Navilife's words in a voice (null: the
+     * default) as an MP3, or null when it can't (off, over, failed); [SpeechService.say]. Only Navilife's own words.
+     */
+    private val firstClip: ((text: String, voice: String?) -> FirstClip?)? = null,
+    /** The longest the answer waits for [firstClip]; past it the answer goes without, and the device asks as before. */
+    private val firstClipWaitMs: Long = FIRST_CLIP_WAIT_MS,
+) {
+    /** One piece said: the MP3 and the voice that said it. */
+    class FirstClip(val mp3: ByteArray, val voice: String?)
 
     fun ask(r: AskCodec.Request): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI isn't set up")
@@ -22,7 +34,7 @@ class AskService(private val provider: LanguageModelProvider?) {
                 val refs = r.items.map { it.ref }.filter { it.isNotEmpty() }.toSet()
                 // A handle the device didn't send can't name a task; the device checks the rest again.
                 val kept = actions.filter { it.kind in KINDS && (it.ref == null || it.ref in refs) }
-                AskCodec.Response(AskCodec.Response.ANSWERED, words.ifBlank { "No answer" }, kept)
+                withFirstClip(r, AskCodec.Response(AskCodec.Response.ANSWERED, words.ifBlank { "No answer" }, kept))
             }
             ModelOutcome.Off -> AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI is off")
             ModelOutcome.OverBudget -> AskCodec.Response(AskCodec.Response.OVER, reason = "This month's AI budget is used up; it's back on the 1st")
@@ -30,8 +42,27 @@ class AskService(private val provider: LanguageModelProvider?) {
         }
     }
 
+    /**
+     * A spoken question that asked to [AskCodec.Request.speak]: the answer's first piece ([TalkRules.firstPiece], what the
+     * device will say first) said now and sent with it, so the device plays it without a second round trip. Within
+     * [firstClipWaitMs]; anything else (no voice, a refusal, slow, too big) sends the answer as it was. Never throws.
+     */
+    private fun withFirstClip(r: AskCodec.Request, answer: AskCodec.Response): AskCodec.Response {
+        val say = firstClip ?: return answer
+        if (!r.voice || !r.speak) return answer
+        val piece = os.meka.core.domain.TalkRules.firstPiece(answer.answer)?.takeIf { it.length <= SpeechCodec.MAX_TEXT } ?: return answer
+        val clip = try {
+            java.util.concurrent.CompletableFuture.supplyAsync { say(piece, r.speakVoice) }
+                .get(firstClipWaitMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+        } catch (e: Exception) { null } ?: return answer
+        if (clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) return answer
+        return answer.copy(firstText = piece, firstAudio = java.util.Base64.getEncoder().encodeToString(clip.mp3), firstVoice = clip.voice)
+    }
+
     companion object {
         const val FEATURE = "ask"
+        /** How long a spoken answer waits for its first piece's clip (Polly and Chirp usually take well under a second). */
+        const val FIRST_CLIP_WAIT_MS = 2_500L
         /** A spoken answer (Talk to MEKA) is metered on its own, so Activity can count Talk's day. */
         const val FEATURE_TALK = "ask.talk"
         const val MAX_TOKENS = 600

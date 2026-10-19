@@ -184,4 +184,24 @@ class AskCodecTest {
         assertFalse(AskCodec.decodeStatus("""{"state":"on","keyRefused":"yes"}""").keyRefused)
         assertFalse(AskCodec.decodeStatus("""{"state":"on"}""").keyRefused)
     }
+
+    @Test
+    fun aSpokenQuestionCanAskForItsFirstPieceAndTheClipComesBackWholeOrNotAtAll() {
+        // Voice completeness, slice 3.
+        val spoken = req.copy(voice = true, speak = true, speakVoice = "Aoede-US")
+        assertEquals(spoken, AskCodec.decodeRequest(AskCodec.encodeRequest(spoken)))
+        val default = req.copy(voice = true, speak = true)
+        assertEquals(default, AskCodec.decodeRequest(AskCodec.encodeRequest(default)))
+        // Speak only means something for a spoken question; an odd voice name is refused.
+        assertEquals(req, AskCodec.decodeRequest(AskCodec.encodeRequest(req.copy(speak = true, speakVoice = "Amy"))))
+        assertFalse(AskCodec.encodeRequest(req.copy(voice = true)).contains("speak"))
+        assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(req.copy(voice = true, speak = true, speakVoice = "Amy; drop"))) }
+        val answer = AskCodec.Response(AskCodec.Response.ANSWERED, "On Friday. Bring kit.", firstText = "On Friday.", firstAudio = "bXAz", firstVoice = "Amy")
+        assertEquals(answer, AskCodec.decodeResponse(AskCodec.encodeResponse(answer)))
+        // Half a clip isn't sent, and a too-long one isn't read.
+        val half = answer.copy(firstAudio = null)
+        assertEquals(half.copy(firstText = null, firstVoice = null), AskCodec.decodeResponse(AskCodec.encodeResponse(half)))
+        val big = AskCodec.encodeResponse(answer.copy(firstAudio = "a".repeat(SpeechCodec.MAX_AUDIO_B64 + 1)))
+        assertEquals(null, AskCodec.decodeResponse(big).firstAudio)
+    }
 }

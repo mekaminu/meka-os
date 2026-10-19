@@ -222,6 +222,17 @@ object TalkRules {
         return listOfNotNull(words.takeIf { it.isNotEmpty() }, did.takeIf { it.isNotEmpty() }, offer, there).joinToString(" ")
     }
 
+    /**
+     * Voice completeness, slice 3 (the first words sooner): the first piece the device will say of an answer whose
+     * words the model wrote as [text] ([SpeechRules.pieces] of [spoken]'s start, which is the answer's words when it has
+     * any), so the server can say it with the answer and the device finds it ready. Null when there are no words to say.
+     */
+    fun firstPiece(text: String?): String? {
+        val words = speakable(AskRules.answerText(text))
+        if (words.isEmpty()) return null
+        return SpeechRules.pieces(words).firstOrNull()?.takeIf { it.isNotBlank() && it.length <= SpeechRules.MAX_PIECE }
+    }
+
     /** After Meka's yes: "Added Call the dentist for tomorrow at 09:00. Anything else?" (failures said plainly). */
     fun spokenDone(done: List<AskProposal>, failed: Int, today: Long): String {
         val said = done.map { phrase(it, today, past = true).replaceFirstChar { c -> c.uppercase() } + "." }

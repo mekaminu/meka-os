@@ -82,7 +82,14 @@ interface NewsImagesApi {
 
 /** What MEKA's server said to a question (Ask MEKA, V1 AI layer): words and proposed actions, or why there are none. */
 sealed class AskReply {
-    data class Answered(val text: String, val actions: List<os.meka.core.domain.AskRawAction>) : AskReply()
+    /**
+     * [firstText] / [firstAudio] (base64 MP3): the answer's first spoken piece, said by the server with the answer when
+     * [AiApi.askSpoken] asked for it (voice completeness, slice 3); both or neither.
+     */
+    data class Answered(
+        val text: String, val actions: List<os.meka.core.domain.AskRawAction>,
+        val firstText: String? = null, val firstAudio: String? = null,
+    ) : AskReply()
     /** [state]: off · over (the month's budget) · failed, with the server's [reason]. */
     data class Unavailable(val state: String, val reason: String?) : AskReply()
 }
@@ -107,6 +114,18 @@ interface AiApi {
         history: List<os.meka.core.domain.TalkTurn> = emptyList(),
         voice: Boolean = false,
     ): AskReply
+
+    /**
+     * Voice completeness, slice 3 (the first words sooner): a spoken question ([ask] with voice) that also asks the
+     * server to say the answer's first piece in [speakVoice] (null: the default) and send it with the answer. A
+     * transport without it asks as before.
+     */
+    suspend fun askSpoken(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+    ): AskReply = ask(question, context, history, voice = true)
     /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
     suspend fun aiStatus(): AiStatusReply? = null
 
@@ -648,12 +667,30 @@ class HttpSyncTransport(
         context: os.meka.core.domain.AskContext,
         history: List<os.meka.core.domain.TalkTurn>,
         voice: Boolean,
+    ): AskReply = askWith(question, context, history, voice, speak = false, speakVoice = null)
+
+    override suspend fun askSpoken(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+    ): AskReply = askWith(question, context, history, voice = true, speak = true, speakVoice = speakVoice)
+
+    private suspend fun askWith(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        voice: Boolean,
+        speak: Boolean,
+        speakVoice: String?,
     ): AskReply {
         val body = AskCodec.encodeRequest(
             AskCodec.Request(
                 question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) },
                 history = history.map { AskCodec.Turn(it.question, it.answer, it.done) },
                 voice = voice,
+                speak = speak,
+                speakVoice = speakVoice,
             ),
         )
         prepare() // the ask route requires the device's signing key on the server
@@ -667,7 +704,10 @@ class HttpSyncTransport(
         }
         val r = AskCodec.decodeResponse(resp.bodyAsText())
         return if (r.state == AskCodec.Response.ANSWERED) {
-            AskReply.Answered(r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) })
+            AskReply.Answered(
+                r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
+                r.firstText, r.firstAudio,
+            )
         } else {
             AskReply.Unavailable(r.state, r.reason)
         }

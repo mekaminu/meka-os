@@ -302,6 +302,8 @@ class MekaCore(
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
     private val mekaVoice = os.meka.core.domain.MekaVoiceStore(replica)
     private val speechClips = LinkedHashMap<String, String>()
+    /** Voice completeness, slice 3: clips in [speechClips] that came with a spoken answer, not yet played. */
+    private val speechAnswerClips = LinkedHashSet<String>()
     private var speechQuietUntilMs = 0L
     private var speechWarmed = false
     private val speechTimings = ArrayDeque<os.meka.core.domain.SpeechTiming>()
@@ -7883,8 +7885,19 @@ class MekaCore(
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
                 ahead = os.meka.core.domain.EventAskRules.ahead(q, currentEvents(), nowMs(), cal, ::accountEditable))
         }
-        val reply = try { api.ask(q, context, history.map(::sendable), voice) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+        // Voice completeness, slice 3: a spoken question whose answer Navilife's voice will say asks for the first piece
+        // with the answer (only Navilife's words are said; nothing of his question is spoken or kept).
+        val speakVoice = if (voice && speechApi != null) onCore { speechVoiceNow() } else null
+        val reply = try {
+            if (speakVoice != null) api.askSpoken(q, context, history.map(::sendable), speakVoice.name)
+            else api.ask(q, context, history.map(::sendable), voice)
+        } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
+        }
+        if (speakVoice != null && reply is AskReply.Answered) {
+            val text = reply.firstText
+            val audio = reply.firstAudio
+            if (!text.isNullOrBlank() && !audio.isNullOrEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio) }
         }
         return when (reply) {
             is AskReply.Unavailable -> unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
@@ -8228,7 +8241,16 @@ class MekaCore(
         val api = speechApi ?: return null
         val words = text.trim().takeIf { it.isNotEmpty() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return null
         val voice = onCore { speechVoiceNow() } ?: return null
-        onCore { speechCached(voice.name, words) }?.let { return it }
+        onCore {
+            speechCached(voice.name, words)?.also {
+                // A first piece that came with the answer: counted once, as such, in Activity's timing line.
+                if (speechAnswerClips.remove(os.meka.core.domain.SpeechRules.cacheKey(voice.name, words))) {
+                    speechTimed(nowMs(), 0L, os.meka.core.domain.SpeechTiming.Outcome.WITH_ANSWER)
+                    speechUnreachable = false
+                    speechOfflineSaid = false
+                }
+            }
+        }?.let { return it }
         val wait = os.meka.core.domain.SpeechRules.budgetMs(first, reading, hold)
         val started = nowMs()
         // Set here and kept on the core below: no core hop inside the timeout (a test's virtual clock would fire it).
@@ -9175,6 +9197,16 @@ class MekaCore(
         val chosen = mekaVoice.chosen()
         if (chosen == os.meka.core.domain.MekaVoiceRules.DEVICE || nowMs() < speechQuietUntilMs) return null
         return SpeechVoice(chosen)
+    }
+
+    /** Keeps a first piece the server said with a spoken answer ([AskReply.Answered.firstAudio]) ready for [speechClip]. */
+    private fun speechWithAnswer(voice: String?, words: String, audio: String) {
+        val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words.trim())
+        speechClips.remove(key)
+        speechClips[key] = audio
+        speechAnswerClips += key
+        while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechClips.keys.first().also { speechClips.remove(it) })
+        while (speechAnswerClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechAnswerClips.first())
     }
 
     private fun speechCached(voice: String?, words: String): String? {

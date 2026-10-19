@@ -109,6 +109,7 @@ object SpeechRules {
                 SpeechTiming.Outcome.SPOKEN -> seconds(t.ms) + if (t.bluetooth) " + Bluetooth" else ""
                 SpeechTiming.Outcome.LATE -> "late"
                 SpeechTiming.Outcome.FAILED -> "no answer"
+                SpeechTiming.Outcome.WITH_ANSWER -> WITH_ANSWER + if (t.bluetooth) " + Bluetooth" else ""
             }
         }
         val spoken = last.filter { it.outcome == SpeechTiming.Outcome.SPOKEN }.map { it.ms + if (it.bluetooth) BLUETOOTH_MS else 0L }.sorted()
@@ -116,6 +117,12 @@ object SpeechRules {
         val bt = if (last.any { it.bluetooth && it.outcome == SpeechTiming.Outcome.SPOKEN }) BLUETOOTH_NOTE else ""
         return "$TIMING_LABEL · ${parts.joinToString(" · ")}$middle$bt"
     }
+
+    /**
+     * Voice completeness, slice 3 (the first words sooner): a spoken answer's first piece that came with the answer itself
+     * (no wait of its own), shown so in [timingLine] and left out of its middle.
+     */
+    const val WITH_ANSWER = "with the answer"
 
     /**
      * Voice completeness (2026-10-19): what headphones or car audio add before he hears a clip. Android and macOS don't
@@ -329,7 +336,7 @@ object SpeechRules {
  * ([Outcome.FAILED]).
  */
 data class SpeechTiming(val atMs: Long, val ms: Long, val outcome: Outcome, val bluetooth: Boolean = false) {
-    enum class Outcome { SPOKEN, LATE, FAILED }
+    enum class Outcome { SPOKEN, LATE, FAILED, WITH_ANSWER }
 }
 
 /**

@@ -61,6 +61,13 @@ object AskCodec {
         val items: List<Item>,
         val history: List<Turn> = emptyList(),
         val voice: Boolean = false,
+        /**
+         * Voice completeness, slice 3 (the first words sooner): a spoken question ([voice]) whose answer the device will
+         * say in Navilife's voice asks the server to say the answer's first piece in [speakVoice] (null: the default)
+         * with the answer, so the device needn't ask for it after. Left out of the JSON when false.
+         */
+        val speak: Boolean = false,
+        val speakVoice: String? = null,
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -74,8 +81,15 @@ object AskCodec {
         val minutes: Int? = null,
     )
 
-    /** [state]: answered · off (no key) · over (the month's budget is spent) · failed ([reason] says why). */
-    data class Response(val state: String, val answer: String? = null, val actions: List<Action> = emptyList(), val reason: String? = null) {
+    /**
+     * [state]: answered · off (no key) · over (the month's budget is spent) · failed ([reason] says why). [firstText] and
+     * [firstAudio] (base64 MP3, said by [firstVoice]): the answer's first spoken piece, when the request asked to
+     * [Request.speak] and the voice answered in time; both or neither.
+     */
+    data class Response(
+        val state: String, val answer: String? = null, val actions: List<Action> = emptyList(), val reason: String? = null,
+        val firstText: String? = null, val firstAudio: String? = null, val firstVoice: String? = null,
+    ) {
         companion object {
             const val ANSWERED = "answered"
             const val OFF = "off"
@@ -102,6 +116,10 @@ object AskCodec {
             }
         }
         if (r.voice) put("voice", true)
+        if (r.speak) {
+            put("speak", true)
+            r.speakVoice?.let { put("speakVoice", it) }
+        }
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("ask request") {
@@ -137,8 +155,13 @@ object AskCodec {
         }
         require(history.size <= MAX_HISTORY) { "history" }
         val voice = (o["voice"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
-        Request(q, date, now, items, history, voice)
+        val speak = voice && (o["speak"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        val speakVoice = if (!speak) null else o.optStr("speakVoice")?.also { require(SPEAK_VOICE.matches(it)) { "speakVoice" } }
+        Request(q, date, now, items, history, voice, speak, speakVoice)
     }
+
+    /** A voice id as [SpeechCodec] takes it ("Amy", "Aoede", "Aoede-US"). */
+    private val SPEAK_VOICE = Regex("[A-Za-z]{2,20}(-US)?")
 
     fun encodeResponse(r: Response): String = buildJsonObject {
         put("w", WireCodec.VERSION)
@@ -146,6 +169,11 @@ object AskCodec {
         r.answer?.let { put("answer", it) }
         r.reason?.let { put("reason", it) }
         putJsonArray("actions") { r.actions.forEach { add(encodeAction(it)) } }
+        if (r.firstText != null && r.firstAudio != null) {
+            put("firstText", r.firstText)
+            put("firstAudio", r.firstAudio)
+            r.firstVoice?.let { put("firstVoice", it) }
+        }
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("ask response") {
@@ -156,7 +184,12 @@ object AskCodec {
             answer = o.optStr("answer"),
             actions = actionsOf(o),
             reason = o.optStr("reason"),
-        )
+        ).let { r ->
+            // The first piece's clip: kept only whole and within SpeechCodec's limits, else simply not there.
+            val text = o.optStr("firstText")?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT }
+            val audio = o.optStr("firstAudio")?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 }
+            if (text == null || audio == null) r else r.copy(firstText = text, firstAudio = audio, firstVoice = o.optStr("firstVoice")?.take(40))
+        }
     }
 
     /**
