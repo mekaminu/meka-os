@@ -10,4 +10,4 @@ mac_where: Ask → Daily → News
 ---
 what: the headlines on the topics you choose, also read in the morning brief and shown on the news widget.
 how: Open News to choose topics and sources; say "the headlines" or "more news" to Talk to hear them.
-tip: A brass dot marks a story you haven't read; Mark all read puts them away, with Undo. Save for the train puts a story's link in your train queue. Under Topics, Sources switches a publisher off everywhere news shows, and Follow takes a team, person or word ("Arsenal, Lamine Yamal"): stories naming one lead News, the ticker and the brief, whatever their topic. The ticker and the brief lead with stories you haven't read; ones you've opened (here or on the other app) only come after every new one.
+tip: A brass dot marks a story you haven't read; Mark all read puts them away, with Undo, and the ticker and brief lead with new ones. Save for the train puts a story's link in your train queue. Under Topics, Sources switches a publisher off everywhere news shows, and Follow takes a team, person or word ("Arsenal, Lamine Yamal"): stories naming one lead News, the ticker and the brief.
