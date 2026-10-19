@@ -41,6 +41,11 @@ import os.meka.core.sync.fv
  * ahead carries its mark beside the hours ([ProtectedRules.dayMark]) and the week a line under its summary
  * ([ProtectedRules.weekLine]). Read only; nothing new stored.
  *
+ * Slice 6 (2026-10-19, [ProtectedMailRules.morningNotice]): **one morning note for what waited.** At 07:00 on the
+ * morning protected time ends, one heads-up says how many business emails came in while it was protected and still
+ * need him, and from whom ("3 work emails waited overnight" · "Sam Taylor, Alex Green and 1 more · in From your mail"),
+ * opening Needs you; its own Notifications row, gone at midday. Nothing new stored.
+ *
  * Later: work notifications (an Outlook work calendar's reminders) wait until morning too.
  */
 object ProtectedFields {
@@ -471,5 +476,82 @@ object ProtectedMailRules {
         if (n <= 0 || untilMs == null) return null
         val what = if (n == 1) "1 business email" else "$n business emails"
         return "Held now · $what till ${untilLabel(untilMs, nowMs, cal)}"
+    }
+
+    // ---- Slice 6: the morning note ----
+
+    const val NOTICE_PREFIX = "protected-mail:"
+    /** The morning note stands until midday; after that the card itself is enough. */
+    const val NOTICE_UNTIL_MIN = 12 * 60
+    private const val LOOK_BACK_DAYS = 14
+
+    /**
+     * Slice 6: when the protected time that ended at [day]'s morning began: the evening's start, or midnight of the
+     * first wholly protected day before it. Null when [day]'s morning didn't end any protected time (a lifted evening,
+     * protected time off, a weekday after an open evening).
+     */
+    fun windowStart(s: ProtectedSetting?, day: Long, schedule: WorkSchedule, holidays: HolidayCalendar, cal: LocalCalendar): Long? {
+        val morning = cal.toEpochMs(day, MORNING_MIN)
+        if (ProtectedRules.protectedUntil(s, morning - 60_000L, schedule, holidays, cal) != morning) return null
+        var start: Long? = null
+        var d = day - 1
+        repeat(LOOK_BACK_DAYS) {
+            if (ProtectedRules.wholeDay(s, d, schedule, holidays)) {
+                start = cal.toEpochMs(d, 0)
+                d -= 1
+            } else {
+                ProtectedRules.eveningFrom(s, d, schedule, holidays)?.let { start = cal.toEpochMs(d, it) }
+                return start ?: cal.toEpochMs(day, 0)
+            }
+        }
+        return start ?: cal.toEpochMs(day, 0)
+    }
+
+    /** "overnight" (from last evening), "since Fri 19:00", "since Sat" (a whole day). */
+    fun sinceLabel(startMs: Long, day: Long, cal: LocalCalendar): String {
+        val startDay = cal.epochDayOf(startMs)
+        val minute = cal.minuteOfDay(startMs)
+        if (startDay == day - 1 && minute > 0) return "overnight"
+        val name = LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(startDay) - 1]
+        return if (minute == 0) "since $name" else "since $name ${LocalClock.formatMinute(minute)}"
+    }
+
+    /**
+     * Slice 6 (the item's "held work notifications arrive as one morning digest with a count"): one heads-up at 07:00
+     * on the morning protected time ends, when business mail held through it still needs him — "3 work emails waited
+     * overnight" · "Sam Taylor, Alex Green and 1 more · in From your mail". Once per morning (one key a day), gone at
+     * midday, opening Needs you; nothing when Work mail shows as it comes, nothing came, or it's still protected.
+     * Never the subjects or the words: only who wrote.
+     */
+    fun morningNotice(
+        items: List<MailItem>, s: ProtectedSetting?, nowMs: Long, schedule: WorkSchedule, holidays: HolidayCalendar, cal: LocalCalendar,
+    ): Notice? {
+        if (s == null || !s.on || !s.holdMail) return null
+        val day = cal.epochDayOf(nowMs)
+        val morning = cal.toEpochMs(day, MORNING_MIN)
+        val until = cal.toEpochMs(day, NOTICE_UNTIL_MIN)
+        if (nowMs < morning || nowMs >= until) return null
+        if (ProtectedRules.protectedUntil(s, nowMs, schedule, holidays, cal) != null) return null
+        val start = windowStart(s, day, schedule, holidays, cal) ?: return null
+        val waited = items.filter { holdable(it) && it.receivedAtMs in start until morning && MailNeedsRules.showing(it, nowMs) }
+            .sortedWith(compareByDescending<MailItem> { it.receivedAtMs }.thenBy { it.id })
+        if (waited.isEmpty()) return null
+        val n = waited.size
+        val title = (if (n == 1) "1 work email waited " else "$n work emails waited ") + sinceLabel(start, day, cal)
+        return Notice(
+            key = "$NOTICE_PREFIX$day", source = NoticeSource.PROTECTED_MAIL, tier = NoticeTier.HEADS_UP,
+            title = title, text = "${whoLine(waited)} · in From your mail",
+            atMs = morning, target = NoticeTarget.NEEDS_YOU, expiresAtMs = until,
+        )
+    }
+
+    /** "Sam Taylor", "Sam Taylor and Alex Green", "Sam Taylor, Alex Green and 2 more" (each sender once, newest first). */
+    fun whoLine(items: List<MailItem>): String {
+        val names = items.map { it.from.trim().ifEmpty { "Someone" } }.distinct()
+        return when {
+            names.size == 1 -> names[0]
+            names.size == 2 -> "${names[0]} and ${names[1]}"
+            else -> "${names[0]}, ${names[1]} and ${names.size - 2} more"
+        }
     }
 }

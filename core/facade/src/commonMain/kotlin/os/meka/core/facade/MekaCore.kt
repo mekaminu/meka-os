@@ -9917,6 +9917,8 @@ class MekaCore(
             moneyMonth = moneyMonthReady(),
             // Balance view, slice 4: Thursday evening's nudge when an area is well short as planned.
             balance = balanceNudge,
+            // Protected time, slice 6: at 07:00 the morning it ends, one note for the business mail that waited.
+            protectedTime = protectedTime.setting(), workSchedule = work.schedule(),
         )
 
     /**

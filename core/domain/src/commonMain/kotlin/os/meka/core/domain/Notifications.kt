@@ -251,6 +251,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * with what's planned · 5 h to find by Sunday". Opens Review.
      */
     BALANCE("Balance: an area short of its target (Thursday)", NoticeTier.HEADS_UP),
+    /**
+     * Protected time, slice 6 ([ProtectedMailRules.morningNotice]): at 07:00 on the morning protected time ends, one
+     * note for the business mail that waited through it — "3 work emails waited overnight" · "Sam Taylor, Alex Green
+     * and 1 more · in From your mail". Opens Needs you.
+     */
+    PROTECTED_MAIL("Work mail that waited (protected time)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jordan · due today"). */
@@ -694,6 +700,7 @@ object Governor {
         NoticeSource.BARCA_RESULT -> if (n == 1) "a Barça result" else "$n Barça results"
         NoticeSource.MEETING_PREP -> if (n == 1) "a meeting to prepare for" else "$n meetings to prepare for"
         NoticeSource.BALANCE -> "an area short of its target"
+        NoticeSource.PROTECTED_MAIL -> "work mail that waited"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -810,6 +817,9 @@ object NoticeSources {
         moneyMonth: Int? = null,
         /** Balance view, slice 4: this week's nudge as planned, if an area is well short ([BalanceRules.notices]). */
         balance: BalanceNudge? = null,
+        /** Protected time, slice 6: the setting and the work schedule, for the morning note on what waited. */
+        protectedTime: ProtectedSetting? = null,
+        workSchedule: WorkSchedule? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -967,6 +977,7 @@ object NoticeSources {
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         out += KidsRules.notices(kids, kidRecords, nowMs, cal)
         out += BalanceRules.notices(balance, nowMs, cal)
+        if (workSchedule != null) ProtectedMailRules.morningNotice(mail, protectedTime, nowMs, workSchedule, holidays, cal)?.let { out += it }
         // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.
         out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal, prepLeadMin)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)

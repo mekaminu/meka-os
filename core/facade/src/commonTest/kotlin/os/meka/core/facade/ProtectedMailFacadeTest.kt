@@ -105,4 +105,24 @@ class ProtectedMailFacadeTest {
         assertEquals(false, fold.protectedView.value.openToday)
         assertNull(fold.mailNeeds.value?.rows?.firstOrNull { it.id == business })
     }
+
+    @Test
+    fun mondayMorningBringsOneNoteForTheWorkMailThatWaited() = runTest {
+        email("m4", "Invoice question", "Business") // Sat 08:30, inside the weekend's protected time
+        email("m5", "Football on Saturday", "Personal")
+        val fold = core("android")
+        fold.syncNow()
+        fold.setProtectedTime(evenings = true, fromMin = 19 * 60, weekends = true)
+        fun waited(r: os.meka.core.domain.GovernorResult) = r.post.filter { it.source == os.meka.core.domain.NoticeSource.PROTECTED_MAIL }
+        // Still the weekend: nothing.
+        assertEquals(0, waited(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).size)
+        now += 45 * hour + 35 * 60_000L // Mon 19 Oct, 07:05
+        fold.tick()
+        val gov = fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = waited(gov).single()
+        assertEquals("1 work email waited since Fri 19:00", n.title)
+        assertEquals("Sam Taylor · in From your mail", n.text)
+        assertEquals(os.meka.core.domain.NoticeTarget.NEEDS_YOU, n.target)
+        assertEquals(0, waited(fold.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)).size) // once
+    }
 }
