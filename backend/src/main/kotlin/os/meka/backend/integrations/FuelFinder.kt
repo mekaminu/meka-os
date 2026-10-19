@@ -68,6 +68,8 @@ class FuelFinder internal constructor(
     @Volatile private var refreshing = false
     @Volatile private var lastTryMs = 0L
     @Volatile private var lastFailed = false
+    /** Why the last refresh failed (a status code or an error's class, never a key), for [report]. */
+    @Volatile private var lastError: String? = null
     private var token: Pair<String, Long>? = null
     private val lock = Any()
 
@@ -90,6 +92,29 @@ class FuelFinder internal constructor(
         return FuelCodec.Response(FuelCodec.Response.OK, stations)
     }
 
+    /**
+     * The deploy run's "Fuel prices" notice (Needs Meka #34): whether the keys are in, whether Fuel Finder gave a token
+     * and the prices, and how many forecourts carry each fuel; counts only, never a key, a place or a price. With the
+     * keys in and no copy yet it starts the first fetch, so a fresh deploy proves the keys within a minute or two.
+     */
+    fun report(): String {
+        if (!configured()) return "off · the server has no Fuel Finder keys"
+        val t = now()
+        val c = copy
+        if (c == null || t - c.pricesAtMs > PRICES_MS) kick(t)
+        if (c == null) {
+            return when {
+                refreshing -> "loading · fetching every forecourt's prices"
+                lastFailed -> "failed · ${lastError ?: "Fuel Finder didn't answer"}"
+                else -> "loading · first fetch starting"
+            }
+        }
+        val kinds = FuelKind.entries.joinToString(" · ") { k -> "${k.short} at ${c.sites.count { k in it.prices }}" }
+        val age = ((t - c.pricesAtMs) / 60_000L).coerceAtLeast(0)
+        val failed = if (lastFailed) " · last refresh failed: ${lastError ?: "no answer"}" else ""
+        return "ok · token and prices read · ${c.sites.size} forecourts with prices · $kinds · prices $age min old$failed"
+    }
+
     /** Starts one refresh unless one is running or the last try was under [RETRY_MS] ago. */
     private fun kick(t: Long) {
         synchronized(lock) {
@@ -101,8 +126,10 @@ class FuelFinder internal constructor(
             try {
                 refresh()
                 lastFailed = false
+                lastError = null
             } catch (e: Exception) {
                 lastFailed = true // the old copy (if any) keeps answering
+                lastError = reason(e)
             } finally {
                 refreshing = false
             }
@@ -175,6 +202,11 @@ class FuelFinder internal constructor(
         const val MAX_BATCHES = 60
         private const val MAX_BYTES = 20_000_000
         private val LONDON: ZoneId = ZoneId.of("Europe/London")
+
+        /** A failure's reason for [report]: our own messages ("fuel finder token 401", "empty") or the error's class. */
+        internal fun reason(e: Exception): String =
+            (if (e is IllegalStateException) e.message else null)?.takeIf { it.length <= 60 && it.none { c -> c == '\n' } }
+                ?: e::class.simpleName ?: "error"
 
         private fun JsonObject.str(k: String): String? =
             (this[k] as? JsonPrimitive)?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() && it != "null" }

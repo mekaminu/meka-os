@@ -46,6 +46,8 @@ class NotifyReports(
     private val spam: ((householdId: String) -> String)? = null,
     /** KMS free tier (2026-10-18): the server's KMS-backed reads since start ([os.meka.backend.integrations.KmsMeter]). */
     private val kms: (() -> String)? = null,
+    /** Fuel prices (Needs Meka #34): [os.meka.backend.integrations.FuelFinder.report], counts only. */
+    private val fuel: (() -> String)? = null,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
@@ -72,6 +74,7 @@ class NotifyReports(
             voice = voice?.let { read -> runCatching { read() }.getOrNull() },
             spam = spam?.let { read -> runCatching { read(who.householdId) }.getOrNull() },
             kms = kms?.let { read -> runCatching { read() }.getOrNull() },
+            fuel = fuel?.let { read -> runCatching { read() }.getOrNull() },
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)

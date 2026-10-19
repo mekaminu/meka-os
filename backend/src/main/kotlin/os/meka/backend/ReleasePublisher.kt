@@ -265,7 +265,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms", "publisher-fuel")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -343,6 +343,18 @@ object ReleasePublisherCli {
                     println(spamLine(l.spam))
                     0
                 }
+                "publisher-fuel" -> {
+                    // The report starts the first fetch on a fresh server: give it a few minutes to read every batch.
+                    var line: String? = null
+                    for (attempt in 0 until 8) {
+                        val l = runCatching { client.notifications() }.getOrNull()
+                        line = l?.fuel
+                        if (line != null && !line.startsWith("loading")) break
+                        if (attempt < 7) kotlinx.coroutines.delay(30_000)
+                    }
+                    println(fuelLine(line))
+                    0
+                }
                 "publisher-kms" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=AWS key reads::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -399,6 +411,13 @@ object ReleasePublisherCli {
     const val KMS_WARN_PER_DAY = 130L
     /** Each secret and each account's token read once at start. */
     const val KMS_START_ALLOWANCE = 40L
+
+    /** Fuel prices (Needs Meka #34): one notice, a warning unless the token and prices were read; counts only. */
+    fun fuelLine(line: String?): String {
+        if (line == null) return "::notice title=Fuel prices::the server doesn't report it yet"
+        val ok = line.startsWith("ok ")
+        return "::${if (ok) "notice" else "warning"} title=Fuel prices::$line".replace("%", "%25")
+    }
 
     fun spamLine(line: String?): String {
         if (line == null) return "::notice title=Spam-call lookup::the server doesn't report it yet"

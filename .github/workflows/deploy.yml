@@ -280,6 +280,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-spam "${{ steps.decide.outputs.url }}"
 
+      # Fuel prices (Needs Meka #34): Fuel Finder's token and a full price download through the server's own copy, then
+      # how many forecourts carry each fuel; counts only, never a key, a place or a price.
+      - name: Fuel prices
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-fuel "${{ steps.decide.outputs.url }}"
+
       # KMS free tier (2026-10-18): the server's KMS-backed reads (secrets and sign-in tokens) since it started, and its
       # uptime, so a run sees the caches hold (a warning when the rate would pass about a fifth of the free 20,000 a month).
       - name: AWS key reads

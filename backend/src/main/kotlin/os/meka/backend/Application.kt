@@ -1146,6 +1146,9 @@ fun main(args: Array<String>) {
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
             val speech = speechFromEnv(ds, ai?.budget)?.also { startSpeechWarm(it) }
+            // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys; one instance
+            // answers the phones and the deploy run's "Fuel prices" notice.
+            val fuelFinder = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) }
             // Spam-call lookup (2026-10-17): unknown callers' numbers searched on the web; off until the Brave key is in.
             // Made before the call assistant, which asks it about the caller while they say who they are.
             val numberLookup = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let {
@@ -1212,11 +1215,11 @@ fun main(args: Array<String>) {
                         travel = { hh -> integrations?.travelReport(hh) ?: "off · integrations not running" },
                         voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" },
                         spam = { hh -> numberLookup?.report(hh) ?: "off · the server has no Brave secret set" },
-                        kms = { os.meka.backend.integrations.KmsMeter.reportLine() }),
+                        kms = { os.meka.backend.integrations.KmsMeter.reportLine() },
+                        fuel = { fuelFinder?.report() ?: "off · the server has no Fuel Finder secret set" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
-                    // Car and parking, slice 6: off ("off" to the phone) until Meka pastes the Fuel Finder keys.
-                    fuel = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) },
+                    fuel = fuelFinder,
                     numberLookup = numberLookup,
                     tradingExports = tradingExports,
                     vaultFiles = VaultFiles.fromEnv(),

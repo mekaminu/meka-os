@@ -119,6 +119,30 @@ class FuelFinderTest {
     }
 
     @Test
+    fun theDeployReportStartsTheFirstFetchAndGivesCountsOnly() {
+        keys = null
+        assertEquals("off · the server has no Fuel Finder keys", finder().report())
+        keys = FuelFinderKeys("client-abc", "secret-xyz")
+        val f = finder()
+        assertTrue(f.report().startsWith("loading"))
+        assertEquals(1, queued.size) // the report itself starts the first fetch
+        runQueued()
+        val ok = f.report()
+        assertEquals("ok · token and prices read · 3 forecourts with prices · unleaded at 3 · super unleaded at 0 · diesel at 1 · premium diesel at 0 · prices 0 min old", ok)
+        // Never a key, a place or a price.
+        listOf("client-abc", "secret-xyz", "tok-", "Oak Road", "AB1", "52.1", "139.9").forEach { assertFalse(it in ok, it) }
+        assertTrue(ReleasePublisherCli.fuelLine(ok).startsWith("::notice title=Fuel prices::ok"))
+        // A failed first fetch says why (the status code), and the deploy notice warns.
+        failing = true
+        val g = finder()
+        g.report(); runQueued()
+        val failed = g.report()
+        assertEquals("failed · fuel finder 503", failed)
+        assertTrue(ReleasePublisherCli.fuelLine(failed).startsWith("::warning title=Fuel prices::"))
+        assertEquals("::notice title=Fuel prices::the server doesn't report it yet", ReleasePublisherCli.fuelLine(null))
+    }
+
+    @Test
     fun keysAndRecordsReadSafely() {
         assertNull(FuelFinderKeys.parse("{}"))
         assertNull(FuelFinderKeys.parse("junk"))

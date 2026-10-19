@@ -70,6 +70,9 @@ class NotifyDiagnosticsCodecTest {
         val kms = "KMS-backed reads since start: 9 (secrets 6 · token decrypts 3 · token encrypts 0) · up 3 h 10 min"
         assertEquals(kms, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, kms = kms))).kms)
         assertEquals(null, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null))).kms)
+        val fuel = "ok · token and prices read · 7,900 forecourts with prices · unleaded at 7,800 · prices 3 min old"
+        assertEquals(fuel, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null, fuel = fuel))).fuel)
+        assertEquals(null, NotifyDiagnosticsCodec.decodeLatest(NotifyDiagnosticsCodec.encodeLatest(NotifyDiagnosticsCodec.Latest(null))).fuel)
         assertNull(NotifyDiagnosticsCodec.decodeLatest("""{"w":1,"report":null}""").mail)
     }
 
