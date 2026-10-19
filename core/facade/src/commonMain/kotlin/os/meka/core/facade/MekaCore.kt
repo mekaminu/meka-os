@@ -185,6 +185,8 @@ class MekaCore(
     private val balanceTargets = os.meka.core.domain.BalanceTargets(replica)
     /** Balance view, slice 4: this week's nudge as planned, worked out in [refresh]. */
     private var balanceNudge: os.meka.core.domain.BalanceNudge? = null
+    /** Balance view, slice 5: the choices' stored text before the last "Count as …", for its Undo (set = undoable). */
+    private var balanceCountUndo: Pair<String?, Boolean>? = null
     private val reflections = os.meka.core.domain.Reflections(replica, nowMs)
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val lifeAdmin = os.meka.core.domain.LifeAdmin(replica, nowMs, ZoneCalendar(timeZone))
@@ -4471,6 +4473,27 @@ class MekaCore(
     suspend fun setBalanceTarget(area: String, minutes: Int): String? = onCore {
         val a = os.meka.core.domain.BalanceArea.entries.firstOrNull { it.name == area } ?: return@onCore null
         balanceTargets.set(a, minutes)?.also { refresh() }
+    }
+
+    /**
+     * Balance view, slice 5: "Count as …" for an event with no clear area: every event titled like [title] counts as
+     * [area] ("FAMILY", "HEALTH", "SELF", "WORK"; "NONE" = never counted; "CLEAR" forgets the choice), past weeks too.
+     * Synced. Returns the line to show ("“Swim club” counts as health from now on · on both devices"), or null when
+     * nothing changed; [balanceUndoCountAs] puts it back.
+     */
+    suspend fun balanceCountAs(title: String, area: String): String? = onCore {
+        val before = balanceTargets.choicesText()
+        balanceTargets.countAs(title, area)?.also { balanceCountUndo = before to true; refresh() }
+    }
+
+    /** Slice 5: Undo for the last [balanceCountAs]; false when there's nothing to undo. */
+    suspend fun balanceUndoCountAs(): Boolean = onCore {
+        val (before, ok) = balanceCountUndo ?: return@onCore false
+        if (!ok) return@onCore false
+        balanceCountUndo = null
+        balanceTargets.writeChoices(before)
+        refresh()
+        true
     }
     /** "Done reviewing" for the week on screen; synced. */
     suspend fun reviewDone() = onCore { review.markReviewed(_review.value.weekStart) }
@@ -9660,18 +9683,20 @@ class MekaCore(
                 os.meka.core.domain.ClubChildRules.child(e, marks.clubChildren, ZoneCalendar(timeZone)) ?: os.meka.core.domain.FootballRules.child(e)
             }
             // Slice 2: the reviewed week and the three before it, counted the same way, for each area's trend.
+            // Slice 5: his "Count as …" choices, by title.
+            val chosen = balanceTargets.choices()
             val trendWeeks = os.meka.core.domain.BalanceRules.trendMinutes(
-                _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents, review::habitDays, childOf,
+                _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents, review::habitDays, childOf, chosen,
             )
             _balance.value = os.meka.core.domain.BalanceRules.view(
                 _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents,
-                _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks,
+                _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks, chosen,
             )
             // Slice 4: this week as planned, for Thursday evening's one nudge.
             val thisWeek = os.meka.core.domain.GoalRules.weekStart(todayEpochDay())
             balanceNudge = os.meka.core.domain.BalanceRules.nudge(
                 thisWeek, ZoneCalendar(timeZone), hoursOf(workState, thisWeek), dayEvents, review.habitDays(thisWeek),
-                balanceTargets.targets(), childOf,
+                balanceTargets.targets(), childOf, chosen,
             )
             // Slice 3: the week ahead's balance line, the week it shows counted as planned.
             val ahead = _weekAhead.value
@@ -9679,7 +9704,7 @@ class MekaCore(
                 _weekAhead.value = ahead.withBalance(
                     os.meka.core.domain.BalanceRules.weekAheadLine(
                         ahead.weekStart, ahead.title == "Next week", ZoneCalendar(timeZone), hoursOf(workState, ahead.weekStart),
-                        dayEvents, review.habitDays(ahead.weekStart), balanceTargets.targets(), childOf,
+                        dayEvents, review.habitDays(ahead.weekStart), balanceTargets.targets(), childOf, chosen,
                     ),
                 )
             }

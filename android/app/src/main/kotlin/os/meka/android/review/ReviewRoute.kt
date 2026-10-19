@@ -95,6 +95,8 @@ fun ReviewRoute(core: MekaCore) {
     val balance by core.balanceView.collectAsState()
     // What the last target chip said (Balance view).
     var balanceSaid by remember { mutableStateOf<String?>(null) }
+    // Slice 5: what the last "Count as …" tap said (with Undo).
+    var countSaid by remember { mutableStateOf<String?>(null) }
     // What the last Save said, for the week it was said in; the journal entry just removed (for Undo).
     var reflectSaid by remember { mutableStateOf<Pair<Long, ReflectionSaved>?>(null) }
     var removedEntry by remember { mutableStateOf<ReflectionEntry?>(null) }
@@ -157,6 +159,15 @@ fun ReviewRoute(core: MekaCore) {
                 scope.launch { runCatching { core.setBalanceTarget(area.name, minutes) }.getOrNull()?.let { balanceSaid = it } }
             },
             toggleTargets = { haptics.tick() },
+            countSaid = countSaid,
+            countAs = { title, area ->
+                haptics.light()
+                scope.launch { runCatching { core.balanceCountAs(title, area) }.getOrNull()?.let { countSaid = it } }
+            },
+            undoCount = {
+                haptics.tick()
+                scope.launch { if (runCatching { core.balanceUndoCountAs() }.getOrDefault(false)) countSaid = null }
+            },
             reflection = reflection.takeIf { it.weekStart == week.weekStart },
             reflectSaid = reflectSaid?.takeIf { it.first == week.weekStart }?.second,
             removedEntry = removedEntry,
@@ -191,6 +202,9 @@ private fun Week(
     balanceSaid: String?,
     setTarget: (BalanceArea, Int) -> Unit,
     toggleTargets: () -> Unit,
+    countSaid: String?,
+    countAs: (String, String) -> Unit,
+    undoCount: () -> Unit,
     reflection: ReflectionView?,
     reflectSaid: ReflectionSaved?,
     removedEntry: ReflectionEntry?,
@@ -235,7 +249,7 @@ private fun Week(
         }
 
         // Balance (V2): the week's time across work, family, health and self against his targets.
-        balance?.let { balanceItems(it, balanceSaid, 4, setTarget, toggleTargets) }
+        balance?.let { balanceItems(it, balanceSaid, 4, setTarget, toggleTargets, countSaid, countAs, undoCount) }
 
         // Reflect (weekly reflection): what went well, what to drop, the one thing; the journal under it.
         reflection?.let { reflectionItems(it, reflectSaid, removedEntry, 4, act) }

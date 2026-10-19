@@ -240,4 +240,47 @@ class BalanceTest {
         )
         assertEquals(1, all.count { it.source == NoticeSource.BALANCE })
     }
+
+    @Test
+    fun countAsChoosesTheAreaForEventsWithNoClearAreaByTitle() {
+        val end = at(mon + 7, 9)
+        val plain = BalanceRules.view(mon, end, cal, work, week, habits, emptyMap(), childOf)
+        assertEquals(listOf("Pick up parcel"), plain.unclear.map { it.title })
+        assertEquals("Mon · 1 h", plain.unclear.single().line)
+        assertEquals("pick up parcel", plain.unclear.single().key)
+        // Counted as family: it leaves work's hours and joins family; no longer listed or "not counted".
+        val chosen = BalanceChoices.decode("pick up parcel=f")
+        val v = BalanceRules.view(mon, end, cal, work, week, habits, emptyMap(), childOf, chosen = chosen)
+        assertEquals(7 * 60, row(v, BalanceArea.FAMILY).minutes)
+        assertEquals(39 * 60, row(v, BalanceArea.WORK).minutes)
+        assertTrue(v.unclear.isEmpty())
+        assertNull(v.uncounted)
+        assertEquals(listOf("Pick up parcel" to "Family"), v.choices.map { it.title to it.label })
+        // A choice wins over the word rules, and "don't count" leaves an event out entirely.
+        val over = BalanceChoices.decode("cinema=n|pick up parcel=h")
+        val o = BalanceRules.view(mon, end, cal, work, week, habits, emptyMap(), childOf, chosen = over)
+        assertEquals(60, row(o, BalanceArea.SELF).minutes)
+        assertEquals(75 + 60 + 45 + 60, row(o, BalanceArea.HEALTH).minutes)
+        assertEquals("Not counted", o.choices.first().label)
+        // The same title next week counts as planned too, and the trend counts it in every week.
+        val nextWeek = week.map { it.copy(id = it.id + "n", startAtMs = it.startAtMs + 7 * 86_400_000L, endAtMs = it.endAtMs + 7 * 86_400_000L) }
+        val line = BalanceRules.weekAheadLine(mon + 7, true, cal, work, nextWeek, emptyList(), emptyMap(), childOf, chosen)
+        assertTrue(line!!.contains("family 7 h of 8 h"), line)
+        val t = BalanceRules.trendMinutes(mon + 7, at(mon + 14, 9), cal, work, week + nextWeek, { emptyList() }, childOf, chosen)
+        assertEquals(listOf(0, 0, 7 * 60, 7 * 60), t.map { it.second.getValue(BalanceArea.FAMILY) })
+    }
+
+    @Test
+    fun choicesAreStoredAsOneShortTextNewestFirst() {
+        val c = BalanceChoices.decode("swim club=h| team lunch =n|bad|x=z|=f|swim club=w")
+        assertEquals(listOf("swim club", "team lunch"), c.map.keys.toList())
+        assertEquals(BalanceArea.HEALTH, c.area("swim club"))
+        assertTrue(c.has("team lunch"))
+        assertNull(c.area("team lunch"))
+        assertEquals("swim club=h|team lunch=n", BalanceChoices.encode(c.map))
+        assertEquals("swim club", BalanceRules.key("  Swim   CLUB! "))
+        assertEquals(BalanceChoices.NONE, BalanceChoices.decode(null))
+        val many = (1..80).associate { "e$it" to BalanceArea.SELF as BalanceArea? }
+        assertEquals(BalanceRules.MAX_CHOICES, BalanceChoices.decode(BalanceChoices.encode(many)).map.size)
+    }
 }

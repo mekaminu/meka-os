@@ -1919,6 +1919,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.barcaResult.label, "Barça full time")
         XCTAssertEqual(NoticeSource.meetingPrep.label, "Meeting prep (before meetings)")
         XCTAssertEqual(NoticeSource.balance.label, "Balance: an area short of its target (Thursday)") // Balance view, slice 4: the weekly nudge, listed like the rest
+        // Balance view, slice 5: the "Count as" chips reach Swift as plain Strings.
+        XCTAssertEqual(BalanceRules.shared.countAsCodes(), ["FAMILY", "HEALTH", "SELF", "WORK", "NONE"])
+        XCTAssertEqual(BalanceRules.shared.countAsLabel(code: "NONE"), "Don't count")
+        XCTAssertEqual(BalanceRules.shared.key(title: "  Choir   PRACTICE! "), "choir practice")
         XCTAssertEqual(MeetingPrepLead.companion.of(key: "30"), MeetingPrepLead.thirty) // Meeting prep, slice 2: the Mail sheet's chips
     }
 

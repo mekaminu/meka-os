@@ -8,6 +8,10 @@ import SwiftUI
 /// Motion: the section staggers in with the review's others; bars fill on appear and glide to a new target; statuses
 /// cross-fade; Targets unfolds in place on the expand spring (the chevron turns); a chip blends to the accent.
 /// Reduce Motion: cross-fades, bars set.
+///
+/// Slice 5: "Count as …": each event with no clear area is listed with chips (Family, Health, Self, Work, Don't count);
+/// a click counts every event with that title (synced with the Fold), the row folds away and the line says so with
+/// Undo. His choices are listed under Targets, each with Forget.
 struct BalanceSection: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -15,6 +19,7 @@ struct BalanceSection: View {
     let palette: MekaPalette
     @State private var open = false
     @State private var said: String?
+    @State private var countSaid: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -26,11 +31,77 @@ struct BalanceSection: View {
             if let u = balance.uncounted {
                 Text(u).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
+            countAs
             Text(balance.sources).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             targets
         }
         .padding(.top, MekaSpace.l)
+    }
+
+    /// Slice 5: the events with no clear area, each with a chip per area; the line after a click with Undo.
+    @ViewBuilder
+    private var countAs: some View {
+        ForEach(Array(balance.unclear.enumerated()), id: \.element.key) { i, u in
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                HStack {
+                    Text(u.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Spacer()
+                    Text(u.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                }
+                HStack(spacing: MekaSpace.xs) {
+                    Text("Count as").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    ForEach(countChoices, id: \.0) { choice in
+                        chip(choice.1, lit: false) { count(u.title, choice.0) }
+                    }
+                }
+            }
+            .staggeredAppear(i)
+            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: balance.unclear.map(\.key))
+        if let s = countSaid {
+            HStack {
+                Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Spacer()
+                Button("Undo") {
+                    Task { if await model.balanceUndoCountAs() { countSaid = nil } }
+                }
+                .buttonStyle(.plain).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+            }
+            .transition(.opacity)
+        }
+    }
+
+    private var countChoices: [(String, String)] {
+        BalanceRules.shared.countAsCodes().map { ($0, BalanceRules.shared.countAsLabel(code: $0)) }
+    }
+
+    private func count(_ title: String, _ code: String) {
+        Task {
+            if let line = await model.balanceCountAs(title, area: code) {
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { countSaid = line }
+            }
+        }
+    }
+
+    /// Slice 5: his "Count as …" choices under Targets, each with Forget.
+    @ViewBuilder
+    private var choices: some View {
+        if !balance.choices.isEmpty {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                Text("Counted as you chose").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                ForEach(balance.choices, id: \.key) { c in
+                    HStack {
+                        Text("\(c.title) · \(c.label)").font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        Spacer()
+                        Button("Forget") { count(c.title, "CLEAR") }
+                            .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.accent)
+                            .accessibilityLabel("Forget how \(c.title) counts")
+                    }
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -63,6 +134,7 @@ struct BalanceSection: View {
                     }
                     .staggeredAppear(i)
                 }
+                choices
                 if let s = said {
                     Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)

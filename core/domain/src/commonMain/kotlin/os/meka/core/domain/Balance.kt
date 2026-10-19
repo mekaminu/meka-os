@@ -34,6 +34,11 @@ import os.meka.core.sync.fv
  * (after the 12:30 digest, before the 18:00 one and protected evenings), when family, health or his own time is well short of its target even with what's still planned that week, one
  * heads-up names the area most short ("Family time is short this week" · "3 h of 8 h with what's planned · 5 h to find
  * by Sunday"), opening Review. Nothing stored; its Notifications row lowers or silences it.
+ *
+ * Slice 5 (2026-10-19): "Count as …" ([BalanceView.unclear], [BalanceChoices]): an event with no clear area is listed
+ * under the balance with Family, Health, Self, Work and Don't count; his choice is kept by the title's words (so a
+ * weekly "Swim club" counts every week, past weeks included) in the synced field [BalanceRules.CHOICES_FIELD] and wins
+ * over the word rules. Choices are listed under Targets, each with Forget.
  */
 enum class BalanceArea(val label: String, val field: String, val defaultMin: Int?, val choices: List<Int>) {
     WORK("Work", "workMin", null, listOf(35, 40, 45, 50).map { it * 60 }),
@@ -51,6 +56,56 @@ data class BalanceWeek(val weekStart: Long, val label: String, val minutes: Int,
 
 /** Slice 4: the week's one nudge, for the area most short of its target as planned. */
 data class BalanceNudge(val weekStart: Long, val area: BalanceArea, val title: String, val text: String)
+
+/**
+ * Slice 5: an event the week had with no clear area, by its title's [key] (lower-case words): "Swim club", "Thu · 1 h"
+ * (or "Tue, Thu · 2 h" when it came more than once), its minutes that week.
+ */
+data class BalanceUnclear(val key: String, val title: String, val line: String, val minutes: Int)
+
+/** Slice 5: one choice he made: "Swim club" · "Health" ("Not counted"), by [key]. */
+data class BalanceChoiceRow(val key: String, val title: String, val label: String)
+
+/**
+ * Slice 5: his "Count as …" choices, title key → area (null = don't count). Stored as one Text field,
+ * "swim club=h|team lunch=n", newest first, at most [BalanceRules.MAX_CHOICES]; keys are lower-case letters, digits and
+ * spaces only, so "|" and "=" never occur in one.
+ */
+data class BalanceChoices(val map: Map<String, BalanceArea?> = emptyMap(), val titles: Map<String, String> = emptyMap()) {
+    /** Whether [key] has a choice, and which ([area] null = don't count). */
+    fun has(key: String): Boolean = key in map
+    fun area(key: String): BalanceArea? = map[key]
+
+    companion object {
+        val NONE = BalanceChoices()
+        private fun code(a: BalanceArea?): String = when (a) {
+            BalanceArea.WORK -> "w"; BalanceArea.FAMILY -> "f"; BalanceArea.HEALTH -> "h"; BalanceArea.SELF -> "s"; null -> "n"
+        }
+        private fun area(code: String): Pair<Boolean, BalanceArea?> = when (code) {
+            "w" -> true to BalanceArea.WORK; "f" -> true to BalanceArea.FAMILY; "h" -> true to BalanceArea.HEALTH
+            "s" -> true to BalanceArea.SELF; "n" -> true to null; else -> false to null
+        }
+
+        /** Reads the stored text; anything malformed is skipped. Entries keep their order (newest first). */
+        fun decode(text: String?): BalanceChoices {
+            if (text.isNullOrBlank()) return NONE
+            val map = LinkedHashMap<String, BalanceArea?>()
+            for (part in text.split('|')) {
+                val eq = part.lastIndexOf('=')
+                if (eq <= 0) continue
+                val key = BalanceRules.key(part.substring(0, eq))
+                val (ok, a) = area(part.substring(eq + 1).trim())
+                if (!ok || key.isEmpty() || key in map) continue
+                map[key] = a
+                if (map.size >= BalanceRules.MAX_CHOICES) break
+            }
+            return BalanceChoices(map)
+        }
+
+        fun encode(map: Map<String, BalanceArea?>): String =
+            map.entries.take(BalanceRules.MAX_CHOICES).joinToString("|") { (k, a) -> "$k=${code(a)}" }
+    }
+}
 
 /** One thing that counted: "Football U10s" · "Sat" · 90 min. */
 data class BalanceItem(val area: BalanceArea, val title: String, val day: Long, val minutes: Int)
@@ -94,6 +149,10 @@ data class BalanceView(
     val sources: String,
     /** "4 events not counted · no clear area" or null. */
     val uncounted: String?,
+    /** Slice 5: the events with no clear area, biggest first, at most [BalanceRules.MAX_UNCLEAR], for "Count as …". */
+    val unclear: List<BalanceUnclear> = emptyList(),
+    /** Slice 5: his choices (newest first), listed under Targets with Forget. */
+    val choices: List<BalanceChoiceRow> = emptyList(),
 ) {
     companion object {
         val EMPTY = BalanceView(0, true, emptyList(), "", BalanceRules.SOURCES, null)
@@ -110,6 +169,18 @@ object BalanceRules {
     const val HABIT_HEALTH_MIN = 45
     const val HABIT_SELF_MIN = 30
     const val MAX_ITEMS = 3
+    /** Slice 5: the synced field holding his "Count as …" choices, and how many are kept / listed. */
+    const val CHOICES_FIELD = "areaTitles"
+    const val MAX_CHOICES = 60
+    const val MAX_UNCLEAR = 5
+    /** The "Count as" chips: the areas, then [DONT_COUNT]. */
+    const val DONT_COUNT = "NONE"
+    val COUNT_AS: List<Pair<String, String>> = listOf(
+        "FAMILY" to "Family", "HEALTH" to "Health", "SELF" to "Self", "WORK" to "Work", DONT_COUNT to "Don't count",
+    )
+    /** The "Count as" codes in order, and a code's chip label (for the Mac, which can't read [COUNT_AS]'s pairs). */
+    fun countAsCodes(): List<String> = COUNT_AS.map { it.first }
+    fun countAsLabel(code: String): String = COUNT_AS.firstOrNull { it.first == code }?.second ?: code
     /** Slice 2: how many weeks the trend shows (the reviewed one included). */
     const val TREND_WEEKS = 4
     /** Work's chip for "his own hours" (clears the set target). */
@@ -152,6 +223,12 @@ object BalanceRules {
         if (sb.isNotEmpty()) out += sb.toString()
         return out
     }
+
+    /** Slice 5: a title's key for "Count as …": its lower-case words joined by spaces, at most 60 characters. */
+    fun key(title: String): String = words(title).joinToString(" ").take(60).trim()
+
+    /** "Swim club" from the key "swim club". */
+    fun keyTitle(key: String): String = key.replaceFirstChar { it.uppercaseChar() }
 
     private fun has(text: String, set: Set<String>, phrases: List<String>): Boolean {
         val ws = words(text)
@@ -246,6 +323,7 @@ object BalanceRules {
         events: List<CalendarEvent>,
         habits: List<Pair<String, List<Boolean>>>,
         childOf: (CalendarEvent) -> String?,
+        chosen: BalanceChoices = BalanceChoices.NONE,
     ): Pair<Map<BalanceArea, Int>, Pair<List<BalanceItem>, Int>> {
         val startMs = cal.toEpochMs(weekStart, 0)
         val endMs = minOf(cal.toEpochMs(weekStart + 7, 0), nowMs)
@@ -261,7 +339,8 @@ object BalanceRules {
         for (e in events) {
             if (e.allDay || e.isFixture || e.endAtMs <= e.startAtMs) continue
             val span = overlap(e.startAtMs to e.endAtMs, startMs to endMs) ?: continue
-            val area = area(e, childOf)
+            val k = if (chosen.map.isEmpty()) "" else key(e.title)
+            val area = if (k.isNotEmpty() && chosen.has(k)) (chosen.area(k) ?: continue) else area(e, childOf)
             if (area == null) { uncounted++; continue }
             val inBlocks = blocks.mapNotNull { overlap(it, span) }
             if (area == BalanceArea.WORK) {
@@ -299,6 +378,51 @@ object BalanceRules {
         return minutes to (items to uncounted)
     }
 
+    /**
+     * Slice 5: the week's timed events with no clear area (and no choice of his), grouped by title key, biggest first:
+     * "Swim club" · "Tue, Thu · 2 h". Counted like [count]: only up to [nowMs], all-day events and fixtures left out.
+     */
+    fun unclear(
+        weekStart: Long,
+        nowMs: Long,
+        cal: LocalCalendar,
+        events: List<CalendarEvent>,
+        childOf: (CalendarEvent) -> String?,
+        chosen: BalanceChoices = BalanceChoices.NONE,
+    ): List<BalanceUnclear> {
+        val startMs = cal.toEpochMs(weekStart, 0)
+        val endMs = minOf(cal.toEpochMs(weekStart + 7, 0), nowMs)
+        if (endMs <= startMs) return emptyList()
+        data class Acc(val title: String, val days: MutableSet<Long> = linkedSetOf(), var spans: MutableList<Pair<Long, Long>> = mutableListOf())
+        val byKey = LinkedHashMap<String, Acc>()
+        for (e in events.sortedBy { it.startAtMs }) {
+            if (e.allDay || e.isFixture || e.endAtMs <= e.startAtMs) continue
+            val span = overlap(e.startAtMs to e.endAtMs, startMs to endMs) ?: continue
+            val k = key(e.title)
+            if (k.isEmpty() || chosen.has(k) || area(e, childOf) != null) continue
+            val acc = byKey.getOrPut(k) { Acc(e.title.trim().take(40)) }
+            acc.days += cal.epochDayOf(span.first)
+            acc.spans += span
+        }
+        return byKey.map { (k, a) ->
+            val min = covered(a.spans).toInt()
+            val days = a.days.sorted().joinToString(", ") { LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(it) - 1] }
+            BalanceUnclear(k, a.title, "$days · ${hours(min)}", min)
+        }.sortedWith(compareByDescending<BalanceUnclear> { it.minutes }.thenBy { it.key })
+    }
+
+    /** Slice 5: his choices as rows for Targets: "Swim club" · "Health" / "Not counted". */
+    fun choiceRows(chosen: BalanceChoices): List<BalanceChoiceRow> = chosen.map.map { (k, a) ->
+        BalanceChoiceRow(k, chosen.titles[k] ?: keyTitle(k), a?.label ?: "Not counted")
+    }
+
+    /** Slice 5: the line after a "Count as …" tap ([area] null = don't count; [forgot] = Forget). */
+    fun countAsLine(title: String, area: BalanceArea?, forgot: Boolean): String = when {
+        forgot -> "“$title” is back to no clear area · on both devices"
+        area == null -> "“$title” won't be counted · on both devices"
+        else -> "“$title” counts as ${area.label.lowercase()} from now on · on both devices"
+    }
+
     private fun itemLine(i: BalanceItem): String =
         if (i.day < 0) "${i.title} · ${hours(i.minutes)}"
         else "${i.title.take(40)} · ${LocalClock.DAY_SHORT[CivilDate.isoDayOfWeek(i.day) - 1]} · ${hours(i.minutes)}"
@@ -314,10 +438,11 @@ object BalanceRules {
         targets: Map<BalanceArea, Int>,
         childOf: (CalendarEvent) -> String? = { null },
         trendWeeks: List<Pair<Long, Map<BalanceArea, Int>>> = emptyList(),
+        chosen: BalanceChoices = BalanceChoices.NONE,
     ): BalanceView {
         val today = cal.epochDayOf(nowMs)
         val isCurrent = today >= weekStart && today < weekStart + 7
-        val (minutes, counted) = count(weekStart, nowMs, cal, work, events, habits, childOf)
+        val (minutes, counted) = count(weekStart, nowMs, cal, work, events, habits, childOf, chosen)
         val (items, uncounted) = counted
         val ownHours = scheduledMin(work, weekStart)
         val rows = BalanceArea.entries.map { a ->
@@ -359,7 +484,8 @@ object BalanceRules {
             workRow.status?.takeIf { workRow.lit }?.let { "work $it" },
         ).joinToString(" · ")
         val notCounted = uncounted.takeIf { it > 0 }?.let { ShutdownRules.count(it, "event") + " not counted · no clear area" }
-        return BalanceView(weekStart, isCurrent, rows, line, SOURCES, notCounted)
+        val unclear = unclear(weekStart, nowMs, cal, events, childOf, chosen).take(MAX_UNCLEAR)
+        return BalanceView(weekStart, isCurrent, rows, line, SOURCES, notCounted, unclear, choiceRows(chosen))
     }
 
     /**
@@ -374,9 +500,10 @@ object BalanceRules {
         events: List<CalendarEvent>,
         habitsFor: (Long) -> List<Pair<String, List<Boolean>>>,
         childOf: (CalendarEvent) -> String?,
+        chosen: BalanceChoices = BalanceChoices.NONE,
     ): List<Pair<Long, Map<BalanceArea, Int>>> = (TREND_WEEKS - 1 downTo 0).map { back ->
         val ws = weekStart - 7L * back
-        ws to count(ws, nowMs, cal, work, events, habitsFor(ws), childOf).first
+        ws to count(ws, nowMs, cal, work, events, habitsFor(ws), childOf, chosen).first
     }
 
     /** "12 Oct" for the week starting [weekStart]. */
@@ -428,9 +555,10 @@ object BalanceRules {
         habits: List<Pair<String, List<Boolean>>>,
         targets: Map<BalanceArea, Int>,
         childOf: (CalendarEvent) -> String? = { null },
+        chosen: BalanceChoices = BalanceChoices.NONE,
     ): String? {
         val endMs = cal.toEpochMs(weekStart + 7, 0)
-        val minutes = count(weekStart, endMs, cal, work, events, habits, childOf).first
+        val minutes = count(weekStart, endMs, cal, work, events, habits, childOf, chosen).first
         if (minutes.values.all { it <= 0 }) return null
         val parts = mutableListOf<String>()
         for (a in listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF)) {
@@ -475,9 +603,10 @@ object BalanceRules {
         habits: List<Pair<String, List<Boolean>>>,
         targets: Map<BalanceArea, Int>,
         childOf: (CalendarEvent) -> String? = { null },
+        chosen: BalanceChoices = BalanceChoices.NONE,
     ): BalanceNudge? {
         val endMs = cal.toEpochMs(weekStart + 7, 0)
-        val minutes = count(weekStart, endMs, cal, work, events, habits, childOf).first
+        val minutes = count(weekStart, endMs, cal, work, events, habits, childOf, chosen).first
         val short = listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF).mapNotNull { a ->
             val target = targets[a] ?: a.defaultMin ?: return@mapNotNull null
             val n = minutes.getValue(a)
@@ -521,6 +650,41 @@ object BalanceRules {
 /** The balance targets on a replica. */
 class BalanceTargets(private val replica: Replica) {
     fun targets(): Map<BalanceArea, Int> = BalanceRules.targets(replica.entity(EntityTypes.CONTEXT_MODE, BalanceRules.ENTITY_ID)?.fields)
+
+    /** Slice 5: the stored text of his "Count as …" choices (null when none). */
+    fun choicesText(): String? = replica.entity(EntityTypes.CONTEXT_MODE, BalanceRules.ENTITY_ID)?.fields
+        ?.get(BalanceRules.CHOICES_FIELD)?.textOrNull
+
+    /** Slice 5: his "Count as …" choices. */
+    fun choices(): BalanceChoices = BalanceChoices.decode(choicesText())
+
+    /**
+     * Slice 5: "Count as …": the events titled like [title] count as [area] ([BalanceRules.DONT_COUNT] = never counted;
+     * "CLEAR" forgets the choice). Returns the line to show, or null when nothing changed.
+     */
+    fun countAs(title: String, area: String): String? {
+        val key = BalanceRules.key(title)
+        if (key.isEmpty()) return null
+        val forget = area == "CLEAR"
+        val a = BalanceArea.entries.firstOrNull { it.name == area }
+        if (!forget && a == null && area != BalanceRules.DONT_COUNT) return null
+        val now = choices().map
+        if (forget && key !in now) return null
+        if (!forget && key in now && now[key] == a) return null
+        val next = LinkedHashMap<String, BalanceArea?>()
+        if (!forget) next[key] = a
+        for ((k, v) in now) if (k != key) next[k] = v
+        writeChoices(BalanceChoices.encode(next))
+        return BalanceRules.countAsLine(BalanceRules.keyTitle(key), a, forget)
+    }
+
+    /** Slice 5: puts the stored text back as it was (Undo). */
+    fun writeChoices(text: String?) {
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, BalanceRules.ENTITY_ID,
+            mapOf(BalanceRules.CHOICES_FIELD to (if (text.isNullOrEmpty()) FieldValue.Null else text.fv())),
+        )
+    }
 
     /**
      * Sets [area]'s target to [minutes] a week ([BalanceRules.YOUR_HOURS] or the area's default clears it); returns the

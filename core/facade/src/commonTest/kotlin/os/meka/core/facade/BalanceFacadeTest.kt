@@ -86,4 +86,57 @@ class BalanceFacadeTest {
         fold.tick()
         assertTrue(balance(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
     }
+
+    @Test
+    fun countAsAnEventWithNoClearAreaCountsItOnBothAppsWithUndo() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        // A server-written event with no clear area: Wed 14 Oct, 19:00–20:00 in London (after his hours).
+        val clock = os.meka.core.sync.HlcClock("server", { now })
+        val start = now - 172_800_000L + 10_500_000L
+        var k = 0
+        mapOf(
+            os.meka.core.domain.EventFields.TITLE to os.meka.core.sync.FieldValue.Text("Choir practice"),
+            os.meka.core.domain.EventFields.START_AT to os.meka.core.sync.FieldValue.Int64(start),
+            os.meka.core.domain.EventFields.END_AT to os.meka.core.sync.FieldValue.Int64(start + 3_600_000L),
+            os.meka.core.domain.EventFields.ALL_DAY to os.meka.core.sync.FieldValue.Bool(false),
+            os.meka.core.domain.EventFields.PROVIDER to os.meka.core.sync.FieldValue.Text("google"),
+            os.meka.core.domain.EventFields.ACCOUNT to os.meka.core.sync.FieldValue.Text("a@example.com"),
+            os.meka.core.domain.EventFields.CALENDAR to os.meka.core.sync.FieldValue.Text("Personal"),
+            os.meka.core.domain.EventFields.REMOVED to os.meka.core.sync.FieldValue.Bool(false),
+        ).forEach { (f, v) ->
+            ops.append(os.meka.core.sync.Op("srvsw${k++}", "hh", os.meka.core.domain.EntityTypes.EVENT, "sw1", f, v, clock.now(), emptyList(), "server"))
+        }
+        fold.syncNow(); mac.syncNow()
+        fold.tick()
+        val before = fold.balanceView.value
+        assertEquals("Choir practice", before.unclear.single().title)
+        assertEquals("Wed · 1 h", before.unclear.single().line)
+        assertEquals("1 event not counted · no clear area", before.uncounted)
+        assertTrue(before.choices.isEmpty())
+
+        assertEquals("“Choir practice” counts as health from now on · on both devices", fold.balanceCountAs("Choir practice", "HEALTH"))
+        assertNull(fold.balanceCountAs("Choir practice", "HEALTH"))
+        assertNull(fold.balanceCountAs("Choir practice", "SLEEP"))
+        val after = fold.balanceView.value
+        assertEquals("1 h of 3 h", after.rows.first { it.area == BalanceArea.HEALTH }.line)
+        assertTrue(after.unclear.isEmpty())
+        assertNull(after.uncounted)
+        assertEquals("Choir practice · Health", after.choices.single().let { "${it.title} · ${it.label}" })
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals("1 h of 3 h", mac.balanceView.value.rows.first { it.area == BalanceArea.HEALTH }.line)
+
+        // Undo puts it back to no clear area; Don't count leaves it out without asking; Forget asks again.
+        assertTrue(fold.balanceUndoCountAs())
+        assertEquals(false, fold.balanceUndoCountAs())
+        assertEquals("0 h of 3 h", fold.balanceView.value.rows.first { it.area == BalanceArea.HEALTH }.line)
+        assertEquals(1, fold.balanceView.value.unclear.size)
+        assertEquals("“Choir practice” won't be counted · on both devices", fold.balanceCountAs("choir  PRACTICE", "NONE"))
+        assertTrue(fold.balanceView.value.unclear.isEmpty())
+        assertNull(fold.balanceView.value.uncounted)
+        assertEquals("Not counted", fold.balanceView.value.choices.single().label)
+        assertEquals("“Choir practice” is back to no clear area · on both devices", fold.balanceCountAs("Choir practice", "CLEAR"))
+        assertEquals(1, fold.balanceView.value.unclear.size)
+    }
 }

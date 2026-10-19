@@ -4357,6 +4357,33 @@ final class CoreModel {
         }
     }
 
+    /// Balance view (slice 5): "Count as …" for events titled like `title` ("FAMILY", "HEALTH", "SELF", "WORK",
+    /// "NONE" = don't count, "CLEAR" = forget); only Strings cross. Returns the line to show, or nil when nothing changed.
+    func balanceCountAs(_ title: String, area: String) async -> String? {
+        guard let core else { return nil }
+        do {
+            let line = try await core.balanceCountAs(title: title, area: area)
+            if line != nil { MekaHaptics.light() }
+            return line
+        } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Slice 5: Undo for the last "Count as …"; false when there was nothing to undo.
+    func balanceUndoCountAs() async -> Bool {
+        guard let core else { return false }
+        do {
+            let undone = try await core.balanceUndoCountAs().boolValue
+            if undone { MekaHaptics.tick() }
+            return undone
+        } catch {
+            lastError = error.localizedDescription
+            return false
+        }
+    }
+
     func removeWin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeWin(id: id) } }
 
     // MARK: Weekly reflection (slice 1)

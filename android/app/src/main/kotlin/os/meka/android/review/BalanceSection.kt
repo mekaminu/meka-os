@@ -3,6 +3,7 @@ package os.meka.android.review
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -60,6 +61,10 @@ import os.meka.core.domain.BalanceView
  * Motion (catalogue "Weekly review"): the section staggers in with the review's others; each bar fills on appear and
  * glides to a new target; statuses cross-fade and blend to the accent; Targets unfolds in place (expand spring, the
  * chevron turns, tick haptic); a chip blends to the accent with a light haptic. Reduced motion: cross-fades, bars set.
+ *
+ * Slice 5: "Count as …": each event with no clear area is listed under the balance with chips (Family, Health, Self,
+ * Work, Don't count); a tap counts every event with that title (synced), the row folds away and the line says so with
+ * Undo. His choices are listed under Targets, each with Forget.
  */
 internal fun LazyListScope.balanceItems(
     balance: BalanceView,
@@ -67,6 +72,9 @@ internal fun LazyListScope.balanceItems(
     index: Int,
     onTarget: (BalanceArea, Int) -> Unit,
     onToggle: () -> Unit,
+    countSaid: String? = null,
+    onCountAs: (String, String) -> Unit = { _, _ -> },
+    onUndoCount: () -> Unit = {},
 ) {
     if (balance.rows.isEmpty()) return
     item(key = "h-balance") {
@@ -81,8 +89,9 @@ internal fun LazyListScope.balanceItems(
     item(key = "balance-foot") {
         Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(index)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             balance.uncounted?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            CountAs(balance, countSaid, onCountAs, onUndoCount)
             Text(balance.sources, style = MekaType.caption, color = Meka.colors.textTertiary)
-            Targets(balance, said, onTarget, onToggle)
+            Targets(balance, said, onTarget, onToggle, onCountAs)
         }
     }
 }
@@ -156,10 +165,57 @@ private fun TrendBars(r: BalanceRow) {
     }
 }
 
+/**
+ * Slice 5: "Count as …" for each event with no clear area: its title, when ("Tue, Thu · 2 h") and a chip per area. A
+ * row folds away once chosen (the chosen chip blends to the accent first); the line after a tap cross-fades in with Undo.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, String) -> Unit, onUndo: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+        balance.unclear.forEachIndexed { i, u ->
+            androidx.compose.runtime.key(u.key) {
+                var picked by remember { mutableStateOf<String?>(null) }
+                Column(Modifier.appear(rememberAppearance(i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(u.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                        Text(u.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    }
+                    Text("Count as", style = MekaType.caption, color = Meka.colors.textTertiary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        BalanceRules.COUNT_AS.forEach { (code, label) ->
+                            TargetChip(label, picked == code) { picked = code; onCountAs(u.title, code) }
+                        }
+                    }
+                }
+            }
+        }
+        Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "balance-count-said") { l ->
+            l?.let {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                    Text(
+                        "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Undo") { onUndo() }
+                            .minTouch().padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** "Targets ›": a row of chips per area, unfolding in place; the line the last tap said under them. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun Targets(balance: BalanceView, said: String?, onTarget: (BalanceArea, Int) -> Unit, onToggle: () -> Unit) {
+private fun Targets(
+    balance: BalanceView,
+    said: String?,
+    onTarget: (BalanceArea, Int) -> Unit,
+    onToggle: () -> Unit,
+    onCountAs: (String, String) -> Unit,
+) {
     var open by rememberSaveable { mutableStateOf(false) }
     val reduced = Meka.reducedMotion
     val turn by animateFloatAsState(if (open) 90f else 0f, if (reduced) MekaMotion.appear<Float>(true) else MekaMotion.expand<Float>(false), label = "balance-chevron")
@@ -186,6 +242,23 @@ private fun Targets(balance: BalanceView, said: String?, onTarget: (BalanceArea,
                                     else -> c == r.targetMin
                                 }
                                 TargetChip(if (c == BalanceRules.YOUR_HOURS) "Your hours" else BalanceRules.hours(c), chosen) { onTarget(r.area, c) }
+                            }
+                        }
+                    }
+                }
+                // Slice 5: his "Count as …" choices, each with Forget.
+                if (balance.choices.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text("Counted as you chose", style = MekaType.caption, color = Meka.colors.textTertiary)
+                        balance.choices.forEach { c ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${c.title} · ${c.label}", style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                                Text(
+                                    "Forget", style = MekaType.caption, color = Meka.colors.accent,
+                                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                                        .clickable(role = Role.Button, onClickLabel = "Forget how ${c.title} counts") { onCountAs(c.title, "CLEAR") }
+                                        .minTouch().padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+                                )
                             }
                         }
                     }
