@@ -107,6 +107,11 @@ class WatchTileService : TileService() {
             column.addContent(gap(MekaSpace.xs.value))
                 .addContent(text(it, MekaType.caption, if (v.commuteLit) C.accent else C.textSecondary, 1))
         }
+        // Bin days completeness 2: tonight's bins from 16:00, lit from his reminder's time (the inbox gives way).
+        v.binsLine?.let {
+            column.addContent(gap(MekaSpace.xs.value))
+                .addContent(text(it, MekaType.caption, if (v.binsLit) C.accent else C.textSecondary, 1))
+        }
         // Meeting prep, slice 3: the meeting about to start, lit (the inbox gives way).
         v.prepLine?.let {
             column.addContent(gap(MekaSpace.xs.value))

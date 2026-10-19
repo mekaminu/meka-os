@@ -5183,6 +5183,7 @@ class MekaCore(
 
     /** The watch's bins row, worked out with each refresh (each minute while the watch's screen is on). */
     private var watchBinsNow: os.meka.core.domain.WatchBins? = null
+    private var watchBinRemind: Int = os.meka.core.domain.BinRules.NOTICE_MIN
 
     /** The watch's leave-by row, worked out with each refresh (each minute while the watch's screen is on). */
     private var watchCommuteNow: os.meka.core.domain.WatchCommute? = null
@@ -5370,7 +5371,11 @@ class MekaCore(
         val cal = ZoneCalendar(timeZone)
         val quiet = _notifySettings.value.quiet
         val on = quiet.isQuietAt(now, cal)
-        return os.meka.core.domain.WatchQuietRules.refreshAfterMs(watchHome(), now, on, if (on) quiet.endAfter(now, cal) else null)
+        val after = os.meka.core.domain.WatchQuietRules.refreshAfterMs(watchHome(), now, on, if (on) quiet.endAfter(now, cal) else null)
+        // Bin days completeness 2: the tile's bins line lights at his reminder's time and goes at midnight, on time.
+        val bins = os.meka.core.domain.BinRules.watchChangeInMin(watchBinsNow, cal.minuteOfDay(now), watchBinRemind)
+            ?.let { it * 60_000L - now % 60_000L } ?: return after
+        return minOf(after, bins.coerceAtLeast(1_000L))
     }
 
     /** Galaxy Watch completeness slice 2: "Quiet hours · until 07:00" while Navilife's quiet hours are on; else null. */
@@ -9962,6 +9967,7 @@ class MekaCore(
         _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays, binRemind)
         // Bin days, completeness: tonight's bins on the watch, lit from his reminder's time.
         watchBinsNow = os.meka.core.domain.BinRules.watch(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays, binRemind)
+        watchBinRemind = binRemind
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         val docItems = documents.items()
         _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)

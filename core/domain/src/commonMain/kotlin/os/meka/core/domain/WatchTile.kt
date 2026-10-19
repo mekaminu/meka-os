@@ -58,6 +58,13 @@ data class WatchTileView(
      */
     val commuteLine: String? = null,
     val commuteLit: Boolean = false,
+    /**
+     * Bin days completeness 2: "Bins out tonight · Black bin and food caddy" from 16:00 the evening before a collection
+     * until midnight, lit from his reminder's time like the screen's row ("Bins · not out tonight" when the usual
+     * collection was moved or dropped, never lit); null on other evenings. The inbox gives way to it.
+     */
+    val binsLine: String? = null,
+    val binsLit: Boolean = false,
     /** Galaxy Watch completeness slice 1: "2 to sync" while changes made on the watch wait to be sent; else null. */
     val syncMark: String? = null,
     /** Galaxy Watch completeness slice 2: "Quiet hours · until 07:00" while Navilife's quiet hours are on; else null. */
@@ -131,8 +138,8 @@ object WatchTileRules {
             if (f.running) add("${f.title}, ${spokenClock(f.clock)}")
             button?.let { add("Double tap ${it.label} to ${it.label.lowercase()}") }
         }.joinToString(". ") + "." + (home.prep?.let { " " + it.spoken } ?: "") + (home.match?.let { " " + it.spoken } ?: "") +
-            (home.commute?.let { " " + it.spoken } ?: "") + (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
-        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null && home.prep == null && home.commute == null }
+            (home.commute?.let { " " + it.spoken } ?: "") + (home.bins?.let { " " + it.spoken } ?: "") + (parking?.let { " " + it.spoken } ?: "") + (home.inbox?.let { " " + it.spoken } ?: "")
+        val inbox = home.inbox?.takeIf { fastLine == null && parking == null && home.match == null && home.prep == null && home.commute == null && home.bins == null }
         return WatchTileView(
             label = home.label, lit = home.lit, title = title, line = home.line,
             button = button, buttonId = button?.let(::pressId), fastLine = fastLine, fastReached = f.running && f.reached,
@@ -141,6 +148,7 @@ object WatchTileRules {
             matchLine = home.match?.short, matchLit = home.match?.lit == true,
             prepLine = home.prep?.short,
             commuteLine = home.commute?.short, commuteLit = home.commute?.lit == true,
+            binsLine = home.bins?.short, binsLit = home.bins?.lit == true,
         )
     }
 

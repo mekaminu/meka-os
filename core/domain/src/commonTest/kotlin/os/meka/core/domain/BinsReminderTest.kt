@@ -95,4 +95,42 @@ class BinsReminderTest {
         assertEquals("No food caddy collection", w.line)
         assertEquals("Nothing goes out tonight", w.note)
     }
+
+    @Test
+    fun theTileCarriesTonightsBinsAndTheInboxGivesWay() {
+        val bins = listOf(bin("Black bin", 2, 2, d(10, 13)), bin("Food caddy", 2, 1, d(10, 13)))
+        val w = BinRules.watch(bins, mon, 18 * 60, none, 20 * 60)!!
+        val now = cal.toEpochMs(mon, 18 * 60)
+        val home = WatchHomeView("YOU'RE CLEAR", false, "Nothing else today", null, emptyList(), null,
+            WatchHomeRules.fast(FastingView.EMPTY, now), WatchHomeRules.inbox(3, null), bins = w)
+        val tile = WatchTileRules.tile(home)
+        assertEquals("Bins out tonight · Black bin and food caddy", tile.binsLine)
+        assertFalse(tile.binsLit)
+        assertNull(tile.inboxLine, "the inbox gives way")
+        assertTrue(tile.spoken.contains("Black bin and food caddy go out tonight."))
+        val lit = WatchTileRules.tile(home.copy(bins = BinRules.watch(bins, mon, 20 * 60, none, 20 * 60)))
+        assertTrue(lit.binsLit)
+        // No bins tonight: the inbox is back and nothing about bins.
+        val calm = WatchTileRules.tile(home.copy(bins = null))
+        assertNull(calm.binsLine)
+        assertEquals(home.inbox!!.short, calm.inboxLine)
+        // Quiet hours drop the inbox but keep the bins.
+        val quiet = WatchQuietRules.tile(tile, home, "Quiet hours · until 07:00")
+        assertEquals(tile.binsLine, quiet.binsLine)
+    }
+
+    @Test
+    fun theTileIsRedrawnAtHisReminderTimeAndAtMidnight() {
+        val bins = listOf(bin("Black bin", 2, 2, d(10, 13)))
+        val early = BinRules.watch(bins, mon, 18 * 60 + 30, none, 20 * 60)
+        assertEquals(90, BinRules.watchChangeInMin(early, 18 * 60 + 30, 20 * 60), "lights at 20:00")
+        val lit = BinRules.watch(bins, mon, 20 * 60, none, 20 * 60)
+        assertEquals(4 * 60, BinRules.watchChangeInMin(lit, 20 * 60, 20 * 60), "gone at midnight")
+        assertEquals(1, BinRules.watchChangeInMin(lit, 24 * 60 - 1, 20 * 60))
+        assertNull(BinRules.watchChangeInMin(null, 18 * 60, 20 * 60))
+        // A dropped collection never lights: only midnight.
+        val dropped = listOf(bin("Food caddy", 2, 1, d(10, 13), listOf(BinMove("m", "Food caddy", d(10, 13), null))))
+        val w = BinRules.watch(dropped, mon, 17 * 60, none, 20 * 60)
+        assertEquals(7 * 60, BinRules.watchChangeInMin(w, 17 * 60, 20 * 60))
+    }
 }

@@ -112,6 +112,8 @@ object BinRules {
     const val SETTING_ID = "bins_reminder"
     const val REMIND_FIELD = "remindMinute"
     const val STALE_MIN = 7 * 60
+    /** The watch's label while bins go out tonight. */
+    const val OUT_LABEL = "OUT TONIGHT"
 
     const val ADD_HINT = "Add… (Black bin Tue fortnightly from 13 Oct, Food caddy every Tue)"
     const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
@@ -439,7 +441,18 @@ object BinRules {
         }
         val note = (listOfNotNull(notes(going, today + 1).removePrefix(" · ").takeIf { it.isNotEmpty() }) + held)
             .joinToString(" · ").takeIf { it.isNotEmpty() }
-        return WatchBins("OUT TONIGHT", minuteOfDay >= remindMinute, names(going), note, "Bins out tonight · ${names(going)}", tonight.spoken)
+        return WatchBins(OUT_LABEL, minuteOfDay >= remindMinute, names(going), note, "Bins out tonight · ${names(going)}", tonight.spoken)
+    }
+
+    /**
+     * Bin days completeness 2: minutes from [minuteOfDay] until the watch's bins row next changes — his reminder's time
+     * while bins still to go out aren't lit yet, else midnight (when the row goes) — so the tile is redrawn on time even
+     * in quiet hours' hourly rest. Null while there's no row ([w] null).
+     */
+    fun watchChangeInMin(w: WatchBins?, minuteOfDay: Int, remindMinute: Int = NOTICE_MIN): Int? {
+        if (w == null) return null
+        val at = if (!w.lit && w.label == OUT_LABEL && minuteOfDay < remindMinute) remindMinute else 24 * 60
+        return (at - minuteOfDay).coerceAtLeast(1)
     }
 
     /** "Sat 2 Jan instead of Wed 30 Dec" / "No collection on Tue 29 Dec". */

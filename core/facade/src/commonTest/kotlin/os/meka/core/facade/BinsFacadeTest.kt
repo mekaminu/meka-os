@@ -114,4 +114,31 @@ class BinsFacadeTest {
         val eight = mac.governNotifications(seven.stateEncoded, DeviceAlerts.ALL)
         assertEquals(listOf("Food caddy out tonight"), bins(eight).map { it.title })
     }
+
+    @Test
+    fun theWatchTileCarriesTonightsBinsAndIsRedrawnAtTheReminderAndAtMidnight() = runTest {
+        val fold = core("android")
+        fold.addBin("Food caddy every Tuesday")
+        fold.setBinReminder(20 * 60)
+        fold.setQuietHours(true, 17 * 60, 7 * 60)
+        // Monday 16:00: the tile says it, not lit; the inbox would give way.
+        now += 2 * 24 * 3_600_000L + 6 * 3_600_000L
+        fold.tick()
+        assertEquals("Bins out tonight · Food caddy", fold.watchTile().binsLine)
+        assertEquals(false, fold.watchTile().binsLit)
+        // 19:50, in quiet hours (a calm tile rests an hour): redrawn at 20:00 instead, when it lights.
+        now += 3 * 3_600_000L + 50 * 60_000L
+        fold.tick()
+        assertEquals(10 * 60_000L, fold.watchRefreshAfterMs())
+        now += 10 * 60_000L
+        fold.tick()
+        assertEquals(true, fold.watchTile().binsLit)
+        // 23:40: redrawn at midnight, when the line goes.
+        now += 3 * 3_600_000L + 40 * 60_000L
+        fold.tick()
+        assertEquals(20 * 60_000L, fold.watchRefreshAfterMs())
+        now += 20 * 60_000L
+        fold.tick()
+        assertNull(fold.watchTile().binsLine)
+    }
 }
