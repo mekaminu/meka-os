@@ -120,8 +120,8 @@ class NewsReadFacadeTest {
         fold.syncNow(); mac.syncNow()
         assertEquals(listOf("ai-0"), mac.newsPlace.value.items.map { it.id })
 
-        assertEquals("Following Oakfield Rovers and Bitcoin · stories naming them lead News", fold.newsFollow("Oakfield Rovers, bitcoin"))
-        assertEquals("Already following Bitcoin", fold.newsFollow("BITCOIN"))
+        assertEquals("Following Oakfield Rovers and bitcoin · stories naming them lead News", fold.newsFollow("Oakfield Rovers, bitcoin"))
+        assertEquals("Already following BITCOIN", fold.newsFollow("BITCOIN"))
         assertEquals("Type a word or name to follow, at least two letters", fold.newsFollow(" , x"))
         fold.syncNow(); mac.syncNow()
         val place = mac.newsPlace.value
