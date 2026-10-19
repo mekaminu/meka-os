@@ -43,6 +43,25 @@ interface NewsProvider {
     fun headlines(topic: String): List<RemoteHeadline>
     /** Headlines mirrored per topic (fixed slots, so the number of entities never grows). */
     val slots: Int get() = 4
+    /** Full news hub, slice 5: the feeds that failed at their last tries, for the apps' News (see [FeedHealth]). */
+    fun feedsDown(): List<FeedDown> = emptyList()
+}
+
+/** Full news hub, slice 5: one feed that failed (or had nothing usable) at its last [fails] tries in a row, since [sinceMs]. */
+data class FeedDown(val source: String, val topic: String, val sinceMs: Long, val fails: Int)
+
+/**
+ * Which feeds are failing, kept in memory per provider: a read that works clears its feed, one that fails starts or
+ * extends its run. A restart forgets it (the next failing tries report it again). Only names and times, never content.
+ */
+class FeedHealth(private val now: () -> Long = System::currentTimeMillis) {
+    private val down = LinkedHashMap<String, FeedDown>()
+    @Synchronized fun ok(key: String) { down.remove(key) }
+    @Synchronized fun failed(key: String, source: String, topic: String) {
+        val prev = down[key]
+        down[key] = prev?.copy(fails = prev.fails + 1) ?: FeedDown(source, topic, now(), 1)
+    }
+    @Synchronized fun all(): List<FeedDown> = down.values.toList()
 }
 
 /**
@@ -51,6 +70,9 @@ interface NewsProvider {
  */
 class BbcNewsRss internal constructor(private val fetch: (String) -> String) : NewsProvider {
     constructor() : this(::httpGet)
+
+    /** Full news hub, slice 5: which topics' feeds are failing (tests swap in one on their clock). */
+    internal var health = FeedHealth()
 
     override val id = "news"
     override val source = "BBC News"
@@ -69,8 +91,19 @@ class BbcNewsRss internal constructor(private val fetch: (String) -> String) : N
 
     override val topics: List<String> get() = feeds.keys.toList()
 
-    override fun headlines(topic: String): List<RemoteHeadline> =
-        Rss.parse(fetch(feeds[topic] ?: error("unknown topic"))).sortedByDescending { it.publishedMs }
+    override fun headlines(topic: String): List<RemoteHeadline> {
+        val url = feeds[topic] ?: error("unknown topic")
+        val items = try {
+            Rss.parse(fetch(url))
+        } catch (e: Exception) {
+            health.failed(topic, source, topic)
+            throw e
+        }
+        if (items.isEmpty()) health.failed(topic, source, topic) else health.ok(topic)
+        return items.sortedByDescending { it.publishedMs }
+    }
+
+    override fun feedsDown(): List<FeedDown> = health.all()
 
     companion object {
         private val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).followRedirects(HttpClient.Redirect.NORMAL).build()
@@ -111,6 +144,9 @@ class PublicNewsFeeds internal constructor(
 ) : NewsProvider {
     constructor() : this(DEFAULT_FEEDS, BbcNewsRss::httpGet)
 
+    /** Full news hub, slice 5: which feeds are failing (tests swap in one on their clock). */
+    internal var health = FeedHealth()
+
     override val id = "news_more"
     override val source = "AI, tech and Barça news"
     override val topics: List<String> get() = feeds.map { it.topic }.distinct()
@@ -121,14 +157,23 @@ class PublicNewsFeeds internal constructor(
         require(mine.isNotEmpty()) { "unknown topic" }
         var failed = 0
         val all = mine.flatMap { f ->
-            runCatching {
-                Rss.parseAny(fetch(f.url)).map { tidy(it, f) }.filter { h -> f.match?.containsMatchIn(h.title) ?: true }
-            }.getOrElse { failed++; emptyList() }
+            val key = f.topic + "|" + f.url
+            runCatching { Rss.parseAny(fetch(f.url)) }.fold(
+                onSuccess = { parsed ->
+                    // Nothing usable in a feed that read (a changed format) is as good as down; a match filter keeping
+                    // none of a working feed's items is not.
+                    if (parsed.isEmpty()) health.failed(key, f.source, f.topic) else health.ok(key)
+                    parsed.map { tidy(it, f) }.filter { h -> f.match?.containsMatchIn(h.title) ?: true }
+                },
+                onFailure = { failed++; health.failed(key, f.source, f.topic); emptyList() },
+            )
         }
         if (failed == mine.size) error("no feed for $topic could be read")
         val seen = HashSet<String>()
         return all.sortedByDescending { it.publishedMs }.filter { seen.add(NewsRules.storyKey(it.title)) && seen.add(it.id) }
     }
+
+    override fun feedsDown(): List<FeedDown> = health.all()
 
     /** The publisher on every item; Google News's " - Mundo Deportivo" title suffix moved into the source. */
     private fun tidy(h: RemoteHeadline, f: NewsFeed): RemoteHeadline {

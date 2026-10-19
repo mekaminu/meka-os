@@ -1,6 +1,8 @@
 package os.meka.backend
 
 import os.meka.backend.integrations.BbcNewsRss
+import os.meka.backend.integrations.FeedDown
+import os.meka.backend.integrations.FeedHealth
 import os.meka.backend.integrations.NewsFeed
 import os.meka.backend.integrations.PublicNewsFeeds
 import os.meka.backend.integrations.InMemoryIntegrationStore
@@ -274,5 +276,41 @@ class NewsTest {
         assertTrue(PublicNewsFeeds.DEFAULT_FEEDS.filter { it.topic == "spain" }.any { it.lang == "en" })
         assertTrue(PublicNewsFeeds.BARCA_TITLE.containsMatchIn("Barça v Getafe"))
         assertTrue(!PublicNewsFeeds.BARCA_TITLE.containsMatchIn("Barcaldine floods"))
+    }
+
+    @Test
+    fun feedsThatFailAreRememberedPerFeedUntilTheyReadAgainAndListedForTheApps() {
+        // Full news hub, slice 5.
+        var vergeDown = true
+        var hnEmpty = true
+        val p = PublicNewsFeeds(feeds) { url ->
+            when {
+                url.startsWith("https://verge.") -> if (vergeDown) error("down") else rss(item("v1", "A model", "Tue, 06 Oct 2026 06:00:00 GMT"))
+                url.startsWith("https://openai.") -> rss(item("o1", "Our news", "Tue, 06 Oct 2026 05:00:00 GMT"))
+                url.startsWith("https://hnrss.") -> if (hnEmpty) rss() else rss(item("h1", "Show HN", "Tue, 06 Oct 2026 05:00:00 GMT"))
+                else -> rss(item("x", "Other", "Tue, 06 Oct 2026 05:00:00 GMT"))
+            }
+        }.also { it.health = FeedHealth { now } }
+        val start = now
+        assertEquals(listOf("Our news"), p.headlines("ai").map { it.title }) // one feed down: the topic still reads
+        p.headlines("tech")
+        now += 60 * 60_000L
+        p.headlines("ai")
+        assertEquals(
+            setOf(FeedDown("The Verge", "ai", start, 2), FeedDown("Hacker News", "tech", start, 1)),
+            p.feedsDown().toSet(),
+        )
+        vergeDown = false; hnEmpty = false
+        p.headlines("ai"); p.headlines("tech")
+        assertTrue(p.feedsDown().isEmpty())
+
+        // The BBC's feeds per topic, and the account list carries them (names and times only).
+        val bbc = BbcNewsRss { url -> if (url.contains("/world/")) error("feed down") else rss(item("a1", "Story", "Tue, 06 Oct 2026 05:00:00 GMT")) }
+            .also { it.health = FeedHealth { now } }
+        val store = InMemoryIntegrationStore(knownHouseholds = listOf("home"))
+        val integrations = Integrations(store, InMemoryServerOpStore(), emptyMap(), { null }, noCipher, "https://meka.example", { now }, news = mapOf(bbc.id to bbc))
+        integrations.syncAll()
+        val listed = integrations.accounts("home").single { it.provider == bbc.id }
+        assertEquals(listOf(os.meka.core.wire.WireCodec.FeedDown("BBC News", "world", now, 1)), listed.feedsDown)
     }
 }

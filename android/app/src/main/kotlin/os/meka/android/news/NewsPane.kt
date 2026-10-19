@@ -125,6 +125,8 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
     var followNote by remember { mutableStateOf<String?>(null) }
     var unfollowed by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(followNote) { if (followNote != null) { delay(6_000); followNote = null; unfollowed = null } }
+    // Full news hub, slice 5: which feeds aren't coming through (the server's list, at most every 10 minutes).
+    LaunchedEffect(Unit) { core.refreshNewsSources() }
     BackHandler(enabled = openId != null && eventOpen == null) { openId = null }
     BackHandler(enabled = eventOpen != null) { eventOpen = null }
 

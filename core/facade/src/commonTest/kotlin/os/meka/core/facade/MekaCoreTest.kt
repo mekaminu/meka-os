@@ -1489,6 +1489,29 @@ class MekaCoreTest {
         assertNull(accounts[1].eventsLine)
     }
 
+    @Test
+    fun newsAsksWhichFeedsArentComingThroughAtMostEveryTenMinutes() = runTest {
+        // Full news hub, slice 5: the account list names the feeds down; News shows them after the lanes.
+        val server = EditingTransport(
+            listOf(ConnectedAccount("news_more", "AI, tech and Barça news", "ok", now,
+                newsDown = listOf(os.meka.core.domain.NewsFeedDown("Barca Universal", "barca", now - 3 * 3_600_000L, 3)))),
+        )
+        val fold = core("android", server)
+        assertTrue(fold.newsPlace.value.quiet.none { "Barca Universal" in it })
+        assertTrue(fold.refreshNewsSources())
+        assertEquals(listOf("Barca Universal · Barça · not coming through for 3 h · Navilife keeps trying"), fold.newsPlace.value.quiet.filter { "Barca Universal" in it })
+        // Within ten minutes it doesn't ask again; after, it does, and a feed back up leaves the line.
+        server.list = listOf(ConnectedAccount("news_more", "AI, tech and Barça news", "ok", now))
+        assertFalse(fold.refreshNewsSources())
+        now += 11 * 60_000L
+        server.offline = true
+        assertFalse(fold.refreshNewsSources()) // offline keeps what was known
+        assertTrue(fold.newsPlace.value.quiet.any { "Barca Universal" in it })
+        server.offline = false
+        assertTrue(fold.refreshNewsSources())
+        assertTrue(fold.newsPlace.value.quiet.none { "Barca Universal" in it })
+    }
+
     /** The server's list with mail accounts in it (Inbox autopilot, slice 1). */
     private inner class MailTransport(
         var list: List<ConnectedAccount>,

@@ -1923,6 +1923,12 @@ final class CoreModel {
     func setNewsSource(_ name: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setNewsSource(name: name, on: on) } }
     /// Full news hub, slice 3: follows what he typed ("Arsenal, Lamine Yamal"); stories naming one lead News, the ticker
     /// and the brief on both apps. Only the typed String crosses; the line to show comes back.
+    /// Full news hub, slice 5: asks the server which feeds aren't coming through (at most every 10 minutes);
+    /// `newsPlace` follows on its own.
+    func refreshNewsSources() async {
+        guard let core else { return }
+        _ = try? await core.refreshNewsSources()
+    }
     func newsFollow(_ typed: String) async -> String? {
         guard let core else { return nil }
         do {

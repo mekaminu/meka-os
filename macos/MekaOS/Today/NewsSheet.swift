@@ -61,6 +61,8 @@ struct NewsSheet: View {
         .onAppear {
             if let id = model.newsStoryId { forward = true; openId = id; model.newsStoryId = nil }
         }
+        // Full news hub, slice 5: which feeds aren't coming through, named after the lanes and on their switches.
+        .task { await model.refreshNewsSources() }
     }
 
     /// Full news hub, slice 3: the Follow field, and its line (what following does, or what just changed, with Undo).

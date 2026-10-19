@@ -93,6 +93,17 @@ class WireCodecTest {
         assertEquals(null, WireCodec.decodeAccounts("{\"w\":${WireCodec.VERSION},\"accounts\":[{\"provider\":\"gmail\",\"email\":\"a@b.c\",\"status\":\"error\",\"why\":\"Some Thing\"}]}").single().why)
         // An older server's list (no "edit") reads as read-only.
         assertEquals(false, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"google","email":"a@b.c","status":"ok"}]}""").single().canEdit)
+        // Full news hub, slice 5: a news account's feeds down round-trip; malformed entries are dropped, absent = null.
+        val news = listOf(WireCodec.IntegrationAccount("news_more", "AI, tech and Barça news", "ok", 5L,
+            feedsDown = listOf(WireCodec.FeedDown("Barca Universal", "barca", 1_790_000_000_000L, 3))))
+        assertEquals(news, WireCodec.decodeAccounts(WireCodec.encodeAccounts(news)))
+        assertEquals(null, WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"news","email":"BBC News","status":"ok"}]}""").single().feedsDown)
+        assertEquals(
+            listOf(WireCodec.FeedDown("OK", "ai", 1L, 2)),
+            WireCodec.decodeAccounts("""{"w":${WireCodec.VERSION},"accounts":[{"provider":"news","email":"BBC News","status":"ok","down":[""" +
+                """{"s":"OK","t":"ai","since":1,"n":2},{"s":"","t":"ai","since":1,"n":2},{"s":"X","t":"Bad Topic","since":1,"n":2},""" +
+                """{"s":"X","t":"ai","since":-1,"n":2},{"s":"X","t":"ai","since":1,"n":0},"junk"]}]}""").single().feedsDown,
+        )
         assertEquals("https://accounts.example/x?y=1", WireCodec.decodeConnectUrl(WireCodec.encodeConnectUrl("https://accounts.example/x?y=1")))
     }
 

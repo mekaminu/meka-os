@@ -5357,6 +5357,8 @@ class MekaCore(
         /** Passes [refresh] makes at most when commits keep arriving while it runs (each pass sees them all). */
         private const val MAX_REFRESH_PASSES = 4
         const val FOREGROUND_SYNC_MS: Long = 30_000L
+        /** Full news hub, slice 5: how often opening News asks the server which feeds aren't coming through. */
+        const val NEWS_DOWN_EVERY_MS: Long = 10 * 60_000L
         const val SIGNED_OUT_MESSAGE = "This device was signed out of your server. Reconnect it with the enrolment code; nothing is lost."
         /** The key a platform reports among posted keys when the digest went out ([notificationsPostedKeys]). */
         const val DIGEST_KEY = "meka.digest"
@@ -5405,11 +5407,41 @@ class MekaCore(
         return now
     }
 
+    /** Full news hub, slice 5: the news feeds the server last said it couldn't read (display only, never synced). */
+    private var newsDown: List<os.meka.core.domain.NewsFeedDown> = emptyList()
+    private var newsDownAskedMs: Long? = null
+
+    private suspend fun rememberNewsDown(list: List<ConnectedAccount>) {
+        val down = list.flatMap { it.newsDown }
+        onCore {
+            newsDownAskedMs = nowMs()
+            if (down != newsDown) {
+                newsDown = down
+                refresh()
+            }
+        }
+    }
+
+    /**
+     * Full news hub, slice 5: News asks the server which feeds aren't coming through when it opens (at most every
+     * [NEWS_DOWN_EVERY_MS]); a source not read at its last tries is marked under Topics → Sources and named after the
+     * lanes. Offline keeps what was known. Returns whether it asked.
+     */
+    suspend fun refreshNewsSources(): Boolean {
+        val api = accountsApi ?: return false
+        val last = onCore { newsDownAskedMs }
+        if (last != null && nowMs() - last < NEWS_DOWN_EVERY_MS) return false
+        val list = try { api.accounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null } ?: return false
+        rememberNewsDown(list)
+        return true
+    }
+
     /** Accounts connected for this household, for the Calendars screen. Empty when offline or not connected. */
     suspend fun connectedAccounts(): List<ConnectedAccount> {
         val list = try { accountsApi?.accounts() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         // Offline keeps what was known: the server checks again before sending anything.
         list?.let(::rememberEditing)
+        list?.let { rememberNewsDown(it) }
         // Mail accounts have their own pane (Inbox autopilot); Calendars lists calendars and feeds.
         val accounts = list?.filter { !os.meka.core.domain.MailProviders.isMail(it.provider) } ?: return emptyList()
         // Each signed-in account is titled like its main calendar, with Meka's own name for it when he gave one.
@@ -9585,7 +9617,7 @@ class MekaCore(
                     protectedLine = os.meka.core.domain.ProtectedRules.briefLine(protectedTime.setting(), todayDay, workState.schedule, holidays),
                 )
             }
-        _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone), trainQueue.items())
+        _newsPlace.value = news.place(nowMs(), dayEvents, ZoneCalendar(timeZone), trainQueue.items(), newsDown)
         val weatherNow = os.meka.core.domain.WeatherRules.view(forecast, nowMs(), cal, weatherPlace.wanted(), workForecast, workPlace.wanted(), office)
             // The trains on an office day's commute (Places item 4), under the weather line.
             .copy(route = os.meka.core.domain.RouteRules.todayLine(lineStatus.snapshot(), office, nowMs(), cal))

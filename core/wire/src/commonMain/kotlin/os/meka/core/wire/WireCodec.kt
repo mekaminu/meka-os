@@ -160,7 +160,12 @@ object WireCodec {
         /** The unread count went up (2026-10-18): a mail inbox's total and unread at the last check. Additive: absent = not known. */
         val inboxTotal: Long? = null,
         val inboxUnread: Long? = null,
+        /** Full news hub, slice 5: a news account's feeds that failed at their last tries. Additive: absent = none known. */
+        val feedsDown: List<FeedDown>? = null,
     )
+
+    /** Full news hub, slice 5: one feed the server couldn't read — its source, topic, first failure and tries in a row. */
+    data class FeedDown(val source: String, val topic: String, val sinceMs: Long, val fails: Int)
 
     /** Naming what a mail account is for (Inbox autopilot, slice 1): Personal · Business · Outlook. */
     data class MailLabelChange(val email: String, val label: String)
@@ -223,6 +228,11 @@ object WireCodec {
                 a.why?.let { put("why", it.take(12)) }
                 a.inboxTotal?.let { put("inbox", it) }
                 a.inboxUnread?.let { put("unread", it) }
+                a.feedsDown?.takeIf { it.isNotEmpty() }?.let { list ->
+                    put("down", JsonArray(list.take(MAX_FEEDS_DOWN).map { d ->
+                        buildJsonObject { put("s", d.source.take(60)); put("t", d.topic); put("since", d.sinceMs); put("n", d.fails) }
+                    }))
+                }
             }
         }))
     }
@@ -243,8 +253,22 @@ object WireCodec {
                 why = a["why"]?.jsonPrimitive?.contentOrNull?.take(12)?.takeIf { w -> w.all { it in 'a'..'z' } },
                 inboxTotal = a["inbox"]?.jsonPrimitive?.longOrNull?.takeIf { it >= 0 },
                 inboxUnread = a["unread"]?.jsonPrimitive?.longOrNull?.takeIf { it >= 0 },
+                feedsDown = feedsDown(a["down"]),
             )
         }
+    }
+
+    private const val MAX_FEEDS_DOWN = 40
+    private val topicPattern = Regex("[a-z_]{1,24}")
+
+    /** The down feeds; malformed entries dropped (untrusted names stay plain text, at most 60 characters). */
+    private fun feedsDown(e: JsonElement?): List<FeedDown>? = (e as? JsonArray)?.take(MAX_FEEDS_DOWN)?.mapNotNull { x ->
+        val o = x as? JsonObject ?: return@mapNotNull null
+        val source = (o["s"] as? JsonPrimitive)?.contentOrNull?.trim()?.take(60)?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+        val topic = (o["t"] as? JsonPrimitive)?.contentOrNull?.takeIf { topicPattern.matches(it) } ?: return@mapNotNull null
+        val since = (o["since"] as? JsonPrimitive)?.longOrNull?.takeIf { it >= 0 } ?: return@mapNotNull null
+        val fails = (o["n"] as? JsonPrimitive)?.intOrNull?.takeIf { it >= 1 } ?: return@mapNotNull null
+        FeedDown(source, topic, since, fails)
     }
 
     /**

@@ -295,7 +295,9 @@ class Integrations(
                 why = if (it.provider in mail && it.status == "error") MailCheckRules.read(it.lastError) else null,
                 // The unread count went up (2026-10-18): the inbox's own counts at the last check, for Health and Today.
                 inboxTotal = if (it.provider in mail) mailChecks[it.id]?.inboxTotal else null,
-                inboxUnread = if (it.provider in mail) mailChecks[it.id]?.inboxUnread else null)
+                inboxUnread = if (it.provider in mail) mailChecks[it.id]?.inboxUnread else null,
+                // Full news hub, slice 5: which feeds of a news account aren't coming through (names and times only).
+                feedsDown = news[it.provider]?.feedsDown()?.map { d -> WireCodec.FeedDown(d.source, d.topic, d.sinceMs, d.fails) })
         }
 
     /**

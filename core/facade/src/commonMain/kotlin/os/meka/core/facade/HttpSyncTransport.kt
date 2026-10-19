@@ -42,6 +42,8 @@ data class ConnectedAccount(
      * screenshots: is Hotmail coming through?); [MekaCore.connectedAccounts] fills it in from the mirrored events.
      */
     val eventsLine: String? = null,
+    /** Full news hub, slice 5: a news account's feeds the server couldn't read at its last tries. */
+    val newsDown: List<os.meka.core.domain.NewsFeedDown> = emptyList(),
 ) {
     val needsReconnect: Boolean get() = status == "needs_reconnect"
     /** "Google · meka@gmail.com · synced 08:29" · "Headlines · synced 08:29"; [syncedAt] as the device writes the time. */
@@ -540,7 +542,10 @@ class HttpSyncTransport(
         WireCodec.decodeAccounts(post("/v1/integrations/$provider/editing", WireCodec.encodeEditingChange(WireCodec.EditingChange(email, editing = false))))
             .map(::account)
 
-    private fun account(a: WireCodec.IntegrationAccount) = ConnectedAccount(a.provider, a.email, a.status, a.lastSyncAtMs, a.canEdit)
+    private fun account(a: WireCodec.IntegrationAccount) = ConnectedAccount(
+        a.provider, a.email, a.status, a.lastSyncAtMs, a.canEdit,
+        newsDown = a.feedsDown.orEmpty().map { os.meka.core.domain.NewsFeedDown(it.source, it.topic, it.sinceMs, it.fails) },
+    )
 
     override suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> =
         mail(WireCodec.decodeAccounts(post("/v1/integrations/list", "")))

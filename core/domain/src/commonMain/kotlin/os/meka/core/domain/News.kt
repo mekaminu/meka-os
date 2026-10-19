@@ -195,9 +195,24 @@ data class NewsMatchday(val eventId: String, val title: String, val line: String
  * Full news hub, slice 2: one source's switch under Topics — "BBC News · 8" while on, "Daily Star · off" once off. [stories]
  * counts its stories in the chosen topics over the last two days (0 for an off source with nothing now).
  */
-data class NewsSourceChoice(val key: String, val name: String, val stories: Int, val on: Boolean) {
-    val label: String get() = if (on) "$name · $stories" else "$name · off"
+data class NewsSourceChoice(
+    val key: String, val name: String, val stories: Int, val on: Boolean,
+    /** Full news hub, slice 5: the server couldn't read this source at its last tries ([NewsFeedDown]). */
+    val down: Boolean = false,
+) {
+    val label: String get() = when {
+        !on -> "$name · off"
+        down -> "$name · $stories · not coming through"
+        else -> "$name · $stories"
+    }
 }
+
+/**
+ * Full news hub, slice 5: one feed the server couldn't read (an error, or nothing usable in it) at its last [fails]
+ * tries in a row, since [sinceMs]: the source's name as its stories carry it, and the topic it feeds. Display state
+ * from the server's account list, never synced.
+ */
+data class NewsFeedDown(val source: String, val topic: String, val sinceMs: Long, val fails: Int)
 
 /**
  * Full news hub, slice 3: one word or name he follows — "Arsenal · 3" (stories in the last two days, any topic, from
@@ -397,7 +412,9 @@ object NewsRules {
         if (sources.isEmpty()) return null
         val off = sources.count { !it.on }
         val n = sources.size
+        val down = sources.count { it.on && it.down }
         return "$n source" + (if (n == 1) "" else "s") + " · " + (if (off == 0) "all on" else "$off off") +
+            (if (down > 0) " · $down not coming through" else "") +
             " · tap one to leave its stories out of News and the brief"
     }
 
@@ -571,10 +588,12 @@ object NewsRules {
         queuedLinks: Set<String> = emptySet(),
         sourcesOff: List<String> = emptyList(),
         follows: List<String> = emptyList(),
+        down: List<NewsFeedDown> = emptyList(),
     ): NewsPlace {
         val chosen = topics.filter { it.chosen }.map { it.id }
         val offKeys = sourcesOff.map(::sourceKey).toHashSet()
-        val sources = sources(all, chosen, nowMs, sourcesOff)
+        val downShown = downShown(down, chosen, offKeys)
+        val sources = withDown(sources(all, chosen, nowMs, sourcesOff), downShown)
         val order = LEAD.filter { it in chosen } + chosen.filter { it !in LEAD }
         val seenLinks = HashSet<String>()
         val seenTitles = HashSet<String>()
@@ -616,11 +635,60 @@ object NewsRules {
             else -> "No headlines in the last two days · they refresh every hour"
         }
         // With nothing at all to show, the empty line says it; otherwise each quiet topic gets its own line.
-        val quiet = if (lanes.isEmpty()) emptyList() else order.filter { it !in shown }.map { t ->
+        val quiet = (if (lanes.isEmpty()) emptyList() else order.filter { it !in shown }.map { t ->
             val label = NewsTopics.byId(t)?.label ?: t
             if (t in hiddenBySources) "$label · its sources are off" else "$label · nothing in the last two days"
-        }
+        }) + downLines(downShown, nowMs)
         return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen }, spanish, sources, quiet, followChoices)
+    }
+
+    /** A feed counts as not coming through after this many failed tries in a row (the server reads them hourly). */
+    const val DOWN_AFTER_FAILS = 2
+
+    /**
+     * Full news hub, slice 5: the feeds worth a word — failed [DOWN_AFTER_FAILS]+ tries in a row, feeding a chosen
+     * topic, from a source he has on — one per source (its topics in chip order, the earliest failure), longest down first.
+     */
+    fun downShown(down: List<NewsFeedDown>, chosen: List<String>, offKeys: Set<String>): List<NewsFeedDown> =
+        down.filter { it.fails >= DOWN_AFTER_FAILS && it.topic in chosen && sourceKey(it.source).isNotEmpty() && sourceKey(it.source) !in offKeys }
+            .groupBy { sourceKey(it.source) }
+            .map { (_, feeds) ->
+                val topicsHere = feeds.map { it.topic }.distinct().sortedBy { chosen.indexOf(it) }
+                NewsFeedDown(feeds.first().source.take(MAX_SOURCE_NAME), topicsHere.joinToString(","), feeds.minOf { it.sinceMs }, feeds.maxOf { it.fails })
+            }
+            .sortedWith(compareBy<NewsFeedDown> { it.sinceMs }.thenBy { it.source.lowercase() })
+
+    /**
+     * The source switches with the ones not coming through marked. A down feed whose name carries no stories (an
+     * aggregator like Google News, whose stories carry their publishers' names) gets no switch: its line says it.
+     */
+    fun withDown(sources: List<NewsSourceChoice>, down: List<NewsFeedDown>): List<NewsSourceChoice> {
+        if (down.isEmpty()) return sources
+        val keys = down.map { sourceKey(it.source) }.toHashSet()
+        return sources.map { if (it.on && it.key in keys) it.copy(down = true) else it }
+    }
+
+    /** "Barca Universal · Barça · not coming through for 5 h · Navilife keeps trying", one line per source. */
+    fun downLines(down: List<NewsFeedDown>, nowMs: Long): List<String> = down.map { d ->
+        val topicsLabel = d.topic.split(',').mapNotNull { NewsTopics.byId(it)?.label }.let(::joinAnd)
+        listOf(d.source, topicsLabel.takeIf { it.isNotEmpty() }, "not coming through " + downFor(nowMs - d.sinceMs), "Navilife keeps trying")
+            .filterNotNull().joinToString(" · ")
+    }
+
+    /** "for under an hour" · "for 5 h" · "for 2 days". */
+    fun downFor(ms: Long): String {
+        val h = ms.coerceAtLeast(0) / 3_600_000L
+        return when {
+            h < 1 -> "for under an hour"
+            h < 48 -> "for $h h"
+            else -> "for ${h / 24} days"
+        }
+    }
+
+    private fun joinAnd(xs: List<String>): String = when (xs.size) {
+        0 -> ""
+        1 -> xs[0]
+        else -> xs.dropLast(1).joinToString(", ") + " and " + xs.last()
     }
 
     /** What the fixtures feed adds to a title whose kick-off isn't set yet. */
@@ -803,12 +871,15 @@ class News(private val replica: Replica) {
         dayEvents: List<CalendarEvent> = emptyList(),
         cal: LocalCalendar = LocalCalendar.UTC,
         queued: List<QueueItem> = emptyList(),
+        /** Full news hub, slice 5: the feeds the server last said it couldn't read. */
+        down: List<NewsFeedDown> = emptyList(),
     ): NewsPlace = NewsRules.place(
         inLanguage(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal), spanish(),
         read = readKeys().toHashSet(),
         queuedLinks = queued.filter { !it.done }.map { QueueRules.key(it.url) }.toHashSet(),
         sourcesOff = sourcesOff(),
         follows = follows(),
+        down = down,
     )
 
     /** The read list ([NewsFields.READ]). */
