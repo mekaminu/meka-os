@@ -9,13 +9,19 @@ data class AiDayUse(val feature: String, val calls: Long, val microUsd: Long)
  *
  * "MEKA's AI today · Talk 6 · Ask 2 · Messages 4 · 3¢": Talk's spoken answers first, then typed questions, then what
  * MEKA read for Meka (messages, groups' gists, callers' messages checked for spam, emails sorted), then anything else, and what the
- * day cost at list price. Nothing asked today → no line.
+ * day cost at list price (Navilife's voice too, "Voice 12" clips). Nothing asked today → no line.
  */
 object AiTodayRules {
     const val PREFIX = "Navilife's AI today"
 
+    /**
+     * Navilife's own voice (Amazon Polly) counted in the same budget (voice completeness, 2026-10-19): the server meters
+     * each clip as "voice.polly" at Polly's list price, so Settings and Activity show it as **Voice** (clips, not calls).
+     */
+    const val VOICE_PREFIX = "voice."
+
     /** The groups, in the order they are said, and the server's feature names they gather. */
-    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), MAIL("Mail"), OTHER("Other") }
+    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), MAIL("Mail"), VOICE("Voice"), OTHER("Other") }
 
     fun groupOf(feature: String): Group = when {
         feature == "ask.talk" -> Group.TALK
@@ -25,6 +31,7 @@ object AiTodayRules {
             feature.startsWith("messages.") -> Group.MESSAGES
         feature == "extract.callscam" -> Group.CALLS
         feature.startsWith("mail.") -> Group.MAIL
+        feature.startsWith(VOICE_PREFIX) -> Group.VOICE
         else -> Group.OTHER
     }
 
@@ -71,7 +78,8 @@ object AiSpendRules {
             .map { (g, rows) -> Triple(g, rows.sumOf { it.calls }, rows.sumOf { it.cents }) }
             .sortedWith(compareByDescending<Triple<AiTodayRules.Group, Long, Long>> { it.third }.thenByDescending { it.second }.thenBy { it.first.ordinal })
             .map { (g, calls, cents) ->
-                val c = if (calls == 1L) "1 call" else "$calls calls"
+                val unit = if (g == AiTodayRules.Group.VOICE) "clip" else "call"
+                val c = if (calls == 1L) "1 $unit" else "$calls ${unit}s"
                 AiSpendLine(g.label, "$c · ${cost(cents)}", if (total > 0) (cents.toFloat() / total).coerceIn(0f, 1f) else 0f)
             }
     }

@@ -245,9 +245,20 @@ class AiBudget(
     }
 
     /** Counts a call against its feature and raises the 70 % / 100 % alert once per month each. */
-    fun record(feature: String, model: String, inputTokens: Int, outputTokens: Int) {
+    fun record(feature: String, model: String, inputTokens: Int, outputTokens: Int) =
+        meter(feature, inputTokens, outputTokens, ModelPrices.costMicroUsd(model, inputTokens, outputTokens))
+
+    /**
+     * Counts one priced use that isn't a model call (Navilife's voice: a Polly clip, voice completeness 2026-10-19)
+     * against [feature], at [microUsd], with the same alerts. No tokens; nothing of what was said is kept.
+     */
+    fun recordCost(feature: String, microUsd: Long) = meter(feature, 0, 0, microUsd.coerceAtLeast(0))
+
+    /** Whether the month's budget is spent (the voice then leaves speaking to the device until the 1st). Never throws. */
+    fun over(): Boolean = runCatching { state().level == Level.OVER }.getOrDefault(false)
+
+    private fun meter(feature: String, inputTokens: Int, outputTokens: Int, cost: Long) {
         val m = month()
-        val cost = ModelPrices.costMicroUsd(model, inputTokens, outputTokens)
         store.add(m, feature, inputTokens, outputTokens, cost)
         // The daily count is only for Activity: a failure there never stops the budget's meter.
         runCatching { store.addDay(day(), feature, inputTokens, outputTokens, cost) }

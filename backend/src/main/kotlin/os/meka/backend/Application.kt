@@ -1137,7 +1137,7 @@ fun main(args: Array<String>) {
             )?.also { it.start() }
             // The GitHub build's publishes show in Activity on every device (and wake them, so the update shows soon).
             val releaseActivity = ReleaseActivity(opStore, onWritten = { hh -> push?.serverChanged(hh) })
-            val speech = speechFromEnv(ds)?.also { startSpeechWarm(it) }
+            val speech = speechFromEnv(ds, ai?.budget)?.also { startSpeechWarm(it) }
             // Spam-call lookup (2026-10-17): unknown callers' numbers searched on the web; off until the Brave key is in.
             // Made before the call assistant, which asks it about the caller while they say who they are.
             val numberLookup = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let {

@@ -49,4 +49,18 @@ class AiSpendTest {
         // An older server: the line is as before and nothing unfolds.
         assertEquals(AiStatusView("On · $1.20 of $20 this month", lit = false, canAsk = true), AskRules.statusView("on", null, 120, 2000, "ok"))
     }
+
+    @Test
+    fun navilifesVoiceIsCountedAsClips() {
+        val month = listOf(AiMonthUse("ask.talk", 40, 120), AiMonthUse("voice.polly", 300, 60), AiMonthUse("voice.polly", 1, 0))
+        val lines = AiSpendRules.lines(month)
+        assertEquals(listOf("Talk", "Voice"), lines.map { it.label })
+        assertEquals("301 clips · 60¢", lines[1].detail)
+        assertEquals("1 clip · under 1¢", AiSpendRules.lines(listOf(AiMonthUse("voice.polly", 1, 0))).single().detail)
+        assertEquals(AiTodayRules.Group.VOICE, AiTodayRules.groupOf("voice.polly"))
+        assertEquals(
+            "Navilife's AI today · Talk 3 · Voice 12 · 1¢",
+            AiTodayRules.line(listOf(AiDayUse("voice.polly", 12, 4_000), AiDayUse("ask.talk", 3, 6_000))),
+        )
+    }
 }

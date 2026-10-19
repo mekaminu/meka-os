@@ -295,6 +295,39 @@ class SpeechTest {
     }
 
     @Test
+    fun pollysClipsAreCountedInTheAiBudgetAndStopWhenItIsSpent() {
+        val google = FakePolly(chirp)
+        val polly = FakePolly(gb)
+        val store = InMemoryAiUsageStore()
+        val budget = AiBudget(1_000L, store, nowMs = { now }) // $0.001: 34 generative characters
+        val s = SpeechService(polly, InMemorySpeechUsageStore(), nowMs = { now }, google = google, budget = budget)
+        // A Google clip is inside its free tier: nothing counted.
+        assertEquals(SpeechCodec.Response.SPOKEN, s.speak(SpeechCodec.Request("Good morning, Meka.", "Aoede")).state)
+        assertTrue(store.month("2026-10").isEmpty())
+        // Polly's generative Amy: 15 characters at $30 a million.
+        assertEquals(SpeechCodec.Response.SPOKEN, s.speak(SpeechCodec.Request("Ten past seven.")).state)
+        assertEquals(AiUsage(SpeechService.VOICE_FEATURE, 1, 0, 0, 450), store.month("2026-10").single())
+        assertEquals(450L, store.day("2026-10-09").single().microUsd)
+        // Neural Emma costs less a character.
+        s.speak(SpeechCodec.Request("Ten past seven.", "Emma"))
+        assertEquals(450L + 240, store.month("2026-10").single().microUsd)
+        assertEquals(16L * 10, PollyPrices.microUsd("neural", 10))
+        assertEquals(4L * 10, PollyPrices.microUsd("standard", 10))
+        // Spent: Polly hands back to the device's voice until the 1st, and nothing more is said or counted.
+        s.speak(SpeechCodec.Request("It's a work day, finishing at half five."))
+        val over = s.speak(SpeechCodec.Request("Hi."))
+        assertEquals(SpeechCodec.Response.OVER, over.state)
+        assertEquals(SpeechService.BUDGET_OVER, over.reason)
+        assertEquals(3, polly.said.size)
+        assertEquals(3L, store.month("2026-10").single().calls)
+        // Warming at start is counted too; without a budget nothing changes.
+        val other = InMemoryAiUsageStore()
+        SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, budget = AiBudget(20_000_000L, other, nowMs = { now })).warm()
+        assertEquals(SpeechService.WARM_LINE.length * 30L, other.month("2026-10").single().microUsd)
+        assertEquals(SpeechCodec.Response.SPOKEN, SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }).speak(SpeechCodec.Request("Hi.")).state)
+    }
+
+    @Test
     fun pastNineHundredThousandGoogleCharactersPollySpeaksSoTheFreeTierIsNeverExceeded() {
         val google = FakePolly(chirp)
         val polly = FakePolly(gb)

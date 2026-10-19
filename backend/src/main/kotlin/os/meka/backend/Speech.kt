@@ -192,6 +192,22 @@ class GoogleSpeech internal constructor(
     }
 }
 
+/**
+ * Amazon Polly's list prices (eu-west-2, 2026), in micro-dollars a character: generative $30, neural $16 and standard $4
+ * per million characters. Any AWS free tier is not taken off, so the budget never undercounts.
+ */
+object PollyPrices {
+    const val GENERATIVE_MICRO_USD = 30L
+    const val NEURAL_MICRO_USD = 16L
+    const val STANDARD_MICRO_USD = 4L
+
+    fun microUsd(engine: String, chars: Long): Long = chars.coerceAtLeast(0) * when (engine) {
+        SpeechService.GENERATIVE -> GENERATIVE_MICRO_USD
+        SpeechService.NEURAL -> NEURAL_MICRO_USD
+        else -> STANDARD_MICRO_USD
+    }
+}
+
 /** The month's meter: clips and characters per UTC month. */
 interface SpeechUsageStore {
     fun add(month: String, chars: Long)
@@ -255,6 +271,13 @@ class SpeechService(
     private val google: SpeechEngine? = null,
     private val googleUsage: SpeechUsageStore = InMemorySpeechUsageStore(),
     val googleFallbackAt: Long = GOOGLE_FALLBACK_AT,
+    /**
+     * The AI layer's monthly budget (voice completeness, 2026-10-19: "Polly cost counted in the AI budget"): each Polly
+     * clip is counted in it as [VOICE_FEATURE] at [PollyPrices]' list price, and once the month's budget is spent Polly
+     * answers [SpeechCodec.Response.OVER] (the device's own voice speaks until the 1st). Google's clips stay inside its
+     * free tier, so they cost nothing and aren't counted. Null (no AI layer): Polly's own [capChars] only, as before.
+     */
+    private val budget: AiBudget? = null,
 ) {
     private var cached: Pair<Long, List<SpeechCodec.Voice>>? = null
     private var googleCached: Pair<Long, List<SpeechCodec.Voice>>? = null
@@ -350,12 +373,14 @@ class SpeechService(
         }
         val voice = if (wanted.provider == SpeechCodec.POLLY) wanted else default
         if (usage.used(m) + chars > capChars) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER))
+        if (budget?.over() == true) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = BUDGET_OVER))
         val audio = runCatching { e.synthesize(r.text, voice.id, voice.engine) }.getOrElse {
             return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = UNREACHABLE))
         }
         if (audio.isEmpty()) return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly said nothing"))
         if (audio.size > SpeechCodec.MAX_AUDIO_BYTES) return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly's clip was too long"))
         usage.add(m, chars)
+        meterPolly(chars, voice.engine)
         return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine), audio)
     }
 
@@ -436,7 +461,16 @@ class SpeechService(
         val voice = runCatching { offered() }.getOrNull()?.let(::defaultOf) ?: return
         val m = month()
         if (runCatching { usage.used(m) }.getOrDefault(capChars) + WARM_LINE.length > capChars) return
-        if (runCatching { e.synthesize(WARM_LINE, voice.id, voice.engine) }.isSuccess) runCatching { usage.add(m, WARM_LINE.length.toLong()) }
+        if (runCatching { e.synthesize(WARM_LINE, voice.id, voice.engine) }.isSuccess) {
+            runCatching { usage.add(m, WARM_LINE.length.toLong()) }
+            meterPolly(WARM_LINE.length.toLong(), voice.engine)
+        }
+    }
+
+    /** One Polly clip in the AI budget at list price; a meter failure never stops the voice. */
+    private fun meterPolly(chars: Long, engine: String) {
+        val b = budget ?: return
+        runCatching { b.recordCost(VOICE_FEATURE, PollyPrices.microUsd(engine, chars)) }
     }
 
     /** Reads the voice lists again now (off the request path), keeping the old ones if a provider can't be reached. */
@@ -466,6 +500,9 @@ class SpeechService(
         val PREFERRED_GOOGLE = listOf("Aoede", "Kore", "Leda", "Charon", "Puck", "Orus")
         const val UNREACHABLE = "Couldn't reach Amazon Polly"
         const val OVER = "This month's voice is used up; Navilife's own voice speaks until the 1st"
+        const val BUDGET_OVER = "This month's AI budget is used up; the device's own voice speaks until the 1st"
+        /** The AI budget's feature for Navilife's voice (the apps show it as Voice, counted in clips). */
+        const val VOICE_FEATURE = "voice.polly"
         /** What [warm] says once at start (metered like any clip). */
         const val WARM_LINE = "Hello."
         /** How often the background refresh reads the voice list (well inside the six hours a request would wait). */
@@ -521,7 +558,7 @@ fun startSpeechWarm(speech: SpeechService, periodMs: Long = SpeechService.REFRES
  * Null unless the deployment turns Polly on (`MEKA_SPEECH_ENGINE=polly`) and has a database for the meter. Google's
  * voices come with it when a Google key is in place (its own secret, else the travel times' key; read at use time).
  */
-fun speechFromEnv(ds: DataSource): SpeechService? {
+fun speechFromEnv(ds: DataSource, budget: AiBudget? = null): SpeechService? {
     if (System.getenv("MEKA_SPEECH_ENGINE")?.trim() != "polly") return null
     val speechSecret = System.getenv("MEKA_SPEECH_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
     val mapsSecret = System.getenv("MEKA_MAPS_GOOGLE_SECRET")?.takeIf { it.isNotBlank() }
@@ -529,5 +566,6 @@ fun speechFromEnv(ds: DataSource): SpeechService? {
     return SpeechService(
         PollySpeech(), PostgresSpeechUsageStore(ds),
         google = google, googleUsage = PostgresSpeechUsageStore(ds, "speech_usage_google"),
+        budget = budget,
     )
 }
