@@ -46,6 +46,33 @@ class MoneyFacadeTest {
         "05/10/2026,SALARY OAKFIELD LTD,2500.00\n"
 
     @Test
+    fun aTidiedReceiptShowsUnderItsPaymentOnTheMac() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        val clock = HlcClock("server", { now })
+        var k = 0
+        val receipt = os.meka.core.domain.MailTidiedEmail(
+            os.meka.core.domain.MailTidiedRules.key("acc", "m1"), os.meka.core.domain.MailTidy.RECEIPT, null,
+            CivilDate.toEpochDay(2026, 10, 2) * 86_400_000L + 9 * 3_600_000L, "Tesco", "tesco.example",
+            "Your Tesco order", 4_000, preview = "Bananas, milk, bread and 9 more items",
+        )
+        val emails = listOf(receipt)
+        (os.meka.core.domain.MailAutopilotRules.batchFields(now - 3_600_000L, "Personal", mapOf(os.meka.core.domain.MailTidy.RECEIPT to 1)) +
+            os.meka.core.domain.MailTidiedRules.fields(emails)).forEach { (f, v) ->
+            ops.append(Op("srvrc${k++}", "hh", EntityTypes.MAIL_TIDY, "mt1", f, v, clock.now(), emptyList(), "server"))
+        }
+        fold.openMoney()
+        fold.importMoneyStatement("Current account", statement)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        mac.openMoney()
+        val m = mac.moneyView.value.month!!
+        val tesco = m.txns.single { it.merchant.startsWith("Tesco") }
+        assertEquals("Receipt in your email · “Your Tesco order”", tesco.receipt)
+        assertEquals("Bananas, milk, bread and 9 more items", tesco.receiptDetail)
+        assertEquals("1 of October's payments has a receipt in your email", m.receiptsLine)
+    }
+
+    @Test
     fun lockedUntilOpenedThenSyncsToTheMac() = runTest(timeout = SLOW_RUNNER) {
         val fold = core("android")
         val mac = core("mac")

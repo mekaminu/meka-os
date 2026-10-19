@@ -390,6 +390,9 @@ data class MoneyTxnRow(
     /** Slice 14: counted in the shared costs with his partner ([MoneyShared]); [sharedAlways] when it's the payer's mark. */
     val shared: Boolean = false,
     val sharedAlways: Boolean = false,
+    /** Money at a glance: its receipt or order email ([MoneyReceipts.line]) and the preview's detail, when matched. */
+    val receipt: String? = null,
+    val receiptDetail: String? = null,
 )
 
 data class MoneyAccountRow(val id: String, val name: String, val line: String)
@@ -402,6 +405,8 @@ data class MoneyAccountRow(val id: String, val name: String, val line: String)
 data class MoneyMonth(
     val offset: Int, val label: String, val spentLine: String, val vsLine: String?, val vsLit: Boolean,
     val categories: List<MoneyCategoryRow>, val txns: List<MoneyTxnRow>, val more: Int,
+    /** Money at a glance: "4 payments this month have a receipt in your email" ([MoneyReceipts.monthLine]); null with none. */
+    val receiptsLine: String? = null,
 )
 
 /**
@@ -559,6 +564,8 @@ object MoneyRules {
         challenges: MoneyChallengeSetting = MoneyChallengeSetting(),
         /** Slice 17: the device is outside UK time, and a trip on or near (its name and first day). */
         abroadNow: Boolean = false, trip: Pair<String, Long>? = null,
+        /** Money at a glance: priced receipt and order emails from his tidies ([MoneyReceipts.fromTidies]). */
+        receipts: List<MoneyReceiptMail> = emptyList(),
     ): MoneyView {
         val names = accounts.associate { it.id to it.name }
         val bank = nowMs?.let { MoneyBank.view(bankSync, accounts, bankRemoved, bankAskedAtMs, it, cal) }
@@ -634,18 +641,26 @@ object MoneyRules {
             else -> "About your 6-month average"
         }
         val sorted = cur.sortedWith(compareByDescending<MoneyTxn> { it.day }.thenBy { it.id })
+        // Money at a glance: receipts matched over every line, so one near a month's edge goes to the right payment.
+        val receiptOf = if (receipts.isEmpty()) emptyMap() else MoneyReceipts.match(
+            mine.map { MoneyReceiptLine(it.id, it.day, it.pence, keyOf(it)) },
+            receipts,
+        )
         val rows = sorted.take(SHOWN_TXNS).map { t ->
             val c = cat(t)
             val key = keyOf(t)
             val merchant = MoneyCategoryRules.merchantLabel(key)
+            val r = receiptOf[t.id]
             MoneyTxnRow(
                 id = t.id, day = CivilDate.shortLabel(t.day), merchant = merchant, amount = signed(t.pence), moneyIn = t.pence > 0,
                 category = c.key, categoryLabel = c.label, account = names[t.account].orEmpty(), taught = key in rules,
                 spoken = "${CivilDate.shortLabel(t.day)}, $merchant, ${if (t.pence < 0) "out" else "in"} ${fmt(kotlin.math.abs(t.pence))}, ${c.label}" +
-                    (if (isBiz(t)) ", business" else "") + (if (isShared(t)) ", shared" else ""),
+                    (if (isBiz(t)) ", business" else "") + (if (isShared(t)) ", shared" else "") + (r?.let { MoneyReceipts.spoken(it) } ?: ""),
                 business = isBiz(t),
                 shared = isShared(t),
                 sharedAlways = sharedMerchants[key] == true,
+                receipt = r?.let { MoneyReceipts.line(it) },
+                receiptDetail = r?.let { MoneyReceipts.detail(it) },
             )
         }
         val month = MoneyMonth(
@@ -653,6 +668,7 @@ object MoneyRules {
             spentLine = "Spent ${fmt(spent)}" + (if (income > 0) " · in ${fmt(income)}" else ""),
             vsLine = vsLine, vsLit = !partial && avgTotal != null && spent - avgTotal >= OVER_MIN_PENCE,
             categories = catRows, txns = rows, more = (sorted.size - rows.size).coerceAtLeast(0),
+            receiptsLine = MoneyReceipts.monthLine(cur.count { it.id in receiptOf }, CivilDate.MONTH_LONG[shown % 12]),
         )
         val summary = "${accounts.size} account${if (accounts.size == 1) "" else "s"} · ${mine.size} transactions" +
             (if (merged.hidden > 0) " · ${merged.hidden} in a statement and from your bank, counted once" else "")

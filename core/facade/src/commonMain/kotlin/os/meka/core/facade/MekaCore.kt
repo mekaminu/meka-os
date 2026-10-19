@@ -895,6 +895,8 @@ class MekaCore(
             money.sharedTxns(), money.sharedMerchants(), money.sharedEntries(), money.sharedSetting(), aboutYou.profile().partnerName,
             money.challenges(),
             moneyAbroadNow(), os.meka.core.domain.MoneyTravel.tripNear(trips.items(), todayEpochDay()),
+            // Money at a glance: the receipt and order emails Inbox autopilot tidied, matched to their payments.
+            receipts = os.meka.core.domain.MoneyReceipts.fromTidies(activity.mailTidyBatches(), ZoneCalendar(timeZone)),
         ).let { v ->
             v.copy(
                 trading = os.meka.core.domain.TradingTracker.view(wallets, nowMs(), ZoneCalendar(timeZone), tradingAlertSetting()),

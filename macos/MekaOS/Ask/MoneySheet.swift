@@ -169,6 +169,9 @@ struct MoneySheet: View {
             }
             if !m.txns.isEmpty {
                 Text("PAYMENTS · CLICK ONE TO CHANGE ITS CATEGORY").font(MekaType.caption).foregroundStyle(palette.textTertiary).padding(.top, MekaSpace.xs)
+                if let l = m.receiptsLine {
+                    Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                }
                 ForEach(m.txns, id: \.id) { t in txn(t) }
                 if m.more > 0 {
                     Text("and \(m.more) more this month").font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -1010,6 +1013,13 @@ struct MoneySheet: View {
                     Text(t.merchant).font(MekaType.body).foregroundStyle(palette.textPrimary)
                     Text("\(t.day) · \(t.categoryLabel)\(t.taught ? " · yours" : "")\(t.business ? " · Business" : "")\(t.shared ? " · Shared" : "") · \(t.account)")
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
+                    if let r = t.receipt {
+                        Text(r).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    }
+                    if let d = t.receiptDetail {
+                        Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(2)
+                    }
                 }
                 Spacer()
                 Text(t.amount).font(MekaType.body).foregroundStyle(t.moneyIn ? palette.accent : palette.textPrimary)

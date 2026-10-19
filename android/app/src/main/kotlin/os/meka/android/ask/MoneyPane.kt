@@ -524,6 +524,11 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     Text("PAYMENTS · TAP ONE TO CHANGE ITS CATEGORY", style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
                 }
+                m.receiptsLine?.let { l ->
+                    item(key = "txns-receipts") {
+                        Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.animateItem())
+                    }
+                }
                 m.txns.forEach { t ->
                     item(key = "txn-${t.id}") {
                         TxnRow(t, Modifier.animateItem(),
@@ -984,7 +989,9 @@ private fun TxnRow(
             Column(Modifier.weight(1f)) {
                 Text(t.merchant, style = MekaType.body, color = Meka.colors.textPrimary)
                 Text("${t.day} · ${t.categoryLabel}" + (if (t.taught) " · yours" else "") + (if (t.business) " · Business" else "") + (if (t.shared) " · Shared" else "") + " · ${t.account}",
-                    style = MekaType.caption, color = Meka.colors.textSecondary)
+                    style = MekaType.caption, color = Meka.colors.textSecondary)                // Money at a glance: what the payment was for, from its receipt or order email (the shop's words).
+                t.receipt?.let { r -> Text(r, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                t.receiptDetail?.let { d -> Text(d, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2) }
             }
             Text(t.amount, style = MekaType.body, color = if (t.moneyIn) Meka.colors.accent else Meka.colors.textPrimary)
         }
