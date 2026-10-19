@@ -245,6 +245,12 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * Quote review at 14:00" · "With Sam Taylor · last email Tue 13:02 · you promised 1". Opens Today.
      */
     MEETING_PREP("Meeting prep (before meetings)", NoticeTier.HEADS_UP),
+    /**
+     * Balance view, slice 4 ([BalanceRules.notices]): at most once a week, Thursday at 17:00, when family, health or his
+     * own time is well short of its target even with what's planned — "Family time is short this week" · "3 h of 8 h
+     * with what's planned · 5 h to find by Sunday". Opens Review.
+     */
+    BALANCE("Balance: an area short of its target (Thursday)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jordan · due today"). */
@@ -687,6 +693,7 @@ object Governor {
         NoticeSource.BARCA_GOALS -> if (n == 1) "a Barça goal" else "$n Barça goals"
         NoticeSource.BARCA_RESULT -> if (n == 1) "a Barça result" else "$n Barça results"
         NoticeSource.MEETING_PREP -> if (n == 1) "a meeting to prepare for" else "$n meetings to prepare for"
+        NoticeSource.BALANCE -> "an area short of its target"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -801,6 +808,8 @@ object NoticeSources {
         moneyYear: Int? = null,
         /** Money manager (7): the month whose review is ready (its first days; [MoneyMonthReview.readyMonth]). */
         moneyMonth: Int? = null,
+        /** Balance view, slice 4: this week's nudge as planned, if an area is well short ([BalanceRules.notices]). */
+        balance: BalanceNudge? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -957,6 +966,7 @@ object NoticeSources {
         out += ParcelRules.notices(parcels, nowMs, cal)
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         out += KidsRules.notices(kids, kidRecords, nowMs, cal)
+        out += BalanceRules.notices(balance, nowMs, cal)
         // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.
         out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal, prepLeadMin)
         if (weekAhead != null) out += WeekAheadRules.notices(weekAhead, nowMs, cal, weekAheadSetting, settings.digestMinutes)

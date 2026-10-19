@@ -1918,6 +1918,7 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(NoticeSource.barcaGoals.label, "Barça goals") // slice 2: each goal, then full time, in one place
         XCTAssertEqual(NoticeSource.barcaResult.label, "Barça full time")
         XCTAssertEqual(NoticeSource.meetingPrep.label, "Meeting prep (before meetings)")
+        XCTAssertEqual(NoticeSource.balance.label, "Balance: an area short of its target (Thursday)") // Balance view, slice 4: the weekly nudge, listed like the rest
         XCTAssertEqual(MeetingPrepLead.companion.of(key: "30"), MeetingPrepLead.thirty) // Meeting prep, slice 2: the Mail sheet's chips
     }
 

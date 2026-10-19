@@ -204,4 +204,40 @@ class BalanceTest {
         )
         assertNull(ahead.withBalance(null).balance)
     }
+
+    @Test
+    fun atMostOneNudgeAWeekOnThursdayEveningForTheAreaMostShort() {
+        // As planned the week has family 6 h, health 3 h, self 3 h 30: with the default targets nothing is short enough.
+        assertNull(BalanceRules.nudge(mon, cal, work, week, habits, emptyMap(), childOf))
+        // Family 10 h and health 5 h: both 40% short; family is short by more, so it's named and health rides along.
+        val targets = mapOf(BalanceArea.FAMILY to 10 * 60, BalanceArea.HEALTH to 5 * 60)
+        val n = BalanceRules.nudge(mon, cal, work, week, habits, targets, childOf)!!
+        assertEquals(BalanceArea.FAMILY, n.area)
+        assertEquals("Family time is short this week", n.title)
+        assertEquals("6 h of 10 h with what's planned · 4 h to find by Sunday · health short too", n.text)
+        // Health alone: a different title.
+        val h = BalanceRules.nudge(mon, cal, work, week, habits, mapOf(BalanceArea.HEALTH to 5 * 60), childOf)!!
+        assertEquals("Time for your health is short this week", h.title)
+        assertEquals("3 h of 5 h with what's planned · 2 h to find by Sunday", h.text)
+        // Under an hour short is never named, even well under the share.
+        assertNull(BalanceRules.nudge(mon, cal, work, week, habits, mapOf(BalanceArea.SELF to 4 * 60), childOf))
+
+        val notices = BalanceRules.notices(n, at(mon, 9), cal)
+        assertEquals(1, notices.size)
+        val x = notices.single()
+        assertEquals("balance:$mon", x.key)
+        assertEquals(NoticeSource.BALANCE, x.source)
+        assertEquals(NoticeTier.HEADS_UP, x.tier)
+        assertEquals(NoticeTarget.REVIEW, x.target)
+        assertEquals(at(mon + 3, 17), x.atMs)
+        assertEquals(at(mon + 5, 0), x.expiresAtMs)
+        // From Saturday it's gone, and no nudge means no notice.
+        assertTrue(BalanceRules.notices(n, at(mon + 5, 9), cal).isEmpty())
+        assertTrue(BalanceRules.notices(null, at(mon + 3, 17), cal).isEmpty())
+        // Through the collector like every source.
+        val all = NoticeSources.collect(
+            ListsView.EMPTY, FastingView.EMPTY, ShutdownView.EMPTY, Today(emptyList(), null, emptyList(), emptyList()), at(mon + 3, 17), cal, balance = n,
+        )
+        assertEquals(1, all.count { it.source == NoticeSource.BALANCE })
+    }
 }

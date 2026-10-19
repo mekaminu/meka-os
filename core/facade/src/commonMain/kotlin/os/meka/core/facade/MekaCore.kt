@@ -183,6 +183,8 @@ class MekaCore(
     private val wins = os.meka.core.domain.WorkWins(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     /** Balance view (V2, slice 1): the targets per area, synced. */
     private val balanceTargets = os.meka.core.domain.BalanceTargets(replica)
+    /** Balance view, slice 4: this week's nudge as planned, worked out in [refresh]. */
+    private var balanceNudge: os.meka.core.domain.BalanceNudge? = null
     private val reflections = os.meka.core.domain.Reflections(replica, nowMs)
     private val dateNight = os.meka.core.domain.DateNight(replica, nowMs, ZoneCalendar(timeZone))
     private val lifeAdmin = os.meka.core.domain.LifeAdmin(replica, nowMs, ZoneCalendar(timeZone))
@@ -9665,6 +9667,12 @@ class MekaCore(
                 _review.value.weekStart, nowMs(), ZoneCalendar(timeZone), balanceHours, dayEvents,
                 _review.value.habits.map { it.title to it.days }, balanceTargets.targets(), childOf, trendWeeks,
             )
+            // Slice 4: this week as planned, for Thursday evening's one nudge.
+            val thisWeek = os.meka.core.domain.GoalRules.weekStart(todayEpochDay())
+            balanceNudge = os.meka.core.domain.BalanceRules.nudge(
+                thisWeek, ZoneCalendar(timeZone), hoursOf(workState, thisWeek), dayEvents, review.habitDays(thisWeek),
+                balanceTargets.targets(), childOf,
+            )
             // Slice 3: the week ahead's balance line, the week it shows counted as planned.
             val ahead = _weekAhead.value
             if (ahead.weekStart > 0) {
@@ -9847,6 +9855,8 @@ class MekaCore(
             // Money manager, slice 18: on 2 January, last year's review is ready (read only in January).
             moneyYear = moneyYearReady(),
             moneyMonth = moneyMonthReady(),
+            // Balance view, slice 4: Thursday evening's nudge when an area is well short as planned.
+            balance = balanceNudge,
         )
 
     /**

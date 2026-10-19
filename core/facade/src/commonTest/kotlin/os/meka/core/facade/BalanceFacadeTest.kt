@@ -62,4 +62,28 @@ class BalanceFacadeTest {
         assertEquals(mac.reviewView.value.weekStart, mac.balanceView.value.weekStart)
         assertEquals("40 h 30 of your 40 h 30", mac.balanceView.value.rows.first { it.area == BalanceArea.WORK }.line)
     }
+
+    @Test
+    fun thursdaysNudgeNamesTheAreaMostShortAndPostsOnce() = runTest {
+        val fold = core("android")
+        fun balance(r: os.meka.core.domain.GovernorResult) = r.post.filter { it.source == os.meka.core.domain.NoticeSource.BALANCE }
+        // Thu 15 Oct, 16:55: the week has nothing for family, health or self, but the nudge waits for 17:00.
+        now -= 86_400_000L - 50 * 60_000L
+        fold.tick()
+        val before = fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+        assertTrue(balance(before).isEmpty())
+        // 17:05: one heads-up naming the area most short.
+        now += 10 * 60_000L
+        fold.tick()
+        val gov = fold.governNotifications(before.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
+        val n = balance(gov).single()
+        assertEquals("Family time is short this week", n.title)
+        assertEquals("0 h of 8 h with what's planned · 8 h to find by Sunday · health and self short too", n.text)
+        assertEquals(os.meka.core.domain.NoticeTarget.REVIEW, n.target)
+        assertTrue(balance(fold.governNotifications(gov.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty()) // once a week
+        // Saturday: gone.
+        now += 2 * 86_400_000L
+        fold.tick()
+        assertTrue(balance(fold.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)).isEmpty())
+    }
 }

@@ -29,6 +29,11 @@ import os.meka.core.sync.fv
  *
  * Slice 3 (2026-10-19): the week ahead carries one balance line for the week it shows, counted as planned
  * ([BalanceRules.weekAheadLine], [WeekAheadView.balance]).
+ *
+ * Slice 4 (2026-10-19): at most one nudge a week ([BalanceRules.nudge], [BalanceRules.notices]): on Thursday at 17:00
+ * (after the 12:30 digest, before the 18:00 one and protected evenings), when family, health or his own time is well short of its target even with what's still planned that week, one
+ * heads-up names the area most short ("Family time is short this week" · "3 h of 8 h with what's planned · 5 h to find
+ * by Sunday"), opening Review. Nothing stored; its Notifications row lowers or silences it.
  */
 enum class BalanceArea(val label: String, val field: String, val defaultMin: Int?, val choices: List<Int>) {
     WORK("Work", "workMin", null, listOf(35, 40, 45, 50).map { it * 60 }),
@@ -43,6 +48,9 @@ enum class BalanceArea(val label: String, val field: String, val defaultMin: Int
  * over), and whether it's the week in progress (counted so far).
  */
 data class BalanceWeek(val weekStart: Long, val label: String, val minutes: Int, val pct: Int, val met: Boolean, val current: Boolean)
+
+/** Slice 4: the week's one nudge, for the area most short of its target as planned. */
+data class BalanceNudge(val weekStart: Long, val area: BalanceArea, val title: String, val text: String)
 
 /** One thing that counted: "Football U10s" · "Sat" · 90 min. */
 data class BalanceItem(val area: BalanceArea, val title: String, val day: Long, val minutes: Int)
@@ -437,6 +445,71 @@ object BalanceRules {
         return if (parts.isEmpty()) {
             listOfNotNull(head, "every target met", workOver ?: "work within your hours".takeIf { workTarget > 0 }).joinToString(" · ")
         } else (listOf(head) + parts + listOfNotNull(workOver)).joinToString(" · ")
+    }
+
+    /** Slice 4: the nudge's day (Thursday, 0 = Monday) and time, and how short an area must be to be named. */
+    const val NUDGE_DAY = 3
+    const val NUDGE_MIN = 17 * 60
+    const val NUDGE_SHORT_MIN = 60
+    /** Named only when what's planned reaches less than this share of the target (%). */
+    const val NUDGE_BELOW_PCT = 75
+    const val NOTICE_PREFIX = "balance:"
+
+    private fun nudgeName(a: BalanceArea): String = when (a) {
+        BalanceArea.FAMILY -> "Family time"
+        BalanceArea.HEALTH -> "Time for your health"
+        BalanceArea.SELF -> "Time for yourself"
+        BalanceArea.WORK -> "Work"
+    }
+
+    /**
+     * Slice 4: the week starting [weekStart] counted as planned (its whole calendar and work hours, the habits ticked so
+     * far, like [weekAheadLine]); the area of family, health and self most short of its target, when it's at least
+     * [NUDGE_SHORT_MIN] short and under [NUDGE_BELOW_PCT]% of it, else null. Work is never nudged.
+     */
+    fun nudge(
+        weekStart: Long,
+        cal: LocalCalendar,
+        work: WorkHours,
+        events: List<CalendarEvent>,
+        habits: List<Pair<String, List<Boolean>>>,
+        targets: Map<BalanceArea, Int>,
+        childOf: (CalendarEvent) -> String? = { null },
+    ): BalanceNudge? {
+        val endMs = cal.toEpochMs(weekStart + 7, 0)
+        val minutes = count(weekStart, endMs, cal, work, events, habits, childOf).first
+        val short = listOf(BalanceArea.FAMILY, BalanceArea.HEALTH, BalanceArea.SELF).mapNotNull { a ->
+            val target = targets[a] ?: a.defaultMin ?: return@mapNotNull null
+            val n = minutes.getValue(a)
+            if (target <= 0 || target - n < NUDGE_SHORT_MIN || n * 100 >= target * NUDGE_BELOW_PCT) null
+            else Triple(a, n, target)
+        }.sortedWith(compareByDescending<Triple<BalanceArea, Int, Int>> { (it.third - it.second) * 1000L / it.third }
+            .thenByDescending { it.third - it.second }.thenBy { it.first.ordinal })
+        val (area, n, target) = short.firstOrNull() ?: return null
+        val others = short.drop(1).map { it.first.label.lowercase() }
+        val text = listOfNotNull(
+            "${hours(n)} of ${hours(target)} with what's planned",
+            "${hours(target - n)} to find by Sunday",
+            others.takeIf { it.isNotEmpty() }?.let { it.joinToString(" and ") + " short too" },
+        ).joinToString(" · ")
+        return BalanceNudge(weekStart, area, "${nudgeName(area)} is short this week", text)
+    }
+
+    /**
+     * Slice 4: the nudge's heads-up ([NoticeSource.BALANCE]) through the governor like every notice: Thursday at
+     * [NUDGE_MIN], one key a week so it posts at most once, standing until Friday ends, opening Review. The rules re-run
+     * each evaluation, so a week that catches up before Thursday evening sends nothing.
+     */
+    fun notices(nudge: BalanceNudge?, nowMs: Long, cal: LocalCalendar): List<Notice> {
+        nudge ?: return emptyList()
+        val thursday = nudge.weekStart + NUDGE_DAY
+        if (cal.epochDayOf(nowMs) > thursday + 1) return emptyList()
+        return listOf(Notice(
+            key = "$NOTICE_PREFIX${nudge.weekStart}", source = NoticeSource.BALANCE, tier = NoticeTier.HEADS_UP,
+            title = nudge.title, text = nudge.text,
+            atMs = cal.toEpochMs(thursday, NUDGE_MIN), target = NoticeTarget.REVIEW,
+            expiresAtMs = cal.toEpochMs(thursday + 2, 0),
+        ))
     }
 
     /** The line after setting a target: "Family: 10 h a week · on both devices". */
