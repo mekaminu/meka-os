@@ -173,7 +173,7 @@ private fun TrendBars(r: BalanceRow) {
 @Composable
 private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, String) -> Unit, onUndo: () -> Unit) {
     val reduced = Meka.reducedMotion
-    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+    Column(Modifier.animateContentSize(MekaMotion.expand(reduced)), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
         balance.unclear.forEachIndexed { i, u ->
             androidx.compose.runtime.key(u.key) {
                 var picked by remember { mutableStateOf<String?>(null) }
@@ -198,7 +198,7 @@ private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, Str
                     Text(
                         "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Undo") { onUndo() }
-                            .minTouch().padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+                            .minTouch().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
                     )
                 }
             }
@@ -257,7 +257,7 @@ private fun Targets(
                                     "Forget", style = MekaType.caption, color = Meka.colors.accent,
                                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                                         .clickable(role = Role.Button, onClickLabel = "Forget how ${c.title} counts") { onCountAs(c.title, "CLEAR") }
-                                        .minTouch().padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+                                        .minTouch().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
                                 )
                             }
                         }
