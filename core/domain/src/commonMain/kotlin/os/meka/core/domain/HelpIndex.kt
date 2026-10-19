@@ -438,7 +438,7 @@ internal object HelpIndex {
             keywords = listOf("news", "news topics", "news sources", "headlines", "ticker"),
             what = "the headlines on the topics you choose, also read in the morning brief and shown on the news widget.",
             how = "Open News to choose topics and sources; say \"the headlines\" or \"more news\" to Talk to hear them.",
-            tips = listOf("A brass dot marks a story you haven't read; opening it (here or on the other app) marks it read, and Mark all read puts the rest away, with Undo. Save for the train in a story puts its link in your train queue."),
+            tips = listOf("A brass dot marks a story you haven't read; opening it (here or on the other app) marks it read, and Mark all read puts the rest away, with Undo. Save for the train in a story puts its link in your train queue. Under Topics, Sources has a switch for each publisher: switch one off and its stories leave News, the ticker and the brief on both apps."),
             fold = HelpPlace.NEWS,
             foldWhere = "Ask → Daily → News",
             mac = HelpPlace.NEWS,

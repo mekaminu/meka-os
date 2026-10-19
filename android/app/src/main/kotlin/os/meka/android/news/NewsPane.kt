@@ -165,6 +165,20 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                             place.sourcesCaption,
                             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs),
                         )
+                        // Full news hub, slice 2: a switch per source in the chosen topics; off leaves its stories out
+                        // of News, the ticker and the brief on both apps. The chip's colour blends like a topic's.
+                        if (place.sources.isNotEmpty()) {
+                            Box(Modifier.padding(top = MekaSpace.m)) {
+                                Chips("Sources", place.sources.map { it.label to it.on }) { i ->
+                                    val src = place.sources[i]
+                                    haptics.tick()
+                                    scope.launch { runCatching { core.setNewsSource(src.name, !src.on) } }
+                                }
+                            }
+                            place.sourcesLine?.let { line ->
+                                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                            }
+                        }
                     }
                 }
             }
@@ -203,6 +217,16 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                 }
                 items(lane.items, key = { "n-" + it.id }) { n ->
                     StoryRow(core, n, Modifier.animateItem().appear(rememberAppearance(1 + i))) { haptics.tick(); openId = n.id }
+                }
+            }
+            // Full news hub, slice 2: a chosen topic with nothing to show says why, after the lanes.
+            if (place.quiet.isNotEmpty()) {
+                item(key = "quiet") {
+                    Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(1 + place.lanes.size))) {
+                        place.quiet.forEach { line ->
+                            Text(line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                        }
+                    }
                 }
             }
         }

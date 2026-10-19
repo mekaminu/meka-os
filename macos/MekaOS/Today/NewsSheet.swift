@@ -17,6 +17,9 @@ import SwiftUI
 /// Full news hub, slice 1: a brass dot marks a story not read yet; opening it marks it read on both apps (dot and title
 /// fade to the quieter colours); "12 new · 6 read" with Mark all read (Undo for 6 s); each lane's name says "3 new";
 /// in a story, Save for the train puts its link in the train queue.
+/// Slice 2: Topics → Sources lists every source in the chosen topics with its story count, a switch each (synced; off
+/// leaves its stories out of News, the ticker and the brief), and a chosen topic with nothing to show says why after
+/// the lanes ("AI · its sources are off").
 struct NewsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -66,12 +69,27 @@ struct NewsSheet: View {
                 // English only by default (Fold review 2026-10-09 07:26): Spanish sources are a switch, off.
                 Divider()
                 Toggle("Spanish sources", isOn: Binding(get: { place.spanishSources }, set: { model.setNewsSpanish(on: $0) }))
+                // Full news hub, slice 2: a switch per source in the chosen topics (off leaves its stories out of
+                // News, the ticker and the brief on both apps).
+                if !place.sources.isEmpty {
+                    Divider()
+                    Menu("Sources") {
+                        ForEach(place.sources, id: \.key) { src in
+                            let name = src.name
+                            Toggle(src.label, isOn: Binding(get: { src.on }, set: { model.setNewsSource(name, on: $0) }))
+                        }
+                    }
+                }
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
         Text("Spanish sources: " + place.spanishLine + " · " + place.sourcesCaption)
             .font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
             .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: place.spanishSources)
+        if let line = place.sourcesLine {
+            Text("Sources: " + line).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
+                .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: line)
+        }
         if let line = place.unreadLine {
             HStack {
                 Text(marked ?? line).font(MekaType.itemMeta)
@@ -134,6 +152,16 @@ struct NewsSheet: View {
                     ForEach(lane.items, id: \.id) { n in
                         StoryRow(item: n, palette: palette) { open(n.id, forward: true) }.staggeredAppear(1 + i)
                     }
+                }
+                // Full news hub, slice 2: a chosen topic with nothing to show says why.
+                if !place.quiet.isEmpty {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        ForEach(place.quiet, id: \.self) { line in
+                            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                        }
+                    }
+                    .padding(.top, MekaSpace.l)
+                    .staggeredAppear(1 + place.lanes.count)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

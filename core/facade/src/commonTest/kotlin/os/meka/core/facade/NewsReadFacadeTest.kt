@@ -28,11 +28,11 @@ class NewsReadFacadeTest {
         secureRandom = Random(device.hashCode()), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private fun headline(id: String, title: String, url: String?, agoMin: Long) {
+    private fun headline(id: String, title: String, url: String?, agoMin: Long, source: String = "The Verge") {
         listOfNotNull(
             "title" to FieldValue.Text(title),
             url?.let { "url" to FieldValue.Text(it) },
-            "source" to FieldValue.Text("The Verge"),
+            "source" to FieldValue.Text(source),
             "topic" to FieldValue.Text("ai"),
             "publishedAtMs" to FieldValue.Int64(now - agoMin * 60_000L),
             "removed" to FieldValue.Bool(false),
@@ -87,5 +87,27 @@ class NewsReadFacadeTest {
         // Done in the queue: the story can be saved again.
         mac.queueDone(mac.queueView.value.waiting.single().id, true)
         assertTrue(mac.newsPlace.value.items.single { it.id == "ai-0" }.canQueue)
+    }
+
+    /** Full news hub, slice 2: a source switched off on the Fold leaves News and the brief on the Mac too. */
+    @Test
+    fun aSourceSwitchedOffOnTheFoldIsOffOnTheMacAndInTheBrief() = runTest {
+        headline("ai-0", "Model ships", "https://www.theverge.com/ai/1", 10)
+        headline("ai-1", "Funding round", "https://techcrunch.com/ai/2", 20, source = "TechCrunch")
+        val fold = core("android"); val mac = core("mac")
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("TechCrunch · 1", "The Verge · 1"), mac.newsPlace.value.sources.map { it.label })
+        assertTrue(mac.briefView.value.headlines.any { it.title == "Model ships" })
+
+        assertTrue(fold.setNewsSource("The Verge", on = false))
+        assertFalse(fold.setNewsSource("the verge", on = false))
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf("ai-1"), mac.newsPlace.value.items.map { it.id })
+        assertEquals(listOf("TechCrunch · 1", "The Verge · off"), mac.newsPlace.value.sources.map { it.label })
+        assertEquals(listOf("Funding round"), mac.briefView.value.headlines.map { it.title })
+
+        assertTrue(mac.setNewsSource("The Verge", on = true))
+        mac.syncNow(); fold.syncNow()
+        assertEquals(2, fold.newsPlace.value.items.size)
     }
 }

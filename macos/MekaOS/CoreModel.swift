@@ -1918,6 +1918,9 @@ final class CoreModel {
     func setNewsTopic(_ id: String, on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsTopic(topicId: id, on: on) } }
     /// News → Spanish sources (off = English only everywhere news shows); synced.
     func setNewsSpanish(on: Bool) { MekaHaptics.tick(); run { try await $0.setNewsSpanish(on: on) } }
+    /// Full news hub, slice 2: switches one source on or off in News, the ticker and the brief; synced with the Fold.
+    /// Only the source's name String crosses.
+    func setNewsSource(_ name: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setNewsSource(name: name, on: on) } }
 
     // Full news hub, slice 1: read and new (synced with the Fold), Mark all read with Undo, Save for the train.
     /// Opening a story in News marks it read on both apps. Only the story's id crosses.

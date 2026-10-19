@@ -56,6 +56,12 @@ object NewsFields {
      * read on one may show as new again on the other: harmless).
      */
     const val READ = "newsRead"
+    /**
+     * The sources Meka switched off (full news hub, slice 2; additive, LWW): comma-separated publisher names as the
+     * stories carry them ("BBC Sport", "Daily Star"), commas taken out, at most [NewsRules.MAX_SOURCES_OFF]; matched by
+     * [NewsRules.sourceKey]. A story from one of them is left out of News, the ticker and the brief. Absent = all on.
+     */
+    const val SOURCES_OFF = "newsSourcesOff"
 }
 
 data class NewsTopic(val id: String, val label: String)
@@ -174,6 +180,14 @@ data class NewsLane(val topicId: String, val label: String, val sources: String,
  */
 data class NewsMatchday(val eventId: String, val title: String, val line: String, val live: Boolean, val event: CalendarEvent)
 
+/**
+ * Full news hub, slice 2: one source's switch under Topics — "BBC News · 8" while on, "Daily Star · off" once off. [stories]
+ * counts its stories in the chosen topics over the last two days (0 for an off source with nothing now).
+ */
+data class NewsSourceChoice(val key: String, val name: String, val stories: Int, val on: Boolean) {
+    val label: String get() = if (on) "$name · $stories" else "$name · off"
+}
+
 /** The detail sheet: the story, its place in the run ("3 of 18") and the stories either side (Next/Previous). */
 data class NewsDetail(val item: NewsItem, val position: String, val previousId: String?, val nextId: String?)
 
@@ -189,7 +203,17 @@ data class NewsPlace(
     val matchday: NewsMatchday? = null,
     /** News → Spanish sources: off by default (English only). */
     val spanishSources: Boolean = false,
+    /** Full news hub, slice 2: every source in the chosen topics (most stories first), then the ones switched off. */
+    val sources: List<NewsSourceChoice> = emptyList(),
+    /**
+     * Full news hub, slice 2: a chosen topic with nothing to show, and why — "AI · its sources are off" or "Health ·
+     * nothing in the last two days" — shown after the lanes.
+     */
+    val quiet: List<String> = emptyList(),
 ) {
+    /** "12 sources · 2 off · …" under the source switches; null with none. */
+    val sourcesLine: String? get() = NewsRules.sourceSwitchesLine(sources)
+
     /** The switch's line under Topics, and the caption naming every source for what's switched on. */
     val spanishLine: String get() = NewsRules.spanishLine(spanishSources)
     val sourcesCaption: String get() = NewsRules.sourcesCaption(spanishSources)
@@ -229,6 +253,70 @@ object NewsRules {
     const val MAX_IN_LANE = 10
     /** Read stories remembered (well over two days of every topic's lanes); the oldest go first. */
     const val MAX_READ = 400
+    /** Sources that can be switched off at once (well over what the feeds name). */
+    const val MAX_SOURCES_OFF = 40
+    private const val MAX_SOURCE_NAME = 60
+
+    /** A source's key: its name as [storyKey] makes it ("BBC  Sport" and "bbc sport" are one source). */
+    fun sourceKey(name: String): String = storyKey(name)
+
+    /** The stored off list as display names (blank and repeated ones dropped). */
+    fun sourcesOff(stored: String?): List<String> {
+        val seen = HashSet<String>()
+        return stored?.split(',')?.map { clean(it).take(MAX_SOURCE_NAME) }?.filter { it.isNotEmpty() && seen.add(sourceKey(it)) } ?: emptyList()
+    }
+
+    /** The off list's keys, for filtering. */
+    fun sourcesOffKeys(stored: String?): Set<String> = sourcesOff(stored).map(::sourceKey).toHashSet()
+
+    /**
+     * [stored] with [name] switched [on] (taken out of the list) or off (added at the end, the oldest dropped past
+     * [MAX_SOURCES_OFF]); null when nothing changes or the name is empty.
+     */
+    fun withSource(stored: String?, name: String, on: Boolean): String? {
+        val n = clean(name.replace(',', ' ')).take(MAX_SOURCE_NAME).takeIf { sourceKey(it).isNotEmpty() } ?: return null
+        val have = sourcesOff(stored)
+        val key = sourceKey(n)
+        val there = have.any { sourceKey(it) == key }
+        return when {
+            on && there -> have.filter { sourceKey(it) != key }.joinToString(",")
+            !on && !there -> (have + n).takeLast(MAX_SOURCES_OFF).joinToString(",")
+            else -> null
+        }
+    }
+
+    /**
+     * The source switches: each source with stories in the chosen topics over the last two days (most first, then by
+     * name; a story counted once however many topics carry it), then every source switched off that has none now.
+     */
+    fun sources(all: List<Headline>, chosen: List<String>, nowMs: Long, off: List<String>): List<NewsSourceChoice> {
+        val offKeys = off.map(::sourceKey).toHashSet()
+        val counts = LinkedHashMap<String, Pair<String, HashSet<String>>>()
+        for (h in all) {
+            if (h.topic !in chosen || h.publishedAtMs > nowMs + 10 * 60_000L || nowMs - h.publishedAtMs > MAX_AGE_IN_PLACE_MS) continue
+            val k = sourceKey(h.source)
+            if (k.isEmpty()) continue
+            counts.getOrPut(k) { h.source to HashSet() }.second.add(linkKey(h))
+        }
+        val seen = counts.entries
+            .sortedWith(compareByDescending<Map.Entry<String, Pair<String, HashSet<String>>>> { it.value.second.size }.thenBy { it.value.first.lowercase() })
+            .map { (k, v) -> NewsSourceChoice(k, v.first, v.second.size, k !in offKeys) }
+        val quietOff = off.filter { sourceKey(it) !in counts }.map { NewsSourceChoice(sourceKey(it), it, 0, false) }
+        return seen + quietOff
+    }
+
+    /** "12 sources · 2 off · tap one to leave its stories out of News and the brief" / "… · all on · …"; null with none. */
+    fun sourceSwitchesLine(sources: List<NewsSourceChoice>): String? {
+        if (sources.isEmpty()) return null
+        val off = sources.count { !it.on }
+        val n = sources.size
+        return "$n source" + (if (n == 1) "" else "s") + " · " + (if (off == 0) "all on" else "$off off") +
+            " · tap one to leave its stories out of News and the brief"
+    }
+
+    /** Leaves out the stories from switched-off sources ([offKeys]: [sourceKey]s). */
+    fun fromSourcesOn(all: List<Headline>, offKeys: Set<String>): List<Headline> =
+        if (offKeys.isEmpty()) all else all.filter { sourceKey(it.source) !in offKeys }
 
     /**
      * Full news hub, slice 1: a story's key in the read list — 12 hex characters of a 64-bit FNV-1a hash of its link
@@ -394,12 +482,16 @@ object NewsRules {
         spanish: Boolean = false,
         read: Set<String> = emptySet(),
         queuedLinks: Set<String> = emptySet(),
+        sourcesOff: List<String> = emptyList(),
     ): NewsPlace {
         val chosen = topics.filter { it.chosen }.map { it.id }
+        val offKeys = sourcesOff.map(::sourceKey).toHashSet()
+        val sources = sources(all, chosen, nowMs, sourcesOff)
         val order = LEAD.filter { it in chosen } + chosen.filter { it !in LEAD }
         val seenLinks = HashSet<String>()
         val seenTitles = HashSet<String>()
-        val fresh = all.filter { it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_IN_PLACE_MS }
+        val freshAll = all.filter { it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_IN_PLACE_MS }
+        val fresh = fromSourcesOn(freshAll, offKeys)
         val lanes = order.mapNotNull { topic ->
             val items = fresh.filter { it.topic == topic }
                 .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { it.id })
@@ -415,12 +507,20 @@ object NewsRules {
             if (items.isEmpty()) null
             else NewsLane(topic, NewsTopics.byId(topic)?.label ?: topic, sourcesLine(items), items)
         }
+        val shown = lanes.map { it.topicId }.toSet()
+        val hiddenBySources = order.filter { t -> t !in shown && freshAll.any { it.topic == t } && fresh.none { it.topic == t } }.toSet()
         val empty = when {
             lanes.isNotEmpty() -> null
             chosen.isEmpty() -> "No topics chosen · pick some below"
+            hiddenBySources.isNotEmpty() -> "Nothing from the sources you have on · turn some back on under Topics"
             else -> "No headlines in the last two days · they refresh every hour"
         }
-        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen }, spanish)
+        // With nothing at all to show, the empty line says it; otherwise each quiet topic gets its own line.
+        val quiet = if (lanes.isEmpty()) emptyList() else order.filter { it !in shown }.map { t ->
+            val label = NewsTopics.byId(t)?.label ?: t
+            if (t in hiddenBySources) "$label · its sources are off" else "$label · nothing in the last two days"
+        }
+        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen }, spanish, sources, quiet)
     }
 
     /** What the fixtures feed adds to a title whose kick-off isn't set yet. */
@@ -498,8 +598,26 @@ object NewsRules {
 
 /** Mirrored headlines (read-only: the server writes them) and the synced choice of topics. */
 class News(private val replica: Replica) {
-    /** The headlines Meka reads: English only unless [spanish] is on ([NewsRules.inLanguage]). */
-    fun all(): List<Headline> = NewsRules.inLanguage(everything(), spanish())
+    /**
+     * The headlines Meka reads: English only unless [spanish] is on ([NewsRules.inLanguage]), without the sources he
+     * switched off ([NewsFields.SOURCES_OFF]) — what the brief and Ask read.
+     */
+    fun all(): List<Headline> = NewsRules.fromSourcesOn(inLanguage(), NewsRules.sourcesOffKeys(sourcesOffStored()))
+
+    /** In his languages, every source included (the News place lists the off ones as switches). */
+    private fun inLanguage(): List<Headline> = NewsRules.inLanguage(everything(), spanish())
+
+    private fun sourcesOffStored(): String? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.SOURCES_OFF)?.textOrNull
+
+    /** The sources switched off, as their names. */
+    fun sourcesOff(): List<String> = NewsRules.sourcesOff(sourcesOffStored())
+
+    /** Switches one source on or off everywhere news shows (synced); false when it already was. */
+    fun setSource(name: String, on: Boolean): Boolean {
+        val next = NewsRules.withSource(sourcesOffStored(), name, on) ?: return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.SOURCES_OFF to next.fv()))
+        return true
+    }
 
     /** Every mirrored headline, whatever its language. */
     fun everything(): List<Headline> = replica.entities(EntityTypes.HEADLINE).mapNotNull { Headline.from(it) }
@@ -541,9 +659,10 @@ class News(private val replica: Replica) {
         cal: LocalCalendar = LocalCalendar.UTC,
         queued: List<QueueItem> = emptyList(),
     ): NewsPlace = NewsRules.place(
-        all(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal), spanish(),
+        inLanguage(), choices(), nowMs, NewsRules.matchday(dayEvents, nowMs, cal), spanish(),
         read = readKeys().toHashSet(),
         queuedLinks = queued.filter { !it.done }.map { QueueRules.key(it.url) }.toHashSet(),
+        sourcesOff = sourcesOff(),
     )
 
     /** The read list ([NewsFields.READ]). */

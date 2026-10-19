@@ -4367,6 +4367,13 @@ class MekaCore(
     /** News → Spanish sources (Fold review 2026-10-09 07:26 item 1): off = English only everywhere news shows; synced. */
     suspend fun setNewsSpanish(on: Boolean) = onCore { news.setSpanish(on) }
 
+    /**
+     * Full news hub, slice 2: switches one source on or off (a [os.meka.core.domain.NewsSourceChoice.name] from
+     * `newsPlace.sources`); off leaves its stories out of News, the ticker and the brief on both apps. Synced; false
+     * when it already was.
+     */
+    suspend fun setNewsSource(name: String, on: Boolean): Boolean = onCore { news.setSource(name, on) }
+
     // ---- Full news hub (V2, slice 1: read and new, Save for the train) ----
 
     /** The stories the last Mark all read put away, for its Undo (this device, this session). */
