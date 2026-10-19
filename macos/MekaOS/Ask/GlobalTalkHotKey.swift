@@ -42,13 +42,18 @@ final class GlobalTalkHotKey {
     }
 
     fileprivate func pressed() {
+        Self.bringForward()
+        onPress?()
+    }
+
+    /// Navilife to the front; a window it hid or minimised comes back with it (a closed one returns with a Dock click,
+    /// as before). The menu bar's Say hello uses it too ("Hello, Navilife" slice 2).
+    static func bringForward() {
         NSApp.activate()
-        // A window MEKA hid or minimised comes back with it (a closed one returns with a Dock click, as before).
         if !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }),
            let window = NSApp.windows.first(where: { $0.canBecomeMain }) {
             window.makeKeyAndOrderFront(nil)
         }
-        onPress?()
     }
 
     private func register() {

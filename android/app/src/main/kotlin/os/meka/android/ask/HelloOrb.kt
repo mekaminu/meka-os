@@ -28,7 +28,19 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaRadius
+import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.TalkPhase
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import os.meka.android.designsystem.Meka
@@ -44,11 +56,11 @@ import os.meka.core.domain.TalkOrb
  * ([HelloOrb.pulse]); listening it swells with his voice; thinking two arcs turn round the rim ([HelloOrb.swirl]);
  * speaking rings ripple out ([TalkOrb.ripple]). Battery-light: one Canvas, frames only while it moves. Reduced motion:
  * a still glow (and the halo held), with a level bar under it while listening. Drawing only; the caller gives it its
- * click and screen-reader label.
+ * click and screen-reader label. [still]: drawn as with reduced motion (the bedside clock in quiet hours, no frames).
  */
 @Composable
-fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, size: Dp = HelloOrb.SIZE.dp) {
-    val reduced = Meka.reducedMotion
+fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, size: Dp = HelloOrb.SIZE.dp, still: Boolean = false) {
+    val reduced = Meka.reducedMotion || still
     val accent = Meka.colors.accent
     var elapsed by remember { mutableLongStateOf(0L) }
     LaunchedEffect(reduced, state) {
@@ -114,4 +126,27 @@ fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, s
             }
         }
     }
+}
+
+/**
+ * "Hello, Navilife" slice 2: the Hello orb on the bedside clock (the Fold on its stand), where the mic was: the resting
+ * orb at [HelloOrb.BEDSIDE_SIZE], breathing (a warm halo while Needs you has cards), pressing in to 0.97 on the complete
+ * spring with a light haptic; [onHello] springs the Talk pane up and greets him. [dim]: quiet hours at the bedside, it
+ * quietens with the clock and holds still (no frames drawn all night). Reduced motion: no press scale, a still glow.
+ */
+@Composable
+fun BedsideHelloOrb(needsYou: Int, onHello: () -> Unit, modifier: Modifier = Modifier, dim: Boolean = false) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed && !reduced) 0.97f else 1f, MekaMotion.complete(reduced), label = "helloPress")
+    val alpha by animateFloatAsState(if (dim) 0.45f else 1f, MekaMotion.themeBlend(reduced), label = "helloDim")
+    val line = HelloOrb.restingLine(needsYou, mac = false)
+    HelloOrbView(
+        HelloOrb.state(TalkPhase.ENDED, needsYou), 0f, size = HelloOrb.BEDSIDE_SIZE.dp, still = dim,
+        modifier = modifier.scale(scale).graphicsLayer { this.alpha = alpha }.clip(RoundedCornerShape(MekaRadius.pill))
+            .clickable(interactionSource = source, indication = null, role = Role.Button) { haptics.light(); onHello() }
+            .semantics { contentDescription = "Navilife · $line" },
+    )
 }

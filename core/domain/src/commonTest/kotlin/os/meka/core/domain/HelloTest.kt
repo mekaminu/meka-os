@@ -115,4 +115,22 @@ class HelloTest {
         assertEquals(TalkPhase.ENDED, TalkFlow.heard(after.session, "that's all, thanks").session.phase)
         assertEquals(TalkPhase.LISTENING, TalkFlow.bargeIn(step.session).session.phase)
     }
+
+    @Test
+    fun theHotKeyGreetsOnAReturnAndOtherwiseJustListens() {
+        assertTrue(HelloRules.hotkeyGreets(-1)) // never greeted on this device
+        assertTrue(HelloRules.hotkeyGreets(HelloRules.REGREET_MIN))
+        assertTrue(!HelloRules.hotkeyGreets(5))
+        assertEquals(TalkStart.HELLO, TalkStartRules.fromOpen(TalkStartRules.openValue(TalkStart.HELLO)))
+    }
+
+    @Test
+    fun hisPartnersOpenAsksAreCountedByHerNameOrHerRole() {
+        val people = listOf("Sam Taylor", "Wife", "Alex", "", "sam")
+        assertEquals(3, HelloRules.partnerAsks("Sam", people))
+        assertEquals(1, HelloRules.partnerAsks("Jordan Lee", people)) // only the role
+        assertEquals(0, HelloRules.partnerAsks(null, people))
+        assertEquals(0, HelloRules.partnerAsks("Sam", emptyList()))
+        assertEquals("Sam asked you for something.", HelloRules.partnerLine("Sam Taylor", 1))
+    }
 }

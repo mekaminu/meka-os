@@ -51,7 +51,8 @@ struct MekaOSApp: App {
                     // "Listen when I open MEKA": a launch that came before the core was ready listens now.
                     MacTalkOnOpen.shared.attach { model.requestTalkOnOpen(reduced: MotionSetting.reduced) }
                     // ⌥Space from any app (on by default): MEKA comes forward on Ask listening, as the menu's Talk to MEKA.
-                    GlobalTalkHotKey.shared.attach { model.requestTalk(reduced: MotionSetting.reduced) }
+                    // "Hello, Navilife" slice 2: after two hours with no greeting it says hello first, then listens.
+                    GlobalTalkHotKey.shared.attach { model.requestTalkOrHello(reduced: MotionSetting.reduced) }
                 }
                 // tools/publish-fold.sh hands over the APK it built: mekaos://publish-fold-update?apk=…; the desktop
                 // News widget opens mekaos://news?story=<id>.
@@ -90,8 +91,10 @@ struct MekaOSApp: App {
                     .keyboardShortcut("k", modifiers: .command)
                 // Talk to MEKA (V1 voice slice 3): Ask comes forward and the conversation starts (again: it ends).
                 // With "From any app" on, macOS hands ⌥Space to GlobalTalkHotKey first, which does the same.
-                Button("Talk to Navilife") { model.requestTalk(reduced: MotionSetting.reduced) }
+                Button("Talk to Navilife") { model.requestTalkOrHello(reduced: MotionSetting.reduced) }
                     .keyboardShortcut(.space, modifiers: .option)
+                // "Hello, Navilife" slice 2: the greeting by name, then listening.
+                Button("Say Hello to Navilife") { model.requestHello(reduced: MotionSetting.reduced) }
             }
             CommandMenu("Go") {
                 ForEach(ShellDestination.allCases) { d in

@@ -210,7 +210,10 @@ fun AskMekaSection(
         lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
         app?.talkNow?.value = null
         if (talk.active) return@LaunchedEffect
-        if (talkNow == os.meka.core.domain.TalkStart.OPEN) {
+        if (talkNow == os.meka.core.domain.TalkStart.HELLO) {
+            // "Hello, Navilife" slice 2: the bedside orb was tapped; the greeting, then listening.
+            sayHello()
+        } else if (talkNow == os.meka.core.domain.TalkStart.OPEN) {
             // "Listen when I open MEKA" (slice 4): the room check, then a short window; nothing said → Today again.
             talk.startOnOpen { app?.openDestination?.value = os.meka.android.shell.ShellDestination.TODAY }
         } else startTalking()

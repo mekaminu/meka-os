@@ -11,12 +11,14 @@ struct HelloOrbView: View {
     let level: Float
     let palette: MekaPalette
     var size: CGFloat = CGFloat(HelloOrb.shared.SIZE)
+    /// Frames a second while it moves: the sidebar's and the menu bar's small orbs breathe at a calmer rate (slice 2).
+    var frameRate: Double = 30
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var began = Date()
 
     var body: some View {
         VStack(spacing: MekaSpace.xs) {
-            TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            TimelineView(.animation(minimumInterval: 1.0 / frameRate, paused: reduceMotion)) { context in
                 let elapsedMs = Int64(context.date.timeIntervalSince(began) * 1000)
                 Canvas { g, box in draw(g, box: box, elapsedMs: elapsedMs) }
                     .frame(width: size, height: size)
@@ -87,5 +89,41 @@ struct HelloOrbView: View {
                 g.stroke(arc, with: .color(a(0.9)), style: StrokeStyle(lineWidth: ring * 1.5, lineCap: .round))
             }
         }
+    }
+}
+
+/// "Hello, Navilife" slice 2: the Hello orb at the foot of the sidebar (and in the menu bar's window): a small breathing
+/// orb, warm while Needs you has cards, with "Say hello" and the ⌥Space hint beside it; a click brings Ask forward and
+/// greets him (`CoreModel.requestHello`), then listens. Press style; Reduce Motion: a still glow.
+struct SayHelloButton: View {
+    @Environment(CoreModel.self) private var model
+    let palette: MekaPalette
+    /// Called after the request (the menu bar's window brings the main window forward with it).
+    var then: () -> Void = {}
+
+    var body: some View {
+        let count = model.needsYouCount
+        let line = HelloOrb.shared.restingLine(needsYou: Int32(count), mac: true)
+        Button {
+            MekaHaptics.light()
+            model.requestHello(reduced: MotionSetting.reduced)
+            then()
+        } label: {
+            HStack(spacing: MekaSpace.xs) {
+                HelloOrbView(state: HelloOrb.shared.state(phase: .ended, needsYou: Int32(count)), level: 0, palette: palette,
+                             size: CGFloat(HelloOrb.shared.SIDEBAR_SIZE), frameRate: 12)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text("Say hello").font(MekaType.body).foregroundStyle(palette.textPrimary)
+                    Text(count > 0 ? line : "⌥Space").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .help(line)
+        .accessibilityLabel("Navilife · \(line)")
+        .accessibilityIdentifier("say-hello")
     }
 }

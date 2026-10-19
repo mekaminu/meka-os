@@ -52,6 +52,30 @@ object HelloRules {
     /** What Talk remembers was asked, so "tell me more" follows on from the greeting. */
     const val ASKED = "Hello Navilife"
 
+    /**
+     * ⌥Space on the Mac (and the Fold's stand orb, which always greets): a greeting when none was said in the last
+     * [REGREET_MIN] (a return to the desk), else straight to listening so a quick question isn't slowed by it.
+     */
+    const val REGREET_MIN = 120
+
+    /** [minutesSinceLast] since the last greeting on this device, or negative when there hasn't been one. */
+    fun hotkeyGreets(minutesSinceLast: Int): Boolean = minutesSinceLast < 0 || minutesSinceLast >= REGREET_MIN
+
+    /** Who a request card names when it's his partner's though the name isn't hers ("Wife" in the contacts). */
+    private val PARTNER_ROLES = setOf("wife", "husband", "partner", "hubby", "wifey")
+
+    /**
+     * His partner's open asks, from the requests' [people] (as each message's notification named them): the ones
+     * whose first name is About you's partner's first name, or who are saved by role ("Wife"). Zero without a partner.
+     */
+    fun partnerAsks(partnerName: String?, people: List<String>): Int {
+        val partner = firstName(partnerName)?.lowercase()
+        return people.count { who ->
+            val first = firstName(who)?.lowercase()?.trimEnd(':', ',') ?: return@count false
+            (partner != null && first == partner) || (partner != null && first in PARTNER_ROLES)
+        }
+    }
+
     /** "Good morning" (05:00–11:59), "Good afternoon" (12:00–16:59), "Good evening" (17:00–04:59). */
     fun salutation(minuteOfDay: Int): String = when (minuteOfDay.mod(1440) / 60) {
         in 5..11 -> "Good morning"
@@ -160,6 +184,10 @@ enum class OrbState { IDLE, LISTENING, THINKING, SPEAKING, NEEDS_YOU }
 object HelloOrb {
     /** The orb's box on the Fold (dp) and the Mac (pt): room for the swell and the ripples inside it. */
     const val SIZE = 132
+    /** The bedside clock's orb (slice 2), where its mic was: large enough to tap half asleep, small beside the clock. */
+    const val BEDSIDE_SIZE = 64
+    /** The Mac's sidebar orb, at the sidebar's foot (slice 2), and the menu bar window's. */
+    const val SIDEBAR_SIZE = 40
     /** One turn of the thinking arcs. */
     const val SWIRL_MS = 1_800L
     /** One breath of the needs-you halo. */

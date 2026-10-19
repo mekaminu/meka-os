@@ -59,3 +59,8 @@ fun talkFromCover(app: MekaApplication?) {
 fun talkAtBedside(app: MekaApplication?) {
     app?.talkNow?.value = TalkStart.BEDSIDE
 }
+
+/** "Hello, Navilife" slice 2: the bedside Hello orb; the pane over the clock greets him, then listens. */
+fun helloAtBedside(app: MekaApplication?) {
+    app?.talkNow?.value = TalkStart.HELLO
+}

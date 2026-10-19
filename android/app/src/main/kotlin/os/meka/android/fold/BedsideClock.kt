@@ -116,9 +116,10 @@ import os.meka.core.facade.MekaCore
  * stop ([WatchFaceRules.liveMode]), the face redrawn once a minute so the hands keep time. Tapping it springs the whole
  * 24-hour Day ring up over the clock ([DayRingSheet], "‹ Clock" or Back drops it away).
  *
- * Talk without tapping the mic (slice 3): a mic beside the alarm line springs the Talk pane up over the clock already
- * listening ([BedsideTalkPane]: Ask's field and orb, the same on-device recogniser and yes-before-anything); "‹ Clock"
- * or Back drops it away. While it is up the screen leaves quiet hours' dimming so the answer can be read.
+ * Talk without tapping the mic (slice 3): beside the alarm line ("Hello, Navilife" slice 2: the Hello orb, where the
+ * mic was, breathing and warm while Needs you has cards) springs the Talk pane up over the clock, which greets him by
+ * name with what matters now and then listens ([BedsideTalkPane]: Ask's field and orb, the same recogniser and
+ * yes-before-anything); "‹ Clock" or Back drops it away. While it is up the screen leaves quiet hours' dimming so the answer can be read.
  *
  * Motion: the clock fades up and the lower lines stagger in; the face draws itself in (the quick draw) as the clock
  * appears; changed digits roll up each minute; dimming blends the colours across; the strip fades in and out. Reduced
@@ -178,6 +179,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     var widthPx by remember { mutableIntStateOf(0) }
     // Today's watch face and Day ring, kept current by the shell's minute tick.
     val today by core.today.collectAsState()
+    // "Hello, Navilife" slice 2: the orb's warm halo while Needs you has cards.
+    val needsYouStack by core.needsYouStack.collectAsState()
     Box(
         Modifier.fillMaxSize().background(Meka.colors.background)
             .onGloballyPositioned { topInWindow = it.positionInWindow().y.toInt(); heightPx = it.size.height; widthPx = it.size.width },
@@ -194,7 +197,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
             Box(Modifier.height(gap))
             DayHalf(
                 v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
-                onTalk = { os.meka.android.ask.talkAtBedside(talkApp); talkOpen = true },
+                needsYou = needsYouStack.cards.size,
+                onHello = { os.meka.android.ask.helloAtBedside(talkApp); talkOpen = true },
             ) {
                 open = it
             }
@@ -300,7 +304,7 @@ private fun RollingTime(time: String, color: androidx.compose.ui.graphics.Color,
 }
 
 @Composable
-private fun DayHalf(v: BedsideView, modifier: Modifier, onTalk: () -> Unit, onOpen: (BedsideOpens) -> Unit) {
+private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, onHello: () -> Unit, onOpen: (BedsideOpens) -> Unit) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val text by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "day")
@@ -311,7 +315,8 @@ private fun DayHalf(v: BedsideView, modifier: Modifier, onTalk: () -> Unit, onOp
     Column(modifier.padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
         Row(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
             Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.weight(1f))
-            os.meka.android.ask.TalkMic(onTalk, size = 44.dp, dim = v.dim)
+            // "Hello, Navilife" slice 2: the Hello orb where the mic was; a tap greets him, then listens.
+            os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim)
         }
         val opens = v.opens
         Column(

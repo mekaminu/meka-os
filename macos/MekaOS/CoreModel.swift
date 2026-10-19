@@ -2235,6 +2235,24 @@ final class CoreModel {
         talkAfterBriefBack = back
     }
 
+    /// "Hello, Navilife" slice 2: the sidebar's orb, the menu bar's Say hello, or ⌥Space after a while away: Ask comes
+    /// forward and greets him, then listens (or ends the conversation that's running). Ask's section takes it.
+    var helloRequested = false
+    /// When this Mac last said the greeting, so ⌥Space greets on a return and otherwise just listens.
+    @ObservationIgnored private var lastHelloAt: Date?
+
+    func requestHello(reduced: Bool) {
+        go(to: .ask, reduced: reduced)
+        helloRequested = true
+    }
+
+    /// ⌥Space and the Talk to Navilife command: a greeting when none was said in the last two hours
+    /// (`HelloRules.hotkeyGreets`), else straight to listening as before.
+    func requestTalkOrHello(reduced: Bool) {
+        let minutes = lastHelloAt.map { Int32(min(Date().timeIntervalSince($0) / 60, 100_000)) } ?? -1
+        if HelloRules.shared.hotkeyGreets(minutesSinceLast: minutes) { requestHello(reduced: reduced) } else { requestTalk(reduced: reduced) }
+    }
+
     func requestTalkOnOpen(reduced: Bool) {
         go(to: .ask, reduced: reduced)
         talkOnOpenRequested = true
@@ -2369,10 +2387,13 @@ final class CoreModel {
     }
 
     /// "Hello, Navilife": the greeting the orb says when clicked at rest, built by the core's rules (`HelloRules`; no AI
-    /// call, nothing sent). Only the String crosses back; nil when not connected or it couldn't be read.
+    /// call, nothing sent; his partner's open asks counted by the core). Only the String crosses back; nil when not
+    /// connected or it couldn't be read.
     func hello() async -> String? {
         guard let core else { return nil }
-        return try? await core.hello(partnerAsks: 0).spoken
+        guard let words = try? await core.hello(partnerAsks: -1).spoken else { return nil }
+        lastHelloAt = Date()
+        return words
     }
 
     /// How many cards Needs you holds: the Hello orb's warm halo while any do.

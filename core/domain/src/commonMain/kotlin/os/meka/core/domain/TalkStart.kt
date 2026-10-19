@@ -16,8 +16,11 @@ package os.meka.core.domain
  *
  * Slice 4: [OPEN], MEKA opened from the launcher with "Listen when I open MEKA" on ([TalkOnOpenRules]): a room check
  * first, then a short listening window.
+ *
+ * "Hello, Navilife" slice 2: [HELLO], the Hello orb on the bedside clock (the Fold on its stand), which springs the Talk
+ * pane up and greets him ([HelloRules]) before listening.
  */
-enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR, BEDSIDE, COVER, OPEN }
+enum class TalkStart { SIDE_BUTTON, HEADSET_BUTTON, WIDGET, HEADPHONES, CAR, BEDSIDE, COVER, OPEN, HELLO }
 
 /** One section of the Talk pane: its small label, a [status] line ([lit]: in the accent, set up), and [steps]. */
 data class TalkSetupSection(

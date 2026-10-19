@@ -39,6 +39,12 @@ struct ShellView: View {
             .onChange(of: sidebarPick) { _, picked in go(picked, via: "selection") }
             // ⌘1–⌘8, the command bar, search and notifications move the model; the highlight follows.
             .onChange(of: model.destination, initial: true) { _, now in if sidebarPick != now { sidebarPick = now } }
+            // "Hello, Navilife" slice 2: the Hello orb at the sidebar's foot; a click greets him on Ask.
+            .safeAreaInset(edge: .bottom) {
+                SayHelloButton(palette: palette)
+                    .padding(.horizontal, MekaSpace.m)
+                    .padding(.vertical, MekaSpace.xs)
+            }
             .navigationSplitViewColumnWidth(min: 170, ideal: 200, max: 260)
         } detail: {
             ZStack {

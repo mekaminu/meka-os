@@ -112,11 +112,13 @@ struct AskMekaSection: View {
         .onAppear {
             wireTalk()
             takeTalkRequest()
+            takeHelloRequest()
             takeTalkOnOpen()
             takeTalkAfterBrief()
         }
         .onChange(of: model.talkAfterBriefBack) { _, back in if back != nil { takeTalkAfterBrief() } }
         .onChange(of: model.talkRequested) { _, asked in if asked { takeTalkRequest() } }
+        .onChange(of: model.helloRequested) { _, asked in if asked { takeHelloRequest() } }
         .onChange(of: model.talkOnOpenRequested) { _, asked in if asked { takeTalkOnOpen() } }
         .onDisappear { talk.stop() }
         // Money manager (16): Touch ID said yes to "Unlock Money to answer": the same question again, answered here.
@@ -345,6 +347,14 @@ struct AskMekaSection: View {
         guard model.talkRequested else { return }
         model.talkRequested = false
         toggleTalk()
+    }
+
+    /// "Hello, Navilife" slice 2 (the sidebar's orb, the menu bar, ⌥Space after a while): the greeting, then
+    /// listening; a conversation already running ends, as ⌥Space always did.
+    private func takeHelloRequest() {
+        guard model.helloRequested else { return }
+        model.helloRequested = false
+        if talk.active { toggleTalk() } else { sayHello() }
     }
 
     /// "Listen when I open MEKA": MEKA was just opened with the setting on: check the room, chime, listen for 6 s; if

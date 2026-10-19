@@ -5150,11 +5150,11 @@ class MekaCore(
     /**
      * "Hello, Navilife": the greeting the orb says when tapped at rest ([os.meka.core.domain.HelloRules]), built by
      * rules from what the apps already show: his name in About you, Needs you's urgent cards, today's next event or the
-     * next live train on an office commute, [partnerAsks] (what his partner asked for that is still open, counted by the
-     * app that sees it; 0 where none does) and the tasks due today with no time; quiet hours keep it to one thing.
-     * Instant and free: no AI call, nothing fetched, sent or stored.
+     * next live train on an office commute, what his partner asked for that is still open (the open request cards she's
+     * named on, [os.meka.core.domain.HelloRules.partnerAsks]; [partnerAsks] overrides it when given) and the tasks due
+     * today with no time; quiet hours keep it to one thing. Instant and free: no AI call, nothing fetched, sent or stored.
      */
-    suspend fun hello(partnerAsks: Int = 0): os.meka.core.domain.HelloGreeting = onCore {
+    suspend fun hello(partnerAsks: Int = -1): os.meka.core.domain.HelloGreeting = onCore {
         val cal = ZoneCalendar(timeZone)
         val now = nowMs()
         val minute = cal.minuteOfDay(now)
@@ -5180,7 +5180,8 @@ class MekaCore(
                 train = train,
                 trainMinutesAway = trainAway,
                 partnerName = profile.partnerName,
-                partnerAsks = partnerAsks,
+                partnerAsks = if (partnerAsks >= 0) partnerAsks
+                else os.meka.core.domain.HelloRules.partnerAsks(profile.partnerName, _requests.value.map { it.person }),
                 dueToday = cards.filter { it.kind == os.meka.core.domain.DecisionKind.DUE_TODAY }.map { it.title },
                 quiet = _notifySettings.value.quiet.isQuietAt(now, cal),
             ),

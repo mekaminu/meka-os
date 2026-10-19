@@ -2148,3 +2148,11 @@ Core + server + facade + Fold + Mac, no migration (ADR-008 addendum: `mail_find`
 - Help tip (docs/help/talk.md, HelpIndex regenerated), motion row "Hello, Navilife (Hello orb)".
 - Tests: HelloTest (+7: empty day and names, order and the limit of three, train vs event, quiet hours, partner and due words, the orb's states and numbers, greet → speak → listen → "that's all").
 
+## "Hello, Navilife" — slice 2 (2026-10-19): the orb on the stand, the Mac's sidebar and menu bar, ⌥Space, and his partner's asks
+
+- *Core + facade + Fold + Mac, no server change, no migration, Mac checked nightly:* `HelloRules.hotkeyGreets(minutesSinceLast)` (greet when none was said on this device in the last `REGREET_MIN` = 120 min, else listen straight away) and `HelloRules.partnerAsks(partnerName, people)` (open request cards whose first name is About you's partner's, or saved by role: Wife, Husband, Partner…; 0 without a partner); facade `MekaCore.hello(partnerAsks = -1)` now counts them from `requests` itself (slice 1 passed 0). `TalkStart.HELLO`; `HelloOrb.BEDSIDE_SIZE` 64, `SIDEBAR_SIZE` 40.
+- Fold: the bedside clock's mic (beside the alarm line) is now `BedsideHelloOrb` (the Hello orb at 64 dp, warm halo while Needs you has cards, press 0.97 with a light haptic, dims to 0.45 and holds still in quiet hours so no frames are drawn all night; `HelloOrbView(still)`); a tap sets `talkNow = TalkStart.HELLO` (`helloAtBedside`) and springs the Talk pane up, whose `AskMekaSection` greets (mic asked first if needed) then listens.
+- Mac: `SayHelloButton` (40 pt orb breathing at 12 fps, "Say hello" with "⌥Space" or the Needs you line) at the sidebar's foot (`safeAreaInset`) and at the top of the menu bar's window (which brings the window forward through `GlobalTalkHotKey.bringForward`); `CoreModel.requestHello/helloRequested/lastHelloAt/requestTalkOrHello`; Ask's section takes the request (a running conversation ends, as ⌥Space did); ⌥Space and Edit → Talk to Navilife go through `requestTalkOrHello`; Edit → Say Hello to Navilife added. No new destination, so ⌘1–⌘8 and the sidebar UI test are unchanged.
+- Help tip (docs/help/talk.md, HelpIndex regenerated), motion row "Hello, Navilife (stand, sidebar, menu bar)".
+- Tests: HelloTest (+2: the hot key greets on a return and otherwise listens, TalkStart.HELLO round trip; his partner's asks by name or role).
+

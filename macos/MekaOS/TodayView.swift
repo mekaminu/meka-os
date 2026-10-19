@@ -1258,6 +1258,8 @@ private struct DetailContent: View {
 
 struct QuickCaptureMenu: View {
     @Environment(CoreModel.self) private var model
+    @Environment(\.colorScheme) private var scheme
+    private var palette: MekaPalette { scheme == .dark ? .dark : .light }
     @State private var text = ""
     /// Notice new screenshots (screenshots and photos, slice 2): this Mac's own switch.
     @AppStorage(MacScreenshotWatch.enabledKey) private var noticeScreenshots = false
@@ -1266,6 +1268,9 @@ struct QuickCaptureMenu: View {
         VStack(alignment: .leading, spacing: 0) {
             // The menu-bar "now" (Fold modes, slice 3): the one thing that matters now, with its one-tap actions.
             NowCard()
+            // "Hello, Navilife" slice 2: the orb in the menu bar's window; a click brings Navilife forward and greets.
+            SayHelloButton(palette: palette) { GlobalTalkHotKey.bringForward() }
+                .padding([.horizontal, .top], MekaSpace.m)
             TextField("Capture anything…", text: $text)
                 .textFieldStyle(.roundedBorder)
                 .onSubmit { model.captureTyped(text); text = "" }
