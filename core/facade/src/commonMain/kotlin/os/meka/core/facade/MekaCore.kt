@@ -5148,6 +5148,49 @@ class MekaCore(
         os.meka.core.domain.CoverNowRules.now(_today.value, nowMs(), ZoneCalendar(timeZone), _sessions.value.cards, weekGoalTitles())
 
     /**
+     * "Hello, Navilife": the greeting the orb says when tapped at rest ([os.meka.core.domain.HelloRules]), built by
+     * rules from what the apps already show: his name in About you, Needs you's urgent cards, today's next event or the
+     * next live train on an office commute, [partnerAsks] (what his partner asked for that is still open, counted by the
+     * app that sees it; 0 where none does) and the tasks due today with no time; quiet hours keep it to one thing.
+     * Instant and free: no AI call, nothing fetched, sent or stored.
+     */
+    suspend fun hello(partnerAsks: Int = 0): os.meka.core.domain.HelloGreeting = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val minute = cal.minuteOfDay(now)
+        val profile = aboutYou.profile()
+        val cards = _needsYouStack.value.cards
+        val event = _today.value.upcomingEvents(now).firstOrNull()?.let { e ->
+            os.meka.core.domain.HelloEvent(
+                e.title, cal.minuteOfDay(e.startAtMs), cal.minuteOfDay(e.endAtMs),
+                minutesAway = ((e.startAtMs - now) / 60_000L).toInt().let { if (e.startAtMs <= now) minOf(it, 0) else maxOf(it, 1) },
+            )
+        }
+        val route = os.meka.core.domain.RouteRules
+        val board = route.commute(officeToday(), now, cal)?.let { route.liveBoard(lineStatus.snapshot(), it, now) }
+        val train = board?.let { route.upcoming(it, now, cal, n = 1).firstOrNull() }
+        val trainAway = train?.let { d -> ((if (d.cancelled) d.depMin else (d.expMin ?: d.depMin)) - minute).mod(1440) }
+        os.meka.core.domain.HelloRules.greeting(
+            os.meka.core.domain.HelloFacts(
+                minuteOfDay = minute,
+                name = profile.shownName,
+                urgent = cards.filter { it.urgent }.map { it.title },
+                needsYou = cards.size,
+                event = event,
+                train = train,
+                trainMinutesAway = trainAway,
+                partnerName = profile.partnerName,
+                partnerAsks = partnerAsks,
+                dueToday = cards.filter { it.kind == os.meka.core.domain.DecisionKind.DUE_TODAY }.map { it.title },
+                quiet = _notifySettings.value.quiet.isQuietAt(now, cal),
+            ),
+        )
+    }
+
+    /** How many cards Needs you holds now: the Hello orb's warm halo while any do. */
+    fun needsYouCount(): Int = _needsYouStack.value.cards.size
+
+    /**
      * Up next as the closed Fold's card on every screen (Fold review 2026-10-09, item 3): "UP NEXT", the title, its line
      * and Done · Tomorrow · Open, for the open Fold's Today and the Mac's window. Null when nothing is up next. Pure.
      */

@@ -81,6 +81,7 @@ import os.meka.core.domain.AskCard
 import os.meka.core.domain.TrustOffer
 import os.meka.core.domain.AskOutcome
 import os.meka.core.domain.AskRules
+import os.meka.core.domain.HelloOrb
 import os.meka.core.domain.TalkOrb
 import os.meka.core.domain.TalkPhase
 import os.meka.core.facade.MekaCore
@@ -188,6 +189,17 @@ fun AskMekaSection(
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) talk.start()
         else askMic.launch(Manifest.permission.RECORD_AUDIO)
     }
+    // "Hello, Navilife": the resting orb's tap says the greeting, then listens (the mic is asked for first if needed).
+    val helloMic = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) talk.hello() else talk.refused()
+    }
+    fun sayHello() {
+        keyboard?.hide()
+        haptics.light()
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) talk.hello()
+        else helloMic.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    val needsYouStack by core.needsYouStack.collectAsState()
 
     // Talk without tapping the mic (slice 1): the side button or the headphones' button opened MEKA on Ask; start
     // listening once MEKA is in front (a start before that would be stopped by the lifecycle observer above).
@@ -375,7 +387,7 @@ fun AskMekaSection(
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            TalkPanel(talk) { haptics.tick(); talk.tapOrb() }
+            TalkPanel(talk, needsYouStack.cards.size) { haptics.tick(); talk.tapOrb() }
         }
         Column(
             Modifier.fillMaxWidth().padding(top = MekaSpace.m, bottom = MekaSpace.l)
@@ -385,6 +397,24 @@ fun AskMekaSection(
         ) {
             when (val s = shown) {
                 AskShown.Idle -> if (!searching) {
+                    // "Hello, Navilife": the orb at rest, glowing warm while Needs you has cards; a tap greets him.
+                    if (canAsk && !talk.active && talk.problem == null) {
+                        val line = HelloOrb.restingLine(needsYouStack.cards.size, mac = false)
+                        Column(
+                            Modifier.fillMaxWidth().padding(vertical = MekaSpace.m).appear(rememberAppearance(0)),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                        ) {
+                            HelloOrbView(
+                                HelloOrb.state(TalkPhase.ENDED, needsYouStack.cards.size), 0f,
+                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                                    .clickable(role = Role.Button) { sayHello() }
+                                    .testTag(ASK_HELLO_TAG)
+                                    .semantics { contentDescription = "Navilife · $line" },
+                            )
+                            Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        }
+                    }
                     Text(
                         AskFieldRules.idleLine(canAsk, mac = false, used = usedAsk),
                         style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -470,6 +500,7 @@ fun AskMekaSection(
 
 const val ASK_FIELD_TAG = "ask-field"
 const val ASK_MIC_TAG = "ask-mic"
+const val ASK_HELLO_TAG = "ask-hello"
 const val ASK_MATCH_TAG = "ask-match"
 const val ASK_AUTO_TAG = "ask-auto"
 const val ASK_TRUST_TAG = "ask-trust"
@@ -515,15 +546,15 @@ internal fun AskMatchList(m: AskMatches, onOpen: (AskMatch) -> Unit, onSeeAll: (
 
 /** The orb (tap: interrupt while MEKA speaks, else end), its line, the live transcript and MEKA's words. */
 @Composable
-private fun TalkPanel(talk: TalkController, onOrb: () -> Unit) {
+private fun TalkPanel(talk: TalkController, needsYou: Int, onOrb: () -> Unit) {
     val reduced = Meka.reducedMotion
     Column(
         Modifier.fillMaxWidth().padding(top = MekaSpace.m).semantics { liveRegion = LiveRegionMode.Polite },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        VoiceOrb(
-            talk.phase, talk.level,
+        HelloOrbView(
+            HelloOrb.state(talk.phase, needsYou), talk.level,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(enabled = talk.active, role = Role.Button, onClick = onOrb)
                 .semantics { contentDescription = "Navilife, ${TalkOrb.label(talk.phase, mac = false, talkOver = talk.talkOver)}" },

@@ -98,6 +98,29 @@ final class TalkController {
     /// Starts a conversation: asks for the microphone and speech recognition the first time.
     func start() { begin(afterBrief: false) }
 
+    /// "Hello, Navilife": the orb clicked at rest. The greeting is built by the core's rules on the Mac
+    /// (`CoreModel.hello`, a String back), said in Navilife's voice, then Talk listens as after any answer. Asks for the
+    /// microphone and speech recognition first, as a start does; the core's step is made on the main actor.
+    func hello() {
+        guard !active else { return }
+        generation += 1
+        problem = nil
+        heard = ""
+        said = ""
+        talkOver = MacTalkOver.enabled
+        let gen = generation
+        Task {
+            guard await Self.allowed() else {
+                if gen == generation { problem = .noPermission }
+                return
+            }
+            guard gen == generation, let words = await model?.hello() else { return }
+            guard gen == generation, !active else { return }
+            Task { await model?.warmVoice() }
+            apply(TalkFlow.shared.greet(greeting: words))
+        }
+    }
+
     /// Starts a conversation fresh, or (`afterBrief`) listening as if Talk had just read the brief. The core's first
     /// step is made inside the main-actor task, so no Kotlin value crosses isolation.
     private func begin(afterBrief: Bool) {

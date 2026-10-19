@@ -2368,6 +2368,16 @@ final class CoreModel {
         _ = try? await core.warmVoice()
     }
 
+    /// "Hello, Navilife": the greeting the orb says when clicked at rest, built by the core's rules (`HelloRules`; no AI
+    /// call, nothing sent). Only the String crosses back; nil when not connected or it couldn't be read.
+    func hello() async -> String? {
+        guard let core else { return nil }
+        return try? await core.hello(partnerAsks: 0).spoken
+    }
+
+    /// How many cards Needs you holds: the Hello orb's warm halo while any do.
+    var needsYouCount: Int { needsYouStack?.cards.count ?? 0 }
+
     // MARK: Weekly review
 
     /// Shows the week `offset` weeks from this one (0 this week, -1 last week, back to -12); a tick haptic.

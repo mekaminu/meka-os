@@ -459,6 +459,16 @@ object TalkFlow {
         listOf(TalkEffect.Listen),
     )
 
+    /**
+     * "Hello, Navilife": the orb tapped at rest. Navilife says the greeting ([HelloRules.greeting]) first, then listens
+     * as after any answer (barge-in, "that's all", "tell me more"). The conversation remembers what it said, so a
+     * follow-up question has it; the greeting is built from his own data on the device, never from untrusted text.
+     */
+    fun greet(greeting: String): TalkStep = TalkStep(
+        TalkSession(TalkPhase.SPEAKING, conversation = Conversation().answered(HelloRules.ASKED, greeting)),
+        listOf(TalkEffect.Speak(greeting)),
+    )
+
     /** A final transcript while listening. */
     fun heard(s: TalkSession, utterance: String): TalkStep = heard(s, utterance, TalkOpenRules.DEFAULT)
 

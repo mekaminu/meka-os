@@ -100,6 +100,20 @@ class TalkController(
     /** Starts a conversation (the mic permission is already granted). */
     fun start() = begin(TalkFlow.start())
 
+    /**
+     * "Hello, Navilife": the orb tapped at rest. The greeting is built by the core's rules on the device
+     * ([MekaCore.hello]: no AI call), said in Navilife's voice, then Talk listens as after any answer.
+     */
+    fun hello() {
+        if (active) return
+        val gen = generation
+        scope.launch {
+            val greeting = runCatching { core.hello() }.getOrNull() ?: return@launch
+            if (gen != generation || active) return@launch
+            begin(TalkFlow.greet(greeting.spoken))
+        }
+    }
+
     /** Starts a conversation at [first] (a fresh one, or listening after the brief). */
     private fun begin(first: TalkStep) {
         if (active) return

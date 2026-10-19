@@ -82,7 +82,7 @@ struct AskMekaSection: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
             if talk.active || talk.problem != nil {
-                TalkPanel(talk: talk, palette: palette) { MekaHaptics.tick(); talk.tapOrb() }
+                TalkPanel(talk: talk, needsYou: model.needsYouCount, palette: palette) { MekaHaptics.tick(); talk.tapOrb() }
                     .padding(.top, MekaSpace.xs)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -245,6 +245,23 @@ struct AskMekaSection: View {
             .id(replyN)
         } else {
             if !searching {
+                // "Hello, Navilife": the orb at rest, glowing warm while Needs you has cards; a click greets him.
+                if canAsk && !talk.active && talk.problem == nil {
+                    let line = HelloOrb.shared.restingLine(needsYou: Int32(model.needsYouCount), mac: true)
+                    VStack(spacing: MekaSpace.xs) {
+                        Button(action: sayHello) {
+                            HelloOrbView(state: HelloOrb.shared.state(phase: .ended, needsYou: Int32(model.needsYouCount)),
+                                         level: 0, palette: palette)
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .help("Say hello to Navilife")
+                        .accessibilityLabel("Navilife · \(line)")
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, MekaSpace.m)
+                    .transition(.opacity)
+                }
                 Text(AskFieldRules.shared.idleLine(canAsk: canAsk, mac: true, used: usedAsk))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.leading, MekaSpace.xxs)
@@ -352,6 +369,14 @@ struct AskMekaSection: View {
         talk.startAfterBrief { if back != .ask { model.go(to: back, reduced: MotionSetting.reduced) } }
     }
 
+    /// "Hello, Navilife": the resting orb clicked; the greeting, then listening.
+    private func sayHello() {
+        guard canAsk, !talk.active else { return }
+        focused = false
+        MekaHaptics.light()
+        talk.hello()
+    }
+
     private func toggleTalk() {
         if talk.active {
             MekaHaptics.tick()
@@ -389,6 +414,7 @@ struct AskMekaSection: View {
 /// can't listen.
 private struct TalkPanel: View {
     let talk: TalkController
+    let needsYou: Int
     let palette: MekaPalette
     let onOrb: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -398,7 +424,7 @@ private struct TalkPanel: View {
     var body: some View {
         VStack(spacing: MekaSpace.xs) {
             Button(action: onOrb) {
-                VoiceOrbView(phase: talk.phase, level: talk.level, palette: palette)
+                HelloOrbView(state: HelloOrb.shared.state(phase: talk.phase, needsYou: Int32(needsYou)), level: talk.level, palette: palette)
             }
             .buttonStyle(MekaPressStyle())
             // Resting after "Too noisy — click to talk": a click starts listening as the mic does.
