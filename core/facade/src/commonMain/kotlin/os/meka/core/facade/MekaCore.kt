@@ -149,6 +149,12 @@ class MekaCore(
      * segfault at start.
      */
     private val localStore = store
+    /**
+     * Full news hub, slice 5: the news feeds the server last said it couldn't read (display only, never synced).
+     * Declared up here, before `init`, because the first refresh reads it.
+     */
+    private var newsDown: List<os.meka.core.domain.NewsFeedDown> = emptyList()
+    private var newsDownAskedMs: Long? = null
     private val tasks = Tasks(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val events = CalendarEvents(replica)
     private val bankHolidays = os.meka.core.domain.BankHolidayStore(replica)
@@ -5406,10 +5412,6 @@ class MekaCore(
         now?.let(::rememberEditing)
         return now
     }
-
-    /** Full news hub, slice 5: the news feeds the server last said it couldn't read (display only, never synced). */
-    private var newsDown: List<os.meka.core.domain.NewsFeedDown> = emptyList()
-    private var newsDownAskedMs: Long? = null
 
     private suspend fun rememberNewsDown(list: List<ConnectedAccount>) {
         val down = list.flatMap { it.newsDown }
