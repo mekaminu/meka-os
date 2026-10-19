@@ -62,6 +62,13 @@ object NewsFields {
      * [NewsRules.sourceKey]. A story from one of them is left out of News, the ticker and the brief. Absent = all on.
      */
     const val SOURCES_OFF = "newsSourcesOff"
+    /**
+     * The words and names Meka follows (full news hub, slice 3; additive, LWW): comma-separated phrases as he typed
+     * them ("Arsenal", "Lamine Yamal"), at most [NewsRules.MAX_FOLLOWS], matched by [NewsRules.followKey] as whole
+     * words in a story's title or summary, whatever its topic. Matching stories lead News in a Following lane and
+     * reach the ticker and the brief. Absent = none.
+     */
+    const val FOLLOWS = "newsFollows"
 }
 
 data class NewsTopic(val id: String, val label: String)
@@ -152,6 +159,8 @@ data class NewsItem(
     val read: Boolean = false,
     /** Full news hub, slice 1: its link is waiting in the train queue. */
     val queued: Boolean = false,
+    /** Full news hub, slice 3: the followed word it matched (it sits in the Following lane); null otherwise. */
+    val followed: String? = null,
 ) {
     /** The key the read list holds for this story ([NewsRules.readKey]). */
     val readKey: String get() = NewsRules.readKey(url, title)
@@ -168,6 +177,8 @@ data class NewsItem(
 data class NewsLane(val topicId: String, val label: String, val sources: String, val items: List<NewsItem>) {
     /** The Barça lane has its own colour (the `barca` token) on both apps. */
     val isBarca: Boolean get() = topicId == NewsTopics.BARCA.id
+    /** Full news hub, slice 3: the lane of stories matching the words he follows, first of all. */
+    val isFollowing: Boolean get() = topicId == NewsRules.FOLLOWING_LANE
     /** Full news hub, slice 1: stories not read yet in this lane. */
     val unread: Int get() = items.count { !it.read }
     /** "3 new" beside the lane's name, or null when everything in it is read. */
@@ -186,6 +197,14 @@ data class NewsMatchday(val eventId: String, val title: String, val line: String
  */
 data class NewsSourceChoice(val key: String, val name: String, val stories: Int, val on: Boolean) {
     val label: String get() = if (on) "$name · $stories" else "$name · off"
+}
+
+/**
+ * Full news hub, slice 3: one word or name he follows — "Arsenal · 3" (stories in the last two days, any topic, from
+ * the sources he has on), "Bitcoin · none yet". A tap takes it off (with Undo).
+ */
+data class NewsFollowChoice(val key: String, val name: String, val stories: Int) {
+    val label: String get() = if (stories > 0) "$name · $stories" else "$name · none yet"
 }
 
 /** The detail sheet: the story, its place in the run ("3 of 18") and the stories either side (Next/Previous). */
@@ -210,9 +229,15 @@ data class NewsPlace(
      * nothing in the last two days" — shown after the lanes.
      */
     val quiet: List<String> = emptyList(),
+    /** Full news hub, slice 3: the words and names he follows, in the order he added them. */
+    val follows: List<NewsFollowChoice> = emptyList(),
 ) {
     /** "12 sources · 2 off · …" under the source switches; null with none. */
     val sourcesLine: String? get() = NewsRules.sourceSwitchesLine(sources)
+    /** The line under Follow: what following does, or how many he follows and what a tap does. */
+    val followsLine: String get() = NewsRules.followsLine(follows)
+    /** Whether another word can be followed ([NewsRules.MAX_FOLLOWS]). */
+    val canFollowMore: Boolean get() = follows.size < NewsRules.MAX_FOLLOWS
 
     /** The switch's line under Topics, and the caption naming every source for what's switched on. */
     val spanishLine: String get() = NewsRules.spanishLine(spanishSources)
@@ -256,6 +281,68 @@ object NewsRules {
     /** Sources that can be switched off at once (well over what the feeds name). */
     const val MAX_SOURCES_OFF = 40
     private const val MAX_SOURCE_NAME = 60
+    /** Words and names followed at once. */
+    const val MAX_FOLLOWS = 12
+    /** A followed phrase's longest (a name or a few words, not a sentence). */
+    const val MAX_FOLLOW_CHARS = 40
+    /** The Following lane's id ([NewsLane.topicId]); never a topic id. */
+    const val FOLLOWING_LANE = "following"
+
+    /** A followed phrase's key: as [storyKey] makes it ("Lamine  Yamal!" and "lamine yamal" are one). */
+    fun followKey(phrase: String): String = storyKey(phrase)
+
+    /** The stored follows as display phrases (blank, too-short and repeated ones dropped), in the order added. */
+    fun follows(stored: String?): List<String> {
+        val seen = HashSet<String>()
+        return stored?.split(',')?.map { clean(it).take(MAX_FOLLOW_CHARS) }
+            ?.filter { followKey(it).length >= 2 && seen.add(followKey(it)) } ?: emptyList()
+    }
+
+    /**
+     * What he typed under Follow, as phrases: split on commas, semicolons and " and " only between commas is kept as
+     * one name ("Marks and Spencer" stays whole), each cleaned and capped; under 2 letters dropped.
+     */
+    fun parseFollows(typed: String): List<String> {
+        val seen = HashSet<String>()
+        return typed.split(',', ';', '\n').map { clean(it).trim('"', '\'', '#', '@', ' ').take(MAX_FOLLOW_CHARS).trim() }
+            .filter { followKey(it).length >= 2 && seen.add(followKey(it)) }
+    }
+
+    /**
+     * [stored] with [phrases] followed (added at the end, each once; past [MAX_FOLLOWS] the newest are not added) or,
+     * with [on] false, unfollowed; null when nothing changes. The second value is what was actually added or taken off.
+     */
+    fun withFollows(stored: String?, phrases: List<String>, on: Boolean): Pair<String, List<String>>? {
+        val have = follows(stored)
+        val keys = have.map(::followKey).toHashSet()
+        return if (on) {
+            val room = (MAX_FOLLOWS - have.size).coerceAtLeast(0)
+            val added = phrases.map { clean(it.replace(',', ' ')).take(MAX_FOLLOW_CHARS) }
+                .filter { followKey(it).length >= 2 && keys.add(followKey(it)) }.take(room)
+            if (added.isEmpty()) null else (have + added).joinToString(",") to added
+        } else {
+            val drop = phrases.map(::followKey).toHashSet()
+            val gone = have.filter { followKey(it) in drop }
+            if (gone.isEmpty()) null else have.filter { followKey(it) !in drop }.joinToString(",") to gone
+        }
+    }
+
+    /**
+     * The first followed phrase ([follows], display names) a story names as whole words in its title or summary,
+     * accents, case and punctuation ignored ("Barça" matches "barca"; "AI" doesn't match "said"); null for none.
+     */
+    fun followMatch(h: Headline, follows: List<String>): String? {
+        if (follows.isEmpty()) return null
+        val text = " " + storyKey(h.title + " " + (h.summary ?: "")) + " "
+        return follows.firstOrNull { f -> followKey(f).let { k -> k.isNotEmpty() && text.contains(" $k ") } }
+    }
+
+    /** "Follow a word or name…" with none; "Following 2 · stories naming them lead News, the ticker and the brief · tap one to stop". */
+    fun followsLine(follows: List<NewsFollowChoice>): String = when {
+        follows.isEmpty() -> "Follow a team, a person, a company or a word: stories naming it lead News, the ticker and the brief, whatever their topic"
+        follows.size >= MAX_FOLLOWS -> "Following $MAX_FOLLOWS, the most · tap one to stop following it"
+        else -> "Following ${follows.size} · stories naming them lead News, the ticker and the brief · tap one to stop"
+    }
 
     /** A source's key: its name as [storyKey] makes it ("BBC  Sport" and "bbc sport" are one source). */
     fun sourceKey(name: String): String = storyKey(name)
@@ -483,6 +570,7 @@ object NewsRules {
         read: Set<String> = emptySet(),
         queuedLinks: Set<String> = emptySet(),
         sourcesOff: List<String> = emptyList(),
+        follows: List<String> = emptyList(),
     ): NewsPlace {
         val chosen = topics.filter { it.chosen }.map { it.id }
         val offKeys = sourcesOff.map(::sourceKey).toHashSet()
@@ -492,26 +580,38 @@ object NewsRules {
         val seenTitles = HashSet<String>()
         val freshAll = all.filter { it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_IN_PLACE_MS }
         val fresh = fromSourcesOn(freshAll, offKeys)
-        val lanes = order.mapNotNull { topic ->
+        fun item(h: Headline, followed: String?) = NewsItem(
+            h.id, h.title, h.url, h.source, h.topic,
+            "${h.source} · ${age(h.publishedAtMs, nowMs)}" + (followed?.let { " · $it" } ?: ""), h.summary, h.publishedAtMs, h.imageKey,
+            read = readKey(h.url, h.title) in read,
+            queued = h.url != null && QueueRules.key(h.url) in queuedLinks,
+            followed = followed,
+        )
+        // Full news hub, slice 3: stories naming a followed word lead, from any topic the server mirrors (each once).
+        val followCounts = LinkedHashMap<String, HashSet<String>>()
+        follows.forEach { followCounts[followKey(it)] = HashSet() }
+        val following = fresh.mapNotNull { h -> followMatch(h, follows)?.let { h to it } }
+            .sortedWith(compareByDescending<Pair<Headline, String>> { it.first.publishedAtMs }.thenBy { it.first.id })
+            .filter { (h, f) -> followCounts[followKey(f)]?.add(linkKey(h)); seenLinks.add(linkKey(h)) && seenTitles.add(storyKey(h.title)) }
+            .take(MAX_IN_LANE)
+            .map { (h, f) -> item(h, f) }
+        val followLane = if (following.isEmpty()) null else NewsLane(FOLLOWING_LANE, "Following", sourcesLine(following), following)
+        val lanes = listOfNotNull(followLane) + order.mapNotNull { topic ->
             val items = fresh.filter { it.topic == topic }
                 .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { it.id })
                 .filter { seenLinks.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
                 .take(MAX_IN_LANE)
-                .map { h ->
-                    NewsItem(
-                        h.id, h.title, h.url, h.source, h.topic, "${h.source} · ${age(h.publishedAtMs, nowMs)}", h.summary, h.publishedAtMs, h.imageKey,
-                        read = readKey(h.url, h.title) in read,
-                        queued = h.url != null && QueueRules.key(h.url) in queuedLinks,
-                    )
-                }
+                .map { h -> item(h, null) }
             if (items.isEmpty()) null
             else NewsLane(topic, NewsTopics.byId(topic)?.label ?: topic, sourcesLine(items), items)
         }
+        val followChoices = follows.map { NewsFollowChoice(followKey(it), it, followCounts[followKey(it)]?.size ?: 0) }
         val shown = lanes.map { it.topicId }.toSet()
         val hiddenBySources = order.filter { t -> t !in shown && freshAll.any { it.topic == t } && fresh.none { it.topic == t } }.toSet()
         val empty = when {
             lanes.isNotEmpty() -> null
-            chosen.isEmpty() -> "No topics chosen · pick some below"
+            chosen.isEmpty() && follows.isEmpty() -> "No topics chosen · pick some below"
+            chosen.isEmpty() -> "Nothing naming what you follow in the last two days · pick some topics below"
             hiddenBySources.isNotEmpty() -> "Nothing from the sources you have on · turn some back on under Topics"
             else -> "No headlines in the last two days · they refresh every hour"
         }
@@ -520,7 +620,7 @@ object NewsRules {
             val label = NewsTopics.byId(t)?.label ?: t
             if (t in hiddenBySources) "$label · its sources are off" else "$label · nothing in the last two days"
         }
-        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen }, spanish, sources, quiet)
+        return NewsPlace(lanes, topics, empty, matchday?.takeIf { NewsTopics.BARCA.id in chosen }, spanish, sources, quiet, followChoices)
     }
 
     /** What the fixtures feed adds to a title whose kick-off isn't set yet. */
@@ -578,22 +678,35 @@ object NewsRules {
 
     /**
      * The brief's headlines: the chosen topics only, from the last [MAX_AGE_MS], newest first, each story once (the
-     * same article in two topic feeds, or the same title), at most [MAX_IN_BRIEF].
+     * same article in two topic feeds, or the same title), at most [MAX_IN_BRIEF]. Full news hub, slice 3: stories naming
+     * a word he [follows] come first, whatever their topic ("BBC Sport · Following Arsenal · 2 h ago"), at most three of
+     * them, so the chosen topics still have their say.
      */
-    fun forBrief(all: List<Headline>, chosen: List<String>, nowMs: Long): List<BriefHeadline> {
+    fun forBrief(all: List<Headline>, chosen: List<String>, nowMs: Long, follows: List<String> = emptyList()): List<BriefHeadline> {
         val seenStories = HashSet<String>()
         val seenTitles = HashSet<String>()
-        return all.asSequence()
-            .filter { it.topic in chosen && it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_MS }
-            .sortedWith(compareByDescending<Headline> { it.publishedAtMs }.thenBy { chosen.indexOf(it.topic) }.thenBy { it.id })
+        val fresh = all.filter { it.publishedAtMs <= nowMs + 10 * 60_000L && nowMs - it.publishedAtMs <= MAX_AGE_MS }
+        val newest = compareByDescending<Headline> { it.publishedAtMs }.thenBy { chosen.indexOf(it.topic) }.thenBy { it.id }
+        val followed = fresh.mapNotNull { h -> followMatch(h, follows)?.let { h to it } }
+            .sortedWith(compareBy(newest) { it.first })
+            .filter { (h, _) -> seenStories.add(linkKey(h)) && seenTitles.add(storyKey(h.title)) }
+            .take(MAX_FOLLOWED_IN_BRIEF)
+            .map { (h, f) -> BriefHeadline(h.id, h.title, h.url, listOf(h.source, "Following $f", age(h.publishedAtMs, nowMs)).joinToString(" · ")) }
+        val rest = fresh.asSequence()
+            .filter { it.topic in chosen }
+            .sortedWith(newest)
             .filter { seenStories.add(linkKey(it)) && seenTitles.add(storyKey(it.title)) }
-            .take(MAX_IN_BRIEF)
+            .take(MAX_IN_BRIEF - followed.size)
             .map { h ->
                 val topic = NewsTopics.byId(h.topic)?.takeIf { chosen.size > 1 }?.label
                 BriefHeadline(h.id, h.title, h.url, listOfNotNull(h.source, topic, age(h.publishedAtMs, nowMs)).joinToString(" · "))
             }
             .toList()
+        return followed + rest
     }
+
+    /** Followed stories in the brief at most (the rest of [MAX_IN_BRIEF] are the chosen topics'). */
+    const val MAX_FOLLOWED_IN_BRIEF = 3
 }
 
 /** Mirrored headlines (read-only: the server writes them) and the synced choice of topics. */
@@ -617,6 +730,21 @@ class News(private val replica: Replica) {
         val next = NewsRules.withSource(sourcesOffStored(), name, on) ?: return false
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.SOURCES_OFF to next.fv()))
         return true
+    }
+
+    private fun followsStored(): String? = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(NewsFields.FOLLOWS)?.textOrNull
+
+    /** The words and names followed ([NewsFields.FOLLOWS]), in the order added. */
+    fun follows(): List<String> = NewsRules.follows(followsStored())
+
+    /**
+     * Follows (or with [on] false stops following) these phrases everywhere news shows (synced); what changed, empty
+     * when nothing did (already followed, too short, or [NewsRules.MAX_FOLLOWS] reached).
+     */
+    fun setFollows(phrases: List<String>, on: Boolean): List<String> {
+        val (next, changed) = NewsRules.withFollows(followsStored(), phrases, on) ?: return emptyList()
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(NewsFields.FOLLOWS to next.fv()))
+        return changed
     }
 
     /** Every mirrored headline, whatever its language. */
@@ -663,6 +791,7 @@ class News(private val replica: Replica) {
         read = readKeys().toHashSet(),
         queuedLinks = queued.filter { !it.done }.map { QueueRules.key(it.url) }.toHashSet(),
         sourcesOff = sourcesOff(),
+        follows = follows(),
     )
 
     /** The read list ([NewsFields.READ]). */

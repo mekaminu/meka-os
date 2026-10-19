@@ -4374,6 +4374,31 @@ class MekaCore(
      */
     suspend fun setNewsSource(name: String, on: Boolean): Boolean = onCore { news.setSource(name, on) }
 
+    /**
+     * Full news hub, slice 3: follows what he typed under News → Topics → Follow ("Arsenal, Lamine Yamal": commas
+     * separate); stories naming one, whatever their topic, lead News in a Following lane and reach the ticker and the
+     * brief on both apps. Synced. The line to show: "Following Arsenal and Lamine Yamal", or why nothing was added.
+     */
+    suspend fun newsFollow(typed: String): String = onCore {
+        val phrases = os.meka.core.domain.NewsRules.parseFollows(typed)
+        if (phrases.isEmpty()) return@onCore "Type a word or name to follow, at least two letters"
+        val added = news.setFollows(phrases, true)
+        when {
+            added.isNotEmpty() -> "Following " + humanJoin(added) + " · stories naming " + (if (added.size == 1) "it" else "them") + " lead News"
+            news.follows().size >= os.meka.core.domain.NewsRules.MAX_FOLLOWS -> "You follow ${os.meka.core.domain.NewsRules.MAX_FOLLOWS} already · stop following one first"
+            else -> "Already following " + humanJoin(phrases)
+        }
+    }
+
+    /** Stops following one word (a [os.meka.core.domain.NewsFollowChoice.name]); Undo is [newsFollow] with it. False when it wasn't followed. */
+    suspend fun newsUnfollow(name: String): Boolean = onCore { news.setFollows(listOf(name), false).isNotEmpty() }
+
+    private fun humanJoin(xs: List<String>): String = when (xs.size) {
+        0 -> ""
+        1 -> xs[0]
+        else -> xs.dropLast(1).joinToString(", ") + " and " + xs.last()
+    }
+
     // ---- Full news hub (V2, slice 1: read and new, Save for the train) ----
 
     /** The stories the last Mark all read put away, for its Undo (this device, this session). */
@@ -9519,7 +9544,8 @@ class MekaCore(
         _notifySettings.value = notifySettings
         _brief.value = brief.view(all, dayEvents, workState.schedule, notifySettings.quiet, _lists.value, _goals.value, _fasting.value, today,
             news.all(), news.choices(), workHolidays, placesLine ?: os.meka.core.domain.WeatherRules.nowLine(forecast, nowMs(), cal), schoolToday,
-            upNextId = _today.value.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren).let {
+            upNextId = _today.value.upNext?.id, work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
+            newsFollows = news.follows()).let {
                 // Annual leave, slice 2: "… · last day before leave · back Mon 2 Nov" and "Annual leave · no work · back …".
                 val workLine = os.meka.core.domain.LeaveRules.workLine(it.workLine, leaveDays, leaveHours, today.epochDay)
                 val t = _today.value

@@ -1921,6 +1921,22 @@ final class CoreModel {
     /// Full news hub, slice 2: switches one source on or off in News, the ticker and the brief; synced with the Fold.
     /// Only the source's name String crosses.
     func setNewsSource(_ name: String, on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setNewsSource(name: name, on: on) } }
+    /// Full news hub, slice 3: follows what he typed ("Arsenal, Lamine Yamal"); stories naming one lead News, the ticker
+    /// and the brief on both apps. Only the typed String crosses; the line to show comes back.
+    func newsFollow(_ typed: String) async -> String? {
+        guard let core else { return nil }
+        do {
+            let line = try await core.newsFollow(typed: typed)
+            MekaHaptics.tick()
+            return line
+        } catch { lastError = error.localizedDescription; return nil }
+    }
+    /// Stops following one word or name (Undo is `newsFollow` with it); whether it was followed.
+    func newsUnfollow(_ name: String) async -> Bool {
+        guard let core else { return false }
+        MekaHaptics.tick()
+        return (try? await core.newsUnfollow(name: name))?.boolValue ?? false
+    }
 
     // Full news hub, slice 1: read and new (synced with the Fold), Mark all read with Undo, Save for the train.
     /// Opening a story in News marks it read on both apps. Only the story's id crosses.

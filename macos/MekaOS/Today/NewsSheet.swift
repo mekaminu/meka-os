@@ -20,6 +20,9 @@ import SwiftUI
 /// Slice 2: Topics → Sources lists every source in the chosen topics with its story count, a switch each (synced; off
 /// leaves its stories out of News, the ticker and the brief), and a chosen topic with nothing to show says why after
 /// the lanes ("AI · its sources are off").
+/// Slice 3: Follow — a field under the captions takes a team, a person or a word ("Arsenal, Lamine Yamal"); stories
+/// naming one lead News in a Following lane whatever their topic, and reach the ticker and the brief on both apps.
+/// Topics → Following lists each with its count; choosing one stops following it, with Undo.
 struct NewsSheet: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.dismiss) private var dismiss
@@ -30,6 +33,9 @@ struct NewsSheet: View {
     @State private var forward = true
     @State private var marked: String?
     @State private var trainLine: CoreModel.QueueSaid?
+    @State private var followText = ""
+    @State private var followNote: String?
+    @State private var unfollowed: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -57,6 +63,45 @@ struct NewsSheet: View {
         }
     }
 
+    /// Full news hub, slice 3: the Follow field, and its line (what following does, or what just changed, with Undo).
+    @ViewBuilder
+    private func followRow(_ place: NewsPlace) -> some View {
+        if place.canFollowMore {
+            TextField("Follow a team, person or word…", text: $followText)
+                .textFieldStyle(.roundedBorder).font(MekaType.body)
+                .onSubmit {
+                    let typed = followText
+                    guard !typed.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+                    followText = ""
+                    Task { unfollowed = nil; followNote = await model.newsFollow(typed) }
+                }
+        }
+        HStack {
+            Text(followNote ?? place.followsLine).font(MekaType.caption)
+                .foregroundStyle(followNote != nil ? palette.accent : palette.textTertiary)
+                .contentTransition(.opacity)
+            Spacer()
+            if let name = unfollowed, followNote != nil {
+                Button("Undo") {
+                    Task { _ = await model.newsFollow(name); unfollowed = nil; followNote = nil }
+                }
+                .buttonStyle(.borderless).foregroundStyle(palette.accent)
+            }
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: followNote)
+        .task(id: followNote) {
+            guard followNote != nil else { return }
+            try? await Task.sleep(for: .seconds(6))
+            followNote = nil; unfollowed = nil
+        }
+    }
+
+    private func unfollow(_ name: String) {
+        Task {
+            if await model.newsUnfollow(name) { unfollowed = name; followNote = "Stopped following " + name }
+        }
+    }
+
     @ViewBuilder
     private func list(_ place: NewsPlace) -> some View {
         HStack {
@@ -80,6 +125,16 @@ struct NewsSheet: View {
                         }
                     }
                 }
+                // Full news hub, slice 3: what he follows; choosing one stops following it.
+                if !place.follows.isEmpty {
+                    Divider()
+                    Menu("Following") {
+                        ForEach(place.follows, id: \.key) { f in
+                            let name = f.name
+                            Button("Stop following " + f.label) { unfollow(name) }
+                        }
+                    }
+                }
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
@@ -90,6 +145,7 @@ struct NewsSheet: View {
             Text("Sources: " + line).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
                 .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: line)
         }
+        followRow(place).staggeredAppear(0)
         if let line = place.unreadLine {
             HStack {
                 Text(marked ?? line).font(MekaType.itemMeta)

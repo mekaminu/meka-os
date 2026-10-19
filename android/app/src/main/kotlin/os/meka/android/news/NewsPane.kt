@@ -12,6 +12,11 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -116,6 +121,10 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
     // Full news hub, slice 1: "Marked 12 read" with Undo for a few seconds after Mark all read.
     var markedLine by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(markedLine) { if (markedLine != null) { delay(6_000); markedLine = null } }
+    // Full news hub, slice 3: what Follow just did ("Following Arsenal …", "Stopped following …"), and its Undo.
+    var followNote by remember { mutableStateOf<String?>(null) }
+    var unfollowed by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(followNote) { if (followNote != null) { delay(6_000); followNote = null; unfollowed = null } }
     BackHandler(enabled = openId != null && eventOpen == null) { openId = null }
     BackHandler(enabled = eventOpen != null) { eventOpen = null }
 
@@ -177,6 +186,50 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                             }
                             place.sourcesLine?.let { line ->
                                 Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                            }
+                        }
+                        // Full news hub, slice 3: words and names he follows; a story naming one leads News (any topic),
+                        // the ticker and the brief. A tap on a chip stops following it, with Undo.
+                        Box(Modifier.padding(top = MekaSpace.m)) {
+                            if (place.follows.isNotEmpty()) {
+                                Chips("Follow", place.follows.map { it.label to true }) { i ->
+                                    val f = place.follows[i]
+                                    haptics.tick()
+                                    scope.launch {
+                                        if (runCatching { core.newsUnfollow(f.name) }.getOrDefault(false)) {
+                                            unfollowed = f.name; followNote = "Stopped following ${f.name}"
+                                        }
+                                    }
+                                }
+                            } else {
+                                SectionLabel("Follow")
+                            }
+                        }
+                        if (place.canFollowMore) {
+                            Box(Modifier.padding(top = MekaSpace.xs)) {
+                                FollowField { typed ->
+                                    haptics.tick()
+                                    scope.launch {
+                                        unfollowed = null
+                                        followNote = runCatching { core.newsFollow(typed) }.getOrNull()
+                                    }
+                                }
+                            }
+                        }
+                        AnimatedContent(followNote, label = "follow-note") { note ->
+                            if (note == null) {
+                                Text(place.followsLine, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                            } else {
+                                Row(Modifier.padding(top = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(note, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
+                                    unfollowed?.let { name ->
+                                        Text("Undo", style = MekaType.captionStrong, color = Meka.colors.accent,
+                                            modifier = Modifier.clickable(role = Role.Button) {
+                                                haptics.tick()
+                                                scope.launch { runCatching { core.newsFollow(name) }; unfollowed = null; followNote = null }
+                                            }.minTouch().padding(horizontal = MekaSpace.xs))
+                                    }
+                                }
                             }
                         }
                     }
@@ -469,4 +522,27 @@ private fun NavButton(label: String, id: String?, go: (String) -> Unit) {
             .then(if (id != null) Modifier.clickable(role = Role.Button) { go(id) } else Modifier)
             .minTouch().padding(horizontal = MekaSpace.l),
     )
+}
+
+/** Full news hub, slice 3: the Follow field under Topics — type a team, a person or a word, Done follows it. */
+@Composable
+private fun FollowField(onDone: (String) -> Unit) {
+    var text by rememberSaveable { mutableStateOf("") }
+    val hint = "Follow a team, person or word…"
+    Box(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .minTouch().padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
+    ) {
+        if (text.isEmpty()) Text(hint, style = MekaType.body, color = Meka.colors.textTertiary)
+        BasicTextField(
+            value = text,
+            onValueChange = { text = it.take(200) },
+            singleLine = true,
+            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+            cursorBrush = SolidColor(Meka.colors.accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (text.isNotBlank()) { onDone(text); text = "" } }),
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = hint },
+        )
+    }
 }
