@@ -8231,12 +8231,15 @@ class MekaCore(
         onCore { speechCached(voice.name, words) }?.let { return it }
         val wait = os.meka.core.domain.SpeechRules.budgetMs(first, reading, hold)
         val started = nowMs()
+        // Set here and kept on the core below: no core hop inside the timeout (a test's virtual clock would fire it).
+        var unreachable = false
         val r = withTimeoutOrNull(wait) {
             try { api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
-                onCore { speechUnreachable = true }
+                unreachable = true
                 os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED)
             }
         }
+        if (unreachable) onCore { speechUnreachable = true }
         if (r == null) { // slow this time: the device speaks, and the next line asks again
             onCore { speechTimed(started, wait, os.meka.core.domain.SpeechTiming.Outcome.LATE) }
             return null
