@@ -67,11 +67,35 @@ data class BinsView(
     val summary: String,
     /** Slice 3: the one-offs still to come, soonest first: "Black bin" · "Sat 2 Jan instead of Wed 30 Dec" (Remove takes it back). */
     val oneOffs: List<BinRow> = emptyList(),
+    /** Completeness: the evening reminder's minute ([BinRules.NOTICE_MIN] until he picks another). */
+    val remindMinute: Int = BinRules.NOTICE_MIN,
+    /** The reminder's chips, in order (his minute among them). */
+    val remindChoices: List<Int> = BinRules.REMIND_CHOICES,
+    /** "Reminder the evening before at 19:00 · Today says it from 16:00". */
+    val remindLine: String = BinRules.remindLine(BinRules.NOTICE_MIN),
 ) {
     val isEmpty: Boolean get() = rows.isEmpty()
 
     companion object { val EMPTY = BinsView(emptyList(), BinRules.EMPTY_LINE) }
 }
+
+/**
+ * Bin days completeness: tonight's bins on the Galaxy Watch, from [BinRules.EVE_FROM_MIN] the evening before a
+ * collection until midnight — "OUT TONIGHT" · "Black bin and food caddy", lit from his reminder's time.
+ */
+data class WatchBins(
+    /** "OUT TONIGHT", or "BINS" when the usual collection was moved or dropped. */
+    val label: String,
+    /** From his reminder's time on (bins still to go out): the label is lit. */
+    val lit: Boolean,
+    /** "Black bin and food caddy" · "No food caddy collection". */
+    val line: String,
+    /** "a day later for the bank holiday", "Nothing goes out tonight", or null. */
+    val note: String?,
+    /** The tile's one line: "Bins out tonight · Black bin". */
+    val short: String,
+    val spoken: String,
+)
 
 /** What adding a line did: the line under the field, and whether nothing was written. */
 data class BinAdded(val line: String, val refused: Boolean)
@@ -80,8 +104,13 @@ object BinRules {
     const val MAX_NAME = 40
     /** Today's line from 16:00 the evening before until midnight. */
     const val EVE_FROM_MIN = 16 * 60
-    /** The heads-up at 19:00 the evening before, standing until 07:00 on the day (bins out by then). */
+    /** The heads-up at 19:00 the evening before (his choice since completeness), standing until 07:00 on the day. */
     const val NOTICE_MIN = 19 * 60
+    /** Completeness: the reminder's chips, 17:00 to 21:00. */
+    val REMIND_CHOICES: List<Int> = listOf(17 * 60, 18 * 60, 19 * 60, 20 * 60, 21 * 60)
+    /** The `context_mode` entity holding the reminder's minute (ADR-008 addendum 2026-10-19, additive). */
+    const val SETTING_ID = "bins_reminder"
+    const val REMIND_FIELD = "remindMinute"
     const val STALE_MIN = 7 * 60
 
     const val ADD_HINT = "Add… (Black bin Tue fortnightly from 13 Oct, Food caddy every Tue)"
@@ -367,8 +396,9 @@ object BinRules {
     }
 
     /** The Bins pane. */
-    fun view(bins: List<BinItem>, today: Long, holidays: HolidayCalendar): BinsView {
-        if (bins.isEmpty()) return BinsView.EMPTY
+    fun view(bins: List<BinItem>, today: Long, holidays: HolidayCalendar, remindMinute: Int = NOTICE_MIN): BinsView {
+        val choices = (REMIND_CHOICES + remindMinute).distinct().sorted()
+        if (bins.isEmpty()) return BinsView.EMPTY.copy(remindMinute = remindMinute, remindChoices = choices, remindLine = remindLine(remindMinute))
         val rows = bins.map { b ->
             val next = next(b, today, holidays)
             val note = next?.let { "Next: ${dayWord(it, today)}" + (note(b, it)?.let { n -> " · $n" } ?: "") }
@@ -377,7 +407,39 @@ object BinRules {
         }
         val firstDay = bins.mapNotNull { next(it, today, holidays) }.minOrNull()
         val summary = firstDay?.let { "Next: ${names(onDay(bins, it, holidays))} · ${dayWord(it, today)}" } ?: EMPTY_LINE
-        return BinsView(rows, summary, oneOffRows(bins, today))
+        return BinsView(rows, summary, oneOffRows(bins, today), remindMinute, choices, remindLine(remindMinute))
+    }
+
+    /** A reminder minute he may pick: a quarter hour from 16:00 (Today's line) to 22:00. */
+    fun validRemind(minute: Int): Boolean = minute in EVE_FROM_MIN..22 * 60 && minute % 15 == 0
+
+    /** The stored minute, or [NOTICE_MIN] when none (or not a valid one) is stored. */
+    fun readRemind(fields: Map<String, FieldValue>?): Int =
+        fields?.get(REMIND_FIELD)?.longOrNull?.toInt()?.takeIf { validRemind(it) } ?: NOTICE_MIN
+
+    /** "Reminder the evening before at 19:00 · Today says it from 16:00". */
+    fun remindLine(minute: Int): String =
+        "Reminder the evening before at ${LocalClock.formatMinute(minute)} · Today says it from ${LocalClock.formatMinute(EVE_FROM_MIN)}"
+
+    /** "Reminder at 20:00 · on both devices" after a chip. */
+    fun remindSaid(minute: Int): String = "Reminder at ${LocalClock.formatMinute(minute)} · on both devices"
+
+    /**
+     * Completeness: tonight's bins on the watch, from [EVE_FROM_MIN] the evening before a collection until midnight
+     * (bins go out the evening before), lit from [remindMinute]; a one-off that moved or dropped tomorrow's usual
+     * collection says so. Null on other evenings and during the day.
+     */
+    fun watch(bins: List<BinItem>, today: Long, minuteOfDay: Int, holidays: HolidayCalendar, remindMinute: Int = NOTICE_MIN): WatchBins? {
+        val tonight = tonightLine(bins, today, minuteOfDay, holidays) ?: return null
+        val going = onDay(bins, today + 1, holidays)
+        val held = heldBack(bins, today + 1, holidays).map { it.second }
+        if (going.isEmpty()) {
+            return WatchBins("BINS", false, held.first(), (held.drop(1) + "Nothing goes out tonight").joinToString(" · "),
+                "Bins · not out tonight", tonight.spoken)
+        }
+        val note = (listOfNotNull(notes(going, today + 1).removePrefix(" · ").takeIf { it.isNotEmpty() }) + held)
+            .joinToString(" · ").takeIf { it.isNotEmpty() }
+        return WatchBins("OUT TONIGHT", minuteOfDay >= remindMinute, names(going), note, "Bins out tonight · ${names(going)}", tonight.spoken)
     }
 
     /** "Sat 2 Jan instead of Wed 30 Dec" / "No collection on Tue 29 Dec". */
@@ -420,7 +482,7 @@ object BinRules {
      * [NOTICE_MIN], through the governor so quiet hours and digests apply, standing until [STALE_MIN] on the day:
      * "Black bin and food caddy out tonight" · "Collected tomorrow, Tue 13 Oct".
      */
-    fun notices(bins: List<BinItem>, nowMs: Long, cal: LocalCalendar, holidays: HolidayCalendar): List<Notice> {
+    fun notices(bins: List<BinItem>, nowMs: Long, cal: LocalCalendar, holidays: HolidayCalendar, remindMinute: Int = NOTICE_MIN): List<Notice> {
         if (bins.isEmpty()) return emptyList()
         val today = cal.epochDayOf(nowMs)
         return (today..today + 7).mapNotNull { day ->
@@ -429,7 +491,7 @@ object BinRules {
                 key = "bins:$day", source = NoticeSource.BINS, tier = NoticeTier.HEADS_UP,
                 title = "${names(going)} out tonight",
                 text = "Collected tomorrow, ${CivilDate.shortLabel(day)}" + notes(going, day),
-                atMs = cal.toEpochMs(day - 1, NOTICE_MIN), target = NoticeTarget.TODAY,
+                atMs = cal.toEpochMs(day - 1, remindMinute.takeIf { validRemind(it) } ?: NOTICE_MIN), target = NoticeTarget.TODAY,
                 expiresAtMs = cal.toEpochMs(day, STALE_MIN),
             )
         }
@@ -506,7 +568,18 @@ class Bins(
             .map { b -> moves[b.id]?.let { b.copy(moves = it) } ?: b }
     }
 
-    fun view(holidays: HolidayCalendar): BinsView = BinRules.view(items(), calendar.epochDayOf(nowMs()), holidays)
+    fun view(holidays: HolidayCalendar): BinsView = BinRules.view(items(), calendar.epochDayOf(nowMs()), holidays, remindMinute())
+
+    /** Completeness: the evening reminder's minute (synced, both devices). */
+    fun remindMinute(): Int = BinRules.readRemind(replica.entity(EntityTypes.CONTEXT_MODE, BinRules.SETTING_ID)?.fields)
+
+    /** Sets the reminder's minute; false (nothing written) when it isn't one he may pick or nothing changes. */
+    fun setRemind(minute: Int): Boolean {
+        if (!BinRules.validRemind(minute)) return false
+        if (replica.entity(EntityTypes.CONTEXT_MODE, BinRules.SETTING_ID) != null && remindMinute() == minute) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, BinRules.SETTING_ID, mapOf(BinRules.REMIND_FIELD to minute.toLong().fv()))
+        return true
+    }
 
     /** Adds (or, for a bin already there by name, updates) what [text] says; refused when MEKA couldn't read it. */
     fun add(text: String, holidays: HolidayCalendar = HolidayCalendar.NONE): BinAdded {

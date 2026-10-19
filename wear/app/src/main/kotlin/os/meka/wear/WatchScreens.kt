@@ -321,6 +321,8 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
 
         CommuteRow(home.commute, reduced)
 
+        BinsRow(home.bins, reduced)
+
         PrepRow(home.prep, reduced)
 
         MatchRow(home.match, reduced)
@@ -748,6 +750,42 @@ private fun CommuteRow(commute: os.meka.core.domain.WatchCommute?, reduced: Bool
                 label = "commuteLine",
             ) { line -> Line(line, MekaType.metaStrong.copy(color = C.textPrimary, fontFeatureSettings = "tnum"), maxLines = 2) }
             v.note?.let { Line(it, MekaType.caption.copy(color = C.accent), maxLines = 3) }
+        }
+    }
+}
+
+/**
+ * Bin days, completeness: the evening before a collection, from 16:00 until midnight — "OUT TONIGHT" · "Black bin and
+ * food caddy", the label lit in the accent from his reminder's time; a moved or dropped collection says so. It unfolds
+ * on the expand spring (reduced motion: a fade) and folds away at midnight; the label cross-fades when it lights.
+ */
+@Composable
+private fun BinsRow(bins: os.meka.core.domain.WatchBins?, reduced: Boolean) {
+    // The last row shown, so it folds away still showing itself (not state: nothing reads it to recompose).
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchBins>(1) }
+    if (bins != null) last[0] = bins
+    AnimatedVisibility(
+        visible = bins != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "bins",
+    ) {
+        val v = bins ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = MekaSpace.m)
+                .semantics(mergeDescendants = true) { contentDescription = v.spoken },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            AnimatedContent(
+                targetState = v.lit,
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "binsLit",
+            ) { lit -> Line(v.label, MekaType.captionStrong.copy(color = if (lit) C.accent else C.textSecondary), maxLines = 1) }
+            Line(v.line, MekaType.metaStrong.copy(color = C.textPrimary), maxLines = 2)
+            v.note?.let { Line(it, MekaType.caption.copy(color = C.textSecondary), maxLines = 3) }
         }
     }
 }

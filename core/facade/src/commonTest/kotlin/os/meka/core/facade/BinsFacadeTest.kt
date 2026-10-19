@@ -85,4 +85,33 @@ class BinsFacadeTest {
         assertTrue(mac.binsView.value.oneOffs.isEmpty())
         assertEquals("Next: Food caddy · Tue 13 Oct", mac.binsView.value.summary)
     }
+
+    @Test
+    fun theReminderTimeSetOnTheFoldMovesTheMacsHeadsUpAndTheWatchShowsTonightsBins() = runTest {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.addBin("Food caddy every Tuesday")
+        assertEquals("Reminder at 20:00 · on both devices", fold.setBinReminder(20 * 60))
+        assertNull(fold.setBinReminder(20 * 60))
+        assertNull(fold.setBinReminder(23 * 60))
+        fold.syncNow(); mac.syncNow()
+        assertEquals(20 * 60, mac.binsView.value.remindMinute)
+
+        // Monday 16:00: the watch shows tonight's bins, not lit yet.
+        now += 2 * 24 * 3_600_000L + 6 * 3_600_000L
+        mac.tick()
+        val early = mac.watchHome().bins
+        assertEquals("OUT TONIGHT" to "Food caddy", early?.label to early?.line)
+        assertEquals(false, early?.lit)
+        fun bins(g: os.meka.core.domain.GovernorResult) = g.post.filter { it.source == NoticeSource.BINS }
+        val four = mac.governNotifications(null, DeviceAlerts.ALL)
+        now += 3 * 3_600_000L
+        val seven = mac.governNotifications(four.stateEncoded, DeviceAlerts.ALL)
+        assertTrue(bins(seven).isEmpty(), "not at 19:00 any more")
+        now += 3_600_000L
+        mac.tick()
+        assertEquals(true, mac.watchHome().bins?.lit)
+        val eight = mac.governNotifications(seven.stateEncoded, DeviceAlerts.ALL)
+        assertEquals(listOf("Food caddy out tonight"), bins(eight).map { it.title })
+    }
 }

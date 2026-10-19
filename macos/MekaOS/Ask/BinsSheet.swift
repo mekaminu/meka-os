@@ -4,7 +4,8 @@ import SwiftUI
 /// Ask → More → Bins on the Mac (bin days, slice 1), like the Fold's BinsPane: each bin typed once with its day
 /// ("Black bin Tue fortnightly from 13 Oct", "Food caddy every Tuesday"), a row per bin with its pattern and next
 /// collection (a day later after a bank holiday), each with Remove. Slice 3: one-offs typed in the same field ("Black
-/// bin Sat 2 Jan instead of 29 Dec", "No black bin 29 Dec") list under ONE-OFFS, each with Remove. Only Strings cross
+/// bin Sat 2 Jan instead of 29 Dec", "No black bin 29 Dec") list under ONE-OFFS, each with Remove. Completeness:
+/// REMINDER picks the evening heads-up's time (17:00 to 21:00, synced with the Fold). Only Strings and an Int32 cross
 /// to the core.
 ///
 /// Motion: the sheet scale-fades (system); the summary and the line under the field cross-fade (a refused line lit in
@@ -76,6 +77,28 @@ struct BinsSheet: View {
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: rows.map(\.id) + oneOffs.map(\.id))
             }
             .frame(maxHeight: 320)
+            // Completeness: when the evening reminder comes (synced, both devices).
+            if let v {
+                let minute = Int(v.remindMinute)
+                HStack(spacing: MekaSpace.xs) {
+                    Text("REMINDER")
+                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                        .foregroundStyle(palette.textTertiary)
+                        .accessibilityAddTraits(.isHeader)
+                    Picker("Reminder", selection: Binding(get: { minute }, set: { model.setBinReminder(minute: $0) })) {
+                        ForEach(v.remindChoices.map { Int($0.int32Value) }, id: \.self) { m in
+                            Text(LocalClock.companion.formatMinute(m: Int32(m))).tag(m)
+                        }
+                    }
+                    .labelsHidden().frame(width: 90)
+                    .accessibilityLabel("Bins reminder time")
+                }
+                .padding(.top, MekaSpace.xs)
+                Text(v.remindLine).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: v.remindLine)
+            }
             Text(BinRules.shared.COUNCIL).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {

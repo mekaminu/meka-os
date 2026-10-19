@@ -36,6 +36,8 @@ data class WatchHomeView(
     val message: WatchMessageDraft? = null,
     /** The commute counts everywhere, completeness: when to leave on an office day's commute ([WatchCommuteRules]). */
     val commute: WatchCommute? = null,
+    /** Bin days, completeness: tonight's bins, from 16:00 the evening before a collection ([BinRules.watch]). */
+    val bins: WatchBins? = null,
 )
 
 /**
@@ -215,7 +217,7 @@ object WatchHomeRules {
         now: NowView, fasting: FastingView, nowMs: Long, inbox: WatchInbox? = null,
         parking: List<WatchParking> = emptyList(), match: WatchMatch? = null, prep: WatchPrep? = null,
         draft: WatchDraft? = null, evening: WatchEvening? = null, message: WatchMessageDraft? = null,
-        commute: WatchCommute? = null,
+        commute: WatchCommute? = null, bins: WatchBins? = null,
     ): WatchHomeView {
         val target = now.task?.id ?: now.session?.habitId
         val offered = WATCH_ACTIONS.filter { now.offers(it) }.filter { a ->
@@ -244,6 +246,7 @@ object WatchHomeRules {
             evening = evening,
             message = message,
             commute = commute,
+            bins = bins,
         )
     }
 

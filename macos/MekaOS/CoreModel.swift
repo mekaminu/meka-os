@@ -4752,6 +4752,13 @@ final class CoreModel {
 
     func removeBin(_ id: String) { MekaHaptics.tick(); run { _ = try await $0.removeBin(id: id) } }
 
+    /// Bin days completeness: the evening reminder's time (synced, so the Fold reminds at it too); only an Int32 crosses.
+    func setBinReminder(minute: Int) {
+        MekaHaptics.tick()
+        let m = Int32(minute)
+        run { _ = try await $0.setBinReminder(minute: m) }
+    }
+
     // MARK: Travel mode (slice 1)
 
     /// What adding a typed trip or booking said: the line under the field, and whether nothing was written.

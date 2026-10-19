@@ -145,7 +145,7 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
     GOALS("Goals: quiet goals and the month's review", NoticeTier.HEADS_UP),
     /** The Sunday week ahead ([WeekAheadRules.notices]): Sunday at 18:00, "Your week ahead" · the coming week in a line. */
     WEEK_AHEAD("Sunday week ahead", NoticeTier.HEADS_UP),
-    /** Bin days ([BinRules.notices]): the evening before a collection at 19:00, "Black bin and food caddy out tonight". */
+    /** Bin days ([BinRules.notices]): the evening before a collection at 19:00 (or his time), "Black bin and food caddy out tonight". */
     BINS("Bins out the night before", NoticeTier.HEADS_UP),
     /**
      * Gift planner ([GiftRules.notices]): two weeks before a birthday or anniversary and on its order-by day, at 09:00 —
@@ -776,6 +776,8 @@ object NoticeSources {
         weekAheadSetting: WeekAheadSetting = WeekAheadSetting.DEFAULT,
         /** Bin days: the bins and the bank holidays that move them ([BinRules.notices]). */
         bins: List<BinItem> = emptyList(),
+        /** Bin days, completeness: the evening reminder's minute he picked ([BinRules.NOTICE_MIN] by default). */
+        binRemindMinute: Int = BinRules.NOTICE_MIN,
         holidays: HolidayCalendar = HolidayCalendar.NONE,
         /** Car on autopilot: the registration, for the reminders' titles ([CarRules.notices]). */
         carRegistration: String? = null,
@@ -968,7 +970,7 @@ object NoticeSources {
         out += AppointmentRules.notices(appointments, nowMs, cal)
         out += GoalRhythmRules.notices(goals.goals, goals.month, nowMs, cal)
         if (leaving != null) out += LeavingRules.notices(leaving, office, lines, nowMs, cal)
-        out += BinRules.notices(bins, nowMs, cal, holidays)
+        out += BinRules.notices(bins, nowMs, cal, holidays, binRemindMinute)
         out += GiftRules.notices(occasions, nowMs, cal)
         out += CarRules.notices(lists.renewals.all, carRegistration, nowMs, cal)
         out += MoneyDateRules.notices(lists.renewals.all, nowMs, cal)

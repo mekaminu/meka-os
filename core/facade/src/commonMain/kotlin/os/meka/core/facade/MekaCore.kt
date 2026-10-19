@@ -3861,6 +3861,14 @@ class MekaCore(
     /** Removes a bin for good. */
     suspend fun removeBin(id: String): Boolean = onCore { bins.remove(id) }
 
+    /**
+     * Bin days, completeness: the evening reminder's time (a chip, 17:00 to 21:00; synced, so both devices remind at
+     * it). Returns the line to show ("Reminder at 20:00 · on both devices"), or null when nothing changed.
+     */
+    suspend fun setBinReminder(minute: Int): String? = onCore {
+        if (bins.setRemind(minute)) os.meka.core.domain.BinRules.remindSaid(minute) else null
+    }
+
     // ---- Travel mode (V1, slice 1; Ask → More → Trips) ----
 
     /**
@@ -5157,7 +5165,12 @@ class MekaCore(
             os.meka.core.domain.WatchMessageDraftRules.view(_triage.value),
             // The commute counts everywhere, completeness: when to leave, as last worked out on the core's thread.
             watchCommuteNow,
+            // Bin days, completeness: tonight's bins, as last worked out on the core's thread.
+            watchBinsNow,
         )
+
+    /** The watch's bins row, worked out with each refresh (each minute while the watch's screen is on). */
+    private var watchBinsNow: os.meka.core.domain.WatchBins? = null
 
     /** The watch's leave-by row, worked out with each refresh (each minute while the watch's screen is on). */
     private var watchCommuteNow: os.meka.core.domain.WatchCommute? = null
@@ -9933,7 +9946,10 @@ class MekaCore(
         _approvals.value = approvalStore.cards()
         _school.value = school.view(hoursOf(workState, todayDay))
             .copy(inset = os.meka.core.domain.SchoolTerms.insetLink(aboutYou.profile().schoolWebsite))
-        _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays)
+        val binRemind = bins.remindMinute()
+        _bins.value = os.meka.core.domain.BinRules.view(binItems, todayDay, holidays, binRemind)
+        // Bin days, completeness: tonight's bins on the watch, lit from his reminder's time.
+        watchBinsNow = os.meka.core.domain.BinRules.watch(binItems, todayDay, cal.minuteOfDay(nowMs()), holidays, binRemind)
         _gifts.value = os.meka.core.domain.GiftRules.view(occasionItems, todayDay)
         val docItems = documents.items()
         _trips.value = os.meka.core.domain.TripRules.view(tripItems, todayDay, docItems, tripClocks)
@@ -10053,7 +10069,7 @@ class MekaCore(
             leaving = leavingSetting(),
             weekAhead = _weekAhead.value,
             weekAheadSetting = weekAheadSettings.setting(),
-            bins = bins.items(), holidays = bankHolidays.calendar(),
+            bins = bins.items(), holidays = bankHolidays.calendar(), binRemindMinute = bins.remindMinute(),
             carRegistration = car.registration(),
             lifeAdmin = _lifeAdmin.value,
             occasions = gifts.items(),

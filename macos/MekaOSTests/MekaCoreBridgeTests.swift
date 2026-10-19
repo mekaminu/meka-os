@@ -2939,6 +2939,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertTrue(core.binsView.value.oneOffs.isEmpty)
         let gone = try await core.removeBinMove(id: "nope")
         XCTAssertFalse(gone.boolValue)
+        // Completeness: the reminder's time crosses as an Int32 and comes back as the sheet's line.
+        let said = try await core.setBinReminder(minute: 20 * 60)
+        XCTAssertEqual(said, "Reminder at 20:00 · on both devices")
+        XCTAssertEqual(rules.remindLine(minute: 19 * 60), "Reminder the evening before at 19:00 · Today says it from 16:00")
     }
 
     func testSchoolReachesSwift() {

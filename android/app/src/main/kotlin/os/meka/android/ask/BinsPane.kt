@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,9 +45,11 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.android.work.SettingChip
 import os.meka.core.domain.BinAdded
 import os.meka.core.domain.BinRow
 import os.meka.core.domain.BinRules
+import os.meka.core.domain.LocalClock
 import os.meka.core.facade.MekaCore
 
 /**
@@ -53,11 +57,13 @@ import os.meka.core.facade.MekaCore
  * "Food caddy every Tuesday" — a row per bin with its pattern and next collection (a day later after a bank holiday),
  * each with Remove. Slice 3: one-offs typed in the same field ("Black bin Sat 2 Jan instead of 29 Dec", "No black bin
  * 29 Dec") list under ONE-OFFS, each with Remove (the collection goes on its usual day again). The evening before, Today says "Black bin and food caddy out tonight" and a heads-up comes at 19:00.
+ * Completeness: REMINDER's chips (17:00 to 21:00) move that heads-up, synced so the Mac reminds at the same time.
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; the summary and the line under the field
  * cross-fade (a refused line lit in the accent); rows stagger in 40 ms apart and arrive, move and leave with the list's
  * item motion; Add gives a light haptic (a tick when refused), Remove a tick. Reduced motion: cross-fades.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun BinsPane(core: MekaCore, onClose: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -122,6 +128,28 @@ fun BinsPane(core: MekaCore, onClose: () -> Unit) {
             BinRowView(r, Modifier.animateItem().appear(rememberAppearance(4 + v.rows.size + i)), "Remove the one-off for ${r.name}, ${r.line}") {
                 haptics.tick()
                 scope.launch { runCatching { core.removeBinMove(r.id) } }
+            }
+        }
+        // Completeness: when the evening reminder comes (synced, both devices); Today's line from 16:00 is unchanged.
+        item(key = "remind-label") {
+            SectionLabel("REMINDER", Modifier.animateItem().padding(top = MekaSpace.m))
+        }
+        item(key = "remind") {
+            Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    v.remindChoices.forEach { m ->
+                        val label = LocalClock.formatMinute(m)
+                        SettingChip(label, m == v.remindMinute, "Bins reminder at $label") {
+                            haptics.tick()
+                            scope.launch {
+                                runCatching { core.setBinReminder(m) }.getOrNull()?.let { said = BinAdded(it, refused = false) }
+                            }
+                        }
+                    }
+                }
+                Crossfade(v.remindLine, animationSpec = MekaMotion.appear(reduced), label = "bins-remind") { line ->
+                    Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
             }
         }
         item(key = "council") {
