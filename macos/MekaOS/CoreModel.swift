@@ -2502,6 +2502,13 @@ final class CoreModel {
         _ = try? await core.warmVoice()
     }
 
+    /// The orb speed pass, slice 5: tells Navilife's server he's about to talk, so it opens its AI and voice connections
+    /// before his question arrives (at most every 20 s from the Mac; nothing he said is sent). Nothing crosses back.
+    func warmTalk() async {
+        guard let core else { return }
+        _ = try? await core.warmTalk()
+    }
+
     /// The orb speed pass, slice 3: the hello's openers (this part of the day's and the next hour's, and the welcome
     /// back) made ahead in Navilife's voice, so a click on the orb speaks with no voice fetch. Nothing crosses back.
     func warmHello() async {

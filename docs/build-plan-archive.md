@@ -2342,6 +2342,13 @@ Meka 17:34: he could listen to callers' messages before, but Done (or Clear all)
 - Fold: `TalkController.waitCue` on each Ask (tick via `TalkAutoListen.thinkingTick`, a short quiet tone; hold via `MekaSpeaker.holdOn`), cancelled on End; `MekaSpeaker.say` lets a holding line finish before the answer, `stop` ends it. Mac: `TalkController.waitCue` (Tink at 0.12), `MekaSpeaker.holdOn` and `say` the same, `CoreModel.answerHoldClip` (Data only crosses).
 - Help tip (voice.md), HelpIndex regenerated, motion row (Talk to MEKA). Tests: AnswerWaitTest (6), AnswerHoldFacadeTest (3). No server change, no wire change, no migration, Mac checked nightly.
 
+## The orb feels slow — slice 5 (2026-10-20): the server gets ready as he starts talking
+
+- Core `TalkWarmRules` (TalkWarm.kt): `DEVICE_GAP_MS` 20 s (a device warms at most this often), `SERVER_GAP_MS` 15 s, `due`/`serverDue` (a clock jump back counts as due). Wire `TalkWarmCodec` (the request is only the version; the answer warming · recent · off, unknown → off).
+- Server: `POST /v1/talk/warm` (signed, keyed devices) → `TalkWarm.request()`, at most every 15 s, both warm-ups on their own virtual threads off the request path: `LanguageModelProvider.touch` (Anthropic: `GET /v1/models?limit=1`, no tokens, nothing metered) over `AiHttp.client`, now the one JDK client for the model list, whole answers and streamed answers, so the warmed connection is the answer's; `SpeechService.touch` → `SpeechEngine.touch` (Google's `v1/voices?languageCode=en-GB` over the clips' own client while it has a key, answers and isn't resting; else Polly's DescribeVoices). Nothing said, kept, counted or logged; failures silent. ADR-004 addendum.
+- Facade: `TalkWarmApi` (`HttpSyncTransport.talkWarm`, 404/403 → false) and `MekaCore.warmTalk()` (the device gap, never throws).
+- Fold: `TalkController.hello` (with the tap), `begin` and each `listen` launch `core.warmTalk()`. Mac: `CoreModel.warmTalk`, `TalkController.hello`, `begin` and `listen` the same (nothing crosses back). Help tip (voice.md), HelpIndex regenerated. No UI change, so no motion row. Tests: TalkWarmTest (core, 5), TalkWarmCodecTest (4), TalkWarmFacadeTest (4), backend TalkWarmTest (7). No migration, Mac checked nightly.
+
 ## An update hidden with "Later" can still be installed (Fix first, Meka 2026-10-20 22:20)
 
 He tapped Later on the update card by mistake and couldn't find the build again: Later hid that build until a newer one. Done 2026-10-20 in one slice:

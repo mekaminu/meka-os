@@ -31,6 +31,13 @@ interface SpeechEngine {
 
     /** Whether the engine can be asked at all (Google: a key is in place). */
     fun configured(): Boolean = true
+
+    /**
+     * The orb speed pass, slice 5: opens (or keeps open) the connection to the voice with a free request (the British
+     * voice list, nothing said, nothing counted), so the clip that follows doesn't pay for a new connection. True when
+     * it answered. Throws when the service can't be reached.
+     */
+    fun touch(): Boolean = false
 }
 
 /** Amazon Polly in the service's own region (credentials from the task role). */
@@ -47,6 +54,11 @@ class PollySpeech : SpeechEngine {
             token = page.nextToken()?.takeIf { it.isNotEmpty() }
         } while (token != null && out.size < 200)
         return out
+    }
+
+    override fun touch(): Boolean {
+        polly.describeVoices(DescribeVoicesRequest.builder().languageCode("en-GB").build())
+        return true
     }
 
     override fun synthesize(text: String, voice: String, engine: String): ByteArray =
@@ -78,6 +90,12 @@ class GoogleSpeech internal constructor(
             check(status == 200) { "voices $status" }
             parseVoices(body, lang)
         }
+    }
+
+    /** One British voice list over the clips' own client; no key: nothing is sent. */
+    override fun touch(): Boolean {
+        val k = key() ?: return false
+        return get("$BASE/voices?languageCode=en-GB", mapOf(KEY_HEADER to k)).first == 200
     }
 
     override fun synthesize(text: String, voice: String, engine: String): ByteArray {
@@ -423,6 +441,19 @@ class SpeechService(
         }
         if (audio == null) googleFailedAtMs = nowMs()
         return audio
+    }
+
+    /**
+     * The orb speed pass, slice 5: warms the voice the next clip will most likely come from ([SpeechEngine.touch]):
+     * Google's while it has a key, answers and isn't resting after a failure, else Polly's. Nothing is said or counted.
+     * True when it answered. Never throws.
+     */
+    fun touch(): Boolean {
+        val g = google
+        val googleFirst = g != null && googleReachable && runCatching { g.configured() }.getOrDefault(false) &&
+            !EngineLatchRules.useFallback(googleLatch, nowMs())
+        val e = if (googleFirst) g else engine
+        return e != null && runCatching { e.touch() }.getOrDefault(false)
     }
 
     /** Whether Polly has the Google voice's job now (Google is resting after a failure). */

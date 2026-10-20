@@ -82,6 +82,13 @@ interface LanguageModelProvider {
      */
     fun stream(request: ModelRequest, onText: (String) -> Unit): ModelOutcome =
         complete(request).also { if (it is ModelOutcome.Answered) onText(it.text) }
+
+    /**
+     * The orb speed pass, slice 5: opens (or keeps open) the connection to the model with a free request that asks for
+     * no answer and costs no tokens, so the answer that follows a hello doesn't pay for a new connection. True when
+     * the provider answered. Never throws; a provider with nothing to warm does nothing.
+     */
+    fun touch(): Boolean = false
 }
 
 /**
@@ -92,8 +99,7 @@ fun interface HttpLines {
     fun send(method: String, url: String, headers: Map<String, String>, body: String?, onLine: (String) -> Unit): Int
 
     companion object {
-        fun jdk(timeout: Duration = Duration.ofSeconds(60)): HttpLines {
-            val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+        fun jdk(timeout: Duration = Duration.ofSeconds(60), client: HttpClient = AiHttp.client): HttpLines {
             return HttpLines { method, url, headers, body, onLine ->
                 val req = HttpRequest.newBuilder(URI(url)).timeout(timeout)
                     .method(method, if (body == null) HttpRequest.BodyPublishers.noBody() else HttpRequest.BodyPublishers.ofString(body))
@@ -106,13 +112,20 @@ fun interface HttpLines {
     }
 }
 
+/**
+ * The orb speed pass, slice 5: one HTTP client for every call to Anthropic (the model list, whole answers and streamed
+ * ones), so the connection a warm-up opens ([LanguageModelProvider.touch]) is the one the next answer uses.
+ */
+object AiHttp {
+    val client: HttpClient by lazy { HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build() }
+}
+
 /** A minimal HTTP exchange returning status and body, so the provider is testable without the network. */
 fun interface HttpExchange {
     fun send(method: String, url: String, headers: Map<String, String>, body: String?): Pair<Int, String>
 
     companion object {
-        fun jdk(timeout: Duration = Duration.ofSeconds(60)): HttpExchange {
-            val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+        fun jdk(timeout: Duration = Duration.ofSeconds(60), client: HttpClient = AiHttp.client): HttpExchange {
             return HttpExchange { method, url, headers, body ->
                 val req = HttpRequest.newBuilder(URI(url)).timeout(timeout)
                     .method(method, if (body == null) HttpRequest.BodyPublishers.noBody() else HttpRequest.BodyPublishers.ofString(body))
@@ -374,6 +387,12 @@ class AnthropicProvider(
         return if (code in 200..299) parse(text, model, request.feature) else failure(code)
     }
 
+    /** The model list's first entry (free, no tokens) over the shared client ([AiHttp]); no key: nothing is sent. */
+    override fun touch(): Boolean {
+        val k = key() ?: return false
+        return runCatching { http.send("GET", WARM_URL, anthropicHeaders(k), null).first in 200..299 }.getOrDefault(false)
+    }
+
     private fun failure(code: Int): ModelOutcome.Failed = when (code) {
         401 -> ModelOutcome.Failed("Anthropic refused the key")
         403 -> ModelOutcome.Failed("The key isn't allowed to use the API")
@@ -459,6 +478,8 @@ class AnthropicProvider(
 
     companion object {
         const val MESSAGES_URL = "https://api.anthropic.com/v1/messages"
+        /** The warm-up's request: one model's name, nothing else ([touch]). */
+        const val WARM_URL = "https://api.anthropic.com/v1/models?limit=1"
     }
 }
 

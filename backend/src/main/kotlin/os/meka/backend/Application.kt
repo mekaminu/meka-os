@@ -79,6 +79,7 @@ import os.meka.core.wire.NumberLookupCodec
 import os.meka.core.wire.TradingExportCodec
 import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
+import os.meka.core.wire.TalkWarmCodec
 import os.meka.core.wire.FoldPostureCodec
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.UpdateFailureCodec
@@ -826,6 +827,19 @@ fun Application.mekaSync(
                     val spoken = mp3?.let { said.response.copy(audio = java.util.Base64.getEncoder().encodeToString(it)) } ?: said.response
                     call.respondText(SpeechCodec.encodeResponse(spoken), ContentType.Application.Json)
                 }
+            }
+        }
+
+        if (ai?.provider != null || speech != null) {
+            // The orb speed pass, slice 5: "he's about to talk" (the orb tapped, Talk opened, listening started): the
+            // server opens its connections to the AI and to Navilife's voice with free requests, off the request path.
+            // The request carries nothing but the version; nothing is kept or logged. Keyed devices only.
+            val talkWarm = TalkWarm(ai?.provider?.let { p -> { p.touch() } }, speech?.let { sp -> { sp.touch() } })
+            post("/v1/talk/warm") {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                TalkWarmCodec.decodeRequest(body)
+                call.respondText(TalkWarmCodec.encodeResponse(talkWarm.request()), ContentType.Application.Json)
             }
         }
 

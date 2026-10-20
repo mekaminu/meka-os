@@ -378,6 +378,15 @@ interface SpeechApi {
 }
 
 /**
+ * The orb speed pass, slice 5: "he's about to talk" (`POST /v1/talk/warm`): Navilife's server opens its connections to
+ * the AI and to Navilife's voice ahead of the answer. Nothing he said or anything about him is sent. False when an
+ * older server lacks the route or has nothing to warm. Network failures throw.
+ */
+interface TalkWarmApi {
+    suspend fun talkWarm(): Boolean
+}
+
+/**
  * "Where I am now" (Places item 3): the forecast at an approximate point. The point must already be rounded
  * ([os.meka.core.domain.HereRules.round]); the server refuses anything finer. Available once the device is connected.
  */
@@ -546,7 +555,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -990,6 +999,18 @@ class HttpSyncTransport(
             return SpeechCodec.binaryResponse(Base64.encode(bytes), resp.headers[SpeechCodec.HEADER_VOICE], resp.headers[SpeechCodec.HEADER_ENGINE])
         }
         return SpeechCodec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun talkWarm(): Boolean {
+        prepare() // the route requires the device's signing key on the server
+        val resp = send("/v1/talk/warm", os.meka.core.wire.TalkWarmCodec.encodeRequest())
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from /v1/talk/warm")
+            // An older server without the route, or a device key not registered yet: nothing to warm, nothing lost.
+            resp.status.value == 404 || resp.status.value == 403 -> return false
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/talk/warm")
+        }
+        return os.meka.core.wire.TalkWarmCodec.decodeResponse(resp.bodyAsText()).state != os.meka.core.wire.TalkWarmCodec.Response.OFF
     }
 
     override suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices {

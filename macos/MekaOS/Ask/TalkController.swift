@@ -131,6 +131,8 @@ final class TalkController {
                 if gen == generation { problem = .noPermission }
                 return
             }
+            // The orb speed pass, slice 5: the server opens its AI and voice connections while the hello plays.
+            Task { await model?.warmTalk() }
             // The orb speed pass, slice 2: this hello is timed from the click to Navilife's voice (Voice → Speed).
             await model?.turnHelloBegan()
             guard gen == generation, let hello = await model?.hello() else { return }
@@ -168,6 +170,7 @@ final class TalkController {
             }
             guard gen == generation else { return }
             Task { await model?.warmVoice() } // MEKA's common lines in its voice, fetched once
+            Task { await model?.warmTalk() } // slice 5: the server gets ready for his question (at most every 20 s)
             apply(afterBrief ? TalkFlow.shared.afterBrief() : TalkFlow.shared.start())
         }
     }
@@ -461,6 +464,8 @@ final class TalkController {
         let online = !forced && MacSignal.online && !resting
         guard online || recognizer.supportsOnDeviceRecognition else { return fail(.noOnDevice) }
         guard recognizer.isAvailable else { return fail(.busy) }
+        // The orb speed pass, slice 5: he's about to ask something; the server warms again if its last was a while ago.
+        Task { await model?.warmTalk() }
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.requiresOnDeviceRecognition = !online
         listeningOnline = online

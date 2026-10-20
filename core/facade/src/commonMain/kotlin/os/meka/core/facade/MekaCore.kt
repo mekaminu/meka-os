@@ -271,6 +271,7 @@ class MekaCore(
     private var newsImagesApi: NewsImagesApi? = transport as? NewsImagesApi
     private var aiApi: AiApi? = transport as? AiApi
     private var speechApi: SpeechApi? = transport as? SpeechApi
+    private var talkWarmApi: TalkWarmApi? = transport as? TalkWarmApi
     private var hereApi: HereApi? = transport as? HereApi
     private var fuelApi: FuelApi? = transport as? FuelApi
     private var numberLookupApi: NumberLookupApi? = transport as? NumberLookupApi
@@ -5607,6 +5608,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
+            talkWarmApi = transport as? TalkWarmApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
             numberLookupApi = transport as? NumberLookupApi; tradingExportApi = transport as? TradingExportApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
@@ -9575,6 +9577,25 @@ class MekaCore(
         // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.
         onCore { os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName) }
             .forEach { if (!speechPrefetch(it)) return }
+    }
+
+    /** When this device last asked the server to get ready ([warmTalk]); null: not yet. */
+    private var talkWarmedAt: Long? = null
+
+    /**
+     * The orb speed pass, slice 5: tells Navilife's server he's about to talk (the orb tapped, Talk opened, listening
+     * started), so it opens its connections to the AI and to Navilife's voice before his question arrives
+     * ([os.meka.core.domain.TalkWarmRules]: at most once every 20 s from this device). Nothing he said is sent. True
+     * when the server started a warm-up. Not connected, an older server, offline: false. Never throws.
+     */
+    suspend fun warmTalk(): Boolean {
+        val api = talkWarmApi ?: return false
+        val go = onCore {
+            val now = nowMs()
+            os.meka.core.domain.TalkWarmRules.due(talkWarmedAt, now).also { if (it) talkWarmedAt = now }
+        }
+        if (!go) return false
+        return try { api.talkWarm() } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
     }
 
     /** The holding line said last ([answerHoldClip]), so the next one differs. */

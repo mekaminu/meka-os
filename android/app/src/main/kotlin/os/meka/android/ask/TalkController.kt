@@ -107,6 +107,8 @@ class TalkController(
     fun hello() {
         if (active) return
         val gen = generation
+        // The orb speed pass, slice 5: the server opens its AI and voice connections while the hello plays.
+        scope.launch { core.warmTalk() }
         scope.launch {
             // The orb speed pass, slice 2: this hello is timed from the tap to Navilife's voice (Settings → Speed).
             core.turnHelloBegan()
@@ -141,6 +143,7 @@ class TalkController(
         talkOver = TalkAutoListen.talkOver(context)
         speaker.prepare()
         scope.launch { core.warmVoice() } // MEKA's common lines in its voice, fetched once
+        scope.launch { core.warmTalk() } // slice 5: the server gets ready for his question (at most every 20 s)
         apply(first)
     }
 
@@ -423,6 +426,8 @@ class TalkController(
             engine = want
         }
         val r = recognizer ?: return fail(TalkProblem.FAILED)
+        // The orb speed pass, slice 5: he's about to ask something; the server warms again if its last was a while ago.
+        scope.launch { core.warmTalk() }
         heard = ""
         level = 0f
         val now = android.os.SystemClock.elapsedRealtime()
