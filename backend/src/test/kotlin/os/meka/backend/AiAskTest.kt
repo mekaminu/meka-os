@@ -124,14 +124,14 @@ class AiAskTest {
         assertEquals(os.meka.core.domain.AskRules.KINDS.toSet(), AskService.KINDS)
         val advertised = Regex("""\{"kind":"([a-z_]+)"""").findAll(AskService.SYSTEM).map { it.groupValues[1] }.toSet()
         assertEquals(AskService.KINDS, advertised)
-        // An open turn (the larger model) that tries to send, pay, trade, share or book gets none of it back.
-        val model = FakeModel(answered(
-            """{"answer":"On it.","actions":[{"kind":"send_message","title":"Alex: on my way"},{"kind":"send_email","title":"files"},
-               {"kind":"pay","title":"£40 to Sam"},{"kind":"trade","title":"buy 1 BTC"},{"kind":"share_document","title":"passport"},
-               {"kind":"book_table","title":"Dishoom 8pm"},{"kind":"add_task","title":"Ring Sam"}]}""",
-        ))
-        val open = AskService(model).ask(request.copy(question = "any ideas for a birthday treat for my wife?"))
-        assertEquals(listOf("add_task"), open.actions.map { it.kind })
+        // An open turn (the larger model) that tries to send, pay, trade, share or book gets none of it back
+        // (the codec reads at most three actions, so each try goes in its own answer).
+        val model = FakeModel(answered("""{"answer":"On it.","actions":[]}"""))
+        val open = request.copy(question = "any ideas for a birthday treat for my wife?")
+        for (kind in listOf("send_message", "send_email", "pay", "trade", "share_document", "book_table", "archive_email")) {
+            model.outcome = answered("""{"answer":"On it.","actions":[{"kind":"$kind","title":"Alex: on my way"},{"kind":"add_task","title":"Ring Sam"}]}""")
+            assertEquals(listOf("add_task"), AskService(model).ask(open).actions.map { it.kind }, kind)
+        }
     }
 
     @Test
