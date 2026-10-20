@@ -61,6 +61,28 @@ final class MekaSpeaker {
         }
     }
 
+    /// The companion, slice 9: says `text` once whatever is being said now is over (the answer's early first
+    /// sentence), never cutting it short; `done` runs once both are over, never when `stop()` or another line cut them
+    /// short. Empty `text`: only the wait.
+    func follow(_ text: String, done: (@MainActor @Sendable () -> Void)? = nil) {
+        line += 1
+        let id = line
+        let before = task
+        speaking = true
+        task = Task { [weak self] in
+            await withTaskCancellationHandler {
+                await before?.value
+            } onCancel: {
+                before?.cancel()
+            }
+            guard let self, !Task.isCancelled else { return }
+            if !text.isEmpty { await self.speakNow(text, reading: false) }
+            guard !Task.isCancelled, id == self.line else { return }
+            self.speaking = false
+            done?()
+        }
+    }
+
     /// "Play my messages" in Talk (call assistant polish 8c): says and plays the playlist's steps in order — MEKA's
     /// lines as `say` would, each caller's recording (MEKA's server through `CoreModel.voiceMessageAudio`, played from
     /// memory), or the step's words when it can't be had or played. `done` runs once all of it is over, never when

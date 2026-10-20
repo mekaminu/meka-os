@@ -3,6 +3,7 @@ package os.meka.backend
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
@@ -74,6 +75,35 @@ sealed interface ModelOutcome {
 interface LanguageModelProvider {
     val id: String
     fun complete(request: ModelRequest): ModelOutcome
+
+    /**
+     * The companion, slice 9: as [complete], with the answer's text handed to [onText] piece by piece as the model
+     * writes it, so a spoken answer can start before it is finished. A provider that can't stream hands it over whole.
+     */
+    fun stream(request: ModelRequest, onText: (String) -> Unit): ModelOutcome =
+        complete(request).also { if (it is ModelOutcome.Answered) onText(it.text) }
+}
+
+/**
+ * An HTTP exchange whose answer is read line by line as it arrives (server-sent events), so the provider is testable
+ * without the network: [onLine] gets each line of the body; the status comes back once the body has ended.
+ */
+fun interface HttpLines {
+    fun send(method: String, url: String, headers: Map<String, String>, body: String?, onLine: (String) -> Unit): Int
+
+    companion object {
+        fun jdk(timeout: Duration = Duration.ofSeconds(60)): HttpLines {
+            val client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build()
+            return HttpLines { method, url, headers, body, onLine ->
+                val req = HttpRequest.newBuilder(URI(url)).timeout(timeout)
+                    .method(method, if (body == null) HttpRequest.BodyPublishers.noBody() else HttpRequest.BodyPublishers.ofString(body))
+                headers.forEach { (k, v) -> req.header(k, v) }
+                val r = client.send(req.build(), HttpResponse.BodyHandlers.ofLines())
+                r.body().use { lines -> lines.forEach(onLine) }
+                r.statusCode()
+            }
+        }
+    }
 }
 
 /** A minimal HTTP exchange returning status and body, so the provider is testable without the network. */
@@ -320,31 +350,96 @@ class AnthropicProvider(
     private val budget: AiBudget,
     private val http: HttpExchange = HttpExchange.jdk(),
     private val catalog: ModelCatalog = ModelCatalog(key, http),
+    /** The companion, slice 9: the streamed exchange ([stream]). */
+    private val lines: HttpLines = HttpLines.jdk(),
 ) : LanguageModelProvider {
     override val id = "anthropic"
+
+    private fun bodyOf(request: ModelRequest, model: String, stream: Boolean): String = buildJsonObject {
+        put("model", model)
+        put("max_tokens", request.maxTokens.coerceAtMost(ModelRequest.MAX_OUTPUT_TOKENS))
+        if (request.system.isNotBlank()) put("system", request.system)
+        putJsonArray("messages") {
+            request.turns.forEach { t -> addJsonObject { put("role", t.role.wire); put("content", t.text) } }
+        }
+        if (stream) put("stream", true)
+    }.toString()
 
     override fun complete(request: ModelRequest): ModelOutcome {
         val k = key() ?: return ModelOutcome.Off
         if (budget.state().level == AiBudget.Level.OVER) return ModelOutcome.OverBudget
         val model = catalog.model(request.tier)
-        val body = buildJsonObject {
-            put("model", model)
-            put("max_tokens", request.maxTokens.coerceAtMost(ModelRequest.MAX_OUTPUT_TOKENS))
-            if (request.system.isNotBlank()) put("system", request.system)
-            putJsonArray("messages") {
-                request.turns.forEach { t -> addJsonObject { put("role", t.role.wire); put("content", t.text) } }
-            }
-        }.toString()
-        val (code, text) = runCatching { http.send("POST", MESSAGES_URL, anthropicHeaders(k), body) }
+        val (code, text) = runCatching { http.send("POST", MESSAGES_URL, anthropicHeaders(k), bodyOf(request, model, stream = false)) }
             .getOrElse { return ModelOutcome.Failed("Couldn't reach Anthropic") }
-        return when (code) {
-            in 200..299 -> parse(text, model, request.feature)
-            401 -> ModelOutcome.Failed("Anthropic refused the key")
-            403 -> ModelOutcome.Failed("The key isn't allowed to use the API")
-            429 -> ModelOutcome.Failed("Anthropic is limiting requests (spend cap or rate limit)")
-            529 -> ModelOutcome.Failed("Anthropic is busy; try again shortly")
-            else -> ModelOutcome.Failed("Anthropic answered $code")
+        return if (code in 200..299) parse(text, model, request.feature) else failure(code)
+    }
+
+    private fun failure(code: Int): ModelOutcome.Failed = when (code) {
+        401 -> ModelOutcome.Failed("Anthropic refused the key")
+        403 -> ModelOutcome.Failed("The key isn't allowed to use the API")
+        429 -> ModelOutcome.Failed("Anthropic is limiting requests (spend cap or rate limit)")
+        529 -> ModelOutcome.Failed("Anthropic is busy; try again shortly")
+        else -> ModelOutcome.Failed("Anthropic answered $code")
+    }
+
+    /**
+     * The companion, slice 9: the Messages API with `"stream": true`. Each text delta goes to [onText] as it arrives;
+     * the usage is metered once the stream ends (what was written is counted even when it ends in an error). Still
+     * text in, text out, no tools.
+     */
+    override fun stream(request: ModelRequest, onText: (String) -> Unit): ModelOutcome {
+        val k = key() ?: return ModelOutcome.Off
+        if (budget.state().level == AiBudget.Level.OVER) return ModelOutcome.OverBudget
+        val asked = catalog.model(request.tier)
+        val text = StringBuilder()
+        var model = asked
+        var input = 0
+        var output = 0
+        var stop: String? = null
+        var failed: String? = null
+        val errorBody = StringBuilder()
+        val code = runCatching {
+            lines.send("POST", MESSAGES_URL, anthropicHeaders(k) + ("accept" to "text/event-stream"), bodyOf(request, asked, stream = true)) { line ->
+                if (!line.startsWith("data:")) {
+                    if (errorBody.length < 2_000) errorBody.append(line)
+                    return@send
+                }
+                val o = runCatching { Json.parseToJsonElement(line.removePrefix("data:").trim()).jsonObject }.getOrNull() ?: return@send
+                when (o["type"]?.jsonPrimitive?.content) {
+                    "message_start" -> {
+                        val m = o["message"]?.jsonObject
+                        m?.get("model")?.jsonPrimitive?.content?.let { model = it }
+                        val u = m?.get("usage")?.jsonObject
+                        input = (u?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0) +
+                            (u?.get("cache_creation_input_tokens")?.jsonPrimitive?.intOrNull ?: 0) +
+                            (u?.get("cache_read_input_tokens")?.jsonPrimitive?.intOrNull ?: 0)
+                        output = u?.get("output_tokens")?.jsonPrimitive?.intOrNull ?: output
+                    }
+                    "content_block_delta" -> {
+                        val d = o["delta"]?.jsonObject
+                        if (d?.get("type")?.jsonPrimitive?.content == "text_delta") {
+                            val piece = d["text"]?.jsonPrimitive?.content.orEmpty()
+                            if (piece.isNotEmpty()) {
+                                text.append(piece)
+                                runCatching { onText(piece) }
+                            }
+                        }
+                    }
+                    "message_delta" -> {
+                        o["delta"]?.jsonObject?.get("stop_reason")?.jsonPrimitive?.contentOrNull?.let { stop = it }
+                        o["usage"]?.jsonObject?.get("output_tokens")?.jsonPrimitive?.intOrNull?.let { output = it }
+                    }
+                    "error" -> failed = o["error"]?.jsonObject?.get("type")?.jsonPrimitive?.content ?: "error"
+                }
+            }
+        }.getOrElse {
+            if (input > 0 || output > 0) budget.record(request.feature, model, input, output)
+            return ModelOutcome.Failed("Couldn't reach Anthropic")
         }
+        if (code !in 200..299) return failure(code)
+        if (input > 0 || output > 0) budget.record(request.feature, model, input, output)
+        if (failed != null) return if (failed == "overloaded_error") failure(529) else ModelOutcome.Failed("Anthropic's answer stopped part way")
+        return ModelOutcome.Answered(text.toString(), model, input, output, stop)
     }
 
     private fun parse(text: String, asked: String, feature: String): ModelOutcome = runCatching {

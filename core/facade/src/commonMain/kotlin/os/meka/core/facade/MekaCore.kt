@@ -7862,7 +7862,27 @@ class MekaCore(
      * a spoken yes runs them through [doAsk] like a tap ([os.meka.core.domain.TalkFlow]).
      */
     suspend fun talk(question: String, history: List<os.meka.core.domain.TalkTurn>): os.meka.core.domain.AskOutcome =
-        ask(question, history.takeLast(os.meka.core.domain.TalkRules.MAX_HISTORY), voice = true)
+        ask(question, history.takeLast(os.meka.core.domain.TalkRules.MAX_HISTORY), voice = true, onEarly = {})
+
+    /**
+     * The companion, slice 9 (speech that starts within about a second): [talk], with the answer's first sentence
+     * handed to [onEarly] as soon as the server has said it, while the rest is still being written; its clip is
+     * already in the speech cache, so saying it starts at once ([os.meka.core.domain.TalkFlow.early]). [onEarly] runs
+     * at most once, before this returns. The Fold uses this; the Mac reads [talkEarlyPiece] while it waits.
+     */
+    suspend fun talkStreamed(
+        question: String, history: List<os.meka.core.domain.TalkTurn>, onEarly: (String) -> Unit,
+    ): os.meka.core.domain.AskOutcome =
+        ask(question, history.takeLast(os.meka.core.domain.TalkRules.MAX_HISTORY), voice = true, onEarly = onEarly)
+
+    /**
+     * The companion, slice 9: the first sentence of the spoken answer on its way now, once the server has sent it
+     * ahead ([talkStreamed]); null before it comes, and from the start of the next spoken question.
+     */
+    fun talkEarlyPiece(): String? = talkEarly
+
+    @kotlin.concurrent.Volatile
+    private var talkEarly: String? = null
 
     /**
      * Notifications never seen (slice 4): how this device's notifications stand (the Fold's NotifyTraceStore),
@@ -7878,7 +7898,10 @@ class MekaCore(
 
     private suspend fun ask(
         question: String, history: List<os.meka.core.domain.TalkTurn>, voice: Boolean, beyondHelp: Boolean = false,
+        /** The companion, slice 9: a spoken question's first sentence, sent ahead (null: not a streamed ask). */
+        onEarly: ((String) -> Unit)? = null,
     ): os.meka.core.domain.AskOutcome {
+        if (onEarly != null) talkEarly = null
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
         // Reading and learning, slice 2: "what am I reading?" is answered from his list, and "I'm on page 200",
@@ -8035,7 +8058,15 @@ class MekaCore(
         // with the answer (only Navilife's words are said; nothing of his question is spoken or kept).
         val speakVoice = if (voice && speechApi != null) onCore { speechVoiceNow() } else null
         val reply = try {
-            if (speakVoice != null) api.askSpoken(q, context, history.map(::sendable), speakVoice.name)
+            // The companion, slice 9: the first sentence comes ahead, said, while the model writes the rest.
+            if (speakVoice != null && onEarly != null) api.askStreamed(q, context, history.map(::sendable), speakVoice.name) { text, audio, _ ->
+                if (text.isNotBlank() && audio.isNotEmpty() && talkEarly == null) {
+                    onCore { speechWithAnswer(speakVoice.name, text, audio) }
+                    talkEarly = text
+                    onEarly(text)
+                }
+            }
+            else if (speakVoice != null) api.askSpoken(q, context, history.map(::sendable), speakVoice.name)
             else api.ask(q, context, history.map(::sendable), voice)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)

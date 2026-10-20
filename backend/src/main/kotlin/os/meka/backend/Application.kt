@@ -17,9 +17,11 @@ import io.ktor.server.request.receiveChannel
 import io.ktor.utils.io.readRemaining
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.readByteArray
 import io.ktor.server.response.respondText
+import io.ktor.server.response.respondTextWriter
 import io.ktor.server.response.header
 import io.ktor.server.response.respondBytes
 import io.ktor.server.routing.get
@@ -643,6 +645,32 @@ fun Application.mekaSync(
                 val request = AskCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { askService.ask(request) }
                 call.respondText(AskCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // The companion, slice 9: the same question, answered in lines as they're ready: the first sentence said
+            // while the model is still writing, then the whole answer. Nothing is kept or logged.
+            post(AskCodec.STREAM_PATH) {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = AskCodec.decodeRequest(body)
+                val lines = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+                call.respondTextWriter(ContentType("application", "x-ndjson")) {
+                    kotlinx.coroutines.coroutineScope {
+                        launch(Dispatchers.IO) {
+                            val answer = try {
+                                askService.askStream(request) { first -> lines.trySend(AskCodec.encodeStreamFirst(first)) }
+                            } catch (e: Exception) {
+                                AskCodec.Response(AskCodec.Response.FAILED, reason = "Navilife's AI couldn't answer")
+                            }
+                            lines.trySend(AskCodec.encodeResponse(answer))
+                            lines.close()
+                        }
+                        for (line in lines) {
+                            write(line)
+                            write("\n")
+                            flush()
+                        }
+                    }
+                }
             }
             // Requests from people Meka watches: one message's text, the sender's label and the time; proposals back.
             // Nothing is kept or logged.

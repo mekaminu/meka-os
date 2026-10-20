@@ -277,7 +277,11 @@ class TalkController(
                 val heardBy = engine
                 scope.launch {
                     os.meka.android.today.HereLocation.refresh(context, core, effect.question)
-                    val out = core.talk(effect.question, effect.history)
+                    // The companion, slice 9: the answer's first sentence comes ahead, already said; Navilife starts
+                    // speaking it while the rest is still being written.
+                    val out = core.talkStreamed(effect.question, effect.history) { piece ->
+                        scope.launch { if (gen == generation) apply(TalkFlow.early(session, piece)) }
+                    }
                     // The mic fix, step 3: his own "add …" was done at once; how long from his words ending to Added.
                     if (endedAt != null && heardBy != null && (out as? AskOutcome.Answered)?.answer?.did?.isNotEmpty() == true) {
                         core.recordHeardTiming(android.os.SystemClock.elapsedRealtime() - endedAt, heardBy)
@@ -299,6 +303,14 @@ class TalkController(
             is TalkEffect.Speak -> {
                 said = effect.text
                 say(effect.text)
+            }
+            is TalkEffect.SpeakEarly -> {
+                said = effect.text
+                sayEarly(effect.text)
+            }
+            is TalkEffect.SpeakRest -> {
+                said = listOf(said, effect.text).filter { it.isNotBlank() }.joinToString(" ")
+                sayRest(effect.text)
             }
             TalkEffect.PlayMessages -> playMessages()
             is TalkEffect.ReadOut -> readOut(effect.read)
@@ -487,6 +499,19 @@ class TalkController(
         val id = ++utterance
         speaker.say(text) { finishedSaying(id) }
         listenOver()
+    }
+
+    /** The companion, slice 9: the answer's first sentence, said while the rest comes; its end moves nothing on. */
+    private fun sayEarly(text: String) {
+        ++utterance
+        speaker.say(text)
+        listenOver()
+    }
+
+    /** The rest of the answer, once the early piece is over; then Talk listens again (barge-in keeps watching). */
+    private fun sayRest(text: String) {
+        val id = ++utterance
+        speaker.follow(text) { finishedSaying(id) }
     }
 
     /**

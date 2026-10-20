@@ -323,4 +323,78 @@ class AiAskTest {
         assertTrue("Its days lines" in sent.system)
         assertTrue("days: Days asked about · Thu 22 Oct · 1 event · 1 task" in sent.turns.last().text, sent.turns.last().text)
     }
+
+    /** A model that writes its answer in pieces, as Anthropic's stream does (the companion, slice 9). */
+    private class StreamingModel(private val pieces: List<String>, private val between: () -> Unit = {}) : LanguageModelProvider {
+        override val id = "fake-stream"
+        override fun complete(request: ModelRequest): ModelOutcome = ModelOutcome.Answered(pieces.joinToString(""), "claude-sonnet-9", 900, 80, "end_turn")
+        override fun stream(request: ModelRequest, onText: (String) -> Unit): ModelOutcome {
+            pieces.forEach { onText(it); between() }
+            return complete(request)
+        }
+    }
+
+    @Test
+    fun aStreamedSpokenAnswerSendsItsFirstSentenceWhileTheRestIsWritten() {
+        val events = mutableListOf<String>()
+        val model = StreamingModel(listOf("""{"answer":"Rayleigh scat""", """tering. Blue light bou""", """nces about more.","actions":[]}""")) { events += "piece" }
+        val said = mutableListOf<String>()
+        val service = AskService(model, { text, voice -> said += text; AskService.FirstClip(byteArrayOf(1, 2, 3), voice ?: "Amy") })
+        val spoken = request.copy(question = "why is the sky blue", voice = true, speak = true, speakVoice = "Aoede")
+        val firsts = mutableListOf<AskCodec.StreamLine.First>()
+        val r = service.askStream(spoken) { synchronized(firsts) { firsts += it; events += "first" } }
+        assertEquals(listOf(AskCodec.StreamLine.First("Rayleigh scattering.", "AQID", "Aoede")), firsts)
+        assertEquals(listOf("Rayleigh scattering."), said) // said once, never again with the answer
+        assertEquals("Rayleigh scattering. Blue light bounces about more.", r.answer)
+        assertEquals(null, r.firstAudio)
+        assertTrue(events.indexOf("first") >= 0)
+        // A typed question, or spoken without speak: nothing goes ahead; the answer is the same as /v1/ai/ask's.
+        val typed = mutableListOf<AskCodec.StreamLine.First>()
+        assertEquals(service.ask(request).answer, service.askStream(request) { typed += it }.answer)
+        assertTrue(typed.isEmpty())
+        // The voice refused: nothing goes ahead and the answer carries no clip either.
+        val refused = AskService(model, { _, _ -> null }).askStream(spoken) { error("not sent") }
+        assertEquals(null, refused.firstAudio)
+        // AI off.
+        assertEquals(AskCodec.Response.OFF, AskService(null).askStream(spoken) { error("not sent") }.state)
+    }
+
+    @Test
+    fun aOneSentenceAnswerOrAPlainOneStillSpeaksAndActionsComeOnlyWithTheWhole() {
+        val model = StreamingModel(listOf("""{"answer":"Shall I add it?",""", """"actions":[{"kind":"add_task","title":"Call Sam"}]}"""))
+        val firsts = mutableListOf<AskCodec.StreamLine.First>()
+        val spoken = request.copy(voice = true, speak = true)
+        val r = AskService(model, { _, v -> AskService.FirstClip(byteArrayOf(9), v) }).askStream(spoken) { firsts += it }
+        assertEquals(listOf("Shall I add it?"), firsts.map { it.text })
+        assertEquals(listOf(AskCodec.Action("add_task", title = "Call Sam")), r.actions)
+        // Plain words (not JSON) can't be read early: the first piece comes with the answer, as before.
+        val plain = StreamingModel(listOf("It's sunny. ", "Enjoy it."))
+        val p = AskService(plain, { _, v -> AskService.FirstClip(byteArrayOf(9), v) }).askStream(spoken) { error("not early") }
+        assertEquals("It's sunny.", p.firstText)
+        // A clip slower than the wait is never sent after the answer.
+        val slow = AskService(model, { _, _ -> Thread.sleep(400); AskService.FirstClip(byteArrayOf(1), null) }, firstClipWaitMs = 20)
+        val late = mutableListOf<AskCodec.StreamLine.First>()
+        val answer = slow.askStream(spoken) { synchronized(late) { late += it } }
+        Thread.sleep(600)
+        assertEquals(AskCodec.Response.ANSWERED, answer.state)
+        assertTrue(synchronized(late) { late.isEmpty() })
+    }
+
+    @Test
+    fun theStreamRouteSendsLinesToKeyedDevicesOnly() = testApplication {
+        val devices = InMemoryDeviceRegistry()
+        val foldSecret = devices.enrol("hh", "fold")
+        val foldKey = TestDeviceKey().also { devices.registerKey(DeviceIdentity("hh", "fold"), it.publicB64) }
+        val model = StreamingModel(listOf("""{"answer":"You have the dentist. Then trai""", """ning at 7.","actions":[]}"""))
+        application {
+            mekaSync(InMemoryServerOpStore(), devices, ai = AiLayer(AiHealth(key = { goodKey }, http = { _, _ -> 200 }), provider = model))
+        }
+        val body = AskCodec.encodeRequest(request)
+        val ok = client.post(AskCodec.STREAM_PATH) { with(foldKey) { signed(foldSecret, AskCodec.STREAM_PATH, body) } }
+        assertEquals(HttpStatusCode.OK, ok.status)
+        val lines = ok.bodyAsText().lines().mapNotNull { AskCodec.decodeStreamLine(it) }
+        // No voice on this server: no first piece, only the whole answer.
+        assertEquals(listOf<AskCodec.StreamLine>(AskCodec.StreamLine.Final(AskCodec.Response(AskCodec.Response.ANSWERED, "You have the dentist. Then training at 7.", emptyList()))), lines)
+        assertEquals(HttpStatusCode.Unauthorized, client.post(AskCodec.STREAM_PATH) { header("Authorization", "Bearer $foldSecret"); setBody(body) }.status)
+    }
 }

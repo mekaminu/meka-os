@@ -107,6 +107,30 @@ class MekaSpeaker(
     }
 
     /**
+     * The companion, slice 9: says [text] once whatever is being said now is over (the answer's early first sentence),
+     * never cutting it short; [onDone] runs once both are over, never when stopped or replaced. Empty [text]: only
+     * the wait.
+     */
+    fun follow(text: String, onDone: () -> Unit = {}) {
+        val before = job
+        val id = ++line
+        speaking = true
+        job = scope.launch {
+            try {
+                before?.join()
+            } catch (e: CancellationException) {
+                before?.cancel()
+                throw e
+            }
+            if (text.isNotBlank()) speakNow(text, reading = false)
+            if (id == line) {
+                speaking = false
+                onDone()
+            }
+        }.also { j -> j.invokeOnCompletion { if (it != null) before?.cancel() } }
+    }
+
+    /**
      * "Play my messages" in Talk (call assistant polish 8c): says and plays the playlist's steps in order — MEKA's
      * lines as [say] would, each caller's recording fetched with [fetch] (from MEKA's server, played from memory and
      * let go), or the step's words when it can't be had or played. [onDone] runs once all of it is over, never when

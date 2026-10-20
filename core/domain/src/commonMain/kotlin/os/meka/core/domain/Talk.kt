@@ -412,6 +412,16 @@ sealed interface TalkEffect {
     data class OpenHelp(val link: HelpLink) : TalkEffect
     /** Say [text] on the device, then report with [TalkFlow.spoke]. */
     data class Speak(val text: String) : TalkEffect
+    /**
+     * The companion, slice 9: say [text], the answer's first sentence the server sent ahead while the rest is still
+     * being written ([TalkFlow.early]). Its end is not reported: the rest follows it ([SpeakRest]).
+     */
+    data class SpeakEarly(val text: String) : TalkEffect
+    /**
+     * The companion, slice 9: once the early piece is over, say [text], the rest of the answer (empty when there's no
+     * more), then report with [TalkFlow.spoke]. Never cuts the early piece short.
+     */
+    data class SpeakRest(val text: String) : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
     data object StopSpeaking : TalkEffect
     /** The conversation is over: stop listening and speaking, put the orb away. Cards and undo chips stay on screen. */
@@ -434,6 +444,8 @@ data class TalkSession(
     val help: HelpLink? = null,
     /** Where to go once the conversation ends after this line ("take me there"). */
     val openHelpAfter: HelpLink? = null,
+    /** The companion, slice 9: the answer's first sentence, being said while the rest of the answer comes. */
+    val early: String? = null,
 )
 
 data class TalkStep(val session: TalkSession, val effects: List<TalkEffect>)
@@ -514,8 +526,34 @@ object TalkFlow {
     fun silence(s: TalkSession): TalkStep =
         if (s.phase != TalkPhase.LISTENING) TalkStep(s, emptyList()) else end(s)
 
-    /** MEKA's answer to [question]. An unavailable answer is said and the conversation ends after it. */
+    /**
+     * The companion, slice 9: the answer's first sentence came ahead of the rest ([StreamedSpeechRules.earlyPiece]):
+     * say it now while the answer is still being written. Only while thinking, and only once a turn.
+     */
+    fun early(s: TalkSession, piece: String): TalkStep {
+        if (s.phase != TalkPhase.THINKING || s.early != null || piece.isBlank()) return TalkStep(s, emptyList())
+        return TalkStep(s.copy(phase = TalkPhase.SPEAKING, early = piece), listOf(TalkEffect.SpeakEarly(piece)))
+    }
+
+    /**
+     * MEKA's answer to [question]. An unavailable answer is said and the conversation ends after it. After an early
+     * piece (slice 9) only the rest is said, once that piece is over ([TalkEffect.SpeakRest]).
+     */
     fun answered(s: TalkSession, question: String, outcome: AskOutcome, today: Long): TalkStep {
+        val early = s.early
+        if (early != null && s.phase == TalkPhase.SPEAKING) {
+            val step = answeredNow(s.copy(phase = TalkPhase.THINKING, early = null), question, outcome, today)
+            // An answer that failed after its first sentence (rare) says its whole line after it.
+            val effects = step.effects.map {
+                if (it !is TalkEffect.Speak) it
+                else TalkEffect.SpeakRest(if (outcome is AskOutcome.Answered) StreamedSpeechRules.rest(it.text, early) else it.text)
+            }
+            return TalkStep(step.session, effects)
+        }
+        return answeredNow(s, question, outcome, today)
+    }
+
+    private fun answeredNow(s: TalkSession, question: String, outcome: AskOutcome, today: Long): TalkStep {
         if (s.phase != TalkPhase.THINKING) return TalkStep(s, emptyList())
         return when (outcome) {
             is AskOutcome.Answered -> say(
@@ -544,14 +582,17 @@ object TalkFlow {
 
     /** MEKA finished saying its line: listen again (or end, when that was the last word). */
     fun spoke(s: TalkSession): TalkStep {
-        if (s.phase != TalkPhase.SPEAKING) return TalkStep(s, emptyList())
+        // An early piece's end isn't the line's end: the rest of the answer is still to come (slice 9).
+        if (s.phase != TalkPhase.SPEAKING || s.early != null) return TalkStep(s, emptyList())
         if (s.endAfterSpeaking) return end(s)
         return TalkStep(s.copy(phase = TalkPhase.LISTENING), listOf(TalkEffect.Listen))
     }
 
     /** Meka started talking while MEKA spoke: stop and listen (a closing line is cut short and the conversation ends). */
-    fun bargeIn(s: TalkSession): TalkStep {
-        if (s.phase != TalkPhase.SPEAKING) return TalkStep(s, emptyList())
+    fun bargeIn(s0: TalkSession): TalkStep {
+        if (s0.phase != TalkPhase.SPEAKING) return TalkStep(s0, emptyList())
+        // Talking over an early piece drops the rest of that answer (slice 9): it arrives to a listening Talk and is left.
+        val s = s0.copy(early = null)
         if (s.endAfterSpeaking) return TalkStep(
             s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null),
             listOfNotNull(TalkEffect.StopSpeaking, TalkEffect.End, s.openAfter?.let { TalkEffect.Open(it) }, s.openHelpAfter?.let { TalkEffect.OpenHelp(it) }),
@@ -562,7 +603,7 @@ object TalkFlow {
     /** The orb tapped, the screen left, a call coming in: everything stops at once. */
     fun stop(s: TalkSession): TalkStep =
         if (s.phase == TalkPhase.ENDED) TalkStep(s, emptyList())
-        else TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null), listOfNotNull(TalkEffect.StopSpeaking.takeIf { s.phase == TalkPhase.SPEAKING }, TalkEffect.End))
+        else TalkStep(s.copy(phase = TalkPhase.ENDED, openAfter = null, openHelpAfter = null, early = null), listOfNotNull(TalkEffect.StopSpeaking.takeIf { s.phase == TalkPhase.SPEAKING }, TalkEffect.End))
 
     private fun say(s: TalkSession, text: String): TalkStep =
         TalkStep(s.copy(phase = TalkPhase.SPEAKING), listOf(TalkEffect.Speak(text)))

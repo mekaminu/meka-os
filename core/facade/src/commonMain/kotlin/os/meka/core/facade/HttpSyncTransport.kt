@@ -3,14 +3,17 @@ package os.meka.core.facade
 import io.ktor.client.HttpClient
 import io.ktor.client.request.header
 import io.ktor.client.request.post
+import io.ktor.client.request.preparePost
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsChannel
 import io.ktor.client.statement.bodyAsText
 import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.contentLength
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import io.ktor.utils.io.readUTF8Line
 import os.meka.core.sync.AuthRejectedException
 import os.meka.core.sync.PullRequest
 import os.meka.core.sync.PullResponse
@@ -130,6 +133,19 @@ interface AiApi {
         history: List<os.meka.core.domain.TalkTurn>,
         speakVoice: String?,
     ): AskReply = ask(question, context, history, voice = true)
+
+    /**
+     * The companion, slice 9 (speech that starts within about a second): [askSpoken], with the answer's first sentence
+     * handed to [onFirst] (its words, its clip as base64 MP3, the voice that said it) as soon as the server has said it,
+     * while the model is still writing the rest. A transport or server without it asks as [askSpoken] does.
+     */
+    suspend fun askStreamed(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+        onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
+    ): AskReply = askSpoken(question, context, history, speakVoice)
     /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
     suspend fun aiStatus(): AiStatusReply? = null
 
@@ -680,6 +696,71 @@ class HttpSyncTransport(
         speakVoice: String?,
     ): AskReply = askWith(question, context, history, voice = true, speak = true, speakVoice = speakVoice)
 
+    /** The server answered 404 to the stream once (an older server): ask as before from then on. */
+    private var streamMissing = false
+
+    override suspend fun askStreamed(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+        onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
+    ): AskReply {
+        if (streamMissing) return askSpoken(question, context, history, speakVoice)
+        val body = askBody(question, context, history, voice = true, speak = true, speakVoice = speakVoice)
+        prepare() // the ask routes require the device's signing key on the server
+        val path = AskCodec.STREAM_PATH
+        val reply: AskReply? = sendStreaming(path, body) { resp ->
+            when {
+                resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from $path")
+                resp.status.value == 404 -> { streamMissing = true; return@sendStreaming null }
+                resp.status.value == 403 -> return@sendStreaming AskReply.Unavailable(AskCodec.Response.FAILED, "this device's key isn't registered yet")
+                !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
+            }
+            val channel = resp.bodyAsChannel()
+            var whole: AskCodec.Response? = null
+            while (whole == null) {
+                val line = channel.readUTF8Line() ?: break
+                when (val l = AskCodec.decodeStreamLine(line)) {
+                    is AskCodec.StreamLine.First -> onFirst(l.text, l.audio, l.voice)
+                    is AskCodec.StreamLine.Final -> whole = l.response
+                    null -> Unit
+                }
+            }
+            replyOf(whole ?: throw TransportException("the answer stopped part way from $path"))
+        }
+        return reply ?: askSpoken(question, context, history, speakVoice)
+    }
+
+    private fun askBody(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        voice: Boolean,
+        speak: Boolean,
+        speakVoice: String?,
+    ): String = AskCodec.encodeRequest(
+        AskCodec.Request(
+            question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) },
+            history = history.map { AskCodec.Turn(it.question, it.answer, it.done) },
+            voice = voice,
+            speak = speak,
+            speakVoice = speakVoice,
+            callMe = if (context.callSir) AskCodec.CALL_SIR else null,
+            recall = context.recall.filter { it.isNotBlank() }.map { it.take(AskCodec.MAX_LINE) }.takeLast(AskCodec.MAX_RECALL),
+        ),
+    )
+
+    private fun replyOf(r: AskCodec.Response): AskReply =
+        if (r.state == AskCodec.Response.ANSWERED) {
+            AskReply.Answered(
+                r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
+                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note,
+            )
+        } else {
+            AskReply.Unavailable(r.state, r.reason)
+        }
+
     private suspend fun askWith(
         question: String,
         context: os.meka.core.domain.AskContext,
@@ -688,17 +769,7 @@ class HttpSyncTransport(
         speak: Boolean,
         speakVoice: String?,
     ): AskReply {
-        val body = AskCodec.encodeRequest(
-            AskCodec.Request(
-                question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) },
-                history = history.map { AskCodec.Turn(it.question, it.answer, it.done) },
-                voice = voice,
-                speak = speak,
-                speakVoice = speakVoice,
-                callMe = if (context.callSir) AskCodec.CALL_SIR else null,
-                recall = context.recall.filter { it.isNotBlank() }.map { it.take(AskCodec.MAX_LINE) }.takeLast(AskCodec.MAX_RECALL),
-            ),
-        )
+        val body = askBody(question, context, history, voice, speak, speakVoice)
         prepare() // the ask route requires the device's signing key on the server
         val resp = send("/v1/ai/ask", body)
         when {
@@ -708,15 +779,7 @@ class HttpSyncTransport(
             resp.status.value == 403 -> return AskReply.Unavailable(AskCodec.Response.FAILED, "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/ask")
         }
-        val r = AskCodec.decodeResponse(resp.bodyAsText())
-        return if (r.state == AskCodec.Response.ANSWERED) {
-            AskReply.Answered(
-                r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
-                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note,
-            )
-        } else {
-            AskReply.Unavailable(r.state, r.reason)
-        }
+        return replyOf(AskCodec.decodeResponse(resp.bodyAsText()))
     }
 
     override suspend fun aiStatus(): AiStatusReply? {
@@ -1148,6 +1211,36 @@ class HttpSyncTransport(
         if (resp.status.value == 401) throw AuthRejectedException("HTTP 401 from $path")
         if (!resp.status.isSuccess()) throw TransportException("HTTP ${resp.status.value} from $path")
         return resp.bodyAsText()
+    }
+
+    /**
+     * The companion, slice 9: [send], with the answer read as it arrives inside [block] (the body is a stream, so it is
+     * only readable there). Network failures are [TransportException]s, as [send]'s are.
+     */
+    private suspend fun <T> sendStreaming(path: String, body: String, block: suspend (HttpResponse) -> T): T = try {
+        val time = nowMs()
+        val nonce = Random.nextBytes(16).joinToString("") { (it.toInt() and 0xff).toString(16).padStart(2, '0') }
+        val signature = deviceKey?.signBase64(RequestSigning.canonical("POST", path, time, nonce, body))
+        client.preparePost(baseUrl.trimEnd('/') + path) {
+            contentType(ContentType.Application.Json)
+            header("Authorization", "Bearer ${deviceSecret()}")
+            if (signature != null) {
+                header(RequestSigning.HEADER_TIME, time.toString())
+                header(RequestSigning.HEADER_NONCE, nonce)
+                header(RequestSigning.HEADER_SIGNATURE, signature)
+            }
+            setBody(body)
+        }.execute { block(it) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: AuthRejectedException) {
+        throw e
+    } catch (e: TransportException) {
+        throw e
+    } catch (e: os.meka.core.wire.WireFormatException) {
+        throw TransportException("bad answer from $path: ${e.message}", e)
+    } catch (e: Exception) {
+        throw TransportException("network error: ${e.message}", e)
     }
 
     private suspend fun send(path: String, body: String): HttpResponse = try {

@@ -253,6 +253,48 @@ object AskCodec {
     }
 
     /**
+     * The companion, slice 9 (speech that starts within about a second): `POST /v1/ai/ask-stream` takes the same request
+     * as `/v1/ai/ask` and answers with lines of JSON as they are ready: at most one [StreamLine.First] (the answer's
+     * first sentence, said by the server while the model was still writing the rest), then the [StreamLine.Final]
+     * response exactly as `/v1/ai/ask` sends it. A server without the route answers 404 and the device asks as before.
+     */
+    const val STREAM_PATH = "/v1/ai/ask-stream"
+
+    sealed interface StreamLine {
+        /** The first piece of Navilife's own words, and its clip (base64 MP3) in [voice]. */
+        data class First(val text: String, val audio: String, val voice: String?) : StreamLine
+        data class Final(val response: Response) : StreamLine
+    }
+
+    fun encodeStreamFirst(f: StreamLine.First): String = buildJsonObject {
+        put("w", WireCodec.VERSION)
+        put("first", buildJsonObject {
+            put("text", f.text)
+            put("audio", f.audio)
+            f.voice?.let { put("voice", it) }
+        })
+    }.toString()
+
+    /**
+     * One line of the stream: a first piece (kept only whole and within [SpeechCodec]'s limits, else null and simply not
+     * there), the final response ([decodeResponse], which throws on a bad one), or null for a blank line.
+     */
+    fun decodeStreamLine(line: String): StreamLine? {
+        if (line.isBlank()) return null
+        val o = wrap("ask stream line") { json.parseToJsonElement(line).jsonObject }
+        val f = o["first"]
+        if (f != null) {
+            val fo = f as? JsonObject ?: return null
+            if ((o["w"] as? JsonPrimitive)?.intOrNull != WireCodec.VERSION) return null
+            val text = (fo["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT } ?: return null
+            val audio = (fo["audio"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 } ?: return null
+            val voice = (fo["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.take(40)
+            return StreamLine.First(text, audio, voice)
+        }
+        return StreamLine.Final(decodeResponse(line))
+    }
+
+    /**
      * A model's answer, which should be one JSON object `{"answer": "…", "actions": [...]}` (possibly in a code fence):
      * its words (at most [MAX_ANSWER] characters) and up to [MAX_ACTIONS] actions. Anything that isn't that JSON is
      * taken as plain words with no actions, so a chatty answer still reads and can never act.

@@ -226,4 +226,48 @@ class AiModelsTest {
             assertEquals(listOf(AiUsage("ask.talk", 2, 150, 15, 225)), store.day("1999-01-02"))
         }
     }
+
+    @Test
+    fun aStreamedCallHandsOverTheWordsAsTheyComeAndMetersOnce() {
+        // The companion, slice 9: Anthropic's server-sent events, read line by line.
+        val http = FakeHttp()
+        val budget = AiBudget(20_000_000, InMemoryAiUsageStore(), nowMs = { now })
+        val sent = mutableListOf<String?>()
+        var status = 200
+        var events = listOf(
+            "event: message_start",
+            """data: {"type":"message_start","message":{"model":"claude-haiku-9","usage":{"input_tokens":1000,"output_tokens":1}}}""",
+            "",
+            """data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}""",
+            """data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Added "}}""",
+            """data: {"type":"ping"}""",
+            """data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"it."}}""",
+            """data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":200}}""",
+            """data: {"type":"message_stop"}""",
+        )
+        val lines = HttpLines { _, _, headers, body, onLine -> sent += body; assertEquals("text/event-stream", headers["accept"]); events.forEach(onLine); status }
+        val p = AnthropicProvider({ goodKey }, budget, http, ModelCatalog({ goodKey }, http, nowMs = { now }), lines)
+        val got = mutableListOf<String>()
+        val out = assertIs<ModelOutcome.Answered>(p.stream(ask()) { got += it })
+        assertEquals(listOf("Added ", "it."), got)
+        assertEquals("Added it.", out.text)
+        assertEquals(200, out.outputTokens)
+        assertEquals("end_turn", out.stopReason)
+        assertTrue(Json.parseToJsonElement(sent.single()!!).jsonObject["stream"]!!.jsonPrimitive.content == "true")
+        assertFalse("tools" in Json.parseToJsonElement(sent.single()!!).jsonObject)
+        assertEquals(2000, budget.state().spentMicroUsd)
+        // An error part way, a refused key, the network down: said plainly; what was written is still counted.
+        events = listOf(
+            """data: {"type":"message_start","message":{"model":"claude-haiku-9","usage":{"input_tokens":1000,"output_tokens":0}}}""",
+            """data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}""",
+        )
+        assertEquals("Anthropic is busy; try again shortly", assertIs<ModelOutcome.Failed>(p.stream(ask()) {}).reason)
+        assertEquals(3000, budget.state().spentMicroUsd)
+        status = 401
+        events = listOf("""{"type":"error","error":{"type":"authentication_error"}}""")
+        assertEquals("Anthropic refused the key", assertIs<ModelOutcome.Failed>(p.stream(ask()) {}).reason)
+        val down = AnthropicProvider({ goodKey }, budget, http, ModelCatalog({ goodKey }, http, nowMs = { now }), { _, _, _, _, _ -> throw java.io.IOException("down") })
+        assertEquals("Couldn't reach Anthropic", assertIs<ModelOutcome.Failed>(down.stream(ask()) {}).reason)
+        assertEquals(ModelOutcome.Off, AnthropicProvider({ null }, budget, http, lines = lines).stream(ask()) { error("not called") })
+    }
 }

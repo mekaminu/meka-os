@@ -2290,6 +2290,10 @@ final class CoreModel {
         return out
     }
 
+    /// The companion, slice 9: the spoken answer's first sentence, once the server has sent it ahead (already said and
+    /// cached, so it plays at once), or nil. Only a String crosses; Talk reads it while it waits for the answer.
+    func talkEarlyPiece() -> String? { core?.talkEarlyPiece() }
+
     /// A spoken yes: does the cards exactly as clicking them would (`MekaCore.doTalk`), then one undo bar takes them
     /// all back. The cards cross into the core once; `indices` are their places in the answer on screen.
     func doTalk(_ cards: [AskCard], indices: [Int]) async -> TalkDid? {

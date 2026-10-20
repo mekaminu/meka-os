@@ -247,4 +247,20 @@ class AskCodecTest {
         // An older server's answer simply has none.
         assertEquals(emptyList<AskCodec.Source>(), AskCodec.decodeResponse("""{"w":1,"state":"answered","answer":"x","actions":[]}""").sources)
     }
+
+    @Test
+    fun theStreamSendsAFirstPieceThenTheWholeAnswer() {
+        // The companion, slice 9: one line per piece of news, the final one exactly as /v1/ai/ask answers.
+        val first = AskCodec.StreamLine.First("Rayleigh scattering.", "AQID", "Aoede")
+        assertEquals(first, AskCodec.decodeStreamLine(AskCodec.encodeStreamFirst(first)))
+        val final = AskCodec.Response(AskCodec.Response.ANSWERED, "Rayleigh scattering. Blue scatters most.", emptyList())
+        assertEquals(AskCodec.StreamLine.Final(final), AskCodec.decodeStreamLine(AskCodec.encodeResponse(final)))
+        assertEquals(null, AskCodec.decodeStreamLine("   "))
+        // A first piece that isn't whole or is too big is simply not there; a bad final line is refused.
+        assertEquals(null, AskCodec.decodeStreamLine(AskCodec.encodeStreamFirst(first.copy(audio = ""))))
+        assertEquals(null, AskCodec.decodeStreamLine(AskCodec.encodeStreamFirst(first.copy(text = "x".repeat(SpeechCodec.MAX_TEXT + 1)))))
+        assertEquals(null, AskCodec.decodeStreamLine("""{"w":1,"first":"x"}"""))
+        assertFailsWith<WireFormatException> { AskCodec.decodeStreamLine("""{"w":1,"answer":"no state"}""") }
+        assertFailsWith<WireFormatException> { AskCodec.decodeStreamLine("not json") }
+    }
 }

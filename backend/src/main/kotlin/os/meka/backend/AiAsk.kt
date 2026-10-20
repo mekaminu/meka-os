@@ -65,7 +65,47 @@ class AskService(
     fun ask(r: AskCodec.Request): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI isn't set up")
         val web = live?.let { look -> runCatching { look(r.question) }.getOrNull() }
-        val outcome = p.complete(request(r, web))
+        return answerOf(r, web, p.complete(request(r, web)))
+    }
+
+    /**
+     * The companion, slice 9 (speech that starts within about a second): [ask], with the model's answer read as it is
+     * written. For a spoken question that asked to be spoken ([AskCodec.Request.speak]), the moment the answer's first
+     * sentence is whole ([os.meka.core.domain.StreamedSpeechRules.earlyPiece]) it is said ([firstClip], only
+     * Navilife's own words) while the model carries on, and handed to [emit] as soon as its clip is ready, so the device
+     * can start speaking. The whole answer is then checked exactly as [ask] checks it; the first piece isn't sent twice.
+     * [emit] may be called from another thread; it is never called after this returns.
+     */
+    fun askStream(r: AskCodec.Request, emit: (AskCodec.StreamLine.First) -> Unit): AskCodec.Response {
+        val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI isn't set up")
+        val web = live?.let { look -> runCatching { look(r.question) }.getOrNull() }
+        val say = firstClip?.takeIf { r.voice && r.speak }
+        val written = StringBuilder()
+        val gate = Any()
+        var closed = false
+        var early: String? = null
+        var saying: java.util.concurrent.CompletableFuture<AskCodec.StreamLine.First?>? = null
+        val outcome = p.stream(request(r, web)) { delta ->
+            written.append(delta)
+            if (say != null && saying == null) {
+                os.meka.core.domain.StreamedSpeechRules.earlyPiece(written.toString())?.takeIf { it.length <= SpeechCodec.MAX_TEXT }?.let { piece ->
+                    early = piece
+                    saying = java.util.concurrent.CompletableFuture.supplyAsync {
+                        val clip = runCatching { say(piece, r.speakVoice) }.getOrNull()
+                        if (clip == null || clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) null
+                        else AskCodec.StreamLine.First(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice).also { f -> synchronized(gate) { if (!closed) runCatching { emit(f) } } }
+                    }
+                }
+            }
+        }
+        // The early piece's clip, if one is on its way: waited for (within the usual wait), so it always goes first.
+        val sent = saying?.let { f -> runCatching { f.get(firstClipWaitMs, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() }
+        synchronized(gate) { closed = true } // a clip later than the wait is never sent after the answer
+        if (sent == null) saying?.cancel(false)
+        return answerOf(r, web, outcome, firstAlready = sent?.text?.takeIf { it == early })
+    }
+
+    private fun answerOf(r: AskCodec.Request, web: LiveFacts.Found?, outcome: ModelOutcome, firstAlready: String? = null): AskCodec.Response {
         return when (outcome) {
             is ModelOutcome.Answered -> {
                 val (words, actions) = AskCodec.parseModelAnswer(outcome.text)
@@ -78,7 +118,10 @@ class AskService(
                 // device; never from an answer that read other people's words on the web.
                 val note = if (web != null || !isOpenTurn(r, null)) null
                 else AskCodec.modelNote(outcome.text)?.let { os.meka.core.domain.CompanionMemoryRules.clean(it) }
-                withFirstClip(r, AskCodec.Response(AskCodec.Response.ANSWERED, words.ifBlank { "No answer" }, kept, sources = sources, note = note))
+                val answered = AskCodec.Response(AskCodec.Response.ANSWERED, words.ifBlank { "No answer" }, kept, sources = sources, note = note)
+                // Slice 9: the device already has the first piece when it went ahead and is still the answer's first.
+                if (firstAlready != null && os.meka.core.domain.TalkRules.firstPiece(answered.answer) == firstAlready) answered
+                else withFirstClip(r, answered)
             }
             ModelOutcome.Off -> AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI is off")
             ModelOutcome.OverBudget -> AskCodec.Response(AskCodec.Response.OVER, reason = "This month's AI budget is used up; it's back on the 1st")

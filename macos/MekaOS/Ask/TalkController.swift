@@ -56,7 +56,7 @@ final class TalkController {
     var onDid: ([Int]) -> Void = { _ in }
 
     @ObservationIgnored private var model: CoreModel?
-    @ObservationIgnored private var session = TalkSession(phase: .ended, conversation: Conversation(turns: []), pending: [], questions: 0, endAfterSpeaking: false, openAfter: nil, help: nil, openHelpAfter: nil)
+    @ObservationIgnored private var session = TalkSession(phase: .ended, conversation: Conversation(turns: []), pending: [], questions: 0, endAfterSpeaking: false, openAfter: nil, help: nil, openHelpAfter: nil, early: nil)
     /// Bumped by every start and stop, so a late answer or callback from an earlier conversation changes nothing.
     @ObservationIgnored private var generation = 0
 
@@ -237,7 +237,8 @@ final class TalkController {
         session = session.doCopy(phase: session.phase, conversation: session.conversation,
                                   pending: session.pending.filter { $0 != card },
                                   questions: session.questions, endAfterSpeaking: session.endAfterSpeaking,
-                                  openAfter: session.openAfter, help: session.help, openHelpAfter: session.openHelpAfter)
+                                  openAfter: session.openAfter, help: session.help, openHelpAfter: session.openHelpAfter,
+                                  early: session.early)
     }
 
     private func apply(_ step: TalkStep) {
@@ -279,9 +280,22 @@ final class TalkController {
             let gen = generation
             let ended = wordsEnded
             let online = listeningOnline
+            // The companion, slice 9: while the answer is written, its first sentence may come ahead, already said;
+            // Navilife starts speaking it at once. Only a String is read from the core.
+            let early = Task { [weak self] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(80))
+                    guard let self, gen == self.generation, self.phase == .thinking else { return }
+                    if let piece = self.model?.talkEarlyPiece() {
+                        self.apply(TalkFlow.shared.early(s: self.session, piece: piece))
+                        return
+                    }
+                }
+            }
             Task {
                 guard let model else { return }
                 let out = await model.talk(question, history: ask.history)
+                early.cancel()
                 guard gen == generation else { return }
                 guard let out else { return fail(.failed) }
                 // The mic fix, step 3: his own "add …" was done at once; how long from his words ending to Added.
@@ -310,6 +324,12 @@ final class TalkController {
         } else if let speak = effect as? TalkEffectSpeak {
             said = speak.text
             say(speak.text)
+        } else if let early = effect as? TalkEffectSpeakEarly {
+            said = early.text
+            sayEarly(early.text)
+        } else if let rest = effect as? TalkEffectSpeakRest {
+            said = [said, rest.text].filter { !$0.isEmpty }.joined(separator: " ")
+            sayRest(rest.text)
         } else if effect is TalkEffectPlayMessages {
             playMessages()
         } else if let readOut = effect as? TalkEffectReadOut {
@@ -585,6 +605,20 @@ final class TalkController {
         let id = utterance
         speaker.say(text) { [weak self] in self?.finishedSaying(id) }
         listenOver()
+    }
+
+    /// The companion, slice 9: the answer's first sentence, said while the rest comes; its end moves nothing on.
+    private func sayEarly(_ text: String) {
+        utterance += 1
+        speaker.say(text)
+        listenOver()
+    }
+
+    /// The rest of the answer, once the early piece is over; then Talk listens again (barge-in keeps watching).
+    private func sayRest(_ text: String) {
+        utterance += 1
+        let id = utterance
+        speaker.follow(text) { [weak self] in self?.finishedSaying(id) }
     }
 
     /// "Play my messages" (call assistant polish 8c): each voice message introduced in MEKA's voice, then the caller's
