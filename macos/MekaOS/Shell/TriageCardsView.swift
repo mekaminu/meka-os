@@ -53,7 +53,12 @@ private struct TriageChatRow: View {
                 if let name = chat.askedBy {
                     Text(rules.askedLine(name: name)).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 }
-                Text(chat.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                // Done at the card's far right, beside the name, as on every Needs you card (Meka, 2026-10-20 17:33).
+                HStack(alignment: .center, spacing: MekaSpace.xs) {
+                    Text(chat.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    DonePill(palette: palette, label: rules.DONE, spoken: "Done with \(chat.title)") { model.doneTriageChat(chat) }
+                }
                 Text("\(chat.countLine) · \(chat.meta)").font(MekaType.itemMeta)
                     .foregroundStyle(chat.replies > 0 ? palette.accent : palette.textSecondary)
                 // MEKA's one-line summary of a busy chat (slice 3c), first; only the lines that need a reply stay under it.
@@ -69,7 +74,6 @@ private struct TriageChatRow: View {
                     Text(chatter).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).lineLimit(2).padding(.top, MekaSpace.xxs)
                 }
                 HStack(spacing: MekaSpace.xs) {
-                    pill(rules.DONE, filled: true) { model.doneTriageChat(chat) }
                     pill(open ? rules.SHOW_LESS : rules.expandLabel(chat: chat), filled: false) {
                         MekaHaptics.tick()
                         withAnimation(MekaMotion.expand(reduced: reduceMotion)) { open.toggle() }

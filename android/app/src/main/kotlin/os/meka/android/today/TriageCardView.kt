@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
@@ -213,8 +214,13 @@ internal fun TriageChatView(
                 Text(TriageChatRules.askedLine(name), style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.testTag("triage-chat-asked-${chat.key}"))
             }
-            Text(chat.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.semantics { contentDescription = chat.spoken })
+            // Done at the card's far right, beside the name, as on every Needs you card (Meka, 2026-10-20 17:33).
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(chat.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f).semantics { contentDescription = chat.spoken })
+                os.meka.android.designsystem.DonePill("Done with ${chat.title}, ${chat.cards.size} messages", label = TriageChatRules.DONE,
+                    tag = "triage-chat-done-${chat.key}") { haptics.light(); onFinish(ChatFinishTap.DONE) }
+            }
             Text("${chat.countLine} · ${chat.meta}", style = MekaType.itemMeta,
                 color = if (chat.replies > 0) Meka.colors.accent else Meka.colors.textSecondary)
             // MEKA's one-line summary of a busy chat (slice 3c) cross-fades in over the top lines once it arrives; only the
@@ -241,9 +247,6 @@ internal fun TriageChatView(
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
-                TriagePill(TriageChatRules.DONE, filled = true, spoken = "Done with ${chat.title}, ${chat.cards.size} messages") {
-                    haptics.light(); onFinish(ChatFinishTap.DONE)
-                }
                 val label = if (open) TriageChatRules.SHOW_LESS else TriageChatRules.expandLabel(chat)
                 TriagePill(label, filled = false, spoken = label) { haptics.tick(); open = !open }
                 val (mark, tap) = ChatShadeRules.markButton(chat.app, markable)

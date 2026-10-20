@@ -118,7 +118,7 @@ private fun DiscordChannelCardView(card: DiscordChannelCard, onKeep: (String) ->
                 Text(card.title, style = MekaType.body, color = Meka.colors.textPrimary)
                 card.server?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
             }
-            MailNeedsPill("Done", spoken = "Done with ${card.title}", onClick = onDone)
+            os.meka.android.designsystem.DonePill("Done with ${card.title}", tag = "discord-done-${card.key}", onDone = onDone)
         }
         Text(card.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         // Slice 3: Navilife's AI's one line on what was said; fades in when it arrives (reduced motion: no fade).

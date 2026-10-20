@@ -66,6 +66,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
+import os.meka.android.designsystem.DonePill
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
@@ -487,7 +488,7 @@ private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 private fun time(ms: Long) = timeFmt.format(Instant.ofEpochMilli(ms).atZone(ZoneId.systemDefault()))
 
 @Composable
-private fun PersonCard(
+internal fun PersonCard(
     p: PersonSummary,
     expanded: Boolean,
     modifier: Modifier,
@@ -507,22 +508,24 @@ private fun PersonCard(
             .clickable(role = Role.Button) { onTap() }.padding(MekaSpace.m),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            Text(p.personName, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f, fill = false))
-            if (p.urgent) Text("Urgent", style = MekaType.captionStrong, color = Meka.colors.critical)
-            if (p.isFamily) Text("Family", style = MekaType.caption, color = Meka.colors.accent)
-            if (p.mentioned) Text(GroupChatRules.MENTIONED, style = MekaType.captionStrong, color = Meka.colors.accent)
-            Spacer(Modifier.weight(1f))
-            Text(time(p.latestAtMs), style = MekaType.caption, color = Meka.colors.textTertiary)
+        // Done at the far right edge, in the same place on every card (Meka, 2026-10-20 17:33): the name, its
+        // labels and the time keep the rest of the row, so a long name never moves it.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    Text(p.personName, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1,
+                        overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    if (p.urgent) Text("Urgent", style = MekaType.captionStrong, color = Meka.colors.critical)
+                    if (p.isFamily) Text("Family", style = MekaType.caption, color = Meka.colors.accent)
+                    if (p.mentioned) Text(GroupChatRules.MENTIONED, style = MekaType.captionStrong, color = Meka.colors.accent)
+                    Text(time(p.latestAtMs), style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+                Text("${p.line} · ${p.apps.joinToString(", ") { it.label }}", style = MekaType.caption, color = Meka.colors.textSecondary)
+                if (!expanded) p.latestText?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2) }
+            }
             // Its own Done (Meka, 2026-10-15 20:28): clears just this card, Undo on the bar.
-            Text(AfterWorkDone.DONE, style = MekaType.captionStrong, color = Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.background)
-                    .clickable(role = Role.Button) { onDone() }
-                    .semantics { contentDescription = AfterWorkDone.doneLabel(p) }
-                    .minTouch().padding(horizontal = MekaSpace.xs))
+            DonePill(AfterWorkDone.doneLabel(p), label = AfterWorkDone.DONE, tag = "after-work-done-${p.cardKey}", onDone = onDone)
         }
-        Text("${p.line} · ${p.apps.joinToString(", ") { it.label }}", style = MekaType.caption, color = Meka.colors.textSecondary)
-        if (!expanded) p.latestText?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, maxLines = 2) }
         AnimatedVisibility(
             expanded,
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),

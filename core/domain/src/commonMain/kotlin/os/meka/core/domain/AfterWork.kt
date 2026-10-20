@@ -549,6 +549,31 @@ object AfterWorkDone {
         p.items.any { it.app == CaptureApp.PHONE && it.kind != CaptureKind.MESSAGE }
 }
 
+/**
+ * The Done pill on every Needs you card (Meka, 2026-10-20 17:33: "it sits in the middle … and draws as a squashed black
+ * blob"): one gold-outlined pill at the **far right edge of the card, in the same place on every card** (trailing,
+ * centred on the collapsed card; the time stays beside the title). The drawn pill is [HEIGHT_DP] high with
+ * [SIDE_PAD_DP] each side and a [BORDER_DP] accent border on the raised surface, accent text; the [TOUCH_DP] touch
+ * target is added *outside* it, so the tap height never stretches what is drawn. Press: scale to [PRESS_SCALE] and a
+ * gold flash for [FLASH_MS] before the card leaves (reduced motion: no scale or flash, the card just fades).
+ * Clear all stays a text button. Fold and Mac read the same numbers.
+ */
+object DonePillSpec {
+    const val HEIGHT_DP = 32
+    const val MAX_DRAWN_HEIGHT_DP = 36
+    const val SIDE_PAD_DP = 14
+    const val BORDER_DP = 1
+    const val TOUCH_DP = 48
+    const val PRESS_SCALE = 0.96f
+    const val FLASH_MS = 140L
+
+    /** The pressed scale: [PRESS_SCALE] while held, never when motion is reduced. */
+    fun scale(pressed: Boolean, reduced: Boolean): Float = if (pressed && !reduced) PRESS_SCALE else 1f
+
+    /** How long the gold flash shows before Done runs: none when motion is reduced. */
+    fun flashMs(reduced: Boolean): Long = if (reduced) 0L else FLASH_MS
+}
+
 internal fun plural(n: Int, one: String, many: String = one + "s") = "$n ${if (n == 1) one else many}"
 
 /** The words of the one quiet "summary ready" notification. Names stay off the lock screen ([publicText]). */

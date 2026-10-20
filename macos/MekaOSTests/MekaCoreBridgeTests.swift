@@ -3291,4 +3291,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(MailMomentRules.shared.settingLine(time: MailMomentTime.morning),
                        "Mornings from 08:00 · Needs you offers a few minutes to clear what needs you")
     }
+
+    /// The Done pill on Needs you cards (Meka, 2026-10-20 17:33): the Mac draws it from the core's numbers.
+    func testDonePillSpecReachesSwift() {
+        let spec = DonePillSpec.shared
+        XCTAssertLessThanOrEqual(spec.HEIGHT_DP, 36)
+        XCTAssertGreaterThanOrEqual(spec.TOUCH_DP, 48)
+        XCTAssertEqual(spec.scale(pressed: true, reduced: false), 0.96, accuracy: 0.001)
+        XCTAssertEqual(spec.scale(pressed: true, reduced: true), 1, accuracy: 0.001)
+        XCTAssertEqual(spec.flashMs(reduced: true), 0)
+    }
 }

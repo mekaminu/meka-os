@@ -89,28 +89,30 @@ struct AfterWorkSheet: View {
         let key = Self.key(p)
         let expanded = open == key
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            HStack(spacing: MekaSpace.xs) {
-                Text(p.personName).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
-                if p.urgent {
-                    Text("Urgent").font(MekaType.captionStrong).foregroundStyle(palette.critical)
+            // Done at the far right edge, in the same place on every card (Meka, 2026-10-20 17:33); the time stays
+            // beside the name, so a long name never moves it.
+            HStack(alignment: .center, spacing: MekaSpace.xs) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    HStack(spacing: MekaSpace.xs) {
+                        Text(p.personName).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                        if p.urgent {
+                            Text("Urgent").font(MekaType.captionStrong).foregroundStyle(palette.critical)
+                        }
+                        if p.isFamily {
+                            Text("Family").font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                        if p.mentioned {
+                            Text(GroupChatRules.shared.MENTIONED).font(MekaType.captionStrong).foregroundStyle(palette.accent)
+                        }
+                        Text(Self.time(p.latestAtMs)).font(MekaType.caption).foregroundStyle(palette.textTertiary).monospacedDigit()
+                    }
+                    Text("\(p.line) · \(p.apps.map { $0.label }.joined(separator: ", "))")
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 }
-                if p.isFamily {
-                    Text("Family").font(MekaType.caption).foregroundStyle(palette.accent)
-                }
-                if p.mentioned {
-                    Text(GroupChatRules.shared.MENTIONED).font(MekaType.captionStrong).foregroundStyle(palette.accent)
-                }
-                Spacer()
-                Text(Self.time(p.latestAtMs)).font(MekaType.caption).foregroundStyle(palette.textTertiary).monospacedDigit()
+                .frame(maxWidth: .infinity, alignment: .leading)
                 // Its own Done (Meka, 2026-10-15 20:28): clears just this card, Undo on the bar.
-                Button(AfterWorkDone.shared.DONE) { done(p) }
-                    .buttonStyle(MekaPressStyle())
-                    .font(MekaType.captionStrong)
-                    .foregroundStyle(palette.accent)
-                    .accessibilityLabel(AfterWorkDone.shared.doneLabel(p: p))
+                DonePill(palette: palette, label: AfterWorkDone.shared.DONE, spoken: AfterWorkDone.shared.doneLabel(p: p)) { done(p) }
             }
-            Text("\(p.line) · \(p.apps.map { $0.label }.joined(separator: ", "))")
-                .font(MekaType.caption).foregroundStyle(palette.textSecondary)
             if expanded {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     ForEach(p.shownItems, id: \.id) { item in
