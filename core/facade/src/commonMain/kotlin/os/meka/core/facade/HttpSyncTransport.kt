@@ -91,6 +91,8 @@ sealed class AskReply {
         val firstText: String? = null, val firstAudio: String? = null,
         /** The companion, slice 2: the web results the answer drew on, as (title, https URL); checked again on the core. */
         val sources: List<Pair<String, String>> = emptyList(),
+        /** The companion, slice 5: the server's note of what this conversation was about; checked again on the core. */
+        val note: String? = null,
     ) : AskReply()
     /** [state]: off · over (the month's budget) · failed, with the server's [reason]. */
     data class Unavailable(val state: String, val reason: String?) : AskReply()
@@ -694,6 +696,7 @@ class HttpSyncTransport(
                 speak = speak,
                 speakVoice = speakVoice,
                 callMe = if (context.callSir) AskCodec.CALL_SIR else null,
+                recall = context.recall.filter { it.isNotBlank() }.map { it.take(AskCodec.MAX_LINE) }.takeLast(AskCodec.MAX_RECALL),
             ),
         )
         prepare() // the ask route requires the device's signing key on the server
@@ -709,7 +712,7 @@ class HttpSyncTransport(
         return if (r.state == AskCodec.Response.ANSWERED) {
             AskReply.Answered(
                 r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
-                r.firstText, r.firstAudio, r.sources.map { it.title to it.url },
+                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note,
             )
         } else {
             AskReply.Unavailable(r.state, r.reason)

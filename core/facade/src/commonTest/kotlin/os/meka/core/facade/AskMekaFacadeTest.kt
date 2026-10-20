@@ -66,6 +66,44 @@ class AskMekaFacadeTest {
     )
 
     @Test
+    fun anOpenChatsNoteIsKeptSentBackWithTheNextOpenQuestionAndForgottenOnRequest() = runTest {
+        // The companion, slice 5: remembering across conversations.
+        val c = core()
+        server.reply = AskReply.Answered("Heat pumps move heat rather than make it.", emptyList(), note = "Talked through heat pumps vs a new boiler; leaning heat pump")
+        c.askMeka("Explain how a heat pump works")
+        assertEquals(listOf("Today · Talked through heat pumps vs a new boiler; leaning heat pump"), c.companionMemoryRows())
+        assertTrue(server.asked.last().second.recall.isEmpty())
+        // The next open question carries it; a look-up of his day doesn't.
+        server.reply = AskReply.Answered("Ok.", emptyList())
+        c.askMeka("Any ideas for half term?")
+        assertEquals(listOf("Thu 8 Oct · Talked through heat pumps vs a new boiler; leaning heat pump"), server.asked.last().second.recall)
+        c.askMeka("What's on today?")
+        assertTrue(server.asked.last().second.recall.isEmpty())
+        c.askMeka("Can we pick up where we left off?")
+        assertEquals(1, server.asked.last().second.recall.size)
+        // A note that carries a long number is never kept.
+        server.reply = AskReply.Answered("Ok.", emptyList(), note = "Talked about the account 12345678")
+        c.askMeka("Why is the sky blue?")
+        assertEquals(1, c.companionMemoryRows().size)
+        // Forget all, then off: nothing kept, nothing sent.
+        c.forgetCompanionMemory()
+        assertTrue(c.companionMemoryRows().isEmpty())
+        c.setCompanionRemembers(false)
+        assertFalse(c.companionRemembers())
+        server.reply = AskReply.Answered("Ok.", emptyList(), note = "Talked about learning Spanish on the train")
+        c.askMeka("Should I learn Spanish or Italian?")
+        assertTrue(c.companionMemoryRows().isEmpty())
+        c.setCompanionRemembers(true)
+        c.askMeka("Should I learn Spanish or Italian?")
+        assertEquals(listOf("Today · Talked about learning Spanish on the train"), c.companionMemoryRows())
+        // An answer that read the web keeps no note, even if one came.
+        c.forgetCompanionMemory()
+        server.reply = AskReply.Answered("The BBC says so.", emptyList(), sources = listOf("Strike" to "https://bbc.co.uk/a"), note = "Talked about the rail strike")
+        c.askMeka("What's the latest on the rail strike?")
+        assertTrue(c.companionMemoryRows().isEmpty())
+    }
+
+    @Test
     fun aLiveAnswerShowsItsSourcesHttpsOnlyAndOneASite() = runTest {
         // The companion, slice 2: where a live answer came from, as cards under the words.
         val c = core()

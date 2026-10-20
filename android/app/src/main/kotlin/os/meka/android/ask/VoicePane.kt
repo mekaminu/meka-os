@@ -65,6 +65,7 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.work.SettingChip
+import os.meka.core.domain.CompanionMemoryRules
 import os.meka.core.domain.CompanionRules
 import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRow
@@ -89,7 +90,9 @@ import os.meka.core.facade.MekaCore
  * with a light haptic and its label cross-fades to "■ Stop" while it plays (Stop: tick haptic); the status and month
  * lines cross-fade; "+3 more" unfolds the rest of the phone's voices (they stagger in); a slider's line cross-fades as
  * it moves, a tick haptic on each step. Reduced motion: cross-fades. The companion, slice 3: "Navilife calls you" (By name ·
- * Sir, synced) at the top; the chosen pill blends to the accent with a tick haptic and its line cross-fades.
+ * Sir, synced) at the top; the chosen pill blends to the accent with a tick haptic and its line cross-fades. The companion,
+ * slice 5: "What Navilife remembers" under it (Remember · Don't remember, synced, then the kept notes, newest first, and
+ * Forget all): the pill blends with a tick haptic, the notes cross-fade out on Forget all (medium haptic) or off.
  */
 @Composable
 fun VoicePane(core: MekaCore, onClose: () -> Unit) {
@@ -107,6 +110,13 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
     // The companion, slice 3: "sir" or by name, synced.
     var sir by remember { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(Unit) { sir = runCatching { core.companionCallsSir() }.getOrDefault(false) }
+    // The companion, slice 5: whether Navilife remembers chats, and what it keeps (synced).
+    var remembers by remember { mutableStateOf<Boolean?>(null) }
+    var memoryRows by remember { mutableStateOf<List<String>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        remembers = runCatching { core.companionRemembers() }.getOrDefault(true)
+        memoryRows = runCatching { core.companionMemoryRows() }.getOrDefault(emptyList())
+    }
     LaunchedEffect(Unit) {
         speaker.prepare()
         view = runCatching { core.voicePicker(mac = false) }.getOrNull()
@@ -128,6 +138,21 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         haptics.tick()
         sir = on // lit at once; the choice follows to every device
         scope.launch { runCatching { core.setCompanionCallsSir(on) } }
+    }
+
+    fun remember(on: Boolean) {
+        if (remembers == on) return
+        haptics.tick()
+        remembers = on // lit at once; off forgets the notes on every device
+        if (!on) memoryRows = emptyList()
+        scope.launch { runCatching { core.setCompanionRemembers(on) } }
+    }
+
+    fun forgetAll() {
+        if (memoryRows.isEmpty()) return
+        haptics.medium()
+        memoryRows = emptyList()
+        scope.launch { runCatching { core.forgetCompanionMemory() } }
     }
 
     fun sample(c: VoiceChoice) {
@@ -187,6 +212,30 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                 }
                 Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
                     Text(CompanionRules.callLine(now), style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+        }
+        remembers?.let { on ->
+            // The companion, slice 5: what Navilife remembers of earlier chats, viewable and clearable.
+            Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(CompanionMemoryRules.TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SettingChip(CompanionMemoryRules.ON_LABEL, on = on, spoken = "Navilife remembers your chats") { remember(true) }
+                    SettingChip(CompanionMemoryRules.OFF_LABEL, on = !on, spoken = "Navilife doesn't remember your chats") { remember(false) }
+                }
+                Crossfade(on to memoryRows, animationSpec = MekaMotion.appear(reduced), label = "memory") { (now, rows) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Text(
+                            if (!now) CompanionMemoryRules.OFF_LINE else CompanionMemoryRules.onLine(rows.size),
+                            style = MekaType.caption, color = Meka.colors.textTertiary,
+                        )
+                        if (now && rows.isEmpty()) Text(CompanionMemoryRules.EMPTY, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        rows.forEach { row -> Text(row, style = MekaType.body, color = Meka.colors.textPrimary) }
+                        if (rows.isNotEmpty()) {
+                            Text(CompanionMemoryRules.FORGET_ALL, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clickable(role = Role.Button) { forgetAll() }.minTouch())
+                        }
+                    }
                 }
             }
         }

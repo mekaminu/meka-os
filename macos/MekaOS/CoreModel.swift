@@ -2376,6 +2376,31 @@ final class CoreModel {
         voicePicker = try? await core.voicePicker(mac: true)
         // The companion, slice 3: "sir" or by name, read with the picker (only a Bool crosses).
         callsSir = (try? await core.companionCallsSir())?.boolValue ?? false
+        // The companion, slice 5: whether Navilife remembers chats and what it keeps (only a Bool and strings cross).
+        remembersChats = (try? await core.companionRemembers())?.boolValue ?? true
+        memoryRows = (try? await core.companionMemoryRows()) ?? []
+    }
+
+    /// The companion, slice 5: whether Navilife remembers chats (synced; on by default).
+    private(set) var remembersChats = true
+    /// The companion, slice 5: what Navilife remembers of earlier chats, newest first ("Yesterday · Talked through …").
+    private(set) var memoryRows: [String] = []
+
+    /// Turns remembering on or off on every device, lit at once (off forgets the notes); a tick haptic.
+    func setRemembersChats(_ on: Bool) {
+        guard let core, on != remembersChats else { return }
+        MekaHaptics.tick()
+        remembersChats = on
+        if !on { memoryRows = [] }
+        Task { try? await core.setCompanionRemembers(on: on) }
+    }
+
+    /// Forgets every note on every device.
+    func forgetChats() {
+        guard let core, !memoryRows.isEmpty else { return }
+        MekaHaptics.tick()
+        memoryRows = []
+        Task { try? await core.forgetCompanionMemory() }
     }
 
     /// The companion, slice 3: whether Navilife calls him "sir" in Ask, Talk and Hello (synced; false: by name).

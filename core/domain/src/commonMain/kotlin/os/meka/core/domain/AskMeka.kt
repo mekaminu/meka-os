@@ -34,6 +34,11 @@ data class AskContext(
     val eventRefs: Map<String, AskEventRef> = emptyMap(),
     /** The companion, slice 3: he'd rather be called "sir" (Settings → Voice); sent as the request's `callMe`. */
     val callSir: Boolean = false,
+    /**
+     * The companion, slice 5: the notes of earlier chats sent back with an open question ([CompanionMemoryRules.recall]),
+     * empty for none; sent as the request's `recall`.
+     */
+    val recall: List<String> = emptyList(),
 ) {
     companion object {
         val EMPTY = AskContext("", "", emptyList(), emptyMap(), untrusted = false)

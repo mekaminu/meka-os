@@ -301,6 +301,8 @@ class MekaCore(
     private var listedPeople = os.meka.core.domain.ListedPeople.NONE
     /** MEKA's voice: the synced choice, the clips said so far (in memory, newest last) and a pause after a refusal. */
     private val mekaVoice = os.meka.core.domain.MekaVoiceStore(replica)
+    /** The companion, slice 5: notes of earlier chats (Settings → Navilife's voice → What Navilife remembers). */
+    private val companionMemory = os.meka.core.domain.CompanionMemoryStore(replica)
     private val speechClips = LinkedHashMap<String, String>()
     /** Voice completeness, slice 3: clips in [speechClips] that came with a spoken answer, not yet played. */
     private val speechAnswerClips = LinkedHashSet<String>()
@@ -8018,7 +8020,8 @@ class MekaCore(
                 days = askDays, dayLines = askDays?.let { r -> os.meka.core.domain.DayAskRules.askLines(r, askDayEvents, askDayTasks, cal.epochDayOf(nowMs()), cal) }.orEmpty(),
                 dayEvents = askDayEvents, dayTasks = askDayTasks)
                 // The companion, slice 3: "sir" when he chose it in Settings → Voice.
-                .copy(callSir = mekaVoice.callsSir())
+                // The companion, slice 5: the notes of earlier chats, only with an open question or one about an earlier chat.
+                .copy(callSir = mekaVoice.callsSir(), recall = companionRecall(q, history, cal))
         }
         // Voice completeness, slice 3: a spoken question whose answer Navilife's voice will say asks for the first piece
         // with the answer (only Navilife's words are said; nothing of his question is spoken or kept).
@@ -8053,6 +8056,9 @@ class MekaCore(
                     if (auto != null) { did += auto; false } else true
                 }
                 if (did.isNotEmpty()) activityChanged()
+                // The companion, slice 5: an open chat's note is kept in his own data (never from a question that carried
+                // other people's words, nor from an answer that read the web: the server sends none then).
+                if (!context.untrusted && reply.sources.isEmpty()) companionMemory.keep(reply.note, cal.epochDayOf(nowMs()))
                 // The companion, slice 2: the web results the answer drew on, as source cards (https only, no site twice).
                 os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did, sources = os.meka.core.domain.LiveFactsRules.sources(reply.sources)))
             }
@@ -8349,6 +8355,29 @@ class MekaCore(
 
     /** Chooses MEKA's voice on every device (null: MEKA's default). False, and nothing saved, for a name that can't be one. */
     suspend fun chooseMekaVoice(name: String?): Boolean = onCore { mekaVoice.choose(name) }
+
+    /** The companion, slice 5: the notes sent with [q], or none. Caller is on the core. */
+    private fun companionRecall(q: String, history: List<os.meka.core.domain.TalkTurn>, cal: ZoneCalendar): List<String> {
+        val today = cal.epochDayOf(nowMs())
+        val notes = companionMemory.notes(today)
+        return if (!os.meka.core.domain.CompanionMemoryRules.sends(q, history.map { it.question }, companionMemory.remembers(), notes)) emptyList()
+        else os.meka.core.domain.CompanionMemoryRules.recall(notes, today)
+    }
+
+    /** The companion, slice 5: whether Navilife remembers conversations (Settings → Navilife's voice; on by default). Synced. */
+    suspend fun companionRemembers(): Boolean = onCore { companionMemory.remembers() }
+
+    /** The companion, slice 5: turns remembering on or off on every device; off forgets the notes too. */
+    suspend fun setCompanionRemembers(on: Boolean) { onCore { companionMemory.setRemembers(on) } }
+
+    /** The companion, slice 5: what Navilife remembers, newest first ("Yesterday · Talked through …"). */
+    suspend fun companionMemoryRows(): List<String> = onCore {
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        os.meka.core.domain.CompanionMemoryRules.rows(companionMemory.notes(today), today)
+    }
+
+    /** The companion, slice 5: forgets every note on every device. */
+    suspend fun forgetCompanionMemory() { onCore { companionMemory.forgetAll() } }
 
     /** The companion, slice 3: whether Navilife calls him "sir" (Settings → Voice; false: by name). Synced. */
     suspend fun companionCallsSir(): Boolean = onCore { mekaVoice.callsSir() }

@@ -13,3 +13,4 @@ tip: On a slow connection the first words can take a moment; offline it says "Us
 tip: Ask → More → Activity shows how quickly the voice answered; clips heard over Bluetooth or car audio are marked "+ Bluetooth", about 0.2 s more.
 tip: In Talk the first words of an answer come with the answer itself, so Navilife starts speaking without a second wait; Activity marks those "with the answer".
 tip: At the top, Navilife calls you lets you choose whether it calls you by your name or "sir" in Ask, Talk and Hello; the choice follows you to every device.
+tip: Under it, What Navilife remembers lists a line about each proper chat (kept 30 days in your own data) so Ask, Talk and Hello can pick up where you left off; choose Don't remember to start fresh each time (it forgets them too), or Forget all.

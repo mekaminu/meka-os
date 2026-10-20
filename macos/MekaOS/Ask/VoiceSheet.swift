@@ -65,6 +65,40 @@ struct VoiceSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.callsSir)
     }
 
+    /// The companion, slice 5: what Navilife remembers of earlier chats, with Remember / Don't remember and Forget all.
+    private var memory: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(CompanionMemoryRules.shared.TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textSecondary)
+            Picker(CompanionMemoryRules.shared.TITLE, selection: Binding(get: { model.remembersChats }, set: { model.setRemembersChats($0) })) {
+                Text(CompanionMemoryRules.shared.ON_LABEL).tag(true)
+                Text(CompanionMemoryRules.shared.OFF_LABEL).tag(false)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 260)
+            Text(model.remembersChats ? CompanionMemoryRules.shared.onLine(count: Int32(model.memoryRows.count)) : CompanionMemoryRules.shared.OFF_LINE)
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if model.remembersChats && model.memoryRows.isEmpty {
+                Text(CompanionMemoryRules.shared.EMPTY).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(model.memoryRows, id: \.self) { row in
+                Text(row).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+            if !model.memoryRows.isEmpty {
+                Button(CompanionMemoryRules.shared.FORGET_ALL) { model.forgetChats() }
+                    .buttonStyle(.link)
+            }
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.memoryRows)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.remembersChats)
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(VoicePickerRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
@@ -72,6 +106,7 @@ struct VoiceSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(0)
             callMe.staggeredAppear(1)
+            memory.staggeredAppear(2)
             if let v = model.voicePicker {
                 ForEach(Array(v.choices.enumerated()), id: \.element.id) { i, c in
                     // Each provider's voices under their heading (Google's British, American, then Polly's).

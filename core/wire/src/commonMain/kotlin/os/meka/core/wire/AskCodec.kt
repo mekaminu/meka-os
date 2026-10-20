@@ -73,6 +73,12 @@ object AskCodec {
          * by name. Left out of the JSON when null; an older server simply ignores it, and an unknown value reads as null.
          */
         val callMe: String? = null,
+        /**
+         * The companion, slice 5: short notes of earlier chats (oldest first, at most [MAX_RECALL] of at most
+         * [MAX_LINE]), so an open turn can pick up where they left off. Left out of the JSON when empty; an older
+         * server ignores it.
+         */
+        val recall: List<String> = emptyList(),
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -99,6 +105,11 @@ object AskCodec {
          * [MAX_SOURCES]. Left out of the JSON when empty; an older device simply ignores it.
          */
         val sources: List<Source> = emptyList(),
+        /**
+         * The companion, slice 5: one short line of what this conversation was about, for the device to keep (at most
+         * [MAX_NOTE]); null when there's nothing worth keeping. Left out of the JSON when null; an older device ignores it.
+         */
+        val note: String? = null,
     ) {
         companion object {
             const val ANSWERED = "answered"
@@ -117,6 +128,10 @@ object AskCodec {
 
     /** [Request.callMe]'s one value. */
     const val CALL_SIR = "sir"
+
+    /** The companion, slice 5: notes of earlier chats sent with a question, and the longest note an answer carries. */
+    const val MAX_RECALL = 6
+    const val MAX_NOTE = 200
 
     fun encodeRequest(r: Request): String = buildJsonObject {
         put("w", WireCodec.VERSION)
@@ -141,6 +156,7 @@ object AskCodec {
             r.speakVoice?.let { put("speakVoice", it) }
         }
         if (r.callMe == CALL_SIR) put("callMe", CALL_SIR)
+        if (r.recall.isNotEmpty()) putJsonArray("recall") { r.recall.forEach { add(JsonPrimitive(it)) } }
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("ask request") {
@@ -179,7 +195,13 @@ object AskCodec {
         val speak = voice && (o["speak"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val speakVoice = if (!speak) null else o.optStr("speakVoice")?.also { require(SPEAK_VOICE.matches(it)) { "speakVoice" } }
         val callMe = (o["callMe"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it == CALL_SIR }
-        Request(q, date, now, items, history, voice, speak, speakVoice, callMe)
+        val recall = (o["recall"] as? JsonArray ?: JsonArray(emptyList())).map { e ->
+            ((e as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw IllegalArgumentException("recall")).also {
+                require(it.isNotBlank() && it.length <= MAX_LINE) { "recall" }
+            }
+        }
+        require(recall.size <= MAX_RECALL) { "recall" }
+        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall)
     }
 
     /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */
@@ -209,6 +231,7 @@ object AskCodec {
         if (r.sources.isNotEmpty()) {
             putJsonArray("sources") { r.sources.take(MAX_SOURCES).forEach { src -> addJsonObject { put("title", src.title); put("url", src.url) } } }
         }
+        r.note?.takeIf { it.isNotBlank() && it.length <= MAX_NOTE }?.let { put("note", it) }
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("ask response") {
@@ -220,6 +243,7 @@ object AskCodec {
             actions = actionsOf(o),
             reason = o.optStr("reason"),
             sources = sourcesOf(o),
+            note = o.optStr("note")?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_NOTE },
         ).let { r ->
             // The first piece's clip: kept only whole and within SpeechCodec's limits, else simply not there.
             val text = o.optStr("firstText")?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT }
@@ -240,6 +264,18 @@ object AskCodec {
         val words = o?.optStr("answer")
         if (o == null || words == null) return text.trim().take(MAX_ANSWER) to emptyList()
         return words.trim().take(MAX_ANSWER) to actionsOf(o)
+    }
+
+    /**
+     * The companion, slice 5: the `"note"` in a model's answer (one short line of what the conversation was about), or
+     * null when there is none or it isn't a plain string within [MAX_NOTE].
+     */
+    fun modelNote(text: String): String? {
+        val start = text.indexOf('{')
+        val end = text.lastIndexOf('}')
+        if (start < 0 || end <= start) return null
+        val o = runCatching { json.parseToJsonElement(text.substring(start, end + 1)).jsonObject }.getOrNull() ?: return null
+        return o.optStr("note")?.replace(Regex("""\s+"""), " ")?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_NOTE }
     }
 
     /** An earlier answer as the model wrote it, for the conversation's turns: `{"answer":"…","actions":[]}`. */

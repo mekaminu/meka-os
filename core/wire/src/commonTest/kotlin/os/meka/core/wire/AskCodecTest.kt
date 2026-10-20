@@ -196,6 +196,23 @@ class AskCodecTest {
     }
 
     @Test
+    fun notesOfEarlierChatsTravelWithTheQuestionAndAnAnswerMayCarryOne() {
+        // The companion, slice 5.
+        val recalled = req.copy(recall = listOf("Sun 18 Oct · Talked through heat pumps", "Tue 20 Oct · Weighing Spanish lessons"))
+        assertEquals(recalled, AskCodec.decodeRequest(AskCodec.encodeRequest(recalled)))
+        assertFalse(AskCodec.encodeRequest(req).contains("recall"))
+        assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(req.copy(recall = List(7) { "Note $it" }))) }
+        assertFailsWith<WireFormatException> { AskCodec.decodeRequest(AskCodec.encodeRequest(req.copy(recall = listOf("x".repeat(AskCodec.MAX_LINE + 1))))) }
+        val noted = AskCodec.Response(AskCodec.Response.ANSWERED, "Ok.", note = "Talked through heat pumps")
+        assertEquals(noted, AskCodec.decodeResponse(AskCodec.encodeResponse(noted)))
+        assertFalse(AskCodec.encodeResponse(noted.copy(note = null)).contains("note"))
+        assertEquals("Talked through heat pumps", AskCodec.modelNote("""{"answer":"Ok.","actions":[],"note":"  Talked through\n heat pumps "}"""))
+        assertEquals(null, AskCodec.modelNote("""{"answer":"Ok.","actions":[]}"""))
+        assertEquals(null, AskCodec.modelNote("""{"answer":"Ok.","note":7}"""))
+        assertEquals(null, AskCodec.modelNote("just words"))
+    }
+
+    @Test
     fun aSpokenQuestionCanAskForItsFirstPieceAndTheClipComesBackWholeOrNotAtAll() {
         // Voice completeness, slice 3.
         val spoken = req.copy(voice = true, speak = true, speakVoice = "Aoede-US")
