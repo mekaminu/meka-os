@@ -10,7 +10,9 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import os.meka.core.domain.AskCard
 import os.meka.core.domain.AskOutcome
@@ -292,15 +294,29 @@ class TalkController(
                 val gen = generation
                 val endedAt = wordsEndedAt
                 val heardBy = engine
+                // The orb speed pass, slice 6: the same question already asked ahead with the words heard so far.
+                val early = ahead?.takeIf { it.gen == gen && os.meka.core.domain.AskAheadRules.use(it.question, effect.question) }
+                if (early != null) ahead = null else dropAhead()
                 waitCue(gen)
                 scope.launch {
-                    // The orb speed pass, slice 2: timed from his last word to the answer's voice (Settings → Speed).
-                    core.turnTalkBegan(endedAt?.let { android.os.SystemClock.elapsedRealtime() - it } ?: 0L)
-                    os.meka.android.today.HereLocation.refresh(context, core, effect.question)
-                    // The companion, slice 9: the answer's first sentence comes ahead, already said; Navilife starts
-                    // speaking it while the rest is still being written.
-                    val out = core.talkStreamed(effect.question, effect.history) { piece ->
-                        scope.launch { if (gen == generation) apply(TalkFlow.early(session, piece)) }
+                    val onPiece: (String) -> Unit = { piece -> if (gen == generation) apply(TalkFlow.early(session, piece)) }
+                    val adopted = early?.let { a ->
+                        a.onPiece = onPiece
+                        a.piece?.let(onPiece)
+                        try {
+                            a.job?.await()
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            if (!isActive) throw e
+                            null
+                        }
+                    }
+                    val out = if (adopted != null) adopted else {
+                        // The orb speed pass, slice 2: timed from his last word to the answer's voice (Settings → Speed).
+                        core.turnTalkBegan(endedAt?.let { android.os.SystemClock.elapsedRealtime() - it } ?: 0L)
+                        os.meka.android.today.HereLocation.refresh(context, core, effect.question)
+                        // The companion, slice 9: the answer's first sentence comes ahead, already said; Navilife starts
+                        // speaking it while the rest is still being written.
+                        core.talkStreamed(effect.question, effect.history) { piece -> scope.launch { onPiece(piece) } }
                     }
                     // The mic fix, step 3: his own "add …" was done at once; how long from his words ending to Added.
                     if (endedAt != null && heardBy != null && (out as? AskOutcome.Answered)?.answer?.did?.isNotEmpty() == true) {
@@ -371,6 +387,7 @@ class TalkController(
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
+                dropAhead()
                 waitJob?.cancel()
                 scope.launch { core.turnEnded() }
                 endpoint?.cancel()
@@ -383,6 +400,60 @@ class TalkController(
 
     /** The tick and holding line of the question being answered now ([waitCue]). */
     private var waitJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * The orb speed pass, slice 6: a quick look-up asked ahead ([askAhead]) for conversation [gen], with its first
+     * sentence ([piece]) kept until the flow takes it ([onPiece]).
+     */
+    private class Ahead(val gen: Int, val question: String) {
+        var job: kotlinx.coroutines.Deferred<AskOutcome?>? = null
+        var piece: String? = null
+        var onPiece: ((String) -> Unit)? = null
+    }
+
+    private var ahead: Ahead? = null
+
+    /**
+     * The orb speed pass, slice 6 ([os.meka.core.domain.AskAheadRules]): Navilife has just decided he has finished and
+     * stopped the recogniser, whose final words take a moment more. A read-only quick look-up is asked now with the
+     * words heard so far, exactly as the flow would ask it; when the final words say the same, that answer is used
+     * (the Ask effect above), otherwise it is dropped. Nothing it brings back is said or shown until then.
+     */
+    private fun askAhead() {
+        dropAhead()
+        val words = heard
+        if (words.isBlank() || phase != TalkPhase.LISTENING) return
+        if (!os.meka.core.domain.AskAheadRules.worthIt(words, session.conversation.history.map { it.question })) return
+        val named = os.meka.core.domain.ParkingRules.talkCar(words, core.carsView.value)
+        val ask = TalkFlow.heard(session, named?.utterance ?: words, os.meka.core.domain.TalkOpenRules.FOLD)
+            .effects.singleOrNull() as? TalkEffect.Ask ?: return
+        val endedAt = wordsEndedAt
+        val a = Ahead(generation, ask.question)
+        a.job = scope.async {
+            // A failure here never reaches the screen: null, and the final words are asked afresh.
+            try {
+                core.turnTalkBegan(endedAt?.let { android.os.SystemClock.elapsedRealtime() - it } ?: 0L)
+                os.meka.android.today.HereLocation.refresh(context, core, ask.question)
+                core.talkStreamed(ask.question, ask.history) { piece ->
+                    scope.launch {
+                        a.piece = piece
+                        a.onPiece?.invoke(piece)
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+        }
+        ahead = a
+    }
+
+    /** A question asked ahead that the final words didn't match (or the conversation moved on): cancelled, unsaid. */
+    private fun dropAhead() {
+        ahead?.job?.cancel()
+        ahead = null
+    }
 
     /**
      * The orb speed pass, slice 4: while the answer to the question of conversation [gen] is on its way (the orb already
@@ -426,6 +497,7 @@ class TalkController(
             engine = want
         }
         val r = recognizer ?: return fail(TalkProblem.FAILED)
+        dropAhead()
         // The orb speed pass, slice 5: he's about to ask something; the server warms again if its last was a while ago.
         scope.launch { core.warmTalk() }
         heard = ""
@@ -453,6 +525,7 @@ class TalkController(
                 )
                 if (step == os.meka.core.domain.ListenStep.FINISH) {
                     if (wordsEndedAt == null) wordsEndedAt = t
+                    askAhead() // slice 6: a quick look-up goes now, while the final words are on their way
                     runCatching { recognizer?.stopListening() } // the words come in onResults
                     return@launch
                 }
@@ -502,6 +575,7 @@ class TalkController(
             val named = os.meka.core.domain.ParkingRules.talkCar(text, core.carsView.value)
             namedCar = named?.carId
             apply(TalkFlow.heard(session, named?.utterance ?: text, os.meka.core.domain.TalkOpenRules.FOLD))
+            dropAhead() // slice 6: not taken by the question asked now (the Ask effect took it, if it was the same)
         }
 
         override fun onError(error: Int) {

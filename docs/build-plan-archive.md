@@ -2349,6 +2349,14 @@ Meka 17:34: he could listen to callers' messages before, but Done (or Clear all)
 - Facade: `TalkWarmApi` (`HttpSyncTransport.talkWarm`, 404/403 → false) and `MekaCore.warmTalk()` (the device gap, never throws).
 - Fold: `TalkController.hello` (with the tap), `begin` and each `listen` launch `core.warmTalk()`. Mac: `CoreModel.warmTalk`, `TalkController.hello`, `begin` and `listen` the same (nothing crosses back). Help tip (voice.md), HelpIndex regenerated. No UI change, so no motion row. Tests: TalkWarmTest (core, 5), TalkWarmCodecTest (4), TalkWarmFacadeTest (4), backend TalkWarmTest (7). No migration, Mac checked nightly.
 
+## The orb feels slow — slice 6 (2026-10-21): quick look-ups asked ahead with the words heard so far
+
+On the Fold, Talk ends listening itself 0.6 s after his last word and stops the recogniser, whose final words then take a moment more (the online recogniser's round trip). Now a read-only quick look-up goes at that moment with the words heard so far; when the final words match, its answer (and its early first sentence) is the one used; otherwise it is cancelled and the final words asked as before.
+- Core `AskAheadRules` (AskAhead.kt): `worthIt(words, earlier)` — at least 3 words, starts like a plain question (what/when/where/who/which/is/are/do/does/did/have/will/any/how many/how much/how long…), no acting word (add, remind, move, send, pay, pause, set, open, play, read, plan, take…), not an open turn (`CompanionRules.isOpen`), not Money (`MoneyAskRules.isAbout`, behind his fingerprint); `norm`, `same(ahead, final)` (case, punctuation, spacing aside), `use(ahead, question)`.
+- Fold `TalkController`: `askAhead()` at the endpoint's FINISH (before `stopListening`) runs `TalkFlow.heard` on the partial words (with the parking rename) and, only when its single effect is an Ask, starts `talkStreamed` in an `async` (timed by the speed log from his last word; a failure gives null); the early first sentence is kept until adopted. The Ask effect adopts it when `AskAheadRules.use` matches (same conversation), else `dropAhead()` cancels it; also dropped at each listen, after the final words are taken and at End. A dropped look-up's speed trace has no voice, so the log records nothing for it.
+- The Mac already asks with the words heard at its own endpoint (it doesn't wait for a final result), so no Mac change. Help tip (voice.md), HelpIndex regenerated. No UI change (no motion row), no server change, no wire change, no migration.
+- Tests: AskAheadTest (5).
+
 ## An update hidden with "Later" can still be installed (Fix first, Meka 2026-10-20 22:20)
 
 He tapped Later on the update card by mistake and couldn't find the build again: Later hid that build until a newer one. Done 2026-10-20 in one slice:
