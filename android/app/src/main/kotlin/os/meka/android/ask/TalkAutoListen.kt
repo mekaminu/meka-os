@@ -133,6 +133,18 @@ object TalkAutoListen {
         }
     }
 
+    /**
+     * The orb speed pass, slice 4: the soft thinking tick while an answer is on its way
+     * ([os.meka.core.domain.AnswerWaitRules.cues]): shorter and quieter than [chime].
+     */
+    fun thinkingTick() {
+        runCatching {
+            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 18)
+            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 50)
+            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 300)
+        }
+    }
+
     private fun bluetoothAudio(context: Context): Boolean = runCatching {
         val audio = context.getSystemService(AudioManager::class.java) ?: return false
         audio.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in BLUETOOTH_TYPES }

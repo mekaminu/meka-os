@@ -289,6 +289,7 @@ class TalkController(
                 val gen = generation
                 val endedAt = wordsEndedAt
                 val heardBy = engine
+                waitCue(gen)
                 scope.launch {
                     // The orb speed pass, slice 2: timed from his last word to the answer's voice (Settings → Speed).
                     core.turnTalkBegan(endedAt?.let { android.os.SystemClock.elapsedRealtime() - it } ?: 0L)
@@ -367,12 +368,37 @@ class TalkController(
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
+                waitJob?.cancel()
                 scope.launch { core.turnEnded() }
                 endpoint?.cancel()
                 recognizer?.cancel()
                 stopSaying()
                 level = 0f
             }
+        }
+    }
+
+    /** The tick and holding line of the question being answered now ([waitCue]). */
+    private var waitJob: kotlinx.coroutines.Job? = null
+
+    /**
+     * The orb speed pass, slice 4: while the answer to the question of conversation [gen] is on its way (the orb already
+     * shows Thinking), a soft tick after [os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS] and, still nothing after
+     * [os.meka.core.domain.AnswerWaitRules.HOLD_AFTER_MS], a holding line in Navilife's voice from memory
+     * ([MekaCore.answerHoldClip]: "One sec, Meka…"), which the answer then follows. Nothing once the answer has begun.
+     */
+    private fun waitCue(gen: Int) {
+        waitJob?.cancel()
+        val sent = android.os.SystemClock.elapsedRealtime()
+        fun started() = gen != generation || phase != TalkPhase.THINKING || session.early != null
+        waitJob = scope.launch {
+            delay(os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS)
+            if (!os.meka.core.domain.AnswerWaitRules.cues(android.os.SystemClock.elapsedRealtime() - sent, started())) return@launch
+            TalkAutoListen.thinkingTick()
+            delay(os.meka.core.domain.AnswerWaitRules.HOLD_AFTER_MS - os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS)
+            if (!os.meka.core.domain.AnswerWaitRules.holds(android.os.SystemClock.elapsedRealtime() - sent, started(), held = false)) return@launch
+            val clip = core.answerHoldClip() ?: return@launch
+            if (!started()) speaker.holdOn(clip)
         }
     }
 

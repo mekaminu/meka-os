@@ -2343,6 +2343,14 @@ final class CoreModel {
         return Data(base64Encoded: clip)
     }
 
+    /// The orb speed pass, slice 4: the next holding line ("One sec, Meka…") in Navilife's voice, only when it is already
+    /// on the Mac (made ahead with the hello's openers); nil otherwise. Never asks the server. Only the String crosses.
+    func answerHoldClip() async -> Data? {
+        guard let core else { return nil }
+        guard let clip = try? await core.answerHoldClip() else { return nil }
+        return Data(base64Encoded: clip)
+    }
+
     /// MEKA's voice isn't to be asked right now (not connected, the Mac's own voice chosen, or the server refused a
     /// moment ago), so a missed piece of the brief hands the rest to the Mac's voice (`SpeechRules.onMiss`).
     func speechResting() async -> Bool {

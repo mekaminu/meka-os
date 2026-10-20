@@ -9572,6 +9572,30 @@ class MekaCore(
             os.meka.core.domain.HelloRules.warmLines(ZoneCalendar(timeZone).minuteOfDay(nowMs()), aboutYou.profile().shownName, welcome)
         }
         lines.forEach { if (!speechPrefetch(it)) return }
+        // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.
+        onCore { os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName) }
+            .forEach { if (!speechPrefetch(it)) return }
+    }
+
+    /** The holding line said last ([answerHoldClip]), so the next one differs. */
+    private var answerHoldLast: Int? = null
+
+    /**
+     * The orb speed pass, slice 4: the next holding line ([os.meka.core.domain.AnswerWaitRules.holdLines]: "One sec,
+     * Meka…") in Navilife's voice, only when it is already on the device ([warmHello] makes them ahead); the next one
+     * in turn that is here, so never the same twice running. Null otherwise (nothing is said). Never asks the server.
+     */
+    suspend fun answerHoldClip(): String? = onCore {
+        val voice = speechVoiceNow() ?: return@onCore null
+        val lines = os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName)
+        val start = os.meka.core.domain.AnswerWaitRules.nextIndex(answerHoldLast, lines.size)
+        for (k in lines.indices) {
+            val i = (start + k) % lines.size
+            val clip = speechCached(voice.name, lines[i]) ?: continue
+            answerHoldLast = i
+            return@onCore clip
+        }
+        null
     }
 
     /**

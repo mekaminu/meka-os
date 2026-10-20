@@ -92,18 +92,40 @@ class MekaSpeaker(
      * [SpeechRules.HOLD_AUDIO_MS] more before the phone's voice takes over.
      */
     fun say(text: String, reading: Boolean = false, onDone: () -> Unit = {}) {
-        stop()
+        // The orb speed pass, slice 4: a holding line still being said ("One sec, Meka…") is let finish first.
+        val holding = holdJob?.takeIf { it.isActive }
+        holdJob = null
+        if (holding == null) stop() else { line++; job = null }
         // The picker may have changed the phone's voice since this speaker started (prefs are read from memory).
         DeviceVoiceStore.load(context).let { if (it != settings) useDeviceVoice(it) }
         val id = ++line
         speaking = true
         job = scope.launch {
+            try {
+                holding?.join()
+            } catch (e: CancellationException) {
+                holding?.cancel()
+                throw e
+            }
             speakNow(text, reading)
             if (id == line) {
                 speaking = false
                 onDone()
             }
         }
+    }
+
+    /** The holding line being said while an answer is on its way ([holdOn]); the next [say] waits for its end. */
+    private var holdJob: Job? = null
+
+    /**
+     * The orb speed pass, slice 4: plays the holding line's [clip] ("One sec, Meka…", Navilife's voice from memory)
+     * while the answer is on its way; the answer's [say] follows once it is over, never cutting it short. [stop] ends
+     * it at once.
+     */
+    fun holdOn(clip: String) {
+        stop()
+        holdJob = scope.launch { play(clip) }.also { job = it }
     }
 
     /**
@@ -331,6 +353,8 @@ class MekaSpeaker(
     /** Stops whatever is being said, in either voice. */
     fun stop() {
         line++
+        holdJob?.cancel()
+        holdJob = null
         job?.cancel()
         job = null
         player?.let { releasePlayer(it) }

@@ -111,3 +111,55 @@ class SpeechAheadFacadeTest {
         }
     }
 }
+
+/** The orb speed pass, slice 4: the holding line on a slow answer is played from memory, never asked for then. */
+class AnswerHoldFacadeTest {
+    private val now = 1_791_476_100_000L
+
+    private class Server(service: SyncService) : SyncTransport, SpeechApi {
+        private val sync = os.meka.core.testing.FaultyTransport(service)
+        val said = mutableListOf<String>()
+        override suspend fun push(request: PushRequest) = sync.push(request)
+        override suspend fun pull(request: PullRequest) = sync.pull(request)
+        override suspend fun speak(text: String, voice: String?): SpeechCodec.Response {
+            said += text
+            return SpeechCodec.Response(SpeechCodec.Response.SPOKEN, audio = "clip:$text", format = "mp3")
+        }
+        override suspend fun speechVoices() = SpeechCodec.Voices(SpeechCodec.Voices.ON)
+    }
+
+    private val server = Server(SyncService(InMemoryServerOpStore()))
+
+    private fun core() = MekaCore(
+        householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = server,
+        secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+    )
+
+    @Test
+    fun nothingIsSaidBeforeTheLinesAreMade() = runTest {
+        val c = core()
+        assertEquals(null, c.answerHoldClip())
+        assertTrue(server.said.isEmpty())
+    }
+
+    @Test
+    fun theHoldingLinesAreMadeWithTheHelloAndTakeTurns() = runTest {
+        val c = core()
+        c.warmHello()
+        assertTrue("One sec…" in server.said)
+        val asked = server.said.size
+        val first = c.answerHoldClip()
+        val second = c.answerHoldClip()
+        assertEquals("clip:One sec…", first)
+        assertEquals("clip:Bear with me…", second)
+        assertEquals(asked, server.said.size)
+    }
+
+    @Test
+    fun nothingWithTheDevicesOwnVoice() = runTest {
+        val c = core()
+        c.warmHello()
+        assertTrue(c.chooseMekaVoice("device"))
+        assertEquals(null, c.answerHoldClip())
+    }
+}
