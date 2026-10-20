@@ -386,8 +386,18 @@ object MailReaderLinks {
     }
 }
 
-/** One attachment row in the reader: "report.pdf" · "240 KB · PDF". */
-data class MailAttachmentRow(val name: String, val meta: String)
+/**
+ * One attachment row in the reader: "report.pdf" · "240 KB · PDF". [index] is its place in the email's list (how the
+ * server finds it again); [plan] is how a tap opens it ([MailAttachmentRules.plan]).
+ */
+data class MailAttachmentRow(
+    val name: String,
+    val meta: String,
+    val index: Int = 0,
+    val plan: String = MailAttachmentRules.VIEW,
+    val type: String? = null,
+    val bytes: Long = 0,
+)
 
 /** What the reader shows; [page] is ready for the web view, or null when the email has no HTML (then [text]). */
 data class MailReaderView(
@@ -410,7 +420,17 @@ data class MailReaderView(
     /** Why the whole email couldn't be read (then [text] is the preview Navilife already had), else null. */
     val problem: String?,
     val spoken: String,
+    /** Which email this is, for opening its attachments ([MailAttachmentRules]); null when it couldn't be read. */
+    val source: MailReaderSource? = null,
 )
+
+/** Navilife's own handle for the email in a reader: a card's id ([MailReaderSource.ITEM]) or a tidy's email ([TIDIED]). */
+data class MailReaderSource(val kind: String, val id: String, val batch: String? = null) {
+    companion object {
+        const val ITEM = "item"
+        const val TIDIED = "tidied"
+    }
+}
 
 object MailReaderRules {
     const val SHOW_IMAGES = "Show images"
@@ -424,7 +444,6 @@ object MailReaderRules {
     const val RECONNECT = "Your mail account needs signing in again (Ask → Settings → Mail) · here's the preview"
     const val UNKNOWN = "Navilife couldn't find this email · here's the preview it had"
     const val NO_TEXT = "(No text in this email)"
-    const val ATTACHMENT_OPEN = "Open it in your mail to save it · opening attachments in Navilife comes next"
     /** The most of the plain text shown (the rest is in the mail app). */
     const val MAX_TEXT = 60_000
 
@@ -472,7 +491,10 @@ object MailReaderRules {
     }
 
     fun attachmentRows(list: List<MailAttachmentFacts>): List<MailAttachmentRow> =
-        list.map { a -> MailAttachmentRow(a.name.ifBlank { "Attachment" }, listOfNotNull(size(a.bytes), kind(a.type, a.name)).joinToString(" · ")) }
+        list.mapIndexed { i, a ->
+            val name = a.name.ifBlank { "Attachment" }
+            MailAttachmentRow(name, listOfNotNull(size(a.bytes), kind(a.type, a.name)).joinToString(" · "), i, MailAttachmentRules.plan(name, a.type, a.bytes), a.type, a.bytes)
+        }
 
     private fun people(label: String, list: List<MailPerson>): String? {
         if (list.isEmpty()) return null
@@ -503,6 +525,7 @@ object MailReaderRules {
      */
     fun view(
         r: MailMessageAnswer?, fallback: MailReaderFallback, nowMs: Long, cal: LocalCalendar, images: Boolean,
+        source: MailReaderSource? = null,
     ): MailReaderView {
         val ok = r?.state == MailMessageAnswer.OK
         val problem = when {
@@ -548,7 +571,7 @@ object MailReaderRules {
                 else -> null
             },
             canShowImages = ok && !images && blocked > 0,
-            note = note, problem = problem, spoken = spoken,
+            note = note, problem = problem, spoken = spoken, source = if (ok) source else null,
         )
     }
 }

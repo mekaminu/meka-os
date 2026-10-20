@@ -361,6 +361,32 @@ internal class Http(private val client: HttpClient = HttpClient.newBuilder().con
     }
 
     /**
+     * Read the full email, slice 2: a GET whose answer is raw bytes (an attachment's `$value`), read up to [max] bytes;
+     * more throws [MailAttachmentTooBig]. Null body for a 404/400 (gone); 401 reconnect; anything else not 2xx throws.
+     */
+    fun bytes(url: String, bearer: String, max: Long): Pair<Int, ByteArray?> {
+        val req = HttpRequest.newBuilder(URI(url)).timeout(Duration.ofSeconds(60)).header("Authorization", "Bearer $bearer").GET().build()
+        val resp = client.send(req, HttpResponse.BodyHandlers.ofInputStream())
+        resp.body().use { input ->
+            val code = resp.statusCode()
+            if (code == 401) throw ReconnectRequired("provider API refused the token")
+            if (code == 404 || code == 400) return code to null
+            if (code !in 200..299) throw IllegalStateException("provider HTTP $code")
+            val declared = resp.headers().firstValueAsLong("Content-Length").orElse(-1)
+            if (declared > max) throw MailAttachmentTooBig()
+            val out = java.io.ByteArrayOutputStream()
+            val buf = ByteArray(64 * 1024)
+            while (true) {
+                val n = input.read(buf)
+                if (n < 0) break
+                out.write(buf, 0, n)
+                if (out.size() > max) throw MailAttachmentTooBig()
+            }
+            return code to out.toByteArray()
+        }
+    }
+
+    /**
      * Inbox fixes, slice 7: the reason word in a 403's error body (Google: `error.errors[].reason`, `error.details[].reason`
      * or `error.status`; Microsoft: `error.code`), kept only when it is one of [os.meka.core.domain.MailCheckRules.KNOWN_REASONS]
      * (so "the Gmail API is off" can be told from a rate limit); the provider's own message is never kept.

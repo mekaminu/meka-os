@@ -188,6 +188,7 @@ internal fun MailNeedsSection(
                             onNotNeeded = { haptics.light(); answer { core.dismissMailDraft(row.id) } },
                             onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
                             onRead = { images -> core.readMailItem(row.id, images) },
+                            onAttachment = { v, i -> core.openMailAttachment(v, i) },
                             onSend = { text, sent ->
                                 haptics.medium()
                                 scope.launch {
@@ -230,6 +231,8 @@ internal fun MailNeedsRowView(
     onNotNeeded: (() -> Unit)? = null,
     /** Read the full email (2026-10-20): the whole email for the reader (null: not offered here). */
     onRead: (suspend (Boolean) -> MailReaderView)? = null,
+    /** Read the full email, slice 2: open one of the reader's attachments (null: listed only). */
+    onAttachment: (suspend (MailReaderView, Int) -> os.meka.core.domain.MailAttachmentOpened)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -469,6 +472,7 @@ internal fun MailNeedsRowView(
         if (reading && onRead != null) {
             MailReaderSheet(
                 load = onRead,
+                openAttachment = onAttachment,
                 actions = (actions.shown + actions.more).filter(::offered).map { a ->
                     MailReaderAction(MailRowActionRules.label(a, row), MailRowActionRules.spoken(a, row), MailRowActionRules.critical(a)) { perform(a) }
                 },

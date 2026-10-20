@@ -58,6 +58,17 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import android.content.ActivityNotFoundException
+import android.content.Context
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import os.meka.android.export.VaultCopyViewer
+import os.meka.core.domain.MailAttachmentOpened
+import os.meka.core.domain.MailAttachmentRow
+import os.meka.core.domain.MailAttachmentRules
+import os.meka.core.domain.VaultFileOpened
 import os.meka.core.domain.MailLinkCheck
 import os.meka.core.domain.MailReaderLinks
 import os.meka.core.domain.MailReaderRules
@@ -82,6 +93,7 @@ internal fun MailReaderSheet(
     actions: List<MailReaderAction>,
     openLabel: String? = null,
     onOpenInMail: (() -> Unit)? = null,
+    openAttachment: (suspend (MailReaderView, Int) -> MailAttachmentOpened)? = null,
     onClose: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
@@ -93,6 +105,37 @@ internal fun MailReaderSheet(
     var link by remember { mutableStateOf<MailLinkCheck?>(null) }
     var linkLine by remember { mutableStateOf<String?>(null) }
     val uri = LocalUriHandler.current
+    val context = LocalContext.current
+    // Slice 2: the attachment being fetched, the one waiting for "Open in another app?", and a picture/PDF on show.
+    var fetching by remember { mutableStateOf<Int?>(null) }
+    var confirming by remember { mutableStateOf<MailAttachmentRow?>(null) }
+    var viewing by remember { mutableStateOf<VaultFileOpened?>(null) }
+    fun fetch(v: MailReaderView, a: MailAttachmentRow) {
+        val open = openAttachment ?: return
+        if (fetching != null) return
+        fetching = a.index
+        linkLine = "Opening ${a.name}…"
+        scope.launch {
+            val got = runCatching { open(v, a.index) }.getOrNull()
+            fetching = null
+            linkLine = when {
+                got == null -> MailAttachmentRules.FAILED_LINE
+                got.state == MailAttachmentRules.VIEW -> { viewing = got.viewer; null }
+                got.state == MailAttachmentRules.SYSTEM -> MailAttachmentFiles.handOver(context, got)
+                else -> got.line
+            }
+        }
+    }
+    fun tapAttachment(v: MailReaderView, a: MailAttachmentRow) {
+        link = null
+        val said = MailAttachmentRules.planLine(a.plan)
+        when {
+            said != null -> { haptics.tick(); confirming = null; linkLine = said }
+            openAttachment == null -> { haptics.tick(); linkLine = MailAttachmentRules.FAILED_LINE }
+            a.plan == MailAttachmentRules.SYSTEM -> { haptics.tick(); linkLine = null; confirming = a }
+            else -> { haptics.light(); confirming = null; fetch(v, a) }
+        }
+    }
     LaunchedEffect(Unit) { rise.animateTo(1f, MekaMotion.appear(reduced)) }
     LaunchedEffect(images) { view = runCatching { load(images) }.getOrNull() ?: view }
     val close: () -> Unit = { scope.launch { rise.animateTo(0f, MekaMotion.expand(reduced)); onClose() } }
@@ -194,13 +237,33 @@ internal fun MailReaderSheet(
                             v.attachments.forEach { a ->
                                 Column(
                                     Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surfaceRaised)
-                                        .clickable(role = Role.Button) { haptics.tick(); linkLine = MailReaderRules.ATTACHMENT_OPEN }
-                                        .semantics(mergeDescendants = true) { contentDescription = "${a.name}, ${a.meta}" }
+                                        .clickable(role = Role.Button) { tapAttachment(v, a) }
+                                        .graphicsLayer { alpha = if (fetching == a.index) 0.55f else 1f }
+                                        .semantics(mergeDescendants = true) { contentDescription = "Open ${a.name}, ${a.meta}" }
                                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                                 ) {
                                     Text(a.name, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
                                     Text(a.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
                                 }
+                            }
+                        }
+                    }
+                }
+                // Slice 2: a file for another app waits for his yes, naming it and who sent it (unfold; reduced: fade).
+                AnimatedVisibility(confirming != null, enter = unfold(), exit = fold()) {
+                    val a = confirming
+                    if (a != null) {
+                        val c = MailAttachmentRules.confirm(a.name, v.from)
+                        Column(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+                                .padding(MekaSpace.m).testTag("mail-reader-file-confirm"),
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                        ) {
+                            Text(c.title, style = MekaType.metaStrong, color = Meka.colors.textPrimary)
+                            Text(c.body, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                                MailNeedsPill(c.action, spoken = "Open ${a.name} in another app") { haptics.light(); confirming = null; fetch(v, a) }
+                                MailNeedsPill(c.cancel, quiet = true, spoken = "Don't open ${a.name}") { haptics.tick(); confirming = null }
                             }
                         }
                     }
@@ -216,6 +279,43 @@ internal fun MailReaderSheet(
                     Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
             }
+        }
+    }
+    // A picture or PDF attachment, in the Vault's viewer (in the app only; nothing kept).
+    viewing?.let { VaultCopyViewer(it, onClose = { viewing = null }) }
+}
+
+/**
+ * Read the full email, slice 2: an attachment he chose to open in another app, written to the app's own cache folder
+ * (shared through the FileProvider for that one hand-over, read-only) and offered with Android's app chooser. Files
+ * older than an hour are swept each time. Returns the line to show, or null when it was handed over.
+ */
+internal object MailAttachmentFiles {
+    private const val DIR = "mail-files"
+    private const val KEEP_MS = 60 * 60_000L
+
+    suspend fun handOver(context: Context, opened: MailAttachmentOpened): String? {
+        val b64 = opened.base64 ?: return MailAttachmentRules.FAILED_LINE
+        val file = withContext(Dispatchers.IO) {
+            runCatching {
+                val dir = java.io.File(context.cacheDir, DIR).apply { mkdirs() }
+                val now = System.currentTimeMillis()
+                dir.listFiles()?.forEach { f -> if (now - f.lastModified() > KEEP_MS) f.deleteRecursively() }
+                // Each hand-over in its own folder, so two files with one name never overwrite each other.
+                val one = java.io.File(dir, java.util.UUID.randomUUID().toString().take(12)).apply { mkdirs() }
+                java.io.File(one, opened.fileName).apply { writeBytes(android.util.Base64.decode(b64, android.util.Base64.DEFAULT)) }
+            }.getOrNull()
+        } ?: return MailAttachmentRules.FAILED_LINE
+        return try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.updates", file)
+            val view = Intent(Intent.ACTION_VIEW).setDataAndType(uri, opened.mime ?: "application/octet-stream")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            context.startActivity(Intent.createChooser(view, opened.name).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            null
+        } catch (e: ActivityNotFoundException) {
+            MailAttachmentRules.NO_APP_LINE
+        } catch (e: Exception) {
+            MailAttachmentRules.FAILED_LINE
         }
     }
 }

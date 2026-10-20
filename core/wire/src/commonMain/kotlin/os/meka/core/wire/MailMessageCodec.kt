@@ -132,6 +132,51 @@ object MailMessageCodec {
         )
     }
 
+    /**
+     * Read the full email, slice 2: one attachment. `POST /v1/mail/attachment` names the email by the same handle and
+     * the file by its place in the email's list and its name (checked again on the server, so a changed email can't
+     * hand back another file); the server answers with the file's bytes as `application/octet-stream`, or a status:
+     * 404 gone or not this household's · 409 the sign-in ended · 413 too big · 422 never opened from Navilife · 502 the
+     * provider failed.
+     */
+    const val ATTACHMENT_PATH = "/v1/mail/attachment"
+    const val ATTACHMENT_TYPE = "application/octet-stream"
+    const val STATUS_GONE = 404
+    const val STATUS_RECONNECT = 409
+    const val STATUS_TOO_BIG = 413
+    const val STATUS_REFUSED = 422
+    const val STATUS_FAILED = 502
+    private const val MAX_NAME = 400
+
+    data class AttachmentRequest(val kind: String, val id: String, val batch: String?, val index: Int, val name: String)
+
+    /** The attachment fetched: [state] a `MailMessageAnswer` state (or "too_big"), [bytes] when ok. */
+    class AttachmentFetch(val state: String, val bytes: ByteArray? = null) {
+        override fun toString() = "MailMessageCodec.AttachmentFetch(state=$state, bytes=${bytes?.size ?: 0})"
+    }
+
+    fun encodeAttachmentRequest(r: AttachmentRequest): String = buildJsonObject {
+        put("w", WireCodec.VERSION)
+        put("kind", r.kind)
+        put("id", r.id)
+        r.batch?.let { put("batch", it) }
+        put("index", r.index)
+        put("name", r.name.take(MAX_NAME))
+    }.toString()
+
+    fun decodeAttachmentRequest(body: String): AttachmentRequest = wrap("mail attachment request") {
+        val o = json.parseToJsonElement(body).jsonObject
+        checkVersion(o)
+        val kind = str(o, "kind")?.takeIf { it == Request.ITEM || it == Request.TIDIED } ?: throw IllegalArgumentException("kind")
+        val id = handle(str(o, "id")) ?: throw IllegalArgumentException("id")
+        val batch = handle(str(o, "batch"))
+        if (kind == Request.TIDIED && batch == null) throw IllegalArgumentException("batch")
+        val index = (o["index"] as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull?.takeIf { it in 0 until MAX_ATTACHMENTS }
+            ?: throw IllegalArgumentException("index")
+        val name = str(o, "name")?.takeIf { it.isNotBlank() && it.length <= MAX_NAME } ?: throw IllegalArgumentException("name")
+        AttachmentRequest(kind, id, batch, index, name)
+    }
+
     private fun str(o: JsonObject, k: String): String? = (o[k] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
 
     private fun checkVersion(o: JsonObject) {

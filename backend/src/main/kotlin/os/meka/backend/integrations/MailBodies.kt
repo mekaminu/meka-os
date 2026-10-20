@@ -29,12 +29,19 @@ internal object GmailMessageBody {
             .mapNotNull { h -> h["name"].s()?.lowercase()?.let { n -> n to (h["value"].s() ?: "") } }
             .fold(LinkedHashMap<String, String>()) { m, (k, v) -> if (k !in m) m[k] = v; m }
 
-    fun read(m: JsonObject): MailMessageFacts {
+    /** Where one listed attachment's bytes are: Gmail's attachment id, or (small parts) the data inline. */
+    class Ref(val name: String, val bytes: Long, val attachmentId: String?, val data: String?)
+
+    fun read(m: JsonObject): MailMessageFacts = readWithRefs(m).first
+
+    /** The email, and for each of its listed attachments (same order) where its bytes are. */
+    fun readWithRefs(m: JsonObject): Pair<MailMessageFacts, List<Ref>> {
         val payload = m["payload"] as? JsonObject ?: JsonObject(emptyMap())
         val hs = headers(payload)
         var html: String? = null
         var text: String? = null
         val files = mutableListOf<MailAttachmentFacts>()
+        val refs = mutableListOf<Ref>()
         fun walk(p: JsonObject, depth: Int) {
             if (depth > MAX_DEPTH) return
             val mime = p["mimeType"].s()?.lowercase().orEmpty()
@@ -50,7 +57,11 @@ internal object GmailMessageBody {
             if (filename.isNotEmpty() || disposition.startsWith("attachment")) {
                 // A picture that is part of the HTML (inline with a Content-ID) isn't an attachment he'd look for.
                 val inlinePicture = disposition.startsWith("inline") && ph["content-id"] != null && mime.startsWith("image/")
-                if (!inlinePicture) files += MailAttachmentFacts(filename.ifEmpty { "Attachment" }, body?.get("size").l() ?: 0L, mime.ifEmpty { null })
+                if (!inlinePicture) {
+                    val f = MailAttachmentFacts(filename.ifEmpty { "Attachment" }, body?.get("size").l() ?: 0L, mime.ifEmpty { null })
+                    files += f
+                    refs += Ref(f.name, f.bytes, body?.get("attachmentId").s(), body?.get("data").s())
+                }
                 return
             }
             val data = body?.get("data").s() ?: return
@@ -69,14 +80,37 @@ internal object GmailMessageBody {
             atMs = m["internalDate"].l() ?: 0L,
             subject = hs["subject"]?.take(MailAddress.MAX_SUBJECT),
             html = html, text = text, attachments = files,
-        )
+        ) to refs
     }
+}
+
+/** An attachment over [os.meka.core.domain.MailAttachmentRules.MAX_BYTES]: not fetched. */
+class MailAttachmentTooBig : RuntimeException("attachment too big")
+
+/**
+ * Read the full email, slice 2: the listed attachment at [index] of [listed] (name, size), but only when its name is
+ * still [name] (the email changed otherwise: null, gone); too big throws [MailAttachmentTooBig].
+ */
+internal fun <T> pickAttachment(listed: List<T>, index: Int, name: String, nameOf: (T) -> String, sizeOf: (T) -> Long): T? {
+    val a = listed.getOrNull(index) ?: return null
+    if (nameOf(a).trim() != name.trim()) return null
+    if (sizeOf(a) > os.meka.core.domain.MailAttachmentRules.MAX_BYTES) throw MailAttachmentTooBig()
+    return a
 }
 
 /** Graph's `GET /me/messages/{id}` with its body and attachments (names, sizes, types; inline pictures left out). */
 internal object GraphMessageBody {
     const val SELECT = "subject,from,toRecipients,ccRecipients,receivedDateTime,body,hasAttachments"
     const val EXPAND = "attachments(\$select=name,size,contentType,isInline)"
+    /** Slice 2: the same list (same filter, same order) with each one's id, to fetch one by its place. */
+    const val LIST_SELECT = "id,name,size,contentType,isInline"
+
+    /** One listed attachment's Graph id, name and size. */
+    class Ref(val id: String, val name: String, val bytes: Long)
+
+    fun refs(list: JsonObject): List<Ref> = (list["value"] as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+        .filter { (it["isInline"] as? JsonPrimitive)?.contentOrNull != "true" }
+        .mapNotNull { a -> a["id"].s()?.let { id -> Ref(id, a["name"].s()?.trim()?.ifEmpty { null } ?: "Attachment", a["size"].l() ?: 0L) } }
 
     private fun person(e: JsonElement?): MailPerson? {
         val a = (e as? JsonObject)?.get("emailAddress") as? JsonObject ?: return null

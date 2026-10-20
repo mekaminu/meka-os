@@ -149,6 +149,14 @@ interface MailProvider {
      * the AI, and it isn't marked read. Null when it has gone. Default: can't read (the reader keeps the preview).
      */
     fun message(accessToken: String, id: String): os.meka.core.domain.MailMessageFacts? = null
+
+    /**
+     * Read the full email, slice 2: the bytes of email [id]'s listed attachment at [index] (the order [message] lists
+     * them), only while its name is still [name]; null when the email or the file has gone (or the name changed);
+     * [MailAttachmentTooBig] past the limit. Read only at his tap, never stored, logged or given to the AI.
+     */
+    fun attachment(accessToken: String, id: String, index: Int, name: String): ByteArray? =
+        throw UnsupportedOperationException("this mail provider can't fetch attachments")
 }
 
 /** Inbox fixes, slice 1: what an email's own headers say about how it was sent (never its body). */
@@ -534,6 +542,24 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return GmailMessageBody.read(m)
     }
 
+    /** Slice 2: the message's MIME tree again (to find the file by its place), then `attachments/{id}` (base64url). */
+    override fun attachment(accessToken: String, id: String, index: Int, name: String): ByteArray? {
+        val a = http.call("GET", "$API/messages/${Http.enc(id)}?format=full", accessToken)
+        if (a.status == 404 || a.status == 400) return null
+        val m = a.body?.takeIf { a.status in 200..299 } ?: error("Gmail answered ${a.status}")
+        val ref = pickAttachment(GmailMessageBody.readWithRefs(m).second, index, name, { it.name }, { it.bytes }) ?: return null
+        val data = ref.data ?: run {
+            val attId = ref.attachmentId ?: return null
+            val b = http.call("GET", "$API/messages/${Http.enc(id)}/attachments/${Http.enc(attId)}", accessToken)
+            if (b.status == 404 || b.status == 400) return null
+            (b.body?.takeIf { b.status in 200..299 } ?: error("Gmail answered ${b.status}"))["data"]
+                ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull } ?: return null
+        }
+        val bytes = runCatching { java.util.Base64.getUrlDecoder().decode(data.trim().trimEnd('=')) }.getOrNull() ?: return null
+        if (bytes.size > os.meka.core.domain.MailAttachmentRules.MAX_BYTES) throw MailAttachmentTooBig()
+        return bytes
+    }
+
     /** Slice 8a: `in:inbox before:<seconds>`, 500 ids a page (Gmail's own search; nothing but ids comes back). */
     override fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage {
         val q = mutableMapOf("q" to "in:inbox before:${beforeMs / 1000}", "maxResults" to "500")
@@ -730,6 +756,16 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
         if (a.status == 404 || a.status == 400) return null
         val m = a.body?.takeIf { a.status in 200..299 } ?: error("Outlook answered ${a.status}")
         return GraphMessageBody.read(m)
+    }
+
+    /** Slice 2: the message's attachments listed (ids, same filter), then the one file's raw `$value`. */
+    override fun attachment(accessToken: String, id: String, index: Int, name: String): ByteArray? {
+        val list = http.call("GET", "$GRAPH/me/messages/${Http.enc(id)}/attachments?\$select=" + Http.enc(GraphMessageBody.LIST_SELECT), accessToken)
+        if (list.status == 404 || list.status == 400) return null
+        val body = list.body?.takeIf { list.status in 200..299 } ?: error("Outlook answered ${list.status}")
+        val ref = pickAttachment(GraphMessageBody.refs(body), index, name, { it.name }, { it.bytes }) ?: return null
+        val url = "$GRAPH/me/messages/${Http.enc(id)}/attachments/${Http.enc(ref.id)}/\$value"
+        return http.bytes(url, accessToken, os.meka.core.domain.MailAttachmentRules.MAX_BYTES).second
     }
 
     /** Slice 5a: the message's internet headers (on demand, one message per sender). */

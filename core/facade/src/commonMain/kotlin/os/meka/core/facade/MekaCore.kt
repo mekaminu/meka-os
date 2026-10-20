@@ -5755,6 +5755,36 @@ class MekaCore(
         return readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images)
     }
 
+    /**
+     * Read the full email, slice 2: the reader's attachment [index] (of [view]) fetched from the provider now and made
+     * ready to open — a picture or PDF for Navilife's own viewer (only when its bytes are one), another file for another
+     * app (after the reader's confirm), or a line why not. A file that could run something, or over 15 MB, isn't
+     * fetched at all. Nothing is kept; the AI never sees it.
+     */
+    suspend fun openMailAttachment(view: os.meka.core.domain.MailReaderView, index: Int): os.meka.core.domain.MailAttachmentOpened {
+        val rules = os.meka.core.domain.MailAttachmentRules
+        val row = view.attachments.firstOrNull { it.index == index }
+            ?: return os.meka.core.domain.MailAttachmentOpened("Attachment", rules.PROBLEM, line = rules.GONE_LINE)
+        val src = view.source ?: return rules.opened(row, os.meka.core.domain.MailMessageAnswer.GONE, null) { "" }
+        return openMailAttachmentAt(src.kind, src.id, src.batch, row.index, row.name, row.type, row.bytes)
+    }
+
+    /**
+     * [openMailAttachment] from plain values (the Mac hands only Strings and numbers to the core): the email's handle
+     * ([kind], [id], [batch] from the reader's source) and the row's place, name, type and size.
+     */
+    suspend fun openMailAttachmentAt(
+        kind: String, id: String, batch: String?, index: Int, name: String, type: String?, size: Long,
+    ): os.meka.core.domain.MailAttachmentOpened {
+        val rules = os.meka.core.domain.MailAttachmentRules
+        val row = os.meka.core.domain.MailAttachmentRow(name, "", index, rules.plan(name, type, size), type, size)
+        if (row.plan == rules.REFUSED || row.plan == rules.TOO_BIG) return rules.opened(row, null, null) { "" }
+        val fetched = try {
+            accountsApi?.mailAttachment(os.meka.core.wire.MailMessageCodec.AttachmentRequest(kind, id, batch, index, name))
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return rules.opened(row, fetched?.state, fetched?.bytes) { kotlin.io.encoding.Base64.encode(it) }
+    }
+
     /** The same for one email of a tidy ("Archived for you", All tidied mail): archived, in Junk or in Trash. */
     suspend fun readArchivedMail(batchId: String, key: String, images: Boolean = false): os.meka.core.domain.MailReaderView {
         val found = onCore { tidyBatch(batchId)?.let { b -> b.emails.firstOrNull { it.key == key }?.let { b to it } } }
@@ -5768,6 +5798,7 @@ class MekaCore(
     private suspend fun readMail(
         request: os.meka.core.wire.MailMessageCodec.Request, fallback: os.meka.core.domain.MailReaderFallback, images: Boolean,
     ): os.meka.core.domain.MailReaderView {
+        val source = os.meka.core.domain.MailReaderSource(request.kind, request.id, request.batch)
         val r = try { accountsApi?.mailMessage(request) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         val answer = r?.let { x ->
             fun p(q: os.meka.core.wire.MailMessageCodec.Person) = os.meka.core.domain.MailPerson(q.name, q.address)
@@ -5778,7 +5809,7 @@ class MekaCore(
                 blockedImages = x.blockedImages,
             )
         }
-        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images)
+        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source)
     }
 
     /** A link tapped in the reader: where it really goes, for the confirm, or null when Navilife won't open it. */

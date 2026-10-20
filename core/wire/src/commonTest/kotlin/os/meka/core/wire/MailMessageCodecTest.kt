@@ -32,4 +32,17 @@ class MailMessageCodecTest {
         assertFailsWith<WireFormatException> { MailMessageCodec.decodeRequest("""{"w":${WireCodec.VERSION},"kind":"raw","id":"te1234"}""") }
         assertNull(MailMessageCodec.decodeRequest("""{"w":${WireCodec.VERSION},"kind":"item","id":"mi1234"}""").batch)
     }
+
+    @Test
+    fun anAttachmentRequestGoesRoundTripAndBadOnesAreRefused() {
+        val r = MailMessageCodec.AttachmentRequest(MailMessageCodec.Request.TIDIED, "te0123abcd", "mt99ff00", 2, "consent form.pdf")
+        assertEquals(r, MailMessageCodec.decodeAttachmentRequest(MailMessageCodec.encodeAttachmentRequest(r)))
+        val v = WireCodec.VERSION
+        assertFailsWith<WireFormatException> { MailMessageCodec.decodeAttachmentRequest("""{"w":$v,"kind":"item","id":"mi1234","index":-1,"name":"a.pdf"}""") }
+        assertFailsWith<WireFormatException> { MailMessageCodec.decodeAttachmentRequest("""{"w":$v,"kind":"item","id":"mi1234","index":40,"name":"a.pdf"}""") }
+        assertFailsWith<WireFormatException> { MailMessageCodec.decodeAttachmentRequest("""{"w":$v,"kind":"item","id":"mi1234","index":"0","name":"a.pdf"}""") }
+        assertFailsWith<WireFormatException> { MailMessageCodec.decodeAttachmentRequest("""{"w":$v,"kind":"item","id":"mi1234","index":0,"name":" "}""") }
+        assertFailsWith<WireFormatException> { MailMessageCodec.decodeAttachmentRequest("""{"w":$v,"kind":"tidied","id":"te1234","index":0,"name":"a.pdf"}""") }
+        assertFalse(MailMessageCodec.AttachmentFetch("ok", "secret".encodeToByteArray()).toString().contains("secret"))
+    }
 }

@@ -529,6 +529,9 @@ interface AccountsApi {
     /** Read the full email inside Navilife (2026-10-20): one email by Navilife's handle, read from the provider now. */
     suspend fun mailMessage(request: os.meka.core.wire.MailMessageCodec.Request): os.meka.core.wire.MailMessageCodec.Response =
         throw UnsupportedOperationException("reading an email needs Navilife's server")
+    /** Read the full email, slice 2: one attachment's bytes, fetched from the provider now. */
+    suspend fun mailAttachment(request: os.meka.core.wire.MailMessageCodec.AttachmentRequest): os.meka.core.wire.MailMessageCodec.AttachmentFetch =
+        throw UnsupportedOperationException("opening an attachment needs Navilife's server")
 }
 
 /**
@@ -610,6 +613,32 @@ class HttpSyncTransport(
     override suspend fun mailMessage(request: os.meka.core.wire.MailMessageCodec.Request): os.meka.core.wire.MailMessageCodec.Response {
         prepare() // the route requires the device's signing key on the server
         return os.meka.core.wire.MailMessageCodec.decodeResponse(post(os.meka.core.wire.MailMessageCodec.PATH, os.meka.core.wire.MailMessageCodec.encodeRequest(request)))
+    }
+
+    override suspend fun mailAttachment(request: os.meka.core.wire.MailMessageCodec.AttachmentRequest): os.meka.core.wire.MailMessageCodec.AttachmentFetch {
+        val codec = os.meka.core.wire.MailMessageCodec
+        val states = os.meka.core.domain.MailMessageAnswer.Companion
+        prepare() // the route requires the device's signing key on the server
+        val resp = send(codec.ATTACHMENT_PATH, codec.encodeAttachmentRequest(request))
+        val max = os.meka.core.domain.MailAttachmentRules.MAX_BYTES
+        return when (resp.status.value) {
+            401 -> throw AuthRejectedException("HTTP 401 from ${codec.ATTACHMENT_PATH}")
+            codec.STATUS_GONE -> codec.AttachmentFetch(states.GONE)
+            codec.STATUS_RECONNECT -> codec.AttachmentFetch(states.RECONNECT)
+            codec.STATUS_TOO_BIG -> codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
+            codec.STATUS_REFUSED -> codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.REFUSED)
+            in 200..299 -> {
+                val size = resp.contentLength()
+                if (size != null && size > max) return codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
+                val bytes = resp.readRawBytes()
+                when {
+                    bytes.isEmpty() -> codec.AttachmentFetch(states.FAILED)
+                    bytes.size > max -> codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
+                    else -> codec.AttachmentFetch(states.OK, bytes)
+                }
+            }
+            else -> codec.AttachmentFetch(states.FAILED)
+        }
     }
 
     private fun mail(list: List<WireCodec.IntegrationAccount>) = list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }

@@ -48,8 +48,19 @@ class MailReaderFacadeTest {
             return MailMessageCodec.Response(
                 "ok", MailMessageCodec.Person("Sam Taylor", "sam@example.com"), listOf(MailMessageCodec.Person("Alex", "alex@example.com")),
                 atMs = now - hour, subject = "Saturday", html = "<p>Are you still OK to drive?</p>",
-                attachments = listOf(MailMessageCodec.Attachment("route.pdf", 52_000, "application/pdf")), blockedImages = if (request.images) 0 else 1,
+                attachments = listOf(
+                    MailMessageCodec.Attachment("route.pdf", 52_000, "application/pdf"),
+                    MailMessageCodec.Attachment("menu.docx", 9_000, null),
+                    MailMessageCodec.Attachment("setup.exe", 9_000, null),
+                ),
+                blockedImages = if (request.images) 0 else 1,
             )
+        }
+        val files = mutableListOf<MailMessageCodec.AttachmentRequest>()
+        override suspend fun mailAttachment(request: MailMessageCodec.AttachmentRequest): MailMessageCodec.AttachmentFetch {
+            files += request
+            if (down) throw TransportException("offline")
+            return MailMessageCodec.AttachmentFetch("ok", if (request.index == 0) "%PDF-1.4 x".encodeToByteArray() else "PK\u0003\u0004".encodeToByteArray())
         }
     }
 
@@ -80,7 +91,7 @@ class MailReaderFacadeTest {
         assertEquals("Are you still OK to drive?", v.text)
         assertNotNull(v.page)
         assertEquals("1 picture hidden to stop tracking", v.imagesLine)
-        assertEquals(listOf("route.pdf"), v.attachments.map { it.name })
+        assertEquals(listOf("route.pdf", "menu.docx", "setup.exe"), v.attachments.map { it.name })
         assertNull(v.problem)
         // Show images asks again with pictures on.
         assertNull(fold.readMailItem(id, images = true).imagesLine)
@@ -101,5 +112,30 @@ class MailReaderFacadeTest {
         // Links: only real web and email links, each with where it really goes.
         assertEquals("Open example.org?", fold.mailLink("https://example.org/x")!!.title)
         assertNull(fold.mailLink("javascript:x()"))
+    }
+
+    @Test
+    fun anAttachmentIsFetchedByTheEmailsHandleAndOpensWhereItShould() = runTest {
+        val id = MailNeedsRules.itemId("acc1", "m2")
+        val fold = core()
+        val v = fold.readMailItem(id)
+        val pdf = fold.openMailAttachment(v, 0)
+        assertEquals(MailMessageCodec.AttachmentRequest(MailMessageCodec.Request.ITEM, id, null, 0, "route.pdf"), server.files.single())
+        assertEquals(os.meka.core.domain.MailAttachmentRules.VIEW, pdf.state)
+        assertTrue(pdf.viewer!!.isPdf)
+        val doc = fold.openMailAttachment(v, 1)
+        assertEquals(os.meka.core.domain.MailAttachmentRules.SYSTEM, doc.state)
+        assertNotNull(doc.base64)
+        // A file that could run something is never fetched.
+        val exe = fold.openMailAttachment(v, 2)
+        assertEquals(os.meka.core.domain.MailAttachmentRules.REFUSED_LINE, exe.line)
+        assertEquals(2, server.files.size)
+        // Offline: a line, nothing opened.
+        server.down = true
+        assertEquals(os.meka.core.domain.MailAttachmentRules.OFFLINE_LINE, fold.openMailAttachment(v, 0).line)
+        // An email that couldn't be read has no attachments to open.
+        val off = fold.readMailItem(id)
+        assertNull(off.source)
+        assertEquals(os.meka.core.domain.MailAttachmentRules.GONE_LINE, fold.openMailAttachment(off, 0).line)
     }
 }

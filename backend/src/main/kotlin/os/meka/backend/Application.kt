@@ -494,6 +494,32 @@ fun Application.mekaSync(
                 call.respondText(os.meka.core.wire.MailMessageCodec.encodeResponse(answer), ContentType.Application.Json)
             }
 
+            // Read the full email, slice 2: one attachment's bytes, fetched from the provider at his tap by the email's
+            // handle and the file's place and name. Keyed devices only, never the publisher; nothing kept or logged.
+            post(os.meka.core.wire.MailMessageCodec.ATTACHMENT_PATH) {
+                val codec = os.meka.core.wire.MailMessageCodec
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                if (who.deviceId == ReleasePublisher.ID) throw Forbidden()
+                val request = codec.decodeAttachmentRequest(body)
+                val got = withContext(Dispatchers.IO) { integrations.readMailAttachment(who.householdId, request) }
+                call.response.header("Cache-Control", "no-store")
+                val bytes = got.bytes
+                when {
+                    got.state == os.meka.core.domain.MailMessageAnswer.OK && bytes != null ->
+                        call.respondBytes(bytes, ContentType.parse(codec.ATTACHMENT_TYPE))
+                    got.state == os.meka.core.domain.MailMessageAnswer.GONE || got.state == os.meka.core.domain.MailMessageAnswer.UNKNOWN ->
+                        call.respondText("gone", status = HttpStatusCode.fromValue(codec.STATUS_GONE))
+                    got.state == os.meka.core.domain.MailMessageAnswer.RECONNECT ->
+                        call.respondText("reconnect", status = HttpStatusCode.fromValue(codec.STATUS_RECONNECT))
+                    got.state == os.meka.core.domain.MailAttachmentRules.TOO_BIG ->
+                        call.respondText("too big", status = HttpStatusCode.fromValue(codec.STATUS_TOO_BIG))
+                    got.state == os.meka.core.domain.MailAttachmentRules.REFUSED ->
+                        call.respondText("refused", status = HttpStatusCode.fromValue(codec.STATUS_REFUSED))
+                    else -> call.respondText("failed", status = HttpStatusCode.fromValue(codec.STATUS_FAILED))
+                }
+            }
+
             // The provider redirects the owner's browser here. Authenticated by the single-use state, not a device.
             get("/v1/oauth/{provider}/callback") {
                 val provider = call.parameters["provider"].orEmpty()

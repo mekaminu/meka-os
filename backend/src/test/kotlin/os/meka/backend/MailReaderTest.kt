@@ -107,6 +107,13 @@ class MailReaderTest {
             read += id
             return whole[id]
         }
+        val files = mutableMapOf<String, ByteArray>()
+        override fun attachment(accessToken: String, id: String, index: Int, name: String): ByteArray? {
+            fails?.let { throw it }
+            read += "$id#$index"
+            val f = whole[id] ?: return null
+            return os.meka.backend.integrations.pickAttachment(f.attachments, index, name, { it.name }, { it.bytes })?.let { files["$id/${it.name}"] }
+        }
     }
 
     private class Cipher : TokenCipher {
@@ -195,5 +202,60 @@ class MailReaderTest {
         assertEquals(MailMessageAnswer.GONE, i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.TIDIED, k1, "mtbatch1")).state)
         // A key from another tidy isn't found in this one.
         assertEquals(MailMessageAnswer.UNKNOWN, i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.TIDIED, k1, "mtother")).state)
+    }
+
+    @Test
+    fun theProvidersListTheirAttachmentsInTheReadersOrderWithWhereTheBytesAre() {
+        val (f, refs) = GmailMessageBody.readWithRefs(json("""
+            {"payload":{"mimeType":"multipart/mixed","parts":[
+              {"mimeType":"text/plain","body":{"size":2,"data":"${b64("Hi")}"}},
+              {"mimeType":"image/png","filename":"","headers":[{"name":"Content-Disposition","value":"inline"},{"name":"Content-ID","value":"<logo>"}],"body":{"attachmentId":"x","size":900}},
+              {"mimeType":"application/pdf","filename":"consent.pdf","body":{"attachmentId":"att-y","size":240400}},
+              {"mimeType":"text/calendar","filename":"invite.ics","body":{"size":12,"data":"${b64("BEGIN:VCAL")}"}}]}}
+        """))
+        assertEquals(f.attachments.map { it.name }, refs.map { it.name })
+        assertEquals("att-y", refs[0].attachmentId)
+        assertEquals("BEGIN:VCAL", String(Base64.getUrlDecoder().decode(refs[1].data!!)))
+        val graph = GraphMessageBody.refs(json("""{"value":[{"id":"A1","name":"invoice.pdf","size":1200,"isInline":false},
+            {"id":"A2","name":"logo.png","size":300,"isInline":true},{"id":"A3","name":"terms.docx","size":9000,"isInline":false}]}"""))
+        assertEquals(listOf("A1", "A3"), graph.map { it.id })
+        // The place must still hold that name; too big is never fetched.
+        assertEquals("A3", os.meka.backend.integrations.pickAttachment(graph, 1, "terms.docx", { it.name }, { it.bytes })?.id)
+        assertNull(os.meka.backend.integrations.pickAttachment(graph, 1, "invoice.pdf", { it.name }, { it.bytes }))
+        assertNull(os.meka.backend.integrations.pickAttachment(graph, 5, "terms.docx", { it.name }, { it.bytes }))
+        kotlin.test.assertFailsWith<os.meka.backend.integrations.MailAttachmentTooBig> {
+            os.meka.backend.integrations.pickAttachment(listOf("big.zip" to 20_000_000L), 0, "big.zip", { it.first }, { it.second })
+        }
+    }
+
+    @Test
+    fun anAttachmentIsFetchedByTheEmailsHandleAndOnlyForThisHousehold() {
+        val box = Mailbox()
+        val ms = InMemoryMailStore()
+        val i = world(box, ms)
+        box.headers["p0"] = MailHeader("p0", "t-p0", "office@oakfield.sch.uk", "Oakfield School", "Trip on Friday", now - 60_000, unread = true, inInbox = true)
+        box.whole["p0"] = letter
+        box.files["p0/consent.pdf"] = "%PDF-1.4".toByteArray()
+        val acc = connect(i)
+        i.syncAccount(acc)
+        val item = MailNeedsRules.itemId(acc, "p0")
+        fun ask(hh: String, index: Int, name: String) =
+            i.readMailAttachment(hh, MailMessageCodec.AttachmentRequest(MailMessageCodec.Request.ITEM, item, null, index, name))
+        val ok = ask("home", 0, "consent.pdf")
+        assertEquals(MailMessageAnswer.OK, ok.state)
+        assertEquals("%PDF-1.4", String(ok.bytes!!))
+        // Another household reads nothing; a changed list (wrong name) is gone; a runnable name is refused unread.
+        val before = box.read.size
+        assertEquals(MailMessageAnswer.UNKNOWN, ask("other", 0, "consent.pdf").state)
+        assertEquals(before, box.read.size)
+        assertEquals(MailMessageAnswer.GONE, ask("home", 0, "other.pdf").state)
+        assertEquals(os.meka.core.domain.MailAttachmentRules.REFUSED, ask("home", 0, "consent.pdf.exe").state)
+        // Too big, a sign-in that ended, the provider down.
+        box.whole["p0"] = letter.copy(attachments = listOf(MailAttachmentFacts("consent.pdf", 30_000_000, "application/pdf")))
+        assertEquals(os.meka.core.domain.MailAttachmentRules.TOO_BIG, ask("home", 0, "consent.pdf").state)
+        box.fails = ReconnectRequired("refused")
+        assertEquals(MailMessageAnswer.RECONNECT, ask("home", 0, "consent.pdf").state)
+        box.fails = IllegalStateException("provider HTTP 503")
+        assertEquals(MailMessageAnswer.FAILED, ask("home", 0, "consent.pdf").state)
     }
 }

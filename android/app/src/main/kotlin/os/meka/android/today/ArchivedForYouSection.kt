@@ -272,6 +272,7 @@ internal fun ArchivedEmailPreviewPanel(
                     MailReaderAction(label, "$label, ${pv.subject}") { onAsk(pv, action) }
                 },
                 openLabel = pv.openLabel, onOpenInMail = { openInMail() },
+                openAttachment = { v, i -> core.openMailAttachment(v, i) },
                 onClose = { reading = false },
             )
         }

@@ -149,7 +149,13 @@ object VaultCopies {
     /** An opened copy's pictures: the photo, or each PDF page drawn at [width] px (white behind the page). */
     suspend fun pages(context: Context, opened: VaultFileOpened, width: Int = 1_600): List<Bitmap> = withContext(Dispatchers.IO) {
         val bytes = opened.base64?.let { runCatching { Base64.decode(it, Base64.NO_WRAP) }.getOrNull() } ?: return@withContext emptyList()
-        if (!opened.isPdf) return@withContext listOfNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size))
+        if (!opened.isPdf) {
+            // A big photo (an email's attachment can be a full-size camera picture) is sampled down to about [width].
+            val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+            val opts = BitmapFactory.Options().apply { inSampleSize = sampleSize(bounds.outWidth, bounds.outHeight, width) }
+            return@withContext listOfNotNull(runCatching { BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) }.getOrNull())
+        }
         // PdfRenderer needs a file: the app's own no-backup folder, deleted as soon as it is open.
         val dir = File(context.noBackupFilesDir, "vault-open").apply { mkdirs() }
         val file = File.createTempFile("copy", ".pdf", dir)

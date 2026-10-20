@@ -452,6 +452,40 @@ class Integrations(
     }
 
     /**
+     * Read the full email, slice 2: one attachment of the email named by Navilife's handle, fetched from the provider at
+     * his tap ([request]'s place in the list, its name checked again); bytes only on "ok". The file is never kept,
+     * logged, scanned by the AI or opened here; one that could run something isn't fetched at all ("refused").
+     */
+    fun readMailAttachment(householdId: String, request: os.meka.core.wire.MailMessageCodec.AttachmentRequest): os.meka.core.wire.MailMessageCodec.AttachmentFetch {
+        val answer = os.meka.core.domain.MailMessageAnswer.Companion
+        val rules = os.meka.core.domain.MailAttachmentRules
+        fun fetch(state: String) = os.meka.core.wire.MailMessageCodec.AttachmentFetch(state)
+        if (rules.plan(request.name, null, 0) == rules.REFUSED) return fetch(rules.REFUSED)
+        val ms = mailStore ?: return fetch(answer.FAILED)
+        val handle = os.meka.core.wire.MailMessageCodec.Request(request.kind, request.id, request.batch)
+        val accounts = store.accounts(householdId).filter { it.status != DISCONNECTED && it.provider in mail }
+        for (a in accounts) {
+            val ids = mailMessageIds(householdId, a, ms, handle) ?: continue
+            if (ids.isEmpty()) return fetch(answer.GONE)
+            val m = mail.getValue(a.provider)
+            val client = clients.get(m.oauth) ?: return fetch(answer.FAILED)
+            return try {
+                val token = freshAccess(a, "mail") { refresh -> m.refresh(client, refresh) }
+                val bytes = ids.firstNotNullOfOrNull { id -> m.attachment(token, id, request.index, request.name) } ?: return fetch(answer.GONE)
+                os.meka.core.wire.MailMessageCodec.AttachmentFetch(answer.OK, bytes)
+            } catch (e: ReconnectRequired) {
+                forgetAccess(a.id)
+                fetch(answer.RECONNECT)
+            } catch (e: MailAttachmentTooBig) {
+                fetch(rules.TOO_BIG)
+            } catch (e: Exception) {
+                fetch(answer.FAILED)
+            }
+        }
+        return fetch(answer.UNKNOWN)
+    }
+
+    /**
      * The provider ids to try for [request] in account [a], newest first; null when the handle isn't this account's,
      * empty when it is but Navilife no longer knows where the email is.
      */

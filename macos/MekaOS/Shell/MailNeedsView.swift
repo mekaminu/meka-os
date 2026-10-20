@@ -71,7 +71,8 @@ struct MailNeedsView: View {
                                                  suggestTimes: { await model.suggestMeetingTimes(row.id) },
                                                  book: { model.bookMeetingPick(row.id) },
                                                  notNeeded: { model.dismissMailDraft(row.id) },
-                                                 read: { images in await model.readMailItem(row.id, images: images) })
+                                                 read: { images in await model.readMailItem(row.id, images: images) },
+                                                 attachment: { v, a in await model.openMailAttachment(v, a) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -198,6 +199,8 @@ struct MailNeedsRowView: View {
     var notNeeded: (() -> Void)? = nil
     /// Read the full email (2026-10-20): the whole email for the reader (nil: not offered here).
     var read: (@MainActor (Bool) async -> MailReaderView?)? = nil
+    /// Read the full email, slice 2: open one of the reader's attachments (nil: listed only).
+    var attachment: (@MainActor (MailReaderView, MailAttachmentRow) async -> MailFileOpened)? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var reading = false
     @State private var replying = false
@@ -312,7 +315,7 @@ struct MailNeedsRowView: View {
             .accessibilityAddTraits(read != nil ? .isButton : [])
             .sheet(isPresented: $reading) {
                 if let read {
-                    MailReaderSheet(palette: palette, load: read, actions: readerActions)
+                    MailReaderSheet(palette: palette, load: read, actions: readerActions, attachment: attachment)
                 }
             }
             // Drafted replies: Navilife's draft, ready to Send (his click), Edit or put away; it unfolds on the expand

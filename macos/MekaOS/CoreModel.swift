@@ -5923,6 +5923,26 @@ final class CoreModel {
         return try? await core.readMailItem(id: id, images: images)
     }
 
+    /// Read the full email, slice 2: one of the reader's attachments fetched now through Navilife's server, ready for the
+    /// in-app viewer (a picture or PDF) or another app (after the sheet's confirm). The handle and the row are read here,
+    /// on the main actor, into plain Strings and numbers; only those cross to the core.
+    func openMailAttachment(_ view: MailReaderView, _ row: MailAttachmentRow) async -> MailFileOpened {
+        let rules = MailAttachmentRules.shared
+        guard let core, let source = view.source else { return .line(rules.GONE_LINE) }
+        let kind = source.kind, id = source.id, batch = source.batch
+        let index = row.index, name = row.name, type = row.type, size = row.bytes
+        guard let o = try? await core.openMailAttachmentAt(kind: kind, id: id, batch: batch, index: index, name: name, type: type, size: size) else {
+            return .line(rules.FAILED_LINE)
+        }
+        if o.state == rules.VIEW, let v = o.viewer, let b64 = v.base64, let data = Data(base64Encoded: b64) {
+            return .view(ViewedCopy(title: v.title, isPdf: v.isPdf, data: data))
+        }
+        if o.state == rules.SYSTEM, let b64 = o.base64, let data = Data(base64Encoded: b64) {
+            return .system(name: o.name, fileName: o.fileName, data: data)
+        }
+        return .line(o.line ?? rules.FAILED_LINE)
+    }
+
     /// The same for one email of a tidy (Archived for you, All tidied mail): archived, in Junk or in Trash.
     func readArchivedMail(batchId: String, key: String, images: Bool) async -> MailReaderView? {
         guard let core else { return nil }

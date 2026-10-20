@@ -73,7 +73,8 @@ struct MailMomentView: View {
                              unsubscribe: { model.unsubscribeMailItem(id) },
                              suggestTimes: { await model.suggestMeetingTimes(id) },
                              book: { model.bookMeetingPick(id) },
-                             read: { images in await model.readMailItem(id, images: images) })
+                             read: { images in await model.readMailItem(id, images: images) },
+                             attachment: { v, a in await model.openMailAttachment(v, a) })
                 .id(id)
                 .padding(.top, MekaSpace.xs)
                 .offset(x: reduceMotion ? 0 : dragged)

@@ -239,7 +239,8 @@ private struct ArchivedEmailPreviewView: View {
                                         load: { images in await model.readArchivedMail(batchId: batchId, key: key, images: images) },
                                         actions: readerActions(p),
                                         openLabel: p.openLabel,
-                                        openInMail: { Task { openLine = await model.openArchivedEmail(batchId: batchId, key: key) } })
+                                        openInMail: { Task { openLine = await model.openArchivedEmail(batchId: batchId, key: key) } },
+                                        attachment: { v, a in await model.openMailAttachment(v, a) })
                     }
                     HStack(spacing: MekaSpace.xs) {
                         ArchivedPill(label: MailReaderRules.shared.READ_WHOLE, palette: palette,
