@@ -224,6 +224,14 @@ final class MekaSpeaker {
     /// clip: "Talk over MEKA" only learns and listens while it is (`BargeInRules`).
     var audible: Bool { (player?.isPlaying ?? false) || synthesizer.isSpeaking }
 
+    /// "Hello, Navilife", slice 6: how loud Navilife's voice is coming out right now, 0 … 1 (`VoiceOut`): a playing clip's
+    /// metered loudness (never 0 while it plays), else 0 (the Mac's own voice: the orb's syllable swell plays instead).
+    func outputLevel() -> Float {
+        guard let p = player, p.isPlaying, p.isMeteringEnabled else { return 0 }
+        p.updateMeters()
+        return VoiceOut.shared.level(dbfs: p.averagePower(forChannel: 0), playing: true)
+    }
+
     /// Stops whatever is being said, in either voice.
     func stop() {
         line += 1
@@ -267,6 +275,7 @@ final class MekaSpeaker {
     /// Plays one MP3 clip to the end. False when it can't be played (the Mac's voice takes over) or was stopped.
     private func play(_ data: Data) async -> Bool {
         guard let p = try? AVAudioPlayer(data: data) else { return false }
+        p.isMeteringEnabled = true // "Hello, Navilife", slice 6: the orb reads the clip's loudness (a number only)
         player = p
         p.delegate = clipDone
         let key = ObjectIdentifier(p)

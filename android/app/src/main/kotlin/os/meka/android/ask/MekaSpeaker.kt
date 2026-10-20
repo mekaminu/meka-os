@@ -6,6 +6,7 @@ import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaDataSource
 import android.media.MediaPlayer
+import android.media.audiofx.Visualizer
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -68,6 +69,12 @@ class MekaSpeaker(
     private var line = 0
     private var job: Job? = null
     private var player: MediaPlayer? = null
+    /**
+     * "Hello, Navilife", slice 6: the loudness of the clip [player] is playing (Android's `Visualizer` on that player's
+     * own session, peak RMS only: a number, never the audio), so the orb moves with the real voice. Null when it can't
+     * be had (no microphone permission, or the phone refuses): the orb's syllable swell takes over.
+     */
+    private var meter: Visualizer? = null
     /** This phone's own voice, speed and pitch (kept on the phone only). */
     private var settings: DeviceVoiceSettings = DeviceVoiceStore.load(context)
     /** When MEKA's own voice was last heard (wall clock), so a late answer in the same conversation holds. */
@@ -261,6 +268,39 @@ class MekaSpeaker(
         get() = runCatching { player?.isPlaying == true }.getOrDefault(false) ||
             runCatching { tts?.isSpeaking == true }.getOrDefault(false)
 
+    /**
+     * How loud Navilife's voice is coming out right now, 0 … 1 ([os.meka.core.domain.VoiceOut]): a playing clip's measured
+     * loudness (never 0 while it plays), else 0 (the phone's own voice or no meter: the orb's swell).
+     */
+    fun outputLevel(): Float {
+        val v = meter ?: return 0f
+        val playing = runCatching { player?.isPlaying == true }.getOrDefault(false)
+        if (!playing) return 0f
+        val m = Visualizer.MeasurementPeakRms()
+        val ok = runCatching { v.getMeasurementPeakRms(m) == Visualizer.SUCCESS }.getOrDefault(false)
+        if (!ok) return 0f
+        return os.meka.core.domain.VoiceOut.level(os.meka.core.domain.VoiceOut.dbfsOfMillibels(m.mRms), playing = true)
+    }
+
+    /** Opens the loudness meter on [mp]'s session (best effort; nothing is captured but a level). */
+    private fun attachMeter(mp: MediaPlayer) {
+        closeMeter()
+        val allowed = androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!allowed) return
+        meter = runCatching {
+            Visualizer(mp.audioSessionId).apply {
+                setMeasurementMode(Visualizer.MEASUREMENT_MODE_PEAK_RMS)
+                setEnabled(true)
+            }
+        }.getOrNull()
+    }
+
+    private fun closeMeter() {
+        meter?.let { v -> runCatching { v.setEnabled(false) }; runCatching { v.release() } }
+        meter = null
+    }
+
     /** Stops whatever is being said, in either voice. */
     fun stop() {
         line++
@@ -297,7 +337,7 @@ class MekaSpeaker(
         try {
             mp.setAudioAttributes(if (recording) recordingAttributes() else speechAttributes())
             mp.setDataSource(ClipSource(bytes))
-            mp.setOnPreparedListener { it.start() }
+            mp.setOnPreparedListener { attachMeter(it); it.start() }
             mp.setOnCompletionListener { releasePlayer(mp); done(true) }
             mp.setOnErrorListener { _, _, _ -> releasePlayer(mp); done(false); true }
             mp.prepareAsync()
@@ -309,7 +349,7 @@ class MekaSpeaker(
     }
 
     private fun releasePlayer(mp: MediaPlayer) {
-        if (player === mp) player = null
+        if (player === mp) { player = null; closeMeter() }
         try { mp.release() } catch (_: Exception) {}
     }
 

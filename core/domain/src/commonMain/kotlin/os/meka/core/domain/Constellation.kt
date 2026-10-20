@@ -291,3 +291,42 @@ class ConstellationFrame(val n: Int, val dustN: Int) {
     /** The voice's amplitude this frame while speaking (0 otherwise): drives the equator ring. */
     var amp = 0f
 }
+
+/**
+ * "Hello, Navilife", slice 6: the orb speaks with Navilife's **real voice**. While a clip of Navilife's voice plays, the
+ * apps read its loudness a few times a second (the Fold from Android's `Visualizer` on its own player's session, peak
+ * RMS in millibels; the Mac from `AVAudioPlayer`'s meters, average power in dB) and this turns it into the level the
+ * constellation pushes out with ([Constellation.speech]). Only a loudness number is read, never the audio itself, and only
+ * of Navilife's own player. While a metered clip plays the level never drops to 0 ([FLOOR]), so a pause in the voice
+ * calms the orb instead of handing it back to the made-up syllable swell; when nothing metered plays (the device's own
+ * voice, or the meter isn't available) it is 0 and the swell takes over as before. (Non-AI, pure.)
+ */
+object VoiceOut {
+    /** The quietest and loudest a spoken clip gets, in dB full scale. */
+    const val QUIET_DBFS = -45f
+    const val LOUD_DBFS = -9f
+    /** The least a playing, metered clip reads as (a pause): the orb stays with the real voice. */
+    const val FLOOR = 0.02f
+    /** How often the apps read the meter while Navilife speaks. */
+    const val POLL_MS = 40L
+
+    /** A clip's loudness [dbfs] as the orb's level; 0 when nothing metered is [playing]. */
+    fun level(dbfs: Float, playing: Boolean): Float {
+        if (!playing || dbfs.isNaN()) return 0f
+        val l = ((dbfs - QUIET_DBFS) / (LOUD_DBFS - QUIET_DBFS)).coerceIn(0f, 1f)
+        return l.coerceAtLeast(FLOOR)
+    }
+
+    /** Android's `Visualizer.MeasurementPeakRms` reading (millibels, -9600 silence … 0) as dB full scale. */
+    fun dbfsOfMillibels(mb: Int): Float = (mb / 100f).coerceIn(-160f, 0f)
+
+    /**
+     * The shown level follows [target]: up fast with each syllable, down a little slower so it doesn't flicker; straight
+     * to 0 when the clip stops (the swell or rest takes over), and never below [FLOOR] while one plays.
+     */
+    fun follow(shown: Float, target: Float): Float {
+        if (target <= 0f) return 0f
+        val k = if (target > shown) 0.7f else 0.3f
+        return (shown + (target - shown) * k).coerceIn(FLOOR, 1f)
+    }
+}

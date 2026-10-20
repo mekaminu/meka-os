@@ -228,6 +228,26 @@ final class TalkController {
         phase = session.phase
         MacListen.latch.sessionOpen = phase != .ended // a switch to the Mac's own speech lasts the conversation
         step.effects.forEach(run)
+        if phase == .speaking { meterVoice() }
+    }
+
+    /// "Hello, Navilife", slice 6: while Navilife speaks, the orb's level is its voice's metered loudness
+    /// (`MekaSpeaker.outputLevel`, followed by `VoiceOut.follow`); 0 without a meter, so the orb's own swell plays.
+    @ObservationIgnored private var voiceMetering = false
+
+    private func meterVoice() {
+        guard !voiceMetering else { return }
+        voiceMetering = true
+        Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self, self.phase == .speaking else { break }
+                self.level = VoiceOut.shared.follow(shown: self.level, target: self.speaker.outputLevel())
+                try? await Task.sleep(for: .milliseconds(VoiceOut.shared.POLL_MS))
+            }
+            guard let self else { return }
+            self.voiceMetering = false
+            if self.phase != .listening { self.level = 0 }
+        }
     }
 
     private func run(_ effect: any TalkEffect) {

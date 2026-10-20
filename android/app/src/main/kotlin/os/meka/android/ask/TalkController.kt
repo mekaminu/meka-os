@@ -243,6 +243,25 @@ class TalkController(
         phase = session.phase
         PhoneListen.latch.sessionOpen = active // a switch to the phone's own speech lasts the whole conversation
         step.effects.forEach(::run)
+        if (phase == TalkPhase.SPEAKING) meterVoice()
+    }
+
+    /** Reads Navilife's own voice while it speaks, for the orb ("Hello, Navilife", slice 6). */
+    private var voiceMeter: kotlinx.coroutines.Job? = null
+
+    /**
+     * While Navilife speaks, the orb's level is its voice's measured loudness ([MekaSpeaker.outputLevel], followed by
+     * [os.meka.core.domain.VoiceOut.follow]); 0 when there's no meter, so the orb's own syllable swell plays instead.
+     */
+    private fun meterVoice() {
+        if (voiceMeter?.isActive == true) return
+        voiceMeter = scope.launch {
+            while (phase == TalkPhase.SPEAKING) {
+                level = os.meka.core.domain.VoiceOut.follow(level, speaker.outputLevel())
+                kotlinx.coroutines.delay(os.meka.core.domain.VoiceOut.POLL_MS)
+            }
+            if (phase != TalkPhase.LISTENING) level = 0f
+        }
     }
 
     private fun run(effect: TalkEffect) {

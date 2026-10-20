@@ -118,3 +118,42 @@ class ConstellationTest {
         assertEquals(2, Constellation.AMBER_RINGS.size)
     }
 }
+
+/** "Hello, Navilife", slice 6: the orb's speaking level from Navilife's real voice. */
+class VoiceOutTest {
+    @Test
+    fun aPlayingClipsLoudnessBecomesTheOrbsLevel() {
+        assertEquals(0f, VoiceOut.level(-20f, playing = false))
+        assertEquals(1f, VoiceOut.level(-3f, playing = true))
+        assertEquals(VoiceOut.FLOOR, VoiceOut.level(-80f, playing = true)) // a pause: calm, but still the real voice
+        assertEquals(0f, VoiceOut.level(Float.NaN, playing = true))
+        val mid = VoiceOut.level(-27f, playing = true)
+        assertTrue(mid in 0.45f..0.55f, "mid $mid")
+        assertTrue(VoiceOut.level(-15f, true) > VoiceOut.level(-30f, true))
+    }
+
+    @Test
+    fun millibelsReadAsDecibels() {
+        assertEquals(-20f, VoiceOut.dbfsOfMillibels(-2000))
+        assertEquals(-96f, VoiceOut.dbfsOfMillibels(-9600))
+        assertEquals(0f, VoiceOut.dbfsOfMillibels(250))
+    }
+
+    @Test
+    fun itRisesFastFallsSlowerAndLetsGoWhenTheClipStops() {
+        val up = VoiceOut.follow(0.1f, 0.9f) - 0.1f
+        val down = 0.9f - VoiceOut.follow(0.9f, 0.1f)
+        assertTrue(up > down, "up $up down $down")
+        assertEquals(0f, VoiceOut.follow(0.8f, 0f))
+        assertTrue(VoiceOut.follow(0f, VoiceOut.FLOOR) >= VoiceOut.FLOOR)
+    }
+
+    @Test
+    fun theRealVoiceReplacesTheMadeUpSwell() {
+        // Metered (even in a pause) the constellation follows the voice, the same at every moment; unmetered it swells.
+        assertEquals(VoiceOut.FLOOR, Constellation.speech(VoiceOut.FLOOR, 100L, reduced = false))
+        assertEquals(VoiceOut.FLOOR, Constellation.speech(VoiceOut.FLOOR, 350L, reduced = false))
+        assertTrue(Constellation.speech(0f, 100L, reduced = false) != Constellation.speech(0f, 350L, reduced = false))
+        assertEquals(0.4f, Constellation.speech(0.9f, 100L, reduced = true))
+    }
+}
