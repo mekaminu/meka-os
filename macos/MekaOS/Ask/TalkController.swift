@@ -35,6 +35,8 @@ final class TalkController {
     private(set) var heard = ""
     /// What MEKA last said aloud.
     private(set) var said = ""
+    /// "Hello, Navilife" slice 7: when the last hello's entrance began (the orb scatters, gathers and sends its shockwave).
+    private(set) var entranceAt: Date?
     /// Why MEKA couldn't listen, shown under the orb until the next start.
     private(set) var problem: TalkProblem?
     /// "Talk over MEKA" is on for this conversation (read from the Mac's setting at each start; the orb's line).
@@ -117,6 +119,13 @@ final class TalkController {
             guard gen == generation, let words = await model?.hello() else { return }
             guard gen == generation, !active else { return }
             Task { await model?.warmVoice() }
+            // Slice 7, the entrance: the orb's points scatter and gather first; it speaks as they re-form.
+            if !MotionSetting.reduced {
+                let start = Date()
+                entranceAt = start
+                try? await Task.sleep(for: .milliseconds(Int(HelloEntrance.shared.GREET_AT)))
+                guard gen == generation, !active else { return }
+            }
             apply(TalkFlow.shared.greet(greeting: words))
         }
     }

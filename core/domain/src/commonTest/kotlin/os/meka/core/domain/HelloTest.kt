@@ -2,6 +2,8 @@ package os.meka.core.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /** "Hello, Navilife": the greeting built by rules, its order and limits, quiet hours, and the orb's states. */
@@ -212,5 +214,78 @@ class HelloTest {
         assertEquals("Say hello to Navilife · 1 thing needs you", HelloDock.label(TalkPhase.ENDED, 1))
         assertEquals("Say hello to Navilife · 3 things need you", HelloDock.label(TalkPhase.ENDED, 3))
         assertEquals("Navilife is listening · back to the conversation", HelloDock.label(TalkPhase.LISTENING, 3))
+    }
+
+    @Test
+    fun theBigEntranceZoomsScattersGathersThenShocksAndGreets() {
+        val big = EntranceKind.BIG
+        // It starts at the bar and dark comes up with the zoom; in the middle and near-black after it.
+        assertEquals(0f, HelloEntrance.travel(big, 0, false))
+        assertEquals(1f, HelloEntrance.travel(big, HelloEntrance.ZOOM_MS, false))
+        assertEquals(HelloEntrance.DIM, HelloEntrance.dim(big, HelloEntrance.ZOOM_MS, false))
+        // On the sphere, flung out to the edges, back on the sphere as the greeting starts.
+        assertEquals(0f, HelloEntrance.spread(big, 100, false))
+        assertEquals(1f, HelloEntrance.spread(big, HelloEntrance.SCATTER_FROM + HelloEntrance.SCATTER_MS, false))
+        assertEquals(0f, HelloEntrance.spread(big, HelloEntrance.GREET_AT, false))
+        // One shockwave as they re-form, then none.
+        assertNull(HelloEntrance.shock(big, HelloEntrance.GREET_AT - 1, false))
+        val (reach, a) = HelloEntrance.shock(big, HelloEntrance.GREET_AT, false)!!
+        assertEquals(1f, reach); assertTrue(a > 0.5f)
+        assertNull(HelloEntrance.shock(big, HelloEntrance.BIG_MS, false))
+        assertEquals(HelloEntrance.GREET_AT, HelloEntrance.greetAt(big, false))
+        // Points leave at different moments, all out at full spread, all home at none.
+        assertTrue(HelloEntrance.pointSpread(0.5f, 0f) > HelloEntrance.pointSpread(0.5f, 1f))
+        assertEquals(1f, HelloEntrance.pointSpread(1f, 1f))
+        assertEquals(0f, HelloEntrance.pointSpread(0f, 0f))
+    }
+
+    @Test
+    fun reducedMotionCrossFadesAndTheMorningVersionSaysNothing() {
+        // Reduced motion: in the middle at once, no scatter, no shockwave, a short fade, then the greeting.
+        assertEquals(1f, HelloEntrance.travel(EntranceKind.BIG, 0, true))
+        assertEquals(0f, HelloEntrance.spread(EntranceKind.BIG, 500, true))
+        assertNull(HelloEntrance.shock(EntranceKind.BIG, HelloEntrance.GREET_AT, true))
+        assertEquals(HelloEntrance.FADE_MS, HelloEntrance.greetAt(EntranceKind.BIG, true))
+        // The short version: no greeting; gathers from part-way out, then ends back in the bar.
+        assertNull(HelloEntrance.greetAt(EntranceKind.SHORT, false))
+        assertEquals(HelloEntrance.SHORT_FROM, HelloEntrance.spread(EntranceKind.SHORT, 0, false))
+        val end = HelloEntrance.length(EntranceKind.SHORT, false)
+        assertEquals(0f, HelloEntrance.travel(EntranceKind.SHORT, end, false))
+        assertEquals(0f, HelloEntrance.dim(EntranceKind.SHORT, end, false))
+        // Once a morning, never in quiet hours or with reduced motion, never in the afternoon.
+        assertTrue(HelloEntrance.morningPlays(lastDay = 9L, today = 10L, minuteOfDay = 7 * 60, quiet = false, reduced = false))
+        assertFalse(HelloEntrance.morningPlays(10L, 10L, 7 * 60, false, false))
+        assertFalse(HelloEntrance.morningPlays(null, 10L, 7 * 60, true, false))
+        assertFalse(HelloEntrance.morningPlays(null, 10L, 7 * 60, false, true))
+        assertFalse(HelloEntrance.morningPlays(null, 10L, 14 * 60, false, false))
+    }
+
+    @Test
+    fun theStageStaysForTheConversationAndShrinksBackWhenItEnds() {
+        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.SPEAKING, started = true, cards = 0, msSinceGreet = 9_000))
+        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = true, cards = 0, msSinceGreet = 9_000))
+        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.ENDED, started = false, cards = 0, msSinceGreet = 1_000))
+        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = false, cards = 0, msSinceGreet = HelloEntrance.NO_START_MS))
+        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.LISTENING, started = true, cards = 2, msSinceGreet = 9_000))
+        assertTrue(HelloEntrance.swipeCloses(120f)); assertFalse(HelloEntrance.swipeCloses(40f))
+        assertEquals(1f, HelloEntrance.closing(0, HelloEntrance.DIM, false).first)
+        assertEquals(0f, HelloEntrance.closing(HelloEntrance.CLOSE_MS, HelloEntrance.DIM, false).second)
+        // The words under the orb follow who's talking.
+        assertEquals("Good morning, Alex.", HelloEntrance.words(TalkPhase.SPEAKING, "", "Good morning, Alex."))
+        assertEquals("what's on today", HelloEntrance.words(TalkPhase.LISTENING, "what's on today", "Good morning, Alex."))
+        assertNull(HelloEntrance.words(TalkPhase.LISTENING, "", "x"))
+        assertNull(HelloEntrance.words(TalkPhase.ENDED, "a", "b"))
+    }
+
+    @Test
+    fun theConstellationFlingsItsPointsOutAndLetsTheLinesGo() {
+        val geo = Constellation.geometry(Constellation.POINTS)
+        val home = ConstellationFrame(geo.n, 0); val out = ConstellationFrame(geo.n, 0)
+        Constellation.frame(geo, home, OrbState.IDLE, 0f, 0.6f, 1_000, false)
+        Constellation.frame(geo, out, OrbState.IDLE, 0f, 0.6f, 1_000, false, spread = 1f, reach = 5f)
+        val farthest = (0 until geo.n).maxOf { kotlin.math.hypot(home.px[it], home.py[it]) }
+        assertTrue(farthest < 1.3f)
+        assertTrue((0 until geo.n).all { kotlin.math.hypot(out.px[it], out.py[it]) > 3.5f })
+        assertEquals(0f, out.linkBoost)
     }
 }

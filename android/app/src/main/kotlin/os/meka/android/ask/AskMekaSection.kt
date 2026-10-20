@@ -156,6 +156,8 @@ fun AskMekaSection(
                 offer = null
                 shown = AskShown.Answer(q, out, asks + 1)
                 asks += 1
+                (context.applicationContext as? os.meka.android.MekaApplication)?.talkCards?.value =
+                    (out as? AskOutcome.Answered)?.answer?.cards?.size ?: 0
             },
             onDid = { did, cards ->
                 val answer = (shown as? AskShown.Answer)?.outcome as? AskOutcome.Answered
@@ -172,6 +174,11 @@ fun AskMekaSection(
     val phaseApp = context.applicationContext as? os.meka.android.MekaApplication
     LaunchedEffect(talk.phase) { phaseApp?.talkPhase?.value = talk.phase }
     DisposableEffect(talk) { onDispose { phaseApp?.talkPhase?.value = TalkPhase.ENDED } }
+    // "Hello, Navilife" slice 7: the stage over the shell shows these words under its orb and moves with this voice.
+    LaunchedEffect(talk.said, talk.heard) { phaseApp?.talkSaid?.value = talk.said; phaseApp?.talkHeard?.value = talk.heard }
+    LaunchedEffect(talk) { androidx.compose.runtime.snapshotFlow { talk.level }.collect { phaseApp?.talkLevel?.value = it } }
+    val stopNow = phaseApp?.talkStopNow?.collectAsState()?.value == true
+    LaunchedEffect(stopNow) { if (stopNow) { talk.stop(); phaseApp?.talkStopNow?.value = false } }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val obs = LifecycleEventObserver { _, e ->

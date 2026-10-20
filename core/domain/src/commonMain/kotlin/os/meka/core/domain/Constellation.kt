@@ -166,7 +166,11 @@ object Constellation {
      * Works one frame out into [out]: every point's place on screen (−1…1 of the radius, before the app scales it), its
      * depth (0 far … 1 near) and brightness; the lines' brightness; the dust; and the core's glow.
      */
-    fun frame(geo: ConstellationGeometry, out: ConstellationFrame, state: OrbState, level: Float, angle: Float, elapsedMs: Long, reduced: Boolean) {
+    fun frame(
+        geo: ConstellationGeometry, out: ConstellationFrame, state: OrbState, level: Float, angle: Float, elapsedMs: Long, reduced: Boolean,
+        /** The entrance ([HelloEntrance.spread]): 0 on the sphere … 1 flung out to [reach]× the radius (the screen's edges). */
+        spread: Float = 0f, reach: Float = 1f,
+    ) {
         val n = geo.n
         val ca = cos(angle); val sa = sin(angle); val ct = cos(TILT); val st = sin(TILT)
         val t = elapsedMs.coerceAtLeast(0L)
@@ -198,6 +202,14 @@ object Constellation {
             val persp = 1f + 0.16f * z2
             out.px[i] = x1 * persp
             out.py[i] = y2 * persp
+            if (spread > 0f) {
+                // The entrance: each point flung out along its own way from the middle, to the screen's edges.
+                val f = HelloEntrance.pointSpread(spread, s)
+                val dir = kotlin.math.atan2(out.py[i], out.px[i]) + (s - 0.5f) * 0.6f
+                val far = reach * (0.8f + 0.4f * s)
+                out.px[i] += (cos(dir) * far - out.px[i]) * f
+                out.py[i] += (sin(dir) * far - out.py[i]) * f
+            }
             val depth = ((z2 / r.coerceAtLeast(0.5f)) + 1f) / 2f
             out.depth[i] = depth.coerceIn(0f, 1f)
             val twinkle = if (reduced) 1f else 0.85f + 0.15f * sin(tsec * (1.3f + s * 2.2f) + s * 40f)
@@ -208,7 +220,7 @@ object Constellation {
             OrbState.LISTENING -> 1f + 0.5f * voice
             OrbState.SPEAKING -> 1.1f + 0.4f * amp
             else -> 0.8f + 0.2f * breath
-        }
+        } * (1f - spread) * (1f - spread) // the lines let go as the points scatter, and join again as they gather
         out.core = when (state) {
             OrbState.LISTENING -> 0.45f + 0.5f * voice
             OrbState.THINKING -> 0.7f
@@ -227,7 +239,7 @@ object Constellation {
             val swirl = if (reduced) 0f else angle * 0.25f
             out.dx[k] = cos(dir + swirl) * reach
             out.dy[k] = sin(dir + swirl) * reach * 0.92f
-            out.da[k] = (1f - f) * (if (reduced) 0.25f else 0.45f) * (0.5f + 0.5f * s)
+            out.da[k] = (1f - f) * (if (reduced) 0.25f else 0.45f) * (0.5f + 0.5f * s) * (1f - spread)
         }
     }
 

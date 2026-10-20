@@ -35,6 +35,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -65,7 +67,11 @@ import os.meka.core.domain.OrbState
  * glow, and a level bar under it while listening. Drawing only; the caller gives it its click and screen-reader label.
  */
 @Composable
-fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, size: Dp = HelloOrb.SIZE.dp, still: Boolean = false) {
+fun HelloOrbView(
+    state: OrbState, level: Float, modifier: Modifier = Modifier, size: Dp = HelloOrb.SIZE.dp, still: Boolean = false,
+    /** The entrance (slice 7, [os.meka.core.domain.HelloEntrance]): how far the points are flung out, to [reach]× the radius, and its one shockwave. */
+    spread: Float = 0f, reach: Float = 1f, entranceShock: Pair<Float, Float>? = null,
+) {
     val reduced = Meka.reducedMotion || still
     val accent = Meka.colors.accent
     val amber = Meka.colors.calendar3
@@ -92,7 +98,7 @@ fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, s
     val shownLevel by animateFloatAsState(if (state == OrbState.LISTENING || state == OrbState.SPEAKING) level else 0f, label = "hello-level")
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Canvas(Modifier.size(size).clearAndSetSemantics { }) {
-            Constellation.frame(geo, frame, state, shownLevel, angle, elapsed, reduced)
+            Constellation.frame(geo, frame, state, shownLevel, angle, elapsed, reduced, spread, reach)
             val c = center
             val half = this.size.minDimension / 2
             val r = half / Constellation.EXTENT
@@ -129,6 +135,10 @@ fun HelloOrbView(state: OrbState, level: Float, modifier: Modifier = Modifier, s
             // Speaking: the soft shockwave on the beat.
             Constellation.shock(state, elapsed, reduced)?.let { (reach, a) ->
                 drawCircle(gold(a), radius = r * reach, style = Stroke(hair * 3 * (1f - (reach - 1f))), blendMode = blend)
+            }
+            // The entrance: one gold shockwave as the points re-form.
+            entranceShock?.let { (reach2, a) ->
+                drawCircle(shine(a), radius = r * reach2, style = Stroke(hair * 4 * (1.6f - (reach2 - 1f) / 1.1f).coerceAtLeast(0.4f)), blendMode = blend)
             }
             // The lines, in four bands of brightness (one path each, so a few hundred lines stay cheap).
             val bands = Array(4) { Path() }
@@ -237,7 +247,7 @@ fun HelloWakeLine(listening: Boolean, modifier: Modifier = Modifier) {
  * Reduced motion: a still glow, no press scale.
  */
 @Composable
-fun DockedHelloOrb(phase: TalkPhase, needsYou: Int, onTap: () -> Unit, modifier: Modifier = Modifier) {
+fun DockedHelloOrb(phase: TalkPhase, needsYou: Int, onTap: () -> Unit, modifier: Modifier = Modifier, onPlaced: (Offset) -> Unit = {}) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val source = remember { MutableInteractionSource() }
@@ -246,7 +256,7 @@ fun DockedHelloOrb(phase: TalkPhase, needsYou: Int, onTap: () -> Unit, modifier:
     val state = os.meka.core.domain.HelloDock.state(phase, needsYou)
     HelloOrbView(
         state, os.meka.core.domain.HelloDock.level(state), size = os.meka.core.domain.HelloDock.SIZE.dp,
-        modifier = modifier.scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
+        modifier = modifier.onGloballyPositioned { onPlaced(it.boundsInWindow().center) }.scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(interactionSource = source, indication = null, role = Role.Button) { haptics.light(); onTap() }
             .semantics { contentDescription = os.meka.core.domain.HelloDock.label(phase, needsYou) },
     )

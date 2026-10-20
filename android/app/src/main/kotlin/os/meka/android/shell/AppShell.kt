@@ -82,6 +82,12 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.compose.BackHandler
 import os.meka.core.facade.MekaCore
 import os.meka.android.ask.DockedHelloOrb
+import os.meka.android.ask.HelloStage
+import os.meka.core.domain.EntranceKind
+import os.meka.core.domain.TalkPhase
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.key
+import androidx.compose.runtime.remember
 import os.meka.core.domain.DockTap
 import os.meka.core.domain.HelloDock
 import os.meka.core.domain.TalkStart
@@ -160,11 +166,26 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     // "Hello, Navilife" slice 5: the docked orb in the bar says hello from anywhere (Ask comes forward and greets), or
     // takes him back to the conversation that's running.
     val talkPhase by app.talkPhase.collectAsState()
+    // Slice 7, the entrance: a tap at rest plays the big entrance over the shell, which greets once the points re-form
+    // (and stays as the conversation's stage); the first open of the morning plays the short one, once.
+    var entrance by remember { mutableStateOf<EntranceKind?>(null) }
+    var dockAt by remember { mutableStateOf(Offset.Unspecified) }
     val dockTap: () -> Unit = {
-        if (HelloDock.tap(talkPhase) == DockTap.HELLO) app.talkNow.value = TalkStart.HELLO
+        if (HelloDock.tap(talkPhase) == DockTap.HELLO && entrance == null) { app.talkCards.value = 0; entrance = EntranceKind.BIG }
         if (current != ShellDestination.ASK) { arrival = SharedMotion.arrivalAfterGo(ShellDestination.ASK, arrival); current = ShellDestination.ASK }
     }
-    val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(talkPhase, needsYou, dockTap, m) }
+    val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(talkPhase, needsYou, dockTap, m, onPlaced = { dockAt = it }) }
+    val shellContext = LocalContext.current
+    val reducedShell = Meka.reducedMotion
+    LaunchedEffect(Unit) {
+        val prefs = shellContext.getSharedPreferences(HELLO_PREFS, android.content.Context.MODE_PRIVATE)
+        val last = prefs.getLong(MORNING_KEY, -1L).takeIf { it >= 0 }
+        if (core.morningEntrancePlays(last, reducedShell)) {
+            prefs.edit().putLong(MORNING_KEY, core.todayEpochDay()).apply()
+            delay(350) // after the shell's own opening has begun
+            if (entrance == null && app.talkPhase.value == TalkPhase.ENDED) entrance = EntranceKind.SHORT
+        }
+    }
 
     // A place reached from Ask's More list sits behind Ask: back returns there.
     BackHandler(enabled = ShellNav.parent(current) != null) { ShellNav.parent(current)?.let(go) }
@@ -213,6 +234,20 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
                     enter = if (reduced) fadeIn(MekaMotion.appear(true)) else slideInVertically(MekaMotion.expand(false)) { it } + fadeIn(MekaMotion.appear(false)),
                     exit = if (reduced) fadeOut(MekaMotion.appear(true)) else slideOutVertically(MekaMotion.expand(false)) { it } + fadeOut(MekaMotion.appear(false)),
                 ) { BottomBar(current, needsYou, go, dock) }
+            }
+        }
+        entrance?.let { kind ->
+            val said by app.talkSaid.collectAsState()
+            val heard by app.talkHeard.collectAsState()
+            val level by app.talkLevel.collectAsState()
+            val cards by app.talkCards.collectAsState()
+            key(kind) {
+                HelloStage(
+                    kind, dockAt, talkPhase, level, heard, said, cards, needsYou,
+                    onGreet = { app.talkNow.value = TalkStart.HELLO },
+                    onStop = { app.talkStopNow.value = true },
+                    onClosed = { entrance = null },
+                )
             }
         }
     }
@@ -379,3 +414,7 @@ private fun NavItem(d: ShellDestination, lit: Boolean, needsYou: Int, modifier: 
         }
     }
 }
+
+/** The short morning entrance's day, kept on this phone ("Hello, Navilife" slice 7). */
+private const val HELLO_PREFS = "meka_hello"
+private const val MORNING_KEY = "morning_entrance_day"

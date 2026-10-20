@@ -281,6 +281,161 @@ object HelloDock {
     }
 }
 
+// ---- "Hello, Navilife" slice 7: the entrance ----
+
+/** Which entrance plays: the big one (a tap on the docked orb, Say hello on the Mac), or the short morning one. */
+enum class EntranceKind { BIG, SHORT }
+
+/** What the stage does next, once the entrance has played: stay up for the conversation, or shrink back to the bar. */
+enum class StageNext { STAY, CLOSE }
+
+/**
+ * "Hello, Navilife" (c), the entrance (Meka approved 2026-10-19 20:14, from the preview clip): tapping the docked orb
+ * zooms it up to the middle while the screen fades to near-black, its points scatter out to the screen's edges and
+ * fly back in, re-forming with one gold shockwave; then it greets him, and the words appear under it as it speaks.
+ * Closing (a swipe down, or "thanks" ending the conversation) shrinks it back into the bar. A **short** version plays
+ * once on the first open of the morning (gathers, one shockwave, back into the bar; no greeting, nothing said); never
+ * on every app open. Reduced motion: a plain cross-fade, the orb still, and no morning version. The timeline works on
+ * milliseconds since the entrance (or the close) began; the apps only paint it. (Non-AI, pure.)
+ */
+object HelloEntrance {
+    /** The big entrance: the zoom to the middle, the scatter, the gather, then one shockwave. */
+    const val ZOOM_MS = 420L
+    const val SCATTER_FROM = 300L
+    const val SCATTER_MS = 260L
+    const val GATHER_MS = 600L
+    const val SHOCK_MS = 420L
+    /** When the greeting starts: the moment the points have re-formed. */
+    const val GREET_AT = SCATTER_FROM + SCATTER_MS + GATHER_MS
+    const val BIG_MS = GREET_AT + SHOCK_MS
+    /** The short morning version: a gather from part-way out, the shockwave, a short hold, then back into the bar. */
+    const val SHORT_GATHER_MS = 520L
+    const val SHORT_FROM = 0.7f
+    const val SHORT_HOLD_MS = 260L
+    const val SHORT_MS = SHORT_GATHER_MS + SHOCK_MS + SHORT_HOLD_MS
+    /** Shrinking back into the bar. */
+    const val CLOSE_MS = 420L
+    /** Reduced motion: a cross-fade only. */
+    const val FADE_MS = 200L
+    /** How dark the screen goes behind the orb (big; the short version dims less). */
+    const val DIM = 0.9f
+    const val SHORT_DIM = 0.6f
+    /** The stage's orb box on the Fold (dp), and the shockwave's reach (of the orb's radius, wider than speaking's). */
+    const val STAGE_SIZE = 220
+    const val SHOCK_REACH = 2.1f
+    /** Points leave at different moments so the scatter and the gather read as a swarm, not a ring. */
+    const val STAGGER = 0.45f
+    /** A swipe down this far (dp) closes the stage. */
+    const val CLOSE_DRAG_DP = 96f
+    /** If no conversation has started this long after the greeting was due (the microphone refused…), it closes. */
+    const val NO_START_MS = 4_000L
+    /** The morning: the short version plays on the first open between these minutes of the day. */
+    const val MORNING_FROM = 5 * 60
+    const val MORNING_TO = 12 * 60
+
+    private fun ease(x: Float): Float { val c = x.coerceIn(0f, 1f); return 1 - (1 - c) * (1 - c) * (1 - c) }
+    private fun easeIn(x: Float): Float { val c = x.coerceIn(0f, 1f); return c * c }
+
+    /** How long the entrance runs before the stage settles (the short one ends back in the bar). */
+    fun length(kind: EntranceKind, reduced: Boolean): Long = when {
+        reduced -> FADE_MS
+        kind == EntranceKind.BIG -> BIG_MS
+        else -> SHORT_MS + CLOSE_MS
+    }
+
+    /** When the greeting starts (ms into the entrance); null for the short version, which says nothing. */
+    fun greetAt(kind: EntranceKind, reduced: Boolean): Long? = when {
+        kind == EntranceKind.SHORT -> null
+        reduced -> FADE_MS
+        else -> GREET_AT
+    }
+
+    /** Where the orb is: 0 at its place in the bar … 1 in the middle of the screen. */
+    fun travel(kind: EntranceKind, t: Long, reduced: Boolean): Float = when {
+        reduced -> 1f
+        kind == EntranceKind.BIG -> ease(t.toFloat() / ZOOM_MS)
+        t < SHORT_MS -> 1f
+        else -> 1f - ease((t - SHORT_MS).toFloat() / CLOSE_MS)
+    }
+
+    /** How dark the screen is behind the orb (0 … [DIM]). */
+    fun dim(kind: EntranceKind, t: Long, reduced: Boolean): Float {
+        val top = if (kind == EntranceKind.BIG) DIM else SHORT_DIM
+        if (reduced) return top * (t.toFloat() / FADE_MS).coerceIn(0f, 1f)
+        return when {
+            kind == EntranceKind.BIG -> top * ease(t.toFloat() / ZOOM_MS)
+            t < SHORT_MS -> top * ease(t.toFloat() / FADE_MS)
+            else -> top * (1f - ease((t - SHORT_MS).toFloat() / CLOSE_MS))
+        }
+    }
+
+    /** How far the points are flung out: 0 on the sphere … 1 at the screen's edges. */
+    fun spread(kind: EntranceKind, t: Long, reduced: Boolean): Float {
+        if (reduced) return 0f
+        if (kind == EntranceKind.SHORT) return if (t >= SHORT_GATHER_MS) 0f else SHORT_FROM * (1f - ease(t.toFloat() / SHORT_GATHER_MS))
+        val gatherFrom = SCATTER_FROM + SCATTER_MS
+        return when {
+            t < SCATTER_FROM -> 0f
+            t < gatherFrom -> easeIn((t - SCATTER_FROM).toFloat() / SCATTER_MS)
+            t < GREET_AT -> 1f - ease((t - gatherFrom).toFloat() / GATHER_MS)
+            else -> 0f
+        }
+    }
+
+    /** One point's own share of [spread], by its steady [seed]: some leave sooner, some come back later. */
+    fun pointSpread(spread: Float, seed: Float): Float =
+        (spread * (1 + STAGGER) - seed * STAGGER).coerceIn(0f, 1f)
+
+    /** The one gold shockwave as the points re-form: how far out (1 → [SHOCK_REACH]× the radius) and how bright; null otherwise. */
+    fun shock(kind: EntranceKind, t: Long, reduced: Boolean): Pair<Float, Float>? {
+        if (reduced) return null
+        val from = if (kind == EntranceKind.BIG) GREET_AT else SHORT_GATHER_MS
+        if (t < from || t >= from + SHOCK_MS) return null
+        val p = (t - from).toFloat() / SHOCK_MS
+        return (1f + (SHOCK_REACH - 1f) * ease(p)) to (1 - p) * (1 - p) * 0.8f
+    }
+
+    /** Shrinking back into the bar, [t] ms into the close: where the orb is (1 middle … 0 the bar) and how dark. */
+    fun closing(t: Long, from: Float, reduced: Boolean): Pair<Float, Float> {
+        val d = if (reduced) FADE_MS else CLOSE_MS
+        val p = (t.toFloat() / d).coerceIn(0f, 1f)
+        return (if (reduced) 1f - p else 1f - ease(p)) to from * (1f - ease(p))
+    }
+
+    /**
+     * Whether the stage stays up: it closes once a conversation that started has ended ("thanks", "that's all"), when an
+     * answer brings cards to tap (they're on Ask behind it, until the cards rise round the orb), or when nothing started
+     * [NO_START_MS] after the greeting was due.
+     */
+    fun next(phase: TalkPhase, started: Boolean, cards: Int, msSinceGreet: Long): StageNext = when {
+        started && phase == TalkPhase.ENDED -> StageNext.CLOSE
+        cards > 0 -> StageNext.CLOSE
+        !started && msSinceGreet >= NO_START_MS -> StageNext.CLOSE
+        else -> StageNext.STAY
+    }
+
+    /** A swipe down of [dragDp] closes the stage (and ends the conversation). */
+    fun swipeCloses(dragDp: Float): Boolean = dragDp >= CLOSE_DRAG_DP
+
+    /** The words under the orb: what Navilife is saying, else what he's saying as it's heard; nothing while resting. */
+    fun words(phase: TalkPhase, heard: String, said: String): String? = when (phase) {
+        TalkPhase.SPEAKING -> said.ifBlank { null }
+        TalkPhase.LISTENING, TalkPhase.THINKING, TalkPhase.DOING -> heard.ifBlank { null }
+        TalkPhase.ENDED -> null
+    }
+
+    /**
+     * The short version plays on the first open of the morning: once a day (it wasn't played on [today] already),
+     * between [MORNING_FROM] and [MORNING_TO], never in quiet hours, never with reduced motion.
+     */
+    fun morningPlays(lastDay: Long?, today: Long, minuteOfDay: Int, quiet: Boolean, reduced: Boolean): Boolean =
+        !reduced && !quiet && lastDay != today && minuteOfDay in MORNING_FROM until MORNING_TO
+
+    /** The screen reader's label for the stage, and the hint under the orb. */
+    const val LABEL = "Navilife"
+    const val CLOSE_HINT = "Swipe down to close"
+}
+
 // ---- "Hello, Navilife" slice 3: the wake phrase and the Mac's welcome back ----
 
 /**

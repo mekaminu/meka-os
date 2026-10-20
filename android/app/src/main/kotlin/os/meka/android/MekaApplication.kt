@@ -117,6 +117,14 @@ class MekaApplication : Application() {
     val talkNow = MutableStateFlow<os.meka.core.domain.TalkStart?>(null)
     /** "Hello, Navilife" slice 5: the running conversation's phase (ENDED when none), so the docked orb in the bar can show it. */
     val talkPhase = MutableStateFlow(os.meka.core.domain.TalkPhase.ENDED)
+    /** "Hello, Navilife" slice 7: the running conversation's words and voice level, for the stage's orb and the words under it. */
+    val talkSaid = MutableStateFlow("")
+    val talkHeard = MutableStateFlow("")
+    val talkLevel = MutableStateFlow(0f)
+    /** How many cards the conversation's latest answer brought (the stage steps back so they can be tapped on Ask). */
+    val talkCards = MutableStateFlow(0)
+    /** The stage was swiped down: Ask ends the conversation, then clears it. */
+    val talkStopNow = MutableStateFlow(false)
     /**
      * The brief's Listen ran to its end ("Say “plan my day” or “more news”", slice 7): Ask listens for 8 s
      * ([os.meka.core.domain.BriefFollowOnRules]); the value is where to go back to when nothing is said.

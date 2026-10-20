@@ -256,7 +256,7 @@ struct AskMekaSection: View {
                     VStack(spacing: MekaSpace.xs) {
                         Button(action: sayHello) {
                             HelloOrbView(state: HelloOrb.shared.state(phase: .ended, needsYou: Int32(model.needsYouCount)),
-                                         level: 0, palette: palette)
+                                         level: 0, palette: palette, entranceAt: talk.entranceAt)
                         }
                         .buttonStyle(MekaPressStyle())
                         .help("Say hello to Navilife")
@@ -437,7 +437,8 @@ private struct TalkPanel: View {
     var body: some View {
         VStack(spacing: MekaSpace.xs) {
             Button(action: onOrb) {
-                HelloOrbView(state: HelloOrb.shared.state(phase: talk.phase, needsYou: Int32(needsYou)), level: talk.level, palette: palette)
+                HelloOrbView(state: HelloOrb.shared.state(phase: talk.phase, needsYou: Int32(needsYou)), level: talk.level, palette: palette,
+                             entranceAt: talk.entranceAt)
             }
             .buttonStyle(MekaPressStyle())
             // Resting after "Too noisy — click to talk": a click starts listening as the mic does.

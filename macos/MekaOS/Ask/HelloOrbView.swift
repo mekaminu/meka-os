@@ -17,12 +17,16 @@ struct HelloOrbView: View {
     var size: CGFloat
     /// Frames a second while it moves: the sidebar's and the menu bar's small orbs turn at a calmer rate (slice 2).
     var frameRate: Double
+    /// Slice 7, the entrance: when it began; the points scatter to the edge of the orb's box, gather and send one shockwave.
+    var entranceAt: Date?
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var began = Date()
     @State private var orb: OrbConstellation
 
-    init(state: OrbState, level: Float, palette: MekaPalette, size: CGFloat = CGFloat(HelloOrb.shared.SIZE), frameRate: Double = 30) {
+    init(state: OrbState, level: Float, palette: MekaPalette, size: CGFloat = CGFloat(HelloOrb.shared.SIZE), frameRate: Double = 30,
+         entranceAt: Date? = nil) {
+        self.entranceAt = entranceAt
         self.state = state
         self.level = level
         self.palette = palette
@@ -35,7 +39,8 @@ struct HelloOrbView: View {
         VStack(spacing: MekaSpace.xs) {
             TimelineView(.animation(minimumInterval: 1.0 / frameRate, paused: reduceMotion)) { context in
                 let elapsedMs = Int64(context.date.timeIntervalSince(began) * 1000)
-                Canvas { g, box in draw(&g, box: box, elapsedMs: elapsedMs) }
+                let entranceMs: Int64 = entranceAt.map { Int64(context.date.timeIntervalSince($0) * 1000) } ?? -1
+                Canvas { g, box in draw(&g, box: box, elapsedMs: elapsedMs, entranceMs: entranceMs) }
                     .frame(width: size, height: size)
             }
             if reduceMotion && state == .listening {
@@ -51,7 +56,7 @@ struct HelloOrbView: View {
         .accessibilityHidden(true)
     }
 
-    private func draw(_ g: inout GraphicsContext, box: CGSize, elapsedMs: Int64) {
+    private func draw(_ g: inout GraphicsContext, box: CGSize, elapsedMs: Int64, entranceMs: Int64) {
         let k = Constellation.shared
         let dark = colorScheme == .dark
         if dark { g.blendMode = .plusLighter }
@@ -61,7 +66,11 @@ struct HelloOrbView: View {
         let bright = dark ? Color(.sRGB, red: 0.925, green: 0.843, blue: 0.620, opacity: 1) : accent
         let shownLevel: Float = (state == .listening || state == .speaking) ? level : 0
         orb.advance(elapsedMs: elapsedMs, state: state, reduced: reduceMotion)
-        k.frame(geo: orb.geo, out: orb.frame, state: state, level: shownLevel, angle: orb.angle, elapsedMs: elapsedMs, reduced: reduceMotion)
+        // Slice 7: during the entrance the points are flung out to the box's edge and gather again (none afterwards).
+        let entering = entranceMs >= 0 && entranceMs < HelloEntrance.shared.BIG_MS && !reduceMotion
+        let spread: Float = entering ? HelloEntrance.shared.spread(kind: .big, t: entranceMs, reduced: false) : 0
+        k.frame(geo: orb.geo, out: orb.frame, state: state, level: shownLevel, angle: orb.angle, elapsedMs: elapsedMs, reduced: reduceMotion,
+                spread: spread, reach: k.EXTENT * 0.97)
         let f = orb.frame
         let n = Int(orb.geo.n)
         let c = CGPoint(x: box.width / 2, y: box.height / 2)
@@ -107,6 +116,11 @@ struct HelloOrbView: View {
         if let shock = k.shock(state: state, elapsedMs: elapsedMs, reduced: reduceMotion) {
             let (reach, a) = pair(shock)
             g.stroke(circle(c, r * CGFloat(reach)), with: .color(gold(Double(a))), lineWidth: hair * 3 * CGFloat(1 - (reach - 1)))
+        }
+        // The entrance: one gold shockwave as the points re-form.
+        if entering, let wave = HelloEntrance.shared.shock(kind: .big, t: entranceMs, reduced: false) {
+            let (reach, a) = pair(wave)
+            g.stroke(circle(c, min(r * CGFloat(reach), half)), with: .color(bright.opacity(Double(a))), lineWidth: hair * 3)
         }
         // The lines, in four bands of brightness (one path each).
         var bands = [Path](repeating: Path(), count: 4)

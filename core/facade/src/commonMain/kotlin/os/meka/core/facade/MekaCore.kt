@@ -5204,6 +5204,19 @@ class MekaCore(
         )
     }
 
+    /**
+     * "Hello, Navilife" slice 7: whether the short morning entrance plays on this open ([os.meka.core.domain.HelloEntrance.morningPlays]):
+     * the first open of the morning, once a day ([lastDay] the epoch day it last played, kept on the device), never in
+     * quiet hours or with [reduced] motion. Pure, nothing stored.
+     */
+    fun morningEntrancePlays(lastDay: Long?, reduced: Boolean): Boolean {
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        return os.meka.core.domain.HelloEntrance.morningPlays(
+            lastDay, todayEpochDay(), cal.minuteOfDay(now), _notifySettings.value.quiet.isQuietAt(now, cal), reduced,
+        )
+    }
+
     /** How many cards Needs you holds now: the Hello orb's warm halo while any do. */
     fun needsYouCount(): Int = _needsYouStack.value.cards.size
 
