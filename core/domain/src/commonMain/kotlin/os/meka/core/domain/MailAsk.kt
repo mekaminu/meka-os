@@ -15,10 +15,18 @@ package os.meka.core.domain
 /** The brief's mail: how many emails need him now and the first senders, newest first ([MailAskRules.brief]). */
 data class BriefMail(val count: Int, val business: Int, val senders: List<String>)
 
+/**
+ * The companion, slice 7: an email Navilife's autopilot tidied out of the inbox that a question names ("did anything
+ * come from Amazon?"), with its tidy's account and whether it was put back since ([MailAskRules.tidiedHits]).
+ */
+data class MailTidiedHit(val email: MailTidiedEmail, val account: String, val putBack: Boolean)
+
 object MailAskRules {
     /** Emails sent with a mail question, at most (after the head line). */
     const val ASK_EMAILS = 8
-    const val ASK_LINES = 1 + ASK_EMAILS
+    /** The companion, slice 7: tidied emails sent with a question that names a sender, at most (after their head line). */
+    const val TIDIED_EMAILS = 4
+    const val ASK_LINES = 1 + ASK_EMAILS + 1 + TIDIED_EMAILS
     /** Senders the brief names, at most. */
     const val BRIEF_SENDERS = 2
     /** A sender's name in the brief, at most. */
@@ -39,6 +47,7 @@ object MailAskRules {
         "when", "where", "which", "how", "why", "can", "could", "would", "please", "navilife", "meka", "else", "still",
         "waiting", "answer", "message", "messages", "people", "someone", "anyone", "be", "been", "should", "will",
         "stuff", "thing", "things", "all", "much", "many", "lot", "go", "through", "clear", "zero", "ten", "minute", "look",
+        "come", "came", "arrived", "heard", "hear", "back",
     ) + SAID
 
     /**
@@ -50,8 +59,16 @@ object MailAskRules {
         if (WORDS.any { it in q }) return true
         val words = words(q)
         val did = words.indexOfFirst { it == "did" || it == "has" || it == "have" }
-        return did >= 0 && words.drop(did + 1).any { it in SAID }
+        if (did < 0) return false
+        val after = words.drop(did + 1)
+        if (after.any { it in SAID }) return true
+        // The companion, slice 7: "did anything come from Amazon?", "have I heard from the school?".
+        val from = after.indexOf("from")
+        return from > 0 && after.take(from).any { it in CAME }
     }
+
+    /** Words that, before "from", ask whether mail came from someone. */
+    private val CAME = setOf("come", "came", "arrived", "heard", "hear", "anything")
 
     /** The question's words that may name a sender or a subject ("school", "dentist", "invoice"), lower case. */
     fun terms(question: String): List<String> =
@@ -122,13 +139,21 @@ object MailAskRules {
      * ("what did the school say?"): the newest matching emails, or that none of the recent ones are from them. Else
      * how many need him and the first few, by who and subject.
      */
-    fun localAnswer(question: String, items: List<MailItem>, nowMs: Long, cal: LocalCalendar): String? {
+    fun localAnswer(question: String, items: List<MailItem>, nowMs: Long, cal: LocalCalendar, tidied: List<MailTidiedHit> = emptyList()): String? {
         if (!isAbout(question)) return null
         val all = recent(items, nowMs)
         val t = terms(question)
         if (t.isNotEmpty()) {
             val hits = all.filter { matches(it, t) }
+            // The companion, slice 7: what Navilife tidied from them, after what needed him.
+            val tidiedSaid = when {
+                tidied.isEmpty() -> null
+                tidied.size == 1 -> "Navilife tidied one: ${tidiedSaid(tidied[0], nowMs, cal)}."
+                else -> "Navilife tidied ${tidied.size}: " + tidied.take(LOCAL_EMAILS).joinToString("; ") { tidiedSaid(it, nowMs, cal) } +
+                    (if (tidied.size > LOCAL_EMAILS) "; and ${tidied.size - LOCAL_EMAILS} more." else ".")
+            }
             if (hits.isEmpty()) {
+                if (tidiedSaid != null) return "Nothing from that needed you. $tidiedSaid"
                 if (!WORDS.any { it in question.lowercase() }) return null
                 return "Nothing from that among the emails that needed you in the last 14 days."
             }
@@ -136,7 +161,8 @@ object MailAskRules {
                 listOfNotNull("${i.from}: “${i.subject.trim()}”", "${i.account}, ${MailNeedsRules.whenLabel(i.receivedAtMs, nowMs, cal)}",
                     state(i, nowMs, cal)).joinToString(", ")
             }
-            return if (hits.size == 1) "$said." else "${hits.size} emails: $said" + (if (hits.size > LOCAL_EMAILS) "; and ${hits.size - LOCAL_EMAILS} more." else ".")
+            val answer = if (hits.size == 1) "$said." else "${hits.size} emails: $said" + (if (hits.size > LOCAL_EMAILS) "; and ${hits.size - LOCAL_EMAILS} more." else ".")
+            return if (tidiedSaid == null) answer else "$answer $tidiedSaid"
         }
         val needing = all.filter { MailNeedsRules.showing(it, nowMs) }
         if (needing.isEmpty()) return "No emails need you right now."
@@ -145,6 +171,55 @@ object MailAskRules {
         val head = MailNeedsRules.headline(needing.size)
         return "$head: " + named.joinToString(", ") + (if (more > 0) ", and $more more." else ".")
     }
+
+    /**
+     * The companion, slice 7: the emails Navilife tidied in the last [MailNeedsRules.WINDOW_MS] whose sender, domain or
+     * subject a word of [question] names, newest first, each once; none when the question names nothing (a plain "my
+     * email" is about what needs him). Kept emails aren't tidied, so they're not here.
+     */
+    fun tidiedHits(batches: List<MailTidyBatch>, question: String, nowMs: Long): List<MailTidiedHit> {
+        val t = terms(question)
+        if (t.isEmpty()) return emptyList()
+        return batches.flatMap { b ->
+            b.emails.filter { e ->
+                e.tidy != MailTidy.KEEP && nowMs - e.receivedAtMs <= MailNeedsRules.WINDOW_MS && e.receivedAtMs <= nowMs + 60_000L &&
+                    tidiedMatches(e, t)
+            }.map { e ->
+                MailTidiedHit(e, b.account, b.undoneAtMs != null || b.emailDone.any { it.key == e.key && it.action == MailTidiedAction.PUT_BACK })
+            }
+        }.sortedWith(compareByDescending<MailTidiedHit> { it.email.receivedAtMs }.thenBy { it.email.key }).distinctBy { it.email.key }
+    }
+
+    private fun tidiedMatches(e: MailTidiedEmail, terms: List<String>): Boolean {
+        val ws = words((e.from + " " + e.domain.orEmpty().replace('.', ' ') + " " + e.subject).lowercase())
+        return terms.any { t -> ws.any { it.startsWith(t) || (it.length >= 4 && t.startsWith(it)) } }
+    }
+
+    /** Where a tidied email is now: "in the archive", "in Trash", "back in the inbox". */
+    private fun whereNow(h: MailTidiedHit): String = when {
+        h.putBack || h.email.tidy == MailTidy.RESCUE -> "back in the inbox"
+        h.email.tidy == MailTidy.TRASH || h.email.tidy == MailTidy.JUNK_TRASH -> "in Trash"
+        else -> "in the archive"
+    }
+
+    /**
+     * The companion, slice 7: the Ask lines (kind `mail`, after [askLines]) for the tidied emails a question names:
+     * "Tidied · 3 from what he asked about, moved out of the inbox by Navilife, last 14 days", then each, "Tidied ·
+     * Amazon · Personal · Mon 12 Oct · “Your order has shipped” · Receipt £12.99 · in the archive". Empty for none.
+     */
+    fun tidiedLines(hits: List<MailTidiedHit>, nowMs: Long, cal: LocalCalendar): List<String> {
+        if (hits.isEmpty()) return emptyList()
+        val head = "Tidied · ${hits.size} from what he asked about, moved out of the inbox by Navilife's autopilot, last 14 days"
+        return listOf(head) + hits.take(TIDIED_EMAILS).map { h ->
+            listOf("Tidied", h.email.from, h.account, MailNeedsRules.whenLabel(h.email.receivedAtMs, nowMs, cal),
+                "“${h.email.subject.trim()}”", MailTidiedRules.chip(h.email), whereNow(h)).joinToString(" · ")
+        }
+    }
+
+    /** "Amazon: “Your order has shipped”, Receipt £12.99, Personal, Mon 12 Oct, in the archive". */
+    private fun tidiedSaid(h: MailTidiedHit, nowMs: Long, cal: LocalCalendar): String =
+        "${h.email.from}: “${h.email.subject.trim()}”, ${MailTidiedRules.chip(h.email)}, ${h.account}, " +
+            "${MailNeedsRules.whenLabel(h.email.receivedAtMs, nowMs, cal)}, ${whereNow(h)}"
 
     /** The brief's mail: the emails that need him now, newest first, with the first [BRIEF_SENDERS] senders made plain. */
     fun brief(items: List<MailItem>, nowMs: Long): BriefMail? {

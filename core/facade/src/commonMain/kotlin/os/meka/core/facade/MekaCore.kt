@@ -7915,6 +7915,9 @@ class MekaCore(
         // that need him (other people's words: the context turns untrusted); without the AI the device answers itself.
         val mailAsked = os.meka.core.domain.MailAskRules.isAbout(q)
         val mailItems = if (!mailAsked) emptyList() else onCore { activity.mailItems() }
+        // The companion, slice 7: a question naming a sender ("did anything come from Amazon?") also carries what
+        // Navilife's autopilot tidied from them, read here from the tidies' own lists (the server is asked nothing).
+        val mailTidied = if (!mailAsked) emptyList() else onCore { os.meka.core.domain.MailAskRules.tidiedHits(activity.mailTidyBatches(), q, nowMs()) }
         // Ask knows how Navilife itself works: a question plainly about one of Navilife's own features ("flex mode",
         // "how do I set up the bedside clock?") is answered here from the bundled help, with Take me there, and no AI
         // call; one that only mentions a feature takes the matching entries to the AI. Questions the rules above answer
@@ -7934,7 +7937,7 @@ class MekaCore(
         val kidsAsked = !kidsNow.isEmpty && os.meka.core.domain.KidAskRules.isAbout(q, kidsNow.kids.map { it.name })
         fun unavailable(line: String): os.meka.core.domain.AskOutcome {
             val local = (if (notifyAsked) os.meka.core.domain.NotifyAskRules.localAnswer(notifyHealth, notifySettings, nowMs(), cal) else null)
-                ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal) else null)
+                ?: (if (mailAsked) os.meka.core.domain.MailAskRules.localAnswer(q, mailItems, nowMs(), cal, mailTidied) else null)
                 ?: commuteLocal
                 ?: (if (kidsAsked) os.meka.core.domain.KidAskRules.localAnswer(q, kidsNow) else null)
                 ?: (if (barcaAsked) os.meka.core.domain.BarcaAskRules.localAnswer(q, barcaEvents, barcaMarks, nowMs(), cal) else null)
@@ -8004,7 +8007,8 @@ class MekaCore(
                 // The commute counts everywhere, slice 5: the commute, today, tomorrow and the wake alarm, so "when do I need to leave?" has an answer.
                 commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, cal.epochDayOf(nowMs())), cal, nowMs(), currentWake()),
                 // Inbox autopilot, slice 9a: only for a question about his email, so "what did the school say?" has an answer.
-                mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) else emptyList(),
+                mail = if (mailAsked) os.meka.core.domain.MailAskRules.askLines(mailItems, q, nowMs(), cal) +
+                    os.meka.core.domain.MailAskRules.tidiedLines(mailTidied, nowMs(), cal) else emptyList(),
                 // Ask knows how Navilife itself works: the help entries the question mentions.
                 help = helpLines,
                 // Kids' admin, slice 4: only for a question about the children, so "what size shoes is Alex?" has an answer.

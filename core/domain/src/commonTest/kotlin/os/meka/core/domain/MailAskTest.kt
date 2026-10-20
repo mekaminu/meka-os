@@ -114,4 +114,67 @@ class MailAskTest {
         assertTrue(BriefScriptRules.body(v).any { it == "2 emails need you, from Alex Green and Sam Taylor." })
         assertFalse(BriefScriptRules.body(MorningBriefView.EMPTY.copy(dateLabel = "Mon 12 Oct", story = BriefStory())).any { "email" in it })
     }
+
+    // The companion, slice 7: a question naming a sender also finds what Navilife tidied from them.
+    private fun tidied(key: String, agoMs: Long, from: String, domain: String, subject: String, tidy: MailTidy, pence: Long? = null) =
+        MailTidiedEmail(key, tidy, if (tidy == MailTidy.ARCHIVE) MailSort.PROMO else null, now - agoMs, from, domain, subject, pence)
+
+    private val batches = listOf(
+        MailTidyBatch("b1", now - hour, "Personal", "Tidied 3", null, 3, null, null, null, emails = listOf(
+            tidied("t1", 2 * hour, "Amazon", "amazon.co.uk", "Your order has shipped", MailTidy.RECEIPT, 1299),
+            tidied("t2", 3 * hour, "Deliveroo", "deliveroo.co.uk", "20% off tonight", MailTidy.ARCHIVE),
+            tidied("t3", 20 * day, "Amazon", "amazon.co.uk", "Old order", MailTidy.RECEIPT),
+        )),
+        MailTidyBatch("b2", now - 2 * day, "Outlook", "Tidied 2", null, 2, null, null, null,
+            emails = listOf(
+                tidied("t4", 2 * day, "Amazon Prime", "amazon.co.uk", "Your Prime renewal", MailTidy.NEWSLETTER),
+                tidied("t5", 2 * day, "Prize Draw", "win-big.example", "You have won", MailTidy.JUNK_TRASH),
+            ),
+            emailDone = listOf(MailTidiedDone("t4", MailTidiedAction.PUT_BACK, now - day, "Back in the inbox")),
+        ),
+    )
+
+    @Test
+    fun aSenderQuestionFindsWhatNavilifeTidied() {
+        assertTrue(MailAskRules.isAbout("did anything come from Amazon?"))
+        assertTrue(MailAskRules.isAbout("have I heard from the school?"))
+        assertFalse(MailAskRules.isAbout("did I come home late yesterday?"))
+        assertEquals(listOf("amazon"), MailAskRules.terms("did anything come from Amazon?"))
+        val hits = MailAskRules.tidiedHits(batches, "did anything come from Amazon?", now)
+        assertEquals(listOf("t1", "t4"), hits.map { it.email.key })
+        assertTrue(hits[1].putBack)
+        assertEquals(emptyList(), MailAskRules.tidiedHits(batches, "anything important in my email?", now))
+        // The domain counts as well as the name.
+        assertEquals(listOf("t2"), MailAskRules.tidiedHits(batches, "any emails from deliveroo.co.uk?", now).map { it.email.key })
+        val lines = MailAskRules.tidiedLines(hits, now, cal)
+        assertEquals("Tidied · 2 from what he asked about, moved out of the inbox by Navilife's autopilot, last 14 days", lines[0])
+        assertEquals("Tidied · Amazon · Personal · 06:30 · “Your order has shipped” · Receipt £12.99 · in the archive", lines[1])
+        assertTrue(lines[2].endsWith("· Newsletter · back in the inbox"), lines[2])
+        assertEquals("Tidied · Prize Draw · Outlook · Thu 15 Oct · “You have won” · Junk · Trash · in Trash",
+            MailAskRules.tidiedLines(MailAskRules.tidiedHits(batches, "any email from the prize draw?", now), now, cal)[1])
+        assertEquals(emptyList(), MailAskRules.tidiedLines(emptyList(), now, cal))
+        // The lines ride in the mail kind and keep the context untrusted.
+        val mail = MailAskRules.askLines(items, "did anything come from Amazon?", now, cal) + lines
+        val ctx = AskRules.context(Today(emptyList(), null, emptyList(), emptyList()), now, cal, mail = mail)
+        assertTrue(ctx.untrusted)
+        assertEquals(mail.size, ctx.items.count { it.kind == AskItemKind.MAIL })
+        assertEquals(3, ctx.items.count { it.kind == AskItemKind.MAIL && it.line.startsWith("Tidied") })
+    }
+
+    @Test
+    fun withoutTheAiTheDeviceSaysWhatItTidied() {
+        val q = "did anything come from Amazon?"
+        assertEquals(
+            "Nothing from that needed you. Navilife tidied 2: Amazon: “Your order has shipped”, Receipt £12.99, Personal, 06:30, in the archive; " +
+                "Amazon Prime: “Your Prime renewal”, Newsletter, Outlook, Thu 15 Oct, back in the inbox.",
+            MailAskRules.localAnswer(q, items, now, cal, MailAskRules.tidiedHits(batches, q, now)),
+        )
+        val q2 = "any emails from Sam or Deliveroo?"
+        assertEquals(
+            "Sam Taylor: “Invoice for October”, Business, 05:30. Navilife tidied one: Deliveroo: “20% off tonight”, Promo, Personal, 05:30, in the archive.",
+            MailAskRules.localAnswer(q2, items, now, cal, MailAskRules.tidiedHits(batches, q2, now)),
+        )
+        // Nothing tidied: as before.
+        assertEquals("Nothing from that among the emails that needed you in the last 14 days.", MailAskRules.localAnswer("any emails from the plumber?", items, now, cal, emptyList()))
+    }
 }
