@@ -2267,4 +2267,5 @@ Core + server + facade + Fold + Mac, no migration (ADR-008 addendum: `mail_find`
 - `MailAskRules.isAbout` also knows "did anything come from …", "have I heard from …" ("come/came/arrived/heard/hear/anything" before "from"); those words are stop words for the sender terms.
 - AI path: the lines ride in the `mail` kind (no wire change; `ASK_LINES` 9 → 14), so the context stays untrusted (ADR-006). Offline: `localAnswer` adds "Navilife tidied 2: …" after what needed him, or "Nothing from that needed you. Navilife tidied one: …".
 - Money, the Vault and trips were already answered from his own data on the device (Money manager 16, Vault slice 3, Travel mode 2a), so item (2) is left with live trains for another day.
+- CI: 8698eab, run 939 (39451464241) green first try.
 - Files: core/domain MailAsk.kt (MailTidiedHit, tidiedHits, tidiedLines, localAnswer's tidied), core/facade MekaCore.kt (ask), backend AiAsk.kt (mail paragraph), docs/help/ai.md + HelpIndex.kt. Tests: `MailAskTest` +2. No UI change, no migration, both apps through the core.
