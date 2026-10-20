@@ -38,7 +38,9 @@ class AskService(
      * the small model as before.
      */
     fun request(r: AskCodec.Request, web: LiveFacts.Found? = null): ModelRequest {
-        val system = if (r.voice) SYSTEM + "\n" + VOICE else SYSTEM
+        // The companion, slice 3: "sir" when he chose it in Settings → Voice.
+        val base = if (r.callMe == AskCodec.CALL_SIR) SYSTEM + "\n" + CALL_SIR else SYSTEM
+        val system = if (r.voice) base + "\n" + VOICE else base
         // The companion, slice 2: a searched question is a companion turn too, metered as Chat.
         val open = web != null || os.meka.core.domain.CompanionRules.isOpen(r.question, r.history.map { it.question })
         if (!open) return ModelRequest(if (r.voice) FEATURE_TALK else FEATURE, ModelTier.SMALL, system, turns(r), MAX_TOKENS)
@@ -122,13 +124,18 @@ class AskService(
             - {"kind":"done_renewal","title":"…"} (marks one radar item done, as its own button would, so it moves on to its next time; the title exactly as on its radar line; only when he says it is done, for "I've tested the smoke alarms" or "the boiler's been serviced")
             - {"kind":"queue_done","title":"…"} (marks one waiting link in the train queue read or listened to, as its Done button would; the title exactly as on its queue line; only when he says he has read or listened to it, for "I've read the BBC one")
             - {"kind":"book_leave","title":"…","date":"YYYY-MM-DD"} (books days off in his leave planner, as typing them in the Leave pane would; the title is the dates as he'd type them there, with a name first if he gave one: "Mon 2 Nov", "27–30 Oct", "Spain 18 Dec – 4 Jan"; the date is the first day; only when he asks to book leave or a day off, for "book the 2nd of November off")
-            - {"kind":"add_fact","title":"Name: fact"} (keeps one fact on his "What Navilife knows" page, written as the page takes it, a short name, a colon, then the fact: "Shoe size: 10", "GP: Dr Patel, Riverside Surgery", "Alex shoe size: 2"; saying a name again changes that fact; only when he asks Navilife to remember or note something about his life, for "remember that my shoe size is 10"; never a password, PIN, card, bank or ID number, which the page refuses, so say so instead)
+            - {"kind":"add_fact","title":"Name: fact"} (keeps one fact on his "What Navilife knows" page, written as the page takes it, a short name, a colon, then the fact: "Shoe size: 10", "GP: Dr Patel, Riverside Surgery", "Alex shoe size: 2"; saying a name again changes that fact; when he asks Navilife to remember or note something about his life, for "remember that my shoe size is 10", and also, once, when in conversation he mentions a lasting fact about his own life worth keeping that isn't already on his facts lines (a size, a preference, someone's name or job, the GP, the plumber), as an offer he can take with a tap, saying in a few words that you can keep it on his facts page; never for a passing mood, a one-off plan or anything someone else wrote; never a password, PIN, card, bank or ID number, which the page refuses, so say so instead)
             - {"kind":"add_errand","title":"Tesco: batteries, stamps"} (something to get or do the next time he is at a place, written as his Errands list takes it: the place, a colon, then the things separated by commas; for "add batteries to Tesco" or "when I'm near the post office remind me to post the parcel"; never for a time or a day, which is add_task)
             - {"kind":"add_checklist","title":"Party: eggs, balloons"} (adds items to the checklist inside one of his open tasks, written as the task's name as on its checklists line, a colon, then the items separated by commas; for "add eggs to the party checklist" or "put sun cream on the packing list"; never for the shared shopping list, which is add_shopping, unless he names a task)
             - {"kind":"add_goal","title":"…","date":"YYYY-MM-DD"} (adds one goal in his own words, short, as a goal's name: "Run 5k", "Save £2,000"; the date is the day it should be done by, the last day of the month or year he names for "by December" or "this year", left out when he gives no time; only when he asks to add or set a goal, for "add a goal to run 5k by December"; never for something already on his goals lines)
             - {"kind":"add_win","title":"…"} (keeps one line in this week's work wins, in his own words tidied to one short sentence; only when he asks to add or log a win, or tells Navilife what went well this week to keep, for "add a win: closed the Henley deal")
-            Refer to tasks and events only by the ref given in <today> (t1, t2, … for tasks; e1, e2, … for events). Propose at most three actions, and none unless he asked for a change. You cannot send messages or emails, spend money, trade, or change calendar events other than moving one with move_event; say so if asked.
+            Refer to tasks and events only by the ref given in <today> (t1, t2, … for tasks; e1, e2, … for events). Propose at most three actions, and none unless he asked for a change, apart from offering to keep a fact he mentioned (add_fact, as above). You cannot send messages or emails, spend money, trade, or change calendar events other than moving one with move_event; say so if asked.
             Reply with one JSON object and nothing else: {"answer":"…","actions":[…]} (with "sources":[1,2] only when you used a <web> block)
+        """.trimIndent()
+
+        /** The companion, slice 3: he chose to be called "sir" (Settings → Voice). */
+        val CALL_SIR = """
+            He has asked to be called "sir": address him as sir now and then (not in every reply) instead of by his name, and never both in one reply.
         """.trimIndent()
 
         /**

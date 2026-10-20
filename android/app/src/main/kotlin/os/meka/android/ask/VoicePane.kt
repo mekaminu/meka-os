@@ -64,6 +64,8 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.android.work.SettingChip
+import os.meka.core.domain.CompanionRules
 import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRow
 import os.meka.core.domain.DeviceVoiceRules
@@ -86,7 +88,8 @@ import os.meka.core.facade.MekaCore
  * stagger in 40 ms apart; the chosen row's ring and border blend to the accent with a tick haptic; Sample presses in
  * with a light haptic and its label cross-fades to "■ Stop" while it plays (Stop: tick haptic); the status and month
  * lines cross-fade; "+3 more" unfolds the rest of the phone's voices (they stagger in); a slider's line cross-fades as
- * it moves, a tick haptic on each step. Reduced motion: cross-fades.
+ * it moves, a tick haptic on each step. Reduced motion: cross-fades. The companion, slice 3: "Navilife calls you" (By name ·
+ * Sir, synced) at the top; the chosen pill blends to the accent with a tick haptic and its line cross-fades.
  */
 @Composable
 fun VoicePane(core: MekaCore, onClose: () -> Unit) {
@@ -101,6 +104,9 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
     var deviceVoices by remember { mutableStateOf<List<DeviceVoice>?>(null) }
     var deviceSettings by remember { mutableStateOf(DeviceVoiceStore.load(context)) }
     var showAll by remember { mutableStateOf(false) }
+    // The companion, slice 3: "sir" or by name, synced.
+    var sir by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(Unit) { sir = runCatching { core.companionCallsSir() }.getOrDefault(false) }
     LaunchedEffect(Unit) {
         speaker.prepare()
         view = runCatching { core.voicePicker(mac = false) }.getOrNull()
@@ -115,6 +121,13 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         // Lit at once; the saved choice follows to every device.
         view = view?.let { v -> v.copy(choices = v.choices.map { it.copy(selected = it.id == c.id) }) }
         scope.launch { if (runCatching { core.chooseMekaVoice(c.id) }.getOrDefault(false)) view = runCatching { core.voicePicker(mac = false) }.getOrNull() ?: view }
+    }
+
+    fun callSir(on: Boolean) {
+        if (sir == on) return
+        haptics.tick()
+        sir = on // lit at once; the choice follows to every device
+        scope.launch { runCatching { core.setCompanionCallsSir(on) } }
     }
 
     fun sample(c: VoiceChoice) {
@@ -164,6 +177,19 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         Text(VoicePickerRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.VOICE)).appear(rememberAppearance(0)))
         Text(VoicePickerRules.INTRO, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+        sir?.let { on ->
+            // The companion, slice 3: how Navilife addresses him in Ask, Talk and Hello.
+            Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(CompanionRules.CALL_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Navilife calls you by name") { callSir(false) }
+                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Navilife calls you sir") { callSir(true) }
+                }
+                Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
+                    Text(CompanionRules.callLine(now), style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+        }
         val v = view
         if (v == null) {
             SkeletonRows(count = 4, rowHeight = 56.dp)

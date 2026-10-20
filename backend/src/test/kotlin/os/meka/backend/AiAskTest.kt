@@ -173,6 +173,21 @@ class AiAskTest {
     }
 
     @Test
+    fun sirIsAskedForOnlyWhenHeChoseItAndAMentionedFactCanBeOfferedToKeep() {
+        // The companion, slice 3.
+        val model = FakeModel(answered("""{"answer":"Noted, sir. Shall I keep it on your facts page?","actions":[{"kind":"add_fact","title":"Plumber: Sam Jones"}]}"""))
+        val r = AskService(model).ask(request.copy(question = "Our plumber is Sam Jones by the way", callMe = AskCodec.CALL_SIR))
+        assertTrue("called \"sir\"" in model.asked.last().system)
+        assertEquals(listOf("add_fact"), r.actions.map { it.kind })
+        assertTrue("isn't already on his facts lines" in model.asked.last().system)
+        AskService(model).ask(request.copy(callMe = AskCodec.CALL_SIR, voice = true))
+        assertTrue("called \"sir\"" in model.asked.last().system)
+        assertTrue("answer will be spoken" in model.asked.last().system)
+        AskService(model).ask(request)
+        assertFalse("called \"sir\"" in model.asked.last().system)
+    }
+
+    @Test
     fun fromTheBudgetsAlertOpenTurnsStayOnTheSmallModel() {
         val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
         AskService(model, budgetLevel = { AiBudget.Level.ALERT }).ask(request.copy(question = "Any ideas for half term?"))

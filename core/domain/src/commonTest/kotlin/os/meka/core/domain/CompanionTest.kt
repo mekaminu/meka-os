@@ -102,4 +102,30 @@ class CompanionTest {
         assertEquals("bbc.co.uk · Storm Amy: what we know", LiveFactsRules.line(s[0]))
         assertEquals("met.example.com", LiveFactsRules.line(s[1]))
     }
+
+    @Test
+    fun sirIsChosenOnOneDeviceAndUsedOnTheOtherAndByNameIsTheDefault() {
+        // The companion, slice 3.
+        assertEquals(CompanionRules.CALL_SIR, CompanionRules.callMe(" Sir "))
+        assertEquals(null, CompanionRules.callMe(null))
+        assertEquals(null, CompanionRules.callMe("your majesty"))
+        val world = os.meka.core.testing.SyncWorld()
+        val a = world.device("android")
+        val m = world.device("mac")
+        val voice = MekaVoiceStore(a.replica)
+        assertFalse(voice.callsSir())
+        voice.callSir(false)
+        assertEquals(null, a.replica.entity(EntityTypes.CONTEXT_MODE, MekaVoiceStore.ENTITY_ID)) // nothing written for no change
+        voice.choose("Brian")
+        voice.callSir(true)
+        assertTrue(voice.callsSir())
+        assertEquals("Brian", voice.chosen()) // the voice stays as it was
+        a.syncWithRetry(); m.syncWithRetry()
+        assertTrue(MekaVoiceStore(m.replica).callsSir())
+        MekaVoiceStore(m.replica).callSir(false)
+        m.syncWithRetry(); a.syncWithRetry()
+        assertFalse(voice.callsSir())
+        assertTrue("sir" in CompanionRules.callLine(true))
+        assertFalse("sir" in CompanionRules.callLine(false))
+    }
 }

@@ -32,6 +32,8 @@ data class AskContext(
      * events Navilife may move by itself ([EventAskRules.movable]). Never leaves the device.
      */
     val eventRefs: Map<String, AskEventRef> = emptyMap(),
+    /** The companion, slice 3: he'd rather be called "sir" (Settings → Voice); sent as the request's `callMe`. */
+    val callSir: Boolean = false,
 ) {
     companion object {
         val EMPTY = AskContext("", "", emptyList(), emptyMap(), untrusted = false)

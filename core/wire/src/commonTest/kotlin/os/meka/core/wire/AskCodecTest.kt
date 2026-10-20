@@ -186,6 +186,16 @@ class AskCodecTest {
     }
 
     @Test
+    fun sirTravelsWithTheQuestionAndAnythingElseReadsAsByName() {
+        // The companion, slice 3.
+        val sir = req.copy(callMe = AskCodec.CALL_SIR)
+        assertEquals(sir, AskCodec.decodeRequest(AskCodec.encodeRequest(sir)))
+        assertFalse(AskCodec.encodeRequest(req).contains("callMe"))
+        val odd = AskCodec.encodeRequest(req).replaceFirst("{", """{"callMe":"lord",""")
+        assertEquals(req, AskCodec.decodeRequest(odd))
+    }
+
+    @Test
     fun aSpokenQuestionCanAskForItsFirstPieceAndTheClipComesBackWholeOrNotAtAll() {
         // Voice completeness, slice 3.
         val spoken = req.copy(voice = true, speak = true, speakVoice = "Aoede-US")

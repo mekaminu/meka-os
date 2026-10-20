@@ -346,6 +346,11 @@ data class SpeechTiming(val atMs: Long, val ms: Long, val outcome: Outcome, val 
 object MekaVoiceFields {
     /** A Polly voice name ("Amy"); [MekaVoiceRules.DEVICE] for the device's own voice; Null (or absent) for MEKA's default. */
     const val NAME = "name"
+    /**
+     * The companion, slice 3: how Navilife addresses him, [CompanionRules.CALL_SIR] ("sir"), or Null (or absent) for by
+     * name. Synced, so Ask, Talk and Hello say the same on every device.
+     */
+    const val CALL_ME = "call_me"
 }
 
 object MekaVoiceRules {
@@ -381,6 +386,19 @@ class MekaVoiceStore(private val replica: Replica) {
             mapOf(MekaVoiceFields.NAME to (wanted?.let { FieldValue.Text(it) } ?: FieldValue.Null)),
         )
         return true
+    }
+
+    /** The companion, slice 3: whether Navilife calls him "sir" (false: by name, the default). */
+    fun callsSir(): Boolean =
+        CompanionRules.callMe(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(MekaVoiceFields.CALL_ME)?.textOrNull) != null
+
+    /** Chooses "sir" ([sir]) or by name, on every device; nothing written when it's already so. */
+    fun callSir(sir: Boolean) {
+        if (sir == callsSir()) return
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(MekaVoiceFields.CALL_ME to (if (sir) FieldValue.Text(CompanionRules.CALL_SIR) else FieldValue.Null)),
+        )
     }
 
     companion object {

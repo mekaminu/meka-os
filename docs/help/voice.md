@@ -12,3 +12,4 @@ how: Pick a voice there and play a sample.
 tip: On a slow connection the first words can take a moment; offline it says "Using the phone's voice while offline" once and carries on in the phone's own voice.
 tip: Ask → More → Activity shows how quickly the voice answered; clips heard over Bluetooth or car audio are marked "+ Bluetooth", about 0.2 s more.
 tip: In Talk the first words of an answer come with the answer itself, so Navilife starts speaking without a second wait; Activity marks those "with the answer".
+tip: At the top, Navilife calls you lets you choose whether it calls you by your name or "sir" in Ask, Talk and Hello; the choice follows you to every device.

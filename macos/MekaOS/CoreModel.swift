@@ -2374,6 +2374,19 @@ final class CoreModel {
     func refreshVoicePicker() async {
         guard let core else { voicePicker = nil; return }
         voicePicker = try? await core.voicePicker(mac: true)
+        // The companion, slice 3: "sir" or by name, read with the picker (only a Bool crosses).
+        callsSir = (try? await core.companionCallsSir())?.boolValue ?? false
+    }
+
+    /// The companion, slice 3: whether Navilife calls him "sir" in Ask, Talk and Hello (synced; false: by name).
+    private(set) var callsSir = false
+
+    /// Chooses "sir" or by name on every device, lit at once; a tick haptic.
+    func setCallsSir(_ sir: Bool) {
+        guard let core, sir != callsSir else { return }
+        MekaHaptics.tick()
+        callsSir = sir
+        Task { try? await core.setCompanionCallsSir(sir: sir) }
     }
 
     /// Chooses MEKA's voice on every device (a Polly name or "device"), lighting it at once; a tick haptic.

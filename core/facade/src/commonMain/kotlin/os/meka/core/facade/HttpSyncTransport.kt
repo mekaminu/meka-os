@@ -693,6 +693,7 @@ class HttpSyncTransport(
                 voice = voice,
                 speak = speak,
                 speakVoice = speakVoice,
+                callMe = if (context.callSir) AskCodec.CALL_SIR else null,
             ),
         )
         prepare() // the ask route requires the device's signing key on the server

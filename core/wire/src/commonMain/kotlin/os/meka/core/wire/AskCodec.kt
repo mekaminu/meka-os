@@ -68,6 +68,11 @@ object AskCodec {
          */
         val speak: Boolean = false,
         val speakVoice: String? = null,
+        /**
+         * The companion, slice 3: how Navilife addresses him, [CALL_SIR] when he chose "sir" in Settings → Voice, null for
+         * by name. Left out of the JSON when null; an older server simply ignores it, and an unknown value reads as null.
+         */
+        val callMe: String? = null,
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -110,6 +115,9 @@ object AskCodec {
     const val MAX_SOURCE_TITLE = 160
     const val MAX_SOURCE_URL = 500
 
+    /** [Request.callMe]'s one value. */
+    const val CALL_SIR = "sir"
+
     fun encodeRequest(r: Request): String = buildJsonObject {
         put("w", WireCodec.VERSION)
         put("question", r.question)
@@ -132,6 +140,7 @@ object AskCodec {
             put("speak", true)
             r.speakVoice?.let { put("speakVoice", it) }
         }
+        if (r.callMe == CALL_SIR) put("callMe", CALL_SIR)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("ask request") {
@@ -169,7 +178,8 @@ object AskCodec {
         val voice = (o["voice"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val speak = voice && (o["speak"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val speakVoice = if (!speak) null else o.optStr("speakVoice")?.also { require(SPEAK_VOICE.matches(it)) { "speakVoice" } }
-        Request(q, date, now, items, history, voice, speak, speakVoice)
+        val callMe = (o["callMe"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it == CALL_SIR }
+        Request(q, date, now, items, history, voice, speak, speakVoice, callMe)
     }
 
     /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */

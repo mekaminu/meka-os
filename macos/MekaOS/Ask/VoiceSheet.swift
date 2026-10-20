@@ -44,12 +44,34 @@ struct VoiceSheet: View {
         .task { await model.refreshVoicePicker() }
     }
 
+    /// The companion, slice 3: how Navilife addresses him in Ask, Talk and Hello, by name or "sir", on every device.
+    private var callMe: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(CompanionRules.shared.CALL_TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textSecondary)
+            Picker(CompanionRules.shared.CALL_TITLE, selection: Binding(get: { model.callsSir }, set: { model.setCallsSir($0) })) {
+                Text(CompanionRules.shared.CALL_BY_NAME).tag(false)
+                Text(CompanionRules.shared.CALL_SIR_LABEL).tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 220)
+            Text(CompanionRules.shared.callLine(sir: model.callsSir)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .id(model.callsSir)
+                .transition(.opacity)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.callsSir)
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(VoicePickerRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
             Text(VoicePickerRules.shared.INTRO).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(0)
+            callMe.staggeredAppear(1)
             if let v = model.voicePicker {
                 ForEach(Array(v.choices.enumerated()), id: \.element.id) { i, c in
                     // Each provider's voices under their heading (Google's British, American, then Polly's).

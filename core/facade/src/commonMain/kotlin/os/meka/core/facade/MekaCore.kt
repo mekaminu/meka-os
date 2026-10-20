@@ -8009,6 +8009,8 @@ class MekaCore(
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
                 ahead = os.meka.core.domain.EventAskRules.ahead(q, currentEvents(), nowMs(), cal, ::accountEditable))
+                // The companion, slice 3: "sir" when he chose it in Settings → Voice.
+                .copy(callSir = mekaVoice.callsSir())
         }
         // Voice completeness, slice 3: a spoken question whose answer Navilife's voice will say asks for the first piece
         // with the answer (only Navilife's words are said; nothing of his question is spoken or kept).
@@ -8339,6 +8341,12 @@ class MekaCore(
 
     /** Chooses MEKA's voice on every device (null: MEKA's default). False, and nothing saved, for a name that can't be one. */
     suspend fun chooseMekaVoice(name: String?): Boolean = onCore { mekaVoice.choose(name) }
+
+    /** The companion, slice 3: whether Navilife calls him "sir" (Settings → Voice; false: by name). Synced. */
+    suspend fun companionCallsSir(): Boolean = onCore { mekaVoice.callsSir() }
+
+    /** The companion, slice 3: chooses "sir" or by name on every device. */
+    suspend fun setCompanionCallsSir(sir: Boolean) { onCore { mekaVoice.callSir(sir) } }
 
     /**
      * One piece of MEKA's own words ([os.meka.core.domain.SpeechRules.pieces]) said in MEKA's voice: the MP3 as base64,

@@ -62,6 +62,24 @@ object CompanionRules {
         return followUp && isOpen(last, earlier.dropLast(1))
     }
 
+    /**
+     * The companion, slice 3 (how it addresses him): what Settings → Voice saves when he'd rather be called "sir"; the
+     * wire's `callMe`. Anything else (absent, blank, unknown) means by name, as before.
+     */
+    const val CALL_SIR = "sir"
+
+    /** [raw] as the companion should take it: [CALL_SIR], or null for by name. */
+    fun callMe(raw: String?): String? = raw?.trim()?.lowercase()?.takeIf { it == CALL_SIR }
+
+    /** Settings → Voice's row: its heading, the two choices and the line under them. */
+    const val CALL_TITLE = "Navilife calls you"
+    const val CALL_BY_NAME = "By name"
+    const val CALL_SIR_LABEL = "Sir"
+
+    fun callLine(sir: Boolean): String =
+        if (sir) "Navilife calls you sir now and then, in Ask, Talk and Hello, on every device."
+        else "Navilife calls you by your name now and then, in Ask, Talk and Hello, on every device."
+
     /** Lower case, apostrophes kept, other punctuation and extra spaces dropped. */
     private fun norm(s: String): String =
         s.lowercase().replace('’', '\'').replace(Regex("[^a-z0-9' ]"), " ").replace(Regex("\\s+"), " ").trim()
