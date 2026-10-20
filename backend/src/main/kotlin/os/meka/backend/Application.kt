@@ -634,7 +634,7 @@ fun Application.mekaSync(
                     val said = sp.say(SpeechCodec.Request(text, voice))
                     said.mp3?.takeIf { said.response.state == SpeechCodec.Response.SPOKEN }?.let { AskService.FirstClip(it, said.response.voice) }
                 }
-            })
+            }, budgetLevel = { ai.budget?.state()?.level })
             post("/v1/ai/ask") {
                 val body = call.boundedBody()
                 call.device(devices, verifier, body, requireKey = true)

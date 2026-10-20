@@ -21,11 +21,13 @@ object AiTodayRules {
     const val VOICE_PREFIX = "voice."
 
     /** The groups, in the order they are said, and the server's feature names they gather. */
-    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), MAIL("Mail"), VOICE("Voice"), OTHER("Other") }
+    enum class Group(val label: String) { TALK("Talk"), ASK("Ask"), CHAT("Chat"), BRIEF("Brief"), MESSAGES("Messages"), CALLS("Calls"), MAIL("Mail"), VOICE("Voice"), OTHER("Other") }
 
     fun groupOf(feature: String): Group = when {
         feature == "ask.talk" -> Group.TALK
         feature == "ask" -> Group.ASK
+        // The companion (slice 1): open conversation, spoken or typed, on the larger model.
+        feature == CompanionRules.FEATURE -> Group.CHAT
         feature == "ask.brief" -> Group.BRIEF
         feature == "extract.message" || feature == "triage.message" || feature.startsWith("digest.") ||
             feature.startsWith("messages.") -> Group.MESSAGES
