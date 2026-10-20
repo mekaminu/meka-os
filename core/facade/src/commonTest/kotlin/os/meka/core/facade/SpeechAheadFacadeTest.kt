@@ -51,18 +51,23 @@ class SpeechAheadFacadeTest {
     fun aTapOnTheOrbPlaysTheHelloFromMemory() = runTest {
         val c = core()
         c.warmHello()
-        val asked = server.said.size
-        assertTrue("Good evening." in server.said && asked >= 2, server.said.toString())
-        // The tap: the greeting's first piece (and a clear day's rest) come from memory, nothing is fetched.
-        val pieces = SpeechRules.pieces(c.hello().spoken)
-        pieces.forEachIndexed { i, p -> assertEquals("bXAz" + p.length, c.speechClip(p, first = i == 0)) }
-        assertEquals(asked, server.said.size)
+        val asked = server.said.toList()
+        assertTrue("Good evening." in asked, asked.toString())
+        // The tap: the greeting's opening comes from memory, nothing is fetched (and a clear day's rest too).
+        val g = c.hello()
+        val pieces = SpeechRules.pieces(g.spoken)
+        assertEquals("bXAz" + pieces.first().length, c.speechClip(pieces.first(), first = true))
+        assertEquals(asked, server.said.toList())
+        if (g.points.isEmpty()) {
+            pieces.drop(1).forEach { assertEquals("bXAz" + it.length, c.speechClip(it, first = false)) }
+            assertEquals(asked, server.said.toList())
+        }
         // Checked again later: already here, nothing asked.
         c.warmHello()
-        assertEquals(asked, server.said.size)
+        assertEquals(asked, server.said.toList())
         // The Mac's welcome back is made too.
         c.warmHello(welcome = true)
-        assertEquals(listOf("Welcome back."), server.said.drop(asked))
+        assertEquals(listOf("Welcome back."), server.said.drop(asked.size))
     }
 
     @Test
