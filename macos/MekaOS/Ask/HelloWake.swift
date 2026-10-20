@@ -201,12 +201,12 @@ final class MacWelcomeBack {
             },
             // Woken with no lock to undo (no password asked): the return is the wake itself.
             ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
-                MainActor.assumeIsolated {
-                    Task { @MainActor in
-                        try? await Task.sleep(for: .seconds(2))
-                        if !MacWelcomeBack.screenLocked { MacWelcomeBack.shared.returned() }
-                    }
+                // A plain statement (not the closure's value), so the compiler picks the non-throwing Task.
+                let check: @MainActor @Sendable () async -> Void = {
+                    try? await Task.sleep(for: .seconds(2))
+                    if !MacWelcomeBack.screenLocked { MacWelcomeBack.shared.returned() }
                 }
+                Task(operation: check)
             },
             dist.addObserver(forName: Notification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { _ in
                 MainActor.assumeIsolated { MacWelcomeBack.shared.left() }
