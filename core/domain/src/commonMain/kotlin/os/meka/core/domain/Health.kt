@@ -94,6 +94,8 @@ data class DeviceHealth(
     /** "0.1.214"; null leaves the Updates row out. */
     val version: String? = null,
     val updateReady: Boolean = false,
+    /** The ready build was hidden on Today with Later ([AppUpdateRules.newer]); Health still offers Install. */
+    val updateHidden: Boolean = false,
     /** This build's number, for [updateFailure]; null leaves the failure out. */
     val installedCode: Long? = null,
     /** The last phone update that didn't go in ([UpdateFailureRules]); shown until that build is installed. */
@@ -370,7 +372,7 @@ object HealthRules {
         val failed = installed?.let { UpdateFailureRules.healthLine(f.device.updateFailure, it, at(f.device.updateFailure?.atMs ?: 0L, f.nowMs, cal)) }
         if (failed != null) return HealthRow("update", "Updates", "Version $v · $failed", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Try again")
         val size = AppUpdateRules.healthSize(f.device.sizeBytes, f.device.previousSizeBytes)?.let { " · $it" } ?: ""
-        return if (f.device.updateReady) HealthRow("update", "Updates", "Version $v$size · a newer build is ready", HealthState.WARN, HealthFix.INSTALL_UPDATE, "Install")
+        return if (f.device.updateReady) HealthRow("update", "Updates", "Version $v$size · a newer build is ready" + (if (f.device.updateHidden) " (hidden on Today)" else ""), HealthState.WARN, HealthFix.INSTALL_UPDATE, "Install")
         else HealthRow("update", "Updates", "Version $v$size · up to date", HealthState.OK)
     }
 }

@@ -104,7 +104,8 @@ object HealthDevice {
             lastNotificationMs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(LAST_NOTIFICATION, 0L).takeIf { it > 0 },
             callRoleHeld = MekaCallScreeningService.roleHeld(context),
             version = updater?.let { runCatching { it.installedName }.getOrNull() },
-            updateReady = updater?.state?.value is UpdateState.Ready,
+            updateReady = updater?.state?.value is UpdateState.Ready || updater?.newest?.value != null,
+            updateHidden = updater?.newestHidden == true,
             installedCode = updater?.let { runCatching { it.installedCode }.getOrNull() },
             updateFailure = updater?.lastFailure?.value,
             sizeBytes = updater?.let { runCatching { it.installedSizeBytes }.getOrNull() },
@@ -153,13 +154,9 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
                 }
                 HealthFix.INSTALL_UPDATE -> {
                     val app = context.applicationContext as? MekaApplication
-                    // Ready, or Try again after a failure: installs in the app's scope (leaving Health doesn't stop it).
-                    val release = when (val st = app?.updater?.state?.value) {
-                        is UpdateState.Ready -> st.release
-                        is UpdateState.Failed -> st.release
-                        else -> null
-                    }
-                    if (app != null && release != null) app.updater.start(release)
+                    // Ready, Try again after a failure, or the newest build even when Later hid it on Today: installs in
+                    // the app's scope (leaving Health doesn't stop it).
+                    app?.updater?.installFromHealth()
                 }
                 HealthFix.NOTIFICATIONS_ON -> {
                     val needsPermission = android.os.Build.VERSION.SDK_INT >= 33 && androidx.core.content.ContextCompat.checkSelfPermission(
@@ -206,7 +203,11 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
     var checking by rememberSaveable { mutableStateOf(false) }
     fun check() = scope.launch {
         checking = true
-        try { core.refreshHealth(HealthDevice.facts(context)) } finally { checking = false }
+        try {
+            // Updates: the newest build is known before the row is read (a build hidden with Later still shows Install).
+            runCatching { (context.applicationContext as? MekaApplication)?.updater?.check() }
+            core.refreshHealth(HealthDevice.facts(context))
+        } finally { checking = false }
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { check() }
     val fix = rememberHealthFixer(core, openPane) { check() }

@@ -211,6 +211,10 @@ class HealthTest {
         val update = HealthRules.view(facts(device = fold.copy(updateReady = true)), cal)
         assertEquals("Version 0.1.214 · a newer build is ready", update.row("update").line)
         assertEquals(HealthFix.INSTALL_UPDATE, update.row("update").fix)
+        // Hidden on Today with Later: Health still offers Install, and says it was hidden.
+        val hidden = HealthRules.view(facts(device = fold.copy(updateReady = true, updateHidden = true)), cal)
+        assertEquals("Version 0.1.214 · a newer build is ready (hidden on Today)", hidden.row("update").line)
+        assertEquals(HealthFix.INSTALL_UPDATE to "Install", hidden.row("update").fix to hidden.row("update").fixLabel)
         // A build that didn't install shows Android's words until it (or a newer one) is in.
         val failure = UpdateFailure(UpdateFailureRules.STAGE_INSTALL, UpdateFailureRules.STATUS_FAILURE_BLOCKED, null, 214, 230, now - 60 * 60_000L)
         val failed = HealthRules.view(facts(device = fold.copy(installedCode = 214, updateFailure = failure)), cal)

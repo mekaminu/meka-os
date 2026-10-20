@@ -2341,3 +2341,12 @@ Meka 17:34: he could listen to callers' messages before, but Done (or Clear all)
 - Facade: `warmHello` also makes the holding lines ahead (through `speechPrefetch`); `answerHoldClip()` returns the next one in turn that is already on the device (never asks the server; null with the device's own voice).
 - Fold: `TalkController.waitCue` on each Ask (tick via `TalkAutoListen.thinkingTick`, a short quiet tone; hold via `MekaSpeaker.holdOn`), cancelled on End; `MekaSpeaker.say` lets a holding line finish before the answer, `stop` ends it. Mac: `TalkController.waitCue` (Tink at 0.12), `MekaSpeaker.holdOn` and `say` the same, `CoreModel.answerHoldClip` (Data only crosses).
 - Help tip (voice.md), HelpIndex regenerated, motion row (Talk to MEKA). Tests: AnswerWaitTest (6), AnswerHoldFacadeTest (3). No server change, no wire change, no migration, Mac checked nightly.
+
+## An update hidden with "Later" can still be installed (Fix first, Meka 2026-10-20 22:20)
+
+He tapped Later on the update card by mistake and couldn't find the build again: Later hid that build until a newer one. Done 2026-10-20 in one slice:
+- Core: `AppUpdateRules.newer(latest, installedCode)` (the newest build newer than the phone's, whatever Later said), `undoLater(laterCode, undoneCode, previousLaterCode)` (Undo restores what Later hid before), `LATER_NOTE` / `LATER_NOTE_MS` (5 s); `DeviceHealth.updateHidden` and the Health row "a newer build is ready (hidden on Today)" with Install.
+- Fold: `AppUpdater.newest` / `newestHidden`, `UpdateState.Hidden` (the card's note with Undo, gone after 5 s), `undoLater`, `installFromHealth` (the card's build, else the newest even when hidden); `HealthPane` checks for a build on open and installs through `installFromHealth`; `UpdateCard` shows the note and Undo.
+- Mac: passes `updateHidden: false` to Health (no phone updates on the Mac).
+- Help tip in docs/help/health.md; motion row (App update) in docs/motion-catalogue.md.
+- Tests: AppUpdatesTest.aBuildHiddenWithLaterIsStillOfferedInHealthAndUndoBringsTheCardBack, HealthTest (hidden row).

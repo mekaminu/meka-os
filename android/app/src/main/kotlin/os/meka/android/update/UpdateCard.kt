@@ -39,7 +39,9 @@ import os.meka.core.domain.AppUpdateRules
 /**
  * Today's update card (self-updating phone app): rises in when the Mac has published a newer build. Install
  * downloads it (the bar fills as chunks arrive; light haptic on tap), then Android's own Install prompt asks once.
- * Later hides this build. Lines cross-fade between states. Reduced motion: the bar jumps, lines cross-fade.
+ * Later hides this build on Today: for 5 s the line says "Hidden till the next build · Health → Updates has it" with
+ * Undo (the chips cross-fade with the line), then the card folds away; Health → Updates still offers it. Lines
+ * cross-fade between states. Reduced motion: the bar jumps, lines cross-fade.
  */
 @Composable
 internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modifier = Modifier) {
@@ -52,6 +54,7 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
         is UpdateState.Downloading -> state.release
         is UpdateState.Confirming -> state.release
         is UpdateState.Failed -> state.release
+        is UpdateState.Hidden -> state.release
         UpdateState.None -> return
     }
     val line = when (state) {
@@ -60,6 +63,7 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
         is UpdateState.Downloading -> AppUpdateRules.progressLine(state.chunksDone, release.chunkCount)
         is UpdateState.Confirming -> "Downloaded and checked. Tap Install in Android's prompt."
         is UpdateState.Failed -> state.reason
+        is UpdateState.Hidden -> AppUpdateRules.LATER_NOTE
         UpdateState.None -> ""
     }
     val install: () -> Unit = { haptics.light(); updater.start(release) }
@@ -100,6 +104,7 @@ internal fun UpdateCard(state: UpdateState, updater: AppUpdater, modifier: Modif
             is UpdateState.NeedsPermission -> listOf("Allow" to { activity?.let { updater.openPermission(it) }; Unit }, "Install" to install)
             is UpdateState.Confirming -> if (updater.hasPrompt) listOf("Show Install" to { updater.showPrompt(activity); Unit }) else emptyList()
             is UpdateState.Failed -> listOf("Try again" to install, "Later" to { updater.later(release) })
+            is UpdateState.Hidden -> listOf("Undo" to { haptics.light(); updater.undoLater(release) })
             else -> emptyList()
         }
         if (chips.isNotEmpty()) {

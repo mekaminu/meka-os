@@ -20,6 +20,25 @@ class AppUpdatesTest {
     }
 
     @Test
+    fun aBuildHiddenWithLaterIsStillOfferedInHealthAndUndoBringsTheCardBack() {
+        // Later hides the card, but Health → Updates still has the newest build.
+        assertNull(AppUpdateRules.offer(b412, installedCode = 400, laterCode = 412))
+        assertEquals(b412, AppUpdateRules.newer(b412, installedCode = 400))
+        assertNull(AppUpdateRules.newer(b412, installedCode = 412))
+        assertNull(AppUpdateRules.newer(null, installedCode = 1))
+        // Undo restores what Later hid before, so the card is offered again.
+        val restored = AppUpdateRules.undoLater(laterCode = 412, undoneCode = 412, previousLaterCode = 405)
+        assertEquals(405L, restored)
+        assertEquals(b412, AppUpdateRules.offer(b412, installedCode = 400, laterCode = restored))
+        assertNull(AppUpdateRules.undoLater(laterCode = 412, undoneCode = 412, previousLaterCode = null))
+        assertNull(AppUpdateRules.undoLater(laterCode = 412, undoneCode = 412, previousLaterCode = 412))
+        // A Later on another build since is left alone.
+        assertEquals(413L, AppUpdateRules.undoLater(laterCode = 413, undoneCode = 412, previousLaterCode = 405))
+        assertEquals("Hidden till the next build · Health → Updates has it", AppUpdateRules.LATER_NOTE)
+        assertEquals(5_000L, AppUpdateRules.LATER_NOTE_MS)
+    }
+
+    @Test
     fun theUpdateNotificationComesOncePerBuildAndOnlyWhenMekaIsNotOnScreen() {
         val b413 = b412.copy(versionCode = 413)
         assertEquals(true, AppUpdateRules.shouldNotify(b412, toldCode = null, onScreen = false))

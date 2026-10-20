@@ -45,6 +45,8 @@ sealed interface UpdateState {
     data class Confirming(val release: AppRelease) : UpdateState
     /** [reason] in Meka's words; [detail] is Android's own (status and message), shown smaller under it. */
     data class Failed(val release: AppRelease, val reason: String, val detail: String? = null) : UpdateState
+    /** Just put off with Later: the card says where to find it ([AppUpdateRules.LATER_NOTE]) with Undo, then goes. */
+    data class Hidden(val release: AppRelease) : UpdateState
 }
 
 /**
@@ -85,6 +87,19 @@ class AppUpdater(private val app: MekaApplication) {
     private val _latestCode = MutableStateFlow<Long?>(null)
     val latestCode: StateFlow<Long?> = _latestCode.asStateFlow()
 
+    /**
+     * The newest build newer than this one, whatever Later said ([AppUpdateRules.newer]): Health → Updates offers it
+     * with Install even after Later hid Today's card (Meka 2026-10-20 22:20).
+     */
+    private val _newest = MutableStateFlow<AppRelease?>(null)
+    val newest: StateFlow<AppRelease?> = _newest.asStateFlow()
+
+    /** The newest build was hidden on Today with Later (Health says so). */
+    val newestHidden: Boolean get() = _newest.value?.let { prefs.getLong(KEY_LATER, -1) == it.versionCode } == true
+
+    /** Takes Today's card away once the Later note has shown for [AppUpdateRules.LATER_NOTE_MS]. */
+    private var laterNote: kotlinx.coroutines.Job? = null
+
     private val _lastFailure = MutableStateFlow(readFailure())
     /** The last update that didn't go in (kept across restarts) for Health; cleared once that build is installed. */
     val lastFailure: StateFlow<UpdateFailure?> = _lastFailure.asStateFlow()
@@ -102,10 +117,12 @@ class AppUpdater(private val app: MekaApplication) {
         sendUnreportedFailure()
         val latest = app.core.latestRelease() ?: return
         _latestCode.value = latest.versionCode
+        _newest.value = AppUpdateRules.newer(latest.build, installedCode)?.let { latest }
         clearOldDownloads(keep = latest.versionCode)
         val offer = AppUpdateRules.offer(latest.build, installedCode, prefs.getLong(KEY_LATER, -1).takeIf { it > 0 })
         val current = _state.value
         _state.value = when {
+            current is UpdateState.Hidden && current.release == latest -> current
             offer == null -> UpdateState.None
             current is UpdateState.Failed && current.release == latest -> current
             current is UpdateState.NeedsPermission && current.release == latest -> current
@@ -115,11 +132,45 @@ class AppUpdater(private val app: MekaApplication) {
         UpdateNotice.onOffer(app, offer, app.isOnScreen)
     }
 
-    /** "Later": hides this build; a newer one is offered again. */
+    /**
+     * "Later": hides this build on Today and in the notification; a newer one is offered again, and Health → Updates
+     * still has this one. The card says so for [AppUpdateRules.LATER_NOTE_MS] with Undo, then goes.
+     */
     fun later(release: AppRelease) {
-        prefs.edit().putLong(KEY_LATER, release.versionCode).apply()
+        val previous = prefs.getLong(KEY_LATER, -1)
+        prefs.edit().putLong(KEY_LATER, release.versionCode).putLong(KEY_LATER_BEFORE, previous).apply()
         UpdateNotice.cancel(app)
-        _state.value = UpdateState.None
+        _state.value = UpdateState.Hidden(release)
+        laterNote?.cancel()
+        laterNote = app.appScope.launch {
+            delay(AppUpdateRules.LATER_NOTE_MS)
+            if (_state.value == UpdateState.Hidden(release)) _state.value = UpdateState.None
+        }
+    }
+
+    /** Undo after Later: Today's card comes back with Install, as it was. */
+    fun undoLater(release: AppRelease) {
+        laterNote?.cancel()
+        val restored = AppUpdateRules.undoLater(
+            prefs.getLong(KEY_LATER, -1).takeIf { it > 0 }, release.versionCode, prefs.getLong(KEY_LATER_BEFORE, -1).takeIf { it > 0 },
+        )
+        prefs.edit().apply { if (restored == null) remove(KEY_LATER) else putLong(KEY_LATER, restored) }.remove(KEY_LATER_BEFORE).apply()
+        if (_state.value is UpdateState.Hidden) _state.value = UpdateState.Ready(release)
+    }
+
+    /**
+     * Health → Updates → Install: the card's build (Ready, or Try again after a failure), else the newest build even when
+     * Later hid it. Installs in the app's scope; Today's card follows the download.
+     */
+    fun installFromHealth() {
+        val release = when (val st = _state.value) {
+            is UpdateState.Ready -> st.release
+            is UpdateState.Failed -> st.release
+            is UpdateState.Hidden -> st.release
+            else -> _newest.value
+        } ?: return
+        laterNote?.cancel()
+        start(release)
     }
 
     /** Opens Android's "Install unknown apps" switch for MEKA. */
@@ -507,6 +558,8 @@ class AppUpdater(private val app: MekaApplication) {
 
     companion object {
         private const val KEY_LATER = "later"
+        /** What Later had hidden before the last Later (Undo puts it back). */
+        private const val KEY_LATER_BEFORE = "later_before"
         private const val KEY_SIZED_CODE = "sized_code"
         private const val KEY_ICON = "icon_noted"
         private const val KEY_SIZED_BYTES = "sized_bytes"

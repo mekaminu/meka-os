@@ -14,6 +14,24 @@ object AppUpdateRules {
     fun offer(latest: Build?, installedCode: Long, laterCode: Long?): Build? =
         latest?.takeIf { it.versionCode > installedCode && it.versionCode != laterCode }
 
+    /**
+     * A build hidden with Later can still be installed (Meka 2026-10-20 22:20): the newest build newer than this one,
+     * whatever Later said. Ask → Settings → Health → Updates offers it with Install; Later only hides Today's card and
+     * the notification.
+     */
+    fun newer(latest: Build?, installedCode: Long): Build? = latest?.takeIf { it.versionCode > installedCode }
+
+    /** Today's card for [LATER_NOTE_MS] after Later, with Undo. */
+    const val LATER_NOTE = "Hidden till the next build · Health → Updates has it"
+    const val LATER_NOTE_MS = 5_000L
+
+    /**
+     * Undo after Later: the build Later hid before this one comes back ([previousLaterCode]), so [offer] shows
+     * [undoneCode] on Today again. Null when nothing had been put off before.
+     */
+    fun undoLater(laterCode: Long?, undoneCode: Long, previousLaterCode: Long?): Long? =
+        if (laterCode == undoneCode) previousLaterCode?.takeIf { it != undoneCode } else laterCode
+
     const val TITLE = "Navilife update ready"
 
     /**

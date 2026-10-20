@@ -2064,7 +2064,7 @@ final class CoreModel {
         let notifications = MacNotifyRules.shared.health(allowed: allowed, macOff: macAlerts == .off, lastPostMs: MacNotifier.lastPostMs)
         let device = DeviceHealth(mac: true, batteryExempt: nil, batteryStopped: false, notificationAccess: nil,
                                   lastNotificationMs: nil, callRoleHeld: nil, version: version, updateReady: false,
-                                  installedCode: nil, updateFailure: nil, sizeBytes: nil, previousSizeBytes: nil,
+                                  updateHidden: false, installedCode: nil, updateFailure: nil, sizeBytes: nil, previousSizeBytes: nil,
                                   notifications: notifications, callerLookups: nil)
         _ = try? await core.refreshHealth(device: device, force: force)
     }
