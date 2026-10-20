@@ -98,8 +98,10 @@ class AskMekaFacadeTest {
         assertEquals("2026-10-08", ctx.dateIso)
         assertTrue(ctx.nowLine.endsWith("· 17:15"), ctx.nowLine)
         // The task, the commute's lines (an office day today and tomorrow, and the wake alarm) and protected time's one
-        // "off" line (both sent with every question, so "no" is an answer too).
-        assertEquals(listOf(AskItemKind.TASK) + List(4) { AskItemKind.COMMUTE } + AskItemKind.PROTECTED, ctx.items.map { it.kind })
+        // "off" line (both sent with every question, so "no" is an answer too). The companion, slice 4: "tomorrow" carries
+        // tomorrow too, first in the tail: clear, nothing in the calendar and no tasks.
+        assertEquals(listOf(AskItemKind.TASK, AskItemKind.DAYS) + List(4) { AskItemKind.COMMUTE } + AskItemKind.PROTECTED, ctx.items.map { it.kind })
+        assertEquals("Days asked about · Fri 9 Oct · nothing in the calendar and no tasks", ctx.items[1].line)
         assertEquals("t1", ctx.items.first().ref)
         assertFalse(id in ctx.items.first().line)
 
