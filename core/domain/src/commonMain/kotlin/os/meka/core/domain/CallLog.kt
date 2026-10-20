@@ -8,7 +8,21 @@ package os.meka.core.domain
  * reason, whether the number is blocked now and in future, and the same buttons as the notification. Non-AI and pure;
  * the same words on every device. Numbers and words are display only (untrusted, ADR-006) and never logged.
  */
-data class HeldCall(val item: CapturedItem, val cleared: Boolean)
+data class HeldCall(
+    val item: CapturedItem,
+    /** Done cleared its card from Needs you. */
+    val cleared: Boolean,
+    /**
+     * The Done that cleared it kept the words, the summary and the recording (every Done from 2026-10-20; Meka 17:34).
+     * A cleared call without it was cleared by an older Done, which blanked them and deleted the recording.
+     */
+    val keptOnDone: Boolean = false,
+    /** Delete recording in the call's detail (or its Undo still running): the recording is gone, the words stay. */
+    val recordingDeleted: Boolean = false,
+) {
+    /** The words and summary were blanked by an older Done. */
+    val wordsGone: Boolean get() = cleared && !keptOnDone
+}
 
 data class CallDetail(
     val who: String,
@@ -16,7 +30,7 @@ data class CallDetail(
     val timeline: List<String>,
     /** The AI's one-line summary (never for an automated call). */
     val summary: String?,
-    /** The words in quotes, or why there are none ("Words cleared when you pressed Done"); null for a missed call. */
+    /** The words in quotes, or why there are none ("Recording deleted" after a Done from before 2026-10-20); null for a missed call. */
     val words: String?,
     /** "Flagged as likely spam · …" with the AI's reason, while the number is flagged. */
     val spam: String?,
@@ -28,6 +42,10 @@ data class CallDetail(
     val key: String?,
     /** ▶ Listen 0:24, while the server keeps the recording; null otherwise. */
     val listen: String?,
+    /** [VoiceRecordingRules.DELETE] beside ▶ Listen; null when there is nothing to delete. */
+    val deleteRecording: String? = null,
+    /** [VoiceRecordingRules.DELETED] once the recording has been deleted; null otherwise. */
+    val recordingGone: String? = null,
     val callBack: String?,
     val block: String?,
     val unblock: String?,
@@ -127,7 +145,8 @@ object CallLogRules {
     const val ASSISTANT_ANSWERED = "Your call assistant answered"
     const val AWAY = "Outside your work hours"
     const val KEYPAD_URGENT = "Pressed a key for urgent with no words, so it didn't break through"
-    const val CLEARED_WORDS = "Words cleared when you pressed Done"
+    /** A call cleared by a Done from before 2026-10-20, which blanked its words and deleted its recording. */
+    const val CLEARED_WORDS = VoiceRecordingRules.DELETED
     const val FLAGGED = "Flagged as likely spam"
 
     // ---- Slice 6: calls the phone screened ----
@@ -302,13 +321,17 @@ object CallLogRules {
         return if (item.transcribing) CallNoticeRules.TRANSCRIBING else CallNoticeRules.NO_WORDS
     }
 
-    fun detail(item: CapturedItem, cleared: Boolean, blocked: BlockedCallersView, cal: LocalCalendar): CallDetail {
+    /**
+     * The call's detail. [cleared] = its words were blanked by a Done from before 2026-10-20 ([HeldCall.wordsGone]);
+     * [recordingDeleted] = Delete recording was tapped (the words stay, the recording's line says it's gone).
+     */
+    fun detail(item: CapturedItem, cleared: Boolean, blocked: BlockedCallersView, cal: LocalCalendar, recordingDeleted: Boolean = false): CallDetail {
         val n = CallNoticeRules.numberOf(item)
         val key = BlockedCallerRules.keyOf(n)
         val known = CallNoticeRules.known(item)
         val isBlocked = blocked.has(n)
         val suspect = key?.let { k -> blocked.suspects.firstOrNull { it.key == k } }?.takeIf { !isBlocked && !known }
-        val canPlay = item.hasAudio && !cleared
+        val canPlay = item.hasAudio && !cleared && !recordingDeleted
         return CallDetail(
             who = CallNoticeRules.who(item),
             timeline = timeline(item, cal),
@@ -318,6 +341,8 @@ object CallLogRules {
             blockStatus = CallNoticeRules.blockStatus(item, blocked),
             number = n, key = key,
             listen = if (canPlay) CallNoticeRules.listenLabel(item.seconds) else null,
+            deleteRecording = if (canPlay) VoiceRecordingRules.DELETE else null,
+            recordingGone = if (recordingDeleted && item.kind == CaptureKind.VOICE_MESSAGE && !cleared) VoiceRecordingRules.DELETED else null,
             callBack = n?.let { CallNoticeRules.CALL_BACK },
             block = if (n != null && !known && !isBlocked) CallNoticeRules.BLOCK else null,
             unblock = if (n != null && isBlocked) CallNoticeRules.UNBLOCK else null,
@@ -342,9 +367,10 @@ object CallLogRules {
             .thenBy { it.second.first?.item?.id ?: "" }).take(MAX).map { (_, e) ->
             val (c, p) = e
             val item = named(c?.item ?: phoneItem(p!!), names, lists)
-            val cleared = c?.cleared ?: false
+            // Done only clears the card (2026-10-20): the words stay unless an older Done blanked them.
+            val cleared = c?.wordsGone ?: false
             val (chip, isBlocked) = chip(item, blocked)
-            val base = detail(item, cleared, blocked, cal)
+            val base = detail(item, cleared, blocked, cal, recordingDeleted = c?.recordingDeleted ?: false)
             cal.epochDayOf(item.atMs) to CallLogRow(
                 id = item.id,
                 time = LocalClock.formatMinute(cal.minuteOfDay(item.atMs)),

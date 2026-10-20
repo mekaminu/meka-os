@@ -23,6 +23,8 @@ struct ActivitySheet: View {
     @State private var openCall: String?
     /// Completeness: how long entries are kept and what Export saves (nil while the log is empty).
     @State private var keptLine: String?
+    /// Delete recording on a call: its Undo is offered for 5 s (the core writes the deletion after the same wait).
+    @State private var undoRecording: String?
     @State private var exporting = false
 
     var body: some View {
@@ -128,6 +130,11 @@ struct ActivitySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voiceTimingLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiTodayLine)
         .task { await model.refreshVoiceUsage() }
+        .task(id: undoRecording) {
+            guard undoRecording != nil else { return }
+            try? await Task.sleep(nanoseconds: UInt64(VoiceRecordingRules.shared.DELETE_UNDO_MS) * 1_000_000)
+            if !Task.isCancelled { undoRecording = nil }
+        }
         .task(id: model.activity?.weekLine) { keptLine = await model.activityKeptLine() }
         .animation(MekaMotion.appear(reduced: reduceMotion), value: keptLine)
     }
@@ -267,9 +274,28 @@ struct ActivitySheet: View {
             }
             Text(d.blockStatus).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .id(d.blockStatus).transition(.opacity)
-            if d.listen != nil {
-                VoiceMessagePlayerView(id: id, palette: palette)
+            // Done only clears the Needs you card (2026-10-20): the recording stays here for 7 days until deleted.
+            Group {
+                if d.listen != nil {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        VoiceMessagePlayerView(id: id, palette: palette)
+                        if let label = d.deleteRecording {
+                            Button(label) { undoRecording = id; model.deleteCallRecording(id) }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.critical)
+                                .accessibilityLabel("Delete the recording from \(d.who)")
+                        }
+                    }
+                } else if let gone = d.recordingGone {
+                    HStack(spacing: MekaSpace.m) {
+                        Text(gone).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        if undoRecording == id {
+                            Button("Undo") { undoRecording = nil; model.undoDeleteCallRecording(id) }
+                                .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                        }
+                    }
+                }
             }
+            .transition(.opacity)
             HStack(spacing: MekaSpace.m) {
                 if let label = d.callBack, let number = d.number,
                    let url = URL(string: "tel:" + number.filter { $0.isNumber || $0 == "+" }) {
@@ -292,6 +318,8 @@ struct ActivitySheet: View {
         }
         .padding(.top, MekaSpace.xs)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: d.blockStatus)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: d.recordingGone)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: undoRecording)
     }
 
     private func rowView(_ row: ActivityRow) -> some View {

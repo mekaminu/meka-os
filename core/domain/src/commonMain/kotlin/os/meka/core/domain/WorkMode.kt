@@ -32,7 +32,7 @@ object WorkFields {
     const val HOME_DAYS = "workHomeDays"
     /**
      * How long MEKA's server keeps callers' recordings (call assistant polish 8c, "Keep callers' recordings"): days as
-     * Int64, one of [VoiceRecordingRules.KEEP_CHOICES] (0 = don't keep). Last writer wins; absent = 30. Added 2026-10-10.
+     * Int64, one of [VoiceRecordingRules.KEEP_CHOICES] (0 = don't keep). Last writer wins; absent (or an old 30) = 7. Added 2026-10-10.
      */
     const val RECORDING_DAYS = "callRecordingDays"
     // The door-to-door commute ([CommuteFields], 2026-10-13) is on this entity too: commuteToWorkMin, commuteHomeMin.
@@ -281,7 +281,7 @@ data class WorkModeState(
     val callAssistant: Boolean = false,
     /** Spam protection ([SpamProtectionRules]): on unless turned off in Advanced; independent of the call assistant. */
     val spamProtection: Boolean = true,
-    /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7, 30 or 0 (don't keep). */
+    /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7 or 0 (don't keep). */
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
     /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
     val callAssistantPaused: Boolean = false,
@@ -582,7 +582,7 @@ class WorkMode(
 
     /** "Keep callers' recordings": one of [VoiceRecordingRules.KEEP_CHOICES]. Returns whether anything changed. */
     fun setRecordingDays(days: Int): Boolean {
-        require(days in VoiceRecordingRules.KEEP_CHOICES) { "keep 7 or 30 days, or 0 for don't keep" }
+        require(days in VoiceRecordingRules.KEEP_CHOICES) { "keep 7 days, or 0 for don't keep" }
         val stored = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.RECORDING_DAYS)
         if (stored != null && recordingDays() == days) return false
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.RECORDING_DAYS to days.toLong().fv()))

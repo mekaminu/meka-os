@@ -12,3 +12,4 @@ how: Turn it on under Work mode → Call assistant, then set your network's forw
 mac_how: The Mac shows the messages and the settings; the screening itself happens on the Fold.
 tip: Family and the always-ring list always ring through, and a second call within 3 minutes rings.
 tip: It only takes messages: it never shares your details or agrees to anything.
+tip: Done on Needs you only clears the card: the caller's recording, words and summary stay in Activity → Calls for 7 days, then are deleted. To remove one sooner, open the call there and tap Delete recording (Undo for 5 seconds).

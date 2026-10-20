@@ -31,7 +31,7 @@ struct WorkSheet: View {
     private var atWork: Bool { model.work?.atWork ?? false }
     private var callAssistant: Bool { model.work?.callAssistant ?? false }
     private var recordingDays: Int { Int(model.work?.recordingDays ?? Int32(VoiceRecordingRules.shared.DEFAULT_KEEP_DAYS)) }
-    private static let keepChoices = [7, 30, 0]
+    private static let keepChoices = [7, 0]
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {

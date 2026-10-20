@@ -93,7 +93,7 @@ class CallLogTest {
         assertEquals(CallNoticeRules.UNBLOCK, b.unblock)
         assertNull(b.spam)
 
-        // Done cleared the words: the detail says so, and there's nothing to play.
+        // An older Done (before 2026-10-20) blanked the words and deleted the recording: the detail says so.
         val c = CallLogRules.detail(dentist.copy(text = null, summary = null, hasAudio = false), cleared = true, BlockedCallersView.EMPTY, cal)
         assertEquals(CallLogRules.CLEARED_WORDS, c.words)
         assertNull(c.listen)
@@ -140,13 +140,14 @@ class CallLogTest {
         assertEquals(3, fold.clear())
         val calls = fold.calls()
         assertEquals(listOf(CaptureKind.VOICE_MESSAGE, CaptureKind.MISSED_CALL), calls.map { it.item.kind }) // newest first, no WhatsApp
-        assertTrue(calls.all { it.cleared })
+        assertTrue(calls.all { it.cleared && it.keptOnDone })
         assertTrue(fold.items().isEmpty())
         a.sync(); m.sync()
         val onMac = HeldMessages(m.replica) { world.clock.nowMs }.calls()
         assertEquals(2, onMac.size)
         val row = CallLogRules.view(onMac, BlockedCallersView.EMPTY, world.clock.nowMs, LocalCalendar.UTC).days.single().rows.first()
-        assertEquals(CallLogRules.CLEARED_WORDS, row.detail.words)
+        // Done only cleared the card (2026-10-20): the words are still there on the Mac.
+        assertEquals("“Call me back please”", row.detail.words)
         assertFalse(row.blocked)
         // A week later they're gone.
         world.clock.nowMs = t0 + HeldMessages.RETENTION_MS + 60_000

@@ -60,6 +60,7 @@ import os.meka.android.work.VoiceMessagePlayer
 import os.meka.core.domain.CallDetail
 import os.meka.core.domain.CallLogRow
 import os.meka.core.domain.CallLogRules
+import os.meka.core.domain.VoiceRecordingRules
 
 /**
  * Call notifications, slice 5: a call notification's tap. [heldId] is the held message it was about ("" when none),
@@ -73,7 +74,10 @@ data class CallOpen(val heldId: String, val key: String?)
  * with no message, calls stopped before they rang) from the last 7 days, named from this phone's contacts, one line each with a block chip. A tap (tick haptic)
  * unfolds the call's detail in place on the expand spring: the small timeline, the AI's summary, the words, the spam
  * flag, whether it's blocked now and in future, ▶ Listen (the recording, played from memory), Call back (the dialer),
- * Block / Unblock / Not spam (light haptic; the chip and the block line cross-fade). Reduced motion: cross-fades.
+ * Block / Unblock / Not spam (light haptic; the chip and the block line cross-fade). Done on Needs you only clears the
+ * card (2026-10-20): the words and the recording stay here for 7 days; **Delete recording** (light haptic) swaps the
+ * player for "Recording deleted · Undo" (cross-fade) and the server deletes it 5 s later unless Undo. Reduced motion:
+ * cross-fades.
  */
 @Composable
 internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
@@ -93,6 +97,9 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
     // Slice 5: opened from a call's notification — unfold that call and bring it into view.
     val request by app.openCall.collectAsState()
     var reveal by remember { mutableStateOf<String?>(null) }
+    // Delete recording: Undo is offered for 5 s (the core writes it after the same wait).
+    var undoFor by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(undoFor) { if (undoFor != null) { kotlinx.coroutines.delay(VoiceRecordingRules.DELETE_UNDO_MS); undoFor = null } }
     LaunchedEffect(request, view) {
         val r = request ?: return@LaunchedEffect
         CallLogRules.target(view, r.heldId, r.key)?.let { open = it; reveal = it }
@@ -134,6 +141,17 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
                         haptics.light()
                         scope.launch { if (!runCatching { core.dismissSuspectedCaller(key) }.getOrDefault(false)) onNote("Couldn't change that. Try again.") }
                     },
+                    undoDelete = undoFor == row.id,
+                    onDeleteRecording = {
+                        haptics.light()
+                        undoFor = row.id
+                        app.appScope.launch { runCatching { core.deleteCallRecordingSoon(row.id) } }
+                    },
+                    onUndoDelete = {
+                        haptics.light()
+                        undoFor = null
+                        scope.launch { runCatching { core.undoDeleteCallRecording(row.id) } }
+                    },
                 )
             }
         }
@@ -151,6 +169,9 @@ private fun CallRowView(
     onBlock: () -> Unit,
     onUnblock: (String) -> Unit,
     onNotSpam: (String) -> Unit,
+    undoDelete: Boolean,
+    onDeleteRecording: () -> Unit,
+    onUndoDelete: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val bring = remember { BringIntoViewRequester() }
@@ -189,7 +210,7 @@ private fun CallRowView(
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            CallDetailView(row.id, row.detail, fetch, onCallBack, onBlock, onUnblock, onNotSpam)
+            CallDetailView(row.id, row.detail, fetch, onCallBack, onBlock, onUnblock, onNotSpam, undoDelete, onDeleteRecording, onUndoDelete)
         }
     }
 }
@@ -203,6 +224,9 @@ private fun CallDetailView(
     onBlock: () -> Unit,
     onUnblock: (String) -> Unit,
     onNotSpam: (String) -> Unit,
+    undoDelete: Boolean,
+    onDeleteRecording: () -> Unit,
+    onUndoDelete: () -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -224,7 +248,26 @@ private fun CallDetailView(
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "call-block-line",
         ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.textTertiary) }
-        if (d.listen != null) VoiceMessagePlayer(id, fetch)
+        // The recording: the player with Delete recording, or once deleted its line (with Undo for 5 s); cross-fades.
+        AnimatedContent(
+            targetState = Triple(d.listen != null, d.recordingGone, undoDelete),
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "call-recording",
+        ) { (canListen, gone, canUndo) ->
+            when {
+                canListen -> Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    VoiceMessagePlayer(id, fetch)
+                    d.deleteRecording?.let { label ->
+                        Action(label, Meka.colors.critical, Modifier.semantics { contentDescription = "Delete the recording from ${d.who}" }) { onDeleteRecording() }
+                    }
+                }
+                gone != null -> Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+                    Text(gone, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    if (canUndo) Action("Undo", Meka.colors.accent) { onUndoDelete() }
+                }
+                else -> Spacer(Modifier.height(0.dp))
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
             val number = d.number
             if (d.callBack != null && number != null) Action(d.callBack!!, Meka.colors.accent) { onCallBack(number) }

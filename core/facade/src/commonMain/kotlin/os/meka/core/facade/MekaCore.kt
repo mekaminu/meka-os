@@ -484,6 +484,9 @@ class MekaCore(
 
     /** Held items whose card's Done (or Clear all) is waiting out its Undo: hidden from [afterWork], not yet written. */
     private val afterWorkHiding = LinkedHashSet<String>()
+    /** Delete recording tapped, its Undo still offered: shown as deleted, nothing written yet. */
+    private val recordingDeleting = LinkedHashMap<String, Long>()
+    private var recordingDeleteSeq = 0L
     private val _afterWork = MutableStateFlow(os.meka.core.domain.AfterWorkSummary(emptyList()))
     /**
      * "While you were at work": what the Fold held during work mode, grouped by person (urgent, then family, then
@@ -2239,7 +2242,10 @@ class MekaCore(
      */
     suspend fun holdCaptured(items: List<os.meka.core.domain.CapturedItem>, lists: os.meka.core.domain.PeopleLists): Int =
         onCore { held.hold(items, lists) }
-    /** Done on the after-work summary: cleared on every device, texts blanked. WhatsApp and Messages are untouched. */
+    /**
+     * Done on the after-work summary: cleared on every device; chat texts blanked, calls keep their words and
+     * recording for Activity → Calls. WhatsApp and Messages are untouched.
+     */
     suspend fun clearAfterWork(): Int = onCore { afterWorkHiding.clear(); held.clear() }
 
     /**
@@ -4747,7 +4753,7 @@ class MekaCore(
     suspend fun setCallAssistant(on: Boolean) = onCore { work.setCallAssistant(on); refresh() }
 
     /**
-     * "Keep callers' recordings" (call assistant polish 8c): 7 or 30 days, or 0 for don't keep. Synced; MEKA's server
+     * "Keep callers' recordings" (call assistant polish 8c): 7 days, or 0 for don't keep. Synced; MEKA's server
      * deletes what is older at once and stops offering it, and the summary's ▶ Play follows. Other values are ignored.
      */
     suspend fun setRecordingDays(days: Int) = onCore {
@@ -4796,6 +4802,30 @@ class MekaCore(
         val number = os.meka.core.domain.CallNoticeRules.numberOf(call.item) ?: return@onCore false
         val why = os.meka.core.domain.BlockedCallerRules.whyFromHeld(call.item.kind, call.item.atMs, nowMs(), ZoneCalendar(timeZone))
         blockList.block(number, why).also { refresh() }
+    }
+
+    /**
+     * Delete recording in a call's detail (Meka 2026-10-20 17:34): the call shows "Recording deleted" at once and the
+     * deletion is written after [os.meka.core.domain.VoiceRecordingRules.DELETE_UNDO_MS] unless
+     * [undoDeleteCallRecording] took it back; then the server deletes the recording for good (the words stay).
+     */
+    suspend fun deleteCallRecordingSoon(id: String) {
+        if (!os.meka.core.domain.VoiceRecordingRules.isHeldId(id)) return
+        val token = onCore { (++recordingDeleteSeq).also { recordingDeleting[id] = it; refresh() } }
+        scope.launch {
+            delay(os.meka.core.domain.VoiceRecordingRules.DELETE_UNDO_MS)
+            // Only this tap's own timer writes it: an Undo then a second Delete waits its own 5 s.
+            runCatching { onCore { recordingDeleting[id] == token }.let { if (it) commitDeleteCallRecording(id) } }
+        }
+    }
+
+    /** Undo on the bar after Delete recording: the recording comes back, nothing was written. */
+    suspend fun undoDeleteCallRecording(id: String) = onCore { recordingDeleting -= id; refresh() }
+
+    /** Writes a waiting Delete recording now (the delay ending, or the app going to the background). */
+    suspend fun commitDeleteCallRecording(id: String): Boolean = onCore {
+        if (recordingDeleting.remove(id) == null) return@onCore false
+        held.deleteRecording(id).also { refresh() }
     }
 
     /** Takes a number ([key], from [blockedCallers]' rows) off the block list; its calls ring again. */
@@ -7825,7 +7855,7 @@ class MekaCore(
     suspend fun voiceMessageAudio(id: String): ByteArray? {
         if (!os.meka.core.domain.VoiceRecordingRules.isHeldId(id)) return null
         if (_afterWork.value.people.none { p -> p.items.any { it.id == id && it.hasAudio } } &&
-            _heldCalls.value.none { it.item.id == id && it.item.hasAudio && !it.cleared }) return null
+            _heldCalls.value.none { it.item.id == id && it.item.hasAudio && !it.wordsGone && !it.recordingDeleted }) return null
         val api = voiceMessageApi ?: return null
         val bytes = try { api.voiceMessageAudio(id) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
         return bytes?.takeIf { it.isNotEmpty() && it.size <= os.meka.core.domain.VoiceRecordingRules.MAX_BYTES }
@@ -10219,7 +10249,7 @@ class MekaCore(
         _groupGists.value = gistStore.open()
         _chatSummaries.value = chatSummaryStore.all()
         _blockedCallers.value = blockList.view()
-        _heldCalls.value = held.calls()
+        _heldCalls.value = held.calls().map { if (it.item.id in recordingDeleting) it.copy(recordingDeleted = true) else it }
         _callLog.value = os.meka.core.domain.CallLogRules.view(_heldCalls.value, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone))
         _groupDigestCaughtUp.value = gistStore.caughtUpTimes()
         _notifyPreview.value = Governor.preview(currentNotices(all), notifySettings, nowMs(), ZoneCalendar(timeZone))

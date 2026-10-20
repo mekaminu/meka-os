@@ -19,6 +19,7 @@ import kotlin.random.Random
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -80,10 +81,29 @@ class VoiceMessageFacadeTest {
         assertNull(c.voiceMessageAudio(kept))
         server.down = false
 
-        // Done: gone from the summary, so it is never fetched again.
+        // Done (2026-10-20): gone from the summary, but Activity → Calls still plays it.
         c.clearAfterWork()
         c.syncNow()
+        assertTrue(c.afterWork.value.isEmpty)
+        assertNotNull(c.callLog.value.row(kept)!!.detail.listen)
+        assertContentEquals(mp3, c.voiceMessageAudio(kept))
+
+        // Delete recording: shown as deleted at once (Undo for 5 s), nothing written yet; Undo brings it back.
+        c.deleteCallRecordingSoon(kept)
+        assertEquals(os.meka.core.domain.VoiceRecordingRules.DELETED, c.callLog.value.row(kept)!!.detail.recordingGone)
+        assertNull(c.callLog.value.row(kept)!!.detail.listen)
         val before = server.asked.size
+        assertNull(c.voiceMessageAudio(kept))
+        assertEquals(before, server.asked.size)
+        c.undoDeleteCallRecording(kept)
+        assertNotNull(c.callLog.value.row(kept)!!.detail.listen)
+        assertTrue(ops.after("hh", 0, 1000).none { it.op.field == HeldMessageFields.RECORDING_DELETED })
+        // Deleted for real: written and synced, so the server deletes it; the words stay.
+        c.deleteCallRecordingSoon(kept)
+        assertTrue(c.commitDeleteCallRecording(kept))
+        c.syncNow()
+        assertTrue(ops.after("hh", 0, 1000).any { it.op.entityId == kept && it.op.field == HeldMessageFields.RECORDING_DELETED })
+        assertEquals(os.meka.core.domain.VoiceRecordingRules.DELETED, c.callLog.value.row(kept)!!.detail.recordingGone)
         assertNull(c.voiceMessageAudio(kept))
         assertEquals(before, server.asked.size)
     }
@@ -119,7 +139,7 @@ class VoiceMessageFacadeTest {
         server.audio[kept] = byteArrayOf(1, 2, 3)
         val c = core()
         c.syncNow()
-        assertEquals(30, c.workMode.value.recordingDays)
+        assertEquals(7, c.workMode.value.recordingDays)
         c.setRecordingDays(0)
         assertEquals(0, c.workMode.value.recordingDays)
         // Play goes from the summary and nothing is fetched.

@@ -3017,13 +3017,15 @@ final class MekaCoreBridgeTests: XCTestCase {
     func testKeepCallersRecordingsReachesSwift() {
         // Call assistant polish 8c: the "Keep callers' recordings" choice, its line and the summary's note.
         let rules = VoiceRecordingRules.shared
-        XCTAssertEqual(rules.DEFAULT_KEEP_DAYS, 30)
-        XCTAssertEqual(rules.KEEP_CHOICES.map { $0.int32Value }, [7, 30, 0])
+        // 2026-10-20: kept for the call log's 7 days after Done; Delete recording removes one sooner.
+        XCTAssertEqual(rules.DEFAULT_KEEP_DAYS, 7)
+        XCTAssertEqual(rules.KEEP_CHOICES.map { $0.int32Value }, [7, 0])
         XCTAssertEqual(rules.choiceLabel(days: 0), "Don't keep")
         XCTAssertEqual(rules.choiceLabel(days: 7), "7 days")
         XCTAssertTrue(rules.settingLine(days: 0).hasPrefix("Not kept"))
-        XCTAssertEqual(rules.privacy(days: 30), rules.PRIVACY)
-        XCTAssertTrue(rules.privacy(days: 7).contains("7 days"))
+        XCTAssertEqual(rules.privacy(days: 7), rules.PRIVACY)
+        XCTAssertEqual(rules.DELETE, "Delete recording")
+        XCTAssertEqual(rules.DELETE_UNDO_MS, 5000)
     }
 
     func testSignInLineReachesSwift() {

@@ -673,6 +673,18 @@ object HeldMessageFields {
     /** "Done" on either device: gone from the summary on both. */
     const val CLEARED = "cleared"
     const val CLEARED_AT = "clearedAtMs"
+    /**
+     * Written with [CLEARED] by a Done from 2026-10-20 on a call (Bool, TrueWins; Meka 17:34): Done only cleared the
+     * card, so the words, the summary and the recording stay for Activity → Calls and the server doesn't delete the
+     * recording. Absent with [CLEARED] = an older Done, which blanked the words and deleted the recording. Added 2026-10-20.
+     */
+    const val KEPT_ON_DONE = "keptOnDone"
+    /**
+     * Delete recording in the call's detail (Bool, TrueWins): the server deletes the recording for good; the words and
+     * the summary stay. Absent = not deleted. Added 2026-10-20.
+     */
+    const val RECORDING_DELETED = "recordingDeleted"
+    const val RECORDING_DELETED_AT = "recordingDeletedAtMs"
 }
 
 /**
@@ -721,7 +733,7 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
 
     /**
      * Activity → Calls (call notifications, slice 4): the call assistant's messages and the missed calls held at work
-     * from the last [RETENTION_MS], **including** ones Done cleared (their words are gone; [HeldCall.cleared]), newest
+     * from the last [RETENTION_MS], **including** ones Done cleared ([HeldCall.cleared]; their words stay unless an older Done blanked them), newest
      * first, at most [CallLogRules.MAX].
      */
     fun calls(): List<HeldCall> {
@@ -731,9 +743,10 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
         )
         return replica.entities(EntityTypes.HELD_MESSAGE).mapNotNull { e ->
             val cleared = e[HeldMessageFields.CLEARED].boolOrNull == true
+            val kept = e[HeldMessageFields.KEPT_ON_DONE].boolOrNull == true
             val item = read(e, cutoff, keepDays, cleared) ?: return@mapNotNull null
             if (item.app != CaptureApp.PHONE || item.kind == CaptureKind.MESSAGE) return@mapNotNull null
-            HeldCall(item, cleared)
+            HeldCall(item, cleared, keptOnDone = kept, recordingDeleted = e[HeldMessageFields.RECORDING_DELETED].boolOrNull == true)
         }.sortedWith(compareByDescending<HeldCall> { it.item.atMs }.thenBy { it.item.id }).take(CallLogRules.MAX)
     }
 
@@ -755,7 +768,11 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
                 nowMs() - at < CallAssistantRules.TRANSCRIBING_MS,
             noTranscript = noTranscript,
             hasAudio = VoiceRecordingRules.playable(
-                kind, e[HeldMessageFields.AUDIO].boolOrNull == true, cleared = cleared, atMs = at, nowMs = nowMs(), keepDays = keepDays,
+                kind, e[HeldMessageFields.AUDIO].boolOrNull == true,
+                gone = VoiceRecordingRules.gone(
+                    cleared, e[HeldMessageFields.KEPT_ON_DONE].boolOrNull == true, e[HeldMessageFields.RECORDING_DELETED].boolOrNull == true,
+                ),
+                atMs = at, nowMs = nowMs(), keepDays = keepDays,
             ),
             seconds = e[HeldMessageFields.SECONDS].longOrNull?.toInt(),
             urgentBy = e[HeldMessageFields.URGENT_BY].textOrNull,
@@ -788,14 +805,33 @@ class HeldMessages(private val replica: Replica, private val nowMs: () -> Long) 
             if (only != null && e.ref.entityId !in only) continue
             if (e[HeldMessageFields.CLEARED].boolOrNull == true) continue
             if (only == null && (e[HeldMessageFields.AT].longOrNull ?: 0L) > now) continue
+            // A call (Meka 2026-10-20 17:34): Done only clears the card; its words, summary and recording stay for
+            // Activity → Calls (7 days). Chat messages are blanked as before.
+            val call = e[HeldMessageFields.APP].textOrNull == CaptureApp.PHONE.name
             replica.commitLocal(
                 EntityTypes.HELD_MESSAGE, e.ref.entityId,
-                mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null,
+                if (call) mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.KEPT_ON_DONE to true.fv())
+                else mapOf(HeldMessageFields.CLEARED to true.fv(), HeldMessageFields.CLEARED_AT to now.fv(), HeldMessageFields.TEXT to FieldValue.Null,
                     HeldMessageFields.SUMMARY to FieldValue.Null, HeldMessageFields.INTRO to FieldValue.Null),
             )
             n++
         }
         return n
+    }
+
+    /**
+     * Delete recording in a call's detail: the server deletes [id]'s recording for good (the words and the summary
+     * stay). Returns false for an id that isn't a held voice message with a recording, or one already deleted.
+     */
+    fun deleteRecording(id: String): Boolean {
+        val e = replica.entity(EntityTypes.HELD_MESSAGE, id) ?: return false
+        if (e[HeldMessageFields.KIND].textOrNull != CaptureKind.VOICE_MESSAGE.name) return false
+        if (e[HeldMessageFields.AUDIO].boolOrNull != true || e[HeldMessageFields.RECORDING_DELETED].boolOrNull == true) return false
+        replica.commitLocal(
+            EntityTypes.HELD_MESSAGE, id,
+            mapOf(HeldMessageFields.RECORDING_DELETED to true.fv(), HeldMessageFields.RECORDING_DELETED_AT to nowMs().fv()),
+        )
+        return true
     }
 
     companion object {

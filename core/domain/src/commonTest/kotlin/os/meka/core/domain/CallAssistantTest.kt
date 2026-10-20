@@ -95,7 +95,7 @@ class CallAssistantTest {
     }
 
     @Test
-    fun theAisSummaryReachesBothAppsAndDoneBlanksIt() {
+    fun theAisSummaryReachesBothAppsAndDoneKeepsItForTheCallLog() {
         // Call notifications, slice 2: the server writes the summary after the words.
         leave("CA1", "07700 900123", t0 + 10 * hour, "Hi it's the garage, your car is ready to collect")
         val id = CallAssistantRules.heldId("twilio", "CA1")
@@ -106,8 +106,11 @@ class CallAssistantTest {
         assertEquals("Voice message · Garage: car ready to collect · “Hi it's the garage, your car is ready to collect”", item.displayLine)
         HeldMessages(m.replica) { world.clock.nowMs }.clear()
         m.sync(); a.sync()
+        // Done only clears the card (2026-10-20): the summary stays for Activity → Calls on both.
         val e = a.replica.entity(EntityTypes.HELD_MESSAGE, id)!!
-        assertNull(e[HeldMessageFields.SUMMARY].textOrNull)
+        assertEquals("Garage: car ready to collect.", e[HeldMessageFields.SUMMARY].textOrNull)
+        assertTrue(HeldMessages(a.replica) { world.clock.nowMs }.items().isEmpty())
+        assertEquals("Garage: car ready to collect", HeldMessages(a.replica) { world.clock.nowMs }.calls().single().item.summary)
     }
 
     /** Polish 3 and 5: callers named from the Fold's contacts, and Meka's own test call. */

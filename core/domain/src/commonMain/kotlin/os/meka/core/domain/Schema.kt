@@ -440,6 +440,8 @@ object MekaSchema : SchemaRegistry {
         // Held messages: written once by the Fold; Done on either device clears them for good.
         entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.CLEARED -> MergePolicy.TrueWins
         entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.URGENT -> MergePolicy.TrueWins
+        entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.KEPT_ON_DONE -> MergePolicy.TrueWins
+        entityType == EntityTypes.HELD_MESSAGE && field == HeldMessageFields.RECORDING_DELETED -> MergePolicy.TrueWins
         entityType == EntityTypes.HELD_MESSAGE -> MergePolicy.Lww
         // Alarms: the latest set, snooze or dismiss on any device wins.
         entityType == EntityTypes.ALARM -> MergePolicy.Lww

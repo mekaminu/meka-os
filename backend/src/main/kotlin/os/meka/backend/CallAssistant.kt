@@ -600,7 +600,7 @@ class CallAssistant(
         val id = CallAssistantRules.heldId(provider.id, event.callId)
         // A retried callback finds the words already settled: no second job.
         if (settled(hh, id)) return
-        val better = if (kept && !cleared(hh, id)) {
+        val better = if (kept && !gone(hh, id)) {
             VoiceRecordingRules.key(hh, id)?.let { key -> runCatching { transcriber?.transcribe(key) }.getOrNull() }
         } else null
         settle(hh, id, CallAssistantRules.transcript(better) ?: event.text)
@@ -608,8 +608,9 @@ class CallAssistant(
 
     /** Writes a message's words (or that none came through) once; nothing for one Meka already dismissed. */
     private fun settle(hh: String, id: String, raw: String?) {
-        // Done on a device blanked the summary: a late transcript doesn't bring the words back.
-        if (!exists(hh, id) || cleared(hh, id)) return
+        // An older app's Done blanked the summary: a late transcript doesn't bring the words back. (A Done from
+        // 2026-10-20 keeps them for Activity → Calls, so its words still arrive.)
+        if (!exists(hh, id) || wordsGone(hh, id)) return
         val text = CallAssistantRules.transcript(raw) ?: run {
             // No words (transcription failed or heard nothing): the apps stop showing "Transcribing…".
             if (write(hh, id, mapOf(HeldMessageFields.NO_TRANSCRIPT to true.fv()))) runCatching { onWritten(hh) }
@@ -648,7 +649,7 @@ class CallAssistant(
         if (!checkScam && !summarise) return false
         val verdict = checker.check(words) ?: return false
         verdict.summary?.let { summary ->
-            if (!cleared(hh, id) && write(hh, id, mapOf(HeldMessageFields.SUMMARY to summary.fv()))) runCatching { onWritten(hh) }
+            if (!wordsGone(hh, id) && write(hh, id, mapOf(HeldMessageFields.SUMMARY to summary.fv()))) runCatching { onWritten(hh) }
         }
         if (!checkScam || !verdict.scam || key == null || number == null) return false
         val at = now()
@@ -687,7 +688,7 @@ class CallAssistant(
         val recording = event.recording ?: return false
         val hh = household() ?: return false
         val id = CallAssistantRules.heldId(provider.id, event.callId)
-        if (!exists(hh, id) || cleared(hh, id)) return false
+        if (!exists(hh, id) || gone(hh, id)) return false
         val key = VoiceRecordingRules.key(hh, id) ?: return false
         if (fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.AUDIO) == FieldValue.Bool(true)) return true
         // "Don't keep": held only while Amazon Transcribe hears it ([releaseUnkept] deletes it after); without
@@ -696,8 +697,8 @@ class CallAssistant(
         if (!keep && transcriber == null) return false
         val audio = provider.fetchRecording(recording)?.takeIf { it.isNotEmpty() && it.size <= VoiceRecordingRules.MAX_BYTES } ?: return false
         store.put(key, audio)
-        // Done may have been tapped while it was being fetched: then it isn't kept after all.
-        if (cleared(hh, id)) {
+        // Delete recording (or an older app's Done) may have come while it was being fetched: then it isn't kept after all.
+        if (gone(hh, id)) {
             store.delete(key)
             return false
         }
@@ -724,8 +725,8 @@ class CallAssistant(
 
     /**
      * "Keep callers' recordings" (polish 8c): deletes whatever under the household's `voice/` is older than the
-     * synced choice ([VoiceRecordingRules.sweepBeforeMs]); run hourly and whenever the choice changes. The bucket's
-     * 30-day lifecycle rule stays the backstop. Returns how many objects were deleted.
+     * synced choice ([VoiceRecordingRules.sweepBeforeMs], 7 days); run hourly and whenever the choice changes. The
+     * bucket's 8-day lifecycle rule stays the backstop. Returns how many objects were deleted.
      */
     fun sweepRecordings(householdId: String? = household()): Int {
         val store = recordings ?: return 0
@@ -746,7 +747,7 @@ class CallAssistant(
 
     /**
      * A household's recording for a device to play: only a voice message that isn't cleared, was kept and is younger
-     * than the "Keep callers' recordings" choice, 30 days by default ([VoiceRecordingRules.playable]). Null otherwise,
+     * than the "Keep callers' recordings" choice, 7 days ([VoiceRecordingRules.playable]). Null otherwise,
      * including for another household's message.
      */
     fun recording(householdId: String, heldId: String): ByteArray? {
@@ -757,13 +758,21 @@ class CallAssistant(
         val at = (field(HeldMessageFields.AT) as? FieldValue.Int64)?.value
         val playable = VoiceRecordingRules.playable(
             kind, audio = field(HeldMessageFields.AUDIO) == FieldValue.Bool(true),
-            cleared = field(HeldMessageFields.CLEARED) == FieldValue.Bool(true), atMs = at, nowMs = now(),
+            gone = gone(householdId, heldId), atMs = at, nowMs = now(),
             keepDays = keepDays(householdId),
         )
         return if (playable) store.get(key) else null
     }
 
-    /** Done on a device (polish 8c): the dismissed messages' recordings are deleted at once. */
+    /**
+     * A device's push cleared or deleted [heldIds] (Meka 2026-10-20 17:34): only the recordings now gone for good
+     * ([VoiceRecordingRules.gone]: Delete recording, or a Done from an app older than that, which blanked the words)
+     * are deleted at once; a Done that kept them leaves them for Activity → Calls until the 7-day sweep.
+     */
+    fun forgetGoneRecordings(householdId: String, heldIds: Collection<String>) =
+        forgetRecordings(householdId, heldIds.filter { runCatching { gone(householdId, it) }.getOrDefault(false) })
+
+    /** Deletes [heldIds]' recordings (and any transcript being made) at once. */
     fun forgetRecordings(householdId: String, heldIds: Collection<String>) {
         val store = recordings ?: return
         for (id in heldIds) VoiceRecordingRules.key(householdId, id)?.let { key ->
@@ -818,7 +827,16 @@ class CallAssistant(
     private fun settled(hh: String, id: String) =
         ops.find(hh, opId(id, HeldMessageFields.TEXT)) != null || ops.find(hh, opId(id, HeldMessageFields.NO_TRANSCRIPT)) != null
 
-    private fun cleared(hh: String, id: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true)
+    /** An older app's Done blanked the words (a Done from 2026-10-20 keeps them, [HeldMessageFields.KEPT_ON_DONE]). */
+    private fun wordsGone(hh: String, id: String): Boolean =
+        fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED) == FieldValue.Bool(true) &&
+            fields.latest(hh, EntityTypes.HELD_MESSAGE, id, HeldMessageFields.KEPT_ON_DONE) != FieldValue.Bool(true)
+
+    /** The message's recording is gone for good ([VoiceRecordingRules.gone]): nothing is kept or played for it. */
+    private fun gone(hh: String, id: String): Boolean {
+        fun on(f: String) = fields.latest(hh, EntityTypes.HELD_MESSAGE, id, f) == FieldValue.Bool(true)
+        return VoiceRecordingRules.gone(on(HeldMessageFields.CLEARED), on(HeldMessageFields.KEPT_ON_DONE), on(HeldMessageFields.RECORDING_DELETED))
+    }
 
     /** Appends the fields not written before; returns whether anything was written. */
     private fun write(

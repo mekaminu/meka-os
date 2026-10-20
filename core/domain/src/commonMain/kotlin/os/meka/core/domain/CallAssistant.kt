@@ -215,12 +215,14 @@ object CallAssistantRules {
  * has transcribed a voice message, MEKA's server fetches the recording, keeps it encrypted in MEKA's own private
  * bucket (SSE-KMS with MEKA's key, no public address) and deletes the phone service's copy; then it writes
  * [HeldMessageFields.AUDIO] so both apps offer ▶ Play. Devices fetch the audio only over a signed request, keep it in
- * memory while it plays and never save it. Kept [KEEP_MS] at most (a bucket lifecycle rule is the backstop), and
- * deleted at once when Meka taps Done. Non-AI, pure.
+ * memory while it plays and never save it. Kept [KEEP_MS] at most (a bucket lifecycle rule is the backstop). Since
+ * 2026-10-20 (Meka 17:34) Done on Needs you only clears the card: the recording, the words and the summary stay in
+ * Activity → Calls for the call log's 7 days, and **Delete recording** in the call's detail removes one sooner
+ * ([HeldMessageFields.RECORDING_DELETED]). Non-AI, pure.
  */
 object VoiceRecordingRules {
-    /** How long a recording is kept (and offered) after the call. */
-    const val KEEP_MS = 30L * 24 * 60 * 60_000L
+    /** How long a recording is kept (and offered) after the call: the call log's own window. */
+    const val KEEP_MS = 7L * 24 * 60 * 60_000L
     /** Largest recording kept: two minutes of the phone service's MP3 is well under 1 MB. */
     const val MAX_BYTES = 5 * 1024 * 1024
     /** Where recordings live in the bucket; the lifecycle rule is on this prefix. */
@@ -230,12 +232,24 @@ object VoiceRecordingRules {
     const val STOP = "■ Stop"
     const val LOADING = "Loading…"
     const val FAILED = "Couldn't play this message"
-    const val PRIVACY = "Recordings are kept encrypted on Navilife's server for 30 days, and deleted when you tap Done."
+    const val PRIVACY = "Recordings are kept encrypted on Navilife's server for 7 days, and stay in Activity → Calls after you tap Done."
+
+    /** The call detail's button for deleting one recording now (with Undo for [DELETE_UNDO_MS]). */
+    const val DELETE = "Delete recording"
+    /** The detail's line once the recording is gone (deleted from the call's detail, or by Done before 2026-10-20). */
+    const val DELETED = "Recording deleted"
+    /** The undo bar's line after Delete recording. */
+    const val DELETED_UNDO = "Recording deleted · Undo"
+    /** How long Undo is offered before the deletion is written and the server deletes it for good. */
+    const val DELETE_UNDO_MS = 5_000L
 
     /** "Keep callers' recordings" (Work → Call assistant): how long, in days, unless Meka picks otherwise. */
-    const val DEFAULT_KEEP_DAYS = 30
-    /** The choices, in the order the apps show them: 7 days · 30 days · Don't keep (0). */
-    val KEEP_CHOICES = listOf(7, 30, 0)
+    const val DEFAULT_KEEP_DAYS = 7
+    /**
+     * The choices, in the order the apps show them: 7 days · Don't keep (0). 30 days went on 2026-10-20 (Meka 17:34:
+     * kept for the call log's 7 days, then deleted); a stored 30 reads as 7.
+     */
+    val KEEP_CHOICES = listOf(7, 0)
     const val SETTING_TITLE = "Keep callers' recordings"
     /**
      * With "Don't keep", the server still holds a recording while Amazon Transcribe hears it (at most 5 minutes) and
@@ -244,10 +258,9 @@ object VoiceRecordingRules {
     const val UNKEPT_GRACE_MS = 15 * 60_000L
     private const val DAY_MS = 24 * 60 * 60_000L
 
-    /** The synced choice ([WorkFields.RECORDING_DAYS]) as days: 0 or 7 as stored, anything else (or nothing) 30. */
+    /** The synced choice ([WorkFields.RECORDING_DAYS]) as days: 0 as stored, anything else (or nothing) 7. */
     fun keepDays(stored: Long?): Int = when (stored) {
         0L -> 0
-        7L -> 7
         else -> DEFAULT_KEEP_DAYS
     }
 
@@ -260,12 +273,12 @@ object VoiceRecordingRules {
     /** The line under the chips; cross-fades as the choice changes. */
     fun settingLine(days: Int): String =
         if (days == 0) "Not kept · you'll have the words; each recording is deleted once it has been transcribed"
-        else "Kept $days days · encrypted on Navilife's server, deleted sooner when you tap Done"
+        else "Kept $days days · encrypted on Navilife's server, then deleted. Delete recording in Activity → Calls removes one sooner"
 
     /** The note under the after-work summary when something in it can be played. */
     fun privacy(days: Int): String =
         if (days == 0) "Recordings aren't kept: Navilife's server deletes each one once it has been transcribed."
-        else "Recordings are kept encrypted on Navilife's server for $days days, and deleted when you tap Done."
+        else "Recordings are kept encrypted on Navilife's server for $days days, and stay in Activity → Calls after you tap Done."
 
     /**
      * The server's sweep (hourly, and when the choice changes): recordings stored before this are deleted. "Don't
@@ -290,11 +303,18 @@ object VoiceRecordingRules {
         if (householdPattern.matches(householdId)) "$PREFIX$householdId/" else null
 
     /**
-     * Whether a recording is offered: a voice message, not cleared, kept ([HeldMessageFields.AUDIO]) and younger than
-     * the chosen [keepDays] (30 by default; [KEEP_MS] at most; none with "Don't keep").
+     * Whether a recording is offered: a voice message whose recording isn't gone ([gone]: deleted from the call's
+     * detail, or cleared by a Done from before 2026-10-20, which deleted it), kept ([HeldMessageFields.AUDIO]) and
+     * younger than the chosen [keepDays] (7; none with "Don't keep").
      */
-    fun playable(kind: CaptureKind?, audio: Boolean, cleared: Boolean, atMs: Long?, nowMs: Long, keepDays: Int = DEFAULT_KEEP_DAYS): Boolean =
-        kind == CaptureKind.VOICE_MESSAGE && audio && !cleared && atMs != null && nowMs - atMs in 0 until keepMs(keepDays)
+    fun playable(kind: CaptureKind?, audio: Boolean, gone: Boolean, atMs: Long?, nowMs: Long, keepDays: Int = DEFAULT_KEEP_DAYS): Boolean =
+        kind == CaptureKind.VOICE_MESSAGE && audio && !gone && atMs != null && nowMs - atMs in 0 until keepMs(keepDays)
+
+    /**
+     * Whether a held message's recording is gone for good: deleted from the call's detail, or cleared by a Done that
+     * didn't keep it (one written before 2026-10-20, without [HeldMessageFields.KEPT_ON_DONE], deleted it).
+     */
+    fun gone(cleared: Boolean, keptOnDone: Boolean, deleted: Boolean): Boolean = deleted || (cleared && !keptOnDone)
 
     /** "0:12 / 0:40" while playing (whole seconds; a length not known yet shows only where it is). */
     fun progressLine(positionMs: Long, durationMs: Long): String {

@@ -402,13 +402,14 @@ fun Application.mekaSync(
             // Wake the household's other devices so they pull now (coalesced; sent off the request).
             if (push != null && resp.acknowledged.isNotEmpty()) withContext(Dispatchers.IO) { runCatching { push.changed(who) } }
             if (calendarWriter != null && req.ops.any { it.entityType == EntityTypes.EVENT_EDIT }) calendarWriter.poke()
-            // Done on the after-work summary: the dismissed voice messages' recordings are deleted now (polish 8c).
+            // Delete recording in a call's detail, or a Done from an app older than 2026-10-20 (which blanked the
+            // words): those recordings are deleted now. A newer Done keeps them for Activity → Calls (polish 8c, Meka 17:34).
             if (voice != null) {
                 val dismissed = req.ops.filter {
-                    it.entityType == EntityTypes.HELD_MESSAGE && it.field == HeldMessageFields.CLEARED && it.value == FieldValue.Bool(true) &&
-                        it.opId in resp.acknowledged
+                    it.entityType == EntityTypes.HELD_MESSAGE && it.value == FieldValue.Bool(true) && it.opId in resp.acknowledged &&
+                        (it.field == HeldMessageFields.CLEARED || it.field == HeldMessageFields.RECORDING_DELETED)
                 }.map { it.entityId }.distinct()
-                if (dismissed.isNotEmpty()) background { voice.assistant.forgetRecordings(who.householdId, dismissed) }
+                if (dismissed.isNotEmpty()) background { voice.assistant.forgetGoneRecordings(who.householdId, dismissed) }
                 // "Keep callers' recordings" changed: what is now too old goes at once, not at the next hourly sweep.
                 if (req.ops.any { it.entityType == EntityTypes.CONTEXT_MODE && it.field == WorkFields.RECORDING_DAYS && it.opId in resp.acknowledged }) {
                     background { runCatching { voice.assistant.sweepRecordings(who.householdId) } }

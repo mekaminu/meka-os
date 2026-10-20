@@ -11,6 +11,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
 import os.meka.core.domain.CallAssistantRules
+import os.meka.core.domain.CallLogRules
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
 import os.meka.core.domain.HeldMessages
@@ -38,8 +39,8 @@ import kotlin.test.assertTrue
 
 /**
  * Callers' recordings (call assistant polish 8c, Meka 2026-10-09: "can I not listen to it?"): kept in MEKA's own
- * bucket once transcribed, fetched before Twilio's copy is deleted, played only by the household's keyed devices, and
- * deleted at once on Done.
+ * bucket once transcribed, fetched before Twilio's copy is deleted, played only by the household's keyed devices, kept
+ * after Done for the call log's 7 days (2026-10-20) and deleted at once by Delete recording.
  */
 class VoiceRecordingsTest {
     private val token = "twilio-auth-token-for-tests"
@@ -145,20 +146,45 @@ class VoiceRecordingsTest {
         val strangerKey = TestDeviceKey().also { devices.registerKey(DeviceIdentity("hh2", "intruder"), it.publicB64) }
         assertEquals(HttpStatusCode.NotFound, play(id, strangerSecret, strangerKey).status)
 
-        // After 30 days it isn't offered (the bucket's lifecycle rule removes it).
+        // After 7 days it isn't offered (the hourly sweep removes it; the bucket's lifecycle rule is the backstop).
         nowMs += VoiceRecordingRules.KEEP_MS
         assertEquals(HttpStatusCode.NotFound, play(id).status)
     }
 
+    private suspend fun ApplicationTestBuilder.pushFold(vararg ops: Op) {
+        val body = WireCodec.encodePushRequest(PushRequest("hh", "fold", ops.toList()))
+        assertEquals(HttpStatusCode.OK, client.post("/v1/sync/push") { with(foldKey) { signed(foldSecret, "/v1/sync/push", body) } }.status)
+    }
+
     @Test
-    fun doneDeletesTheRecordingAtOnceAndAMessageDismissedBeforeItsTranscriptKeepsNone() = testApplication {
+    fun doneKeepsTheRecordingForTheCallLogAndDeleteRecordingRemovesIt() = testApplication {
+        // Meka 2026-10-20 17:34: Done only clears the card; Delete recording in the call's detail removes it.
+        application { mekaSync(ops, devices, voice = voice, background = { it() }) }
+        switchOn()
+        message("CA1", rec(1))
+        val id = CallAssistantRules.heldId("twilio", "CA1")
+        fun op(n: String, field: String, at: Long) = Op(n, "hh", EntityTypes.HELD_MESSAGE, id, field, FieldValue.Bool(true), Hlc(at, 0, "fold"), emptyList(), "fold")
+        pushFold(op("d1", HeldMessageFields.CLEARED, nowMs + 1), op("d1k", HeldMessageFields.KEPT_ON_DONE, nowMs + 1))
+        assertEquals(setOf("voice/hh/$id.mp3"), store.objects.keys)
+        assertEquals(HttpStatusCode.OK, play(id).status)
+        // Its words still reach Activity → Calls.
+        assertEquals("“It's the garage, your car is ready.”", fold().calls().single().let { CallLogRules.words(it.item, it.wordsGone) })
+
+        pushFold(op("x1", HeldMessageFields.RECORDING_DELETED, nowMs + 2))
+        assertTrue(store.objects.isEmpty())
+        assertEquals(HttpStatusCode.NotFound, play(id).status)
+    }
+
+    @Test
+    fun anOlderAppsDoneDeletesTheRecordingAtOnceAndAMessageDismissedBeforeItsTranscriptKeepsNone() = testApplication {
         application { mekaSync(ops, devices, voice = voice, background = { it() }) }
         switchOn()
         message("CA1", rec(1))
         val id = CallAssistantRules.heldId("twilio", "CA1")
         assertEquals(HttpStatusCode.OK, play(id).status)
 
-        // Done on the Fold: its push carries cleared = true; the recording goes there and then.
+        // Done on a Fold app from before 2026-10-20: its push carries cleared = true without keptOnDone (it blanked
+        // the words); the recording goes there and then.
         val done = Op("d1", "hh", EntityTypes.HELD_MESSAGE, id, HeldMessageFields.CLEARED, FieldValue.Bool(true), Hlc(nowMs + 1, 0, "fold"), emptyList(), "fold")
         val body = WireCodec.encodePushRequest(PushRequest("hh", "fold", listOf(done)))
         assertEquals(HttpStatusCode.OK, client.post("/v1/sync/push") { with(foldKey) { signed(foldSecret, "/v1/sync/push", body) } }.status)
@@ -222,10 +248,11 @@ class VoiceRecordingsTest {
         message("CA2", rec(2))
         val recent = CallAssistantRules.heldId("twilio", "CA2")
         nowMs += 2L * 24 * 3_600_000 // the first is 8 days old, the second 2
-        assertEquals(HttpStatusCode.OK, play(old).status)
-        assertEquals(0, assistant.sweepRecordings()) // 30 days: nothing to sweep yet
-
-        // Meka picks 7 days: the push sweeps the 8-day-old recording there and then; the recent one stays.
+        // 7 days by default (2026-10-20): the 8-day-old one isn't offered and the hourly sweep deletes it.
+        assertEquals(HttpStatusCode.NotFound, play(old).status)
+        assertEquals(1, assistant.sweepRecordings())
+        // Picking 7 days again (or an old app's 30, which reads as 7) changes nothing.
+        keepFor(30)
         keepFor(7)
         assertEquals(setOf("voice/hh/$recent.mp3"), store.objects.keys)
         assertEquals(HttpStatusCode.NotFound, play(old).status)

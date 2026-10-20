@@ -20,7 +20,7 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.core.domain.VoiceRecordingRules
 
 /**
- * "Keep callers' recordings" on the closed Fold's width (412 dp): the three choices, the chosen one's line, and a tap
+ * "Keep callers' recordings" on the closed Fold's width (412 dp): the two choices (7 days · Don't keep since 2026-10-20), the chosen one's line, and a tap
  * choosing another. Runs on the Fold or an emulator; CI compiles it.
  */
 class RecordingKeepSectionTest {
@@ -28,7 +28,7 @@ class RecordingKeepSectionTest {
     val compose = createComposeRule()
 
     @Test
-    fun theThreeChoicesAndTheLineFollowTheChoice() {
+    fun theChoicesAndTheLineFollowTheChoice() {
         val chosen = mutableListOf<Int>()
         compose.setContent {
             var days by remember { mutableIntStateOf(VoiceRecordingRules.DEFAULT_KEEP_DAYS) }
@@ -39,11 +39,11 @@ class RecordingKeepSectionTest {
             }
         }
         compose.onNodeWithText(VoiceRecordingRules.SETTING_TITLE).assertIsDisplayed()
-        compose.onNodeWithText(VoiceRecordingRules.settingLine(30)).assertIsDisplayed()
+        compose.onNodeWithText(VoiceRecordingRules.settingLine(7)).assertIsDisplayed()
         compose.onNodeWithContentDescription("${VoiceRecordingRules.SETTING_TITLE}: Don't keep").performClick()
         compose.waitUntil(3_000) { compose.onAllNodes(androidx.compose.ui.test.hasText(VoiceRecordingRules.settingLine(0))).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("${VoiceRecordingRules.SETTING_TITLE}: 30 days").performClick() // back
         compose.onNodeWithContentDescription("${VoiceRecordingRules.SETTING_TITLE}: 30 days").performClick() // already chosen: nothing
-        assertEquals(listOf(0, 30), chosen)
+        assertEquals(listOf(0, 7), chosen)
     }
 }

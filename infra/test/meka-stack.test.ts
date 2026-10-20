@@ -36,10 +36,10 @@ describe('MekaStack security and cost invariants (ADR-004)', () => {
     t.allResourcesProperties('AWS::SQS::Queue', { KmsMasterKeyId: Match.anyValue() });
   });
 
-  test("callers' recordings are kept at most 30 days (the bucket's backstop to deleting on Done)", () => {
+  test("callers' recordings are kept at most 8 days (the bucket's backstop to the 7-day sweep)", () => {
     t.hasResourceProperties('AWS::S3::Bucket', {
       LifecycleConfiguration: { Rules: Match.arrayWith([Match.objectLike({
-        Id: 'VoiceRecordings', Prefix: 'voice/', Status: 'Enabled', ExpirationInDays: 30, NoncurrentVersionExpiration: { NoncurrentDays: 1 },
+        Id: 'VoiceRecordings', Prefix: 'voice/', Status: 'Enabled', ExpirationInDays: 8, NoncurrentVersionExpiration: { NoncurrentDays: 1 },
       })]) },
     });
   });

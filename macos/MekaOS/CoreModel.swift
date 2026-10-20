@@ -2603,6 +2603,10 @@ final class CoreModel {
         }
     }
     func unblockCaller(_ key: String) { MekaHaptics.tick(); run { _ = try await $0.unblockCaller(key: key) } }
+    /// Delete recording in a call's detail (2026-10-20): shown as deleted at once, written after 5 s unless undone.
+    func deleteCallRecording(_ id: String) { MekaHaptics.light(); run { try await $0.deleteCallRecordingSoon(id: id) } }
+    /// Undo after Delete recording: the recording comes back, nothing was written.
+    func undoDeleteCallRecording(_ id: String) { MekaHaptics.light(); run { try await $0.undoDeleteCallRecording(id: id) } }
     /// Block in a call's detail (Activity → Calls, call notifications slice 4): the call's number goes on the list.
     func blockLoggedCaller(_ id: String) { MekaHaptics.light(); run { _ = try await $0.blockLoggedCaller(id: id) } }
     /// Block again on an unblocked row of Activity → Blocked calls (spam calls still ring, slice 4).
