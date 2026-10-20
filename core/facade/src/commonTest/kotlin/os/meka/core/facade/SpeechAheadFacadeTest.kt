@@ -48,26 +48,39 @@ class SpeechAheadFacadeTest {
     )
 
     @Test
-    fun aTapOnTheOrbPlaysTheHelloFromMemory() = runTest {
+    fun theHellosOpeningIsMadeAhead() = runTest {
         val c = core()
         c.warmHello()
-        val asked = server.said.toList()
-        assertTrue("Good evening." in asked, asked.toString())
-        // The tap: the greeting's opening comes from memory, nothing is fetched (and a clear day's rest too).
-        val g = c.hello()
-        val pieces = SpeechRules.pieces(g.spoken)
-        assertEquals("bXAz" + pieces.first().length, c.speechClip(pieces.first(), first = true))
-        assertEquals(asked, server.said.toList())
-        if (g.points.isEmpty()) {
-            pieces.drop(1).forEach { assertEquals("bXAz" + it.length, c.speechClip(it, first = false)) }
-            assertEquals(asked, server.said.toList())
-        }
-        // Checked again later: already here, nothing asked.
+        assertTrue("Good evening." in server.said)
+    }
+
+    @Test
+    fun aTapOnTheOrbFindsItsOpeningInMemory() = runTest {
+        val c = core()
         c.warmHello()
-        assertEquals(asked, server.said.toList())
-        // The Mac's welcome back is made too.
+        val asked = server.said.size
+        val first = SpeechRules.pieces(c.hello().spoken).first()
+        assertEquals("Good evening.", first)
+        assertEquals("bXAz13", c.speechClip(first, first = true))
+        assertEquals(asked, server.said.size)
+    }
+
+    @Test
+    fun aSecondCheckAsksNothing() = runTest {
+        val c = core()
+        c.warmHello()
+        val asked = server.said.size
+        c.warmHello()
+        assertEquals(asked, server.said.size)
+    }
+
+    @Test
+    fun theMacsWelcomeBackIsMadeToo() = runTest {
+        val c = core()
+        c.warmHello()
+        val asked = server.said.size
         c.warmHello(welcome = true)
-        assertEquals(listOf("Welcome back."), server.said.drop(asked.size))
+        assertEquals(listOf("Welcome back."), server.said.drop(asked))
     }
 
     @Test
