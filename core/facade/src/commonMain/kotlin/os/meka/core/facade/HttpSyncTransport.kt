@@ -623,21 +623,21 @@ class HttpSyncTransport(
         val max = os.meka.core.domain.MailAttachmentRules.MAX_BYTES
         return when (resp.status.value) {
             401 -> throw AuthRejectedException("HTTP 401 from ${codec.ATTACHMENT_PATH}")
-            codec.STATUS_GONE -> codec.AttachmentFetch(states.GONE)
-            codec.STATUS_RECONNECT -> codec.AttachmentFetch(states.RECONNECT)
-            codec.STATUS_TOO_BIG -> codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
-            codec.STATUS_REFUSED -> codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.REFUSED)
+            codec.STATUS_GONE -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(states.GONE)
+            codec.STATUS_RECONNECT -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(states.RECONNECT)
+            codec.STATUS_TOO_BIG -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
+            codec.STATUS_REFUSED -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.REFUSED)
             in 200..299 -> {
                 val size = resp.contentLength()
-                if (size != null && size > max) return codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
+                if (size != null && size > max) return os.meka.core.wire.MailMessageCodec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
                 val bytes = resp.readRawBytes()
                 when {
-                    bytes.isEmpty() -> codec.AttachmentFetch(states.FAILED)
-                    bytes.size > max -> codec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
-                    else -> codec.AttachmentFetch(states.OK, bytes)
+                    bytes.isEmpty() -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(states.FAILED)
+                    bytes.size > max -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(os.meka.core.domain.MailAttachmentRules.TOO_BIG)
+                    else -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(states.OK, bytes)
                 }
             }
-            else -> codec.AttachmentFetch(states.FAILED)
+            else -> os.meka.core.wire.MailMessageCodec.AttachmentFetch(states.FAILED)
         }
     }
 
