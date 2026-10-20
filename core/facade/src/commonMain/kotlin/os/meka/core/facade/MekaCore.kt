@@ -7948,6 +7948,10 @@ class MekaCore(
             val routeLines = os.meka.core.domain.RouteRules.askLines(lineStatus.snapshot(), nowMs(), cal, officeToday())
             // Travel mode completeness, slice 3: the trip destination's days, while away there or the day before.
             val tripLines = os.meka.core.domain.TripWeatherRules.askLines(tripWeather.forecast(), trips.items(), cal.epochDayOf(nowMs()), tripClocks)
+            // The companion, slice 4: the days the question names, with their events and tasks.
+            val askDays = os.meka.core.domain.DayAskRules.range(q, cal.epochDayOf(nowMs()))
+            val askDayEvents = askDays?.let { os.meka.core.domain.DayAskRules.events(it, currentEvents(), cal.epochDayOf(nowMs()), cal) }.orEmpty()
+            val askDayTasks = askDays?.let { os.meka.core.domain.DayAskRules.tasks(it, tasks.all(), cal.epochDayOf(nowMs()), cal) }.orEmpty()
             os.meka.core.domain.AskRules.context(_today.value, nowMs(), cal,
                 os.meka.core.domain.WeatherRules.askLines(weather.forecast(), nowMs(), cal)
                     .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - hereLines.size - routeLines.size - tripLines.size) +
@@ -8008,7 +8012,11 @@ class MekaCore(
                 // Edit your calendars, completeness slice 4: events Navilife may move get a handle, and "move the dentist
                 // to 4pm" carries the coming events it names, so the answer can offer a Move card.
                 movable = { e -> os.meka.core.domain.EventAskRules.movable(e, nowMs(), cal, ::accountEditable) },
-                ahead = os.meka.core.domain.EventAskRules.ahead(q, currentEvents(), nowMs(), cal, ::accountEditable))
+                ahead = os.meka.core.domain.EventAskRules.ahead(q, currentEvents(), nowMs(), cal, ::accountEditable),
+                // The companion, slice 4: the days the question names ("what's on Thursday?", "am I free next weekend?"),
+                // looked up here in his calendar and tasks, so the answer comes from his own data without the server reading it.
+                days = askDays, dayLines = askDays?.let { r -> os.meka.core.domain.DayAskRules.askLines(r, askDayEvents, askDayTasks, cal.epochDayOf(nowMs()), cal) }.orEmpty(),
+                dayEvents = askDayEvents, dayTasks = askDayTasks)
                 // The companion, slice 3: "sir" when he chose it in Settings → Voice.
                 .copy(callSir = mekaVoice.callsSir())
         }

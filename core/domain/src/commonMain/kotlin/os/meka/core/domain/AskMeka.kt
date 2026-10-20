@@ -11,7 +11,7 @@ package os.meka.core.domain
  */
 
 /** What a line of the context is about. The wire names are what the server and the model see. */
-enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca") }
+enum class AskItemKind(val wire: String) { NEEDS_YOU("needs_you"), TASK("task"), DONE("done"), EVENT("event"), WEATHER("weather"), SHOPPING("shopping"), SCHOOL("school"), MEALS("meals"), DATE_NIGHT("date_night"), RENEWALS("renewals"), WINS("wins"), QUEUE("queue"), LEAVE("leave"), FACTS("facts"), PROTECTED("protected"), ERRANDS("errands"), APPOINTMENTS("appointments"), CHECKLISTS("checklists"), GOALS("goals"), BINS("bins"), CAR("car"), LIFE_ADMIN("life_admin"), GIFTS("gifts"), PEOPLE("people"), TRIPS("trips"), NOTIFICATIONS("notifications"), COMMUTE("commute"), MAIL("mail"), HELP("help"), KIDS("kids"), BARCA("barca"), DAYS("days") }
 
 /** One line of what MEKA sends with a question. [ref] is a task's handle on this device ("t1"), empty for others. */
 data class AskItem(val ref: String, val kind: AskItemKind, val line: String)
@@ -270,6 +270,7 @@ object AskRules {
                 mail: List<String> = emptyList(), help: List<String> = emptyList(),
                 kids: List<String> = emptyList(), kidsFromOthers: Boolean = false,
                 barca: List<String> = emptyList(),
+                days: AskDays? = null, dayLines: List<String> = emptyList(), dayEvents: List<CalendarEvent> = emptyList(), dayTasks: List<Task> = emptyList(),
                 movable: (CalendarEvent) -> Boolean = { false }, ahead: List<CalendarEvent> = emptyList()): AskContext {
         val day = cal.epochDayOf(nowMs)
         val ymd = CivilDate.fromEpochDay(day)
@@ -389,7 +390,18 @@ object AskRules {
         // Barça match day, slice 3 ([BarcaAskRules.askLines]): only with a question about Barça or the match; the kick-off,
         // the UK channels and the score were read from public web pages, so they make the context untrusted.
         val barcaLines = barca.take(BarcaAskRules.ASK_LINES).map { AskItem("", AskItemKind.BARCA, line(it)) }
-        val tail = helpLines + notifyLines + mailLines + barcaLines + kidLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
+        // The companion, slice 4 ([DayAskRules]): the days the question names, looked up on the device in his calendar
+        // and tasks; their events and tasks keep their handles, so a move or a done still comes back as a card. Event
+        // titles can be other people's words, so they make the context untrusted. First in the tail: they answer it.
+        val dayItems = if (days == null) emptyList() else
+            dayLines.map { AskItem("", AskItemKind.DAYS, line(it)) } +
+                dayEvents.filter { d -> today.events.none { it.id == d.id } && ahead.none { it.id == d.id } }
+                    .map { e -> AskItem(eventRef(e), AskItemKind.EVENT, line(DayAskRules.eventLine(e, days, cal))) } +
+                dayTasks.map { t ->
+                    if (t.lifecycle == Lifecycle.DONE) AskItem("", AskItemKind.DONE, line(t.title, DayAskRules.taskWhen(t, day, cal)))
+                    else AskItem(ref(t), AskItemKind.TASK, line(t.title, DayAskRules.taskWhen(t, day, cal)))
+                }
+        val tail = dayItems + helpLines + notifyLines + mailLines + barcaLines + kidLines + commuteLines + listOfNotNull(shop, dinners, evening, adminHour) + shield + errandLines + listLines + goalLines + binLines + carLines + giftLines + peopleLines + tripLines + visits + factLines + radar + winLog + saved + leaveLines + schoolYear + forecast
         // Today's own lines keep room for at least [TODAY_ROOM] (the tail's last lines, the forecast's, go first), so a
         // full tail never pushes the context past [MAX_ITEMS].
         val tailKept = tail.take(MAX_ITEMS - minOf(items.size, TODAY_ROOM))
@@ -397,7 +409,7 @@ object AskRules {
         val keptRefs = kept.map { it.ref }.toSet()
         // Things his wife added are someone else's words, like a calendar invitation's title.
         val fromOthers = shop != null && shopping.toBuy.any { ShoppingRules.byName(it.by) != null }
-        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty())
+        return AskContext(dateIso, nowLine, kept, ids.filterKeys { it in keptRefs }, eventRefs = eventRefs.filterKeys { it in keptRefs }, untrusted = today.events.isNotEmpty() || ahead.isNotEmpty() || fromOthers || (dinners != null && mealsFromOthers) || saved.isNotEmpty() || mailLines.isNotEmpty() || (kidLines.isNotEmpty() && kidsFromOthers) || barcaLines.isNotEmpty() || dayItems.any { it.kind == AskItemKind.EVENT })
     }
 
     /** "Shopping list · 3 to buy: milk, eggs, bread" / "Shopping list · nothing to buy". */

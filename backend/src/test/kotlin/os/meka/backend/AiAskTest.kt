@@ -266,4 +266,19 @@ class AiAskTest {
         // AI off: no answer, nothing said.
         assertEquals(null, AskService(null, { _, _ -> error("not asked") }).ask(spoken).firstAudio)
     }
+
+    @Test
+    fun theDaysAQuestionNamesTravelAsDataAndTheirHandlesStillWork() {
+        // The companion, slice 4: "what's on Thursday?" carries Thursday, looked up on the device.
+        val model = FakeModel(answered("""{"answer":"The dentist at 15:00 and the MOT to book.","actions":[{"kind":"move_event","ref":"e1","time":"16:00"}]}"""))
+        val thursday = request.copy(question = "What's on Thursday?", items = request.items + listOf(
+            AskCodec.Item("", "days", "Days asked about · Thu 22 Oct · 1 event · 1 task"),
+            AskCodec.Item("e1", "event", "Thu 22 Oct 15:00–16:00 · Dentist · Personal"),
+        ))
+        val r = AskService(model).ask(AskCodec.decodeRequest(AskCodec.encodeRequest(thursday)))
+        assertEquals(listOf(AskCodec.Action("move_event", ref = "e1", time = "16:00")), r.actions)
+        val sent = model.asked.single()
+        assertTrue("Its days lines" in sent.system)
+        assertTrue("days: Days asked about · Thu 22 Oct · 1 event · 1 task" in sent.turns.last().text, sent.turns.last().text)
+    }
 }
