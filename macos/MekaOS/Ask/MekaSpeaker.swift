@@ -69,13 +69,17 @@ final class MekaSpeaker {
         let id = line
         let before = task
         speaking = true
+        // The orb speed pass, slice 3: the rest's first piece is asked for now, while the first sentence still plays,
+        // so there is no pause between them (the speaker's own ask joins this request or finds it ready).
+        let ahead: Task<Void, Never>? = text.isEmpty ? nil : Task { [weak self] in await self?.model?.speechPrefetch(text) }
         task = Task { [weak self] in
             await withTaskCancellationHandler {
                 await before?.value
             } onCancel: {
                 before?.cancel()
+                ahead?.cancel()
             }
-            guard let self, !Task.isCancelled else { return }
+            guard let self, !Task.isCancelled else { ahead?.cancel(); return }
             if !text.isEmpty { await self.speakNow(text, reading: false) }
             guard !Task.isCancelled, id == self.line else { return }
             self.speaking = false

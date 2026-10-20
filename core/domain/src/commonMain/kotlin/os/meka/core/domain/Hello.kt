@@ -97,6 +97,28 @@ object HelloRules {
     /** His first name as he typed it in About you; null when blank. */
     fun firstName(shown: String?): String? = shown?.trim()?.split(' ')?.firstOrNull()?.takeIf { it.isNotBlank() }
 
+    /**
+     * The orb speed pass, slice 3: how far ahead the hello's openers are made in Navilife's voice ([warmLines]), and
+     * how often a device checks they're still there (already-made ones cost nothing).
+     */
+    const val WARM_AHEAD_MIN = 60
+    const val WARM_EVERY_MS = 15 * 60_000L
+
+    /**
+     * The hello's spoken pieces worth having ready before a tap ([SpeechRules.pieces] of the greeting): for now and
+     * [WARM_AHEAD_MIN] later (so a change of part of the day is covered), the opening ("Good evening, Meka.") and the
+     * clear day's rest ("Nothing needs you. Your evening's clear. Anything you'd like?"); with [welcome] (the Mac's
+     * welcome back) its opening too. Only Navilife's own words: no point from his day is said ahead.
+     */
+    fun warmLines(minuteOfDay: Int, name: String?, welcome: Boolean): List<String> {
+        val clear = listOf(minuteOfDay, minuteOfDay + WARM_AHEAD_MIN).map { m ->
+            SpeechRules.pieces(greeting(HelloFacts(minuteOfDay = m.mod(1440), name = name)).spoken)
+        }
+        val back = if (welcome) listOf(greeting(HelloFacts(minuteOfDay, name, welcome = true)).opening) else emptyList()
+        // The openings first (what a tap says first), then the rest.
+        return (clear.mapNotNull { it.firstOrNull() } + back + clear.flatMap { it.drop(1) }).distinct()
+    }
+
     fun greeting(f: HelloFacts): HelloGreeting {
         val name = firstName(f.name)
         val opening = (if (f.welcome) WelcomeBackRules.OPENING else salutation(f.minuteOfDay)) + (name?.let { ", $it." } ?: ".")

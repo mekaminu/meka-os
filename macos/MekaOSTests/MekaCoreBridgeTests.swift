@@ -3328,4 +3328,15 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.ANSWER_TARGET_MS, 1_500)
         XCTAssertEqual(rules.HELLO_TARGET_MS, 600)
     }
+
+    /// The orb speed pass, slice 3: the hello's openers made ahead come first, are Navilife's own words, and include the
+    /// Mac's welcome back.
+    func testTheHellosOpenersAreMadeAhead() {
+        let lines = HelloRules.shared.warmLines(minuteOfDay: 19 * 60, name: "Alex", welcome: true)
+        XCTAssertEqual(lines.first, "Good evening, Alex.")
+        XCTAssertTrue(lines.contains("Welcome back, Alex."))
+        XCTAssertEqual(HelloRules.shared.WARM_EVERY_MS, 900_000)
+        XCTAssertEqual(SpeechRules.shared.AHEAD_AUDIO_MS, 10_000)
+    }
 }
+

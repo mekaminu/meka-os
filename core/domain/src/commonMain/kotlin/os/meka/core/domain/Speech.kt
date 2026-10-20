@@ -20,6 +20,11 @@ object SpeechRules {
     /** Later pieces are fetched while the one before plays; one this late hands the rest to the device's voice. */
     const val NEXT_AUDIO_MS = 6_000L
     /**
+     * The orb speed pass, slice 3: a clip asked for ahead of being said (the hello's openers, the rest of an answer
+     * while its first sentence plays) may take this long; nobody is waiting on it yet.
+     */
+    const val AHEAD_AUDIO_MS = 10_000L
+    /**
      * A long read (the morning brief's Listen, and after the wake alarm) waits this long for its first piece: Meka asked
      * for the brief and sees "Stop" at once, so a few seconds for a cold server beats the phone's voice for all of it.
      */

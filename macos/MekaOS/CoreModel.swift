@@ -2494,6 +2494,20 @@ final class CoreModel {
         _ = try? await core.warmVoice()
     }
 
+    /// The orb speed pass, slice 3: the hello's openers (this part of the day's and the next hour's, and the welcome
+    /// back) made ahead in Navilife's voice, so a click on the orb speaks with no voice fetch. Nothing crosses back.
+    func warmHello() async {
+        guard let core else { return }
+        _ = try? await core.warmHello(welcome: true)
+    }
+
+    /// The orb speed pass, slice 3: asks for `text`'s first piece in Navilife's voice ahead of being said (the rest of
+    /// an answer while its first sentence plays); the speaker's own ask then finds it ready. Only the String crosses.
+    func speechPrefetch(_ text: String) async {
+        guard let core else { return }
+        _ = try? await core.speechPrefetch(text: text)
+    }
+
     /// "Hello, Navilife": the greeting the orb says when clicked at rest, built by the core's rules (`HelloRules`; no AI
     /// call, nothing sent; his partner's open asks counted by the core). Only the String crosses back; nil when not
     /// connected or it couldn't be read.

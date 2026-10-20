@@ -115,6 +115,9 @@ class MekaSpeaker(
         val before = job
         val id = ++line
         speaking = true
+        // The orb speed pass, slice 3: the rest's first piece is asked for now, while the first sentence still plays, so
+        // there is no pause between them (the speaker's own ask below joins this request or finds it ready).
+        val ahead = if (text.isNotBlank()) scope.launch { core.speechPrefetch(text) } else null
         job = scope.launch {
             try {
                 before?.join()
@@ -127,7 +130,7 @@ class MekaSpeaker(
                 speaking = false
                 onDone()
             }
-        }.also { j -> j.invokeOnCompletion { if (it != null) before?.cancel() } }
+        }.also { j -> j.invokeOnCompletion { if (it != null) { before?.cancel(); ahead?.cancel() } } }
     }
 
     /**

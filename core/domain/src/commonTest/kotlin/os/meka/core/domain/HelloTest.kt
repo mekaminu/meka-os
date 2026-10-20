@@ -383,4 +383,28 @@ class HelloTest {
         assertEquals(List(3) { CardSlot.BELOW }, HelloCards.slots(5, wide = false))
         assertTrue(HelloCards.wide(700f)); assertFalse(HelloCards.wide(380f))
     }
+
+    @Test
+    fun theHellosOpenersAreMadeAheadForNowAndTheNextHour() {
+        // 16:30: this afternoon's and (within the hour) this evening's openings first, then each clear day's rest.
+        val lines = HelloRules.warmLines(16 * 60 + 30, "Alex Smith", welcome = false)
+        assertEquals(
+            listOf(
+                "Good afternoon, Alex.", "Good evening, Alex.",
+                "Nothing needs you. Your afternoon's clear. Anything you'd like?",
+                "Nothing needs you. Your evening's clear. Anything you'd like?",
+            ),
+            lines,
+        )
+        // Each is exactly a piece the hello says (so a tap finds it ready).
+        val spoken = SpeechRules.pieces(HelloRules.greeting(HelloFacts(minuteOfDay = 16 * 60 + 30, name = "Alex")).spoken)
+        assertTrue(lines.containsAll(spoken))
+        // Mid-evening: one part of the day, no repeats; the Mac adds its welcome back.
+        val mac = HelloRules.warmLines(evening, "Alex", welcome = true)
+        assertEquals(listOf("Good evening, Alex.", "Welcome back, Alex.", "Nothing needs you. Your evening's clear. Anything you'd like?"), mac)
+        // Past midnight wraps; no name, no placeholder; never a point from his day.
+        assertEquals("Good evening.", HelloRules.warmLines(23 * 60 + 30, null, welcome = false).first())
+        assertTrue(HelloRules.warmLines(4 * 60 + 30, null, false).contains("Good morning."))
+        assertTrue(lines.all { "need you" !in it || it.startsWith("Nothing") })
+    }
 }

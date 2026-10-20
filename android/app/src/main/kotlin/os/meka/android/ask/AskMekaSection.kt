@@ -176,6 +176,8 @@ fun AskMekaSection(
             },
         )
     }
+    // The orb speed pass, slice 3: the hello's openers made ahead, so a tap on the orb speaks with no voice fetch.
+    LaunchedEffect(talk) { talk.keepHelloWarm() }
     // "Hello, Navilife" slice 5: the docked orb in the bar follows this conversation (ENDED again once it's gone).
     val phaseApp = context.applicationContext as? os.meka.android.MekaApplication
     LaunchedEffect(talk.phase) { phaseApp?.talkPhase?.value = talk.phase }

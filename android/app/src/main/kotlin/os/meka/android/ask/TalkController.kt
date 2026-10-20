@@ -118,6 +118,18 @@ class TalkController(
         }
     }
 
+    /**
+     * The orb speed pass, slice 3: keeps the hello's openers ready in Navilife's voice while this screen lives
+     * ([MekaCore.warmHello]: this part of the day's and the next hour's), checked every
+     * [os.meka.core.domain.HelloRules.WARM_EVERY_MS]; ones already here cost nothing. Runs until cancelled.
+     */
+    suspend fun keepHelloWarm() {
+        while (true) {
+            core.warmHello()
+            kotlinx.coroutines.delay(os.meka.core.domain.HelloRules.WARM_EVERY_MS)
+        }
+    }
+
     /** Starts a conversation at [first] (a fresh one, or listening after the brief). */
     private fun begin(first: TalkStep) {
         if (active) return

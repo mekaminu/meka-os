@@ -99,7 +99,18 @@ final class TalkController {
     func attach(_ model: CoreModel) {
         self.model = model
         speaker.attach(model)
+        // The orb speed pass, slice 3: the hello's openers kept ready in Navilife's voice (checked every
+        // `HelloRules.WARM_EVERY_MS`; ones already here cost nothing), so a click on the orb speaks at once.
+        warmHello?.cancel()
+        warmHello = Task { [weak model] in
+            while !Task.isCancelled {
+                await model?.warmHello()
+                try? await Task.sleep(for: .milliseconds(HelloRules.shared.WARM_EVERY_MS))
+            }
+        }
     }
+
+    @ObservationIgnored private var warmHello: Task<Void, Never>?
 
     /// Starts a conversation: asks for the microphone and speech recognition the first time.
     func start() { begin(afterBrief: false) }

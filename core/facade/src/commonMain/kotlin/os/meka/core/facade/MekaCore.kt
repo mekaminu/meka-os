@@ -308,6 +308,11 @@ class MekaCore(
     private val speechAnswerClips = LinkedHashSet<String>()
     private var speechQuietUntilMs = 0L
     private var speechWarmed = false
+    /**
+     * The orb speed pass, slice 3: clip requests on their way, by cache key (single flight), so a clip asked for ahead
+     * ([speechPrefetch]: the hello's openers, the rest of an answer) and the speaker's own ask share one request.
+     */
+    private val speechInFlight = HashMap<String, kotlinx.coroutines.CompletableDeferred<String?>>()
     private val speechTimings = ArrayDeque<os.meka.core.domain.SpeechTiming>()
     /** Voice completeness: the last request couldn't reach the server, the offline note was said, clips go over Bluetooth. */
     private var speechUnreachable = false
@@ -8599,7 +8604,7 @@ class MekaCore(
     }
 
     private suspend fun fetchSpeechClip(text: String, first: Boolean, reading: Boolean, hold: Boolean): String? {
-        val api = speechApi ?: return null
+        if (speechApi == null) return null
         val words = text.trim().takeIf { it.isNotEmpty() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return null
         val voice = onCore { speechVoiceNow() } ?: return null
         onCore {
@@ -8613,6 +8618,16 @@ class MekaCore(
             }
         }?.let { return it }
         val wait = os.meka.core.domain.SpeechRules.budgetMs(first, reading, hold)
+        // The orb speed pass, slice 3: asked for ahead and still on its way: wait for that request, not a second one.
+        onCore { speechInFlight[os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)] }?.let { ahead ->
+            return withTimeoutOrNull(wait) { ahead.await() }
+        }
+        return requestSpeechClip(words, voice, wait)
+    }
+
+    /** Asks the server to say [words] in [voice] within [wait]; a clip that comes back is kept in memory. Never throws. */
+    private suspend fun requestSpeechClip(words: String, voice: SpeechVoice, wait: Long): String? {
+        val api = speechApi ?: return null
         val started = nowMs()
         // Set here and kept on the core below: no core hop inside the timeout (a test's virtual clock would fire it).
         var unreachable = false
@@ -9515,7 +9530,48 @@ class MekaCore(
     suspend fun warmVoice() {
         if (speechApi == null || onCore { speechWarmed }) return
         onCore { speechWarmed = true }
-        os.meka.core.domain.SpeechRules.COMMON.forEach { if (speechClip(it, first = false) == null) return }
+        os.meka.core.domain.SpeechRules.COMMON.flatMap { os.meka.core.domain.SpeechRules.pieces(it) }.forEach { if (!speechPrefetch(it)) return }
+    }
+
+    /**
+     * The orb speed pass, slice 3: asks for [text]'s first piece ([os.meka.core.domain.SpeechRules.pieces]) in
+     * Navilife's voice now, ahead of being said, and keeps it in memory, so [speechClip] plays it at once (or joins the
+     * request while it is still on its way). Nothing when the device's voice is chosen, the server is resting, it is
+     * already here or already asked for. Not counted in the speed log. True when the clip is here. Never throws.
+     */
+    suspend fun speechPrefetch(text: String): Boolean {
+        if (speechApi == null) return false
+        val words = os.meka.core.domain.SpeechRules.pieces(text).firstOrNull()
+            ?.takeIf { it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return false
+        val voice = onCore { speechVoiceNow() } ?: return false
+        val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)
+        val mine = kotlinx.coroutines.CompletableDeferred<String?>()
+        val other = onCore {
+            if (speechClips.containsKey(key)) return@onCore null
+            speechInFlight[key] ?: run { speechInFlight[key] = mine; mine }
+        } ?: return true
+        if (other !== mine) return other.await() != null
+        try {
+            val clip = requestSpeechClip(words, voice, os.meka.core.domain.SpeechRules.AHEAD_AUDIO_MS)
+            mine.complete(clip)
+            return clip != null
+        } finally {
+            mine.complete(null)
+            onCore { if (speechInFlight[key] === mine) speechInFlight.remove(key) }
+        }
+    }
+
+    /**
+     * The orb speed pass, slice 3: the hello's spoken openers ([os.meka.core.domain.HelloRules.warmLines]: this part of
+     * the day's and the next hour's, the clear-day line and, on the Mac, [welcome] back) made ahead in Navilife's voice,
+     * so a tap on the orb speaks at once with no voice fetch. Already here: nothing is asked. Never throws.
+     */
+    suspend fun warmHello(welcome: Boolean = false) {
+        if (speechApi == null) return
+        val lines = onCore {
+            os.meka.core.domain.HelloRules.warmLines(ZoneCalendar(timeZone).minuteOfDay(nowMs()), aboutYou.profile().shownName, welcome)
+        }
+        lines.forEach { if (!speechPrefetch(it)) return }
     }
 
     /**
