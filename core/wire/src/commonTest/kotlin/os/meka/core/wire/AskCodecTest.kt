@@ -204,4 +204,20 @@ class AskCodecTest {
         val big = AskCodec.encodeResponse(answer.copy(firstAudio = "a".repeat(SpeechCodec.MAX_AUDIO_B64 + 1)))
         assertEquals(null, AskCodec.decodeResponse(big).firstAudio)
     }
+
+    @Test
+    fun aLiveAnswersSourcesComeBackWholeAndHttpsOnly() {
+        // The companion, slice 2.
+        val answer = AskCodec.Response(AskCodec.Response.ANSWERED, "The BBC says it's off.", sources = listOf(AskCodec.Source("Strike off", "https://bbc.co.uk/a")))
+        assertEquals(answer, AskCodec.decodeResponse(AskCodec.encodeResponse(answer)))
+        assertFalse(AskCodec.encodeResponse(answer.copy(sources = emptyList())).contains("sources"))
+        val odd = AskCodec.decodeResponse(
+            """{"w":1,"state":"answered","answer":"x","actions":[],"sources":[{"title":"Ok","url":"https://a.example.com"},{"title":"Plain","url":"http://b.example.com"},
+               {"title":"Script","url":"javascript:alert(1)"},{"url":"https://c.example.com"},{"title":"Space","url":"https://d.example.com/a b"},"junk",
+               {"title":"Two","url":"https://e.example.com"},{"title":"Three","url":"https://f.example.com"},{"title":"Four","url":"https://g.example.com"}]}""",
+        )
+        assertEquals(listOf("https://a.example.com", "https://e.example.com", "https://f.example.com"), odd.sources.map { it.url })
+        // An older server's answer simply has none.
+        assertEquals(emptyList<AskCodec.Source>(), AskCodec.decodeResponse("""{"w":1,"state":"answered","answer":"x","actions":[]}""").sources)
+    }
 }

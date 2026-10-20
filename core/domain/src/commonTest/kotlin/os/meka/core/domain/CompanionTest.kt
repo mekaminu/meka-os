@@ -55,4 +55,51 @@ class CompanionTest {
             AiTodayRules.line(listOf(AiDayUse("ask", 1, 1_000), AiDayUse(CompanionRules.FEATURE, 2, 3_000), AiDayUse("ask.talk", 1, 1_000))),
         )
     }
+
+    @Test
+    fun questionsAboutTheWorldAreSearchedAndHisOwnLifeNeverIs() {
+        // The companion, slice 2: live world facts.
+        listOf(
+            "What's the latest news on the rail strike?",
+            "Who won the Arsenal game?",
+            "What's the weather in Madrid this weekend?",
+            "Forecast for Lisbon on Friday",
+            "What's the price of bitcoin right now?",
+            "When does the new Bond film come out?",
+            "Is the Science Museum open today?",
+        ).forEach { assertEquals(it, LiveFactsRules.query(it), it) }
+        listOf(
+            "What's on today?",
+            "Why is the sky blue?",
+            "What's the latest on my car insurance?",
+            "Any news from our school?",
+            "What's the weather in the morning?",
+            "Forecast for tomorrow",
+            "Is it going to rain at training?",
+            "Latest score for Barça?",
+            "What's the latest news about Navilife",
+            "Latest news on 07700 900123",
+            "Any news for someone@example.com",
+            "Weather in AB1 2CD right now",
+            "",
+        ).forEach { assertEquals(null, LiveFactsRules.query(it), it) }
+        assertEquals(LiveFactsRules.MAX_QUERY, LiveFactsRules.query("latest news " + "about trains ".repeat(30))!!.length)
+    }
+
+    @Test
+    fun sourcesAreHttpsOneASiteAndNamedByTheirSite() {
+        assertEquals("bbc.co.uk", LiveFactsRules.site("https://www.bbc.co.uk/news/x?y=1"))
+        assertEquals(null, LiveFactsRules.site("http://bbc.co.uk"))
+        assertEquals(null, LiveFactsRules.site("javascript:alert(1)"))
+        val s = LiveFactsRules.sources(listOf(
+            "Storm Amy: what we know" to "https://www.bbc.co.uk/news/1",
+            "Another BBC page" to "https://bbc.co.uk/news/2",
+            "Old" to "http://plain.example.com",
+            "  " to "https://met.example.com/forecast",
+            "Third" to "https://third.example.com",
+        ))
+        assertEquals(listOf("bbc.co.uk", "met.example.com"), s.map { it.site })
+        assertEquals("bbc.co.uk · Storm Amy: what we know", LiveFactsRules.line(s[0]))
+        assertEquals("met.example.com", LiveFactsRules.line(s[1]))
+    }
 }

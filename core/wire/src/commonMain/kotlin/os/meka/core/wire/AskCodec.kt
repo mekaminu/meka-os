@@ -89,6 +89,11 @@ object AskCodec {
     data class Response(
         val state: String, val answer: String? = null, val actions: List<Action> = emptyList(), val reason: String? = null,
         val firstText: String? = null, val firstAudio: String? = null, val firstVoice: String? = null,
+        /**
+         * The companion, slice 2 (live world facts): the web results the answer drew on (title and https URL), at most
+         * [MAX_SOURCES]. Left out of the JSON when empty; an older device simply ignores it.
+         */
+        val sources: List<Source> = emptyList(),
     ) {
         companion object {
             const val ANSWERED = "answered"
@@ -97,6 +102,13 @@ object AskCodec {
             const val FAILED = "failed"
         }
     }
+
+    /** One web result an answer drew on: its [title] and its https [url]. */
+    data class Source(val title: String, val url: String)
+
+    const val MAX_SOURCES = 3
+    const val MAX_SOURCE_TITLE = 160
+    const val MAX_SOURCE_URL = 500
 
     fun encodeRequest(r: Request): String = buildJsonObject {
         put("w", WireCodec.VERSION)
@@ -160,6 +172,16 @@ object AskCodec {
         Request(q, date, now, items, history, voice, speak, speakVoice)
     }
 
+    /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */
+    private fun sourcesOf(o: JsonObject): List<Source> =
+        (o["sources"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val so = e as? JsonObject ?: return@mapNotNull null
+            val title = so.optStr("title")?.trim()?.takeIf { it.length <= MAX_SOURCE_TITLE } ?: return@mapNotNull null
+            val url = so.optStr("url")?.trim()?.takeIf { it.startsWith("https://") && it.length <= MAX_SOURCE_URL && it.none(Char::isWhitespace) }
+                ?: return@mapNotNull null
+            Source(title, url)
+        }.take(MAX_SOURCES)
+
     /** A voice id as [SpeechCodec] takes it ("Amy", "Aoede", "Aoede-US"). */
     private val SPEAK_VOICE = Regex("[A-Za-z]{2,20}(-US)?")
 
@@ -174,6 +196,9 @@ object AskCodec {
             put("firstAudio", r.firstAudio)
             r.firstVoice?.let { put("firstVoice", it) }
         }
+        if (r.sources.isNotEmpty()) {
+            putJsonArray("sources") { r.sources.take(MAX_SOURCES).forEach { src -> addJsonObject { put("title", src.title); put("url", src.url) } } }
+        }
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("ask response") {
@@ -184,6 +209,7 @@ object AskCodec {
             answer = o.optStr("answer"),
             actions = actionsOf(o),
             reason = o.optStr("reason"),
+            sources = sourcesOf(o),
         ).let { r ->
             // The first piece's clip: kept only whole and within SpeechCodec's limits, else simply not there.
             val text = o.optStr("firstText")?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT }

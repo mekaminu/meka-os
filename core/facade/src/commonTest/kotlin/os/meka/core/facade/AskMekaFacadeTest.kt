@@ -66,6 +66,21 @@ class AskMekaFacadeTest {
     )
 
     @Test
+    fun aLiveAnswerShowsItsSourcesHttpsOnlyAndOneASite() = runTest {
+        // The companion, slice 2: where a live answer came from, as cards under the words.
+        val c = core()
+        server.reply = AskReply.Answered(
+            "The BBC says the strike is off.", emptyList(),
+            sources = listOf("Strike off" to "https://www.bbc.co.uk/a", "Also BBC" to "https://bbc.co.uk/b", "Plain" to "http://x.example.com", "Met" to "https://met.example.com/f"),
+        )
+        val out = assertIs<AskOutcome.Answered>(c.askMeka("What's the latest on the rail strike?"))
+        assertEquals(listOf("bbc.co.uk · Strike off", "met.example.com · Met"), out.answer.sources.map { os.meka.core.domain.LiveFactsRules.line(it) })
+        assertEquals("https://www.bbc.co.uk/a", out.answer.sources.first().url)
+        server.reply = AskReply.Answered("Nothing yet.", emptyList())
+        assertTrue(assertIs<AskOutcome.Answered>(c.askMeka("Why is the sky blue?")).answer.sources.isEmpty())
+    }
+
+    @Test
     fun aQuestionCarriesTodayByHandlesAndCardsComeBackChecked() = runTest {
         val c = core()
         val id = c.addTask("Book dentist")

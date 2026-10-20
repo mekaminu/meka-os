@@ -66,3 +66,86 @@ object CompanionRules {
     private fun norm(s: String): String =
         s.lowercase().replace('’', '\'').replace(Regex("[^a-z0-9' ]"), " ").replace(Regex("\\s+"), " ").trim()
 }
+
+/** One web result an answer drew on, as Ask shows it under the words: the [site] ("bbc.co.uk"), its [title] and [url]. */
+data class AskSource(val site: String, val title: String, val url: String)
+
+/**
+ * The companion, slice 2 (live world facts): news, scores, prices, the weather somewhere else and anything current are
+ * looked up on the web (the server's Brave Search key, the one the spam-call lookup uses) and the answer names its
+ * source on a card. Non-AI, pure. Only the question's own words are searched, and only when it reads as a question about
+ * the world: anything about his own life ("my", "our", his family), anything carrying an address, a number or an email,
+ * and the home weather the <today> block already has are never sent. No URL is ever fetched; a source card opens in the
+ * browser on his tap.
+ */
+object LiveFactsRules {
+    /** The most searches a day (the Brave key's free credit also pays for the spam-call lookup). */
+    const val MAX_PER_DAY = 40
+    /** The longest query sent. */
+    const val MAX_QUERY = 120
+    /** The most results the model reads, and the most source cards shown. */
+    const val MAX_RESULTS = 4
+    const val MAX_SOURCES = 2
+    const val MAX_TITLE = 120
+    const val MAX_SNIPPET = 320
+
+    /** Words that ask for something current. */
+    private val LIVE = listOf(
+        "news", "headline", "headlines", "latest", "score", "scores", "who won", "won the", "result of", "results of",
+        "price of", "share price", "stock price", "exchange rate", "bitcoin", "right now", "at the moment", "currently", "this week in", "happening in", "going on in",
+        "election", "prime minister", "president of", "release date", "come out", "comes out", "open today", "opening hours",
+        "is it open", "still open", "league table", "top of the league", "fixtures for", "transfer", "strike", "strikes",
+    )
+
+    /** Words that make it about his own life, which is never searched. */
+    private val PERSONAL = setOf(
+        "my", "mine", "our", "ours", "me", "wife", "husband", "son", "sons", "boys", "kids", "children", "daughter", "mum",
+        "dad", "navilife", "meka", "barca", "barça", "barcelona's",
+    )
+
+    /**
+     * The query to search for [question], or null when it shouldn't go to the web: not about something current, about
+     * his own life, carrying a number of five or more digits, an email address or a postcode, or the home weather.
+     */
+    fun query(question: String): String? {
+        val q = question.lowercase().replace('’', '\'')
+        val words = q.replace(Regex("[^a-z0-9'ç ]"), " ").split(' ').filter { it.isNotEmpty() }
+        if (words.isEmpty()) return null
+        if (words.any { it in PERSONAL }) return null
+        if ('@' in q || Regex("""\d{5,}""").containsMatchIn(q.replace(" ", "")) || POSTCODE.containsMatchIn(q)) return null
+        val flat = " " + words.joinToString(" ") + " "
+        if (LIVE.none { " $it " in flat } && !elsewhereWeather(flat)) return null
+        val cleaned = question.replace(Regex("""^\s*(?:(?:hey|ok|okay|hi)\b[\s,]*)?""", RegexOption.IGNORE_CASE), "").replace(Regex("""\s+"""), " ").trim()
+        return cleaned.take(MAX_QUERY).trim().takeIf { it.length >= 3 }
+    }
+
+    /** "weather in Madrid", "forecast for Paris": somewhere named, not home's "forecast for tomorrow". */
+    private fun elsewhereWeather(flat: String): Boolean =
+        Regex(""" (weather|forecast|temperature|raining|rain|snowing|sunny) (in|for|at) ([a-z']+) """).findAll(flat).any { it.groupValues[3] !in WHEN }
+
+    private val WHEN = setOf(
+        "the", "this", "today", "tonight", "tomorrow", "morning", "afternoon", "evening", "training", "school", "work", "home",
+        "a", "an", "next", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "weekend", "half",
+    )
+
+    private val POSTCODE = Regex("""\b[a-z]{1,2}\d[a-z\d]?\s*\d[a-z]{2}\b""")
+
+    /** A result's site as a card names it: the host without "www." ("bbc.co.uk"); null for anything but https. */
+    fun site(url: String): String? {
+        if (!url.startsWith("https://")) return null
+        val host = url.removePrefix("https://").substringBefore('/').substringBefore('?').substringBefore(':').lowercase()
+        if (host.isEmpty() || '@' in host || '.' !in host) return null
+        return host.removePrefix("www.")
+    }
+
+    /** The sources as cards: https only, titled, no site twice, at most [MAX_SOURCES]. */
+    fun sources(raw: List<Pair<String, String>>): List<AskSource> =
+        raw.mapNotNull { (title, url) ->
+            val site = site(url) ?: return@mapNotNull null
+            val t = title.replace(Regex("""\s+"""), " ").trim().take(MAX_TITLE).ifEmpty { site }
+            AskSource(site, t, url)
+        }.distinctBy { it.site }.take(MAX_SOURCES)
+
+    /** The card's line: "bbc.co.uk · Storm Amy: what we know". */
+    fun line(s: AskSource): String = if (s.title == s.site) s.site else "${s.site} · ${s.title}"
+}

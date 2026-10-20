@@ -231,6 +231,29 @@ struct AskMekaSection: View {
                         .accessibilityLabel(label)
                         .staggeredAppear(reply.lines.count + reply.did.count + reply.cards.count + 1)
                     }
+                    // The companion, slice 2: where a live answer came from; a click opens it in the browser.
+                    ForEach(Array(reply.sources.enumerated()), id: \.offset) { k, src in
+                        let line = LiveFactsRules.shared.line(s: src)
+                        Button {
+                            MekaHaptics.light()
+                            if let url = URL(string: src.url) { NSWorkspace.shared.open(url) }
+                        } label: {
+                            HStack(spacing: MekaSpace.xs) {
+                                Text("SOURCE").font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                                Text(line).font(MekaType.body).foregroundStyle(palette.textSecondary).lineLimit(2)
+                                Spacer(minLength: 0)
+                                Text("›").font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            }
+                            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+                            .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+                        }
+                        .buttonStyle(MekaPressStyle())
+                        .accessibilityLabel("Source: " + line)
+                        .help(src.url)
+                        .staggeredAppear(reply.lines.count + reply.did.count + reply.cards.count + k)
+                    }
                     // Money manager (16): a money question while Money is locked; Touch ID, then the answer.
                     if let label = reply.unlockMoney {
                         Button {
@@ -327,7 +350,7 @@ struct AskMekaSection: View {
         talk.attach(model)
         talk.onAnswer = { q, out in
             let r: AskReplyView = switch onEnum(of: out) {
-            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney)
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney, sources: a.answer.sources)
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q

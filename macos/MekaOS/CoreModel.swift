@@ -2162,7 +2162,7 @@ final class CoreModel {
         if let out = asked {
             switch onEnum(of: out) {
             case .answered(let a):
-                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney)
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney, sources: a.answer.sources)
             case .unavailable(let u):
                 reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
@@ -6103,6 +6103,8 @@ struct AskReplyView {
     var stillStuck: String? = nil
     /// Money manager (16): "Unlock Money to answer" under a money question asked while Money is locked.
     var unlockMoney: String? = nil
+    /// The companion, slice 2: the web results a live answer drew on, each a card that opens in the browser.
+    var sources: [AskSource] = []
 }
 
 /// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.

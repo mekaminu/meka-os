@@ -162,7 +162,7 @@ fun AskMekaSection(
                     a.helloGreeting.value = null
                     a.talkCardsDone.value = emptySet()
                     a.talkAnswerCards.value = ans?.cards.orEmpty()
-                    a.talkNeedsAsk.value = ans != null && (ans.help != null || ans.stillStuck != null || ans.unlockMoney != null)
+                    a.talkNeedsAsk.value = ans != null && (ans.help != null || ans.stillStuck != null || ans.unlockMoney != null || ans.sources.isNotEmpty())
                 }
             },
             onDid = { did, cards ->
@@ -504,6 +504,16 @@ fun AskMekaSection(
                                     ask(again = s.question)
                                 }
                             }
+                            // The companion, slice 2: where a live answer came from; a tap opens it in the browser.
+                            o.answer.sources.forEachIndexed { k, src ->
+                                AskSourceRow(src, Modifier.appear(rememberAppearance(lines.size + o.answer.did.size + o.answer.cards.size + k))) {
+                                    haptics.light()
+                                    runCatching {
+                                        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(src.url))
+                                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                                    }
+                                }
+                            }
                             // Money manager (16): a money question while Money is locked; the fingerprint, then the answer.
                             o.answer.unlockMoney?.let { label ->
                                 UnlockMoneyRow(label, Modifier.appear(rememberAppearance(lines.size))) { unlockMoney(s.question) }
@@ -537,6 +547,7 @@ const val ASK_AUTO_TAG = "ask-auto"
 const val ASK_TRUST_TAG = "ask-trust"
 const val ASK_HELP_TAG = "ask-help"
 const val ASK_STILL_STUCK_TAG = "ask-still-stuck"
+const val ASK_SOURCE_TAG = "ask-source"
 const val ASK_UNLOCK_MONEY_TAG = "ask-unlock-money"
 
 /**
@@ -682,6 +693,30 @@ private fun StillStuckRow(label: String, modifier: Modifier, onTap: () -> Unit) 
             .semantics { contentDescription = label }
             .padding(vertical = MekaSpace.xs),
     )
+}
+
+/**
+ * The companion, slice 2: a live answer's source, a quiet card under the words ("bbc.co.uk · Storm Amy: what we
+ * know ›"), a 48 dp target; context, so regular weight.
+ */
+@Composable
+private fun AskSourceRow(src: os.meka.core.domain.AskSource, modifier: Modifier, onTap: () -> Unit) {
+    val line = os.meka.core.domain.LiveFactsRules.line(src)
+    Row(
+        modifier.fillMaxWidth().padding(top = MekaSpace.xxs)
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .background(Meka.colors.surface)
+            .minTouch()
+            .clickable(role = Role.Button, onClick = onTap)
+            .testTag(ASK_SOURCE_TAG)
+            .semantics { contentDescription = "Source: $line" }
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("SOURCE", style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.padding(end = MekaSpace.xs))
+        Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f), maxLines = 2)
+        Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
+    }
 }
 
 /** Money manager (16): "Unlock Money to answer" in an accent pill, like Take me there. */

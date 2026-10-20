@@ -8043,7 +8043,8 @@ class MekaCore(
                     if (auto != null) { did += auto; false } else true
                 }
                 if (did.isNotEmpty()) activityChanged()
-                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did))
+                // The companion, slice 2: the web results the answer drew on, as source cards (https only, no site twice).
+                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did, sources = os.meka.core.domain.LiveFactsRules.sources(reply.sources)))
             }
         }
     }

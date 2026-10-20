@@ -125,6 +125,8 @@ fun Application.mekaSync(
     fuel: FuelFinder? = null,
     /** Spam-call lookup (2026-10-17): what the web says about an unknown caller's number; null leaves the route out. */
     numberLookup: NumberLookup? = null,
+    /** The companion, slice 2: web results for Ask's questions about something current; null answers without. */
+    liveFacts: LiveFacts? = null,
     /** Trading tracker, slice 8: a tax year's trades from Hyperliquid's public data for the export; null leaves the route out. */
     tradingExports: TradingExports? = null,
     /** The family page (family sharing with his wife, slice 2); null leaves its routes out. */
@@ -166,7 +168,7 @@ fun Application.mekaSync(
 
         // Public pages the OAuth consent screens link to (Google requires a home page and privacy policy to publish).
         get("/") {
-            call.respondText(resultPage("Navilife", "A private, single-household personal operating system. It is not a public service and has no sign-ups. Caller-number checks use the Brave Search API (search.brave.com)."), ContentType.Text.Html)
+            call.respondText(resultPage("Navilife", "A private, single-household personal operating system. It is not a public service and has no sign-ups. Caller-number checks and live answers use the Brave Search API (search.brave.com)."), ContentType.Text.Html)
         }
         get("/privacy") { call.respondText(resultPage("Navilife privacy policy", PRIVACY_TEXT), ContentType.Text.Html) }
         // Enable Banking's production application form asks for a terms URL too (2026-10-17).
@@ -634,7 +636,7 @@ fun Application.mekaSync(
                     val said = sp.say(SpeechCodec.Request(text, voice))
                     said.mp3?.takeIf { said.response.state == SpeechCodec.Response.SPOKEN }?.let { AskService.FirstClip(it, said.response.voice) }
                 }
-            }, budgetLevel = { ai.budget?.state()?.level })
+            }, budgetLevel = { ai.budget?.state()?.level }, live = liveFacts?.let { lf -> { q: String -> lf.look(q) } })
             post("/v1/ai/ask") {
                 val body = call.boundedBody()
                 call.device(devices, verifier, body, requireKey = true)
@@ -1151,9 +1153,10 @@ fun main(args: Array<String>) {
             val fuelFinder = System.getenv("MEKA_CAR_FUEL_SECRET")?.takeIf { it.isNotBlank() }?.let { FuelFinder.fromSecret(it) }
             // Spam-call lookup (2026-10-17): unknown callers' numbers searched on the web; off until the Brave key is in.
             // Made before the call assistant, which asks it about the caller while they say who they are.
-            val numberLookup = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let {
-                NumberLookup(BraveSearch.fromSecret(it), PostgresNumberLookupStore(ds))
-            }
+            val brave = System.getenv("MEKA_SEARCH_BRAVE_SECRET")?.takeIf { it.isNotBlank() }?.let { BraveSearch.fromSecret(it) }
+            val numberLookup = brave?.let { NumberLookup(it, PostgresNumberLookupStore(ds)) }
+            // The companion, slice 2: live world facts for Ask and Talk, through the same Brave key.
+            val liveFacts = brave?.let { LiveFacts(it) }
             val voice = voiceFromEnv(opStore, PostgresDeviceRegistry(ds), push, speech, ai, numberLookup)
             voice?.let { startRecordingSweep(it.assistant) }
             voice?.let { startCallClipsWarm(it) }
@@ -1214,13 +1217,14 @@ fun main(args: Array<String>) {
                         trains = { hh -> integrations?.trainsReport(hh) ?: "off · integrations not running" },
                         travel = { hh -> integrations?.travelReport(hh) ?: "off · integrations not running" },
                         voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" },
-                        spam = { hh -> numberLookup?.report(hh) ?: "off · the server has no Brave secret set" },
+                        spam = { hh -> (numberLookup?.report(hh) ?: "off · the server has no Brave secret set") + (liveFacts?.let { " · " + it.report() } ?: "") },
                         kms = { os.meka.backend.integrations.KmsMeter.reportLine() },
                         fuel = { fuelFinder?.report() ?: "off · the server has no Fuel Finder secret set" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     fuel = fuelFinder,
                     numberLookup = numberLookup,
+                    liveFacts = liveFacts,
                     tradingExports = tradingExports,
                     vaultFiles = VaultFiles.fromEnv(),
                 )

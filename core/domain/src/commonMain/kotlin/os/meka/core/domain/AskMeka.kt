@@ -134,6 +134,11 @@ data class AskAnswer(
      * app asks for the fingerprint, then the facade's unlockMoneyAsk, then the same question again. Null otherwise.
      */
     val unlockMoney: String? = null,
+    /**
+     * The companion, slice 2 (live world facts): the web results the answer drew on, at most
+     * [LiveFactsRules.MAX_SOURCES], each a card that opens in the browser on his tap. Empty for every other answer.
+     */
+    val sources: List<AskSource> = emptyList(),
 )
 
 /** What asking came to: an answer, or why there is none (AI off, the month's budget spent, offline, a failure). */

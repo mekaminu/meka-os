@@ -89,6 +89,8 @@ sealed class AskReply {
     data class Answered(
         val text: String, val actions: List<os.meka.core.domain.AskRawAction>,
         val firstText: String? = null, val firstAudio: String? = null,
+        /** The companion, slice 2: the web results the answer drew on, as (title, https URL); checked again on the core. */
+        val sources: List<Pair<String, String>> = emptyList(),
     ) : AskReply()
     /** [state]: off · over (the month's budget) · failed, with the server's [reason]. */
     data class Unavailable(val state: String, val reason: String?) : AskReply()
@@ -706,7 +708,7 @@ class HttpSyncTransport(
         return if (r.state == AskCodec.Response.ANSWERED) {
             AskReply.Answered(
                 r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
-                r.firstText, r.firstAudio,
+                r.firstText, r.firstAudio, r.sources.map { it.title to it.url },
             )
         } else {
             AskReply.Unavailable(r.state, r.reason)
