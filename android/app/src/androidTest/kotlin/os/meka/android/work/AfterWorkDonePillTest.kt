@@ -50,12 +50,12 @@ class AfterWorkDonePillTest {
         }
         val a = compose.onNodeWithTag("after-work-done-${short.cardKey}", useUnmergedTree = true).getBoundsInRoot()
         val b = compose.onNodeWithTag("after-work-done-${long.cardKey}", useUnmergedTree = true).getBoundsInRoot()
-        assertTrue("drawn height ${a.height}", a.height.value <= DonePillSpec.MAX_DRAWN_HEIGHT_DP + 0.5f)
-        assertTrue("drawn height ${b.height}", b.height.value <= DonePillSpec.MAX_DRAWN_HEIGHT_DP + 0.5f)
+        assertTrue("drawn height ${a.bottom - a.top}", (a.bottom - a.top).value <= DonePillSpec.MAX_DRAWN_HEIGHT_DP + 0.5f)
+        assertTrue("drawn height ${b.bottom - b.top}", (b.bottom - b.top).value <= DonePillSpec.MAX_DRAWN_HEIGHT_DP + 0.5f)
         assertEquals(a.left.value, b.left.value, 0.5f)
         assertEquals(a.right.value, b.right.value, 0.5f)
         val touch = compose.onNodeWithTag("after-work-done-${short.cardKey}-touch").getBoundsInRoot()
-        assertTrue("touch height ${touch.height}", touch.height.value >= DonePillSpec.TOUCH_DP - 0.5f)
+        assertTrue("touch height ${touch.bottom - touch.top}", (touch.bottom - touch.top).value >= DonePillSpec.TOUCH_DP - 0.5f)
         compose.onNodeWithContentDescription(AfterWorkDone.doneLabel(long)).performClick()
         compose.waitUntil(3_000) { done.isNotEmpty() }
         assertEquals(listOf(long.personName), done)
