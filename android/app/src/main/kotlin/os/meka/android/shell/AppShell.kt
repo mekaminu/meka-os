@@ -81,6 +81,10 @@ import os.meka.core.domain.FoldModeRules
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.activity.compose.BackHandler
 import os.meka.core.facade.MekaCore
+import os.meka.android.ask.DockedHelloOrb
+import os.meka.core.domain.DockTap
+import os.meka.core.domain.HelloDock
+import os.meka.core.domain.TalkStart
 import kotlinx.coroutines.delay
 import os.meka.android.MekaApplication
 import androidx.compose.ui.platform.LocalContext
@@ -153,6 +157,15 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         openDestination?.let { arrival = SharedMotion.arrivalAfterGo(it, arrival); current = it; app.openDestination.value = null }
     }
 
+    // "Hello, Navilife" slice 5: the docked orb in the bar says hello from anywhere (Ask comes forward and greets), or
+    // takes him back to the conversation that's running.
+    val talkPhase by app.talkPhase.collectAsState()
+    val dockTap: () -> Unit = {
+        if (HelloDock.tap(talkPhase) == DockTap.HELLO) app.talkNow.value = TalkStart.HELLO
+        if (current != ShellDestination.ASK) { arrival = SharedMotion.arrivalAfterGo(ShellDestination.ASK, arrival); current = ShellDestination.ASK }
+    }
+    val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(talkPhase, needsYou, dockTap, m) }
+
     // A place reached from Ask's More list sits behind Ask: back returns there.
     BackHandler(enabled = ShellNav.parent(current) != null) { ShellNav.parent(current)?.let(go) }
 
@@ -187,7 +200,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         }
         when (layout) {
             ShellLayout.RAIL -> Row(Modifier.fillMaxSize()) {
-                Rail(current, needsYou, go)
+                Rail(current, needsYou, go, dock)
                 Box(Modifier.width(1.dp).fillMaxHeight().background(Meka.colors.hairline))
                 content(Modifier.weight(1f).fillMaxHeight())
             }
@@ -199,7 +212,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
                     visible = !WindowInsets.isImeVisible,
                     enter = if (reduced) fadeIn(MekaMotion.appear(true)) else slideInVertically(MekaMotion.expand(false)) { it } + fadeIn(MekaMotion.appear(false)),
                     exit = if (reduced) fadeOut(MekaMotion.appear(true)) else slideOutVertically(MekaMotion.expand(false)) { it } + fadeOut(MekaMotion.appear(false)),
-                ) { BottomBar(current, needsYou, go) }
+                ) { BottomBar(current, needsYou, go, dock) }
             }
         }
     }
@@ -278,20 +291,28 @@ private fun BehindAsk(go: (ShellDestination) -> Unit, body: @Composable () -> Un
     }
 }
 
-/** Closed Fold: the four tabs (labels shrink a little if a narrow screen needs it), a pill springs to the lit one. */
+/**
+ * Closed Fold: the four tabs with the docked Hello orb in the middle (Today · Needs you · ◉ · Calendar · Ask; labels
+ * shrink a little if a narrow screen needs it), a pill springs to the lit tab. The orb sits a little above the bar's line.
+ */
 @Composable
-private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit) {
+private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit, dock: @Composable (Modifier) -> Unit) {
     val items = ShellNav.destinations(ShellLayout.BOTTOM_BAR)
     val lit = ShellNav.barSelection(current)
     BoxWithConstraints(
         Modifier.fillMaxWidth().background(Meka.colors.surface).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
     ) {
-        val slot = maxWidth / items.size
-        val x by animateDpAsState(slot * items.indexOf(lit), MekaMotion.replan(Meka.reducedMotion), label = "bar-pill")
+        val slot = maxWidth / HelloDock.SLOTS
+        val x by animateDpAsState(slot * HelloDock.slot(items.indexOf(lit)), MekaMotion.replan(Meka.reducedMotion), label = "bar-pill")
         Box(Modifier.offset(x = x).width(slot).height(BAR_ITEM_HEIGHT).padding(horizontal = MekaSpace.xxs)
             .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
-        Row(Modifier.fillMaxWidth()) {
-            items.forEach { d ->
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            items.forEachIndexed { i, d ->
+                if (i == HelloDock.SLOT) {
+                    Box(Modifier.weight(1f).height(BAR_ITEM_HEIGHT), contentAlignment = Alignment.Center) {
+                        dock(Modifier.offset(y = -HelloDock.RAISE.dp))
+                    }
+                }
                 NavItem(d, d == lit, needsYou, Modifier.weight(1f).height(BAR_ITEM_HEIGHT), go, fit = true)
             }
         }
@@ -300,17 +321,23 @@ private fun BottomBar(current: ShellDestination, needsYou: Int, go: (ShellDestin
 
 /** Open Fold: a quiet vertical rail; the lit pill springs between rows. */
 @Composable
-private fun Rail(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit) {
+private fun Rail(current: ShellDestination, needsYou: Int, go: (ShellDestination) -> Unit, dock: @Composable (Modifier) -> Unit) {
     val items = ShellNav.destinations(ShellLayout.RAIL)
     val rowHeight = 60.dp
     Box(Modifier.width(112.dp).fillMaxHeight().background(Meka.colors.surface).padding(vertical = MekaSpace.xl, horizontal = MekaSpace.xs)) {
         val lit = ShellNav.barSelection(current)
-        val y by animateDpAsState(rowHeight * items.indexOf(lit), MekaMotion.replan(Meka.reducedMotion), label = "rail-pill")
+        val y by animateDpAsState(rowHeight * HelloDock.slot(items.indexOf(lit)), MekaMotion.replan(Meka.reducedMotion), label = "rail-pill")
         Box(Modifier.offset(y = y).fillMaxWidth().height(rowHeight).padding(vertical = MekaSpace.xxs)
             .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised))
         Column(verticalArrangement = Arrangement.Top) {
             items.forEachIndexed { i, d ->
-                NavItem(d, d == lit, needsYou, Modifier.fillMaxWidth().height(rowHeight).appear(rememberAppearance(i)), go)
+                // "Hello, Navilife" slice 5: the docked orb between Needs you and Calendar, as in the closed Fold's bar.
+                if (i == HelloDock.SLOT) {
+                    Box(Modifier.fillMaxWidth().height(rowHeight).appear(rememberAppearance(i)), contentAlignment = Alignment.Center) {
+                        dock(Modifier)
+                    }
+                }
+                NavItem(d, d == lit, needsYou, Modifier.fillMaxWidth().height(rowHeight).appear(rememberAppearance(HelloDock.slot(i))), go)
             }
         }
     }

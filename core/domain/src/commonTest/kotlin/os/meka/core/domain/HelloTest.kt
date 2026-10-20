@@ -191,4 +191,26 @@ class HelloTest {
         assertEquals(labels.indexOf(HelloWakeRules.LABEL) + 1, labels.indexOf(WelcomeBackRules.LABEL))
         assertEquals("Safety", labels.last())
     }
+    @Test
+    fun theDockedOrbSitsBetweenNeedsYouAndCalendarAndSaysHelloOrGoesBack() {
+        // Today · Needs you · ◉ · Calendar · Ask
+        assertEquals(listOf(0, 1, 3, 4), (0 until 4).map(HelloDock::slot))
+        assertEquals(HelloDock.SLOT, (0 until HelloDock.SLOTS).first { it !in (0 until 4).map(HelloDock::slot) })
+        // Small, no dust: the 80-point constellation.
+        assertEquals(Constellation.POINTS_SMALL, Constellation.points(HelloDock.SIZE, mac = false))
+        assertEquals(0, Constellation.dust(HelloDock.SIZE))
+        // Amber while Needs you has cards, live while a conversation runs.
+        assertEquals(OrbState.NEEDS_YOU, HelloDock.state(TalkPhase.ENDED, 2))
+        assertEquals(OrbState.IDLE, HelloDock.state(TalkPhase.ENDED, 0))
+        assertEquals(OrbState.LISTENING, HelloDock.state(TalkPhase.LISTENING, 2))
+        assertEquals(HelloDock.LIVE_LEVEL, HelloDock.level(OrbState.LISTENING))
+        assertEquals(0f, HelloDock.level(OrbState.NEEDS_YOU))
+        // A tap says hello at rest; during a conversation it goes back to it.
+        assertEquals(DockTap.HELLO, HelloDock.tap(TalkPhase.ENDED))
+        assertEquals(DockTap.CONVERSATION, HelloDock.tap(TalkPhase.THINKING))
+        assertEquals("Say hello to Navilife", HelloDock.label(TalkPhase.ENDED, 0))
+        assertEquals("Say hello to Navilife · 1 thing needs you", HelloDock.label(TalkPhase.ENDED, 1))
+        assertEquals("Say hello to Navilife · 3 things need you", HelloDock.label(TalkPhase.ENDED, 3))
+        assertEquals("Navilife is listening · back to the conversation", HelloDock.label(TalkPhase.LISTENING, 3))
+    }
 }

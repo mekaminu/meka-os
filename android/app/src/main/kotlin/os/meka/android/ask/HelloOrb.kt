@@ -228,3 +228,26 @@ fun HelloWakeLine(listening: Boolean, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * "Hello, Navilife" slice 5 (placement B): the small docked orb in the middle of the bar (and the open Fold's rail) on
+ * every screen: the 80-point constellation at [os.meka.core.domain.HelloDock.SIZE], raised a little, amber with two
+ * comets while Needs you has cards, shivering while a conversation runs. It presses in to 0.94 on the complete spring
+ * with a light haptic; [onTap] says hello, or goes back to the conversation ([os.meka.core.domain.HelloDock.tap]).
+ * Reduced motion: a still glow, no press scale.
+ */
+@Composable
+fun DockedHelloOrb(phase: TalkPhase, needsYou: Int, onTap: () -> Unit, modifier: Modifier = Modifier) {
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed && !reduced) 0.94f else 1f, MekaMotion.complete(reduced), label = "dockPress")
+    val state = os.meka.core.domain.HelloDock.state(phase, needsYou)
+    HelloOrbView(
+        state, os.meka.core.domain.HelloDock.level(state), size = os.meka.core.domain.HelloDock.SIZE.dp,
+        modifier = modifier.scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
+            .clickable(interactionSource = source, indication = null, role = Role.Button) { haptics.light(); onTap() }
+            .semantics { contentDescription = os.meka.core.domain.HelloDock.label(phase, needsYou) },
+    )
+}

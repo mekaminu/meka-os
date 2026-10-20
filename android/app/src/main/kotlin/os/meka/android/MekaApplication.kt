@@ -115,6 +115,8 @@ class MekaApplication : Application() {
     val openNewsStory = MutableStateFlow<String?>(null)
     /** The side button, the headphones' button, the Talk widget or a launcher open with Bluetooth audio / in the car (Talk without tapping the mic): Ask starts listening, then clears it. */
     val talkNow = MutableStateFlow<os.meka.core.domain.TalkStart?>(null)
+    /** "Hello, Navilife" slice 5: the running conversation's phase (ENDED when none), so the docked orb in the bar can show it. */
+    val talkPhase = MutableStateFlow(os.meka.core.domain.TalkPhase.ENDED)
     /**
      * The brief's Listen ran to its end ("Say “plan my day” or “more news”", slice 7): Ask listens for 8 s
      * ([os.meka.core.domain.BriefFollowOnRules]); the value is where to go back to when nothing is said.

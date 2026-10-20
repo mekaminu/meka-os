@@ -234,6 +234,53 @@ object HelloOrb {
     }
 }
 
+// ---- "Hello, Navilife" slice 5: placement B, the docked orb ----
+
+/** What a tap on the docked orb does: say hello (Ask comes forward and greets), or go back to the conversation. */
+enum class DockTap { HELLO, CONVERSATION }
+
+/**
+ * Placement B (Meka approved 2026-10-19 20:14): a small docked Hello orb in the **middle of the Fold's bottom bar on
+ * every screen** (Today · Needs you · ◉ · Calendar · Ask), and in the same place in the open Fold's rail: the small
+ * constellation ([Constellation.POINTS_SMALL] points, no dust), raised a little above the bar's line, amber with two
+ * comets while Needs you has cards, its points shivering faster while Navilife listens. A tap says hello from wherever
+ * he is (Ask comes forward and greets, then listens); during a conversation it takes him back to it. (Non-AI, pure.)
+ */
+object HelloDock {
+    /** The docked orb's box (dp): the sphere sits inside it with room for its comets. */
+    const val SIZE = 48
+    /** How far it sits above the bar's centre line (dp), so it reads as docked rather than another tab. */
+    const val RAISE = 8
+    /** Its place among the bar's slots: between Needs you and Calendar. */
+    const val SLOT = 2
+    /** The bar's slots: the four tabs and the orb. */
+    const val SLOTS = 5
+    /** The level it shivers with while listening or speaking (the bar doesn't hear his voice; the conversation's orb does). */
+    const val LIVE_LEVEL = 0.55f
+
+    /** The slot a tab sits in, by its index among the four tabs: the tabs after the orb move one along. */
+    fun slot(tabIndex: Int): Int = if (tabIndex >= SLOT) tabIndex + 1 else tabIndex
+
+    fun state(phase: TalkPhase, needsYou: Int): OrbState = HelloOrb.state(phase, needsYou)
+
+    fun level(state: OrbState): Float = if (state == OrbState.LISTENING || state == OrbState.SPEAKING) LIVE_LEVEL else 0f
+
+    /** A conversation running takes him back to it; otherwise the tap says hello. */
+    fun tap(phase: TalkPhase): DockTap = if (phase == TalkPhase.ENDED) DockTap.HELLO else DockTap.CONVERSATION
+
+    /** The screen reader's label: "Say hello to Navilife · 2 things need you" · "Navilife is listening · back to the conversation". */
+    fun label(phase: TalkPhase, needsYou: Int): String = when (phase) {
+        TalkPhase.LISTENING -> "Navilife is listening · back to the conversation"
+        TalkPhase.THINKING, TalkPhase.DOING -> "Navilife is thinking · back to the conversation"
+        TalkPhase.SPEAKING -> "Navilife is speaking · back to the conversation"
+        TalkPhase.ENDED -> when {
+            needsYou <= 0 -> "Say hello to Navilife"
+            needsYou == 1 -> "Say hello to Navilife · 1 thing needs you"
+            else -> "Say hello to Navilife · $needsYou things need you"
+        }
+    }
+}
+
 // ---- "Hello, Navilife" slice 3: the wake phrase and the Mac's welcome back ----
 
 /**

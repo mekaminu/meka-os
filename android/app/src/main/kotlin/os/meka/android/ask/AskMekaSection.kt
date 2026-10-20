@@ -168,6 +168,10 @@ fun AskMekaSection(
             },
         )
     }
+    // "Hello, Navilife" slice 5: the docked orb in the bar follows this conversation (ENDED again once it's gone).
+    val phaseApp = context.applicationContext as? os.meka.android.MekaApplication
+    LaunchedEffect(talk.phase) { phaseApp?.talkPhase?.value = talk.phase }
+    DisposableEffect(talk) { onDispose { phaseApp?.talkPhase?.value = TalkPhase.ENDED } }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(lifecycle) {
         val obs = LifecycleEventObserver { _, e ->
