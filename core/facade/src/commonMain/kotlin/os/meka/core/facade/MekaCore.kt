@@ -8022,7 +8022,10 @@ class MekaCore(
                 ahead = os.meka.core.domain.EventAskRules.ahead(q, currentEvents(), nowMs(), cal, ::accountEditable),
                 // The companion, slice 4: the days the question names ("what's on Thursday?", "am I free next weekend?"),
                 // looked up here in his calendar and tasks, so the answer comes from his own data without the server reading it.
-                days = askDays, dayLines = askDays?.let { r -> os.meka.core.domain.DayAskRules.askLines(r, askDayEvents, askDayTasks, cal.epochDayOf(nowMs()), cal) }.orEmpty(),
+                // The companion, slice 8: trains on another day ("train or drive to the match on Saturday?") carry
+                // whether each is an office day and TfL's planned status for that morning when it's been read.
+                days = askDays, dayLines = askDays?.let { r -> os.meka.core.domain.DayAskRules.askLines(r, askDayEvents, askDayTasks, cal.epochDayOf(nowMs()), cal) +
+                    (if (os.meka.core.domain.TrainDayAskRules.isAbout(q)) os.meka.core.domain.TrainDayAskRules.askLines(r, lineStatus.snapshot(), hoursOf(_workMode.value, cal.epochDayOf(nowMs())), nowMs(), cal) else emptyList()) }.orEmpty(),
                 dayEvents = askDayEvents, dayTasks = askDayTasks)
                 // The companion, slice 3: "sir" when he chose it in Settings → Voice.
                 // The companion, slice 5: the notes of earlier chats, only with an open question or one about an earlier chat.
