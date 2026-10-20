@@ -437,6 +437,19 @@ object HelloEntrance {
     fun morningPlays(lastDay: Long?, today: Long, minuteOfDay: Int, quiet: Boolean, reduced: Boolean): Boolean =
         !reduced && !quiet && lastDay != today && minuteOfDay in MORNING_FROM until MORNING_TO
 
+    /**
+     * Slice 9, the entrance on the stand: a tap on the bedside orb, or "Hello Navilife" heard there, plays the big
+     * entrance from the bedside orb. In quiet hours (or with reduced motion) it is the calm cross-fade instead, so a
+     * dark bedroom isn't lit by the scatter and the shockwave.
+     */
+    fun standCalm(quiet: Boolean, reduced: Boolean): Boolean = quiet || reduced
+
+    /**
+     * When the stage on the stand has shrunk back: the clock returns, unless the answer brought something only Ask
+     * draws ([needsAsk]: Take me there, Still stuck), when Talk's pane stays up over the clock to show it.
+     */
+    fun standKeepsTalk(needsAsk: Boolean): Boolean = needsAsk
+
     /** The screen reader's label for the stage, and the hint under the orb. */
     const val LABEL = "Navilife"
     const val CLOSE_HINT = "Swipe down to close"

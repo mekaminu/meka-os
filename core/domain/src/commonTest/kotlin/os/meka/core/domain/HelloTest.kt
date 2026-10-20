@@ -261,6 +261,20 @@ class HelloTest {
     }
 
     @Test
+    fun onTheStandTheEntranceIsBigExceptInQuietHoursAndTheClockReturnsAfter() {
+        // A tap or "Hello Navilife" on the stand: the big entrance in the evening, the calm fade in quiet hours.
+        assertFalse(HelloEntrance.standCalm(quiet = false, reduced = false))
+        assertTrue(HelloEntrance.standCalm(quiet = true, reduced = false))
+        assertTrue(HelloEntrance.standCalm(quiet = false, reduced = true))
+        // Calm means the cross-fade's timeline: no scatter, no shockwave, it greets after the fade.
+        assertEquals(0f, HelloEntrance.spread(EntranceKind.BIG, 500, reduced = true))
+        assertEquals(HelloEntrance.FADE_MS, HelloEntrance.greetAt(EntranceKind.BIG, reduced = true))
+        // Shrunk back: the clock again, unless the answer needs Ask's pane (Take me there, Still stuck).
+        assertFalse(HelloEntrance.standKeepsTalk(needsAsk = false))
+        assertTrue(HelloEntrance.standKeepsTalk(needsAsk = true))
+    }
+
+    @Test
     fun theStageStaysForTheConversationAndShrinksBackWhenItEnds() {
         assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.SPEAKING, started = true, needsAsk = false, msSinceGreet = 9_000))
         assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = true, needsAsk = false, msSinceGreet = 9_000))

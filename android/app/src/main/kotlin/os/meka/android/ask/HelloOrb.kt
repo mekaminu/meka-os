@@ -200,7 +200,7 @@ fun HelloOrbView(
  * quietens with the clock and holds still (no frames drawn all night). Reduced motion: no press scale, a still glow.
  */
 @Composable
-fun BedsideHelloOrb(needsYou: Int, onHello: () -> Unit, modifier: Modifier = Modifier, dim: Boolean = false) {
+fun BedsideHelloOrb(needsYou: Int, onHello: () -> Unit, modifier: Modifier = Modifier, dim: Boolean = false, onPlaced: (Offset) -> Unit = {}) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val source = remember { MutableInteractionSource() }
@@ -210,7 +210,8 @@ fun BedsideHelloOrb(needsYou: Int, onHello: () -> Unit, modifier: Modifier = Mod
     val line = HelloOrb.restingLine(needsYou, mac = false)
     HelloOrbView(
         HelloOrb.state(TalkPhase.ENDED, needsYou), 0f, size = HelloOrb.BEDSIDE_SIZE.dp, still = dim,
-        modifier = modifier.scale(scale).graphicsLayer { this.alpha = alpha }.clip(RoundedCornerShape(MekaRadius.pill))
+        modifier = modifier.onGloballyPositioned { onPlaced(it.boundsInWindow().center) }
+            .scale(scale).graphicsLayer { this.alpha = alpha }.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(interactionSource = source, indication = null, role = Role.Button) { haptics.light(); onHello() }
             .semantics { contentDescription = "Navilife · $line" },
     )

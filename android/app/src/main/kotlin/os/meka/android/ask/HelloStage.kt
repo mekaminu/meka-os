@@ -80,6 +80,7 @@ import kotlin.math.roundToInt
  * an answer's with their buttons one after another; left, right and under it when the screen is wide, in a column
  * under the words on the cover screen. The [EntranceKind.SHORT] version (the first open of the morning) gathers, sends its shockwave and
  * goes back into the bar, saying nothing; a tap skips it. The stage is the night scene in Dark and Light alike.
+ * Slice 9: on the stand it starts from the bedside clock's orb ([fromSize]) and, in quiet hours, is the calm cross-fade ([calm]).
  * Reduced motion: a cross-fade, the orb still. The timeline is the core's [HelloEntrance]; this only paints it.
  */
 @Composable
@@ -101,8 +102,12 @@ fun HelloStage(
     onOpen: (HelloOpen) -> Unit = {},
     /** An answer card's button tapped: Ask does it, as a tap on its own card. */
     onCard: (AskCard) -> Unit = {},
+    /** Slice 9: the size (dp) of the orb it starts from and shrinks back into (the bar's, or the bedside clock's). */
+    fromSize: Int = HelloDock.SIZE,
+    /** Slice 9: the calm cross-fade whatever the motion setting (the stand in quiet hours, [HelloEntrance.standCalm]). */
+    calm: Boolean = false,
 ) {
-    val reduced = Meka.reducedMotion
+    val reduced = Meka.reducedMotion || calm
     val theme = Meka.theme
     var t by remember { mutableLongStateOf(0L) }
     var closeT by remember { mutableLongStateOf(-1L) } // ms into the close, or -1 while open
@@ -194,7 +199,7 @@ fun HelloStage(
             val home = Offset(w / 2, h * 0.42f)
             val from = if (dock.isSpecifiedAndSet()) dock - origin else Offset(w / 2, h - stagePx / 4)
             val c = from + (home - from) * travel
-            val small = HelloDock.SIZE.toFloat() / HelloEntrance.STAGE_SIZE
+            val small = fromSize.toFloat() / HelloEntrance.STAGE_SIZE
             val scale = small + (1f - small) * travel
             // Flung to just past the screen's far corner (in the orb's radii).
             val radius = stagePx / 2 / Constellation.EXTENT

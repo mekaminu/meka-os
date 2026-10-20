@@ -184,6 +184,17 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     val today by core.today.collectAsState()
     // "Hello, Navilife" slice 2: the orb's warm halo while Needs you has cards.
     val needsYouStack by core.needsYouStack.collectAsState()
+    // "Hello, Navilife" slice 9, the entrance on the stand: a tap on the orb or the phrase heard plays the big entrance
+    // from the bedside orb (the calm fade in quiet hours); Talk's pane sits under the stage and does the talking, and
+    // the greeting starts as the points re-form. Shrunk back, the clock returns (unless the answer needs Ask's pane).
+    var entrance by remember { mutableStateOf(false) }
+    var orbAt by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Unspecified) }
+    val startHello: () -> Unit = {
+        if (talkApp == null) { talkOpen = true } else if (!entrance && !talkOpen) {
+            talkApp.talkAnswerCards.value = emptyList(); talkApp.talkNeedsAsk.value = false; talkApp.helloGreeting.value = null
+            talkOpen = true; entrance = true
+        } else { os.meka.android.ask.helloAtBedside(talkApp); talkOpen = true }
+    }
     // Slice 3: on the stand, charging, outside quiet hours and with nothing else up, it listens for "Hello Navilife"
     // on the device; heard, the Talk pane springs up and greets him as a tap on the orb does.
     val wakeListening = os.meka.android.ask.rememberHelloWake(
@@ -191,7 +202,7 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
             on = wakeOn, micAllowed = true, place = open == null && !dayOpen && newsOpen == null,
             talking = talkOpen, charging = charging, quiet = v.dim,
         ),
-    ) { os.meka.android.ask.helloAtBedside(talkApp); talkOpen = true }
+    ) { startHello() }
     Box(
         Modifier.fillMaxSize().background(Meka.colors.background)
             .onGloballyPositioned { topInWindow = it.positionInWindow().y.toInt(); heightPx = it.size.height; widthPx = it.size.width },
@@ -210,7 +221,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
                 v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 needsYou = needsYouStack.cards.size,
                 wakeListening = wakeListening,
-                onHello = { os.meka.android.ask.helloAtBedside(talkApp); talkOpen = true },
+                onHello = startHello,
+                onOrbPlaced = { orbAt = it },
             ) {
                 open = it
             }
@@ -239,6 +251,14 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
                 key(start) { NewsPane(core, onClose = { newsOpen = null }, backLabel = "‹ Clock", startStoryId = start.ifEmpty { null }) }
             }
         }
+        if (entrance && talkApp != null) BedsideHelloStage(
+            talkApp, orbAt, needsYouStack.cards.size, calm = os.meka.core.domain.HelloEntrance.standCalm(v.dim, reduced = false),
+            onClosed = { keepTalk ->
+                entrance = false
+                if (!keepTalk) talkOpen = false
+            },
+            onOpen = { d -> entrance = false; talkOpen = false; onBack(); talkApp.openDestination.value = d },
+        )
     }
 }
 
@@ -316,7 +336,10 @@ private fun RollingTime(time: String, color: androidx.compose.ui.graphics.Color,
 }
 
 @Composable
-private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, wakeListening: Boolean, onHello: () -> Unit, onOpen: (BedsideOpens) -> Unit) {
+private fun DayHalf(
+    v: BedsideView, modifier: Modifier, needsYou: Int, wakeListening: Boolean, onHello: () -> Unit,
+    onOrbPlaced: (androidx.compose.ui.geometry.Offset) -> Unit = {}, onOpen: (BedsideOpens) -> Unit,
+) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val text by animateColorAsState(if (v.dim) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.themeBlend(reduced), label = "day")
@@ -328,7 +351,7 @@ private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, wakeListe
         Row(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
             Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.weight(1f))
             // "Hello, Navilife" slice 2: the Hello orb where the mic was; a tap greets him, then listens.
-            os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim)
+            os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim, onPlaced = onOrbPlaced)
         }
         // Slice 3: while it listens for the phrase, a brass dot and the line say so (the visible indicator).
         os.meka.android.ask.HelloWakeLine(wakeListening, Modifier.align(Alignment.End))
@@ -359,6 +382,50 @@ private fun DayHalf(v: BedsideView, modifier: Modifier, needsYou: Int, wakeListe
             }
         }
     }
+}
+
+/**
+ * "Hello, Navilife" slice 9: the entrance's stage over the bedside clock, fed by Talk's state as the shell's is: it flies
+ * up from the bedside orb at [orbAt], greets ([MekaApplication.talkNow] = HELLO) as the points re-form, the cards rise
+ * round it, and a swipe down / Back / "thanks" shrinks it back into the orb. [onClosed] says whether Talk's pane stays
+ * up (an answer only Ask draws); a greeting card leaves the clock for its screen ([onOpen]). Motion: [os.meka.android.ask.HelloStage].
+ */
+@Composable
+private fun BedsideHelloStage(
+    app: os.meka.android.MekaApplication,
+    orbAt: androidx.compose.ui.geometry.Offset,
+    needsYou: Int,
+    calm: Boolean,
+    onClosed: (keepTalk: Boolean) -> Unit,
+    onOpen: (os.meka.android.shell.ShellDestination) -> Unit,
+) {
+    val phase by app.talkPhase.collectAsState()
+    val said by app.talkSaid.collectAsState()
+    val heard by app.talkHeard.collectAsState()
+    val level by app.talkLevel.collectAsState()
+    val greeting by app.helloGreeting.collectAsState()
+    val answerCards by app.talkAnswerCards.collectAsState()
+    val cardsDone by app.talkCardsDone.collectAsState()
+    val needsAsk by app.talkNeedsAsk.collectAsState()
+    os.meka.android.ask.HelloStage(
+        os.meka.core.domain.EntranceKind.BIG, orbAt, phase, level, heard, said, needsYou,
+        cards = os.meka.android.ask.StageCards(greeting, answerCards, cardsDone, needsAsk),
+        onGreet = { os.meka.android.ask.helloAtBedside(app) },
+        onStop = { app.talkStopNow.value = true },
+        onClosed = { onClosed(os.meka.core.domain.HelloEntrance.standKeepsTalk(app.talkNeedsAsk.value)) },
+        onOpen = { open ->
+            onOpen(
+                when (open) {
+                    os.meka.core.domain.HelloOpen.NEEDS_YOU -> os.meka.android.shell.ShellDestination.NEEDS_YOU
+                    os.meka.core.domain.HelloOpen.CALENDAR -> os.meka.android.shell.ShellDestination.CALENDAR
+                    os.meka.core.domain.HelloOpen.COMMUTE, os.meka.core.domain.HelloOpen.TODAY -> os.meka.android.shell.ShellDestination.TODAY
+                },
+            )
+        },
+        onCard = { app.talkCardTap.value = it },
+        fromSize = os.meka.core.domain.HelloOrb.BEDSIDE_SIZE,
+        calm = calm,
+    )
 }
 
 /**
