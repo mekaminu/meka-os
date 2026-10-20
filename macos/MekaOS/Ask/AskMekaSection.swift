@@ -82,7 +82,13 @@ struct AskMekaSection: View {
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
             if talk.active || talk.problem != nil {
-                TalkPanel(talk: talk, needsYou: model.needsYouCount, palette: palette) { MekaHaptics.tick(); talk.tapOrb() }
+                TalkPanel(talk: talk, needsYou: model.needsYouCount, palette: palette,
+                          onOpenCard: { card in
+                              // Slice 8: a greeting card opens its screen; the conversation ends.
+                              MekaHaptics.light()
+                              talk.stop()
+                              model.go(to: card.open, reduced: reduceMotion)
+                          }) { MekaHaptics.tick(); talk.tapOrb() }
                     .padding(.top, MekaSpace.xs)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -429,6 +435,7 @@ private struct TalkPanel: View {
     let talk: TalkController
     let needsYou: Int
     let palette: MekaPalette
+    var onOpenCard: (HelloCardLine) -> Void = { _ in }
     let onOrb: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
@@ -463,6 +470,12 @@ private struct TalkPanel: View {
                     .foregroundStyle(palette.accent)
                     .multilineTextAlignment(.center)
                     .lineLimit(4)
+                    .transition(.opacity)
+            }
+            // "Hello, Navilife" slice 8: the greeting's cards rise under the orb as it says each thing.
+            if !talk.helloCards.isEmpty {
+                HelloCardsRow(cards: talk.helloCards, spokeAt: talk.helloSpokeAt, palette: palette, onOpen: onOpenCard)
+                    .padding(.top, MekaSpace.xs)
                     .transition(.opacity)
             }
         }

@@ -121,8 +121,17 @@ class MekaApplication : Application() {
     val talkSaid = MutableStateFlow("")
     val talkHeard = MutableStateFlow("")
     val talkLevel = MutableStateFlow(0f)
-    /** How many cards the conversation's latest answer brought (the stage steps back so they can be tapped on Ask). */
-    val talkCards = MutableStateFlow(0)
+    /**
+     * "Hello, Navilife" slice 8: the conversation's latest answer's cards (they rise round the stage's orb, tapped
+     * there as on Ask), which of them are done, and whether the answer holds something only Ask draws (the stage
+     * steps back for it). [talkCardTap] carries a tap on the stage to Ask, which does it and clears it.
+     */
+    val talkAnswerCards = MutableStateFlow<List<os.meka.core.domain.AskCard>>(emptyList())
+    val talkCardsDone = MutableStateFlow<Set<Int>>(emptySet())
+    val talkNeedsAsk = MutableStateFlow(false)
+    val talkCardTap = MutableStateFlow<os.meka.core.domain.AskCard?>(null)
+    /** Slice 8: the greeting just said (its cards rise round the stage's orb as each sentence starts); null once answered. */
+    val helloGreeting = MutableStateFlow<os.meka.core.domain.HelloGreeting?>(null)
     /** The stage was swiped down: Ask ends the conversation, then clears it. */
     val talkStopNow = MutableStateFlow(false)
     /**

@@ -262,11 +262,13 @@ class HelloTest {
 
     @Test
     fun theStageStaysForTheConversationAndShrinksBackWhenItEnds() {
-        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.SPEAKING, started = true, cards = 0, msSinceGreet = 9_000))
-        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = true, cards = 0, msSinceGreet = 9_000))
-        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.ENDED, started = false, cards = 0, msSinceGreet = 1_000))
-        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = false, cards = 0, msSinceGreet = HelloEntrance.NO_START_MS))
-        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.LISTENING, started = true, cards = 2, msSinceGreet = 9_000))
+        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.SPEAKING, started = true, needsAsk = false, msSinceGreet = 9_000))
+        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = true, needsAsk = false, msSinceGreet = 9_000))
+        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.ENDED, started = false, needsAsk = false, msSinceGreet = 1_000))
+        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.ENDED, started = false, needsAsk = false, msSinceGreet = HelloEntrance.NO_START_MS))
+        assertEquals(StageNext.CLOSE, HelloEntrance.next(TalkPhase.LISTENING, started = true, needsAsk = true, msSinceGreet = 9_000))
+        // Slice 8: an answer with cards keeps the stage up (they rise round the orb).
+        assertEquals(StageNext.STAY, HelloEntrance.next(TalkPhase.SPEAKING, started = true, needsAsk = false, msSinceGreet = 9_000))
         assertTrue(HelloEntrance.swipeCloses(120f)); assertFalse(HelloEntrance.swipeCloses(40f))
         assertEquals(1f, HelloEntrance.closing(0, HelloEntrance.DIM, false).first)
         assertEquals(0f, HelloEntrance.closing(HelloEntrance.CLOSE_MS, HelloEntrance.DIM, false).second)
@@ -287,5 +289,64 @@ class HelloTest {
         assertTrue(farthest < 1.3f)
         assertTrue((0 until geo.n).all { kotlin.math.hypot(out.px[it], out.py[it]) > 3.5f })
         assertEquals(0f, out.linkBoost)
+    }
+
+    @Test
+    fun eachThingTheGreetingSaysBringsItsCardInTheSameOrder() {
+        val f = HelloFacts(
+            minuteOfDay = evening, name = "Alex",
+            urgent = listOf("Pay the council tax", "Book the MOT"), needsYou = 4,
+            event = HelloEvent("Parents' evening", 19 * 60 + 30, 20 * 60 + 30, minutesAway = 25),
+            partnerName = "Sam Smith", partnerAsks = 2,
+        )
+        val g = HelloRules.greeting(f)
+        assertEquals(g.points.map { it.kind }, g.cards.map { it.kind })
+        assertEquals(HelloCard(HelloKind.NEEDS_YOU, "NEEDS YOU", "Pay the council tax", "and 1 more", HelloOpen.NEEDS_YOU, warm = true), g.cards[0])
+        assertEquals(HelloCard(HelloKind.EVENT, "IN 25 MIN", "Parents' evening", "19:30–20:30", HelloOpen.CALENDAR), g.cards[1])
+        assertEquals(HelloCard(HelloKind.PARTNER, "SAM ASKED", "2 things", "In Needs you", HelloOpen.NEEDS_YOU), g.cards[2])
+        // Nothing to say, no cards.
+        assertTrue(HelloRules.greeting(HelloFacts(minuteOfDay = evening)).cards.isEmpty())
+        // Due today opens Today; one thing has no "and more".
+        val due = HelloRules.greeting(HelloFacts(minuteOfDay = evening, dueToday = listOf("Send the invoice"))).cards.single()
+        assertEquals(HelloCard(HelloKind.DUE, "DUE TODAY", "Send the invoice", null, HelloOpen.TODAY), due)
+        assertEquals("Due today, Send the invoice", HelloCards.label(due))
+    }
+
+    @Test
+    fun theTrainCardIsTheBoardAndTheEventCardItsTimes() {
+        val late = HelloCards.trainCard(TrainDeparture(depMin = 17 * 60 + 42, expMin = 17 * 60 + 47, platform = "2"))
+        assertEquals(HelloCard(HelloKind.TRAIN, "TRAIN · 17:42", "5 min late", "Expected 17:47 · Platform 2", HelloOpen.COMMUTE, warm = true), late)
+        val onTime = HelloCards.trainCard(TrainDeparture(depMin = 7 * 60 + 12, expMin = 7 * 60 + 12))
+        assertEquals("On time", onTime.title); assertNull(onTime.detail); assertFalse(onTime.warm)
+        assertEquals("Cancelled", HelloCards.trainCard(TrainDeparture(7 * 60, null, cancelled = true)).title)
+        assertEquals("Delayed", HelloCards.trainCard(TrainDeparture(7 * 60, null, delayed = true)).title)
+        assertEquals("ON NOW", HelloCards.eventCard(HelloEvent("Standup", 15 * 60, 15 * 60 + 30, minutesAway = -5)).eyebrow)
+        assertEquals("NEXT", HelloCards.eventCard(HelloEvent("Dinner", 19 * 60, 21 * 60, minutesAway = 90)).eyebrow)
+    }
+
+    @Test
+    fun cardsRiseAsTheirSentenceStartsAndSitRoundTheOrbWhenThereIsRoom() {
+        val f = HelloFacts(minuteOfDay = evening, name = "Alex", urgent = listOf("Pay the council tax"), dueToday = listOf("Send the invoice"))
+        val g = HelloRules.greeting(f)
+        val at = HelloCards.revealAt(g)
+        assertEquals(2, at.size)
+        // The first as soon as "Good evening, Alex." has been said, the next after the first point's sentence.
+        assertEquals(("Good evening, Alex.".length + 1) * HelloCards.MS_PER_CHAR - HelloCards.LEAD_MS, at[0])
+        assertEquals(at[0] + (g.points[0].text.length + 1) * HelloCards.MS_PER_CHAR, at[1])
+        assertEquals(0L, HelloCards.answerRevealAt(0)); assertEquals(240L, HelloCards.answerRevealAt(2))
+        // Below and unseen before, risen and whole after.
+        val before = HelloCards.rise(-1, false)
+        assertEquals(0f, before.alpha); assertEquals(HelloCards.RISE_DP, before.liftDp)
+        val after = HelloCards.rise(HelloCards.RISE_MS, false)
+        assertEquals(CardRise(0f, 1f, 1f), after)
+        assertTrue(HelloCards.rise(HelloCards.RISE_MS / 3, false).liftDp in 0.1f..HelloCards.RISE_DP)
+        // Reduced motion: a fade in place.
+        assertEquals(0f, HelloCards.rise(50, true).liftDp)
+        assertEquals(1f, HelloCards.rise(HelloCards.FADE_MS, true).alpha)
+        // Wide: left, right, under; the cover screen: a column under the words; never more than three.
+        assertEquals(listOf(CardSlot.LEFT, CardSlot.RIGHT, CardSlot.BELOW), HelloCards.slots(3, wide = true))
+        assertEquals(listOf(CardSlot.BELOW), HelloCards.slots(1, wide = true))
+        assertEquals(List(3) { CardSlot.BELOW }, HelloCards.slots(5, wide = false))
+        assertTrue(HelloCards.wide(700f)); assertFalse(HelloCards.wide(380f))
     }
 }

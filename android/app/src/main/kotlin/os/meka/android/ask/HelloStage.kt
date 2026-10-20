@@ -8,7 +8,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.offset
@@ -50,7 +52,13 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.ThemeControl
+import os.meka.core.domain.AskCard
+import os.meka.core.domain.CardRise
+import os.meka.core.domain.CardSlot
 import os.meka.core.domain.Constellation
+import os.meka.core.domain.HelloCard
+import os.meka.core.domain.HelloCards
+import os.meka.core.domain.HelloOpen
 import os.meka.core.domain.EntranceKind
 import os.meka.core.domain.HelloDock
 import os.meka.core.domain.HelloEntrance
@@ -66,8 +74,11 @@ import kotlin.math.roundToInt
  * screen's edges and fly back in, re-forming with one gold shockwave; then it greets him ([onGreet]) and stays as the
  * conversation's stage: the large constellation in the middle, moving with the conversation, and the words under it
  * (what Navilife is saying, or what he's saying as it's heard). A swipe down (or Back) ends the conversation
- * ([onStop]) and it shrinks back into the bar; so does "thanks" ending it, or an answer bringing cards to tap (they're on
- * Ask behind it). The [EntranceKind.SHORT] version (the first open of the morning) gathers, sends its shockwave and
+ * ([onStop]) and it shrinks back into the bar; so does "thanks" ending it, or an answer bringing something only Ask
+ * draws (Take me there, Still stuck). Slice 8: as it speaks the matching cards rise in round the orb ([HelloCards]):
+ * the greeting's (Needs you, the train, the next event, his partner's asks, due today) each as its sentence starts,
+ * an answer's with their buttons one after another; left, right and under it when the screen is wide, in a column
+ * under the words on the cover screen. The [EntranceKind.SHORT] version (the first open of the morning) gathers, sends its shockwave and
  * goes back into the bar, saying nothing; a tap skips it. The stage is the night scene in Dark and Light alike.
  * Reduced motion: a cross-fade, the orb still. The timeline is the core's [HelloEntrance]; this only paints it.
  */
@@ -80,11 +91,16 @@ fun HelloStage(
     level: Float,
     heard: String,
     said: String,
-    cards: Int,
     needsYou: Int,
+    /** Slice 8: the cards rising round the orb (the greeting's, else the latest answer's). */
+    cards: StageCards,
     onGreet: () -> Unit,
     onStop: () -> Unit,
     onClosed: () -> Unit,
+    /** A greeting card tapped: the stage shrinks back and its screen opens. */
+    onOpen: (HelloOpen) -> Unit = {},
+    /** An answer card's button tapped: Ask does it, as a tap on its own card. */
+    onCard: (AskCard) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     val theme = Meka.theme
@@ -97,6 +113,12 @@ fun HelloStage(
     val currentPhase by rememberUpdatedState(phase)
     val greet by rememberUpdatedState(onGreet)
     val closed by rememberUpdatedState(onClosed)
+    // Slice 8: when the greeting's voice began (its cards rise as each sentence starts), and when the answer's cards came.
+    var speakAt by remember { mutableLongStateOf(-1L) }
+    var answerAt by remember { mutableLongStateOf(-1L) }
+    val answerCards = cards.answer
+    LaunchedEffect(answerCards) { answerAt = if (answerCards.isEmpty()) -1L else t }
+    LaunchedEffect(cards.greeting) { speakAt = -1L }
     val greetAt = HelloEntrance.greetAt(kind, reduced)
     val length = HelloEntrance.length(kind, reduced)
 
@@ -117,6 +139,7 @@ fun HelloStage(
             t = now - start
             if (greetAt != null && !greeted && t >= greetAt) { greeted = true; greet() }
             if (currentPhase != TalkPhase.ENDED) started = true
+            if (currentPhase == TalkPhase.SPEAKING && speakAt < 0 && greeted) speakAt = t
             if (kind == EntranceKind.SHORT && t >= length) { closed(); return@LaunchedEffect }
             if (closing) {
                 if (closeStart < 0) closeStart = now
@@ -127,7 +150,7 @@ fun HelloStage(
     }
     // Once settled, the conversation decides: stay up, or shrink back into the bar.
     if (kind == EntranceKind.BIG && greetAt != null && t >= length && !closing &&
-        HelloEntrance.next(phase, started, cards, t - greetAt) == StageNext.CLOSE
+        HelloEntrance.next(phase, started, cards.needsAsk, t - greetAt) == StageNext.CLOSE
     ) LaunchedEffect(Unit) { close(stop = false) }
     BackHandler { close(stop = true) }
 
@@ -182,17 +205,56 @@ fun HelloStage(
                     .offset { IntOffset((c.x - stagePx / 2).roundToInt(), (c.y - stagePx / 2).roundToInt()) }
                     .graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (closeT >= 0 && reduced) travel else 1f },
             )
-            // The words under the orb, cross-fading as they change.
+            // Slice 8: the cards rising round the orb — the answer's (with their buttons), else the greeting's as it says them.
+            val shownCards: List<Pair<Any, CardRise>> = when {
+                !settled -> emptyList()
+                answerCards.isNotEmpty() -> answerCards.withIndex().filter { it.index !in cards.done }.take(HelloCards.MAX).map { (i, card) ->
+                    card to HelloCards.rise(if (answerAt < 0) -1 else t - answerAt - HelloCards.answerRevealAt(i), reduced)
+                }
+                else -> cards.greeting?.let { g ->
+                    val at = HelloCards.revealAt(g)
+                    g.cards.take(HelloCards.MAX).mapIndexed { i, card ->
+                        card to HelloCards.rise(if (speakAt < 0) -1 else t - speakAt - (at.getOrNull(i) ?: 0L), reduced)
+                    }
+                }.orEmpty()
+            }
+            val wide = HelloCards.wide(w / dens.density)
+            val slots = HelloCards.slots(shownCards.size, wide)
+            val cardPx = with(dens) { HelloCards.CARD_DP.dp.toPx() }
+            val gapPx = with(dens) { MekaSpace.l.toPx() }
+            @Composable
+            fun StageCard(item: Any, rise: CardRise, m: Modifier) {
+                when (item) {
+                    is HelloCard -> StageHelloCard(item, rise, dens.density, m) { close(stop = true); onOpen(item.open) }
+                    is AskCard -> StageAnswerCard(item, rise, dens.density, m) { onCard(item) }
+                }
+            }
+            shownCards.forEachIndexed { i, (item, rise) ->
+                val slot = slots.getOrNull(i) ?: return@forEachIndexed
+                if (slot == CardSlot.BELOW) return@forEachIndexed
+                val x = if (slot == CardSlot.LEFT) home.x - stagePx / 2 - gapPx - cardPx else home.x + stagePx / 2 + gapPx
+                StageCard(item, rise, Modifier.offset { IntOffset(x.roundToInt(), (home.y - with(dens) { 40.dp.toPx() }).roundToInt()) })
+            }
+            // The words under the orb, cross-fading as they change; the cards that sit under it follow them.
+            Column(
+                Modifier.align(Alignment.TopCenter)
+                    .offset { IntOffset(0, (home.y + stagePx / 2).roundToInt()) }
+                    .padding(horizontal = MekaSpace.l).widthIn(max = 520.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
             AnimatedContent(
                 targetState = words,
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "hello-words",
-                modifier = Modifier.align(Alignment.TopCenter)
-                    .offset { IntOffset(0, (home.y + stagePx / 2).roundToInt()) }
-                    .padding(horizontal = MekaSpace.l).widthIn(max = 520.dp),
             ) { line ->
-                if (line != null) Text(line, style = MekaType.body, color = MekaDarkColors.textPrimary, textAlign = TextAlign.Center, maxLines = 6)
+                if (line != null) Text(line, style = MekaType.body, color = MekaDarkColors.textPrimary, textAlign = TextAlign.Center,
+                    maxLines = if (shownCards.isEmpty()) 6 else 4)
                 else Box(Modifier.size(1.dp))
+            }
+            shownCards.forEachIndexed { i, (item, rise) ->
+                if (slots.getOrNull(i) == CardSlot.BELOW) StageCard(item, rise, Modifier)
+            }
             }
             if (settled) Text(
                 HelloEntrance.CLOSE_HINT, style = MekaType.caption, color = MekaDarkColors.textTertiary,

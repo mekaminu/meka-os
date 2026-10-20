@@ -2410,13 +2410,22 @@ final class CoreModel {
     /// "Hello, Navilife": the greeting the orb says when clicked at rest, built by the core's rules (`HelloRules`; no AI
     /// call, nothing sent; his partner's open asks counted by the core). Only the String crosses back; nil when not
     /// connected or it couldn't be read.
-    func hello() async -> String? {
+    func hello() async -> HelloSaid? {
         guard let core else { return nil }
         let welcome = welcomeNext
         welcomeNext = false
-        guard let words = try? await core.hello(partnerAsks: -1, welcome: welcome).spoken else { return nil }
+        guard let g = try? await core.hello(partnerAsks: -1, welcome: welcome) else { return nil }
         lastHelloAt = Date()
-        return words
+        // Slice 8: the greeting's cards as plain Swift values, each with when it rises (ms after the voice begins).
+        let reveal = HelloCards.shared.revealAt(g: g).map { Int($0.int64Value) }
+        let cards = g.cards.enumerated().map { i, c in
+            HelloCardLine(
+                id: i, eyebrow: c.eyebrow, title: c.title, detail: c.detail, warm: c.warm,
+                open: HelloCardLine.destination(c.open), revealMs: i < reveal.count ? reveal[i] : 0,
+                label: HelloCards.shared.label(c: c)
+            )
+        }
+        return HelloSaid(words: g.spoken, cards: cards)
     }
 
     /// How many cards Needs you holds: the Hello orb's warm halo while any do.

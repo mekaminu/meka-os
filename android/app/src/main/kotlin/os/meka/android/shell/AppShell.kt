@@ -84,6 +84,8 @@ import os.meka.core.facade.MekaCore
 import os.meka.android.ask.DockedHelloOrb
 import os.meka.android.ask.HelloStage
 import os.meka.core.domain.EntranceKind
+import os.meka.core.domain.HelloOpen
+import os.meka.android.ask.StageCards
 import os.meka.core.domain.TalkPhase
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.runtime.key
@@ -171,7 +173,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     var entrance by remember { mutableStateOf<EntranceKind?>(null) }
     var dockAt by remember { mutableStateOf(Offset.Unspecified) }
     val dockTap: () -> Unit = {
-        if (HelloDock.tap(talkPhase) == DockTap.HELLO && entrance == null) { app.talkCards.value = 0; entrance = EntranceKind.BIG }
+        if (HelloDock.tap(talkPhase) == DockTap.HELLO && entrance == null) { app.talkAnswerCards.value = emptyList(); app.talkNeedsAsk.value = false; app.helloGreeting.value = null; entrance = EntranceKind.BIG }
         if (current != ShellDestination.ASK) { arrival = SharedMotion.arrivalAfterGo(ShellDestination.ASK, arrival); current = ShellDestination.ASK }
     }
     val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(talkPhase, needsYou, dockTap, m, onPlaced = { dockAt = it }) }
@@ -240,13 +242,27 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
             val said by app.talkSaid.collectAsState()
             val heard by app.talkHeard.collectAsState()
             val level by app.talkLevel.collectAsState()
-            val cards by app.talkCards.collectAsState()
+            val greeting by app.helloGreeting.collectAsState()
+            val answerCards by app.talkAnswerCards.collectAsState()
+            val cardsDone by app.talkCardsDone.collectAsState()
+            val needsAsk by app.talkNeedsAsk.collectAsState()
             key(kind) {
                 HelloStage(
-                    kind, dockAt, talkPhase, level, heard, said, cards, needsYou,
+                    kind, dockAt, talkPhase, level, heard, said, needsYou,
+                    cards = StageCards(greeting, answerCards, cardsDone, needsAsk),
                     onGreet = { app.talkNow.value = TalkStart.HELLO },
                     onStop = { app.talkStopNow.value = true },
                     onClosed = { entrance = null },
+                    // Slice 8: a greeting card opens its screen (the stage shrinks back); an answer card is done on Ask.
+                    onOpen = { open ->
+                        val d = when (open) {
+                            HelloOpen.NEEDS_YOU -> ShellDestination.NEEDS_YOU
+                            HelloOpen.CALENDAR -> ShellDestination.CALENDAR
+                            HelloOpen.COMMUTE, HelloOpen.TODAY -> ShellDestination.TODAY
+                        }
+                        app.openDestination.value = d
+                    },
+                    onCard = { app.talkCardTap.value = it },
                 )
             }
         }

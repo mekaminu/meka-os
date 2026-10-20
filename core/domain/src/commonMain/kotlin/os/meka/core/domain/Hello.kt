@@ -36,8 +36,14 @@ enum class HelloKind { NEEDS_YOU, EVENT, TRAIN, PARTNER, DUE }
 /** One thing the greeting says, and which card would rise beside the orb for it (a later slice draws the cards). */
 data class HelloPoint(val kind: HelloKind, val text: String)
 
-/** The greeting: "Good evening, Meka." · up to three points · "Anything you'd like?" */
-data class HelloGreeting(val opening: String, val points: List<HelloPoint>, val closing: String) {
+/**
+ * The greeting: "Good evening, Meka." · up to three points · "Anything you'd like?" [cards]: slice 8, one card per
+ * point in the same order ([HelloCards]), rising round the orb as its sentence is said.
+ */
+data class HelloGreeting(
+    val opening: String, val points: List<HelloPoint>, val closing: String,
+    val cards: List<HelloCard> = emptyList(),
+) {
     /** What Navilife says, in one go. */
     val spoken: String get() = (listOf(opening) + points.map { it.text } + closing).joinToString(" ")
 }
@@ -96,7 +102,7 @@ object HelloRules {
         val opening = (if (f.welcome) WelcomeBackRules.OPENING else salutation(f.minuteOfDay)) + (name?.let { ", $it." } ?: ".")
         val points = points(f)
         val closing = if (points.isEmpty()) "Nothing needs you. Your ${partOfDay(f.minuteOfDay)}'s clear. $CLOSING" else CLOSING
-        return HelloGreeting(opening, points, closing)
+        return HelloGreeting(opening, points, closing, points.mapNotNull { HelloCards.card(it.kind, f) })
     }
 
     fun points(f: HelloFacts): List<HelloPoint> {
@@ -404,12 +410,12 @@ object HelloEntrance {
 
     /**
      * Whether the stage stays up: it closes once a conversation that started has ended ("thanks", "that's all"), when an
-     * answer brings cards to tap (they're on Ask behind it, until the cards rise round the orb), or when nothing started
-     * [NO_START_MS] after the greeting was due.
+     * answer brings something only Ask draws ([needsAsk]: Take me there, Still stuck, the money unlock; slice 8's cards
+     * rise round the orb instead), or when nothing started [NO_START_MS] after the greeting was due.
      */
-    fun next(phase: TalkPhase, started: Boolean, cards: Int, msSinceGreet: Long): StageNext = when {
+    fun next(phase: TalkPhase, started: Boolean, needsAsk: Boolean, msSinceGreet: Long): StageNext = when {
         started && phase == TalkPhase.ENDED -> StageNext.CLOSE
-        cards > 0 -> StageNext.CLOSE
+        needsAsk -> StageNext.CLOSE
         !started && msSinceGreet >= NO_START_MS -> StageNext.CLOSE
         else -> StageNext.STAY
     }
@@ -434,6 +440,143 @@ object HelloEntrance {
     /** The screen reader's label for the stage, and the hint under the orb. */
     const val LABEL = "Navilife"
     const val CLOSE_HINT = "Swipe down to close"
+}
+
+// ---- "Hello, Navilife" slice 8: cards rising round the orb ----
+
+/** Where a greeting's card takes him when tapped. */
+enum class HelloOpen { NEEDS_YOU, CALENDAR, COMMUTE, TODAY }
+
+/**
+ * A card beside the orb for one thing the greeting says, drawn from the fixed native card look (never free text from
+ * a model): [eyebrow] the small capitals line ("TRAIN · 17:42"), [title] the one line that matters ("5 min late"),
+ * [detail] a quiet second line, [warm] amber (urgent, late or cancelled), [open] where a tap takes him.
+ */
+data class HelloCard(
+    val kind: HelloKind, val eyebrow: String, val title: String, val detail: String?, val open: HelloOpen, val warm: Boolean = false,
+)
+
+/** Where a card sits round the orb: to its left, to its right, or under the words. */
+enum class CardSlot { LEFT, RIGHT, BELOW }
+
+/** One card's rise at a moment: lifted [liftDp] below its place (0 when there), [alpha], [scale]. */
+data class CardRise(val liftDp: Float, val alpha: Float, val scale: Float)
+
+/**
+ * "Hello, Navilife" (5), the cards (Meka approved 2026-10-19 20:14): while Navilife speaks, the matching cards rise in
+ * around the orb: the greeting's own (Needs you, the train board, the next event, his partner's asks, due today), each
+ * as its sentence starts, and an answer's cards (its proposals with their buttons) one after another. They rise from a
+ * little below, fading and growing in on the "complete" curve; on a wide screen (the open Fold, the Mac) they sit to
+ * the orb's left, right and under it, on the cover screen in a column under the words. Nothing happens until tapped:
+ * a greeting card opens its screen; an answer card's button goes through the same path as on Ask (the policy engine,
+ * his tap). Reduced motion: a plain fade, all at once. (Non-AI, pure.)
+ */
+object HelloCards {
+    /** About how long the voice takes per character (Chirp 3 HD at its normal pace: ~15 characters a second). */
+    const val MS_PER_CHAR = 62L
+    /** A card starts rising this much before its sentence, so it's there as the words are. */
+    const val LEAD_MS = 150L
+    /** The rise: this far up (dp) over this long. */
+    const val RISE_DP = 28f
+    const val RISE_MS = 480L
+    /** An answer's cards rise one after another, this far apart. */
+    const val STAGGER_MS = 120L
+    /** Reduced motion: a fade only. */
+    const val FADE_MS = 200L
+    /** Where cards go beside the orb: the stage must be at least this wide (dp). */
+    const val WIDE_DP = 600
+    /** A card's width beside the orb, and in the cover screen's column (dp). */
+    const val CARD_DP = 220
+    const val MAX = 3
+
+    private fun ease(x: Float): Float { val c = x.coerceIn(0f, 1f); return 1 - (1 - c) * (1 - c) * (1 - c) }
+
+    /** The card for a greeting point (null when the facts behind it are gone). */
+    fun card(kind: HelloKind, f: HelloFacts): HelloCard? = when (kind) {
+        HelloKind.NEEDS_YOU -> f.urgent.firstOrNull()?.let { first ->
+            HelloCard(kind, "NEEDS YOU", first.trim(), more(f.urgent.size), HelloOpen.NEEDS_YOU, warm = true)
+        }
+        HelloKind.TRAIN -> f.train?.let { trainCard(it) }
+        HelloKind.EVENT -> f.event?.let { eventCard(it) }
+        HelloKind.PARTNER -> if (f.partnerAsks <= 0) null else HelloCard(
+            kind, "${(HelloRules.firstName(f.partnerName) ?: "Your partner").uppercase()} ASKED",
+            if (f.partnerAsks == 1) "1 thing" else "${f.partnerAsks} things", "In Needs you", HelloOpen.NEEDS_YOU,
+        )
+        HelloKind.DUE -> f.dueToday.firstOrNull()?.let { first ->
+            HelloCard(kind, "DUE TODAY", first.trim(), more(f.dueToday.size), HelloOpen.TODAY)
+        }
+    }
+
+    private fun more(n: Int): String? = if (n <= 1) null else "and ${n - 1} more"
+
+    /** "TRAIN · 17:42" · "5 min late" / "On time" / "Cancelled" / "Delayed" · "Expected 17:47 · Platform 2". */
+    fun trainCard(d: TrainDeparture): HelloCard {
+        val late = d.lateMin
+        val title = when {
+            d.cancelled -> "Cancelled"
+            late == null -> "Delayed"
+            late == 0 -> "On time"
+            else -> "$late min late"
+        }
+        val expected = d.expMin?.takeIf { !d.cancelled && (late ?: 0) > 0 }?.let { "Expected ${LocalClock.formatMinute(it)}" }
+        val detail = listOfNotNull(expected, d.platform?.takeIf { it.isNotBlank() }?.let { "Platform $it" }).joinToString(" · ").ifBlank { null }
+        return HelloCard(HelloKind.TRAIN, "TRAIN · ${LocalClock.formatMinute(d.depMin)}", title, detail, HelloOpen.COMMUTE,
+            warm = d.cancelled || late == null || late > 0)
+    }
+
+    /** "ON NOW" / "IN 12 MIN" / "NEXT" · the title · "19:00–20:30". */
+    fun eventCard(e: HelloEvent): HelloCard {
+        val eyebrow = when {
+            e.minutesAway <= 0 -> "ON NOW"
+            e.minutesAway <= 30 -> "IN ${e.minutesAway} MIN"
+            else -> "NEXT"
+        }
+        return HelloCard(HelloKind.EVENT, eyebrow, e.title.trim(),
+            "${LocalClock.formatMinute(e.startMinute)}–${LocalClock.formatMinute(e.endMinute)}", HelloOpen.CALENDAR)
+    }
+
+    /**
+     * When each of the greeting's cards starts to rise, in ms after the voice began: as its own sentence starts (the
+     * characters said before it at [MS_PER_CHAR]), a little early ([LEAD_MS]); never before the voice.
+     */
+    fun revealAt(g: HelloGreeting): List<Long> {
+        var chars = g.opening.length + 1
+        val out = mutableListOf<Long>()
+        for (p in g.points) {
+            out += (chars * MS_PER_CHAR - LEAD_MS).coerceAtLeast(0L)
+            chars += p.text.length + 1
+        }
+        return out.take(g.cards.size)
+    }
+
+    /** An answer's cards: the [i]th rises [STAGGER_MS] after the one before it. */
+    fun answerRevealAt(i: Int): Long = i * STAGGER_MS
+
+    /** A card [ms] after its reveal moment (negative: not yet). Reduced motion: a fade, no lift. */
+    fun rise(ms: Long, reduced: Boolean): CardRise {
+        if (ms < 0) return CardRise(if (reduced) 0f else RISE_DP, 0f, if (reduced) 1f else 0.96f)
+        if (reduced) return CardRise(0f, (ms.toFloat() / FADE_MS).coerceIn(0f, 1f), 1f)
+        val p = ease(ms.toFloat() / RISE_MS)
+        return CardRise(RISE_DP * (1 - p), (ms.toFloat() / (RISE_MS * 0.6f)).coerceIn(0f, 1f), 0.96f + 0.04f * p)
+    }
+
+    /** Where [count] cards sit: on a [wide] stage left, right, then under; else all under the words, in a column. */
+    fun slots(count: Int, wide: Boolean): List<CardSlot> {
+        val n = count.coerceIn(0, MAX)
+        if (!wide) return List(n) { CardSlot.BELOW }
+        return when (n) {
+            0 -> emptyList()
+            1 -> listOf(CardSlot.BELOW)
+            2 -> listOf(CardSlot.LEFT, CardSlot.RIGHT)
+            else -> listOf(CardSlot.LEFT, CardSlot.RIGHT, CardSlot.BELOW)
+        }
+    }
+
+    fun wide(stageWidthDp: Float): Boolean = stageWidthDp >= WIDE_DP
+
+    /** The screen reader's words for a greeting card: "Train · 17:42, 5 min late, Expected 17:47 · Platform 2". */
+    fun label(c: HelloCard): String =
+        listOfNotNull(c.eyebrow.lowercase().replaceFirstChar { it.uppercase() }, c.title, c.detail).joinToString(", ")
 }
 
 // ---- "Hello, Navilife" slice 3: the wake phrase and the Mac's welcome back ----

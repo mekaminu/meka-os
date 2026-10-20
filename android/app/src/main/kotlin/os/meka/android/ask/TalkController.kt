@@ -110,6 +110,8 @@ class TalkController(
         scope.launch {
             val greeting = runCatching { core.hello() }.getOrNull() ?: return@launch
             if (gen != generation || active) return@launch
+            // Slice 8: the stage raises the greeting's cards round its orb as each sentence starts.
+            (context.applicationContext as? os.meka.android.MekaApplication)?.helloGreeting?.value = greeting
             begin(TalkFlow.greet(greeting.spoken))
         }
     }

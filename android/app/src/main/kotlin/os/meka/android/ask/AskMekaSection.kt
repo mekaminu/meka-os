@@ -156,8 +156,14 @@ fun AskMekaSection(
                 offer = null
                 shown = AskShown.Answer(q, out, asks + 1)
                 asks += 1
-                (context.applicationContext as? os.meka.android.MekaApplication)?.talkCards?.value =
-                    (out as? AskOutcome.Answered)?.answer?.cards?.size ?: 0
+                // "Hello, Navilife" slice 8: the stage raises this answer's cards round its orb (the greeting's go).
+                (context.applicationContext as? os.meka.android.MekaApplication)?.let { a ->
+                    val ans = (out as? AskOutcome.Answered)?.answer
+                    a.helloGreeting.value = null
+                    a.talkCardsDone.value = emptySet()
+                    a.talkAnswerCards.value = ans?.cards.orEmpty()
+                    a.talkNeedsAsk.value = ans != null && (ans.help != null || ans.stillStuck != null || ans.unlockMoney != null)
+                }
             },
             onDid = { did, cards ->
                 val answer = (shown as? AskShown.Answer)?.outcome as? AskOutcome.Answered
@@ -296,6 +302,17 @@ fun AskMekaSection(
             }
         }
     }
+
+    // "Hello, Navilife" slice 8: a card tapped on the stage is done here, as a tap on Ask's own card is.
+    val stageTap = phaseApp?.talkCardTap?.collectAsState()?.value
+    LaunchedEffect(stageTap) {
+        val card = stageTap ?: return@LaunchedEffect
+        phaseApp?.talkCardTap?.value = null
+        val answer = (shown as? AskShown.Answer)?.outcome as? AskOutcome.Answered
+        val i = answer?.answer?.cards?.indexOf(card) ?: -1
+        if (i >= 0 && i !in done) tap(i, card)
+    }
+    LaunchedEffect(done) { phaseApp?.talkCardsDone?.value = done }
 
     // Earned trust: Undo on something MEKA did on its own; that kind goes back to asking first.
     fun undoAuto(a: AskAutoDone) {

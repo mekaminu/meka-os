@@ -37,6 +37,10 @@ final class TalkController {
     private(set) var said = ""
     /// "Hello, Navilife" slice 7: when the last hello's entrance began (the orb scatters, gathers and sends its shockwave).
     private(set) var entranceAt: Date?
+    /// "Hello, Navilife" slice 8: the greeting's cards (they rise under the orb as each sentence starts), and when its
+    /// voice began; cleared once he answers.
+    private(set) var helloCards: [HelloCardLine] = []
+    private(set) var helloSpokeAt: Date?
     /// Why MEKA couldn't listen, shown under the orb until the next start.
     private(set) var problem: TalkProblem?
     /// "Talk over MEKA" is on for this conversation (read from the Mac's setting at each start; the orb's line).
@@ -116,8 +120,11 @@ final class TalkController {
                 if gen == generation { problem = .noPermission }
                 return
             }
-            guard gen == generation, let words = await model?.hello() else { return }
+            guard gen == generation, let hello = await model?.hello() else { return }
             guard gen == generation, !active else { return }
+            let words = hello.words
+            helloCards = hello.cards
+            helloSpokeAt = nil
             Task { await model?.warmVoice() }
             // Slice 7, the entrance: the orb's points scatter and gather first; it speaks as they re-form.
             if !MotionSetting.reduced {
@@ -218,6 +225,7 @@ final class TalkController {
     /// Ask left the screen, MEKA went to the background, the mic clicked again: everything stops at once.
     func stop() {
         generation += 1 // also drops a room check or chime still on its way ("Listen when I open MEKA")
+        helloCards = [] // slice 8: the greeting's cards go with the conversation
         openAt = nil
         openLapsed = nil
         guard active else { return }
@@ -238,6 +246,8 @@ final class TalkController {
         MacListen.latch.sessionOpen = phase != .ended // a switch to the Mac's own speech lasts the conversation
         step.effects.forEach(run)
         if phase == .speaking { meterVoice() }
+        // Slice 8: the greeting's cards rise as its voice goes; the first time it speaks marks the moment.
+        if phase == .speaking, !helloCards.isEmpty, helloSpokeAt == nil { helloSpokeAt = Date() }
     }
 
     /// "Hello, Navilife", slice 6: while Navilife speaks, the orb's level is its voice's metered loudness
@@ -278,6 +288,7 @@ final class TalkController {
                 if let ended, case .answered(let a) = onEnum(of: out), !a.answer.did.isEmpty {
                     await model.recordHeardTiming(ms: Int64(Date().timeIntervalSince(ended) * 1000), online: online)
                 }
+                helloCards = [] // slice 8: his answer's own cards take over under the orb, on Ask as before
                 onAnswer(question, out)
                 apply(TalkFlow.shared.answered(s: session, question: question, outcome: out, today: Self.today()))
             }
