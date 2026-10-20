@@ -34,7 +34,7 @@ import os.meka.core.facade.MekaCore
  *
  * Listening (the mic fix, steps 3–4, 2026-10-17; ADR-006 addendum): Google's online recogniser whenever there's signal,
  * Android's on-device one without it ([PhoneListen]; a network failure online listens again on the device); nothing is
- * recorded or kept by Navilife. Listening ends 0.8 s after his last word or sound ([TalkEndpoint]), not at the
+ * recorded or kept by Navilife. Listening ends 0.6 s after his last word or sound ([TalkEndpoint]), not at the
  * recogniser's own longer end, and the time from his words ending to an "Added" is kept for Activity. Speaking uses MEKA's voice (Amazon Polly through MEKA's own server, [MekaCore.speechClip]: only
  * MEKA's own words are sent, never what Meka said), piece by piece, and falls back to `TextToSpeech` with the best
  * installed British voice that speaks on the device ([TalkVoice.best]; never a network voice) when MEKA's voice is off,
@@ -392,7 +392,7 @@ class TalkController(
         } catch (e: Exception) {
             return fail(TalkProblem.FAILED)
         }
-        // Step 3: Navilife ends it 0.8 s after his last word or sound rather than waiting for the recogniser's own end.
+        // Step 3: Navilife ends it 0.6 s after his last word or sound rather than waiting for the recogniser's own end.
         endpoint?.cancel()
         val gen = generation
         endpoint = scope.launch {

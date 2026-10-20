@@ -38,7 +38,7 @@ class ListenTest {
         assertEquals(t0 + 1_000, ListenRules.lastSound(t0 + 1_000, t0 + 400))
         assertTrue(ListenRules.isVoice(0.5f))
         assertFalse(ListenRules.isVoice(0.1f))
-        assertEquals(800L, ListenRules.END_PAUSE_MS)
+        assertEquals(600L, ListenRules.END_PAUSE_MS)
     }
 
     @Test

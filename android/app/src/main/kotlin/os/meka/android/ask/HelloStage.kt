@@ -115,6 +115,8 @@ fun HelloStage(
     var greeted by remember { mutableStateOf(false) }
     var started by remember { mutableStateOf(false) }
     var closing by remember { mutableStateOf(false) }
+    // The orb speed pass: a tap during the big entrance skips the rest of it (the clock jumps ahead by this much).
+    var skipped by remember { mutableLongStateOf(0L) }
     val currentPhase by rememberUpdatedState(phase)
     val greet by rememberUpdatedState(onGreet)
     val closed by rememberUpdatedState(onClosed)
@@ -141,7 +143,7 @@ fun HelloStage(
         var closeStart = -1L
         while (true) {
             val now = withFrameMillis { it }
-            t = now - start
+            t = now - start + skipped
             if (greetAt != null && !greeted && t >= greetAt) { greeted = true; greet() }
             if (currentPhase != TalkPhase.ENDED) started = true
             if (currentPhase == TalkPhase.SPEAKING && speakAt < 0 && greeted) speakAt = t
@@ -186,6 +188,12 @@ fun HelloStage(
                             onDragStart = { drag = 0f },
                             onDragEnd = { if (HelloEntrance.swipeCloses(drag / dens.density)) close(stop = true) },
                         ) { change, dy -> change.consume(); drag += dy }
+                    }
+                }
+                .pointerInput(kind, reduced) {
+                    // A tap while the orb is still flying up and gathering jumps to the end; the hello carries on.
+                    if (kind == EntranceKind.BIG) detectTapGestures {
+                        if (!closing) HelloEntrance.tapThrough(kind, t, reduced)?.let { to -> skipped += to - t }
                     }
                 }
                 .semantics {

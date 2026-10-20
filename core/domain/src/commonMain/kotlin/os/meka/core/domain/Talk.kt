@@ -751,11 +751,12 @@ enum class ListenStep {
  * When a spoken question is over (non-AI, pure): the app asks this a few times a second. Nothing heard for
  * [NOTHING_MS] is silence; once words came, a pause of [PAUSE_MS] (no new words and no voice on the microphone,
  * [ListenRules.lastSound]) ends it, and a question is never longer than [LONGEST_MS] (the on-device recogniser's own
- * limit is about a minute). The mic fix, step 3 (2026-10-17): the pause is 0.8 s (was 1.5 s), and the Fold and the
- * watch ask it too instead of waiting for Android's recogniser's own, much longer, end.
+ * limit is about a minute). The mic fix, step 3 (2026-10-17): the pause was 0.8 s (was 1.5 s), and the Fold and the
+ * watch ask it too instead of waiting for Android's recogniser's own, much longer, end. The orb speed pass (Meka
+ * 2026-10-20 19:57, "a lot of wait"): 0.6 s.
  */
 object TalkEndpoint {
-    const val PAUSE_MS = 800L
+    const val PAUSE_MS = 600L
     const val NOTHING_MS = 8_000L
     const val LONGEST_MS = 55_000L
     /** How often the Mac asks. */

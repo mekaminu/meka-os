@@ -22,7 +22,7 @@ import os.meka.core.domain.TalkEndpoint
 
 /**
  * The capture sheet's 🎙 listening inside the sheet ("the mic should just add it, fast, and understand him", step 3;
- * was Android's own recogniser dialog): [partial] shows his words as he speaks, listening ends 0.8 s after his last
+ * was Android's own recogniser dialog): [partial] shows his words as he speaks, listening ends 0.6 s after his last
  * word or sound ([TalkEndpoint]), Google's online speech with signal and the phone's own without ([PhoneListen]; a
  * network failure tries the phone's own once). [onHeard] gets the words, the recogniser that heard them and when his
  * words ended (elapsed ms), for Activity's "Speech to Added" line; [onNothing] gets a line to show (null: nothing

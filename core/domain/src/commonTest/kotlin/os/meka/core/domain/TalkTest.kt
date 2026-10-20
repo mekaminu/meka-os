@@ -245,8 +245,10 @@ class TalkTest {
         val t0 = 1_000_000L
         assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, false, t0, t0 + 3_000))
         assertEquals(ListenStep.SILENCE, TalkEndpoint.step(t0, false, t0, t0 + TalkEndpoint.NOTHING_MS))
-        // Words came at 2 s: still talking at 2.5 s, done once 0.8 s pass with nothing new.
+        // Words came at 2 s: still talking at 2.5 s, done once 0.6 s pass with nothing new (the orb speed pass).
         assertEquals(ListenStep.KEEP, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 2_500))
+        assertEquals(600L, TalkEndpoint.PAUSE_MS)
+        assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 2_600))
         assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 2_800))
         // Once words came, a long wait is never silence: it's the end of the question.
         assertEquals(ListenStep.FINISH, TalkEndpoint.step(t0, true, t0 + 2_000, t0 + 20_000))

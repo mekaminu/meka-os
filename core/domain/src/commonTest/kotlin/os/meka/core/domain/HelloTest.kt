@@ -223,13 +223,13 @@ class HelloTest {
         assertEquals(0f, HelloEntrance.travel(big, 0, false))
         assertEquals(1f, HelloEntrance.travel(big, HelloEntrance.ZOOM_MS, false))
         assertEquals(HelloEntrance.DIM, HelloEntrance.dim(big, HelloEntrance.ZOOM_MS, false))
-        // On the sphere, flung out to the edges, back on the sphere as the greeting starts.
+        // On the sphere, flung out to the edges, back on the sphere before the shockwave.
         assertEquals(0f, HelloEntrance.spread(big, 100, false))
         assertEquals(1f, HelloEntrance.spread(big, HelloEntrance.SCATTER_FROM + HelloEntrance.SCATTER_MS, false))
-        assertEquals(0f, HelloEntrance.spread(big, HelloEntrance.GREET_AT, false))
+        assertEquals(0f, HelloEntrance.spread(big, HelloEntrance.REFORM_AT, false))
         // One shockwave as they re-form, then none.
-        assertNull(HelloEntrance.shock(big, HelloEntrance.GREET_AT - 1, false))
-        val (reach, a) = HelloEntrance.shock(big, HelloEntrance.GREET_AT, false)!!
+        assertNull(HelloEntrance.shock(big, HelloEntrance.REFORM_AT - 1, false))
+        val (reach, a) = HelloEntrance.shock(big, HelloEntrance.REFORM_AT, false)!!
         assertEquals(1f, reach); assertTrue(a > 0.5f)
         assertNull(HelloEntrance.shock(big, HelloEntrance.BIG_MS, false))
         assertEquals(HelloEntrance.GREET_AT, HelloEntrance.greetAt(big, false))
@@ -240,12 +240,32 @@ class HelloTest {
     }
 
     @Test
+    fun theHelloStartsDuringTheEntranceAndATapSkipsTheRest() {
+        // The orb speed pass: the greeting starts within 0.3 s of the tap, while the orb is still zooming up.
+        val at = HelloEntrance.greetAt(EntranceKind.BIG, false)!!
+        assertTrue(at <= HelloEntrance.GREET_MAX_MS)
+        assertTrue(at < HelloEntrance.ZOOM_MS)
+        assertTrue(at < HelloEntrance.REFORM_AT)
+        assertTrue(HelloEntrance.greetAt(EntranceKind.BIG, true)!! <= HelloEntrance.GREET_MAX_MS)
+        // A tap mid-entrance jumps to its end: the points are home, no shockwave left, the hello carries on.
+        val to = HelloEntrance.tapThrough(EntranceKind.BIG, 500, false)!!
+        assertEquals(HelloEntrance.BIG_MS, to)
+        assertEquals(0f, HelloEntrance.spread(EntranceKind.BIG, to, false))
+        assertNull(HelloEntrance.shock(EntranceKind.BIG, to, false))
+        assertEquals(1f, HelloEntrance.travel(EntranceKind.BIG, to, false))
+        // Nothing to skip once settled, for the calm fade, or for the morning flourish (a tap closes that).
+        assertNull(HelloEntrance.tapThrough(EntranceKind.BIG, HelloEntrance.BIG_MS, false))
+        assertNull(HelloEntrance.tapThrough(EntranceKind.BIG, 100, true))
+        assertNull(HelloEntrance.tapThrough(EntranceKind.SHORT, 100, false))
+    }
+
+    @Test
     fun reducedMotionCrossFadesAndTheMorningVersionSaysNothing() {
         // Reduced motion: in the middle at once, no scatter, no shockwave, a short fade, then the greeting.
         assertEquals(1f, HelloEntrance.travel(EntranceKind.BIG, 0, true))
         assertEquals(0f, HelloEntrance.spread(EntranceKind.BIG, 500, true))
-        assertNull(HelloEntrance.shock(EntranceKind.BIG, HelloEntrance.GREET_AT, true))
-        assertEquals(HelloEntrance.FADE_MS, HelloEntrance.greetAt(EntranceKind.BIG, true))
+        assertNull(HelloEntrance.shock(EntranceKind.BIG, HelloEntrance.REFORM_AT, true))
+        assertEquals(0L, HelloEntrance.greetAt(EntranceKind.BIG, true))
         // The short version: no greeting; gathers from part-way out, then ends back in the bar.
         assertNull(HelloEntrance.greetAt(EntranceKind.SHORT, false))
         assertEquals(HelloEntrance.SHORT_FROM, HelloEntrance.spread(EntranceKind.SHORT, 0, false))
@@ -266,9 +286,9 @@ class HelloTest {
         assertFalse(HelloEntrance.standCalm(quiet = false, reduced = false))
         assertTrue(HelloEntrance.standCalm(quiet = true, reduced = false))
         assertTrue(HelloEntrance.standCalm(quiet = false, reduced = true))
-        // Calm means the cross-fade's timeline: no scatter, no shockwave, it greets after the fade.
+        // Calm means the cross-fade's timeline: no scatter, no shockwave, it greets at once as the fade begins.
         assertEquals(0f, HelloEntrance.spread(EntranceKind.BIG, 500, reduced = true))
-        assertEquals(HelloEntrance.FADE_MS, HelloEntrance.greetAt(EntranceKind.BIG, reduced = true))
+        assertEquals(0L, HelloEntrance.greetAt(EntranceKind.BIG, reduced = true))
         // Shrunk back: the clock again, unless the answer needs Ask's pane (Take me there, Still stuck).
         assertFalse(HelloEntrance.standKeepsTalk(needsAsk = false))
         assertTrue(HelloEntrance.standKeepsTalk(needsAsk = true))

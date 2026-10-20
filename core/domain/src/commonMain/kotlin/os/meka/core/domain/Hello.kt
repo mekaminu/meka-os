@@ -311,9 +311,16 @@ object HelloEntrance {
     const val SCATTER_MS = 260L
     const val GATHER_MS = 600L
     const val SHOCK_MS = 420L
-    /** When the greeting starts: the moment the points have re-formed. */
-    const val GREET_AT = SCATTER_FROM + SCATTER_MS + GATHER_MS
-    const val BIG_MS = GREET_AT + SHOCK_MS
+    /** The moment the points have re-formed (the shockwave goes out). */
+    const val REFORM_AT = SCATTER_FROM + SCATTER_MS + GATHER_MS
+    const val BIG_MS = REFORM_AT + SHOCK_MS
+    /**
+     * When the greeting starts: during the zoom, not after the points re-form (the orb speed pass, Meka 2026-10-20
+     * 19:57: "a lot of wait"; it waited 1.16 s for the scatter and the gather). The target is a hello heard within
+     * 0.6 s of the tap, so the voice is asked for here, well inside [GREET_MAX_MS].
+     */
+    const val GREET_AT = 240L
+    const val GREET_MAX_MS = 300L
     /** The short morning version: a gather from part-way out, the shockwave, a short hold, then back into the bar. */
     const val SHORT_GATHER_MS = 520L
     const val SHORT_FROM = 0.7f
@@ -352,8 +359,19 @@ object HelloEntrance {
     /** When the greeting starts (ms into the entrance); null for the short version, which says nothing. */
     fun greetAt(kind: EntranceKind, reduced: Boolean): Long? = when {
         kind == EntranceKind.SHORT -> null
-        reduced -> FADE_MS
+        reduced -> 0L
         else -> GREET_AT
+    }
+
+    /**
+     * A tap on the stage while the big entrance is still playing skips the rest of it (the orb speed pass: "the
+     * entrance can be tapped through"): the clock jumps to the entrance's end, so the points are home and the hello
+     * (already started at [GREET_AT]) carries on. Null when there's nothing to skip: the short morning version (a tap
+     * closes it), the calm fade, a closing stage, or an entrance that has already settled.
+     */
+    fun tapThrough(kind: EntranceKind, t: Long, reduced: Boolean): Long? {
+        if (kind != EntranceKind.BIG || reduced) return null
+        return if (t < BIG_MS) BIG_MS else null
     }
 
     /** Where the orb is: 0 at its place in the bar … 1 in the middle of the screen. */
@@ -383,7 +401,7 @@ object HelloEntrance {
         return when {
             t < SCATTER_FROM -> 0f
             t < gatherFrom -> easeIn((t - SCATTER_FROM).toFloat() / SCATTER_MS)
-            t < GREET_AT -> 1f - ease((t - gatherFrom).toFloat() / GATHER_MS)
+            t < REFORM_AT -> 1f - ease((t - gatherFrom).toFloat() / GATHER_MS)
             else -> 0f
         }
     }
@@ -395,7 +413,7 @@ object HelloEntrance {
     /** The one gold shockwave as the points re-form: how far out (1 → [SHOCK_REACH]× the radius) and how bright; null otherwise. */
     fun shock(kind: EntranceKind, t: Long, reduced: Boolean): Pair<Float, Float>? {
         if (reduced) return null
-        val from = if (kind == EntranceKind.BIG) GREET_AT else SHORT_GATHER_MS
+        val from = if (kind == EntranceKind.BIG) REFORM_AT else SHORT_GATHER_MS
         if (t < from || t >= from + SHOCK_MS) return null
         val p = (t - from).toFloat() / SHOCK_MS
         return (1f + (SHOCK_REACH - 1f) * ease(p)) to (1 - p) * (1 - p) * 0.8f

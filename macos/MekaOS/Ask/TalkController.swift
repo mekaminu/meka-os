@@ -12,7 +12,7 @@ import Speech
 /// Listening uses `SFSpeechRecognizer`: since the mic fix (steps 3–4, 2026-10-17; ADR-006 addendum, Meka's yes) Apple's
 /// online recognition whenever the Mac has a connection (`MacSignal`), on-device recognition without one
 /// (`ListenRules.engine`; a failure online before any words listens again on the device). Nothing is recorded or kept.
-/// The Mac's recogniser doesn't decide when a question is over, so `TalkEndpoint` does (a 0.8 s pause after his last
+/// The Mac's recogniser doesn't decide when a question is over, so `TalkEndpoint` does (a 0.6 s pause after his last
 /// word or sound; 8 s of nothing is silence). Speaking uses MEKA's voice
 /// (Amazon Polly through MEKA's own server, `MekaCore.speechClip`: only MEKA's own words are sent), piece by piece,
 /// and falls back to `AVSpeechSynthesizer` with the best installed English voice (the one chosen in the voice picker, else
@@ -126,7 +126,8 @@ final class TalkController {
             helloCards = hello.cards
             helloSpokeAt = nil
             Task { await model?.warmVoice() }
-            // Slice 7, the entrance: the orb's points scatter and gather first; it speaks as they re-form.
+            // Slice 7, the entrance: the orb's points scatter and gather. The orb speed pass: it starts speaking while
+            // the orb is still zooming up (`GREET_AT`, 0.24 s), not after the points re-form.
             if !MotionSetting.reduced {
                 let start = Date()
                 entranceAt = start
@@ -213,8 +214,16 @@ final class TalkController {
         }
     }
 
-    /// The orb clicked: while MEKA speaks, stop and listen; otherwise end.
+    /// The orb clicked: during the hello's entrance, skip the rest of it (the hello carries on); while MEKA speaks,
+    /// stop and listen; otherwise end.
     func tapOrb() {
+        if let at = entranceAt {
+            let t = Int64(Date().timeIntervalSince(at) * 1000)
+            if let to = HelloEntrance.shared.tapThrough(kind: .big, t: t, reduced: MotionSetting.reduced) {
+                entranceAt = Date().addingTimeInterval(-Double(to.int64Value) / 1000)
+                return
+            }
+        }
         switch phase {
         case .speaking: apply(TalkFlow.shared.bargeIn(s: session))
         case .ended: start()

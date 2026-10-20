@@ -3303,4 +3303,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(spec.scale(pressed: true, reduced: true), 1, accuracy: 0.001)
         XCTAssertEqual(spec.flashMs(reduced: true), 0)
     }
+
+    /// The orb speed pass (Meka, 2026-10-20 19:57): the hello starts during the entrance and a click skips the rest.
+    func testHelloStartsDuringTheEntranceAndAClickSkipsIt() {
+        let e = HelloEntrance.shared
+        XCTAssertLessThanOrEqual(e.GREET_AT, e.GREET_MAX_MS)
+        XCTAssertLessThan(e.GREET_AT, e.REFORM_AT)
+        XCTAssertEqual(e.tapThrough(kind: .big, t: 500, reduced: false)?.int64Value, e.BIG_MS)
+        XCTAssertNil(e.tapThrough(kind: .big, t: e.BIG_MS, reduced: false))
+        XCTAssertEqual(TalkEndpoint.shared.PAUSE_MS, 600)
+    }
 }

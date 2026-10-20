@@ -27,7 +27,7 @@ object ListenRules {
     fun fallback(engine: ListenEngine, networkFailure: Boolean, onDeviceAvailable: Boolean): ListenEngine? =
         if (engine == ListenEngine.ONLINE && networkFailure && onDeviceAvailable) ListenEngine.ON_DEVICE else null
 
-    /** The pause after his words that ends listening (step 3: "about 0.8 s after he stops"). */
+    /** The pause after his words that ends listening (step 3: "about 0.8 s after he stops"; 0.6 s since the orb speed pass). */
     const val END_PAUSE_MS = TalkEndpoint.PAUSE_MS
 
     /** A microphone level (0 … 1, as the orb draws it) at or over this is him still speaking. */
