@@ -1179,6 +1179,16 @@ final class CoreModel {
         if let v = r.view { mail = v } else { await loadMail() }
     }
 
+    /// Read the full email, slice 3: "Mark an email read when I open it" (synced; off unless he turns it on). Only the Bool crosses.
+    func setMailReaderMarksRead(_ on: Bool) async {
+        guard let core else { return }
+        MekaHaptics.tick()
+        mailMessage = nil
+        guard let r = try? await core.setMailReaderMarksRead(on: on) else { return }
+        mailNote = r.line
+        if let v = r.view { mail = v } else { await loadMail() }
+    }
+
     /// Undo on one of Autopilot's tidies: the server puts the emails back at its next check. Only the id crosses.
     func undoMailTidy(_ id: String) async {
         guard let core else { return }

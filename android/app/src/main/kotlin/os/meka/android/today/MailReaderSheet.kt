@@ -273,6 +273,14 @@ internal fun MailReaderSheet(
                     actions.forEach { a -> MailNeedsPill(a.label, spoken = a.spoken, critical = a.critical) { haptics.medium(); act(a) } }
                     if (openLabel != null && onOpenInMail != null) {
                         MailNeedsPill(openLabel, quiet = true, spoken = "$openLabel, ${v.subject}") { haptics.light(); onOpenInMail() }
+                    } else v.openLink?.let { l ->
+                        // Slice 3: a From your mail card's email opens in Gmail/Outlook too; the hint says where to look.
+                        MailNeedsPill(l.label, quiet = true, spoken = "${l.label}, ${v.subject}") {
+                            haptics.light()
+                            link = null
+                            linkLine = l.hint
+                            runCatching { uri.openUri(l.url) }
+                        }
                     }
                 }
                 AnimatedContent(v.note, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "mail-reader-note") {

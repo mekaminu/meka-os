@@ -93,6 +93,7 @@ class MailReaderTest {
         val headers = linkedMapOf<String, MailHeader>()
         val whole = mutableMapOf<String, MailMessageFacts>()
         val read = mutableListOf<String>()
+        val markedRead = mutableListOf<String>()
         var fails: Exception? = null
         override fun authorizeUrl(client: OAuthClient, redirectUri: String, state: String, codeChallenge: String) = "https://a.example/?state=$state"
         override fun exchangeCode(client: OAuthClient, redirectUri: String, code: String, verifier: String) =
@@ -102,6 +103,7 @@ class MailReaderTest {
         override fun inbox(accessToken: String) = MailboxCheck(headers.size.toLong(), null)
         override fun changes(accessToken: String, cursor: String?, sinceMs: Long) = MailChanges(fetch = headers.keys.toList(), cursor = "h1")
         override fun header(accessToken: String, id: String) = headers[id]
+        override fun markRead(accessToken: String, ids: Collection<String>, read: Boolean) { if (read) markedRead += ids }
         override fun message(accessToken: String, id: String): MailMessageFacts? {
             fails?.let { throw it }
             read += id
@@ -177,6 +179,37 @@ class MailReaderTest {
         assertEquals(MailMessageAnswer.RECONNECT, i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.ITEM, item)).state)
         box.fails = IllegalStateException("provider HTTP 503")
         assertEquals(MailMessageAnswer.FAILED, i.readMailMessage("home", MailMessageCodec.Request(MailMessageCodec.Request.ITEM, item)).state)
+    }
+
+    @Test
+    fun openingAnEmailMarksItReadOnlyWhenHeTurnedThatOn() {
+        val box = Mailbox()
+        val ms = InMemoryMailStore()
+        val ops = InMemoryServerOpStore()
+        val i = world(box, ms, ops)
+        box.headers["p0"] = MailHeader("p0", "t-p0", "office@oakfield.sch.uk", "Oakfield School", "Trip on Friday", now - 60_000, unread = true, inInbox = true)
+        box.whole["p0"] = letter
+        val acc = connect(i)
+        i.syncAccount(acc)
+        val item = MailNeedsRules.itemId(acc, "p0")
+        val request = MailMessageCodec.Request(MailMessageCodec.Request.ITEM, item)
+        // Off (the default): reading it leaves it unread.
+        assertEquals(MailMessageAnswer.OK, i.readMailMessage("home", request).state)
+        assertEquals(emptyList<String>(), box.markedRead)
+        // Turned on in Mail (synced from the Fold): the email he opened is marked read, and only that one.
+        val clock = os.meka.core.sync.HlcClock("fold", { now })
+        ops.transaction {
+            ops.append(os.meka.core.sync.Op(
+                "fold0", "home", EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID,
+                os.meka.core.domain.MailAutopilotFields.READER_MARKS_READ, os.meka.core.sync.FieldValue.Bool(true), clock.now(), emptyList(), "fold",
+            ))
+        }
+        assertEquals(MailMessageAnswer.OK, i.readMailMessage("home", request).state)
+        assertEquals(listOf("p0"), box.markedRead)
+        // Gone: nothing is marked.
+        box.whole.remove("p0")
+        assertEquals(MailMessageAnswer.GONE, i.readMailMessage("home", request).state)
+        assertEquals(listOf("p0"), box.markedRead)
     }
 
     @Test

@@ -145,9 +145,15 @@ object MailAutopilotFields {
     const val CHANGED_AT = "changedAtMs"
     /** Inbox fixes, slice 1: "Mark tidied mail as read" (Bool); absent = on. */
     const val MARK_READ = "markRead"
+    /** Read the full email, slice 3: "Mark an email read when I open it" (Bool); absent = off. */
+    const val READER_MARKS_READ = "readerMarksRead"
 }
 
-data class MailAutopilotSetting(val on: Boolean, val changedAtMs: Long?, val markRead: Boolean = true)
+data class MailAutopilotSetting(
+    val on: Boolean, val changedAtMs: Long?, val markRead: Boolean = true,
+    /** Read the full email, slice 3: opening an email in Navilife's reader marks it read in his mail too. */
+    val readerMarksRead: Boolean = false,
+)
 
 /**
  * One tidy the server did in one account (slice 3b): a `mail_tidy` entity (ADR-008 addendum 2026-10-13), id
@@ -271,7 +277,11 @@ object MailAutopilotRules {
         on = fields?.get(MailAutopilotFields.ON)?.boolOrNull ?: DEFAULT_ON,
         changedAtMs = (fields?.get(MailAutopilotFields.CHANGED_AT) as? FieldValue.Int64)?.value?.takeIf { it > 0 },
         markRead = fields?.get(MailAutopilotFields.MARK_READ)?.boolOrNull ?: true,
+        readerMarksRead = fields?.get(MailAutopilotFields.READER_MARKS_READ)?.boolOrNull ?: false,
     )
+
+    /** Read the full email, slice 3: the "Mark an email read when I open it" switch's write (nothing else touched). */
+    fun readerMarksReadFields(on: Boolean): Map<String, FieldValue> = mapOf(MailAutopilotFields.READER_MARKS_READ to on.fv())
 
     /** Inbox fixes, slice 1: the "Mark tidied mail as read" switch's write (the Autopilot switch's own fields untouched). */
     fun markReadFields(on: Boolean): Map<String, FieldValue> = mapOf(MailAutopilotFields.MARK_READ to on.fv())
@@ -405,6 +415,11 @@ data class MailAutopilotPanel(
     val markReadTitle: String = MailAutopilotPanelRules.MARK_READ_TITLE,
     val markReadLine: String = MailAutopilotPanelRules.MARK_READ_ON_LINE,
     val markReadAction: String = MailAutopilotPanelRules.TURN_OFF,
+    /** Read the full email, slice 3: "Mark an email read when I open it" (synced; absent = off), its line and action. */
+    val readerRead: Boolean = false,
+    val readerReadTitle: String = MailAutopilotPanelRules.READER_READ_TITLE,
+    val readerReadLine: String = MailAutopilotPanelRules.READER_READ_OFF_LINE,
+    val readerReadAction: String = MailAutopilotPanelRules.TURN_ON,
 )
 
 object MailAutopilotPanelRules {
@@ -438,7 +453,20 @@ object MailAutopilotPanelRules {
         markRead = setting.markRead,
         markReadLine = if (setting.markRead) MARK_READ_ON_LINE else MARK_READ_OFF_LINE,
         markReadAction = if (setting.markRead) TURN_OFF else TURN_ON,
+        readerRead = setting.readerMarksRead,
+        readerReadLine = if (setting.readerMarksRead) READER_READ_ON_LINE else READER_READ_OFF_LINE,
+        readerReadAction = if (setting.readerMarksRead) TURN_OFF else TURN_ON,
     )
+
+    // ---- Read the full email, slice 3: "Mark an email read when I open it" (off unless he turns it on) ----
+
+    const val READER_READ_TITLE = "Mark an email read when I open it"
+    const val READER_READ_OFF_LINE = "Off · reading an email in Navilife leaves it unread in your mail; Done still archives it"
+    const val READER_READ_ON_LINE = "On · opening an email in Navilife's reader marks it read in your mail too, as opening it there would"
+
+    /** What the switch says once flipped (Mail's note). */
+    fun readerReadSwitchedLine(on: Boolean): String =
+        if (on) "Emails you open in Navilife will be marked read" else "Emails you open in Navilife stay unread"
 
     // ---- Inbox fixes, slice 5: the Mark-read switch in Mail (Meka, 2026-10-15 20:59: "I thought it would mark emails as read") ----
 

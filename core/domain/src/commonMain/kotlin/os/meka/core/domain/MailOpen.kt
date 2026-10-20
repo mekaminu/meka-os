@@ -81,11 +81,54 @@ object MailOpenRules {
      * Gmail's search for [e]: everywhere, from its domain (else its name), its subject as a phrase, and the day it came
      * with a day either side (Gmail's dates are its own time zone).
      */
-    fun gmailQuery(e: MailTidiedEmail, cal: LocalCalendar): String {
-        val day = cal.epochDayOf(e.receivedAtMs)
-        val from = e.domain?.let { "from:$it" } ?: words(e.from).takeIf { it.isNotEmpty() }?.let { "from:\"$it\"" }
-        val subject = words(e.subject).takeIf { it.isNotEmpty() && e.subject != MailTidiedRules.NO_SUBJECT }?.let { "subject:\"$it\"" }
-        return listOfNotNull("in:anywhere", from, subject, "after:" + ymd(day - 1), "before:" + ymd(day + 2)).joinToString(" ")
+    fun gmailQuery(e: MailTidiedEmail, cal: LocalCalendar): String =
+        query(e.domain?.let { "from:$it" }, e.from, e.subject, e.receivedAtMs, cal)
+
+    private fun query(fromTerm: String?, fromName: String, subject: String, atMs: Long, cal: LocalCalendar): String {
+        val day = cal.epochDayOf(atMs)
+        val from = fromTerm ?: words(fromName).takeIf { it.isNotEmpty() }?.let { "from:\"$it\"" }
+        val s = words(subject).takeIf { it.isNotEmpty() && subject != MailTidiedRules.NO_SUBJECT }?.let { "subject:\"$it\"" }
+        return listOfNotNull("in:anywhere", from, s, "after:" + ymd(day - 1), "before:" + ymd(day + 2)).joinToString(" ")
+    }
+
+    // ---- Read the full email, slice 3 (2026-10-20): Open in Gmail/Outlook from a "From your mail" card's reader ----
+
+    /** A plain address, safe in Gmail's search (letters, digits and . _ % + - @ only), else null. */
+    private fun address(a: String?): String? =
+        a?.trim()?.lowercase()?.takeIf { it.length in 3..254 && it.count { c -> c == '@' } == 1 && it.all { c -> c.isLetterOrDigit() || c in "._%+-@" } }
+
+    /**
+     * The reader's **Open in Gmail / Open in Outlook** for a "From your mail" card's email: its account by the card's
+     * label ("Personal", "Business", "Outlook"), Gmail searched by the sender's address when the reader read it (else
+     * the name), the subject and the day; Outlook's Inbox, or its Archive once Done. Null when the account can't be told.
+     */
+    fun itemLink(
+        account: String, from: String, fromAddress: String?, subject: String, receivedAtMs: Long, done: Boolean,
+        accounts: List<MailAccountFacts>, cal: LocalCalendar,
+    ): MailOpenLink? {
+        val acct = accounts.filter { MailProviders.isMail(it.provider) }.firstOrNull { MailLabel.of(it.label)?.label == account }
+        val provider = acct?.provider ?: if (account == MailLabel.OUTLOOK.label) MailProviders.OUTLOOK else return null
+        val place = if (done) MailPlace.ARCHIVE else MailPlace.INBOX
+        return when (provider) {
+            MailProviders.GMAIL -> {
+                val mine = acct?.email?.trim()?.takeIf { it.contains('@') } ?: return null
+                MailOpenLink(
+                    label = "Open in Gmail",
+                    url = GMAIL_BASE + "?authuser=" + LeavingRules.percentEncode(mine) + "#search/" +
+                        LeavingRules.percentEncode(query(address(fromAddress)?.let { "from:$it" }, from, subject, receivedAtMs, cal)),
+                    hint = "Opens your $account Gmail and searches for it · it's in ${gmailPlace(place)}",
+                )
+            }
+            MailProviders.OUTLOOK -> {
+                val s = if (subject.isBlank() || subject == MailTidiedRules.NO_SUBJECT) "the email" else "“$subject”"
+                MailOpenLink(
+                    label = "Open in Outlook",
+                    url = OUTLOOK_BASE + place.outlookFolder,
+                    hint = "Opens Outlook's ${place.outlookName} · look for $s from $from, ${CivilDate.shortLabel(cal.epochDayOf(receivedAtMs))}",
+                )
+            }
+            else -> null
+        }
     }
 
     /**

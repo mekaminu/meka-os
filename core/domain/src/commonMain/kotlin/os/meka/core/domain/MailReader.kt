@@ -422,6 +422,12 @@ data class MailReaderView(
     val spoken: String,
     /** Which email this is, for opening its attachments ([MailAttachmentRules]); null when it couldn't be read. */
     val source: MailReaderSource? = null,
+    /**
+     * Slice 3: **Open in Gmail / Open in Outlook** for a "From your mail" card's email (made as it is read, handed to the
+     * browser only on his tap, never kept); null for a tidied email (Archived for you passes its own) or when the account
+     * can't be told.
+     */
+    val openLink: MailOpenLink? = null,
 )
 
 /** Navilife's own handle for the email in a reader: a card's id ([MailReaderSource.ITEM]) or a tidy's email ([TIDIED]). */
@@ -436,6 +442,9 @@ object MailReaderRules {
     const val SHOW_IMAGES = "Show images"
     const val IMAGES_SHOWN = "Pictures shown for this email"
     const val READ_WHOLE = "Read the whole email"
+    /** Slice 3: the note's end, by Mail's "Mark an email read when I open it" (off unless he turns it on). */
+    const val STAYS_UNREAD_NOTE = "reading it here doesn't mark it read"
+    const val MARKS_READ_NOTE = "opening it here marked it read"
     const val CLOSE = "Close"
     const val LOADING = "Getting the whole email…"
     const val GONE = "This email isn't in your mailbox any more · here's what Navilife had"
@@ -526,6 +535,7 @@ object MailReaderRules {
     fun view(
         r: MailMessageAnswer?, fallback: MailReaderFallback, nowMs: Long, cal: LocalCalendar, images: Boolean,
         source: MailReaderSource? = null,
+        marksRead: Boolean = false,
     ): MailReaderView {
         val ok = r?.state == MailMessageAnswer.OK
         val problem = when {
@@ -551,7 +561,7 @@ object MailReaderRules {
             else -> "${attachments.size} attachments"
         }
         val account = fallback.account
-        val note = if (ok) "Read from your $account mail just now · Navilife doesn't keep it · reading it here doesn't mark it read"
+        val note = if (ok) "Read from your $account mail just now · Navilife doesn't keep it · " + if (marksRead) MARKS_READ_NOTE else STAYS_UNREAD_NOTE
             else "Navilife keeps only this preview of your $account mail"
         val toLine = if (ok) people("To", r!!.to) else null
         val ccLine = if (ok) people("Cc", r!!.cc) else null

@@ -60,6 +60,13 @@ struct MailSheet: View {
                         Task { await model.setMailMarkRead(on) }
                     }
                     .staggeredAppear(2)
+                    // Read the full email, slice 3: "Mark an email read when I open it" (synced with the Fold).
+                    SwitchPanelView(on: panel.readerRead, title: panel.readerReadTitle, line: panel.readerReadLine,
+                                    action: panel.readerReadAction, palette: palette) {
+                        let on = !panel.readerRead
+                        Task { await model.setMailReaderMarksRead(on) }
+                    }
+                    .staggeredAppear(2)
                     // Slice 7: when the ten-minute inbox comes (synced with the Fold).
                     if let key = model.mailMomentKey {
                         MomentPanelView(key: key, palette: palette) { picked in
@@ -487,6 +494,42 @@ private struct MarkReadPanelView: View {
             .accessibilityElement(children: .combine)
             Spacer(minLength: MekaSpace.xs)
             Button(panel.markReadAction, action: onSwitch)
+                .buttonStyle(MekaPressStyle())
+                .font(MekaType.itemMeta)
+                .foregroundStyle(palette.accent)
+                .padding(.horizontal, MekaSpace.m)
+                .padding(.vertical, MekaSpace.xxs)
+                .background(Capsule().fill(palette.hairline))
+        }
+        .padding(MekaSpace.m)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+    }
+}
+
+/// Read the full email, slice 3: one of Mail's switches from plain values (only Strings and a Bool cross).
+private struct SwitchPanelView: View {
+    let on: Bool
+    let title: String
+    let line: String
+    let action: String
+    let palette: MekaPalette
+    let onSwitch: () -> Void
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MekaSpace.xs) {
+            Circle().fill(on ? palette.accent : palette.hairline)
+                .frame(width: 10, height: 10)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: MekaSpace.xs)
+            Button(action, action: onSwitch)
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.itemMeta)
                 .foregroundStyle(palette.accent)

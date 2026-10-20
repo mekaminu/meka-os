@@ -5752,7 +5752,18 @@ class MekaCore(
         val fallback = os.meka.core.domain.MailReaderFallback(
             item?.from ?: "Unknown sender", item?.subject ?: "", item?.preview, item?.receivedAtMs ?: nowMs(), item?.account ?: "your",
         )
-        return readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images)
+        val view = readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images)
+        item ?: return view
+        // Slice 3: Open in Gmail/Outlook at the reader's foot, made now from the card and the account list (never kept).
+        val facts = lastMailFacts ?: if (item.account == os.meka.core.domain.MailLabel.OUTLOOK.label) emptyList() else try {
+            accountsApi?.mailAccounts()?.also { lastMailFacts = it }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        val address = view.fromAddress ?: view.from.takeIf { it.contains('@') }
+        val link = os.meka.core.domain.MailOpenRules.itemLink(
+            item.account, item.from, address.takeIf { view.problem == null }, item.subject, item.receivedAtMs,
+            done = item.doneAtMs != null && item.undoneAtMs == null, accounts = facts.orEmpty(), cal = ZoneCalendar(timeZone),
+        )
+        return view.copy(openLink = link)
     }
 
     /**
@@ -5809,7 +5820,9 @@ class MekaCore(
                 blockedImages = x.blockedImages,
             )
         }
-        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source)
+        // Slice 3: the server marks it read when Mail's "Mark an email read when I open it" is on; the note says so.
+        val marksRead = onCore { mailAutopilotSetting().readerMarksRead }
+        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images, source, marksRead)
     }
 
     /** A link tapped in the reader: where it really goes, for the confirm, or null when Navilife won't open it. */
@@ -7353,6 +7366,23 @@ class MekaCore(
             }
         }
         return MailSwitched(os.meka.core.domain.MailAutopilotPanelRules.markReadSwitchedLine(on), lastMailFacts?.let { mailView(it) })
+    }
+
+    /**
+     * Read the full email, slice 3: Mail's "Mark an email read when I open it" switch (synced on the Autopilot entity,
+     * absent = off; the server follows it when it reads an email for the reader). Returns Mail's line and the pane.
+     */
+    suspend fun setMailReaderMarksRead(on: Boolean): MailSwitched {
+        onCore {
+            if (mailAutopilotSetting().readerMarksRead != on) {
+                replica.commitLocal(
+                    os.meka.core.domain.EntityTypes.CONTEXT_MODE, os.meka.core.domain.MailAutopilotRules.ENTITY_ID,
+                    os.meka.core.domain.MailAutopilotRules.readerMarksReadFields(on),
+                )
+                refresh()
+            }
+        }
+        return MailSwitched(os.meka.core.domain.MailAutopilotPanelRules.readerReadSwitchedLine(on), lastMailFacts?.let { mailView(it) })
     }
 
     /**

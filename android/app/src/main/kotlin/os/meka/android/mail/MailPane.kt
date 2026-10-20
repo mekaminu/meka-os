@@ -189,6 +189,16 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
         if (now != null) view = Result.success(now) else reload++
     }
 
+    // Read the full email, slice 3: "Mark an email read when I open it" (synced; the server follows it as it reads one).
+    fun switchReaderRead(on: Boolean) = scope.launch {
+        haptics.tick()
+        message = null
+        val r = core.setMailReaderMarksRead(on)
+        note = r.line
+        val now = r.view
+        if (now != null) view = Result.success(now) else reload++
+    }
+
     fun setMoment(time: MailMomentTime) = scope.launch {
         haptics.tick()
         message = null
@@ -298,6 +308,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 v.autopilot?.let { AutopilotCard(it, Modifier.appear(rememberAppearance(0))) { switchAutopilot(!it.on) } }
                 v.autopilot?.let { MarkReadCard(it, Modifier.appear(rememberAppearance(0))) { switchMarkRead(!it.markRead) } }
+                v.autopilot?.let { ReaderReadCard(it, Modifier.appear(rememberAppearance(0))) { switchReaderRead(!it.readerRead) } }
                 if (v.autopilot != null) momentTime?.let { t -> MomentCard(t, Modifier.appear(rememberAppearance(0))) { setMoment(it) } }
                 if (v.autopilot != null) warranty?.let { w -> WarrantyCard(w, Modifier.appear(rememberAppearance(0))) { setWarranty(it) } }
                 if (v.autopilot != null) waits?.let { p ->
@@ -719,25 +730,35 @@ private fun AutopilotCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitc
 
 /** Inbox fixes, slice 5: "Mark tidied mail as read" with its line and Turn off / Turn on (tick haptic). */
 @Composable
-private fun MarkReadCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) {
+private fun MarkReadCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) =
+    SwitchCard(panel.markRead, panel.markReadTitle, panel.markReadLine, panel.markReadAction, "mark-read", modifier, onSwitch)
+
+/** Read the full email, slice 3: "Mark an email read when I open it" (off unless he turns it on), the same card. */
+@Composable
+private fun ReaderReadCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) =
+    SwitchCard(panel.readerRead, panel.readerReadTitle, panel.readerReadLine, panel.readerReadAction, "reader-read", modifier, onSwitch)
+
+/** One of Mail's switches: a dot (gold when on), the title, its line and Turn off / Turn on, crossfading as it flips. */
+@Composable
+private fun SwitchCard(on: Boolean, title: String, line: String, action: String, tag: String, modifier: Modifier, onSwitch: () -> Unit) {
     val reduced = Meka.reducedMotion
     val dot by animateColorAsState(
-        if (panel.markRead) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "mark-read-dot",
+        if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "$tag-dot",
     )
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
-            .semantics(mergeDescendants = true) { contentDescription = panel.markReadTitle + ". " + panel.markReadLine },
+            .semantics(mergeDescendants = true) { contentDescription = "$title. $line" },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
         Column(Modifier.weight(1f)) {
-            Text(panel.markReadTitle, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(panel.markReadLine, animationSpec = MekaMotion.appear(reduced), label = "mark-read-line") {
+            Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "$tag-line") {
                 Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
-        Crossfade(panel.markReadAction, animationSpec = MekaMotion.appear(reduced), label = "mark-read-action") { a ->
+        Crossfade(action, animationSpec = MekaMotion.appear(reduced), label = "$tag-action") { a ->
             Text(
                 a, style = MekaType.itemMeta, color = Meka.colors.accent,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)

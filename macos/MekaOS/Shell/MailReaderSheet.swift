@@ -222,6 +222,15 @@ struct MailReaderSheet: View {
             if let openLabel, let openInMail {
                 MailNeedsPill(label: openLabel, palette: palette, quiet: true, spoken: "\(openLabel), \(v.subject)",
                               action: { MekaHaptics.light(); openInMail() })
+            } else if let l = v.openLink {
+                // Slice 3: a From your mail card's email opens in Gmail/Outlook too; the hint says where to look.
+                let label = l.label, hint = l.hint, url = l.url
+                MailNeedsPill(label: label, palette: palette, quiet: true, spoken: "\(label), \(v.subject)", action: {
+                    MekaHaptics.light()
+                    link = nil
+                    linkLine = hint
+                    if let u = URL(string: url) { NSWorkspace.shared.open(u) }
+                })
             }
         }
         Text(v.note).font(MekaType.caption).foregroundStyle(palette.textTertiary)

@@ -56,6 +56,13 @@ class MailReaderFacadeTest {
                 blockedImages = if (request.images) 0 else 1,
             )
         }
+        var accountsAsked = 0
+        override suspend fun mailAccounts(): List<os.meka.core.domain.MailAccountFacts> {
+            accountsAsked++
+            return listOf(os.meka.core.domain.MailAccountFacts(
+                os.meka.core.domain.MailProviders.GMAIL, "alex@example.com", "ok", null, os.meka.core.domain.MailLabel.PERSONAL.name,
+            ))
+        }
         val files = mutableListOf<MailMessageCodec.AttachmentRequest>()
         override suspend fun mailAttachment(request: MailMessageCodec.AttachmentRequest): MailMessageCodec.AttachmentFetch {
             files += request
@@ -137,5 +144,29 @@ class MailReaderFacadeTest {
         val off = fold.readMailItem(id)
         assertNull(off.source)
         assertEquals(os.meka.core.domain.MailAttachmentRules.GONE_LINE, fold.openMailAttachment(off, 0).line)
+    }
+
+    @Test
+    fun aCardsReaderOpensInGmailAndSaysWhetherOpeningMarkedItRead() = runTest {
+        val id = MailNeedsRules.itemId("acc1", "m3")
+        MailNeedsRules.serverFields("Personal", "Sam Taylor", "sam@example.com", "Saturday", "Are you still OK…", now - hour, 1).forEach { (f, v) ->
+            serverOps.append(Op("srvmo${k++}", "hh", EntityTypes.MAIL_ITEM, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        val fold = core()
+        assertTrue(fold.syncNow())
+        val v = fold.readMailItem(id)
+        val l = assertNotNull(v.openLink)
+        assertEquals("Open in Gmail", l.label)
+        assertTrue(l.url.contains("authuser=alex%40example.com"), l.url)
+        assertTrue(l.url.contains("from%3Asam%40example.com"), l.url)
+        assertTrue(v.note.endsWith(MailReaderRules.STAYS_UNREAD_NOTE))
+        // The account list is asked for once, then kept for this run.
+        fold.readMailItem(id)
+        assertEquals(1, server.accountsAsked)
+        // A tidied email has none of its own (Archived for you passes its own link).
+        assertNull(fold.readArchivedMail("mtb1", "te1").openLink)
+        // Turned on in Mail: the reader says opening it marked it read (the server does the marking).
+        assertEquals(os.meka.core.domain.MailAutopilotPanelRules.readerReadSwitchedLine(true), fold.setMailReaderMarksRead(true).line)
+        assertTrue(fold.readMailItem(id).note.endsWith(MailReaderRules.MARKS_READ_NOTE))
     }
 }

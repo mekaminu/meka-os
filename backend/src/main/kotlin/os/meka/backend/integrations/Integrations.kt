@@ -438,8 +438,14 @@ class Integrations(
             val client = clients.get(m.oauth) ?: return os.meka.core.wire.MailMessageCodec.Response(answer.FAILED)
             return try {
                 val token = freshAccess(a, "mail") { refresh -> m.refresh(client, refresh) }
-                val facts = ids.firstNotNullOfOrNull { id -> m.message(token, id) }
+                val (id, facts) = ids.firstNotNullOfOrNull { id -> m.message(token, id)?.let { id to it } }
                     ?: return os.meka.core.wire.MailMessageCodec.Response(answer.GONE)
+                // Slice 3: Mail's "Mark an email read when I open it" (off unless he turned it on): his own open, so
+                // it's marked read in his mail too; best effort, the email is shown either way.
+                if (readerMarksRead(householdId)) {
+                    markRead(m, token, listOf(id), true)
+                    runCatching { ms.markSeen(a.id, listOf(id)) }
+                }
                 mailMessageResponse(facts, request.images)
             } catch (e: ReconnectRequired) {
                 forgetAccess(a.id)
@@ -1987,6 +1993,10 @@ class Integrations(
     /** Inbox fixes, slice 1: his "Mark tidied mail as read" (on unless he turned it off). */
     private fun markingRead(householdId: String): Boolean =
         MailAutopilotRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID)).markRead
+
+    /** Read the full email, slice 3: his "Mark an email read when I open it" (off unless he turned it on). */
+    private fun readerMarksRead(householdId: String): Boolean =
+        MailAutopilotRules.read(reader.entity(householdId, EntityTypes.CONTEXT_MODE, MailAutopilotRules.ENTITY_ID)).readerMarksRead
 
     /** Marks [ids] read (or unread for an Undo); best effort, a failure never undoes the move it follows. */
     private fun markRead(m: MailProvider, token: String, ids: List<String>, read: Boolean) {
