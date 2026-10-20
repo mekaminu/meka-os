@@ -60,8 +60,8 @@ internal fun StageHelloCard(card: HelloCard, rise: CardRise, density: Float, mod
             .border(1.dp, (if (card.warm) c.calendar3 else c.accent).copy(alpha = 0.35f), cardShape)
             .clickable(role = Role.Button, enabled = rise.alpha > 0.5f, onClick = onTap)
             .semantics { contentDescription = HelloCards.label(card) }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.s),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Text(card.eyebrow, style = MekaType.sectionLabel, color = if (card.warm) c.calendar3 else c.accent, maxLines = 1)
         Text(card.title, style = MekaType.body, color = c.textPrimary, maxLines = 2)

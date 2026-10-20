@@ -44,7 +44,7 @@ struct HelloCardsRow: View {
         TimelineView(.animation(minimumInterval: 1.0 / 60, paused: spokeAt == nil || settled)) { context in
             let shown = cards.prefix(Int(HelloCards.shared.MAX))
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: MekaSpace.s) { ForEach(shown) { card(for: $0, at: context.date) } }
+                HStack(alignment: .top, spacing: MekaSpace.xs) { ForEach(shown) { card(for: $0, at: context.date) } }
                 VStack(spacing: MekaSpace.xs) { ForEach(shown) { card(for: $0, at: context.date) } }
             }
         }
@@ -61,12 +61,12 @@ struct HelloCardsRow: View {
         let rise = HelloCards.shared.rise(ms: ms, reduced: reduceMotion)
         let tint = c.warm ? palette.calendar3 : palette.accent
         return Button { onOpen(c) } label: {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(c.eyebrow).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(tint).lineLimit(1)
                 Text(c.title).font(MekaType.body).foregroundStyle(palette.textPrimary).lineLimit(2)
                 if let d = c.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1) }
             }
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.s)
+            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
             .frame(width: CGFloat(HelloCards.shared.CARD_DP), alignment: .leading)
             .background(palette.surface, in: RoundedRectangle(cornerRadius: MekaRadius.m))
             .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).stroke(tint.opacity(0.35), lineWidth: 1))
