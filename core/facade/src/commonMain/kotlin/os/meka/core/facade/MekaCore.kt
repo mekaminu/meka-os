@@ -6954,7 +6954,8 @@ class MekaCore(
      */
     private fun directAddAllowed(p: os.meka.core.domain.AskProposal): Boolean {
         if (directAddSetting().askFirst) return false
-        val (type, domain) = askAction(p)
+        val (type, domain) = AskPolicy.action(p)
+        if (type in AskPolicy.NEVER || type.external) return false
         val rule = os.meka.core.domain.DirectAddRules.RULE_ID
         val config = PolicyConfig(
             levels = mapOf((domain to type) to AutonomyLevel.AUTO_UNDER_RULE), autoRules = mapOf(rule to type),
@@ -9432,86 +9433,12 @@ class MekaCore(
         t.done.takeLast(os.meka.core.domain.TalkRules.MAX_DONE).map { it.take(os.meka.core.domain.AskRules.MAX_LINE) },
     )
 
-    /** ADR-006: a model's proposal is a suggestion the policy engine must allow; it can never run without a tap. */
-    private fun askAllowed(p: os.meka.core.domain.AskProposal, untrusted: Boolean): Boolean {
-        val (type, domain) = askAction(p)
-        val decision = PolicyEngine(PolicyConfig()).decide(
-            ActionRequest(
-                type, domain,
-                provenance = if (untrusted) Provenance.MODEL_FROM_UNTRUSTED else Provenance.MODEL_FROM_TRUSTED,
-                reversible = true,
-                requestedLevel = AutonomyLevel.SUGGEST,
-            ),
-        )
-        return decision !is PolicyDecision.Deny && decision !is PolicyDecision.Permit
-    }
+    /** ADR-006: a model's proposal is a suggestion the policy engine must allow; it can never run without a tap ([AskPolicy]). */
+    private fun askAllowed(p: os.meka.core.domain.AskProposal, untrusted: Boolean): Boolean = AskPolicy.allowed(p, untrusted)
 
-    /**
-     * Earned trust: may [p] run on its own? Only when the policy engine permits Level 4 under the explicit rule Meka's
-     * "just do it" made for [kind] (ADR-006: reversible, an allowlisted rule, never from untrusted provenance).
-     */
-    private fun askAuto(p: os.meka.core.domain.AskProposal, kind: os.meka.core.domain.TrustKind, untrusted: Boolean): Boolean {
-        val (type, domain) = askAction(p)
-        val rule = os.meka.core.domain.TrustRules.ruleId(kind)
-        // The kill switch ("What MEKA may do" → Pause) holds every kind at asking first.
-        val config = PolicyConfig(
-            levels = mapOf((domain to type) to AutonomyLevel.AUTO_UNDER_RULE), autoRules = mapOf(rule to type),
-            killSwitch = autonomy.paused(),
-        )
-        val decision = PolicyEngine(config).decide(
-            ActionRequest(
-                type, domain,
-                provenance = if (untrusted) Provenance.MODEL_FROM_UNTRUSTED else Provenance.MODEL_FROM_TRUSTED,
-                reversible = true,
-                requestedLevel = AutonomyLevel.AUTO_UNDER_RULE,
-                ruleId = rule,
-            ),
-        )
-        return decision is PolicyDecision.Permit
-    }
-
-    private fun askAction(p: os.meka.core.domain.AskProposal): Pair<ActionType, PolicyDomain> {
-        return when (p) {
-            is os.meka.core.domain.AskProposal.AddTask -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            is os.meka.core.domain.AskProposal.CompleteTask, is os.meka.core.domain.AskProposal.MoveTask -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
-            // Changes an event in Google or Outlook: always a card he taps (never earned trust, TrustRules.kindOf).
-            is os.meka.core.domain.AskProposal.MoveEvent -> ActionType.CREATE_CALENDAR_EVENT to PolicyDomain.CALENDAR
-            is os.meka.core.domain.AskProposal.StartFast -> ActionType.CREATE_TASK to PolicyDomain.HEALTH
-            is os.meka.core.domain.AskProposal.Timer, is os.meka.core.domain.AskProposal.Alarm -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Meka's own list (his wife sees it, but adding to it sends nothing to anyone).
-            is os.meka.core.domain.AskProposal.AddShopping -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // The week's dinners: Meka's own plan (nothing is sent or bought).
-            is os.meka.core.domain.AskProposal.PlanDinner -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Meka's own evening setting (nothing is booked, cancelled or sent).
-            is os.meka.core.domain.AskProposal.SkipDateNight -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Meka's own weekly hour (nothing is booked, cancelled or sent).
-            is os.meka.core.domain.AskProposal.SkipLifeAdmin -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // A note in Meka's own Gifts (nothing is ordered, bought or sent).
-            is os.meka.core.domain.AskProposal.AddGiftIdea -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // A promise in Meka's own Lists (nothing is sent to anyone).
-            is os.meka.core.domain.AskProposal.AddPromise -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // A booking in Meka's own trip (nothing is booked, paid or sent).
-            is os.meka.core.domain.AskProposal.AddBooking -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Marks Meka's own radar item done, like its button (nothing is paid, booked or sent).
-            is os.meka.core.domain.AskProposal.RenewalDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
-            // Keeps a line in Meka's own wins log (nothing is sent to anyone).
-            is os.meka.core.domain.AskProposal.AddWin -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Marks one of Meka's own saved links read, like its Done button (nothing is opened, fetched or sent).
-            is os.meka.core.domain.AskProposal.QueueDone -> ActionType.RESCHEDULE_ITEM to PolicyDomain.TASKS
-            // Marks days off in Meka's own planner, like the Leave pane (nothing is sent to his employer or anyone).
-            is os.meka.core.domain.AskProposal.BookLeave -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Keeps a fact on Meka's own page (nothing is sent to anyone).
-            is os.meka.core.domain.AskProposal.AddFact -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Adds to Meka's own errands list (nothing is sent; where a place is stays on the Fold).
-            is os.meka.core.domain.AskProposal.AddErrand -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Adds to one of Meka's own task checklists (nothing is sent to anyone).
-            is os.meka.core.domain.AskProposal.AddChecklist -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Adds one of Meka's own goals (nothing is sent to anyone).
-            is os.meka.core.domain.AskProposal.AddGoal -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-            // Changes Meka's own reading list, like its buttons (nothing is fetched, bought or sent).
-            is os.meka.core.domain.AskProposal.ReadingUpdate -> ActionType.CREATE_TASK to PolicyDomain.TASKS
-        }
-    }
+    /** Earned trust: may [p] run on its own under Meka's "just do it" for [kind]? ([AskPolicy.auto]; the kill switch holds it.) */
+    private fun askAuto(p: os.meka.core.domain.AskProposal, kind: os.meka.core.domain.TrustKind, untrusted: Boolean): Boolean =
+        AskPolicy.auto(p, kind, untrusted, autonomy.paused())
 
     // ---- Self-updating phone app (build plan M1) ----
 

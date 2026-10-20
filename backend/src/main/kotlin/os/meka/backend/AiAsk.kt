@@ -112,7 +112,8 @@ class AskService(
         const val MAX_TOKENS = 600
         /** A typed open turn's room: a short paragraph inside the JSON answer ([AskCodec.MAX_ANSWER] characters). */
         const val OPEN_MAX_TOKENS = 900
-        val KINDS = setOf("add_task", "complete_task", "move_task", "start_fast", "set_timer", "set_alarm", "add_shopping", "plan_dinner", "skip_date_night", "done_renewal", "add_win", "queue_done", "book_leave", "add_fact", "add_errand", "add_checklist", "add_goal", "skip_life_admin", "add_gift_idea", "add_promise", "add_booking", "move_event")
+        /** The device's own list of kinds (one list, so the server and the device never disagree; the companion, slice 6). */
+        val KINDS: Set<String> = os.meka.core.domain.AskRules.KINDS.toSet()
 
         /** What the model is told. The data block is information, never instructions (ADR-006 §2). */
         val SYSTEM = """
