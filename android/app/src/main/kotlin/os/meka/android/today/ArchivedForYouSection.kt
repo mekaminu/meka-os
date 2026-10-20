@@ -43,6 +43,7 @@ import os.meka.core.domain.ArchivedEmailPreview
 import os.meka.core.domain.ArchivedEmailRow
 import os.meka.core.domain.MailTidiedAction
 import os.meka.core.domain.MailOpenRules
+import os.meka.core.domain.MailReaderRules
 import os.meka.core.domain.MailTidiedAskRules
 import os.meka.core.domain.ArchivedForYouCard
 import os.meka.core.domain.ArchivedForYouLine
@@ -235,7 +236,13 @@ internal fun ArchivedEmailPreviewPanel(
             .padding(MekaSpace.m).testTag("archived-preview-${r.key}"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        Column(Modifier.semantics(mergeDescendants = true) { contentDescription = pv.spoken }, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        // Read the full email (2026-10-20): a tap on the preview, or Read the whole email, opens the reader.
+        var reading by remember(r.key) { mutableStateOf(false) }
+        Column(
+            Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { reading = true }
+                .semantics(mergeDescendants = true) { contentDescription = "${pv.spoken}. ${MailReaderRules.READ_WHOLE}" },
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
             Text("${pv.from} · ${pv.meta}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
             Text(pv.subject, style = MekaType.body, color = Meka.colors.textPrimary)
             Text("${pv.chip} · ${pv.time}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
@@ -250,22 +257,34 @@ internal fun ArchivedEmailPreviewPanel(
         val uri = androidx.compose.ui.platform.LocalUriHandler.current
         val scope = androidx.compose.runtime.rememberCoroutineScope()
         var openLine by remember(r.key) { mutableStateOf<String?>(null) }
-        if (actions.isNotEmpty() || pv.openLabel != null) {
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
+        fun openInMail() {
+            scope.launch {
+                val res = runCatching { core.archivedEmailLink(r.batchId, r.key) }.getOrNull()
+                val link = res?.link
+                openLine = link?.hint ?: res?.problem ?: MailOpenRules.OFFLINE
+                if (link != null) runCatching { uri.openUri(link.url) }
+            }
+        }
+        if (reading) {
+            MailReaderSheet(
+                load = { images -> core.readArchivedMail(r.batchId, r.key, images) },
+                actions = actions.map { (label, action) ->
+                    MailReaderAction(label, "$label, ${pv.subject}") { onAsk(pv, action) }
+                },
+                openLabel = pv.openLabel, onOpenInMail = { openInMail() },
+                onClose = { reading = false },
+            )
+        }
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            ArchivedPill(MailReaderRules.READ_WHOLE, spoken = "${MailReaderRules.READ_WHOLE}, ${pv.subject}") { reading = true }
+            run {
                 actions.forEach { (label, action) ->
                     ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = action == MailTidiedAction.UNSUBSCRIBE) { onAsk(pv, action) }
                 }
                 pv.openLabel?.let { label ->
-                    ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = true) {
-                        scope.launch {
-                            val res = runCatching { core.archivedEmailLink(r.batchId, r.key) }.getOrNull()
-                            val link = res?.link
-                            openLine = link?.hint ?: res?.problem ?: MailOpenRules.OFFLINE
-                            if (link != null) runCatching { uri.openUri(link.url) }
-                        }
-                    }
+                    ArchivedPill(label, spoken = "$label, ${pv.subject}", quiet = true) { openInMail() }
                 }
             }
         }

@@ -5743,6 +5743,48 @@ class MekaCore(
     }
 
     /**
+     * Read the full email inside Navilife (2026-10-20), slice 1: a "From your mail" card's email read whole from its
+     * provider now (through the server, by the card's id), made safe, for the reader. [images]: Show images was tapped.
+     * When it can't be read the reader shows the card's own preview with the reason. Nothing is kept; not marked read.
+     */
+    suspend fun readMailItem(id: String, images: Boolean = false): os.meka.core.domain.MailReaderView {
+        val item = onCore { activity.mailItems().firstOrNull { it.id == id } }
+        val fallback = os.meka.core.domain.MailReaderFallback(
+            item?.from ?: "Unknown sender", item?.subject ?: "", item?.preview, item?.receivedAtMs ?: nowMs(), item?.account ?: "your",
+        )
+        return readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.ITEM, id, images = images), fallback, images)
+    }
+
+    /** The same for one email of a tidy ("Archived for you", All tidied mail): archived, in Junk or in Trash. */
+    suspend fun readArchivedMail(batchId: String, key: String, images: Boolean = false): os.meka.core.domain.MailReaderView {
+        val found = onCore { tidyBatch(batchId)?.let { b -> b.emails.firstOrNull { it.key == key }?.let { b to it } } }
+        val e = found?.second
+        val fallback = os.meka.core.domain.MailReaderFallback(
+            e?.from ?: "Unknown sender", e?.subject ?: "", e?.preview, e?.receivedAtMs ?: nowMs(), found?.first?.account ?: "your",
+        )
+        return readMail(os.meka.core.wire.MailMessageCodec.Request(os.meka.core.wire.MailMessageCodec.Request.TIDIED, key, batchId, images), fallback, images)
+    }
+
+    private suspend fun readMail(
+        request: os.meka.core.wire.MailMessageCodec.Request, fallback: os.meka.core.domain.MailReaderFallback, images: Boolean,
+    ): os.meka.core.domain.MailReaderView {
+        val r = try { accountsApi?.mailMessage(request) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        val answer = r?.let { x ->
+            fun p(q: os.meka.core.wire.MailMessageCodec.Person) = os.meka.core.domain.MailPerson(q.name, q.address)
+            os.meka.core.domain.MailMessageAnswer(
+                state = x.state.takeIf { it in os.meka.core.domain.MailMessageAnswer.STATES } ?: os.meka.core.domain.MailMessageAnswer.FAILED,
+                from = p(x.from), to = x.to.map(::p), cc = x.cc.map(::p), atMs = x.atMs, subject = x.subject, html = x.html, text = x.text,
+                attachments = x.attachments.map { os.meka.core.domain.MailAttachmentFacts(it.name, it.bytes, it.type) },
+                blockedImages = x.blockedImages,
+            )
+        }
+        return os.meka.core.domain.MailReaderRules.view(answer, fallback, nowMs(), ZoneCalendar(timeZone), images)
+    }
+
+    /** A link tapped in the reader: where it really goes, for the confirm, or null when Navilife won't open it. */
+    fun mailLink(url: String): os.meka.core.domain.MailLinkCheck? = os.meka.core.domain.MailReaderLinks.check(url)
+
+    /**
      * "Archived for you" shows which emails, slice 4: **Open in Gmail / Open in Outlook** on an email's preview. The
      * link is made now from the tidy and the server's account list (asked for when this device hasn't got it yet), handed
      * to the browser and never kept; [os.meka.core.domain.MailOpenResult.problem] says why there's none.

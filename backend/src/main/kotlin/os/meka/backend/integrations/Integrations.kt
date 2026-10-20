@@ -419,6 +419,72 @@ class Integrations(
     fun stopEditing(householdId: String, provider: String, email: String): Boolean =
         provider in providers && store.transaction { store.stopEditing(householdId, provider, email.lowercase()) }
 
+    /**
+     * Read the full email inside Navilife (Meka, 2026-10-20), slice 1: one email read whole from its provider at the moment
+     * he taps it, found by Navilife's own handle — a "From your mail" card's id (the account whose card it is; after a
+     * Done, the id the archive gave it), or a tidy's id and the email's key (the id the move gave it, else its first one).
+     * Its HTML is made safe here ([os.meka.core.domain.MailHtmlSanitizer]; remote pictures only when [request] asks), and
+     * nothing of it is kept, logged or given to the AI; reading it doesn't mark it read. A handle that isn't this
+     * household's is "unknown"; an email no longer there "gone"; an ended sign-in "reconnect"; anything else "failed".
+     */
+    fun readMailMessage(householdId: String, request: os.meka.core.wire.MailMessageCodec.Request): os.meka.core.wire.MailMessageCodec.Response {
+        val answer = os.meka.core.domain.MailMessageAnswer.Companion
+        val ms = mailStore ?: return os.meka.core.wire.MailMessageCodec.Response(answer.FAILED)
+        val accounts = store.accounts(householdId).filter { it.status != DISCONNECTED && it.provider in mail }
+        for (a in accounts) {
+            val ids = mailMessageIds(householdId, a, ms, request) ?: continue
+            if (ids.isEmpty()) return os.meka.core.wire.MailMessageCodec.Response(answer.GONE)
+            val m = mail.getValue(a.provider)
+            val client = clients.get(m.oauth) ?: return os.meka.core.wire.MailMessageCodec.Response(answer.FAILED)
+            return try {
+                val token = freshAccess(a, "mail") { refresh -> m.refresh(client, refresh) }
+                val facts = ids.firstNotNullOfOrNull { id -> m.message(token, id) }
+                    ?: return os.meka.core.wire.MailMessageCodec.Response(answer.GONE)
+                mailMessageResponse(facts, request.images)
+            } catch (e: ReconnectRequired) {
+                forgetAccess(a.id)
+                os.meka.core.wire.MailMessageCodec.Response(answer.RECONNECT)
+            } catch (e: Exception) {
+                os.meka.core.wire.MailMessageCodec.Response(answer.FAILED)
+            }
+        }
+        return os.meka.core.wire.MailMessageCodec.Response(answer.UNKNOWN)
+    }
+
+    /**
+     * The provider ids to try for [request] in account [a], newest first; null when the handle isn't this account's,
+     * empty when it is but Navilife no longer knows where the email is.
+     */
+    private fun mailMessageIds(householdId: String, a: AccountRow, ms: MailStore, request: os.meka.core.wire.MailMessageCodec.Request): List<String>? =
+        when (request.kind) {
+            os.meka.core.wire.MailMessageCodec.Request.ITEM -> {
+                if (request.id !in store.transaction { store.mirror(householdId, a.id) }.keys) null
+                else listOfNotNull(
+                    ms.tidied(a.id, request.id).lastOrNull()?.movedId,
+                    ms.messages(a.id).firstOrNull { MailNeedsRules.itemId(a.id, it.id) == request.id }?.id,
+                ).distinct()
+            }
+            else -> {
+                val batch = request.batch ?: return null
+                ms.tidied(a.id, batch).firstOrNull { MailTidiedRules.key(a.id, it.id) == request.id }?.let { listOf(it.movedId, it.id).distinct() }
+            }
+        }
+
+    /** The email made safe for the apps: sanitised HTML, the text, who, when and the files' names and sizes. */
+    private fun mailMessageResponse(f: os.meka.core.domain.MailMessageFacts, images: Boolean): os.meka.core.wire.MailMessageCodec.Response {
+        val safe = f.html?.let { os.meka.core.domain.MailHtmlSanitizer.clean(it, images) }?.takeIf { it.html.isNotBlank() }
+        val text = f.text ?: f.html?.let { os.meka.core.domain.MailHtmlSanitizer.text(it) }
+        fun p(x: os.meka.core.domain.MailPerson) = os.meka.core.wire.MailMessageCodec.Person(x.name, x.address)
+        return os.meka.core.wire.MailMessageCodec.Response(
+            state = os.meka.core.domain.MailMessageAnswer.OK,
+            from = p(f.from), to = f.to.map(::p), cc = f.cc.map(::p), atMs = f.atMs, subject = f.subject,
+            html = safe?.html?.takeIf { it.length <= os.meka.core.wire.MailMessageCodec.MAX_HTML },
+            text = text?.take(os.meka.core.wire.MailMessageCodec.MAX_TEXT),
+            attachments = f.attachments.map { os.meka.core.wire.MailMessageCodec.Attachment(it.name, it.bytes, it.type) },
+            blockedImages = safe?.blockedImages ?: 0,
+        )
+    }
+
     /** Syncs every connected account; one account's failure never stops the others. */
     fun syncAll() {
         runCatching { ensureFeeds() }

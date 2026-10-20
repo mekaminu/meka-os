@@ -190,6 +190,27 @@ private struct ArchivedEmailPreviewView: View {
     @State private var preview: ArchivedEmailPreview?
     @State private var openLine: String?
     @State private var vaultLine: String?
+    /// Read the full email (2026-10-20): the reader is open.
+    @State private var reading = false
+
+    /// The reader's answers: the preview's own (Put back, Always keep, Unsubscribe).
+    private func readerActions(_ p: ArchivedEmailPreview) -> [MailReaderAction] {
+        let batchId = p.batchId, key = p.key
+        var out: [MailReaderAction] = []
+        if let label = p.putBack {
+            out.append(MailReaderAction(id: "PUT_BACK", label: label, spoken: "\(label), \(p.subject)",
+                                        action: { model.askArchivedEmail(batchId: batchId, key: key, action: "PUT_BACK") }))
+        }
+        if let label = p.keep {
+            out.append(MailReaderAction(id: "KEEP", label: label, spoken: label,
+                                        action: { model.askArchivedEmail(batchId: batchId, key: key, action: "KEEP") }))
+        }
+        if let label = p.unsubscribe {
+            out.append(MailReaderAction(id: "UNSUBSCRIBE", label: label, spoken: label,
+                                        action: { model.askArchivedEmail(batchId: batchId, key: key, action: "UNSUBSCRIBE") }))
+        }
+        return out
+    }
 
     var body: some View {
         Group {
@@ -208,8 +229,23 @@ private struct ArchivedEmailPreviewView: View {
                         }
                     }
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(p.spoken)
+                    .accessibilityLabel("\(p.spoken). \(MailReaderRules.shared.READ_WHOLE)")
+                    .accessibilityAddTraits(.isButton)
+                    .contentShape(Rectangle())
+                    .onTapGesture { MekaHaptics.light(); reading = true }
+                    .sheet(isPresented: $reading) {
+                        let batchId = p.batchId, key = p.key
+                        MailReaderSheet(palette: palette,
+                                        load: { images in await model.readArchivedMail(batchId: batchId, key: key, images: images) },
+                                        actions: readerActions(p),
+                                        openLabel: p.openLabel,
+                                        openInMail: { Task { openLine = await model.openArchivedEmail(batchId: batchId, key: key) } })
+                    }
                     HStack(spacing: MekaSpace.xs) {
+                        ArchivedPill(label: MailReaderRules.shared.READ_WHOLE, palette: palette,
+                                     spoken: "\(MailReaderRules.shared.READ_WHOLE), \(p.subject)") {
+                            MekaHaptics.light(); reading = true
+                        }
                         if let label = p.putBack {
                             ArchivedPill(label: label, palette: palette, spoken: "\(label), \(p.subject)") {
                                 model.askArchivedEmail(batchId: p.batchId, key: p.key, action: "PUT_BACK")

@@ -66,6 +66,8 @@ import os.meka.core.domain.MailSendAllRules
 import os.meka.core.domain.MeetingRequestRules
 import os.meka.core.domain.MailRowAction
 import os.meka.core.domain.MailRowActionRules
+import os.meka.core.domain.MailReaderRules
+import os.meka.core.domain.MailReaderView
 import os.meka.core.facade.MekaCore
 
 /**
@@ -185,6 +187,7 @@ internal fun MailNeedsSection(
                             // Drafted replies: Not needed puts Navilife's draft away (Undo on the bar); the email stays.
                             onNotNeeded = { haptics.light(); answer { core.dismissMailDraft(row.id) } },
                             onBook = { haptics.medium(); answer { core.bookMeetingPick(row.id) } },
+                            onRead = { images -> core.readMailItem(row.id, images) },
                             onSend = { text, sent ->
                                 haptics.medium()
                                 scope.launch {
@@ -225,6 +228,8 @@ internal fun MailNeedsRowView(
     onBook: (() -> Unit)? = null,
     /** Drafted replies: Not needed on Navilife's draft (null: not offered here). */
     onNotNeeded: (() -> Unit)? = null,
+    /** Read the full email (2026-10-20): the whole email for the reader (null: not offered here). */
+    onRead: (suspend (Boolean) -> MailReaderView)? = null,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -238,6 +243,8 @@ internal fun MailNeedsRowView(
     var drafting by remember { mutableStateOf(false) }
     var suggesting by remember { mutableStateOf(false) }
     var showLinked by rememberSaveable(row.id) { mutableStateOf(false) }
+    // Read the full email: a tap on the email (its sender, subject and first lines) opens the reader.
+    var reading by rememberSaveable(row.id) { mutableStateOf(false) }
     // Draft replies on the card puts its draft in this editor and opens it (the editor unfolds on the expand spring).
     LaunchedEffect(incoming) {
         incoming?.let { (_, t) -> text = t; lastDraft = t; draftLine = MailDraftRules.DRAFTED_LINE; replying = true }
@@ -245,7 +252,11 @@ internal fun MailNeedsRowView(
     // The card reads each open editor's words for Send all.
     LaunchedEffect(replying, text) { onEditor?.invoke(if (replying) text else null) }
     Column(Modifier.fillMaxWidth().testTag("mail-item-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-        Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = row.spoken }) {
+        Column(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
+                .then(if (onRead != null) Modifier.clickable(role = Role.Button) { haptics.light(); reading = true } else Modifier)
+                .semantics(mergeDescendants = true) { contentDescription = if (onRead != null) "${row.spoken}. ${MailReaderRules.READ_WHOLE}" else row.spoken },
+        ) {
             // Junk fix slice 3: a link he emailed himself, above the sender.
             row.note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.testTag("mail-note-${row.id}")) }
             // Account-security mail: who it's really from and what to do, above the sender.
@@ -453,6 +464,16 @@ internal fun MailNeedsRowView(
             if (more) actions.more.forEach { a ->
                 MailNeedsPill(pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a), onClick = { perform(a) })
             }
+        }
+        // The reader, with this card's own answers at its foot (each closes the reader first; Reply opens the editor here).
+        if (reading && onRead != null) {
+            MailReaderSheet(
+                load = onRead,
+                actions = (actions.shown + actions.more).filter(::offered).map { a ->
+                    MailReaderAction(MailRowActionRules.label(a, row), MailRowActionRules.spoken(a, row), MailRowActionRules.critical(a)) { perform(a) }
+                },
+                onClose = { reading = false },
+            )
         }
     }
 }

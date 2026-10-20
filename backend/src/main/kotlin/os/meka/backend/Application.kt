@@ -483,6 +483,17 @@ fun Application.mekaSync(
                 call.respondText(WireCodec.encodeAccounts(list), ContentType.Application.Json)
             }
 
+            // Read the full email inside Navilife (2026-10-20): one email by Navilife's own handle, read from the provider
+            // now and handed back made safe. Keyed devices only, never the publisher; nothing of it is kept or logged.
+            post(os.meka.core.wire.MailMessageCodec.PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                if (who.deviceId == ReleasePublisher.ID) throw Forbidden()
+                val request = os.meka.core.wire.MailMessageCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { integrations.readMailMessage(who.householdId, request) }
+                call.respondText(os.meka.core.wire.MailMessageCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+
             // The provider redirects the owner's browser here. Authenticated by the single-use state, not a device.
             get("/v1/oauth/{provider}/callback") {
                 val provider = call.parameters["provider"].orEmpty()

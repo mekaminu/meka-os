@@ -526,6 +526,9 @@ interface AccountsApi {
     /** Disconnects a mail account and deletes what Navilife made from its mail (completeness: Delete mail data). */
     suspend fun disconnectMailAndDeleteData(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
         throw UnsupportedOperationException("deleting mail data needs Navilife's server")
+    /** Read the full email inside Navilife (2026-10-20): one email by Navilife's handle, read from the provider now. */
+    suspend fun mailMessage(request: os.meka.core.wire.MailMessageCodec.Request): os.meka.core.wire.MailMessageCodec.Response =
+        throw UnsupportedOperationException("reading an email needs Navilife's server")
 }
 
 /**
@@ -603,6 +606,11 @@ class HttpSyncTransport(
 
     override suspend fun disconnectMailAndDeleteData(provider: String, email: String): List<os.meka.core.domain.MailAccountFacts> =
         mail(WireCodec.decodeAccounts(post("/v1/integrations/$provider/disconnect", WireCodec.encodeMailDisconnect(WireCodec.MailDisconnect(email, deleteData = true)))))
+
+    override suspend fun mailMessage(request: os.meka.core.wire.MailMessageCodec.Request): os.meka.core.wire.MailMessageCodec.Response {
+        prepare() // the route requires the device's signing key on the server
+        return os.meka.core.wire.MailMessageCodec.decodeResponse(post(os.meka.core.wire.MailMessageCodec.PATH, os.meka.core.wire.MailMessageCodec.encodeRequest(request)))
+    }
 
     private fun mail(list: List<WireCodec.IntegrationAccount>) = list.filter { os.meka.core.domain.MailProviders.isMail(it.provider) }
         .map { os.meka.core.domain.MailAccountFacts(it.provider, it.email, it.status, it.lastSyncAtMs, it.label, it.sorted, it.wouldTidy, it.why, it.inboxTotal, it.inboxUnread) }

@@ -142,6 +142,13 @@ interface MailProvider {
      * no longer exists. Never retried by itself: a failure goes back to him.
      */
     fun chaseSent(accessToken: String, id: String, text: String): MailReplyResult = MailReplyResult.FAILED
+
+    /**
+     * Read the full email inside Navilife (2026-10-20): the email [id] whole (headers, body, the attachments' names and
+     * sizes), read only because Meka tapped it to read, for the reader at that moment; never stored, logged or given to
+     * the AI, and it isn't marked read. Null when it has gone. Default: can't read (the reader keeps the preview).
+     */
+    fun message(accessToken: String, id: String): os.meka.core.domain.MailMessageFacts? = null
 }
 
 /** Inbox fixes, slice 1: what an email's own headers say about how it was sent (never its body). */
@@ -519,6 +526,14 @@ class GmailMail internal constructor(private val http: Http) : MailProvider {
         return if (sent.status in 200..299) MailReplyResult.SENT else MailReplyResult.FAILED
     }
 
+    /** Read the full email (2026-10-20): `format=full`, read at his tap; a 404 (or a bad id) means it has gone. */
+    override fun message(accessToken: String, id: String): os.meka.core.domain.MailMessageFacts? {
+        val a = http.call("GET", "$API/messages/${Http.enc(id)}?format=full", accessToken)
+        if (a.status == 404 || a.status == 400) return null
+        val m = a.body?.takeIf { a.status in 200..299 } ?: error("Gmail answered ${a.status}")
+        return GmailMessageBody.read(m)
+    }
+
     /** Slice 8a: `in:inbox before:<seconds>`, 500 ids a page (Gmail's own search; nothing but ids comes back). */
     override fun backlog(accessToken: String, beforeMs: Long, page: String?): MailBacklogPage {
         val q = mutableMapOf("q" to "in:inbox before:${beforeMs / 1000}", "maxResults" to "500")
@@ -703,6 +718,18 @@ class OutlookMail internal constructor(private val http: Http) : MailProvider {
             t.label?.let { label -> categories(accessToken, back)?.takeIf { label in it }?.let { setCategories(accessToken, back, it - label) } }
             done[id] = back
         }
+    }
+
+    /**
+     * Read the full email (2026-10-20): its body as HTML (Outlook's own), recipients and the attachments' names and
+     * sizes (their contents aren't fetched); read at his tap, isRead untouched. A 404 means it has gone (moved again).
+     */
+    override fun message(accessToken: String, id: String): os.meka.core.domain.MailMessageFacts? {
+        val url = "$GRAPH/me/messages/${Http.enc(id)}?\$select=" + Http.enc(GraphMessageBody.SELECT) + "&\$expand=" + Http.enc(GraphMessageBody.EXPAND)
+        val a = http.call("GET", url, accessToken, headers = mapOf("Prefer" to "outlook.body-content-type=\"html\""))
+        if (a.status == 404 || a.status == 400) return null
+        val m = a.body?.takeIf { a.status in 200..299 } ?: error("Outlook answered ${a.status}")
+        return GraphMessageBody.read(m)
     }
 
     /** Slice 5a: the message's internet headers (on demand, one message per sender). */

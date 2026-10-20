@@ -70,7 +70,8 @@ struct MailNeedsView: View {
                                                  onEditor: { t in texts[row.id] = t },
                                                  suggestTimes: { await model.suggestMeetingTimes(row.id) },
                                                  book: { model.bookMeetingPick(row.id) },
-                                                 notNeeded: { model.dismissMailDraft(row.id) })
+                                                 notNeeded: { model.dismissMailDraft(row.id) },
+                                                 read: { images in await model.readMailItem(row.id, images: images) })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -195,7 +196,10 @@ struct MailNeedsRowView: View {
     var book: (() -> Void)? = nil
     /// Drafted replies: Not needed on Navilife's draft (nil: not offered here).
     var notNeeded: (() -> Void)? = nil
+    /// Read the full email (2026-10-20): the whole email for the reader (nil: not offered here).
+    var read: (@MainActor (Bool) async -> MailReaderView?)? = nil
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var reading = false
     @State private var replying = false
     @State private var fullDraft = false
     @State private var text = ""
@@ -226,6 +230,15 @@ struct MailNeedsRowView: View {
                       spoken: MailRowActionRules.shared.spoken(a: a, row: row),
                       action: { perform(a) })
             .disabled(finding)
+    }
+
+    /// The reader's answers: this card's own (Reply closes the reader and opens the editor here).
+    private var readerActions: [MailReaderAction] {
+        (rowActions.shown + rowActions.more).filter { offered($0) }.map { a in
+            MailReaderAction(id: MailRowActionRules.shared.label(a: a, row: row), label: MailRowActionRules.shared.label(a: a, row: row),
+                             spoken: MailRowActionRules.shared.spoken(a: a, row: row), critical: MailRowActionRules.shared.critical(a: a),
+                             action: { perform(a) })
+        }
     }
 
     private func perform(_ a: MailRowAction) {
@@ -291,7 +304,17 @@ struct MailNeedsRowView: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(row.spoken)
+            .accessibilityLabel(read != nil ? "\(row.spoken). \(MailReaderRules.shared.READ_WHOLE)" : row.spoken)
+            // Read the full email: a click on the email (its sender, subject and first lines) opens the reader.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture { if read != nil { MekaHaptics.light(); reading = true } }
+            .accessibilityAddTraits(read != nil ? .isButton : [])
+            .sheet(isPresented: $reading) {
+                if let read {
+                    MailReaderSheet(palette: palette, load: read, actions: readerActions)
+                }
+            }
             // Drafted replies: Navilife's draft, ready to Send (his click), Edit or put away; it unfolds on the expand
             // spring and folds away once he edits, sends or says Not needed (reduced motion: cross-fade).
             if let auto = row.autoDraft, !replying {

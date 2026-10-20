@@ -5916,6 +5916,19 @@ final class CoreModel {
         return try? await core.archivedEmail(batchId: batchId, key: key)
     }
 
+    /// Read the full email inside Navilife (2026-10-20): a From your mail card's whole email for the reader, read from the
+    /// provider now through Navilife's server (nothing kept, not marked read). Only Strings and a Bool cross to the core.
+    func readMailItem(_ id: String, images: Bool) async -> MailReaderView? {
+        guard let core else { return nil }
+        return try? await core.readMailItem(id: id, images: images)
+    }
+
+    /// The same for one email of a tidy (Archived for you, All tidied mail): archived, in Junk or in Trash.
+    func readArchivedMail(batchId: String, key: String, images: Bool) async -> MailReaderView? {
+        guard let core else { return nil }
+        return try? await core.readArchivedMail(batchId: batchId, key: key, images: images)
+    }
+
     /// Slice 4: Open in Gmail / Outlook — the link is made now in the core (the account list asked for if needed), opened in
     /// the browser and never kept. Returns the line to show under the button. Only Strings cross to the core.
     func openArchivedEmail(batchId: String, key: String) async -> String {
