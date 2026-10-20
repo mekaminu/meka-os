@@ -93,6 +93,8 @@ import os.meka.core.facade.MekaCore
  * Sir, synced) at the top; the chosen pill blends to the accent with a tick haptic and its line cross-fades. The companion,
  * slice 5: "What Navilife remembers" under it (Remember · Don't remember, synced, then the kept notes, newest first, and
  * Forget all): the pill blends with a tick haptic, the notes cross-fade out on Forget all (medium haptic) or off.
+ * The orb speed pass, slice 2: "Speed" at the foot (the last 20 hellos and answers, how long each took to start and
+ * where the wait went; this phone only, numbers only), rising in with the rest; Clear (medium haptic) cross-fades it.
  */
 @Composable
 fun VoicePane(core: MekaCore, onClose: () -> Unit) {
@@ -123,6 +125,9 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             ?: VoicePickerRules.view(null, emptyList(), null, null, null, mac = false, connected = false)
     }
     LaunchedEffect(Unit) { deviceVoices = speaker.deviceVoices() }
+    // The orb speed pass, slice 2: the last 20 hellos and answers, how long each took to start (this phone only).
+    var speed by remember { mutableStateOf<os.meka.core.domain.TurnSpeedView?>(null) }
+    LaunchedEffect(Unit) { speed = runCatching { core.turnSpeed("phone") }.getOrNull() }
     val reduced = Meka.reducedMotion
 
     fun choose(c: VoiceChoice) {
@@ -298,6 +303,30 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             }
             Spacer(Modifier.height(MekaSpace.m))
             Text(v.help, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(after + 4)))
+        }
+        speed?.let { sp ->
+            // The orb speed pass, slice 2: where the wait goes, turn by turn (times only, nothing said).
+            Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(5)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(sp.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
+                Text(sp.intro, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Crossfade(sp, animationSpec = MekaMotion.appear(reduced), label = "speed") { now ->
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        now.summary?.let { Text(it, style = MekaType.body, color = Meka.colors.textPrimary) }
+                        now.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                        now.rows.forEach { row -> Text(row, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                        now.clear?.let { label ->
+                            Text(label, style = MekaType.itemMeta, color = Meka.colors.accent,
+                                modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Clear the speed log") {
+                                    haptics.medium()
+                                    scope.launch {
+                                        runCatching { core.clearTurnSpeed() }
+                                        speed = runCatching { core.turnSpeed("phone") }.getOrNull()
+                                    }
+                                }.minTouch())
+                        }
+                    }
+                }
+            }
         }
     }
 }

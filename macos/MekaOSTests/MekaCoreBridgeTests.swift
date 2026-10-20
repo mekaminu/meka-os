@@ -3313,4 +3313,19 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(e.tapThrough(kind: .big, t: e.BIG_MS, reduced: false))
         XCTAssertEqual(TalkEndpoint.shared.PAUSE_MS, 600)
     }
+
+    /// The orb speed pass, slice 2: a turn's trace from Swift, times only, and the store reads back what it wrote.
+    func testATurnsTraceSplitsTheWaitAndKeepsNumbersOnly() {
+        let w = TurnStopwatch(kind: .talk, startMs: 0)
+        w.sent(now: 100)
+        w.firstPiece(now: 1_300)
+        w.clip(now: 1_300, tookMs: 0, audio: true)
+        guard let t = w.finish(wallStartMs: 0) else { return XCTFail("no trace") }
+        XCTAssertEqual(t.toVoiceMs?.int64Value, 1_300)
+        XCTAssertEqual(t.toFirstPieceMs?.int64Value, 1_200)
+        let rules = TurnSpeedRules.shared
+        XCTAssertEqual(rules.decode(text: rules.encode(traces: [t])), [t])
+        XCTAssertEqual(rules.ANSWER_TARGET_MS, 1_500)
+        XCTAssertEqual(rules.HELLO_TARGET_MS, 600)
+    }
 }

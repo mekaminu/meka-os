@@ -108,6 +108,8 @@ class TalkController(
         if (active) return
         val gen = generation
         scope.launch {
+            // The orb speed pass, slice 2: this hello is timed from the tap to Navilife's voice (Settings → Speed).
+            core.turnHelloBegan()
             val greeting = runCatching { core.hello() }.getOrNull() ?: return@launch
             if (gen != generation || active) return@launch
             // Slice 8: the stage raises the greeting's cards round its orb as each sentence starts.
@@ -276,6 +278,8 @@ class TalkController(
                 val endedAt = wordsEndedAt
                 val heardBy = engine
                 scope.launch {
+                    // The orb speed pass, slice 2: timed from his last word to the answer's voice (Settings → Speed).
+                    core.turnTalkBegan(endedAt?.let { android.os.SystemClock.elapsedRealtime() - it } ?: 0L)
                     os.meka.android.today.HereLocation.refresh(context, core, effect.question)
                     // The companion, slice 9: the answer's first sentence comes ahead, already said; Navilife starts
                     // speaking it while the rest is still being written.
@@ -351,6 +355,7 @@ class TalkController(
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
+                scope.launch { core.turnEnded() }
                 endpoint?.cancel()
                 recognizer?.cancel()
                 stopSaying()
@@ -562,6 +567,7 @@ class TalkController(
     private fun finishedSaying(id: Int) {
         if (id != utterance || phase != TalkPhase.SPEAKING) return
         bargeIn.stop() // let go of the microphone before the recogniser takes it
+        scope.launch { core.turnEnded() } // the turn's trace is kept (Settings → Speed)
         apply(TalkFlow.spoke(session))
     }
 

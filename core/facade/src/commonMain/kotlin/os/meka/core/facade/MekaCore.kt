@@ -315,6 +315,10 @@ class MekaCore(
     private var speechOverBluetooth = false
     /** The mic fix, step 3: end of his words → "Added", the last few, in memory only. */
     private val heardTimings = ArrayDeque<os.meka.core.domain.HeardTiming>()
+    /** The orb speed pass, slice 2: the Hello/Talk turn being timed now, and the last 20 (device only, numbers only). */
+    private var turnWatch: os.meka.core.domain.TurnStopwatch? = null
+    private var turnWallStart = 0L
+    private var turnTraces: List<os.meka.core.domain.TurnTrace>? = null
 
     // Declared before Today: Today's timeline reads the booked sessions.
     private val _sessions = MutableStateFlow(os.meka.core.domain.SessionsView.EMPTY)
@@ -8190,11 +8194,16 @@ class MekaCore(
         // Voice completeness, slice 3: a spoken question whose answer Navilife's voice will say asks for the first piece
         // with the answer (only Navilife's words are said; nothing of his question is spoken or kept).
         val speakVoice = if (voice && speechApi != null) onCore { speechVoiceNow() } else null
+        // The orb speed pass, slice 2: a spoken question's trace marks when it left and when the answer began.
+        if (voice) onCore { openTurn()?.sent(nowMs()) }
         val reply = try {
             // The companion, slice 9: the first sentence comes ahead, said, while the model writes the rest.
             if (speakVoice != null && onEarly != null) api.askStreamed(q, context, history.map(::sendable), speakVoice.name) { text, audio, _ ->
                 if (text.isNotBlank() && audio.isNotEmpty() && talkEarly == null) {
-                    onCore { speechWithAnswer(speakVoice.name, text, audio) }
+                    onCore {
+                        openTurn()?.firstPiece(nowMs())
+                        speechWithAnswer(speakVoice.name, text, audio)
+                    }
                     talkEarly = text
                     onEarly(text)
                 }
@@ -8204,6 +8213,7 @@ class MekaCore(
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
             return unavailable(os.meka.core.domain.AskRules.OFFLINE_LINE)
         }
+        if (voice) onCore { openTurn()?.firstPiece(nowMs()) }
         if (speakVoice != null && reply is AskReply.Answered) {
             val text = reply.firstText
             val audio = reply.firstAudio
@@ -8581,6 +8591,14 @@ class MekaCore(
      * kept for Activity ([voiceTimingLine]). Never throws (a cancelled request is simply not counted).
      */
     suspend fun speechClip(text: String, first: Boolean, reading: Boolean, hold: Boolean): String? {
+        val started = nowMs()
+        val clip = fetchSpeechClip(text, first, reading, hold)
+        // The orb speed pass, slice 2: the open turn's voice starts with its first clip (or the device's own voice).
+        onCore { openTurn()?.clip(nowMs(), nowMs() - started, audio = clip != null) }
+        return clip
+    }
+
+    private suspend fun fetchSpeechClip(text: String, first: Boolean, reading: Boolean, hold: Boolean): String? {
         val api = speechApi ?: return null
         val words = text.trim().takeIf { it.isNotEmpty() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return null
         val voice = onCore { speechVoiceNow() } ?: return null
@@ -9414,6 +9432,55 @@ class MekaCore(
 
     /** Activity's "Speech to Added · 0.6 s · 0.9 s · middle 0.7 s"; null before the first. */
     suspend fun heardTimingLine(): String? = onCore { os.meka.core.domain.HeardTimingRules.timingLine(heardTimings.toList()) }
+
+    // ---- The orb speed pass, slice 2: a timing trace of each Hello and Talk turn ----
+
+    /**
+     * "Hello, Navilife" tapped: times the turn from now to Navilife's voice ([os.meka.core.domain.TurnStopwatch]).
+     * Ends any turn still open. Device only: nothing said is kept, only the times.
+     */
+    suspend fun turnHelloBegan(): Unit = onCore { beginTurn(os.meka.core.domain.TurnKind.HELLO, 0L) }
+
+    /** A spoken question: his words ended [agoMs] ago; times the turn from then to the answer's voice. */
+    suspend fun turnTalkBegan(agoMs: Long): Unit = onCore { beginTurn(os.meka.core.domain.TurnKind.TALK, agoMs.coerceIn(0L, 10_000L)) }
+
+    /** The turn's speaking is over, or the conversation stopped: its trace is kept (when its voice started). */
+    suspend fun turnEnded(): Unit = onCore { endTurn() }
+
+    /** Settings → Navilife's voice → Speed: the last 20 turns, newest first, with a summary ([device]: "phone" or "Mac"). */
+    suspend fun turnSpeed(device: String = "phone"): os.meka.core.domain.TurnSpeedView = onCore {
+        turnWatch?.let { if (!it.open(nowMs())) endTurn() }
+        os.meka.core.domain.TurnSpeedRules.view(loadTurnTraces(), ZoneCalendar(timeZone), device)
+    }
+
+    /** Speed's Clear: forgets the kept turns on this device. */
+    suspend fun clearTurnSpeed(): Unit = onCore {
+        turnTraces = emptyList()
+        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.TurnSpeedRules.KEY, "") } }
+    }
+
+    private fun beginTurn(kind: os.meka.core.domain.TurnKind, agoMs: Long) {
+        endTurn()
+        val now = nowMs()
+        turnWatch = os.meka.core.domain.TurnStopwatch(kind, now - agoMs)
+        turnWallStart = now - agoMs
+    }
+
+    private fun endTurn() {
+        val w = turnWatch ?: return
+        turnWatch = null
+        val trace = w.finish(turnWallStart) ?: return
+        val next = os.meka.core.domain.TurnSpeedRules.add(loadTurnTraces(), trace)
+        turnTraces = next
+        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.TurnSpeedRules.KEY, os.meka.core.domain.TurnSpeedRules.encode(next)) } }
+    }
+
+    private fun loadTurnTraces(): List<os.meka.core.domain.TurnTrace> = turnTraces ?: os.meka.core.domain.TurnSpeedRules.decode(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.TurnSpeedRules.KEY) } }.getOrNull(),
+    ).also { turnTraces = it }
+
+    /** The open turn, while it still takes marks. */
+    private fun openTurn(): os.meka.core.domain.TurnStopwatch? = turnWatch?.takeIf { it.open(nowMs()) }
 
     /**
      * Voice completeness (2026-10-19): what the device's own voice says first when it takes over because Navilife's voice

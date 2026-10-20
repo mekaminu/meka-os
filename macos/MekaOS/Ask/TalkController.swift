@@ -120,6 +120,8 @@ final class TalkController {
                 if gen == generation { problem = .noPermission }
                 return
             }
+            // The orb speed pass, slice 2: this hello is timed from the click to Navilife's voice (Voice → Speed).
+            await model?.turnHelloBegan()
             guard gen == generation, let hello = await model?.hello() else { return }
             guard gen == generation, !active else { return }
             let words = hello.words
@@ -303,6 +305,8 @@ final class TalkController {
             }
             Task {
                 guard let model else { return }
+                // The orb speed pass, slice 2: timed from his last word to the answer's voice (only a number crosses).
+                await model.turnTalkBegan(agoMs: ended.map { Int64(Date().timeIntervalSince($0) * 1000) } ?? 0)
                 let out = await model.talk(question, history: ask.history)
                 early.cancel()
                 guard gen == generation else { return }
@@ -361,6 +365,7 @@ final class TalkController {
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {
+            Task { await model?.turnEnded() }
             stopListening()
             stopSaying()
             level = 0
@@ -680,6 +685,7 @@ final class TalkController {
     private func finishedSaying(_ id: Int) {
         guard id == utterance, phase == .speaking else { return }
         stopListeningOver() // let go of the microphone before the recogniser takes it
+        Task { await model?.turnEnded() } // the turn's trace is kept (Voice → Speed)
         apply(TalkFlow.shared.spoke(s: session))
     }
 

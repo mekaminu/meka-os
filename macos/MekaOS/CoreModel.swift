@@ -2368,6 +2368,40 @@ final class CoreModel {
 
     /// The mic fix, step 3: something he said to Talk was added `ms` after his words ended. Only an Int64 and a Bool
     /// cross; the engine is made here and sent once.
+    /// The orb speed pass, slice 2: a hello was clicked; the core times it to Navilife's voice (nothing crosses).
+    func turnHelloBegan() async {
+        try? await core?.turnHelloBegan()
+    }
+
+    /// The orb speed pass, slice 2: a spoken question whose words ended `agoMs` ago (only a number crosses).
+    func turnTalkBegan(agoMs: Int64) async {
+        try? await core?.turnTalkBegan(agoMs: agoMs)
+    }
+
+    /// The orb speed pass, slice 2: the turn's speaking is over (or the conversation stopped).
+    func turnEnded() async {
+        try? await core?.turnEnded()
+    }
+
+    /// The orb speed pass, slice 2: Voice → Speed, the last 20 hellos and answers on this Mac (strings only).
+    private(set) var speedSummary: String?
+    private(set) var speedRows: [String] = []
+
+    func refreshSpeed() async {
+        guard let core, let v = try? await core.turnSpeed(device: "Mac") else { speedSummary = nil; speedRows = []; return }
+        speedSummary = v.summary
+        speedRows = v.rows
+    }
+
+    /// Speed's Clear: forgets the kept turns on this Mac; a tick haptic.
+    func clearSpeed() {
+        guard let core, !speedRows.isEmpty else { return }
+        MekaHaptics.tick()
+        speedSummary = nil
+        speedRows = []
+        Task { try? await core.clearTurnSpeed() }
+    }
+
     func recordHeardTiming(ms: Int64, online: Bool) async {
         guard let core else { return }
         nonisolated(unsafe) let engine: ListenEngine = online ? .online : .onDevice
@@ -2393,6 +2427,7 @@ final class CoreModel {
         // The companion, slice 5: whether Navilife remembers chats and what it keeps (only a Bool and strings cross).
         remembersChats = (try? await core.companionRemembers())?.boolValue ?? true
         memoryRows = (try? await core.companionMemoryRows()) ?? []
+        await refreshSpeed()
     }
 
     /// The companion, slice 5: whether Navilife remembers chats (synced; on by default).

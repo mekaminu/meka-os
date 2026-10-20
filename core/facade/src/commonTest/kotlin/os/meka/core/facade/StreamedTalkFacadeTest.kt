@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  * of the rest of the answer, already said, and plays from memory while the answer is still on its way.
  */
 class StreamedTalkFacadeTest {
-    private val now = 1_791_476_100_000L // Thu 8 Oct 2026, 16:15 UTC
+    private var now = 1_791_476_100_000L // Thu 8 Oct 2026, 16:15 UTC
 
     private class Server(service: SyncService) : SyncTransport, SpeechApi, AiApi {
         private val sync = os.meka.core.testing.FaultyTransport(service)
@@ -33,6 +33,8 @@ class StreamedTalkFacadeTest {
         /** What the core had heard of the answer when the server was still writing it. */
         var heardBeforeEnd: String? = null
         var core: MekaCore? = null
+        /** Runs while the model writes (the speed trace's test moves the clock here). */
+        var onThink: () -> Unit = {}
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun speak(text: String, voice: String?): SpeechCodec.Response {
@@ -49,6 +51,7 @@ class StreamedTalkFacadeTest {
             onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
         ): AskReply {
             asked += "streamed:$speakVoice"
+            onThink()
             onFirst(FIRST, "Zmlyc3Q=", speakVoice)
             onFirst("Again.", "QWdhaW4=", speakVoice) // a second one is never taken
             heardBeforeEnd = core?.talkEarlyPiece()
@@ -93,6 +96,32 @@ class StreamedTalkFacadeTest {
         assertEquals("ask", server.asked.last())
         assertTrue(early.isEmpty())
         assertNull(c.talkEarlyPiece())
+    }
+
+    @Test
+    fun aSpokenTurnIsTimedFromHisLastWordToTheVoiceAndKeptOnTheDevice() = runTest {
+        val c = core()
+        assertEquals(os.meka.core.domain.TurnSpeedRules.EMPTY, c.turnSpeed().empty)
+        server.onThink = { now += 1_200 }
+        c.turnTalkBegan(agoMs = 600) // his words ended 0.6 s ago (the endpoint)
+        c.talkStreamed("why is the sky blue", emptyList()) {}
+        c.speechClip(FIRST, first = true) // from memory: the voice starts at once
+        c.turnEnded()
+        val v = c.turnSpeed()
+        assertEquals(1, v.rows.size)
+        // 16:15 UTC is 17:15 in London; 0.6 s to send, 1.2 s for the answer, its voice ready with it.
+        assertEquals("17:14 · Talk · 1.8 s, slow · sent 0.6 s · answer 1.2 s · voice 0.1 s · clips ready", v.rows.single())
+        assertTrue(v.summary!!.contains("most of the wait: the answer"))
+        // A hello whose clip came from memory at once.
+        c.turnHelloBegan()
+        c.speechClip(FIRST, first = true)
+        c.turnEnded()
+        assertTrue(c.turnSpeed().rows.first().startsWith("17:15 · Hello · 0.1 s"))
+        // Nothing measured (stopped before a word): not kept. Clear forgets them.
+        c.turnHelloBegan(); c.turnEnded()
+        assertEquals(2, c.turnSpeed().rows.size)
+        c.clearTurnSpeed()
+        assertTrue(c.turnSpeed().rows.isEmpty())
     }
 
     private companion object {

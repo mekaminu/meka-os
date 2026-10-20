@@ -99,6 +99,37 @@ struct VoiceSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.remembersChats)
     }
 
+    /// The orb speed pass, slice 2: the last 20 hellos and answers, how long each took to start and where the wait
+    /// went (this Mac only, times only), with Clear.
+    private var speed: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(TurnSpeedRules.shared.TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textSecondary)
+            Text(TurnSpeedRules.shared.INTRO).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let summary = model.speedSummary {
+                Text(summary).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+            if model.speedRows.isEmpty {
+                Text(TurnSpeedRules.shared.EMPTY).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            ForEach(Array(model.speedRows.enumerated()), id: \.offset) { _, row in
+                Text(row).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+            if !model.speedRows.isEmpty {
+                Button(TurnSpeedRules.shared.CLEAR) { model.clearSpeed() }
+                    .buttonStyle(.link)
+            }
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.speedRows)
+    }
+
     private var content: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(VoicePickerRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
@@ -107,6 +138,7 @@ struct VoiceSheet: View {
                 .staggeredAppear(0)
             callMe.staggeredAppear(1)
             memory.staggeredAppear(2)
+            speed.staggeredAppear(3)
             if let v = model.voicePicker {
                 ForEach(Array(v.choices.enumerated()), id: \.element.id) { i, c in
                     // Each provider's voices under their heading (Google's British, American, then Polly's).
