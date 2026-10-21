@@ -166,6 +166,8 @@ private fun StepDots(step: Int, modifier: Modifier) {
 
 @Composable
 private fun LeftStep(p: WeekPlan) {
+    // Item (8): the one line last week's review said to carry into this plan, in the accent.
+    p.carryLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.accent, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
     Text(p.leftLine, style = MekaType.body, color = Meka.colors.textPrimary)
     p.rows.forEach { r ->
         Column(Modifier.fillMaxWidth().padding(top = MekaSpace.m).semantics(mergeDescendants = true) {}) {

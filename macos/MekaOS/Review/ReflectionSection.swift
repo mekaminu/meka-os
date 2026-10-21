@@ -40,6 +40,17 @@ struct ReflectionSection: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: r.line)
                 Text(r.facts).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
+                // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
+                if r.board.planned > 0 {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Text(r.board.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        if let slip = r.board.slippingLine {
+                            Text(slip).font(MekaType.caption).foregroundStyle(palette.accent)
+                        }
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityElement(children: .combine)
+                }
                 if r.skipped {
                     Button("Reflect now") { model.skipReflection(false); open = true }
                         .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)

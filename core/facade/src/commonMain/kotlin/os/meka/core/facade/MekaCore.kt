@@ -2299,7 +2299,9 @@ class MekaCore(
     private fun planWeekFrom(board: os.meka.core.domain.WeekBoard): os.meka.core.domain.WeekPlan {
         val cal = ZoneCalendar(timeZone)
         val shown = os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) }
-        return os.meka.core.domain.PlanWeekRules.plan(board, shown, cal.epochDayOf(nowMs()), cal)
+        val plan = os.meka.core.domain.PlanWeekRules.plan(board, shown, cal.epochDayOf(nowMs()), cal)
+        // Week board item (8): the one line last week's review said to carry into this plan.
+        return plan.copy(carryLine = os.meka.core.domain.BoardReviewRules.carryLine(reflections.all(), plan.weekStart))
     }
 
     /**
@@ -11280,6 +11282,8 @@ class MekaCore(
             os.meka.core.domain.ReflectionRules.view(
                 _review.value, reflections.all(), _wins.value.week.map { it.text }, _goals.value.goals,
                 cal.epochDayOf(nowMs()), cal.minuteOfDay(nowMs()), cal, reflectRequestedWeek,
+                // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
+                board = os.meka.core.domain.BoardReviewRules.review(all, _review.value.weekStart, cal.epochDayOf(nowMs()), cal),
             )
         }
         _search.value = runSearch(all)

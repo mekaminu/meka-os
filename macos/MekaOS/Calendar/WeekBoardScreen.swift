@@ -52,6 +52,12 @@ struct WeekBoardScreen: View {
                     }
                 }
                 Spacer()
+                // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
+                if board.offersReview && week == 0 {
+                    Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
+                        .foregroundStyle(palette.textSecondary).font(MekaType.itemMeta)
+                        .help("Review this week: planned against done, and what kept slipping")
+                }
                 // Item (6): Plan your week opens the guided sheet.
                 Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
                     .foregroundStyle(palette.accent).font(MekaType.itemMeta)

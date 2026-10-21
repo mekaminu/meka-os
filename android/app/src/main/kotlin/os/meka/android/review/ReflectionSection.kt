@@ -122,6 +122,13 @@ private fun ReflectionCard(r: ReflectionView, said: ReflectionSaved?, modifier: 
             Text(l, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         Text(r.facts, style = MekaType.caption, color = Meka.colors.textTertiary)
+        // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
+        if (r.board.planned > 0) {
+            Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
+                Text(r.board.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                r.board.slippingLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+            }
+        }
 
         if (r.skipped) {
             TextAction("Reflect now") { act.tick(); act.skip(false); open = true }

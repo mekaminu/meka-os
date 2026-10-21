@@ -3290,6 +3290,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(plan.canAccept)
         XCTAssertEqual(plan.leftLine, PlanWeekRules.shared.NOTHING_LEFT)
         XCTAssertEqual(PlanWeekRules.shared.STEPS.count, 4)
+        // Item (8), the Friday review: no review yet, so nothing carries into the plan; the review's words reach Swift.
+        XCTAssertNil(plan.carryLine)
+        XCTAssertEqual(BoardReviewRules.shared.REVIEW, "Review the week")
+        XCTAssertFalse(core.reflectionView.value.board.line.isEmpty)
         let accepted = try await core.acceptWeekPlan(plan: plan.chooseDay(taskId: "nothing", day: -1))
         XCTAssertNil(accepted)
         let undidPlan = try await core.undoWeekPlan()

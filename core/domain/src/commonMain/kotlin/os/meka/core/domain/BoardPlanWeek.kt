@@ -51,6 +51,8 @@ data class WeekPlan(
     /** The tasks to place, in the order the spread placed them (due first, then the longest carried, then priority). */
     val rows: List<PlanRow>,
     val goals: List<BoardGoal>,
+    /** Week board item (8): the one line carried from last week's review ("From your review · Run 5k"), on step 1. */
+    val carryLine: String? = null,
 ) {
     /** The days a row can go to, by chip. */
     fun day(d: Long): PlanDay? = days.firstOrNull { it.day == d }

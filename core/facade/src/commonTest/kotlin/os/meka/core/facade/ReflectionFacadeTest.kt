@@ -26,6 +26,26 @@ class ReflectionFacadeTest {
     )
 
     @Test
+    fun theFridayReviewCountsTheBoardsWeekAndItsOneThingCarriesIntoNextWeeksPlan() = runTest {
+        val fold = core("android")
+        try {
+            val a = fold.addTask("Ring the garage")
+            fold.complete(a)
+            fold.addTask("Book MOT")
+            fold.tick()
+            val board = fold.reflectionView.value.board
+            assertEquals(1, board.done)
+            assertTrue(board.line.startsWith("1 of"), board.line)
+            assertTrue(fold.weekBoard.value.offersReview)
+
+            fold.saveReflection("", "", "Run 5k", null, keepWins = false)
+            assertEquals("From your review · Run 5k", fold.planWeek().carryLine)
+        } finally {
+            fold.close()
+        }
+    }
+
+    @Test
     fun sundaysReflectionKeepsWinsPicksTheGoalAndReachesTheMacsJournal() = runTest {
         val fold = core("android")
         val mac = core("mac")

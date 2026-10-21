@@ -129,6 +129,9 @@ data class WeekBoard(
     /** "Someday · 12" for the tray's folded header. */
     val somedayTitle: String get() = if (someday.isEmpty()) WeekBoardRules.SOMEDAY else "${WeekBoardRules.SOMEDAY} · ${someday.size}"
 
+    /** Item (8): from Friday the header offers Review the week ([BoardReviewRules.offersReview]). */
+    val offersReview: Boolean get() = todayEpochDay > 0 && BoardReviewRules.offersReview(todayEpochDay)
+
     /** The week starting [startEpochDay], or null. */
     fun week(startEpochDay: Long): BoardWeek? = weeks.firstOrNull { it.startEpochDay == startEpochDay }
 

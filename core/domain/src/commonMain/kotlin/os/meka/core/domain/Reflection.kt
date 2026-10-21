@@ -88,6 +88,8 @@ data class ReflectionView(
     val timeChoices: List<Int> = ReviewRules.timeChoices(ReviewRules.CARD_START_MIN),
     /** "16:00", "17:00", … for [timeChoices], in order. */
     val timeLabels: List<String> = timeChoices.map { LocalClock.formatMinute(it) },
+    /** Week board item (8), the Friday review: planned against done on the Board, and what kept slipping. */
+    val board: BoardWeekReview = BoardWeekReview.EMPTY,
 ) {
     companion object {
         val EMPTY = ReflectionView(
@@ -158,8 +160,8 @@ object ReflectionRules {
     ).map { ReflectionHint(it) }
 
     /** What to drop: what is still open from the week, then habits that missed it. */
-    fun dropHints(v: WeeklyReviewView): List<ReflectionHint> = distinct(
-        v.stillOpen.map { it.title } + v.habits.filter { !it.met && !v.isCurrent }.map { it.title } +
+    fun dropHints(v: WeeklyReviewView, slipping: List<String> = emptyList()): List<ReflectionHint> = distinct(
+        slipping + v.stillOpen.map { it.title } + v.habits.filter { !it.met && !v.isCurrent }.map { it.title } +
             v.habits.filter { !it.met && v.isCurrent && it.done == 0 }.map { it.title },
     ).map { ReflectionHint(it) }
 
@@ -222,6 +224,8 @@ object ReflectionRules {
         cal: LocalCalendar,
         /** Slice 2: the week "reflect on my week" was said to Talk for: open and lit like Sunday evening's until saved. */
         requestedWeek: Long? = null,
+        /** Week board item (8): the Board's week ([BoardReviewRules.review]); what kept slipping leads What to drop. */
+        board: BoardWeekReview = BoardWeekReview.EMPTY,
     ): ReflectionView {
         val ws = v.weekStart
         val r = all.firstOrNull { it.weekStart == ws }
@@ -245,7 +249,7 @@ object ReflectionRules {
             drop = if (saved) r!!.drop else "",
             matters = if (saved) r!!.matters else "",
             wentWellHints = wentWellHints(v, winTexts),
-            dropHints = dropHints(v),
+            dropHints = dropHints(v, board.slipping.map { it.title }),
             mattersHints = mattersHints(goals, ws + 7),
             saved = saved,
             skipped = skipped,
@@ -255,6 +259,7 @@ object ReflectionRules {
             whenLine = ReviewRules.whenLine(v.card.startMinute),
             startMinute = v.card.startMinute,
             timeChoices = ReviewRules.timeChoices(v.card.startMinute),
+            board = board,
         )
     }
 

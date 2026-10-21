@@ -90,6 +90,10 @@ struct PlanWeekSheet: View {
 
     @ViewBuilder
     private func left(_ p: WeekPlan) -> some View {
+        // Item (8): the one line last week's review said to carry into this plan, in the accent.
+        if let carry = p.carryLine {
+            Text(carry).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+        }
         Text(p.leftLine).font(MekaType.body).foregroundStyle(palette.textPrimary)
         ForEach(p.rows, id: \.taskId) { r in
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
