@@ -5252,6 +5252,37 @@ class MekaCore(
         return local.copy(recent = o.merged(local.recent, shared))
     }
 
+    /** Hello slice 4: the fresh openers Ada wrote, as kept on this device; none when missing or unreadable. Caller is on the core. */
+    private fun helloFresh(): os.meka.core.domain.HelloFreshSet = os.meka.core.domain.HelloFreshRules.decode(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.HelloFreshRules.KEY) } }.getOrNull(),
+    )
+
+    /**
+     * The orb says hello like a person, slice 4: when a batch is due ([os.meka.core.domain.HelloFreshRules.due]: none
+     * yet or a week old, one try a day), asks Navilife's AI for a few fresh openers per part of the day (nothing about
+     * him is sent), checks every line on the device and keeps the ones that pass on this device, where they join the
+     * plain pools. Off, over budget, offline or nothing passing keeps the old ones. True when a new batch was kept.
+     * [warmHello] calls it, so the apps need nothing new.
+     */
+    suspend fun freshenHelloOpeners(): Boolean {
+        val rules = os.meka.core.domain.HelloFreshRules
+        val api = aiApi ?: return false
+        val now = nowMs()
+        val set = onCore { helloFresh() }
+        if (!rules.due(set, now)) return false
+        // The try is marked first, so a failure (or a crash mid-call) never asks again within the day.
+        onCore { runCatching { localStore.transaction { localStore.setLocalValue(rules.KEY, rules.encode(set.copy(triedMs = now))) } } }
+        val reply = try {
+            api.helloOpeners(os.meka.core.wire.HelloOpenersCodec.Request(rules.PER_PART))
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { return false }
+        if (reply.state != os.meka.core.wire.AskCodec.Response.ANSWERED) return false
+        return onCore {
+            val next = rules.took(set, reply.openers.map { os.meka.core.domain.HelloFreshRaw(it.part, it.open, it.ask) }, now)
+            if (next.atMs != now) return@onCore false
+            runCatching { localStore.transaction { localStore.setLocalValue(rules.KEY, rules.encode(next)) } }.isSuccess
+        }
+    }
+
     /** Hello slice 2: home from work, after the football, rain outside, from what the core holds now. Caller is on the core. */
     private fun helloMoments(now: Long, cal: ZoneCalendar): os.meka.core.domain.HelloMoments = runCatching {
         os.meka.core.domain.HelloMomentRules.of(officeToday(), _today.value.events, weather.forecast(), now, cal)
@@ -5271,7 +5302,7 @@ class MekaCore(
         val o = os.meka.core.domain.HelloOpeners
         val day = cal.epochDayOf(now)
         val memory = helloOpenerMemory()
-        val moment = o.moment(cal.minuteOfDay(now), day, now, memory, adaIntroducedToday(day), welcome, helloMoments(now, cal))
+        val moment = o.moment(cal.minuteOfDay(now), day, now, memory, adaIntroducedToday(day), welcome, helloMoments(now, cal), helloFresh())
         val opener = o.pick(moment, memory.recent, day)
         val after = o.said(memory, opener, now)
         runCatching {
@@ -9705,6 +9736,8 @@ class MekaCore(
      * so a tap on the orb speaks at once with no voice fetch. Already here: nothing is asked. Never throws.
      */
     suspend fun warmHello(welcome: Boolean = false) {
+        // Hello slice 4: once a week at most, Ada writes a few fresh openers first, so they're made ahead too.
+        try { freshenHelloOpeners() } catch (e: CancellationException) { throw e } catch (e: Exception) {}
         if (speechApi == null) return
         val lines = onCore {
             val name = aboutYou.profile().shownName
@@ -9719,6 +9752,7 @@ class MekaCore(
             val day = ZoneCalendar(timeZone).epochDayOf(now)
             ask + os.meka.core.domain.HelloOpeners.warm(
                 minute, day, now, helloOpenerMemory(), adaIntroducedToday(day), welcome, name, helloMoments(now, ZoneCalendar(timeZone)),
+                helloFresh(),
             )
         }
         // Each piece as the speaker asks for it (a later piece may join two sentences: "Good day? What can I do for you?").

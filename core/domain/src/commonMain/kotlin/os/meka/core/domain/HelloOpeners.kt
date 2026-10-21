@@ -28,6 +28,8 @@ data class HelloMoment(
     val welcome: Boolean = false,
     /** The moments around him ([HelloMoments]); none by default. */
     val moments: HelloMoments = HelloMoments(),
+    /** Hello slice 4: this part of the day's fresh openers Ada wrote ([HelloFreshRules]), joining its plain pool. */
+    val fresh: List<HelloOpener> = emptyList(),
 )
 
 /**
@@ -262,7 +264,7 @@ object HelloOpeners {
             HelloPart.EVENING -> EVENING
             HelloPart.LATE -> LATE
         }
-        if (part == HelloPart.LATE) return base
+        if (part == HelloPart.LATE) return base + m.fresh
         val day = m.isoDayOfWeek
         val special = when {
             day == 1 && part == HelloPart.MORNING -> MONDAY
@@ -270,7 +272,7 @@ object HelloOpeners {
             day >= 6 -> WEEKEND
             else -> emptyList()
         }
-        return special + base + ANY
+        return special + base + ANY + m.fresh
     }
 
     /**
@@ -297,7 +299,7 @@ object HelloOpeners {
     /** The moment of a hello at [nowMs] ([day], [minuteOfDay] his local ones) after [memory]; [introduced] Ada already did today. */
     fun moment(
         minuteOfDay: Int, day: Long, nowMs: Long, memory: HelloOpenerMemory, introduced: Boolean, welcome: Boolean,
-        moments: HelloMoments = HelloMoments(),
+        moments: HelloMoments = HelloMoments(), fresh: HelloFreshSet = HelloFreshSet(),
     ): HelloMoment = HelloMoment(
         minuteOfDay = minuteOfDay,
         isoDayOfWeek = CivilDate.isoDayOfWeek(day),
@@ -305,6 +307,7 @@ object HelloOpeners {
         again = memory.lastAtMs?.let { nowMs - it in 0 until AGAIN_WITHIN_MS } ?: false,
         welcome = welcome,
         moments = moments,
+        fresh = fresh.of(part(minuteOfDay)),
     )
 
     /** [memory] after [opener] was said at [nowMs]. */
@@ -349,11 +352,11 @@ object HelloOpeners {
      */
     fun warm(
         minuteOfDay: Int, day: Long, nowMs: Long, memory: HelloOpenerMemory, introduced: Boolean, welcome: Boolean, name: String?,
-        moments: HelloMoments = HelloMoments(),
+        moments: HelloMoments = HelloMoments(), fresh: HelloFreshSet = HelloFreshSet(),
     ): List<String> {
-        val now = moment(minuteOfDay, day, nowMs, memory, introduced, welcome, moments)
+        val now = moment(minuteOfDay, day, nowMs, memory, introduced, welcome, moments, fresh)
         val laterMin = minuteOfDay + HelloRules.WARM_AHEAD_MIN
-        val later = moment(laterMin.mod(1440), day + laterMin / 1440, nowMs, memory, introduced = true, welcome = welcome, moments = moments)
+        val later = moment(laterMin.mod(1440), day + laterMin / 1440, nowMs, memory, introduced = true, welcome = welcome, moments = moments, fresh = fresh)
             .copy(again = false)
         val nextPick = pick(now, memory.recent, day)
         val after = said(memory, nextPick, nowMs)

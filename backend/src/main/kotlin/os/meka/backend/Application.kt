@@ -70,6 +70,7 @@ import os.meka.core.wire.VoiceNoteCodec
 import os.meka.core.wire.MessageRequestCodec
 import os.meka.core.wire.BriefScriptCodec
 import os.meka.core.wire.ChatSummaryCodec
+import os.meka.core.wire.HelloOpenersCodec
 import os.meka.core.wire.MailDraftCodec
 import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
@@ -789,6 +790,16 @@ fun Application.mekaSync(
                 val request = ChatSummaryCodec.decodeRequest(body)
                 val answer = withContext(Dispatchers.IO) { chatSummaryService.summarise(request) }
                 call.respondText(ChatSummaryCodec.encodeResponse(answer), ContentType.Application.Json)
+            }
+            // Fresh hello openers (the orb says hello like a person, slice 4): how many per part of the day out, nothing
+            // about him; openers with "{n}" for his name back, checked on the device. Nothing is kept or logged.
+            val helloOpenersService = HelloOpenersService(ai.provider)
+            post(HelloOpenersCodec.PATH) {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                val request = HelloOpenersCodec.decodeRequest(body)
+                val answer = withContext(Dispatchers.IO) { helloOpenersService.write(request) }
+                call.respondText(HelloOpenersCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // A reply drafted by the AI (Inbox autopilot, slice 6b-2b): one email as its card shows it and a few of his own
             // earlier replies out, the draft back for his editor (sent only on his tap). Nothing is kept or logged.

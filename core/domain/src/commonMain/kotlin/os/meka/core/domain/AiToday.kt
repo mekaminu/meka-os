@@ -28,6 +28,8 @@ object AiTodayRules {
         feature == "ask" -> Group.ASK
         // The companion (slice 1): open conversation, spoken or typed, on the larger model.
         feature == CompanionRules.FEATURE -> Group.CHAT
+        // Hello slice 4: the fresh openers Ada writes for her hello, once a week at most.
+        feature == HelloFreshRules.FEATURE -> Group.CHAT
         feature == "ask.brief" -> Group.BRIEF
         feature == "extract.message" || feature == "triage.message" || feature.startsWith("digest.") ||
             feature.startsWith("messages.") -> Group.MESSAGES

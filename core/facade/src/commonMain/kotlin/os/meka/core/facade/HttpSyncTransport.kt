@@ -212,6 +212,14 @@ interface AiApi {
         os.meka.core.wire.ChatSummaryCodec.Response(AskCodec.Response.OFF)
 
     /**
+     * Fresh hello openers (`POST /v1/ai/hello-openers`, the orb says hello like a person slice 4): how many per part of
+     * the day, nothing about him; openers come back unchecked ([os.meka.core.domain.HelloFreshRules.check] reads them).
+     * A server without the route answers "off".
+     */
+    suspend fun helloOpeners(request: os.meka.core.wire.HelloOpenersCodec.Request): os.meka.core.wire.HelloOpenersCodec.Response =
+        os.meka.core.wire.HelloOpenersCodec.Response(AskCodec.Response.OFF)
+
+    /**
      * A reply drafted by MEKA's AI (`POST /v1/ai/mail-draft`, Inbox autopilot slice 6b-2b): one email as its card shows
      * it and a few of Meka's own earlier replies; the draft comes back unchecked ([os.meka.core.domain.MailDraftRules.check]
      * reads it) and only ever goes into his editor. A server without the route answers "off".
@@ -946,6 +954,21 @@ class HttpSyncTransport(
             resp.status.value == 404 -> return os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.OFF)
             resp.status.value == 403 -> return os.meka.core.wire.GroupDigestCodec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/ai/group-digest")
+        }
+        return codec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun helloOpeners(request: os.meka.core.wire.HelloOpenersCodec.Request): os.meka.core.wire.HelloOpenersCodec.Response {
+        val codec = os.meka.core.wire.HelloOpenersCodec
+        val body = codec.encodeRequest(request)
+        prepare() // the AI routes require the device's signing key on the server
+        val resp = send(codec.PATH, body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.PATH}")
+            // A server without the route (older, or no AI key): the hand-written openers carry on alone.
+            resp.status.value == 404 -> return codec.Response(AskCodec.Response.OFF)
+            resp.status.value == 403 -> return codec.Response(AskCodec.Response.FAILED, reason = "this device's key isn't registered yet")
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.PATH}")
         }
         return codec.decodeResponse(resp.bodyAsText())
     }
