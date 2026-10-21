@@ -1374,7 +1374,7 @@ final class MekaCoreBridgeTests: XCTestCase {
     /// stagger arrives in the same order.
     func testTodayOrderReachesSwift() {
         let rules = TodayOrderRules.shared
-        XCTAssertEqual(rules.ORDER, [TodaySlot.clear, .upNext, .timeline, .cards, .needsYou, .anytime, .done])
+        XCTAssertEqual(rules.ORDER, [TodaySlot.clear, .fromYesterday, .upNext, .timeline, .cards, .needsYou, .anytime, .done])
         XCTAssertTrue(rules.leads(slot: .timeline))
         XCTAssertFalse(rules.leads(slot: .cards))
         XCTAssertLessThan(rules.stagger(slot: .upNext), rules.stagger(slot: .cards))

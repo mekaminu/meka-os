@@ -364,7 +364,7 @@ fun TodayRoute(
         BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
             val layout = CommandCentreRules.layout(maxWidth.value)
             val twoPane = layout != CommandLayout.SINGLE
-            val all = (today.needsYou.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
+            val all = (today.needsYou.map { it.task } + today.fromYesterday.map { it.task } + listOfNotNull(today.upNext) + today.yourDay)
             val selected = all.firstOrNull { it.id == selectedId }
             val columns = CommandCentreRules.columns(layout, taskOpen = selected != null)
             // In the command centre an open task stands in for Needs you; back (or Close) brings Needs you back.
@@ -542,7 +542,7 @@ internal fun todayActions(
     rename = { id, t -> TypingSaves.launch { core.rename(id, t) } },
     delete = { id ->
         scope.launch {
-            val title = core.today.value.let { t -> (t.needsYou.map { it.task } + listOfNotNull(t.upNext) + t.yourDay) }.firstOrNull { it.id == id }?.title
+            val title = core.today.value.let { t -> (t.needsYou.map { it.task } + t.fromYesterday.map { it.task } + listOfNotNull(t.upNext) + t.yourDay) }.firstOrNull { it.id == id }?.title
             runCatching { core.delete(id) }
             setSelected(null)
             if (undo != null && title != null) undo.show(TaskWhenRules.deletedLine(title)) { core.restore(id) }
@@ -758,6 +758,15 @@ private fun TodayPane(
     // Calendar sign-ins about to end or expired (Reliability first, item 2): one line with Reconnect.
     val signInFlow = remember(core) { core?.signInLine ?: MutableStateFlow(emptyList<os.meka.core.domain.SignInLine>()) }
     val signIn by signInFlow.collectAsState()
+    // Roll-over's prompt: Break it down opens the task with its steps ready; Someday and Drop leave with Undo on the bar.
+    val carryScope = rememberCoroutineScope()
+    val carryChoice: (String, os.meka.core.domain.CarryChoice) -> Unit = { id, choice ->
+        if (choice == os.meka.core.domain.CarryChoice.BREAK_DOWN) { StepFocus.request(id); actions.select(id) }
+        if (core != null) carryScope.launch {
+            val line = runCatching { core.answerCarried(id, choice) }.getOrNull()
+            if (line != null) undo?.show(line) { core.undoCarried(id) }
+        }
+    }
     val motion = Meka.motion
     // Not on the closed Fold's cover screen: the card waits for the main screen.
     val motionCard = if (now == null) motion.card else null
@@ -1162,6 +1171,19 @@ private fun TodayPane(
                 item(key = "s-needs") { Spacer(Modifier.height(MekaSpace.l)) }
             }
             }
+            TodaySlot.FROM_YESTERDAY -> {
+            // Roll-over (Week board, slice 1): open tasks planned for an earlier day lead Today, oldest first, each
+            // saying how long it has carried; from three carries a one-time prompt under it.
+            if (today.fromYesterday.isNotEmpty()) {
+                val carriedStep = TodayOrderRules.stagger(TodaySlot.FROM_YESTERDAY)
+                itemsIndexed(today.fromYesterday, key = { _, c -> "y-" + c.task.id }) { i, c ->
+                    Headed(os.meka.core.domain.RollOverRules.LABEL.takeIf { i == 0 }, Modifier.animateItem().appear(rememberAppearance(carriedStep, play))) { m ->
+                        CarriedRow(c, actions, rowMotion(c.task.id), m, onChoice = carryChoice)
+                    }
+                }
+                item(key = "s-yesterday") { Spacer(Modifier.height(MekaSpace.l)) }
+            }
+            }
             TodaySlot.UP_NEXT -> {
             if (nowCard != null && nowHandlers != null) {
                 // One stable slot: when the thing changes, the card's content cross-slides.
@@ -1342,6 +1364,8 @@ internal fun TaskRow(
     time: String? = null, timelineLine: String? = null,
     /** A planned task whose time has gone by: its line ("Since 09:15 · 30 min") is lit in the accent colour. */
     late: Boolean = false,
+    /** Roll-over: a "From yesterday" row's line ("Carried 2 days"), lit in the accent colour. */
+    carriedLine: String? = null,
 ) {
     // Just landed from the plan: lit softly, then settles.
     val glow by animateColorAsState(
@@ -1362,11 +1386,12 @@ internal fun TaskRow(
                 NeedsYouReason.CONFLICT -> "Edited on two devices — choose a version"
                 NeedsYouReason.OVERDUE -> "Overdue"
                 NeedsYouReason.DUE_TODAY_UNSCHEDULED -> "Due today · not scheduled"
-                null -> if (time != null) timelineLine else meta(t)
+                null -> carriedLine ?: if (time != null) timelineLine else meta(t)
             }
             line?.let {
                 val color = when {
                     reason == NeedsYouReason.CONFLICT || reason == NeedsYouReason.OVERDUE -> Meka.colors.critical
+                    carriedLine != null && reason == null -> Meka.colors.accent
                     late && reason == null && time != null -> Meka.colors.accent
                     else -> Meka.colors.textSecondary
                 }

@@ -69,6 +69,11 @@ data class Today(
     val meetingPrep: MeetingPrep? = null,
     /** Trading tracker, slice 6: "Trading · up today · 2 positions open", no amounts ([TradingTodayRules.todayLine]); set by the facade. */
     val trading: TradingTodayLine? = null,
+    /**
+     * Roll-over (Week board, slice 1): open tasks planned for an earlier day and not done, oldest first, shown at the top
+     * of Today under "From yesterday" ([RollOverRules]); not in Needs you, Up next or the timeline.
+     */
+    val fromYesterday: List<CarriedTask> = emptyList(),
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false
@@ -77,7 +82,7 @@ data class Today(
     fun upcomingEvents(nowMs: Long): List<CalendarEvent> = events.filter { !it.allDay && it.endAtMs > nowMs }
 
     /** "You're clear." — nothing needs attention and nothing is left today. */
-    val isClear: Boolean get() = needsYou.isEmpty() && upNext == null && yourDay.isEmpty()
+    val isClear: Boolean get() = needsYou.isEmpty() && upNext == null && yourDay.isEmpty() && fromYesterday.isEmpty()
 
     /**
      * The line Today shows when no task is left (Today clarity, Meka 2026-10-07: "You're clear." showed beside all-day
@@ -147,6 +152,7 @@ object TodayProjection {
         }.take(Today.MAX_NEEDS_YOU)
         val needsIds = needs.map { it.task.id }.toSet()
 
+        val carried = RollOverRules.carried(tasks, needsIds, today, calendar::epochDayOf)
         val rest = open.filter { it.id !in needsIds }
         val scheduledToday = rest.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.sortedBy { it.scheduledAtMs }
         val unscheduled = rest.filter { it.scheduledAtMs == null && (it.dueAtMs == null || it.dueAtMs in today) }
@@ -180,7 +186,7 @@ object TodayProjection {
             planned = (needs.map { it.task } + listOfNotNull(upNext) + yourDay).filter { it.scheduledAtMs != null },
             events = todaysEvents,
             sessions = sessions,
-            toDo = needs.size + (if (upNext != null) 1 else 0) + yourDay.size,
+            toDo = needs.size + (if (upNext != null) 1 else 0) + yourDay.size + carried.size,
             nowMs = nowMs,
             today = today,
             calendar = calendar,
@@ -189,6 +195,6 @@ object TodayProjection {
         val later = upNext?.takeIf { LateTaskRules.isLate(it, nowMs) }?.let { t ->
             LateTaskRules.laterSlot(t, scheduledToday, todaysEvents, sessions, nowMs, today)
         }
-        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline, ring, upNextLaterMs = later)
+        return Today(needs, upNext, yourDay, doneToday, todaysEvents, timeline, ring, upNextLaterMs = later, fromYesterday = carried)
     }
 }

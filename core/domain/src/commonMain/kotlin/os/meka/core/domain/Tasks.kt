@@ -42,6 +42,8 @@ data class Task(
     val eventId: String? = null,
     /** Remind me (task detail): when to remind, epoch ms; null for none (see [TaskReminderRules]). */
     val remindAtMs: Long? = null,
+    /** The day the three-carry prompt was answered ([RollOverRules]); null while it may still ask. */
+    val carryAskedDay: Long? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -92,6 +94,7 @@ data class Task(
                 deferredToDay = s[TaskFields.DEFERRED_TO_DAY].longOrNull,
                 eventId = s[TaskFields.EVENT_ID].textOrNull,
                 remindAtMs = s[TaskFields.REMIND_AT].longOrNull,
+                carryAskedDay = s[TaskFields.CARRY_ASKED_DAY].longOrNull,
             )
         }
     }
@@ -468,6 +471,39 @@ class Tasks(
         if (changes.isEmpty()) return false
         replica.commitLocal(EntityTypes.TASK, id, changes)
         return true
+    }
+
+    /**
+     * The three-carry prompt's answer ([RollOverRules]): marks it answered today, then Someday moves the task there and
+     * Drop cancels it; Break it down and Keep leave it where it is. Returns the task as it was, for Undo.
+     */
+    fun answerCarry(id: String, choice: CarryChoice): Task {
+        val t = get(id) ?: throw ValidationException("Task not found")
+        val fields = linkedMapOf<String, FieldValue>(TaskFields.CARRY_ASKED_DAY to calendar.epochDayOf(nowMs()).fv())
+        when (choice) {
+            CarryChoice.SOMEDAY -> {
+                if (t.isRepeating) throw ValidationException("A repeating task can't go to Someday")
+                fields[ActionableFields.LIFECYCLE] = Lifecycle.SOMEDAY.name.fv()
+                fields[ActionableFields.SOMEDAY_KIND] = SomedayKind.OTHER.name.fv()
+            }
+            CarryChoice.DROP -> {
+                if (t.isRepeating) throw ValidationException("Skip a repeating task instead")
+                fields[ActionableFields.LIFECYCLE] = Lifecycle.CANCELLED.name.fv()
+            }
+            CarryChoice.BREAK_DOWN, CarryChoice.KEEP -> Unit
+        }
+        replica.commitLocal(EntityTypes.TASK, id, fields)
+        return t
+    }
+
+    /** Undo for [answerCarry]: puts back the task's state and lets the prompt ask again. */
+    fun undoCarry(before: Task) {
+        val fields = linkedMapOf<String, FieldValue>(
+            ActionableFields.LIFECYCLE to before.lifecycle.name.fv(),
+            TaskFields.CARRY_ASKED_DAY to (before.carryAskedDay?.fv() ?: FieldValue.Null),
+            ActionableFields.SOMEDAY_KIND to (before.somedayKind?.name?.fv() ?: FieldValue.Null),
+        )
+        replica.commitLocal(EntityTypes.TASK, before.id, fields)
     }
 
     fun moveToSomeday(id: String, kind: SomedayKind = SomedayKind.IDEA) {

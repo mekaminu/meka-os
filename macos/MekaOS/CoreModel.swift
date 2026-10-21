@@ -3189,6 +3189,17 @@ final class CoreModel {
 
     /// "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3): re-planned to the first free
     /// stretch from now; the undo bar says where it went ("Moved “Send the invoice” to 15:30") and Undo puts it back.
+    /// Roll-over (Week board, slice 1): the three-carry prompt on a "From yesterday" row. Break it down marks it answered
+    /// (the view opens the task's steps); Someday and Drop leave with Undo on the bar; Keep stops it asking.
+    func answerCarried(_ id: String, _ choice: CarryChoice) {
+        guard let core else { return }
+        MekaHaptics.light()
+        Task {
+            guard let line = try? await core.answerCarried(taskId: id, choice: choice) else { return }
+            offerEventUndo(line, .carried(id))
+        }
+    }
+
     func moveLater(_ id: String) {
         guard let core else { return }
         Task {
@@ -3540,6 +3551,7 @@ final class CoreModel {
         case .mailMoment: run { try await $0.undoMailMoment() }
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
+        case .carried(let id): run { _ = try await $0.undoCarried(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
         case .removeSteps(let ids): run { core in for id in ids { try await core.removeStep(stepId: id) } }
@@ -6194,7 +6206,7 @@ final class CoreModel {
 
     var allTasks: [MekaTask] {
         guard let t = today else { return [] }
-        return t.needsYou.map(\.task) + (t.upNext.map { [$0] } ?? []) + t.yourDay
+        return t.needsYou.map(\.task) + t.fromYesterday.map(\.task) + (t.upNext.map { [$0] } ?? []) + t.yourDay
     }
 
     var selected: MekaTask? { allTasks.first { $0.id == selectedID } }
@@ -6348,6 +6360,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case appointment(AppointmentDone)
         /// Call to book on an appointment (slice 2b): the task goes and the card asks again as before.
         case appointmentCall(AppointmentCall)
+        /// Someday or Drop on a carried task's prompt: it comes back as it was.
+        case carried(String)
         /// Remove on a checklist item: it comes back with its tick and place.
         case restoreStep(String)
         /// Untick all on a checklist: these are ticked again.

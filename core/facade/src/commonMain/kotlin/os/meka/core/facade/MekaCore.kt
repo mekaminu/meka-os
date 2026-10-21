@@ -2047,6 +2047,26 @@ class MekaCore(
     /** Sets a repeat from [repeatChoices] (its `rule`); null stops the task repeating. */
     suspend fun setRepeat(taskId: String, rule: String?) = onCore { tasks.setRepeatRule(taskId, rule) }
     /** Skips this occurrence of a repeating task; the next one is queued for its day. */
+    /**
+     * The three-carry prompt on a "From yesterday" row (roll-over, Week board slice 1; [os.meka.core.domain.RollOverRules]):
+     * marks it answered, then Someday moves the task there and Drop cancels it. Returns the undo bar's line, or null for
+     * Break it down (the app opens the task's steps) and Keep.
+     */
+    suspend fun answerCarried(taskId: String, choice: os.meka.core.domain.CarryChoice): String? = onCore {
+        val before = tasks.answerCarry(taskId, choice)
+        carryUndo[taskId] = before
+        if (choice == os.meka.core.domain.CarryChoice.SOMEDAY || choice == os.meka.core.domain.CarryChoice.DROP) followBlocks(listOf(taskId))
+        os.meka.core.domain.RollOverRules.undoLine(choice, before.title)
+    }
+
+    /** Undo after [answerCarried]: the task comes back as it was and the prompt may ask again. False when nothing to undo. */
+    suspend fun undoCarried(taskId: String): Boolean = onCore {
+        val before = carryUndo.remove(taskId) ?: return@onCore false
+        tasks.undoCarry(before)
+        true
+    }
+    private val carryUndo = mutableMapOf<String, os.meka.core.domain.Task>()
+
     suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId); followBlocks(listOf(taskId)); Unit }
     /** Moves just this occurrence (or a one-off task) out of Today for [days] days. */
     suspend fun snooze(taskId: String, days: Int = 1) = onCore { tasks.snoozeOccurrence(taskId, days); followBlocks(listOf(taskId)); Unit }

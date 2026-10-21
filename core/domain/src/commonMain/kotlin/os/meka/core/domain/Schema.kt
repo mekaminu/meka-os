@@ -225,6 +225,11 @@ object TaskFields {
     const val EVENT_ID = "eventId"
     /** Remind me (task detail): when to remind, epoch ms; Null for no reminder. Moves with the task's When. */
     const val REMIND_AT = "remindAtMs"
+    /**
+     * Roll-over (Week board, slice 1; additive): the local day (epoch day) Meka answered the three-carry prompt
+     * ([RollOverRules]); absent until then, so it asks once.
+     */
+    const val CARRY_ASKED_DAY = "carryAskedDay"
 }
 
 object ChecklistFields {

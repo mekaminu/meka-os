@@ -418,6 +418,12 @@ struct TodayView: View {
                             }
                             .staggeredAppear(step(.clear), play: play)
                         }
+                        // Roll-over (Week board, slice 1): open tasks planned for an earlier day lead, oldest first.
+                        if !today.fromYesterday.isEmpty {
+                            FromYesterdayView(carried: today.fromYesterday, palette: palette)
+                                .padding(.bottom, MekaSpace.l)
+                                .staggeredAppear(step(.fromYesterday), play: play)
+                        }
                         // Up next is the menu bar's card here too (Fold review 2026-10-09, item 3): it carries its own
                         // "UP NEXT", so the section label only heads a lone next event.
                         let upNextCard = model.upNextCard
@@ -712,13 +718,17 @@ struct TaskRow: View {
     /// A planned task whose time has gone by: its line ("Since 09:15 · 30 min") is lit in the accent colour.
     let late: Bool
 
-    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette, time: String? = nil, timelineLine: String? = nil, late: Bool = false) {
+    /// Roll-over: a "From yesterday" row's line ("Carried 2 days"), lit in the accent colour.
+    let carriedLine: String?
+
+    init(task: MekaTask, reason: NeedsYouReason?, palette: MekaPalette, time: String? = nil, timelineLine: String? = nil, late: Bool = false, carriedLine: String? = nil) {
         self.task = task
         self.reason = reason
         self.palette = palette
         self.time = time
         self.timelineLine = timelineLine
         self.late = late
+        self.carriedLine = carriedLine
     }
 
     var body: some View {
@@ -732,7 +742,7 @@ struct TaskRow: View {
                 Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = subtitle {
                     Text(line).font(MekaType.itemMeta)
-                        .foregroundStyle(isAlert ? palette.critical : (late && reason == nil && time != nil ? palette.accent : palette.textSecondary))
+                        .foregroundStyle(isAlert ? palette.critical : ((late && reason == nil && time != nil) || (carriedLine != nil && reason == nil) ? palette.accent : palette.textSecondary))
                 }
             }
             Spacer()
@@ -768,7 +778,7 @@ struct TaskRow: View {
         case .conflict: "Edited on two devices — choose a version"
         case .overdue: "Overdue"
         case .dueTodayUnscheduled: "Due today · not scheduled"
-        default: time != nil ? timelineLine : model.repeatLine(task)
+        default: carriedLine ?? (time != nil ? timelineLine : model.repeatLine(task))
         }
     }
 }

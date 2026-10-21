@@ -2434,3 +2434,12 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Server `HelloOpenersService` (AiHelloOpeners.kt): one SMALL-tier, tool-less call, no user data in the prompt; at most `perPart` per part back; OFF / OVER / FAILED like the other AI routes. Nothing stored or logged.
 - Facade `freshenHelloOpeners()` (marks the try first, asks, keeps the checked batch), called at the start of `warmHello`, so the Fold and the Mac need no change; `hello`/`warmHello` pass the set. `AiApi.helloOpeners` (default OFF) + HttpSyncTransport.
 - Help: talk.md tip + HelpIndex. Tests: HelloFreshTest (6), HelloOpenersCodecTest (2), AiHelloOpenersTest (2), HelloFreshFacadeTest (2). No migration.
+
+
+## Week board and roll-over — slice 1 (2026-10-21): roll-over ("From yesterday")
+- Core `RollOverRules` (CarryOver.kt): open (ACTIVE/INBOX) tasks with a planned time before today, not waiting for a later day and not in Needs you, oldest first; `days` read from the planned day (nothing rewritten, moving it resets the count); line "Carried from yesterday" / "Carried N days" (a repeating one adds "· ↻ Every …"); `asks` from 3 days on a one-off not answered before. `CarryChoice` BREAK_DOWN · SOMEDAY · DROP · KEEP; `undoLine` for Someday and Drop.
+- Before this, a task planned for an earlier day with no due date silently left Today (it was neither planned today nor anytime); only the evening shutdown listed it.
+- `TaskFields.CARRY_ASKED_DAY` (`carryAskedDay`, additive, Lww), `Task.carryAskedDay`; `Tasks.answerCarry` (marks it, Someday → SOMEDAY/OTHER, Drop → CANCELLED; repeating refused) and `undoCarry` (puts lifecycle, mark and Someday kind back).
+- `Today.fromYesterday` (counts against "You're clear." and the ring's to-do count), `TodaySlot.FROM_YESTERDAY` after the clear line, before Up next (stagger step 1; SECTIONS unchanged).
+- Facade `answerCarried` / `undoCarried` (undo kept per task in memory); Fold `CarriedRow` (FromYesterdaySection.kt) + `TaskRow(carriedLine)`, Break it down = StepFocus + open; Mac `FromYesterdayView` + `TaskRow(carriedLine:)`, `CoreModel.answerCarried`, `EventUndoOffer.Action.carried`; selection lists include the carried tasks on both apps.
+- Help: docs/help/from-yesterday.md (+ HelpIndex). Motion row "From yesterday (roll-over)". Tests: RollOverTest (7), RollOverFacadeTest (2), Mac bridge test's order. No migration, no server change.
