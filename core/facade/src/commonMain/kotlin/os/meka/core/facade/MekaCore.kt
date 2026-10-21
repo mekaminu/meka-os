@@ -11580,6 +11580,8 @@ class MekaCore(
             balance = balanceNudge,
             // Speaking up, slice 3: tomorrow stacking up, for the evening heads-up Ada says.
             pressure = _board.value.days.firstNotNullOfOrNull { d -> d.pressure?.takeIf { it.epochDay == todayEpochDay() + 1 } },
+            // Speaking up, slice 4: a reply to an email he put on Waiting for (said only if he turned that moment on).
+            mailFinds = activity.mailFinds(),
             // Protected time, slice 6: at 07:00 the morning it ends, one note for the business mail that waited.
             protectedTime = protectedTime.setting(), workSchedule = work.schedule(),
         )

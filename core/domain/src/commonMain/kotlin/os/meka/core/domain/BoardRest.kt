@@ -74,7 +74,8 @@ object FeelingAskRules {
 /**
  * Stretched holds the non-urgent alerts for a day (Week board, item (11) part 2). Offered with the Stretched answer as
  * "Hold alerts till tomorrow 21:30"; on his tap, for [HOLD_MS] mail and call alerts that can wait don't ring on this
- * device: the ten-minute inbox, work mail that waited, parcels, the call assistant's credit ([HELD_SOURCES]), and on the
+ * device: the ten-minute inbox, work mail that waited, parcels, the call assistant's credit, replies he was waiting for
+ * ([HELD_SOURCES]), and on the
  * Fold the after-call notes for strangers and automatic blocks. They stay in the app (Needs you, Activity → Calls); a
  * held notice that still applies when the hold ends posts then. Urgent calls and messages and Always notify people still
  * come through, and nothing else changes (event reminders, trains, approvals, bills). Resume ends it at once. Kept on
@@ -89,6 +90,7 @@ object AlertHoldRules {
 
     val HELD_SOURCES: Set<NoticeSource> = setOf(
         NoticeSource.MAIL_MOMENT, NoticeSource.PROTECTED_MAIL, NoticeSource.PARCELS, NoticeSource.CALL_CREDIT,
+        NoticeSource.REPLIED,
     )
 
     fun active(untilMs: Long?, nowMs: Long): Boolean = untilMs != null && nowMs < untilMs

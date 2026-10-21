@@ -3469,6 +3469,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeakMoment.pressure.label, "Tomorrow stacking up")
         XCTAssertEqual(NoticeSource.pressure.label, "Tomorrow stacking up (the evening before)")
         XCTAssertEqual(rules.PRESSURE_AT_MIN, 19 * 60 + 30)
+        // Slice 4: a reply he was waiting for, off to start, with its own Notifications row.
+        XCTAssertEqual(SpeakMoment.reply.label, "A reply you were waiting for")
+        XCTAssertFalse(SpeakMoment.reply.defaultOn)
+        XCTAssertEqual(NoticeSource.replied.label, "Replies you were waiting for")
+        XCTAssertEqual(rules.replyWords(who: "Sam Taylor", topic: "Quote"), "Sam Taylor replied to your email about Quote.")
     }
 }
 

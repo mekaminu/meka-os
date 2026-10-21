@@ -175,8 +175,46 @@ class SpeakUpTest {
         assertNull(SpeakUpRules.pressureNotice(p.copy(epochDay = day + 2), now, cal))
         assertNull(SpeakUpRules.pressureNotice(p, cal.toEpochMs(day, SpeakUpRules.PRESSURE_UNTIL_MIN), cal))
         assertNull(SpeakUpRules.pressureNotice(null, now, cal))
-        // Its own switch, on to start, listed last.
+        // Its own switch, on to start, listed before the reply (off to start).
         assertTrue(SpeakUpSettings().isOn(SpeakMoment.PRESSURE))
-        assertEquals(SpeakMoment.PRESSURE.label, SpeakUpRules.view(SpeakUpSettings(), 0, now, cal).sections[SpeakMoment.entries.size - 1].label)
+        assertEquals(SpeakMoment.PRESSURE.label, SpeakUpRules.view(SpeakUpSettings(), 0, now, cal).sections[SpeakMoment.entries.size - 2].label)
+    }
+
+    /** Slice 4: a reply to an email he put on Waiting for is a heads-up; Ada says it only fresh and only if he turned it on. */
+    @Test
+    fun aReplyHeWasWaitingForIsANoticeAndSaidOnlyWhenOn() {
+        val sentDay = cal.epochDayOf(now) - 5
+        val base = MailRenewalRules.read("mf1", MailFollowUpRules.serverFields(MailFollowUp("Sam Taylor", "Reply about Quote"), "Personal", "Re: Quote for the kitchen", sentDay))!!
+        val f = base.copy(state = MailFindState.ADDED, answeredAtMs = now - 10 * 60_000L, answeredWhy = MailFollowUpRules.ANSWERED_REPLIED)
+        val w = WaitingItem(
+            id = MailPromiseRules.waitingId("mf1"), title = "Reply about Quote for the kitchen", who = "Sam Taylor", notes = null,
+            sinceMs = now - 86_400_000L * 5, lastChasedMs = null, chaseDay = null, state = DueState.NONE, meta = "", hasConflict = false,
+        )
+        val n = SpeakUpRules.replyNotices(listOf(f), listOf(w), now).single()
+        assertEquals(NoticeSource.REPLIED, n.source)
+        assertEquals("Sam Taylor replied", n.title)
+        assertEquals("Quote for the kitchen · Personal · Got it in Time to chase if that settles it", n.text)
+        assertEquals(NoticeTarget.NEEDS_YOU, n.target)
+        assertEquals(SpeakMoment.REPLY, n.speak)
+        // Their name keeps its capital after his ("Alex, Sam Taylor replied …").
+        val on = SpeakUpSettings(choices = mapOf(SpeakMoment.REPLY to true))
+        val pick = SpeakUpRules.pick(listOf(n), on, ctx, false, false, 0, now, "Alex") { false }
+        assertEquals("Alex, Sam Taylor replied to your email about Quote for the kitchen.", pick!!.line)
+        // Off to start: the notice posts, Ada stays quiet until he turns the moment on.
+        assertFalse(SpeakUpSettings().isOn(SpeakMoment.REPLY))
+        assertEquals(SpeakHold.OFF, check(n))
+        assertNull(check(n, s = on))
+        // An hour on it is a notification only; after 12 hours, nothing.
+        val old = SpeakUpRules.replyNotices(listOf(f.copy(answeredAtMs = now - 2 * 3_600_000L)), listOf(w), now).single()
+        assertNull(old.speak)
+        assertTrue(SpeakUpRules.replyNotices(listOf(f.copy(answeredAtMs = now - 13 * 3_600_000L)), listOf(w), now).isEmpty())
+        // Got it / Not yet since, his own "wrote again", a closed Waiting for item, or a find not added: none.
+        assertTrue(SpeakUpRules.replyNotices(listOf(f.copy(chase = ChaseMarks(seenAtMs = now))), listOf(w), now).isEmpty())
+        assertTrue(SpeakUpRules.replyNotices(listOf(f.copy(answeredWhy = MailFollowUpRules.ANSWERED_WROTE_AGAIN)), listOf(w), now).isEmpty())
+        assertTrue(SpeakUpRules.replyNotices(listOf(f), emptyList(), now).isEmpty())
+        assertTrue(SpeakUpRules.replyNotices(listOf(f.copy(state = MailFindState.OPEN)), listOf(w), now).isEmpty())
+        // Listed last in Speaking up, after Tomorrow stacking up; a stretched day holds it like other mail.
+        assertEquals(SpeakMoment.REPLY.label, SpeakUpRules.view(SpeakUpSettings(), 0, now, cal).sections[SpeakMoment.entries.size - 1].label)
+        assertTrue(AlertHoldRules.holds(n))
     }
 }

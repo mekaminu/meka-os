@@ -13,7 +13,13 @@ import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.SpeakMoment
 import os.meka.core.domain.SpeakPlace
 import os.meka.core.domain.SpeakUpRules
+import os.meka.core.domain.EntityTypes
+import os.meka.core.domain.MailFollowUpRules
+import os.meka.core.domain.MailSentFacts
+import os.meka.core.sync.FieldValue
+import os.meka.core.sync.HlcClock
 import os.meka.core.sync.InMemoryReplicaStore
+import os.meka.core.sync.Op
 import os.meka.core.sync.InMemoryServerOpStore
 import os.meka.core.sync.SyncService
 import kotlin.random.Random
@@ -116,6 +122,39 @@ class SpeakUpFacadeTest {
             val pick = c.speakUp(r, listOf(n.key), SpeakPlace.BEDSIDE, onCall = false, talking = false)
             assertTrue(pick!!.line.startsWith("Alex, tomorrow evening is stacking up: Call the garage, Wrap the present and Pack the kit."), pick.line)
             assertNull(c.speakUp(r, listOf(n.key), SpeakPlace.BEDSIDE, onCall = false, talking = false))
+        } finally { c.close() }
+    }
+
+    /** Slice 4: a reply to an email he put on Waiting for posts a heads-up; Ada says it once he turns that moment on. */
+    @Test
+    fun aReplyHeWasWaitingForIsSaidOnlyOnceTurnedOn() = runTest {
+        val clock = HlcClock("server", { now })
+        var k = 0
+        fun serverWrite(id: String, fields: Map<String, FieldValue>) = fields.forEach { (f, v) ->
+            ops.append(Op("srvsu${k++}", "hh", EntityTypes.MAIL_FIND, id, f, v, clock.now(), emptyList(), "server"))
+        }
+        val sentDay = os.meka.core.domain.CivilDate.toEpochDay(2026, 10, 14)
+        val fu = MailFollowUpRules.read(MailSentFacts("Sam Taylor", "sam@example.com", 1, "Quote for the kitchen", "Could you send the quote?", now - 7 * 86_400_000L), setOf("alex@example.com"), false)!!
+        val id = MailFollowUpRules.findId("acc1", "s1")
+        serverWrite(id, MailFollowUpRules.serverFields(fu, "Personal", "Quote for the kitchen", sentDay))
+        val c = core()
+        try {
+            c.setAboutYou(AboutField.SHOWN_NAME, "Alex Smith")
+            assertTrue(c.syncNow())
+            c.addMailFind(id)
+            // Sam answers: the server marks the find and the heads-up posts.
+            serverWrite(id, MailFollowUpRules.answeredFields(now - 5 * 60_000L, MailFollowUpRules.ANSWERED_REPLIED))
+            assertTrue(c.syncNow())
+            c.tick()
+            val r = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+            val n = r.post.single { it.source == NoticeSource.REPLIED }
+            assertEquals("Sam Taylor replied", n.title)
+            // Off to start: nothing said.
+            assertNull(c.speakUp(r, listOf(n.key), SpeakPlace.PRIVATE, onCall = false, talking = false))
+            c.speakUpAction(SpeakMoment.REPLY.label)
+            val pick = c.speakUp(r, listOf(n.key), SpeakPlace.PRIVATE, onCall = false, talking = false)
+            assertEquals("Alex, Sam Taylor replied to your email about Quote for the kitchen.", pick?.line)
+            assertNull(c.speakUp(r, listOf(n.key), SpeakPlace.PRIVATE, onCall = false, talking = false))
         } finally { c.close() }
     }
 }

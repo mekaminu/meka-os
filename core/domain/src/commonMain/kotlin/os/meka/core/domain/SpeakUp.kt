@@ -9,14 +9,16 @@ import os.meka.core.sync.Replica
  * The moments Ada says out loud on her own (Meka 2026-10-20 19:49), each its own switch in Ask → Settings → Speaking up.
  * A notice carries its moment ([Notice.speak]) and the words to say after his name ([Notice.spoken]) when it is one;
  * everything else stays a silent notification. Slice 1 has the train and time to leave; slice 2 an urgent message from
- * family or Always notify; slice 3 tomorrow stacking up, once in the evening; the rest of the list (an event in 10
- * minutes, a reply he was waiting for) follows. Listed most important first: when two are due at once, the first is said.
+ * family or Always notify; slice 3 tomorrow stacking up, once in the evening; slice 4 a reply he was waiting for (off
+ * to start); an event in 10 minutes he hasn't left for follows. Listed most important first: when two are due at once,
+ * the first is said.
  */
 enum class SpeakMoment(val label: String, val line: String, val defaultOn: Boolean) {
     URGENT("Urgent from family", "A message or call from family or someone on Always notify that says it's urgent", true),
     TRAIN("Your train", "Cancelled, or 10 minutes or more late, in the 2 hours before you leave", true),
     LEAVE_NOW("Time to leave", "For an event or a booked session with its travel time set", true),
     PRESSURE("Tomorrow stacking up", "Once in the evening, when tomorrow has three or more things on it", true),
+    REPLY("A reply you were waiting for", "Someone answers an email of yours you put on Waiting for", false),
 }
 
 /** "Speak less / speak more": how many moments a day at most. */
@@ -141,14 +143,17 @@ object SpeakUpRules {
         .filter { it.speak != null }
         .sortedBy { it.speak!!.ordinal }
         .firstOrNull { check(it, s, ctx, quiet, meeting, spokenToday, alreadySaid(it.key), nowMs) == null }
-        ?.let { SpeakUpPick(it.key, it.speak!!, line(it.spoken!!, address)) }
+        ?.let { SpeakUpPick(it.key, it.speak!!, line(it.spoken!!, address, keepCase = startsWithName(it.speak!!))) }
+
+    /** The moments whose words start with someone's name ("Sam Taylor replied …"), never lower-cased after his. */
+    fun startsWithName(m: SpeakMoment): Boolean = m == SpeakMoment.URGENT || m == SpeakMoment.REPLY
 
     /** One moment that isn't a governor notice ([checkMoment]), said as [line] would; null when it stays silent. */
     fun pickOne(
         key: String, m: SpeakMoment, spoken: String, s: SpeakUpSettings, ctx: SpeakContext, quiet: Boolean, meeting: Boolean,
         spokenToday: Int, nowMs: Long, address: String?, alreadySaid: Boolean,
     ): SpeakUpPick? = if (checkMoment(m, spoken, s, ctx, quiet, meeting, spokenToday, alreadySaid, nowMs) == null)
-        SpeakUpPick(key, m, line(spoken, address, keepCase = m == SpeakMoment.URGENT)) else null
+        SpeakUpPick(key, m, line(spoken, address, keepCase = startsWithName(m))) else null
 
     /** "Meka, your 07:42 is cancelled." with a name ("Sir, …" when he chose sir); "Your 07:42 is cancelled." without. */
     fun line(spoken: String, address: String?, keepCase: Boolean = false): String {
@@ -302,6 +307,47 @@ object SpeakUpRules {
             atMs = cal.toEpochMs(day, PRESSURE_AT_MIN), target = NoticeTarget.TODAY, expiresAtMs = until,
             speak = SpeakMoment.PRESSURE, spoken = pressureWords(p),
         )
+    }
+
+    // ---- Slice 4: a reply he was waiting for (off to start) ----
+
+    /** The notification stands this long after the reply was seen (or until Got it / Not yet on Time to chase). */
+    const val REPLY_STANDS_MS = 12 * 60 * 60_000L
+    /** Ada says it only while the reply is this fresh: one seen overnight is a notification in the morning, not a line. */
+    const val REPLY_FRESH_MS = 60 * 60_000L
+
+    /** "Sam Taylor replied to your email about Quote for the kitchen." (their name and his subject, nothing they wrote). */
+    fun replyWords(who: String, topic: String?): String =
+        who.trim() + " replied to your email" + (topic?.trim()?.takeIf { it.isNotEmpty() }?.let { " about $it." } ?: ".")
+
+    /**
+     * Follow-up radar's replies ([MailChaseRules.repliedOpen]) as notices: an email of his he put on Waiting for (Add
+     * on "No reply yet") that someone has now answered, the Waiting for item still open and Got it / Not yet not yet
+     * tapped. One heads-up per reply ("Sam Taylor replied" · "Quote for the kitchen · Personal · Got it in Time to chase
+     * if that settles it"), standing [REPLY_STANDS_MS]; Ada says it ([SpeakMoment.REPLY], off to start) only while it is
+     * [REPLY_FRESH_MS] fresh. Their name and his own subject only: nothing they wrote is said or acted on (ADR-006).
+     */
+    fun replyNotices(finds: List<MailFind>, waiting: List<WaitingItem>, nowMs: Long): List<Notice> {
+        val open = waiting.associateBy { it.id }
+        return finds.mapNotNull { f ->
+            if (f.kind != MailFollowUpRules.KIND_FOLLOW_UP || f.state != MailFindState.ADDED) return@mapNotNull null
+            val w = open[MailPromiseRules.waitingId(f.id)] ?: return@mapNotNull null
+            if (!MailChaseRules.repliedOpen(f)) return@mapNotNull null
+            val at = f.answeredAtMs!!
+            val age = nowMs - at
+            if (age < 0 || age >= REPLY_STANDS_MS) return@mapNotNull null
+            val who = w.who?.takeIf { it.isNotBlank() } ?: f.merchant?.takeIf { it.isNotBlank() } ?: MailPromiseRules.NO_NAME
+            val topic = MailFollowUpRules.topic(f.subject)
+            val fresh = age < REPLY_FRESH_MS
+            Notice(
+                key = "replied:${f.id}:$at", source = NoticeSource.REPLIED, tier = NoticeTier.HEADS_UP,
+                title = "$who replied",
+                text = listOfNotNull(topic, f.account.takeIf { it.isNotBlank() }, "Got it in Time to chase if that settles it").joinToString(" · "),
+                atMs = at, target = NoticeTarget.NEEDS_YOU, expiresAtMs = at + REPLY_STANDS_MS,
+                speak = if (fresh) SpeakMoment.REPLY else null,
+                spoken = if (fresh) replyWords(who, topic) else null,
+            )
+        }
     }
 
     // ---- Slice 2: "shh" said to Ada in Talk ----
