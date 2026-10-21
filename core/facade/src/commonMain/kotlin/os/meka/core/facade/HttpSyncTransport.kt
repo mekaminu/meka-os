@@ -395,6 +395,14 @@ interface TalkWarmApi {
 }
 
 /**
+ * Talking to Ada like a conversation, slice 2: how long the server took over the last day's answers (`POST
+ * /v1/talk/speed`), times only. Null from an older server without the route. Network failures throw.
+ */
+interface ServerSpeedApi {
+    suspend fun serverSpeed(): List<os.meka.core.wire.ServerSpeedCodec.Turn>?
+}
+
+/**
  * "Where I am now" (Places item 3): the forecast at an approximate point. The point must already be rounded
  * ([os.meka.core.domain.HereRules.round]); the server refuses anything finer. Available once the device is connected.
  */
@@ -563,7 +571,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -1036,6 +1044,19 @@ class HttpSyncTransport(
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from /v1/talk/warm")
         }
         return os.meka.core.wire.TalkWarmCodec.decodeResponse(resp.bodyAsText()).state != os.meka.core.wire.TalkWarmCodec.Response.OFF
+    }
+
+    override suspend fun serverSpeed(): List<os.meka.core.wire.ServerSpeedCodec.Turn>? {
+        prepare() // the route requires the device's signing key on the server
+        val path = os.meka.core.wire.ServerSpeedCodec.PATH
+        val resp = send(path, os.meka.core.wire.ServerSpeedCodec.encodeRequest())
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from $path")
+            // An older server without the route, or a device key not registered yet: nothing to show.
+            resp.status.value == 404 || resp.status.value == 403 -> return null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
+        }
+        return os.meka.core.wire.ServerSpeedCodec.decodeResponse(resp.bodyAsText())
     }
 
     override suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices {

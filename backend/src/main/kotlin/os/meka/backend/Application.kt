@@ -82,6 +82,7 @@ import os.meka.core.wire.MessageTriageCodec
 import os.meka.core.wire.SpeechCodec
 import os.meka.core.wire.TalkWarmCodec
 import os.meka.core.wire.FoldPostureCodec
+import os.meka.core.wire.ServerSpeedCodec
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.VoiceMessageCodec
@@ -143,6 +144,8 @@ fun Application.mekaSync(
     updateFailures: UpdateFailures? = null,
     /** The Fold's posture changes (bedside clock, slice 2); null leaves the routes out. */
     foldPostures: FoldPostures? = null,
+    /** The server's timing of each answer (talking to Ada like a conversation, slice 2); null keeps none and leaves its route out. */
+    talkSpeed: TalkSpeed? = null,
     /** The phone's notification trace (notifications never seen, slice 2); null leaves the routes out. */
     notifyReports: NotifyReports? = null,
     /** Approval requests from outside MEKA (Kestrel's trades; build plan V1); null leaves the routes out. */
@@ -681,23 +684,23 @@ fun Application.mekaSync(
             }, budgetLevel = { ai.budget?.state()?.level }, live = liveFacts?.let { lf -> { q: String -> lf.look(q) } })
             post("/v1/ai/ask") {
                 val body = call.boundedBody()
-                call.device(devices, verifier, body, requireKey = true)
+                val who = call.device(devices, verifier, body, requireKey = true)
                 val request = AskCodec.decodeRequest(body)
-                val answer = withContext(Dispatchers.IO) { askService.ask(request) }
+                val answer = withContext(Dispatchers.IO) { askService.ask(request) { t -> talkSpeed?.record(who.householdId, t) } }
                 call.respondText(AskCodec.encodeResponse(answer), ContentType.Application.Json)
             }
             // The companion, slice 9: the same question, answered in lines as they're ready: the first sentence said
             // while the model is still writing, then the whole answer. Nothing is kept or logged.
             post(AskCodec.STREAM_PATH) {
                 val body = call.boundedBody()
-                call.device(devices, verifier, body, requireKey = true)
+                val who = call.device(devices, verifier, body, requireKey = true)
                 val request = AskCodec.decodeRequest(body)
                 val lines = kotlinx.coroutines.channels.Channel<String>(kotlinx.coroutines.channels.Channel.UNLIMITED)
                 call.respondTextWriter(ContentType("application", "x-ndjson")) {
                     kotlinx.coroutines.coroutineScope {
                         launch(Dispatchers.IO) {
                             val answer = try {
-                                askService.askStream(request) { first -> lines.trySend(AskCodec.encodeStreamFirst(first)) }
+                                askService.askStream(request, timed = { t -> talkSpeed?.record(who.householdId, t) }) { first -> lines.trySend(AskCodec.encodeStreamFirst(first)) }
                             } catch (e: Exception) {
                                 AskCodec.Response(AskCodec.Response.FAILED, reason = "Navilife's AI couldn't answer")
                             }
@@ -838,6 +841,18 @@ fun Application.mekaSync(
                     val spoken = mp3?.let { said.response.copy(audio = java.util.Base64.getEncoder().encodeToString(it)) } ?: said.response
                     call.respondText(SpeechCodec.encodeResponse(spoken), ContentType.Application.Json)
                 }
+            }
+        }
+
+        if (talkSpeed != null) {
+            // Talking to Ada like a conversation, slice 2: the household's last day of answer timings (times only), for
+            // Speed on the devices and the deploy report (the publisher may read it too).
+            post(ServerSpeedCodec.PATH) {
+                val body = call.boundedBody()
+                val who = call.releaseCaller(devices, verifier, body, publisher)
+                ServerSpeedCodec.decodeRequest(body)
+                val turns = withContext(Dispatchers.IO) { talkSpeed.recent(who) }
+                call.respondText(ServerSpeedCodec.encodeResponse(turns), ContentType.Application.Json)
             }
         }
 
@@ -1296,7 +1311,7 @@ fun main(args: Array<String>) {
                     publisher = System.getenv("MEKA_RELEASE_PUBLISHER_SECRET")?.takeIf { it.isNotBlank() }?.let { SecretsManagerPublisherKey(it) },
                     voice = voice, newsImages = newsImages, calendarWriter = calendarWriter, ai = ai, speech = speech,
                     verifier = verifier, family = family, updateFailures = UpdateFailures(PostgresUpdateFailureStore(ds)),
-                    foldPostures = FoldPostures(PostgresFoldPostureStore(ds)),
+                    foldPostures = FoldPostures(PostgresFoldPostureStore(ds)), talkSpeed = TalkSpeed(PostgresTalkSpeedStore(ds)),
                     notifyReports = NotifyReports(PostgresNotifyReportStore(ds), push, profile = { hh ->
                         opStore.latestFields(hh, EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID)[AboutYouRules.ENTITY_ID]
                     }, assistantCalls = assistantCallsReader(opStore), mailChecks = { hh -> integrations?.mailReport(hh).orEmpty() },
@@ -1502,6 +1517,7 @@ object Migrations {
         25 to "/db/V25__mail_backlog.sql",
         26 to "/db/V26__speech_usage_google.sql",
         27 to "/db/V27__number_lookup.sql",
+        28 to "/db/V28__talk_timing.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

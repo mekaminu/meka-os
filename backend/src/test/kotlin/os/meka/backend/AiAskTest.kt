@@ -436,4 +436,51 @@ class AiAskTest {
         assertEquals(listOf<AskCodec.StreamLine>(AskCodec.StreamLine.Final(AskCodec.Response(AskCodec.Response.ANSWERED, "You have the dentist. Then training at 7.", emptyList()))), lines)
         assertEquals(HttpStatusCode.Unauthorized, client.post(AskCodec.STREAM_PATH) { header("Authorization", "Bearer $foldSecret"); setBody(body) }.status)
     }
+
+    @Test
+    fun aStreamedAnswerIsTimedStepByStepWithNoWords() {
+        var clock = 1_000L
+        val model = StreamingModel(listOf("""{"answer":"Rayleigh scat""", """tering. Blue light bou""", """nces about more.","actions":[]}""")) { synchronized(this) { clock += 100 } }
+        val service = AskService(model, { _, v -> AskService.FirstClip(byteArrayOf(1), v) }, clockMs = { synchronized(this) { clock } }, wallMs = { 1_791_476_100_000L })
+        val timings = mutableListOf<os.meka.core.domain.ServerTurnTiming>()
+        service.askStream(request.copy(question = "why is the sky blue", voice = true, speak = true), timed = { timings += it }) { }
+        val t = timings.single()
+        assertEquals(0L, t.firstTokenMs)
+        // The first sentence is whole once the second piece is in (and the next has begun with " Blue").
+        assertEquals(100L, t.firstSentenceMs)
+        assertTrue(t.clipMs!! in 100L..300L)
+        assertEquals(300L, t.doneMs)
+        assertTrue(t.open && t.spoken)
+        assertEquals("claude-sonnet-9", t.model)
+        assertEquals(1_791_476_100_000L, t.atMs)
+        // A typed quick look-up: no clip; a failed one is timed as not answered; a timing that throws never fails the answer.
+        val quick = mutableListOf<os.meka.core.domain.ServerTurnTiming>()
+        AskService(FakeModel(answered("""{"answer":"Dentist at 9.","actions":[]}"""))).ask(request) { quick += it }
+        assertFalse(quick.single().open); assertFalse(quick.single().spoken); assertEquals(null, quick.single().clipMs)
+        AskService(FakeModel(ModelOutcome.Failed("down"))).ask(request) { quick += it }
+        assertFalse(quick.last().answered)
+        assertEquals(AskCodec.Response.ANSWERED, AskService(FakeModel(answered("""{"answer":"Yes.","actions":[]}"""))).ask(request) { error("store down") }.state)
+    }
+
+    @Test
+    fun theSpeedRouteGivesTheDaysTimingsToKeyedDevicesOnly() = testApplication {
+        val devices = InMemoryDeviceRegistry()
+        val foldSecret = devices.enrol("hh", "fold")
+        val foldKey = TestDeviceKey().also { devices.registerKey(DeviceIdentity("hh", "fold"), it.publicB64) }
+        val model = StreamingModel(listOf("""{"answer":"You have the dentist. Then trai""", """ning at 7.","actions":[]}"""))
+        val speed = TalkSpeed(InMemoryTalkSpeedStore())
+        application {
+            mekaSync(InMemoryServerOpStore(), devices, ai = AiLayer(AiHealth(key = { goodKey }, http = { _, _ -> 200 }), provider = model), talkSpeed = speed)
+        }
+        val body = AskCodec.encodeRequest(request)
+        assertEquals(HttpStatusCode.OK, client.post(AskCodec.STREAM_PATH) { with(foldKey) { signed(foldSecret, AskCodec.STREAM_PATH, body) } }.status)
+        val ask = client.post(os.meka.core.wire.ServerSpeedCodec.PATH) { with(foldKey) { signed(foldSecret, os.meka.core.wire.ServerSpeedCodec.PATH, os.meka.core.wire.ServerSpeedCodec.encodeRequest()) } }
+        assertEquals(HttpStatusCode.OK, ask.status)
+        val text = ask.bodyAsText()
+        val turns = os.meka.core.wire.ServerSpeedCodec.decodeResponse(text)
+        assertEquals(1, turns.size)
+        assertEquals("claude-sonnet-9", turns.single().model)
+        assertFalse(text.contains("dentist", ignoreCase = true))
+        assertEquals(HttpStatusCode.Unauthorized, client.post(os.meka.core.wire.ServerSpeedCodec.PATH) { header("Authorization", "Bearer $foldSecret"); setBody("{}") }.status)
+    }
 }

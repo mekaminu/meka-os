@@ -128,6 +128,9 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
     // The orb speed pass, slice 2: the last 20 hellos and answers, how long each took to start (this phone only).
     var speed by remember { mutableStateOf<os.meka.core.domain.TurnSpeedView?>(null) }
     LaunchedEffect(Unit) { speed = runCatching { core.turnSpeed("phone") }.getOrNull() }
+    // Talking to Ada like a conversation, slice 2: the server's own timings of the last day's answers.
+    var serverSpeed by remember { mutableStateOf<os.meka.core.domain.ServerSpeedView?>(null) }
+    LaunchedEffect(Unit) { serverSpeed = runCatching { core.serverSpeed() }.getOrNull() }
     val reduced = Meka.reducedMotion
 
     fun choose(c: VoiceChoice) {
@@ -324,6 +327,14 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                                     }
                                 }.minTouch())
                         }
+                    }
+                }
+                serverSpeed?.let { sv ->
+                    Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(6)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text(sv.title, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                        Text(sv.intro, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        sv.lines.forEach { line -> Text(line, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                        sv.empty?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
                     }
                 }
             }

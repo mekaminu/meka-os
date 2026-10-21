@@ -16,6 +16,7 @@ import os.meka.core.sync.HlcClock
 import os.meka.core.sync.Op
 import os.meka.core.sync.ServerOpStore
 import os.meka.core.wire.FoldPostureCodec
+import os.meka.core.wire.ServerSpeedCodec
 import os.meka.core.wire.NotifyDiagnosticsCodec
 import os.meka.core.wire.UpdateFailureCodec
 import os.meka.core.wire.WireCodec
@@ -49,7 +50,7 @@ object ReleasePublisher {
     const val LABEL = "GitHub build"
     const val AUTH_SCHEME = "Publisher"
     /** The only routes the publisher may call. */
-    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH, NotifyDiagnosticsCodec.LATEST_PATH)
+    val ROUTES = setOf("/v1/releases/latest", "/v1/releases/upload", UpdateFailureCodec.LIST_PATH, FoldPostureCodec.LATEST_PATH, NotifyDiagnosticsCodec.LATEST_PATH, ServerSpeedCodec.PATH)
 
     /** A fresh key pair: (PKCS#8 private key, X.509 public key), both standard base64. */
     fun generateKeyPair(): Pair<String, String> {
@@ -196,6 +197,14 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
         return FoldPostureCodec.decodeLatest(body)
     }
 
+    /** Talking to Ada like a conversation, slice 2: the last day's answer timings; null from a server without the route. */
+    suspend fun talkSpeed(): List<ServerSpeedCodec.Turn>? {
+        val (status, body) = send(ServerSpeedCodec.PATH, ServerSpeedCodec.encodeRequest())
+        if (status == 404) return null
+        if (status != 200) throw IllegalStateException("HTTP $status from ${ServerSpeedCodec.PATH}")
+        return ServerSpeedCodec.decodeResponse(body)
+    }
+
     /** The phone's newest notification report with the server's last push; throws on a server without the route. */
     suspend fun notifications(): NotifyDiagnosticsCodec.Latest {
         val (status, body) = send(NotifyDiagnosticsCodec.LATEST_PATH, NotifyDiagnosticsCodec.encodeEmptyRequest())
@@ -256,6 +265,8 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  *    Always exits 0: reading them never fails the publish job.
  *  - `publisher-postures <url>`: prints the Fold's last posture changes (bedside clock, slice 2) as GitHub notices,
  *    newest first, so a build run reads what the Fold 8 reports. Always exits 0.
+ *  - `publisher-speed <url>`: prints the server's answer timings over the last day (talking to Ada like a
+ *    conversation, slice 2): the middle of each step for quick look-ups and for conversation. Always exits 0.
  *  - `publisher-notifications <url>`: prints the phone's notification report (notifications never seen, slice 2): one
  *    summary notice (allowed, MEKA's phone setting, channels off, the server's last push) and one per trace entry.
  *    Always exits 0.
@@ -265,7 +276,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms", "publisher-fuel")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-speed", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms", "publisher-fuel")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -285,6 +296,12 @@ object ReleasePublisherCli {
                     val list = runCatching { client.failures() }
                         .getOrElse { println("::notice title=Phone update failures::couldn't read them (${it.message?.take(120)})"); return@runBlocking 0 }
                     failureLines(list, System.currentTimeMillis()).forEach(::println)
+                    0
+                }
+                "publisher-speed" -> {
+                    val turns = runCatching { client.talkSpeed() }
+                        .getOrElse { println("::notice title=Talk speed::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    speedLines(turns, System.currentTimeMillis()).forEach(::println)
                     0
                 }
                 "publisher-postures" -> {
@@ -469,6 +486,17 @@ object ReleasePublisherCli {
             // Workflow commands end at a newline; the message is one line already, and '%' is escaped as GitHub asks.
             "::warning title=Phone update failed::$at · ${UpdateFailureRules.reportLine(f)}".replace("%", "%25")
         }
+    }
+
+    /**
+     * Talking to Ada like a conversation, slice 2: the server's answer timings over the last day as notices, one for
+     * quick look-ups and one for conversation (the middle of each step), else one saying there were none.
+     */
+    fun speedLines(turns: List<ServerSpeedCodec.Turn>?, nowMs: Long): List<String> {
+        if (turns == null) return listOf("::notice title=Talk speed::this server doesn't time its answers yet")
+        val lines = os.meka.core.domain.ServerSpeedRules.lines(turns.map(TalkSpeed::domain), nowMs)
+        if (lines.isEmpty()) return listOf("::notice title=Talk speed::no answers in the last day")
+        return lines.map { "::notice title=Talk speed (server, last day)::$it".replace("%", "%25") }
     }
 
     /** The job's lines for the Fold's posture report: one notice per change, newest first, else one notice. */

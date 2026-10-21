@@ -125,9 +125,28 @@ struct VoiceSheet: View {
                 Button(TurnSpeedRules.shared.CLEAR) { model.clearSpeed() }
                     .buttonStyle(.link)
             }
+            if model.serverSpeedShown {
+                // Talking to Ada like a conversation, slice 2: the server's own timings of the last day's answers.
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(ServerSpeedRules.shared.TITLE).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Text(ServerSpeedRules.shared.INTRO).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(Array(model.serverSpeedLines.enumerated()), id: \.offset) { _, line in
+                        Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    if let empty = model.serverSpeedEmpty {
+                        Text(empty).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .padding(.top, MekaSpace.xs)
+                .transition(.opacity)
+            }
         }
         .padding(.vertical, MekaSpace.xs)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.speedRows)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.serverSpeedLines)
     }
 
     private var content: some View {

@@ -2454,10 +2454,25 @@ final class CoreModel {
     private(set) var speedSummary: String?
     private(set) var speedRows: [String] = []
 
+    /// Talking to Ada like a conversation, slice 2: Speed's "On the server" part (the server's own timings of the last
+    /// day's answers, times only); empty when not connected or the server is older.
+    private(set) var serverSpeedLines: [String] = []
+    private(set) var serverSpeedEmpty: String?
+    private(set) var serverSpeedShown = false
+
     func refreshSpeed() async {
         guard let core, let v = try? await core.turnSpeed(device: "Mac") else { speedSummary = nil; speedRows = []; return }
         speedSummary = v.summary
         speedRows = v.rows
+        if let sv = try? await core.serverSpeed() {
+            serverSpeedLines = sv.lines
+            serverSpeedEmpty = sv.empty
+            serverSpeedShown = true
+        } else {
+            serverSpeedLines = []
+            serverSpeedEmpty = nil
+            serverSpeedShown = false
+        }
     }
 
     /// Speed's Clear: forgets the kept turns on this Mac; a tick haptic.

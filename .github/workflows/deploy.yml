@@ -225,6 +225,13 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-postures "${{ steps.decide.outputs.url }}"
 
+      # How long the server takes over Ada's answers (talking to Ada like a conversation, slice 2): the last day's middle
+      # of each step, quick look-ups and conversation, as notices on this job. Times only.
+      - name: Talk speed on the server
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-speed "${{ steps.decide.outputs.url }}"
+
       # Where the phone's notifications stop (notifications never seen, slice 2): its trace and the server's last push.
       - name: Phone notification trace
         if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''

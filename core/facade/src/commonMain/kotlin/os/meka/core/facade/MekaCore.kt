@@ -277,6 +277,7 @@ class MekaCore(
     private var aiApi: AiApi? = transport as? AiApi
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var talkWarmApi: TalkWarmApi? = transport as? TalkWarmApi
+    private var serverSpeedApi: ServerSpeedApi? = transport as? ServerSpeedApi
     private var hereApi: HereApi? = transport as? HereApi
     private var fuelApi: FuelApi? = transport as? FuelApi
     private var numberLookupApi: NumberLookupApi? = transport as? NumberLookupApi
@@ -6539,7 +6540,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
-            talkWarmApi = transport as? TalkWarmApi
+            talkWarmApi = transport as? TalkWarmApi; serverSpeedApi = transport as? ServerSpeedApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
             numberLookupApi = transport as? NumberLookupApi; tradingExportApi = transport as? TradingExportApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
@@ -10509,6 +10510,21 @@ class MekaCore(
     }
 
     /** Speed's Clear: forgets the kept turns on this device. */
+    /**
+     * Talking to Ada like a conversation, slice 2: Speed's "On the server" part, how long Navilife's server took over
+     * the last day's answers (the middle of each step, quick look-ups and conversation; times only). Null when not
+     * connected, the server is older or didn't answer. Never throws.
+     */
+    suspend fun serverSpeed(): os.meka.core.domain.ServerSpeedView? {
+        val api = serverSpeedApi ?: return null
+        val turns = try { api.serverSpeed() } catch (e: CancellationException) { throw e } catch (e: Exception) { null } ?: return null
+        val now = onCore { nowMs() }
+        return os.meka.core.domain.ServerSpeedRules.view(
+            turns.map { os.meka.core.domain.ServerTurnTiming(it.atMs, it.open, it.spoken, it.model, it.webMs, it.firstTokenMs, it.firstSentenceMs, it.clipMs, it.doneMs, it.answered) },
+            now,
+        )
+    }
+
     suspend fun clearTurnSpeed(): Unit = onCore {
         turnTraces = emptyList()
         runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.TurnSpeedRules.KEY, "") } }

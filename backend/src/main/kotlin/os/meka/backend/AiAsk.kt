@@ -1,5 +1,7 @@
 package os.meka.backend
 
+import os.meka.core.domain.ServerTurnStopwatch
+import os.meka.core.domain.ServerTurnTiming
 import os.meka.core.wire.AskCodec
 import os.meka.core.wire.SpeechCodec
 
@@ -30,6 +32,9 @@ class AskService(
      * ([LiveFacts.look]), or null when it isn't searched; null leaves every answer without.
      */
     private val live: ((question: String) -> LiveFacts.Found?)? = null,
+    /** Talking to Ada like a conversation, slice 2: the clock the server's timings are measured on (ms, monotonic). */
+    private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val wallMs: () -> Long = System::currentTimeMillis,
 ) {
     /**
      * The model call for [r]. The companion, slice 1: an open turn ([CompanionRules.isOpen]: advice, ideas, an
@@ -65,10 +70,24 @@ class AskService(
     /** One piece said: the MP3 and the voice that said it. */
     class FirstClip(val mp3: ByteArray, val voice: String?)
 
-    fun ask(r: AskCodec.Request): AskCodec.Response {
+    /**
+     * Talking to Ada like a conversation, slice 2: [timed] gets this answer's timing (times only, never the words) once
+     * it is written; null times nothing. A timing is never allowed to fail the answer.
+     */
+    fun ask(r: AskCodec.Request, timed: ((ServerTurnTiming) -> Unit)? = null): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI isn't set up")
+        val start = clockMs()
         val web = live?.let { look -> runCatching { look(r.question) }.getOrNull() }
-        return answerOf(r, web, p.complete(request(r, web)))
+        val watch = ServerTurnStopwatch(start, isOpenTurn(r, web), r.voice)
+        if (web != null) watch.web(clockMs())
+        val outcome = p.complete(request(r, web))
+        return answerOf(r, web, outcome).also { report(timed, watch, outcome) }
+    }
+
+    private fun report(timed: ((ServerTurnTiming) -> Unit)?, watch: ServerTurnStopwatch, outcome: ModelOutcome) {
+        timed ?: return
+        val answered = outcome as? ModelOutcome.Answered
+        runCatching { timed(watch.finish(clockMs(), wallMs(), answered?.model, answered != null)) }
     }
 
     /**
@@ -79,24 +98,42 @@ class AskService(
      * can start speaking. The whole answer is then checked exactly as [ask] checks it; the first piece isn't sent twice.
      * [emit] may be called from another thread; it is never called after this returns.
      */
-    fun askStream(r: AskCodec.Request, emit: (AskCodec.StreamLine.First) -> Unit): AskCodec.Response {
+    fun askStream(
+        r: AskCodec.Request,
+        timed: ((ServerTurnTiming) -> Unit)? = null,
+        emit: (AskCodec.StreamLine.First) -> Unit,
+    ): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI isn't set up")
+        val start = clockMs()
         val web = live?.let { look -> runCatching { look(r.question) }.getOrNull() }
+        // Slice 2 of the conversation item: the server's own marks (times only); each is taken once.
+        val watch = ServerTurnStopwatch(start, isOpenTurn(r, web), r.voice)
+        if (web != null) watch.web(clockMs())
         val say = firstClip?.takeIf { r.voice && r.speak }
         val written = StringBuilder()
         val gate = Any()
         var closed = false
         var early: String? = null
         var saying: java.util.concurrent.CompletableFuture<AskCodec.StreamLine.First?>? = null
+        var sentenced = false
         val outcome = p.stream(request(r, web)) { delta ->
+            if (delta.isNotEmpty()) watch.firstToken(clockMs())
             written.append(delta)
-            if (say != null && saying == null) {
-                os.meka.core.domain.StreamedSpeechRules.earlyPiece(written.toString())?.takeIf { it.length <= SpeechCodec.MAX_TEXT }?.let { piece ->
-                    early = piece
-                    saying = java.util.concurrent.CompletableFuture.supplyAsync {
-                        val clip = runCatching { say(piece, r.speakVoice) }.getOrNull()
-                        if (clip == null || clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) null
-                        else AskCodec.StreamLine.First(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice).also { f -> synchronized(gate) { if (!closed) runCatching { emit(f) } } }
+            val wantsPiece = say != null && saying == null
+            if (!sentenced || wantsPiece) {
+                os.meka.core.domain.StreamedSpeechRules.earlyPiece(written.toString())?.let { piece ->
+                    if (!sentenced) { sentenced = true; watch.firstSentence(clockMs()) }
+                    val speak = say
+                    if (wantsPiece && speak != null && piece.length <= SpeechCodec.MAX_TEXT) {
+                        early = piece
+                        saying = java.util.concurrent.CompletableFuture.supplyAsync {
+                            val clip = runCatching { speak(piece, r.speakVoice) }.getOrNull()
+                            if (clip == null || clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) null
+                            else {
+                                synchronized(watch) { watch.clip(clockMs()) }
+                                AskCodec.StreamLine.First(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice).also { f -> synchronized(gate) { if (!closed) runCatching { emit(f) } } }
+                            }
+                        }
                     }
                 }
             }
@@ -105,7 +142,12 @@ class AskService(
         val sent = saying?.let { f -> runCatching { f.get(firstClipWaitMs, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() }
         synchronized(gate) { closed = true } // a clip later than the wait is never sent after the answer
         if (sent == null) saying?.cancel(false)
-        return answerOf(r, web, outcome, firstAlready = sent?.text?.takeIf { it == early })
+        val answer = answerOf(r, web, outcome, firstAlready = sent?.text?.takeIf { it == early })
+        // A clip made after the whole answer (no early piece) is ready when the answer goes.
+        if (answer.firstAudio != null) synchronized(watch) { watch.clip(clockMs()) }
+        if (outcome is ModelOutcome.Answered && !sentenced) watch.firstSentence(clockMs())
+        synchronized(watch) { report(timed, watch, outcome) }
+        return answer
     }
 
     private fun answerOf(r: AskCodec.Request, web: LiveFacts.Found?, outcome: ModelOutcome, firstAlready: String? = null): AskCodec.Response {
