@@ -8173,6 +8173,27 @@ class MekaCore(
     }
 
     /**
+     * Call assistant completeness: where Ask reads Activity → Calls. The Fold sets it to its contacts-named log with the
+     * calls the phone screened ([callLogOf]); null (the Mac) reads [callLog]'s numbers as they are.
+     */
+    var callLogSource: (() -> os.meka.core.domain.CallLogView)? = null
+
+    /**
+     * Call assistant completeness: [q] asks about his calls ([os.meka.core.domain.CallAskRules.answer]); answered from
+     * Activity → Calls on this device, no AI (a caller's words never leave his devices), with Open Calls under the
+     * answer. Null when it isn't.
+     */
+    private suspend fun callsAsk(q: String): os.meka.core.domain.AskOutcome? {
+        if (!os.meka.core.domain.CallAskRules.isAbout(q)) return null
+        val named = try { callLogSource?.invoke() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        val view = named ?: os.meka.core.domain.CallLogRules.view(_heldCalls.value, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone))
+        val text = os.meka.core.domain.CallAskRules.answer(q, view) ?: return null
+        return os.meka.core.domain.AskOutcome.Answered(
+            os.meka.core.domain.AskAnswer(text, emptyList(), help = os.meka.core.domain.CallAskRules.link),
+        )
+    }
+
+    /**
      * Deliveries completeness: [q] asks about his parcels ([os.meka.core.domain.ParcelAskRules.answer]); answered from the
      * parcels the server read from shipping emails, on this device, no AI. Null when it isn't about parcels.
      */
@@ -9040,6 +9061,8 @@ class MekaCore(
         if (!beyondHelp) tripDocsAsk(q)?.let { return it }
         // Deliveries completeness: "any parcels coming?", "where's my Amazon parcel?" answered from the parcels here.
         if (!beyondHelp) parcelAsk(q)?.let { return it }
+        // Call assistant completeness: "any calls today?", "did the dentist ring?" answered from Activity → Calls here.
+        if (!beyondHelp) callsAsk(q)?.let { return it }
         if (!beyondHelp) vaultAsk(q)?.let { return it }
         val cal = ZoneCalendar(timeZone)
         // A question about notifications carries the phone's trace; without the AI the device answers from it itself.

@@ -13,3 +13,4 @@ mac_how: The Mac shows the messages and the settings; the screening itself happe
 tip: Family and the always-ring list always ring through, and a second call within 3 minutes rings.
 tip: It only takes messages: it never shares your details or agrees to anything.
 tip: Done on Needs you only clears the card: the caller's recording, words and summary stay in Activity → Calls for 7 days, then are deleted. To remove one sooner, open the call there and tap Delete recording (Undo for 5 seconds).
+tip: Ask "any calls today?", "who rang yesterday?" or "did the dentist call?" and Navilife answers from Activity → Calls on your device (the callers' words never go to the AI), with Open Calls under the answer.

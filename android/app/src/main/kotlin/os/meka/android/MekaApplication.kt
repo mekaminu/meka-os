@@ -184,6 +184,14 @@ class MekaApplication : Application() {
         os.meka.android.notify.NotifyTraceStore.started(this, os.meka.android.notify.MekaChannels.states(this).size)
         // Slice 4: Ask and Talk read the same state when asked "why didn't I get a notification?".
         core.notificationHealthSource = { os.meka.android.notify.NotifyTraceStore.health(this) }
+        // Call assistant completeness: "any calls today?" reads Activity → Calls as the Fold shows it (contacts' names,
+        // the calls this phone screened), on the device only.
+        core.callLogSource = {
+            core.callLogOf(
+                core.heldCalls.value, os.meka.android.work.CallerLookup.names(this), captures.lists.value,
+                os.meka.android.work.PhoneCallLog.calls(this).value,
+            )
+        }
         // Battery care (Reliability first, slice 1): every process start is a heartbeat.
         os.meka.android.today.BatteryCare.beat(this)
         // Every work-mode change on this phone (clock tick, sync, listener) goes past the nudger. Also runs once at
