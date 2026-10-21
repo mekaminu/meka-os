@@ -321,6 +321,8 @@ export class MekaStack extends cdk.Stack {
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
         MEKA_TRANSCRIBE_ENGINE: 'transcribe',
+        // Navilife's monthly AI cap in USD (Meka 2026-10-21 19:59: "Yes" to $60 for Ada and her errands).
+        MEKA_AI_BUDGET_USD: '60',
       },
       secrets: {
         MEKA_DB_USER: ecs.Secret.fromSecretsManager(dbSecret, 'username'),
