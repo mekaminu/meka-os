@@ -155,7 +155,8 @@ object TodayProjection {
         val carried = RollOverRules.carried(tasks, needsIds, today, calendar::epochDayOf)
         val rest = open.filter { it.id !in needsIds }
         val scheduledToday = rest.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.sortedBy { it.scheduledAtMs }
-        val unscheduled = rest.filter { it.scheduledAtMs == null && (it.dueAtMs == null || it.dueAtMs in today) }
+        // A task parked in a week on the Board with no day yet (Week board slice 4) waits there, not on Today.
+        val unscheduled = rest.filter { it.scheduledAtMs == null && (it.dueAtMs == null || it.dueAtMs in today) && !WeekBoardRules.parked(it) }
             .sortedWith(compareByDescending<Task> { it.priority }.thenBy { it.createdAtMs })
 
         // A planned task whose time has come leads (the earliest, late or not: Fold review 2026-10-09 13:45, item 3),

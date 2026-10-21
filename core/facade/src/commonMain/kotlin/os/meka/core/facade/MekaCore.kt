@@ -2097,13 +2097,41 @@ class MekaCore(
     }
 
     private fun placeOnBoard(board: os.meka.core.domain.WeekBoard, move: os.meka.core.domain.BoardMove): String {
-        val before = board.dayOf(move.taskId)!!
-        val oldIndex = before.openCards.indexOfFirst { it.id == move.taskId }
-        val title = before.cards.first { it.id == move.taskId }.task.title
+        val spot = board.find(move.taskId)!!
+        val oldIndex = board.dayOf(move.taskId)?.openCards?.indexOfFirst { it.id == move.taskId } ?: Int.MAX_VALUE
+        val title = spot.card.task.title
         boardUndo = tasks.placeOnBoard(move)
         if (move.dayChanged) followBlocks(listOf(move.taskId))
         val newIndex = (move.ranks[move.taskId] ?: 0L) / os.meka.core.domain.WeekBoardRules.RANK_STEP - 1
         return os.meka.core.domain.WeekBoardRules.moveLine(title, move, ZoneCalendar(timeZone).epochDayOf(nowMs()), newIndex < oldIndex)
+    }
+
+    // ---- Week board, slice 4: the week's lane and the Someday tray ----
+
+    /**
+     * Drag a card into the lane of the week starting on local [weekStart] (a Monday on the board) at place [toIndex]:
+     * it keeps no day, waits there off Today, and comes back from Someday if it was there. Returns the undo bar's line
+     * ("Moved “Book MOT” to This week"), or null when nothing moved (a repeating or done task, or no change).
+     */
+    suspend fun parkOnBoard(taskId: String, weekStart: Long, toIndex: Int): String? = onCore {
+        val board = _board.value
+        val park = os.meka.core.domain.WeekBoardRules.park(board, taskId, weekStart, toIndex) ?: return@onCore null
+        val spot = board.find(taskId)!!
+        val oldIndex = board.laneOf(taskId)?.lane?.indexOfFirst { it.id == taskId } ?: Int.MAX_VALUE
+        boardUndo = tasks.parkOnBoard(park)
+        if (spot.source == os.meka.core.domain.BoardSource.DAY) followBlocks(listOf(taskId))
+        val newIndex = (park.ranks[taskId] ?: 0L) / os.meka.core.domain.WeekBoardRules.RANK_STEP - 1
+        os.meka.core.domain.WeekBoardRules.parkLine(spot.card.task.title, park, board, newIndex < oldIndex)
+    }
+
+    /** Drag a card onto the Someday tray (or its menu's Someday): out of the week, kept for later. Null when it can't go. */
+    suspend fun somedayOnBoard(taskId: String): String? = onCore {
+        val board = _board.value
+        if (!os.meka.core.domain.WeekBoardRules.canSomeday(board, taskId)) return@onCore null
+        val title = board.find(taskId)!!.card.task.title
+        boardUndo = tasks.somedayOnBoard(taskId)
+        followBlocks(listOf(taskId))
+        os.meka.core.domain.WeekBoardRules.somedayLine(title)
     }
 
     /** Undo after [moveOnBoard] or [nudgeOnBoard]: the task's day and the day's order come back. False when nothing to undo. */

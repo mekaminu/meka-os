@@ -46,6 +46,8 @@ data class Task(
     val carryAskedDay: Long? = null,
     /** Its place within its day on the Week board ([WeekBoardRules]); null until he orders that day. */
     val boardRank: Long? = null,
+    /** The Monday of the week it is parked in on the Board's week lane ([WeekBoardRules.parked]); null otherwise. */
+    val boardWeek: Long? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -98,6 +100,7 @@ data class Task(
                 remindAtMs = s[TaskFields.REMIND_AT].longOrNull,
                 carryAskedDay = s[TaskFields.CARRY_ASKED_DAY].longOrNull,
                 boardRank = s[TaskFields.BOARD_RANK].longOrNull,
+                boardWeek = s[TaskFields.BOARD_WEEK].longOrNull,
             )
         }
     }
@@ -531,15 +534,68 @@ class Tasks(
         if (t.lifecycle.isTerminal) throw ValidationException("That task is finished")
         val before = TaskTiming.of(t)
         val oldRanks = move.ranks.keys.associateWith { get(it)?.boardRank }
+        // Off the Someday tray or out of a week's lane (slice 4): an open task again, no longer parked.
+        val back = linkedMapOf<String, FieldValue>()
+        if (t.lifecycle == Lifecycle.SOMEDAY) back[ActionableFields.LIFECYCLE] = Lifecycle.ACTIVE.name.fv()
+        if (t.boardWeek != null) back[TaskFields.BOARD_WEEK] = FieldValue.Null
+        if (back.isNotEmpty()) replica.commitLocal(EntityTypes.TASK, t.id, back)
         if (move.dayChanged) setWhen(t.id, move.toDay, move.minuteOfDay)
         val after = TaskTiming.of(get(t.id)!!)
         move.ranks.forEach { (id, rank) -> replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.BOARD_RANK to rank.fv())) }
-        return BoardUndo(t.id, before, after, oldRanks)
+        return BoardUndo(t.id, before, after, oldRanks, oldWeek = t.boardWeek, newWeek = null, oldKind = t.somedayKind)
     }
 
-    /** Undo for [placeOnBoard]: the task's day and time come back (unless changed since) and the day's old order. */
+    /**
+     * Parks a task in a week's lane on the Board ([WeekBoardRules.park], slice 4): no day and no time, kept for that
+     * week ([TaskFields.BOARD_WEEK]); off Someday if it was there. A repeating task can't be parked.
+     */
+    fun parkOnBoard(park: BoardPark): BoardUndo {
+        val t = get(park.taskId) ?: throw ValidationException("Task not found")
+        if (t.lifecycle.isTerminal) throw ValidationException("That task is finished")
+        if (t.isRepeating) throw ValidationException("A repeating task belongs to its days")
+        val before = TaskTiming.of(t)
+        val oldRanks = park.ranks.keys.associateWith { get(it)?.boardRank }
+        val fields = linkedMapOf<String, FieldValue>()
+        if (t.lifecycle == Lifecycle.SOMEDAY) fields[ActionableFields.LIFECYCLE] = Lifecycle.ACTIVE.name.fv()
+        if (t.scheduledAtMs != null) fields[TaskFields.SCHEDULED_AT] = FieldValue.Null
+        if (t.deferredToDay != null) fields[TaskFields.DEFERRED_TO_DAY] = FieldValue.Null
+        if (t.boardWeek != park.weekStart) fields[TaskFields.BOARD_WEEK] = park.weekStart.fv()
+        if (fields.isNotEmpty()) replica.commitLocal(EntityTypes.TASK, t.id, fields)
+        val after = TaskTiming.of(get(t.id)!!)
+        park.ranks.forEach { (id, rank) -> replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.BOARD_RANK to rank.fv())) }
+        return BoardUndo(t.id, before, after, oldRanks, oldWeek = t.boardWeek, newWeek = park.weekStart, oldKind = t.somedayKind)
+    }
+
+    /** The Board's Someday tray (slice 4): the task goes to Someday (kept as Other unless it had a kind), no day, no week. */
+    fun somedayOnBoard(id: String): BoardUndo {
+        val t = get(id) ?: throw ValidationException("Task not found")
+        if (t.lifecycle.isTerminal) throw ValidationException("That task is finished")
+        if (t.isRepeating) throw ValidationException("A repeating task can't go to Someday")
+        val before = TaskTiming.of(t)
+        val fields = linkedMapOf<String, FieldValue>(ActionableFields.LIFECYCLE to Lifecycle.SOMEDAY.name.fv())
+        if (t.somedayKind == null) fields[ActionableFields.SOMEDAY_KIND] = SomedayKind.OTHER.name.fv()
+        if (t.scheduledAtMs != null) fields[TaskFields.SCHEDULED_AT] = FieldValue.Null
+        if (t.deferredToDay != null) fields[TaskFields.DEFERRED_TO_DAY] = FieldValue.Null
+        if (t.boardWeek != null) fields[TaskFields.BOARD_WEEK] = FieldValue.Null
+        replica.commitLocal(EntityTypes.TASK, id, fields)
+        val after = TaskTiming.of(get(id)!!)
+        return BoardUndo(id, before, after, emptyMap(), oldWeek = t.boardWeek, newWeek = null, oldKind = t.somedayKind)
+    }
+
+    /**
+     * Undo for [placeOnBoard], [parkOnBoard] and [somedayOnBoard]: the task's day, time and Someday state come back
+     * (unless changed since), the week it was parked in, and the old order.
+     */
     fun undoBoard(u: BoardUndo): Boolean {
         val timing = if (u.before != u.after) putBack(u.taskId, u.before, u.after) else false
+        get(u.taskId)?.let { now ->
+            val fields = linkedMapOf<String, FieldValue>()
+            if (now.boardWeek == u.newWeek && u.oldWeek != u.newWeek) fields[TaskFields.BOARD_WEEK] = u.oldWeek?.fv() ?: FieldValue.Null
+            if (timing && now.somedayKind != u.oldKind) {
+                fields[ActionableFields.SOMEDAY_KIND] = u.oldKind?.name?.fv() ?: FieldValue.Null
+            }
+            if (fields.isNotEmpty()) replica.commitLocal(EntityTypes.TASK, u.taskId, fields)
+        }
         var ranks = false
         u.oldRanks.forEach { (id, rank) ->
             if (get(id) == null) return@forEach

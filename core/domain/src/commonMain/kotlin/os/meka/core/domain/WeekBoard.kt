@@ -78,7 +78,10 @@ data class BoardDay(
     val openCards: List<BoardCard> get() = cards.filter { !it.done }
 }
 
-/** Seven columns, Monday to Sunday. */
+/** Where a card sits on the Board: a day's column, a week's lane (no day yet) or the Someday tray (slice 4). */
+enum class BoardSource { DAY, WEEK, SOMEDAY }
+
+/** Seven columns, Monday to Sunday, and the week's lane of tasks parked for the week with no day yet (slice 4). */
 data class BoardWeek(
     val startEpochDay: Long,
     /** "This week" · "Next week" · "2–8 Nov" */
@@ -86,11 +89,41 @@ data class BoardWeek(
     /** "19–25 Oct" */
     val range: String,
     val days: List<BoardDay>,
-)
+    /** Tasks parked in this week with no day, in his order; this week's also holds those left from earlier weeks. */
+    val lane: List<BoardCard> = emptyList(),
+) {
+    /** "3 to place" · "Park tasks here for the week" */
+    val laneLine: String get() = if (lane.isEmpty()) WeekBoardRules.LANE_EMPTY else "${lane.size} to place"
+    /** Screen readers: "This week, no day yet, 3 tasks". */
+    val laneAccessibilityLabel: String
+        get() = "$title, no day yet, " + if (lane.isEmpty()) "empty" else if (lane.size == 1) "1 task" else "${lane.size} tasks"
+}
 
-data class WeekBoard(val todayEpochDay: Long, val weeks: List<BoardWeek>) {
+data class WeekBoard(
+    val todayEpochDay: Long,
+    val weeks: List<BoardWeek>,
+    /** The Someday tray (slice 4): his Someday tasks, newest first; drag one onto a day or a week to bring it back. */
+    val someday: List<BoardCard> = emptyList(),
+) {
     /** Every column, week after week. */
     val days: List<BoardDay> get() = weeks.flatMap { it.days }
+
+    /** "Someday · 12" for the tray's folded header. */
+    val somedayTitle: String get() = if (someday.isEmpty()) WeekBoardRules.SOMEDAY else "${WeekBoardRules.SOMEDAY} · ${someday.size}"
+
+    /** The week starting [startEpochDay], or null. */
+    fun week(startEpochDay: Long): BoardWeek? = weeks.firstOrNull { it.startEpochDay == startEpochDay }
+
+    /** The week whose lane holds [taskId], or null. */
+    fun laneOf(taskId: String): BoardWeek? = weeks.firstOrNull { w -> w.lane.any { it.id == taskId } }
+
+    /** Where [taskId] is: its card, where it sits and that place's key (the day, the week's Monday, or 0 for Someday). */
+    fun find(taskId: String): BoardSpot? {
+        dayOf(taskId)?.let { d -> return BoardSpot(d.cards.first { it.id == taskId }, BoardSource.DAY, d.epochDay) }
+        laneOf(taskId)?.let { w -> return BoardSpot(w.lane.first { it.id == taskId }, BoardSource.WEEK, w.startEpochDay) }
+        someday.firstOrNull { it.id == taskId }?.let { return BoardSpot(it, BoardSource.SOMEDAY, 0L) }
+        return null
+    }
 
     fun day(epochDay: Long): BoardDay? = weeks.firstOrNull { epochDay in it.startEpochDay until it.startEpochDay + 7 }
         ?.days?.firstOrNull { it.epochDay == epochDay }
@@ -106,6 +139,18 @@ data class WeekBoard(val todayEpochDay: Long, val weeks: List<BoardWeek>) {
     }
 }
 
+/** A card and where it sits ([WeekBoard.find]). */
+data class BoardSpot(val card: BoardCard, val source: BoardSource, val key: Long)
+
+/** A card parked in a week's lane ([WeekBoardRules.park]): the week and the new places of that lane's cards. */
+data class BoardPark(
+    val taskId: String,
+    val from: BoardSource,
+    val weekStart: Long,
+    /** The lane's cards whose place changes (the parked one included). */
+    val ranks: Map<String, Long>,
+)
+
 /** A move worked out by [WeekBoardRules.move]: where the task goes and the new places of that day's cards. */
 data class BoardMove(
     val taskId: String,
@@ -115,12 +160,25 @@ data class BoardMove(
     val minuteOfDay: Int?,
     /** The cards whose place changes (the moved one included), [WeekBoardRules.RANK_STEP] apart. */
     val ranks: Map<String, Long>,
+    /** Where it came from: a day, a week's lane or the Someday tray ([fromDay] is then the week's Monday, or 0). */
+    val from: BoardSource = BoardSource.DAY,
 ) {
-    val dayChanged: Boolean get() = fromDay != toDay
+    val dayChanged: Boolean get() = from != BoardSource.DAY || fromDay != toDay
 }
 
-/** What Undo needs after a Board move: the task's timing before and after, and the old places of the cards it moved. */
-data class BoardUndo(val taskId: String, val before: TaskTiming, val after: TaskTiming, val oldRanks: Map<String, Long?>)
+/**
+ * What Undo needs after a Board move: the task's timing before and after, the old places of the cards it moved, and
+ * (slice 4) the week it was parked in and its Someday kind before.
+ */
+data class BoardUndo(
+    val taskId: String,
+    val before: TaskTiming,
+    val after: TaskTiming,
+    val oldRanks: Map<String, Long?>,
+    val oldWeek: Long? = null,
+    val newWeek: Long? = null,
+    val oldKind: SomedayKind? = null,
+)
 
 /**
  * The Week board (Week board and roll-over, slice 2; Meka approved 2026-10-19 20:36), non-AI and pure: Calendar's Board
@@ -145,6 +203,21 @@ object WeekBoardRules {
     const val VIEW_BOARD = "Board"
     const val EMPTY_DAY = "Nothing planned"
     const val DROP_HERE = "Drop here"
+    const val SOMEDAY = "Someday"
+    const val LANE_EMPTY = "Park tasks here for the week"
+    const val SOMEDAY_EMPTY = "Nothing on Someday"
+    const val NO_DAY = "No day yet"
+    const val TO_SOMEDAY = "Someday"
+    /** The card menu's row that parks a dayed card in its week's lane. */
+    const val TO_WEEK = "No day this week"
+
+    /**
+     * Parked for a week with no day yet (slice 4): a one-off open task with [Task.boardWeek] and neither a planned time
+     * nor a day it shows from. It sits in that week's lane, not in a day's column, and stays off Today.
+     */
+    fun parked(t: Task): Boolean =
+        t.boardWeek != null && t.scheduledAtMs == null && t.showsFromDay == null && !t.isRepeating &&
+            (t.lifecycle == Lifecycle.ACTIVE || t.lifecycle == Lifecycle.INBOX)
 
     fun build(
         tasks: List<Task>,
@@ -163,7 +236,13 @@ object WeekBoardRules {
 
         val sized = TaskEstimateRules.Sized.of(tasks)
         val byDay = HashMap<Long, MutableList<BoardCard>>()
+        val byWeek = HashMap<Long, MutableList<BoardCard>>()
         for (t in tasks) {
+            if (parked(t)) {
+                val ws = maxOf(t.boardWeek!!, firstDay)
+                if (ws <= lastDay) byWeek.getOrPut(ws) { mutableListOf() } += laneCard(t, firstDay, sized)
+                continue
+            }
             val day = columnOf(t, today, calendar) ?: continue
             if (day !in firstDay..lastDay) continue
             byDay.getOrPut(day) { mutableListOf() } += card(t, today, calendar, sized)
@@ -180,14 +259,39 @@ object WeekBoardRules {
                 },
                 range = CalendarAgenda.rangeLabel(ws, ws + 6),
                 days = (ws until ws + 7).map { d -> day(d, today, nowMs, byDay[d].orEmpty(), shown, calendar, work, toneOf) },
+                lane = orderLane(byWeek[ws].orEmpty()),
             )
         }
-        return WeekBoard(today, boardWeeks)
+        val someday = tasks.filter { it.lifecycle == Lifecycle.SOMEDAY }
+            .sortedWith(compareByDescending<Task> { it.createdAtMs }.thenBy { it.id })
+            .map { t ->
+                BoardCard(t, TaskTitleRules.display(t.title), null, ListRules.kindLabel(t.somedayKind ?: SomedayKind.IDEA), done = false, carried = false)
+            }
+        return WeekBoard(today, boardWeeks, someday)
     }
 
-    /** The day [t] sits on, or null when it isn't on the board (Someday, waiting, dropped, or done with no time). */
+    /** A lane card: no time; "From last week" when parked in an earlier week. */
+    private fun laneCard(t: Task, firstDay: Long, sized: TaskEstimateRules.Sized): BoardCard {
+        val weeksAgo = (firstDay - t.boardWeek!!) / 7
+        val line = when {
+            weeksAgo <= 0 -> null
+            weeksAgo == 1L -> "From last week"
+            else -> "From $weeksAgo weeks ago"
+        }
+        return BoardCard(t, TaskTitleRules.display(t.title), null, line, done = false, carried = weeksAgo > 0, suggestedMinutes = TaskEstimateRules.suggest(t, sized))
+    }
+
+    /** A lane's order: placed first by place, then those from earlier weeks, then as added. */
+    fun orderLane(cards: List<BoardCard>): List<BoardCard> = cards.sortedWith(
+        compareBy<BoardCard>({ it.task.boardRank ?: Long.MAX_VALUE })
+            .thenBy { it.task.boardWeek ?: 0L }
+            .thenBy { it.task.createdAtMs }
+            .thenBy { it.id },
+    )
+
+    /** The day [t] sits on, or null when it isn't on the board (Someday, waiting, dropped, parked in a week's lane, or done with no time). */
     fun columnOf(t: Task, today: Long, calendar: LocalCalendar): Long? = when (t.lifecycle) {
-        Lifecycle.ACTIVE, Lifecycle.INBOX -> TaskWhenRules.dayOf(t, today, calendar)
+        Lifecycle.ACTIVE, Lifecycle.INBOX -> if (parked(t)) null else TaskWhenRules.dayOf(t, today, calendar)
         Lifecycle.DONE -> t.completedAtMs?.let(calendar::epochDayOf)
         else -> null
     }
@@ -294,22 +398,66 @@ object WeekBoardRules {
      * when it can't move (not on the board, done, a day before today or off the board) or nothing would change.
      */
     fun move(board: WeekBoard, taskId: String, toDay: Long, toIndex: Int, today: Long, calendar: LocalCalendar): BoardMove? {
-        val from = board.dayOf(taskId) ?: return null
-        val card = from.cards.first { it.id == taskId }
+        val spot = board.find(taskId) ?: return null
+        val card = spot.card
         if (!card.canMove || toDay < today) return null
         val target = board.day(toDay) ?: return null
-        val others = target.openCards.filter { it.id != taskId }
+        val order = placed(target.openCards, taskId, toIndex)
+        if (spot.source == BoardSource.DAY && spot.key == toDay && order == target.openCards.map { it.id }) return null
+        val ranks = ranks(order, target.openCards + card)
+        val minute = if (spot.source == BoardSource.DAY) TaskWhenRules.minuteOf(card.task, today, calendar) else null
+        return BoardMove(taskId, spot.key, toDay, minute, ranks, spot.source)
+    }
+
+    /**
+     * Parking [taskId] in the lane of the week starting [weekStart] at place [toIndex] (slice 4): from a day (it loses
+     * its day and time), from Someday (it comes back) or within the lane. Null for a done or repeating task (a repeat
+     * belongs to its days), a week that isn't on the board, or no change.
+     */
+    fun park(board: WeekBoard, taskId: String, weekStart: Long, toIndex: Int): BoardPark? {
+        val spot = board.find(taskId) ?: return null
+        if (!spot.card.canMove || spot.card.task.isRepeating) return null
+        val week = board.week(weekStart) ?: return null
+        val order = placed(week.lane, taskId, toIndex)
+        if (spot.source == BoardSource.WEEK && spot.key == weekStart && order == week.lane.map { it.id }) return null
+        return BoardPark(taskId, spot.source, weekStart, ranks(order, week.lane + spot.card))
+    }
+
+    /** Whether a card can go to the Someday tray: open, not repeating, not there already. */
+    fun canSomeday(board: WeekBoard, taskId: String): Boolean {
+        val spot = board.find(taskId) ?: return false
+        return spot.source != BoardSource.SOMEDAY && spot.card.canMove && !spot.card.task.isRepeating
+    }
+
+    /** "Moved “Book MOT” to This week" · "… to Next week" · "… to 2–8 Nov" · "Moved “Book MOT” up" in the lane. */
+    fun parkLine(title: String, park: BoardPark, board: WeekBoard, movedUp: Boolean): String {
+        val t = TaskTitleRules.display(title)
+        if (park.from == BoardSource.WEEK && board.laneOf(park.taskId)?.startEpochDay == park.weekStart) {
+            return "Moved “$t” ${if (movedUp) "up" else "down"}"
+        }
+        val week = board.week(park.weekStart)?.title ?: CalendarAgenda.rangeLabel(park.weekStart, park.weekStart + 6)
+        return "Moved “$t” to $week"
+    }
+
+    /** "Moved “Book MOT” to Someday". */
+    fun somedayLine(title: String): String = "Moved “${TaskTitleRules.display(title)}” to $SOMEDAY"
+
+    /** [cards]' ids with [taskId] taken out and put back at [toIndex] (clamped). */
+    private fun placed(cards: List<BoardCard>, taskId: String, toIndex: Int): List<String> {
+        val others = cards.filter { it.id != taskId }
         val at = toIndex.coerceIn(0, others.size)
-        val order = others.map { it.id }.toMutableList().apply { add(at, taskId) }
-        if (from.epochDay == toDay && order == target.openCards.map { it.id }) return null
-        val current = (target.openCards + card).associate { it.id to it.task.boardRank }
+        return others.map { it.id }.toMutableList().apply { add(at, taskId) }
+    }
+
+    /** New places [RANK_STEP] apart for [order]; only those that change. */
+    private fun ranks(order: List<String>, cards: List<BoardCard>): Map<String, Long> {
+        val current = cards.associate { it.id to it.task.boardRank }
         val ranks = LinkedHashMap<String, Long>()
         order.forEachIndexed { i, id ->
             val rank = (i + 1) * RANK_STEP
             if (current[id] != rank) ranks[id] = rank
         }
-        val minute = TaskWhenRules.minuteOf(card.task, today, calendar)
-        return BoardMove(taskId, from.epochDay, toDay, minute, ranks)
+        return ranks
     }
 
     /** The undo bar: "Moved “Book MOT” to Thu 22 Oct" (or Today, Tomorrow); "Moved “Book MOT” up" within a day. */

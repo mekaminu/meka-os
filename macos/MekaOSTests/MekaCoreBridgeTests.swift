@@ -1581,6 +1581,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TaskEstimateRules.shared.MENU_TITLE, "How long?")
         XCTAssertEqual(TaskEstimateRules.shared.choices(estimate: nil, suggested: KotlinInt(int: 30)).map(\.menuLabel), ["15m", "30m · suggested", "1h", "2h"])
         XCTAssertEqual(BoardCapacity(plannedMin: 300, freeMin: 240, unsized: 0).line, "5h planned · 1h over")
+        // Slice 4: the week's lane and the Someday tray.
+        XCTAssertEqual(WeekBoardRules.shared.NO_DAY, "No day yet")
+        XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")
+        XCTAssertEqual(WeekBoardRules.shared.somedayLine(title: "book MOT"), "Moved “Book MOT” to Someday")
+        XCTAssertEqual(WeekBoard(todayEpochDay: 0, weeks: [], someday: []).somedayTitle, "Someday")
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.

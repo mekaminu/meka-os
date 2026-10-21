@@ -82,6 +82,8 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BoardCapacity
 import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
+import os.meka.core.domain.BoardSource
+import os.meka.core.domain.BoardWeek
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.TaskEstimateRules
 import os.meka.core.domain.WeekBoard
@@ -104,6 +106,11 @@ import os.meka.core.facade.MekaCore
  * until he taps), the card's line shows it ("09:00 · 30m"), and each column from today on shows "3h planned · 4h free"
  * over a slim bar that fills gold and turns amber (and breathes gently) when the day is over-planned.
  *
+ * Slice 4: above the days, the week in view has its lane, "No day yet" (tasks parked for the week, off Today until
+ * they get a day) and the folded Someday tray ("Someday · 12", tap to open it). Drag a card onto the lane to park it,
+ * onto the tray to put it on Someday, or out of either onto a day; a card's menu has the same moves (No day this week ·
+ * Someday). The lane and tray glow gold like a column while a card is over them.
+ *
  * Reduced motion: no lift or scale, colours and moves cross-fade.
  */
 @Composable
@@ -117,11 +124,22 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
 
     // Drag state, in root coordinates: the card picked up, where the finger is, and where on the card it was held.
     var drag by remember { mutableStateOf<BoardDrag?>(null) }
+    // Where a card can land: a day's column (its epoch day), the week's lane (LANE) or the Someday tray (TRAY).
     val columns = remember { mutableStateMapOf<Long, Rect>() }
     val cards = remember { mutableStateMapOf<String, Rect>() }
     var origin by remember { mutableStateOf(Offset.Zero) }
-    val hovered by remember { derivedStateOf { drag?.let { d -> columns.entries.firstOrNull { d.pointer.x >= it.value.left && d.pointer.x < it.value.right }?.key } } }
+    val hovered by remember {
+        derivedStateOf {
+            drag?.let { d ->
+                columns.entries.firstOrNull { (k, r) -> k < 0 && r.contains(d.pointer) }?.key
+                    ?: columns.entries.firstOrNull { (k, r) -> k >= 0 && d.pointer.x >= r.left && d.pointer.x < r.right && d.pointer.y >= r.top }?.key
+            }
+        }
+    }
     LaunchedEffect(hovered) { if (drag != null && hovered != null) haptics.tick() }
+    fun showLine(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } } }
+    val onPark: (BoardCard, Long) -> Unit = { card, week -> scope.launch { showLine(runCatching { core.parkOnBoard(card.id, week, Int.MAX_VALUE) }.getOrNull()) } }
+    val onSomeday: (BoardCard) -> Unit = { card -> scope.launch { showLine(runCatching { core.somedayOnBoard(card.id) }.getOrNull()) } }
 
     BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         val wide = maxWidth >= 600.dp
@@ -150,12 +168,44 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
             }
         }
 
+        val weekIndex by remember(board, colPx) { derivedStateOf { ((scroll.value + colPx / 2) / colPx / 7).toInt().coerceIn(0, board.weeks.size - 1) } }
+        val pick: (BoardCard, Offset) -> Unit = { card, at -> haptics.tick(); drag = BoardDrag(card, at, at - (cards[card.id]?.topLeft ?: at)) }
+        val dragBy: (Offset) -> Unit = { delta -> drag = drag?.let { it.copy(pointer = it.pointer + delta) } }
+        val dropCard: () -> Unit = drop@{
+            val d = drag
+            drag = null
+            val at = hovered
+            val week = board.weeks.getOrNull(weekIndex)
+            if (d == null || at == null) return@drop
+            when {
+                at == LANE && week != null -> {
+                    val index = week.lane.filter { it.id != d.card.id }.count { c -> (cards[c.id]?.center?.x ?: 0f) < d.pointer.x }
+                    scope.launch { showLine(runCatching { core.parkOnBoard(d.card.id, week.startEpochDay, index) }.getOrNull()) }
+                }
+                at == TRAY -> onSomeday(d.card)
+                else -> board.day(at)?.takeIf { it.canDrop }?.let { target ->
+                    val index = target.openCards.filter { it.id != d.card.id }.count { c -> (cards[c.id]?.center?.y ?: 0f) < d.pointer.y }
+                    scope.launch { showLine(runCatching { core.moveOnBoard(d.card.id, target.epochDay, index) }.getOrNull()) }
+                }
+            }
+        }
+
         Column(Modifier.fillMaxSize()) {
-            WeekHeader(board, scroll, colPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)))
+            WeekHeader(board, weekIndex, scroll, colPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)))
+            board.weeks.getOrNull(weekIndex)?.let { week ->
+                LaneAndTray(
+                    week = week, board = board, laneWidth = colWidth, hovered = if (drag != null) hovered else null, dragging = drag?.card?.id,
+                    onBounds = { key, r -> columns[key] = r }, onCardBounds = { id, r -> cards[id] = r },
+                    onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
+                    onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
+                    onPark = onPark, onSomeday = onSomeday,
+                    modifier = Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)),
+                )
+            }
             Row(
                 Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null)
                     .padding(horizontal = if (wide) MekaSpace.gutter else MekaSpace.xs)
-                    .appear(rememberAppearance(3)),
+                    .appear(rememberAppearance(4)),
             ) {
                 board.days.forEach { day ->
                     DayColumn(
@@ -165,33 +215,18 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
                         dragging = drag?.card?.id,
                         onBounds = { columns[day.epochDay] = it },
                         onCardBounds = { id, r -> cards[id] = r },
-                        onPick = { card, at -> haptics.tick(); drag = BoardDrag(card, at, at - (cards[card.id]?.topLeft ?: at)) },
-                        onDrag = { delta -> drag = drag?.let { it.copy(pointer = it.pointer + delta) } },
-                        onDrop = {
-                            val d = drag
-                            drag = null
-                            val target = hovered?.let { board.day(it) }
-                            if (d != null && target != null && target.canDrop) {
-                                val index = target.openCards.filter { it.id != d.card.id }.count { c -> (cards[c.id]?.center?.y ?: 0f) < d.pointer.y }
-                                scope.launch {
-                                    val line = runCatching { core.moveOnBoard(d.card.id, target.epochDay, index) }.getOrNull()
-                                    if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } }
-                                }
-                            }
-                        },
+                        onPick = pick,
+                        onDrag = dragBy,
+                        onDrop = dropCard,
                         onCancel = { drag = null },
                         onMove = { card, days, places ->
-                            scope.launch {
-                                val line = runCatching { core.nudgeOnBoard(card.id, days, places) }.getOrNull()
-                                if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } }
-                            }
+                            scope.launch { showLine(runCatching { core.nudgeOnBoard(card.id, days, places) }.getOrNull()) }
                         },
                         onMoveTo = { card, to ->
-                            scope.launch {
-                                val line = runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()
-                                if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } }
-                            }
+                            scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) }
                         },
+                        onPark = onPark,
+                        onSomeday = onSomeday,
                         onDone = { card ->
                             haptics.light()
                             scope.launch {
@@ -232,13 +267,16 @@ private const val LIFT = 1.04f
 
 private data class BoardDrag(val card: BoardCard, val pointer: Offset, val grab: Offset)
 
+/** Drop-target keys besides a day's epoch day: the week's lane and the Someday tray. */
+private const val LANE = -1L
+private const val TRAY = -2L
+
 /** "This week · 19–25 Oct" with ‹ › stepping a week; follows the board as it scrolls. */
 @Composable
-private fun WeekHeader(board: WeekBoard, scroll: ScrollState, colPx: Float, modifier: Modifier) {
+private fun WeekHeader(board: WeekBoard, week: Int, scroll: ScrollState, colPx: Float, modifier: Modifier) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
-    val week by remember(board, colPx) { derivedStateOf { ((scroll.value + colPx / 2) / colPx / 7).toInt().coerceIn(0, board.weeks.size - 1) } }
     val w = board.weeks[week]
     fun go(to: Int) {
         val target = (to * 7 * colPx).toInt()
@@ -282,6 +320,8 @@ private fun DayColumn(
     onCancel: () -> Unit,
     onMove: (BoardCard, Int, Int) -> Unit,
     onMoveTo: (BoardCard, Long) -> Unit,
+    onPark: (BoardCard, Long) -> Unit,
+    onSomeday: (BoardCard) -> Unit,
     onDone: (BoardCard) -> Unit,
     onAdd: (String) -> Unit,
     onEstimate: (BoardCard, Int?) -> Unit,
@@ -339,7 +379,10 @@ private fun DayColumn(
         Spacer(Modifier.height(MekaSpace.xs))
         Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             day.cards.forEach { card ->
-                BoardCardRow(card, day, board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop, onCancel, onMove, onMoveTo, onDone, onEstimate)
+                BoardCardRow(
+                    card, BoardSource.DAY, day.epochDay, day.openCards, board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop, onCancel,
+                    onMove, onMoveTo, onPark, onSomeday, onDone, onEstimate,
+                )
             }
         }
         if (hovered && day.openCards.isEmpty()) {
@@ -352,7 +395,11 @@ private fun DayColumn(
 @Composable
 private fun BoardCardRow(
     card: BoardCard,
-    day: BoardDay,
+    /** Where it sits: a day ([key] its epoch day), a week's lane ([key] its Monday) or the Someday tray. */
+    source: BoardSource,
+    key: Long,
+    /** The open cards it moves up and down among (a day's), or empty for none. */
+    siblings: List<BoardCard>,
     board: WeekBoard,
     beingDragged: Boolean,
     onCardBounds: (String, Rect) -> Unit,
@@ -362,14 +409,17 @@ private fun BoardCardRow(
     onCancel: () -> Unit,
     onMove: (BoardCard, Int, Int) -> Unit,
     onMoveTo: (BoardCard, Long) -> Unit,
-    onDone: (BoardCard) -> Unit,
+    onPark: (BoardCard, Long) -> Unit,
+    onSomeday: (BoardCard) -> Unit,
+    onDone: ((BoardCard) -> Unit)?,
     onEstimate: (BoardCard, Int?) -> Unit,
+    modifier: Modifier = Modifier.fillMaxWidth(),
 ) {
     var menu by remember { mutableStateOf(false) }
     var bounds by remember { mutableStateOf(Rect.Zero) }
     val ghost by animateFloatAsState(if (beingDragged) 0.3f else 1f, MekaMotion.appear(Meka.reducedMotion), label = "board-ghost")
     Box(
-        Modifier.fillMaxWidth().alpha(ghost)
+        modifier.alpha(ghost)
             .onGloballyPositioned { bounds = it.boundsInRoot(); onCardBounds(card.id, bounds) }
             .then(
                 if (card.canMove) Modifier.pointerInput(card.id) {
@@ -385,7 +435,7 @@ private fun BoardCardRow(
             .clickable(enabled = card.canMove, role = Role.Button) { menu = true }
             .semantics { contentDescription = card.accessibilityLabel },
     ) {
-        CardFace(card, lifted = false, onDone = { onDone(card) })
+        CardFace(card, lifted = false, onDone = onDone?.let { f -> { f(card) } })
         if (card.canMove) {
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 @Composable
@@ -393,17 +443,23 @@ private fun BoardCardRow(
                     text = { Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
                     onClick = { menu = false; onClick() },
                 )
-                val index = day.openCards.indexOfFirst { it.id == card.id }
+                val index = siblings.indexOfFirst { it.id == card.id }
                 if (index > 0) entry("Move up") { onMove(card, 0, -1) }
-                if (index in 0 until day.openCards.size - 1) entry("Move down") { onMove(card, 0, 1) }
+                if (index in 0 until siblings.size - 1) entry("Move down") { onMove(card, 0, 1) }
                 // The day strip: today and the next six days, except the day it's on.
-                (board.todayEpochDay until board.todayEpochDay + 7).filter { it != day.epochDay }.forEach { d ->
+                (board.todayEpochDay until board.todayEpochDay + 7).filter { source != BoardSource.DAY || it != key }.forEach { d ->
                     val label = when (d) {
                         board.todayEpochDay -> "Today"
                         board.todayEpochDay + 1 -> "Tomorrow"
                         else -> board.day(d)?.let { "${it.weekday} ${it.number}" } ?: return@forEach
                     }
                     entry(label) { onMoveTo(card, d) }
+                }
+                // Slice 4: no day yet this week (a repeat belongs to its days), or Someday.
+                if (!card.task.isRepeating) {
+                    val thisWeek = board.weeks.firstOrNull()?.startEpochDay
+                    if (thisWeek != null && !(source == BoardSource.WEEK && key == thisWeek)) entry(WeekBoardRules.TO_WEEK) { onPark(card, thisWeek) }
+                    if (source != BoardSource.SOMEDAY) entry(WeekBoardRules.TO_SOMEDAY) { onSomeday(card) }
                 }
                 // Slice 3: how long it takes, Navilife's guess marked; nothing is set until he taps one.
                 Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
@@ -511,6 +567,102 @@ fun CalendarViewSwitch(board: Boolean, modifier: Modifier = Modifier, onChange: 
                     .clickable(role = Role.Tab) { if (!lit) { haptics.tick(); onChange(isBoard) } }
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
+        }
+    }
+}
+
+/**
+ * Above the days (slice 4): the week in view's lane, "No day yet" with its cards side by side (parked for the week, off
+ * Today until they get a day), and the folded Someday tray; tap the tray to open its cards. Both glow gold while a card
+ * is over them. Cards here drag and have the same menu as a day's.
+ */
+@Composable
+private fun LaneAndTray(
+    week: BoardWeek,
+    board: WeekBoard,
+    laneWidth: androidx.compose.ui.unit.Dp,
+    hovered: Long?,
+    dragging: String?,
+    onBounds: (Long, Rect) -> Unit,
+    onCardBounds: (String, Rect) -> Unit,
+    onPick: (BoardCard, Offset) -> Unit,
+    onDrag: (Offset) -> Unit,
+    onDrop: () -> Unit,
+    onCancel: () -> Unit,
+    onMoveTo: (BoardCard, Long) -> Unit,
+    onPark: (BoardCard, Long) -> Unit,
+    onSomeday: (BoardCard) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    var trayOpen by remember { mutableStateOf(false) }
+    val cardWidth = laneWidth.coerceIn(140.dp, 200.dp)
+    @Composable
+    fun zone(key: Long, lit: Boolean, mod: Modifier, content: @Composable () -> Unit) {
+        val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "zone-glow-$key")
+        val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "zone-fill-$key")
+        Box(
+            mod.onGloballyPositioned { onBounds(key, it.boundsInRoot()) }
+                .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
+                .border(1.dp, glow, RoundedCornerShape(MekaRadius.m)).padding(MekaSpace.xs),
+        ) { content() }
+    }
+    Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.Top) {
+            zone(LANE, hovered == LANE, Modifier.weight(1f)) {
+                Column {
+                    Row(Modifier.clearAndSetSemantics { contentDescription = week.laneAccessibilityLabel }, verticalAlignment = Alignment.Bottom) {
+                        Text(WeekBoardRules.NO_DAY, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
+                        Spacer(Modifier.width(MekaSpace.xs))
+                        Text(week.laneLine, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (week.lane.isNotEmpty()) {
+                        Row(
+                            Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState(), enabled = dragging == null),
+                            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                        ) {
+                            week.lane.forEach { card ->
+                                BoardCardRow(
+                                    card, BoardSource.WEEK, week.startEpochDay, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
+                                    onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> }, Modifier.width(cardWidth),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            zone(TRAY, hovered == TRAY, Modifier.width(cardWidth)) {
+                Column {
+                    Text(
+                        board.somedayTitle + if (board.someday.isEmpty()) "" else if (trayOpen) "  ▴" else "  ▾",
+                        style = MekaType.metaStrong, color = Meka.colors.textSecondary, maxLines = 1,
+                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
+                            .clickable(enabled = board.someday.isNotEmpty(), role = Role.Button) { haptics.tick(); trayOpen = !trayOpen }
+                            .semantics { contentDescription = board.somedayTitle + if (trayOpen) ", open" else ", folded" },
+                    )
+                    if (board.someday.isEmpty()) {
+                        Text(WeekBoardRules.SOMEDAY_EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+                    }
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = trayOpen && board.someday.isNotEmpty(),
+                        enter = androidx.compose.animation.expandVertically(MekaMotion.appear(reduced)) + androidx.compose.animation.fadeIn(MekaMotion.appear(reduced)),
+                        exit = androidx.compose.animation.shrinkVertically(MekaMotion.appear(reduced)) + androidx.compose.animation.fadeOut(MekaMotion.appear(reduced)),
+                    ) {
+                        Column(
+                            Modifier.padding(top = MekaSpace.xs).height(220.dp).verticalScroll(rememberScrollState(), enabled = dragging == null),
+                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                        ) {
+                            board.someday.forEach { card ->
+                                BoardCardRow(
+                                    card, BoardSource.SOMEDAY, 0L, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
+                                    onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> },
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

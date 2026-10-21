@@ -235,6 +235,11 @@ object TaskFields {
      * ([WeekBoardRules.RANK_STEP] apart); absent until he orders that day, so the day keeps its usual order.
      */
     const val BOARD_RANK = "boardRank"
+    /**
+     * Week board, slice 4 (additive, Lww): the Monday (epoch day) of the week a task with no day is parked in, on that
+     * week's "This week" lane ([WeekBoardRules.parked]); absent for every other task. Out of Today until it has a day.
+     */
+    const val BOARD_WEEK = "boardWeek"
 }
 
 object ChecklistFields {

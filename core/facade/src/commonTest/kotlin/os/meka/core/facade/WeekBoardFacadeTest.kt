@@ -84,4 +84,35 @@ class WeekBoardFacadeTest {
         assertNull(c.nudgeOnBoard(id, -1, 0), "never before today")
         assertTrue(c.weekBoard.value.day(today)!!.cards.any { it.id == id })
     }
+
+    @Test
+    fun aCardParkedInTheWeekLeavesTodaySyncsAndGoesToSomedayAndBack() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val mot = fold.addTask("Book MOT")
+        fold.tick()
+        val board = fold.weekBoard.value
+        val today = board.todayEpochDay
+        val monday = board.weeks[0].startEpochDay
+        assertEquals(mot, fold.today.value.upNext?.id)
+
+        assertEquals("Moved “Book MOT” to This week", fold.parkOnBoard(mot, monday, 0))
+        assertEquals(listOf(mot), fold.weekBoard.value.weeks[0].lane.map { it.id })
+        assertTrue(fold.weekBoard.value.day(today)!!.cards.none { it.id == mot })
+        assertTrue(fold.today.value.upNext?.id != mot && fold.today.value.yourDay.none { it.id == mot })
+        assertNull(fold.parkOnBoard(mot, monday, 0), "already there")
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf(mot), mac.weekBoard.value.weeks[0].lane.map { it.id })
+
+        assertEquals("Moved “Book MOT” to Someday", mac.somedayOnBoard(mot))
+        assertEquals(listOf(mot), mac.weekBoard.value.someday.map { it.id })
+        assertTrue(mac.weekBoard.value.weeks[0].lane.isEmpty())
+        assertNull(mac.somedayOnBoard(mot), "already on Someday")
+
+        assertEquals("Moved “Book MOT” to Tomorrow", mac.moveOnBoard(mot, today + 1, 0))
+        assertEquals(listOf(mot), mac.weekBoard.value.day(today + 1)!!.cards.map { it.id })
+        assertTrue(mac.weekBoard.value.someday.isEmpty())
+        assertTrue(mac.undoBoardMove())
+        assertEquals(listOf(mot), mac.weekBoard.value.someday.map { it.id })
+    }
 }

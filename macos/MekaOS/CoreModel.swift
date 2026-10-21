@@ -3232,6 +3232,29 @@ final class CoreModel {
         }
     }
 
+    /// A drop on a week's lane (Week board, slice 4): the card is parked in that week with no day (off Today), at that
+    /// place; the undo bar says "Moved “Book MOT” to This week" and Undo puts it back where it was.
+    func parkOnBoard(_ id: String, week: Int64, index: Int) {
+        guard let core else { return }
+        let place = Int32(clamping: index)
+        Task {
+            guard let line = try? await core.parkOnBoard(taskId: id, weekStart: week, toIndex: place) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardMove)
+        }
+    }
+
+    /// A drop on the Someday tray (Week board, slice 4), or a card's Someday: kept for later, with Undo.
+    func somedayOnBoard(_ id: String) {
+        guard let core else { return }
+        if boardSelectedID == id { boardSelectedID = nil }
+        Task {
+            guard let line = try? await core.somedayOnBoard(taskId: id) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardMove)
+        }
+    }
+
     /// "+ Add" at the foot of a Board column: a task on that day, last in its order.
     func addOnBoard(_ text: String, day: Int64) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)

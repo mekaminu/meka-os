@@ -15,6 +15,10 @@ import SwiftUI
 /// nothing set until he picks), the card's line shows it, and each column from today on shows "3h planned · 4h free"
 /// over a slim bar, gold as it fills and amber (breathing gently) when the day is over-planned.
 ///
+/// Slice 4: above the days, the week's lane "No day yet" (tasks parked for the week, off Today until they get a day)
+/// and the Someday tray ("Someday · 12", click to open). Drop a card on either to park it or put it on Someday, drag one
+/// out onto a day; the context menu has No day this week · Someday. Both lift with a gold edge while targeted.
+///
 /// Motion: weeks push across the way you moved; a targeted column lifts (scale 1.01) and its edge blends to gold on the
 /// approve spring; cards glide to their new places (replan). Reduce Motion: cross-fades, no lift.
 struct WeekBoardScreen: View {
@@ -25,6 +29,7 @@ struct WeekBoardScreen: View {
     @State private var week = 0
     @State private var direction = 0
     @State private var target: Int64?
+    @State private var trayOpen = false
 
     var body: some View {
         let w = board.weeks[min(week, board.weeks.count - 1)]
@@ -49,6 +54,18 @@ struct WeekBoardScreen: View {
             .buttonStyle(.borderless)
 
             HStack(alignment: .top, spacing: MekaSpace.xs) {
+                BoardLaneView(week: w, board: board, palette: palette, targeted: target == laneKey) { on in
+                    if on { target = laneKey } else if target == laneKey { target = nil }
+                }
+                BoardTrayView(board: board, palette: palette, open: $trayOpen, targeted: target == trayKey) { on in
+                    if on { target = trayKey } else if target == trayKey { target = nil }
+                }
+                .frame(width: 220)
+            }
+            .animation(MekaMotion.replan(reduced: reduceMotion), value: w.lane.map(\.id))
+            .animation(MekaMotion.replan(reduced: reduceMotion), value: board.someday.map(\.id))
+
+            HStack(alignment: .top, spacing: MekaSpace.xs) {
                 ForEach(w.days, id: \.epochDay) { d in
                     BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay) { on in
                         if on { target = d.epochDay } else if target == d.epochDay { target = nil }
@@ -61,6 +78,10 @@ struct WeekBoardScreen: View {
         }
         .background(keyboard)
     }
+
+    /// Drop-target keys besides a day's epoch day.
+    private let laneKey: Int64 = -1
+    private let trayKey: Int64 = -2
 
     private func step(_ by: Int) {
         MekaHaptics.tick()
@@ -138,7 +159,7 @@ private struct BoardColumnView: View {
             }
 
             ForEach(Array(day.cards.enumerated()), id: \.element.id) { i, card in
-                BoardCardView(card: card, day: day, index: i, board: board, palette: palette)
+                BoardCardView(card: card, spot: .day(day), board: board, palette: palette)
             }
 
             if glow && day.openCards.isEmpty {
@@ -159,7 +180,7 @@ private struct BoardColumnView: View {
         .animation(MekaMotion.approve(reduced: reduceMotion), value: glow)
         // A card dropped on the column's free space goes last in the day.
         .dropDestination(for: String.self) { ids, _ in
-            guard day.canDrop, let id = ids.first, board.dayOf(taskId: id) != nil else { return false }
+            guard day.canDrop, let id = ids.first, board.find(taskId: id) != nil else { return false }
             model.moveOnBoard(id, day: day.epochDay, index: Int.max / 2)
             return true
         } isTargeted: { onTarget($0) }
@@ -186,12 +207,29 @@ private struct BoardColumnView: View {
     }
 }
 
+/// Where a card sits on the Board (slice 4): a day's column, a week's lane or the Someday tray.
+private enum CardSpot {
+    case day(BoardDay)
+    case lane(BoardWeek)
+    case someday
+
+    /// The cards it moves up and down among (a day's open cards; none elsewhere).
+    var siblings: [BoardCard] {
+        if case .day(let d) = self { return d.openCards }
+        return []
+    }
+
+    var dayEpoch: Int64? {
+        if case .day(let d) = self { return d.epochDay }
+        return nil
+    }
+}
+
 private struct BoardCardView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let card: BoardCard
-    let day: BoardDay
-    let index: Int
+    let spot: CardSpot
     let board: WeekBoard
     let palette: MekaPalette
     @State private var over = false
@@ -239,15 +277,28 @@ private struct BoardCardView: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: over)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(card.accessibilityLabel)
-        .modifier(BoardDrag(card: card, day: day, index: index, board: board, over: $over))
+        .modifier(BoardDrag(card: card, spot: spot, board: board, over: $over))
         .contextMenu {
             if card.canMove {
-                let at = day.openCards.firstIndex { $0.id == card.id } ?? 0
-                Button("Move up") { model.nudgeOnBoard(card.id, days: 0, places: -1) }.disabled(at == 0)
-                Button("Move down") { model.nudgeOnBoard(card.id, days: 0, places: 1) }.disabled(at >= day.openCards.count - 1)
-                Divider()
-                ForEach(Array((0..<7).map { board.todayEpochDay + Int64($0) }.filter { $0 != day.epochDay }), id: \.self) { d in
+                let siblings = spot.siblings
+                if !siblings.isEmpty {
+                    let at = siblings.firstIndex { $0.id == card.id } ?? 0
+                    Button("Move up") { model.nudgeOnBoard(card.id, days: 0, places: -1) }.disabled(at == 0)
+                    Button("Move down") { model.nudgeOnBoard(card.id, days: 0, places: 1) }.disabled(at >= siblings.count - 1)
+                    Divider()
+                }
+                ForEach(Array((0..<7).map { board.todayEpochDay + Int64($0) }.filter { $0 != spot.dayEpoch }), id: \.self) { d in
                     Button(label(d)) { model.moveOnBoard(card.id, day: d, index: Int.max / 2) }
+                }
+                // Slice 4: no day yet this week (a repeat belongs to its days), or Someday.
+                if !card.task.isRepeating {
+                    Divider()
+                    if let thisWeek = board.weeks.first?.startEpochDay, !isLane(thisWeek) {
+                        Button(WeekBoardRules.shared.TO_WEEK) { model.parkOnBoard(card.id, week: thisWeek, index: Int.max / 2) }
+                    }
+                    if !isSomeday {
+                        Button(WeekBoardRules.shared.TO_SOMEDAY) { model.somedayOnBoard(card.id) }
+                    }
                 }
                 Divider()
                 // Slice 3: how long it takes; Navilife's guess is marked, nothing is set until he picks.
@@ -262,6 +313,16 @@ private struct BoardCardView: View {
                 }
             }
         }
+    }
+
+    private func isLane(_ week: Int64) -> Bool {
+        if case .lane(let w) = spot { return w.startEpochDay == week }
+        return false
+    }
+
+    private var isSomeday: Bool {
+        if case .someday = spot { return true }
+        return false
     }
 
     private func label(_ d: Int64) -> String {
@@ -309,27 +370,149 @@ private struct CapacityBar: View {
     }
 }
 
-/// An open card can be dragged; any card is a place to drop one (it takes that card's place in the day).
+/// An open card can be dragged; any card is a place to drop one (it takes that card's place in the day or the lane; on
+/// the Someday tray it goes to Someday).
 private struct BoardDrag: ViewModifier {
     @Environment(CoreModel.self) private var model
     let card: BoardCard
-    let day: BoardDay
-    let index: Int
+    let spot: CardSpot
     let board: WeekBoard
     @Binding var over: Bool
 
+    private var canDrop: Bool {
+        if case .day(let d) = spot { return d.canDrop }
+        return true
+    }
+
     func body(content: Content) -> some View {
         let dropped = content.dropDestination(for: String.self) { ids, _ in
-            guard day.canDrop, let id = ids.first, id != card.id, board.dayOf(taskId: id) != nil else { return false }
-            // It takes that card's place: before it when moving up or from another day, after it when moving down.
-            let place = day.openCards.firstIndex { $0.id == card.id } ?? day.openCards.count
-            model.moveOnBoard(id, day: day.epochDay, index: place)
+            guard canDrop, let id = ids.first, id != card.id, board.find(taskId: id) != nil else { return false }
+            switch spot {
+            case .day(let day):
+                // It takes that card's place: before it when moving up or from another day, after it when moving down.
+                let place = day.openCards.firstIndex { $0.id == card.id } ?? day.openCards.count
+                model.moveOnBoard(id, day: day.epochDay, index: place)
+            case .lane(let week):
+                let place = week.lane.firstIndex { $0.id == card.id } ?? week.lane.count
+                model.parkOnBoard(id, week: week.startEpochDay, index: place)
+            case .someday:
+                model.somedayOnBoard(id)
+            }
             return true
-        } isTargeted: { over = $0 && day.canDrop }
+        } isTargeted: { over = $0 && canDrop }
         if card.canMove {
             dropped.draggable(card.id)
         } else {
             dropped
         }
+    }
+}
+
+/// The week's lane above the days (slice 4): "No day yet" and its cards side by side; a card dropped here is parked in
+/// the week (off Today until it gets a day). Lifts with a gold edge while targeted.
+private struct BoardLaneView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let week: BoardWeek
+    let board: WeekBoard
+    let palette: MekaPalette
+    let targeted: Bool
+    let onTarget: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                Text(WeekBoardRules.shared.NO_DAY).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary)
+                Text(week.laneLine).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(week.laneAccessibilityLabel)
+            if !week.lane.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: MekaSpace.xs) {
+                        ForEach(week.lane, id: \.id) { card in
+                            BoardCardView(card: card, spot: .lane(week), board: board, palette: palette)
+                                .frame(width: 200)
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+            }
+        }
+        .modifier(BoardZone(palette: palette, targeted: targeted))
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first, board.find(taskId: id) != nil else { return false }
+            model.parkOnBoard(id, week: week.startEpochDay, index: Int.max / 2)
+            return true
+        } isTargeted: { onTarget($0) }
+    }
+}
+
+/// The Someday tray (slice 4): "Someday · 12", click to open its cards (newest first); a card dropped here goes to
+/// Someday, and one dragged out onto a day or the lane comes back.
+private struct BoardTrayView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let board: WeekBoard
+    let palette: MekaPalette
+    @Binding var open: Bool
+    let targeted: Bool
+    let onTarget: (Bool) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Button {
+                MekaHaptics.tick()
+                withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open.toggle() }
+            } label: {
+                HStack(spacing: MekaSpace.xxs) {
+                    Text(board.somedayTitle).font(MekaType.metaStrong).foregroundStyle(palette.textSecondary)
+                    if !board.someday.isEmpty {
+                        Image(systemName: open ? "chevron.up" : "chevron.down").font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+            .buttonStyle(MekaPressStyle())
+            .disabled(board.someday.isEmpty)
+            .accessibilityLabel(board.somedayTitle + (open ? ", open" : ", folded"))
+            if board.someday.isEmpty {
+                Text(WeekBoardRules.shared.SOMEDAY_EMPTY).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+            } else if open {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                        ForEach(board.someday, id: \.id) { card in
+                            BoardCardView(card: card, spot: .someday, board: board, palette: palette)
+                        }
+                    }
+                }
+                .scrollIndicators(.never)
+                .frame(maxHeight: 220)
+                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .modifier(BoardZone(palette: palette, targeted: targeted))
+        .dropDestination(for: String.self) { ids, _ in
+            guard let id = ids.first, WeekBoardRules.shared.canSomeday(board: board, taskId: id) else { return false }
+            model.somedayOnBoard(id)
+            return true
+        } isTargeted: { onTarget($0) }
+    }
+}
+
+/// The lane's and the tray's frame: raised with a gold edge and a slight lift while a card is over it.
+private struct BoardZone: ViewModifier {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    let targeted: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .padding(MekaSpace.xs)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(targeted ? palette.surfaceRaised : palette.surface))
+            .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(targeted ? palette.accent : palette.hairline, lineWidth: targeted ? 1.5 : 1))
+            .scaleEffect(targeted && !reduceMotion ? 1.01 : 1)
+            .animation(MekaMotion.approve(reduced: reduceMotion), value: targeted)
     }
 }
