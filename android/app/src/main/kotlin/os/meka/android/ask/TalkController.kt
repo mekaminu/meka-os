@@ -94,6 +94,18 @@ class TalkController(
     private var utterance = 0
     /** "Talk over MEKA": the microphone's level while MEKA speaks, and the core's detector over it. */
     private val bargeIn = TalkBargeIn(context, ::overheard)
+
+    // The orb speed pass, slice 7 ([os.meka.core.domain.HelloListenRules]): the mic open while the hello speaks.
+    /** The hello's words, until [say] starts saying them. */
+    private var helloLine: String? = null
+    /** The hello is being said now (barge-in on the speaker is quicker meanwhile). */
+    private var helloSaying = false
+    /** The recogniser is open while the hello still speaks (headphones): his words stop it ([answeredOverHello]). */
+    private var micOverHello = false
+    /** The hello's words, taken out of what the recogniser hears this turn (its echo); null once his words are taken. */
+    private var echoOf: String? = null
+    /** The recogniser heard only the hello's echo after it ended once already: the next time is silence as usual. */
+    private var echoRetried = false
     private var bargeState: BargeInState = BargeInRules.start()
     private var bargeOutput = BargeInOutput.SPEAKER
 
@@ -118,6 +130,7 @@ class TalkController(
             if (gen != generation || active) return@launch
             // Slice 8: the stage raises the greeting's cards round its orb as each sentence starts.
             (context.applicationContext as? os.meka.android.MekaApplication)?.helloGreeting?.value = greeting
+            helloLine = greeting.spoken // slice 7: the line said next is the hello (the mic may open with it)
             begin(TalkFlow.greet(greeting.spoken))
         }
     }
@@ -387,6 +400,9 @@ class TalkController(
             }
             TalkEffect.StopSpeaking -> stopSaying()
             TalkEffect.End -> {
+                micOverHello = false
+                echoOf = null
+                helloLine = null
                 dropAhead()
                 waitJob?.cancel()
                 scope.launch { core.turnEnded() }
@@ -518,7 +534,9 @@ class TalkController(
         endpoint = scope.launch {
             while (true) {
                 delay(os.meka.core.domain.TalkEndpoint.TICK_MS)
-                if (gen != generation || phase != TalkPhase.LISTENING) return@launch
+                if (gen != generation) return@launch
+                if (micOverHello) continue // slice 7: the hello is still speaking; the silence timer starts when it ends
+                if (phase != TalkPhase.LISTENING) return@launch
                 val t = android.os.SystemClock.elapsedRealtime()
                 val step = os.meka.core.domain.TalkEndpoint.step(
                     listenAt, heard.isNotBlank(), os.meka.core.domain.ListenRules.lastSound(lastWordsAt, lastVoiceAt), t,
@@ -550,26 +568,45 @@ class TalkController(
         override fun onEvent(eventType: Int, params: Bundle?) {}
 
         override fun onPartialResults(partialResults: Bundle?) {
-            if (phase != TalkPhase.LISTENING) return
-            partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                ?.takeIf { it.isNotBlank() }?.let {
-                    if (it != heard) lastWordsAt = android.os.SystemClock.elapsedRealtime()
-                    heard = it
-                    speechBegan = true
-                }
+            if (phase != TalkPhase.LISTENING && !micOverHello) return
+            val raw = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
+                ?.takeIf { it.isNotBlank() } ?: return
+            val echo = echoOf
+            if (micOverHello) {
+                // Slice 7: the hello is still speaking; two words of his own (its echo taken out) stop it.
+                if (!os.meka.core.domain.HelloListenRules.isHim(raw, echo.orEmpty(), playing = true)) return
+                answeredOverHello()
+            }
+            val text = if (echo != null) os.meka.core.domain.HelloListenRules.his(raw, echo) else raw
+            if (text.isBlank()) return
+            if (text != heard) lastWordsAt = android.os.SystemClock.elapsedRealtime()
+            heard = text
+            speechBegan = true
         }
 
         override fun onResults(results: Bundle?) {
-            if (phase != TalkPhase.LISTENING) return
+            if (phase != TalkPhase.LISTENING && !micOverHello) return
             endpoint?.cancel()
+            val raw = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            val echo = echoOf
+            if (echo != null) {
+                if (micOverHello) {
+                    // Slice 7: the recogniser stopped by itself while the hello spoke: his answer, or open it again.
+                    if (os.meka.core.domain.HelloListenRules.isHim(raw, echo, playing = true)) answeredOverHello() else return listen()
+                } else if (os.meka.core.domain.HelloListenRules.onlyEcho(raw, echo) && !echoRetried) {
+                    echoRetried = true // it heard only the hello: listen again once rather than end
+                    return listen()
+                }
+            }
             if (wordsEndedAt == null) wordsEndedAt = android.os.SystemClock.elapsedRealtime()
-            val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+            val text = if (echo != null) os.meka.core.domain.HelloListenRules.his(raw, echo) else raw
             if (engine == os.meka.core.domain.ListenEngine.ONLINE && text.isNotBlank()) PhoneListen.onlineWorked()
             took(text.ifBlank { heard })
         }
 
         /** What he said goes to the flow (the final result, or the words so far when the recogniser gave up after them). */
         private fun took(text: String) {
+            echoOf = null
             if (text.isNotBlank()) heard = text
             // Car and parking, slice 8: "where's the Golf?" is "where's the car?" for the car it names.
             val named = os.meka.core.domain.ParkingRules.talkCar(text, core.carsView.value)
@@ -579,6 +616,15 @@ class TalkController(
         }
 
         override fun onError(error: Int) {
+            if (micOverHello) {
+                // Slice 7: while the hello speaks, silence or no match opens it again; anything else leaves it to the
+                // hello's end, which listens as before.
+                if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) return listen()
+                endpoint?.cancel()
+                micOverHello = false
+                echoOf = null
+                return
+            }
             if (phase != TalkPhase.LISTENING) return // a cancel after stopping reports ERROR_CLIENT
             endpoint?.cancel()
             // Words already heard (Navilife ended it, then the recogniser said no match or lost the network): take them.
@@ -619,8 +665,35 @@ class TalkController(
     /** Says [text] in MEKA's voice (else the phone's own); the conversation moves on once it has been said. */
     private fun say(text: String) {
         val id = ++utterance
+        val hello = helloLine
+        helloLine = null
+        helloSaying = hello != null
         speaker.say(text) { finishedSaying(id) }
-        listenOver()
+        // Slice 7: with headphones the recogniser opens with the hello, so he can just start talking.
+        if (hello != null && os.meka.core.domain.HelloListenRules.opensMic(talkOver, TalkBargeIn.output(context))) listenOverHello(hello)
+        else listenOver()
+    }
+
+    /**
+     * The orb speed pass, slice 7: the recogniser opens while the hello is still speaking (headphones only: on the
+     * speaker it would mostly hear Navilife). What it catches of the hello is taken out; his own words stop the hello.
+     */
+    private fun listenOverHello(hello: String) {
+        echoOf = hello
+        echoRetried = false
+        micOverHello = true
+        listen()
+    }
+
+    /** He answered the hello while it was still speaking: it stops, and the recogniser already has his words. */
+    private fun answeredOverHello() {
+        micOverHello = false
+        helloSaying = false
+        val now = android.os.SystemClock.elapsedRealtime()
+        listenAt = now
+        lastWordsAt = now
+        scope.launch { core.turnEnded() } // the hello's trace is kept (Settings → Speed)
+        apply(TalkFlow.overHello(session))
     }
 
     /** The companion, slice 9: the answer's first sentence, said while the rest comes; its end moves nothing on. */
@@ -676,6 +749,8 @@ class TalkController(
     /** Stops whatever is being said, in either voice. */
     private fun stopSaying() {
         utterance++
+        helloSaying = false
+        micOverHello = false // a tap or barge-in during the hello: Talk listens afresh (the echo is still taken out)
         bargeIn.stop()
         speaker.stop()
     }
@@ -683,8 +758,17 @@ class TalkController(
     /** The line [id] finished (or couldn't be said): listen again, unless it was cut short since. */
     private fun finishedSaying(id: Int) {
         if (id != utterance || phase != TalkPhase.SPEAKING) return
+        helloSaying = false
         bargeIn.stop() // let go of the microphone before the recogniser takes it
         scope.launch { core.turnEnded() } // the turn's trace is kept (Settings → Speed)
+        if (micOverHello) {
+            // Slice 7: the hello ended with the recogniser already open: keep listening; the silence timer starts now.
+            micOverHello = false
+            val now = android.os.SystemClock.elapsedRealtime()
+            listenAt = now
+            lastWordsAt = now
+            return apply(TalkFlow.spokeListening(session))
+        }
         apply(TalkFlow.spoke(session))
     }
 
@@ -701,7 +785,9 @@ class TalkController(
     /** One frame's level while MEKA speaks: the core decides whether Meka is talking over it. */
     private fun overheard(db: Float) {
         if (phase != TalkPhase.SPEAKING) return
-        val step = BargeInRules.step(bargeState, db, speaker.audible, bargeOutput, android.os.SystemClock.elapsedRealtime())
+        // Slice 7: quicker on the speaker while the hello plays (it asks him a question).
+        val tuning = os.meka.core.domain.HelloListenRules.tuning(bargeOutput, helloSaying)
+        val step = BargeInRules.stepWith(bargeState, db, speaker.audible, tuning, android.os.SystemClock.elapsedRealtime())
         bargeState = step.state
         if (step.interrupt) apply(TalkFlow.bargeIn(session)) // stops MEKA, lets go of the microphone, listens
     }

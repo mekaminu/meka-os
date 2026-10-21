@@ -1,6 +1,7 @@
 @preconcurrency import MekaKit
 import AppKit
 import AVFoundation
+import CoreAudio
 import Network
 import Observation
 import os
@@ -96,6 +97,18 @@ final class TalkController {
     private let overMeter = OSAllocatedUnfairLock<Float>(initialState: -160)
     private static let overTickMs = 40
 
+    // The orb speed pass, slice 7 (`HelloListenRules`): the mic open while the hello is still speaking.
+    /// The hello's words, until `say` starts saying them.
+    @ObservationIgnored private var helloLine: String?
+    /// The hello is being said now (barge-in is quicker meanwhile).
+    @ObservationIgnored private var helloSaying = false
+    /// The recogniser is open while the hello still speaks (headphones): his words stop it (`answeredOverHello`).
+    @ObservationIgnored private var micOverHello = false
+    /// The hello's words, taken out of what the recogniser hears this turn (its echo); nil once his words are taken.
+    @ObservationIgnored private var echoOf: String?
+    /// The recogniser heard only the hello's echo once already after it ended: the next time is silence as usual.
+    @ObservationIgnored private var echoRetried = false
+
     func attach(_ model: CoreModel) {
         self.model = model
         speaker.attach(model)
@@ -149,6 +162,7 @@ final class TalkController {
                 try? await Task.sleep(for: .milliseconds(Int(HelloEntrance.shared.GREET_AT)))
                 guard gen == generation, !active else { return }
             }
+            helloLine = words // slice 7: the line said next is the hello (the mic may open with it)
             apply(TalkFlow.shared.greet(greeting: words))
         }
     }
@@ -380,6 +394,9 @@ final class TalkController {
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {
+            micOverHello = false
+            echoOf = nil
+            helloLine = nil
             waitTask?.cancel()
             Task { await model?.turnEnded() }
             stopListening()
@@ -507,7 +524,9 @@ final class TalkController {
         clock = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .milliseconds(TalkEndpoint.shared.TICK_MS))
-                guard let self, gen == self.generation, self.phase == .listening else { return }
+                // Slice 7: while the hello still speaks with the mic open, the clock waits for it to end.
+                guard let self, gen == self.generation, self.phase == .listening || self.micOverHello else { return }
+                if self.micOverHello { continue }
                 self.tick()
             }
         }
@@ -619,7 +638,29 @@ final class TalkController {
     }
 
     private func recognised(_ text: String?, final: Bool, failed: Bool, quiet: Bool = false, gen: Int) {
-        guard gen == generation, phase == .listening else { return }
+        guard gen == generation, phase == .listening || micOverHello else { return }
+        if micOverHello {
+            // Slice 7: the hello is still speaking; two words of his own (its echo taken out) stop it.
+            guard let raw = text, HelloListenRules.shared.isHim(heard: raw, hello: echoOf ?? "", playing: true) else {
+                if failed {
+                    // Give the mic back: the hello's end listens as before.
+                    micOverHello = false
+                    stopListening()
+                } else if final {
+                    listen() // it stopped by itself on the hello's echo: open it again
+                }
+                return
+            }
+            answeredOverHello()
+        }
+        var text = text
+        if let echo = echoOf, let raw = text {
+            if (final || failed) && !echoRetried && HelloListenRules.shared.onlyEcho(heard: raw, hello: echo) {
+                echoRetried = true // it heard only the hello: listen again once rather than end
+                return listen()
+            }
+            text = HelloListenRules.shared.his(heard: raw, hello: echo)
+        }
         if let text, !text.isEmpty {
             if text != heard { lastWords = Date() }
             heard = text
@@ -644,6 +685,7 @@ final class TalkController {
 
     /// The question is over: what was heard goes to the flow.
     private func finishListening() {
+        echoOf = nil
         if wordsEnded == nil { wordsEnded = Date() }
         let text = heard
         stopListening()
@@ -672,8 +714,31 @@ final class TalkController {
     private func say(_ text: String) {
         utterance += 1
         let id = utterance
+        let hello = helloLine
+        helloLine = nil
+        helloSaying = hello != nil
         speaker.say(text) { [weak self] in self?.finishedSaying(id) }
-        listenOver()
+        // Slice 7: with headphones the recogniser opens with the hello, so he can just start talking.
+        if let hello, talkOver, MacAudioOut.headphones { listenOverHello(hello) } else { listenOver() }
+    }
+
+    /// The orb speed pass, slice 7: the recogniser opens while the hello is still speaking (headphones only: on the
+    /// speakers it would mostly hear Navilife). What it catches of the hello is taken out; his own words stop it.
+    private func listenOverHello(_ hello: String) {
+        echoOf = hello
+        echoRetried = false
+        micOverHello = true
+        listen()
+    }
+
+    /// He answered the hello while it was still speaking: it stops, and the recogniser already has his words.
+    private func answeredOverHello() {
+        micOverHello = false
+        helloSaying = false
+        listenStarted = Date()
+        lastWords = listenStarted
+        Task { await model?.turnEnded() } // the hello's trace is kept (Voice → Speed)
+        apply(TalkFlow.shared.overHello(s: session))
     }
 
     /// The companion, slice 9: the answer's first sentence, said while the rest comes; its end moves nothing on.
@@ -732,6 +797,8 @@ final class TalkController {
     /// Stops whatever is being said, in either voice.
     private func stopSaying() {
         utterance += 1
+        helloSaying = false
+        micOverHello = false // a click or barge-in during the hello: Talk listens afresh (the echo is still taken out)
         stopListeningOver()
         speaker.stop()
     }
@@ -739,8 +806,16 @@ final class TalkController {
     /// The line `id` finished: listen again, unless it was cut short since.
     private func finishedSaying(_ id: Int) {
         guard id == utterance, phase == .speaking else { return }
+        helloSaying = false
         stopListeningOver() // let go of the microphone before the recogniser takes it
         Task { await model?.turnEnded() } // the turn's trace is kept (Voice → Speed)
+        if micOverHello {
+            // Slice 7: the hello ended with the recogniser already open: keep listening; the silence timer starts now.
+            micOverHello = false
+            listenStarted = Date()
+            lastWords = listenStarted
+            return apply(TalkFlow.shared.spokeListening(s: session))
+        }
         apply(TalkFlow.shared.spoke(s: session))
     }
 
@@ -781,8 +856,10 @@ final class TalkController {
             v = -160
             return loudest
         }
-        let step = BargeInRules.shared.step(s: bargeState, levelDbfs: db, playing: speaker.audible, output: .speaker,
-                                            nowMs: Int64(ProcessInfo.processInfo.systemUptime * 1000))
+        // Slice 7: quicker while the hello plays (it asks him a question).
+        let tuning = HelloListenRules.shared.tuning(output: .speaker, hello: helloSaying)
+        let step = BargeInRules.shared.stepWith(s: bargeState, levelDbfs: db, playing: speaker.audible, tuning: tuning,
+                                                nowMs: Int64(ProcessInfo.processInfo.systemUptime * 1000))
         bargeState = step.state
         if step.interrupt { apply(TalkFlow.shared.bargeIn(s: session)) } // stops MEKA, lets go of the mic, listens
     }
@@ -849,5 +926,32 @@ enum MacSignal {
     nonisolated static var online: Bool {
         _ = monitor
         return state.withLock { $0 }
+    }
+}
+
+/// Where the Mac's sound goes (the orb speed pass, slice 7): headphones are AirPods or other Bluetooth audio, or
+/// wired headphones in the Mac's jack. Read from CoreAudio's default output each time (nothing kept); anything else
+/// (the built-in speakers, a display, USB speakers) counts as the speakers.
+enum MacAudioOut {
+    static var headphones: Bool {
+        var device = AudioDeviceID(0)
+        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr,
+              device != 0 else { return false }
+        var transport: UInt32 = 0
+        size = UInt32(MemoryLayout<UInt32>.size)
+        address.mSelector = kAudioDevicePropertyTransportType
+        if AudioObjectGetPropertyData(device, &address, 0, nil, &size, &transport) == noErr,
+           transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE {
+            return true
+        }
+        var source: UInt32 = 0
+        size = UInt32(MemoryLayout<UInt32>.size)
+        address.mSelector = kAudioDevicePropertyDataSource
+        address.mScope = kAudioDevicePropertyScopeOutput
+        return AudioObjectGetPropertyData(device, &address, 0, nil, &size, &source) == noErr && source == 0x6864_706E // 'hdpn'
     }
 }

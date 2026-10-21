@@ -588,6 +588,24 @@ object TalkFlow {
         return TalkStep(s.copy(phase = TalkPhase.LISTENING), listOf(TalkEffect.Listen))
     }
 
+    /**
+     * The orb speed pass, slice 7: the hello was still speaking with the recogniser already open ([HelloListenRules]),
+     * and he answered it: the hello stops and Talk is listening, with no fresh Listen (his first words are already in).
+     */
+    fun overHello(s: TalkSession): TalkStep {
+        if (s.phase != TalkPhase.SPEAKING) return TalkStep(s, emptyList())
+        return TalkStep(s.copy(phase = TalkPhase.LISTENING, early = null), listOf(TalkEffect.StopSpeaking))
+    }
+
+    /**
+     * The orb speed pass, slice 7: the hello finished with the recogniser already open: Talk is listening, with no fresh
+     * Listen (as [spoke] otherwise).
+     */
+    fun spokeListening(s: TalkSession): TalkStep {
+        val step = spoke(s)
+        return if (step.session.phase == TalkPhase.LISTENING) TalkStep(step.session, step.effects - TalkEffect.Listen) else step
+    }
+
     /** Meka started talking while MEKA spoke: stop and listen (a closing line is cut short and the conversation ends). */
     fun bargeIn(s0: TalkSession): TalkStep {
         if (s0.phase != TalkPhase.SPEAKING) return TalkStep(s0, emptyList())

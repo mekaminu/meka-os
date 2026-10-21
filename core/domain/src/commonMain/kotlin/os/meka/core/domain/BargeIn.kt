@@ -74,13 +74,17 @@ object BargeInRules {
      * audio is [playing] right now, where it comes out ([output]) and the time ([nowMs]). [BargeInStep.interrupt] once
      * Meka has clearly been talking over it; the state then starts afresh.
      */
-    fun step(s: BargeInState, levelDbfs: Float, playing: Boolean, output: BargeInOutput, nowMs: Long): BargeInStep {
+    fun step(s: BargeInState, levelDbfs: Float, playing: Boolean, output: BargeInOutput, nowMs: Long): BargeInStep =
+        stepWith(s, levelDbfs, playing, tuning(output), nowMs)
+
+    /** As [step], with the detector's numbers given ([HelloListenRules.tuning]: quicker while the hello plays). */
+    fun stepWith(s: BargeInState, levelDbfs: Float, playing: Boolean, tuning: BargeInTuning, nowMs: Long): BargeInStep {
+        val t = tuning
         if (!playing) return BargeInStep(s.copy(playingSinceMs = null, runStartMs = null, lastLoudMs = null, lastMs = nowMs), false)
         val level = if (levelDbfs.isNaN()) -160f else levelDbfs.coerceIn(-160f, 0f)
         val since = s.playingSinceMs ?: nowMs
         val dt = (nowMs - (s.lastMs ?: nowMs)).coerceIn(0L, MAX_FRAME_MS)
         val floor = if (s.floorDb.isNaN()) level else s.floorDb
-        val t = tuning(output)
         val inGrace = nowMs - since < GRACE_MS
         val loud = !inGrace && level >= maxOf(floor + t.marginDb, t.minDbfs)
         if (loud) {

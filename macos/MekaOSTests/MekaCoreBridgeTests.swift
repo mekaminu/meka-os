@@ -1018,6 +1018,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(section.action, "Turn on")
     }
 
+    /// The orb speed pass, slice 7: the mic open during the hello reaches Swift.
+    func testHelloListenReachesSwift() {
+        let hello = "Good evening, Alex. Anything you'd like?"
+        XCTAssertTrue(HelloListenRules.shared.opensMic(talkOver: true, output: .headphones))
+        XCTAssertFalse(HelloListenRules.shared.opensMic(talkOver: true, output: .speaker))
+        XCTAssertEqual(HelloListenRules.shared.his(heard: "anything you'd like what's on", hello: hello), "what's on")
+        XCTAssertTrue(HelloListenRules.shared.isHim(heard: "anything you'd like what's on", hello: hello, playing: true))
+        XCTAssertTrue(HelloListenRules.shared.onlyEcho(heard: "good evening Alex", hello: hello))
+        let tuning = HelloListenRules.shared.tuning(output: .speaker, hello: true)
+        XCTAssertEqual(tuning.sustainMs, 240)
+        let greeted = TalkFlow.shared.greet(greeting: hello)
+        XCTAssertEqual(TalkFlow.shared.overHello(s: greeted.session).session.phase, .listening)
+        XCTAssertTrue(TalkFlow.shared.spokeListening(s: greeted.session).effects.isEmpty)
+        let step = BargeInRules.shared.stepWith(s: BargeInRules.shared.start(), levelDbfs: -8, playing: true, tuning: tuning, nowMs: 0)
+        XCTAssertFalse(step.interrupt)
+    }
+
     /// "Listen when I open MEKA" on the Mac: the sheet's section, the open and Dock rules and the room check reach Swift.
     func testTalkOnOpenReachesSwift() {
         let on = TalkOnOpenRules.shared.section(on: true, mac: true)
