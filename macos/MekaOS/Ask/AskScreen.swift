@@ -194,6 +194,7 @@ struct AskScreen: View {
         case .work: model.showWork = true
         case .protectedTime: model.showProtected = true
         case .notifications: model.showNotifications = true
+        case .speakUp: model.showSpeakUp = true
         case .autonomy: model.showAutonomy = true
         case .activity: model.showActivity = true
         case .yourData: model.showYourData = true

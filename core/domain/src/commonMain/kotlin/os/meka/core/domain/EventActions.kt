@@ -491,6 +491,7 @@ object ReminderRules {
                     text = "Starts $start · ${EventDetails.durationLabel(travel * MIN_MS)} away · $place",
                     atMs = e.startAtMs - travel * MIN_MS, target = NoticeTarget.TODAY, expiresAtMs = e.startAtMs,
                     precision = NoticePrecision.CLOCK,
+                    speak = SpeakMoment.LEAVE_NOW, spoken = SpeakUpRules.leaveWords(e.title, start),
                 )
             }
         }

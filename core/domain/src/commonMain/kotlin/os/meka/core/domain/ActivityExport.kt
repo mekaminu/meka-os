@@ -33,6 +33,7 @@ object ActivityExportRules {
         ActivityKind.FAMILY -> "Family"
         ActivityKind.DEVICE -> "Device"
         ActivityKind.APPROVAL -> "Approval"
+        ActivityKind.SPOKE -> "Said aloud"
     }
 
     fun fileName(today: Long): String = "navilife-activity-${date(today)}.csv"

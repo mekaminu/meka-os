@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -176,7 +177,10 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         if (HelloDock.tap(talkPhase) == DockTap.HELLO && entrance == null) { app.talkAnswerCards.value = emptyList(); app.talkNeedsAsk.value = false; app.helloGreeting.value = null; entrance = EntranceKind.BIG }
         if (current != ShellDestination.ASK) { arrival = SharedMotion.arrivalAfterGo(ShellDestination.ASK, arrival); current = ShellDestination.ASK }
     }
-    val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(talkPhase, needsYou, dockTap, m, onPlaced = { dockAt = it }) }
+    // Speaking up: while Ada says a moment on her own, the docked orb shows Speaking (a tap still says hello as ever).
+    val speakingUp by app.speakUp.speaking.collectAsState()
+    val dockPhase = if (speakingUp && talkPhase == TalkPhase.ENDED) TalkPhase.SPEAKING else talkPhase
+    val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(dockPhase, needsYou, { if (speakingUp) app.speakUp.stop(); dockTap() }, m, onPlaced = { dockAt = it }) }
     val shellContext = LocalContext.current
     val reducedShell = Meka.reducedMotion
     LaunchedEffect(Unit) {
@@ -212,6 +216,8 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
         transitionSpec = { fadeIn(MekaMotion.appear(reducedMode)) togetherWith fadeOut(MekaMotion.appear(reducedMode)) },
         label = "fold-mode",
     ) { bedside ->
+    // Speaking up: the bedside clock in the evening counts as "at home".
+    DisposableEffect(bedside) { if (bedside) app.speakUp.bedsideShowing = true; onDispose { if (bedside) app.speakUp.bedsideShowing = false } }
     if (bedside) BedsideClock(core, fold, onBack = leaveBedside) else
     // One shared-transition layout for the whole shell: titles travel within a screen and, from cards and More rows,
     // across the shell's slide into the place they open (Four tabs, slice 3).

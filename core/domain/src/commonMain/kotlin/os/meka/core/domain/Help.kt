@@ -50,6 +50,7 @@ enum class HelpPlace(val key: String) {
     WORK("work"),
     PROTECTED("protectedTime"),
     NOTIFICATIONS("notifications"),
+    SPEAK_UP("speakUp"),
     APPEARANCE("appearance"),
     VOICE("voice"),
     TALK("talk"),

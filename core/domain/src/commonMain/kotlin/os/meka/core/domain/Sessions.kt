@@ -425,6 +425,7 @@ object SessionRules {
                 title = "${c.heading} at ${hhmm(start)}", text = "Leave by ${hhmm(start - BUFFER_MIN * min)} · until ${hhmm(end)}",
                 atMs = start - LEAVE_NOTICE_MIN * min, target = NoticeTarget.TODAY, expiresAtMs = start,
                 precision = NoticePrecision.CLOCK,
+                speak = SpeakMoment.LEAVE_NOW, spoken = SpeakUpRules.sessionWords(c.heading, hhmm(start), hhmm(start - BUFFER_MIN * min)),
             )
             out += Notice(
                 key = "session:${c.habitId}:$day:ask", source = NoticeSource.SESSION_ASK, tier = NoticeTier.HEADS_UP,

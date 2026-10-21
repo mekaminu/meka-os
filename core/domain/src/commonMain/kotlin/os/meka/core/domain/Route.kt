@@ -682,7 +682,11 @@ object RouteRules {
                 key = "trainlive:$day:${commute.name.lowercase()}:${worst.depMin}", source = NoticeSource.TRAINS, tier = NoticeTier.HEADS_UP,
                 title = name(r.firstId, r) + " " + words(worst), text = "$advice$also · live $checked",
                 atMs = atMs, target = NoticeTarget.TODAY, expiresAtMs = expires,
-            ),
+            ).let { n ->
+                // Speaking up, slice 1: cancelled or 10+ minutes late is said out loud where he can hear it privately.
+                val said = SpeakUpRules.trainWords(worst, good, good?.let { leaveFor(it, commute, nowMin) })
+                if (said == null) n else n.copy(speak = SpeakMoment.TRAIN, spoken = said)
+            },
         )
     }
 

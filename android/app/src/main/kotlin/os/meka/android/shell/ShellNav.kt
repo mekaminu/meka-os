@@ -85,6 +85,7 @@ enum class MoreItem(
     WORK("Work mode", "Work hours and the Work switch", null, MoreGroup.SETTINGS),
     PROTECTED("Protected time", "Evenings and weekends, kept free of tasks", null, MoreGroup.SETTINGS),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
+    SPEAK_UP(os.meka.core.domain.SpeakUpRules.TITLE, os.meka.core.domain.SpeakUpRules.ROW_LINE, null, MoreGroup.SETTINGS),
     APPEARANCE("Appearance", "Dark, Light or Auto", null, MoreGroup.SETTINGS),
     VOICE("Ada's voice", "How Ada sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
     TALK("Talk", "The side button and your headphones", null, MoreGroup.SETTINGS),

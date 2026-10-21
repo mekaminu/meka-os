@@ -5338,6 +5338,74 @@ class MekaCore(
         if (digest != null && DIGEST_KEY in keys) digestPosted(digest)
     }
 
+    // ---- Speaking up (the JARVIS step, slice 1) ----
+
+    private val speakUp = os.meka.core.domain.SpeakUpStore(replica)
+
+    /**
+     * Speaking up: of the notices this device just posted ([result]'s, by [keys], plain strings for Swift), the one Ada
+     * says out loud now, or null. [place] is where this device would say it; [onCall] and [talking] what it is busy
+     * with. A pick is written to Activity at once (once per notice across devices, and counted for the day's cap).
+     */
+    suspend fun speakUp(
+        result: GovernorResult, keys: List<String>, place: os.meka.core.domain.SpeakPlace, onCall: Boolean, talking: Boolean,
+    ): os.meka.core.domain.SpeakUpPick? = onCore {
+        val set = keys.toSet()
+        val posted = result.post.filter { it.key in set && it.speak != null }
+        if (posted.isEmpty()) return@onCore null
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        val pick = os.meka.core.domain.SpeakUpRules.pick(
+            posted, speakUp.settings(), os.meka.core.domain.SpeakContext(place, onCall, talking),
+            quiet = notifyPrefs.settings().quiet.isQuietAt(now, cal),
+            meeting = os.meka.core.domain.SpeakUpRules.inMeeting(currentEvents(), now),
+            spokenToday = activity.spokenSince(cal.toEpochMs(cal.epochDayOf(now), 0)), nowMs = now,
+            address = os.meka.core.domain.SpeakUpRules.address(aboutYou.profile().shownName, mekaVoice.callsSir()),
+            alreadySaid = activity::wasSpoken,
+        ) ?: return@onCore null
+        activity.recordSpoken(pick.key, pick.line)
+        activityChanged()
+        pick
+    }
+
+    /**
+     * The Mac's one call after posting: [notificationsPostedKeys] and then [speakUp] with the same [result], so Swift
+     * sends the governor's result to the core once (strict concurrency).
+     */
+    suspend fun postedKeysThenSpeak(
+        result: GovernorResult, keys: List<String>, place: os.meka.core.domain.SpeakPlace, onCall: Boolean, talking: Boolean,
+    ): os.meka.core.domain.SpeakUpPick? {
+        notificationsPostedKeys(result, keys)
+        return speakUp(result, keys, place, onCall, talking)
+    }
+
+    /** Ask → Settings → Speaking up. */
+    suspend fun speakUpView(): os.meka.core.domain.SpeakUpView = onCore {
+        val now = nowMs()
+        val cal = ZoneCalendar(timeZone)
+        os.meka.core.domain.SpeakUpRules.view(speakUp.settings(), activity.spokenSince(cal.toEpochMs(cal.epochDayOf(now), 0)), now, cal)
+    }
+
+    /** A Speaking up section's button ([label] the section's label): a moment's Turn on / Turn off, How often, Mute. */
+    suspend fun speakUpAction(label: String): os.meka.core.domain.SpeakUpView {
+        onCore {
+            val s = speakUp.settings()
+            val m = os.meka.core.domain.SpeakMoment.entries.firstOrNull { it.label == label }
+            when {
+                m != null -> speakUp.setMoment(m, !s.isOn(m))
+                label == os.meka.core.domain.SpeakUpRules.OFTEN_LABEL ->
+                    speakUp.setOften(os.meka.core.domain.SpeakOften.entries.first { it != s.often })
+                label == os.meka.core.domain.SpeakUpRules.MUTE_LABEL ->
+                    speakUp.mute(if (s.muted(nowMs())) null else nowMs() + os.meka.core.domain.SpeakUpRules.MUTE_MS)
+            }
+            Unit
+        }
+        return speakUpView()
+    }
+
+    /** "shh" / "not now" to Ada: mutes speaking up for 2 hours on every device. */
+    suspend fun muteSpeakUp() = onCore { speakUp.mute(nowMs() + os.meka.core.domain.SpeakUpRules.MUTE_MS) }
+
     // ---- Activity log ----
 
     /**

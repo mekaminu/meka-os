@@ -70,6 +70,8 @@ class NotificationGovernor(private val context: Context, private val app: MekaAp
             // The same notices (and the digest) go in the activity log, "What MEKA did and why".
             app.core.notificationsPosted(posted)
             digest?.let { app.core.digestPosted(it) }
+            // Speaking up (slice 1): at most one of them said out loud, where he can hear it privately.
+            runCatching { app.speakUp.consider(r, posted.map { it.key }) }
         } // else: what would have posted still shows in the app; nothing piles up for later (and nothing counts)
         prefs.edit().putString(KEY_STATE, r.stateEncoded).commit()
         schedule(r.nextWakeMs, r.nextWakePrecision)

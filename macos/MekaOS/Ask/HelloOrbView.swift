@@ -212,11 +212,12 @@ struct SayHelloButton: View {
         let line = HelloOrb.shared.restingLine(needsYou: Int32(count), mac: true)
         Button {
             MekaHaptics.light()
+            if model.speakingUp { model.stopSpeakingUp() }
             model.requestHello(reduced: MotionSetting.reduced)
             then()
         } label: {
             HStack(spacing: MekaSpace.xs) {
-                HelloOrbView(state: HelloOrb.shared.state(phase: .ended, needsYou: Int32(count)), level: 0, palette: palette,
+                HelloOrbView(state: HelloOrb.shared.state(phase: model.speakingUp ? .speaking : .ended, needsYou: Int32(count)), level: 0, palette: palette,
                              size: CGFloat(HelloOrb.shared.SIDEBAR_SIZE), frameRate: 12)
                 VStack(alignment: .leading, spacing: 0) {
                     Text("Say hello").font(MekaType.body).foregroundStyle(palette.textPrimary)

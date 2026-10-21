@@ -63,7 +63,7 @@ enum MoreGroup: Int, CaseIterable, Identifiable {
 /// which shows its choices in the row itself (`ShellNav.unfoldsInPlace`), or MEKA's AI, which only says how it is
 /// (`ShellNav.opens`). Life tiles carry their `tile` (the core's live line) and an SF Symbol.
 enum MoreItem: Int, CaseIterable, Identifiable {
-    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, reading, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
+    case lists, goals, people, dinners, bins, dateNight, school, kids, appointments, leave, gifts, trips, errands, car, money, emergency, facts, brief, weekAhead, news, shutdown, trainQueue, reading, voiceNotes, lifeAdmin, review, aboutYou, work, protectedTime, notifications, speakUp, appearance, voice, talk, calendars, mail, family, watch, recovery, autonomy, ai, activity, setup, health, vault, yourData, settings
     var id: Int { rawValue }
 
     var label: String {
@@ -98,6 +98,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .work: "Work mode"
         case .protectedTime: "Protected time"
         case .notifications: "Notifications"
+        case .speakUp: SpeakUpRules.shared.TITLE
         case .appearance: "Appearance"
         case .voice: "Ada's voice"
         case .talk: "Talk"
@@ -150,6 +151,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .work: "Work hours and the Work switch"
         case .protectedTime: "Evenings and weekends, kept free of tasks"
         case .notifications: "Quiet hours, digests and what reaches you"
+        case .speakUp: SpeakUpRules.shared.ROW_LINE
         case .appearance: "Dark, Light or Auto"
         case .voice: "How Ada sounds in Talk, the brief and calls"
         case .talk: "⌥Space and the mic"
@@ -173,7 +175,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         switch self {
         case .lists, .goals, .people, .dinners, .bins, .dateNight, .school, .kids, .appointments, .leave, .gifts, .trips, .errands, .car, .money, .emergency, .facts: .life
         case .brief, .weekAhead, .news, .shutdown, .trainQueue, .reading, .voiceNotes, .lifeAdmin, .review: .daily
-        case .aboutYou, .work, .protectedTime, .notifications, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
+        case .aboutYou, .work, .protectedTime, .notifications, .speakUp, .appearance, .voice, .talk, .calendars, .mail, .family, .watch, .recovery, .autonomy, .ai, .activity, .setup, .health, .vault, .yourData, .settings: .settings
         }
     }
 

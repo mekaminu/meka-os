@@ -86,6 +86,11 @@ enum class ActivityKind {
      * acts on the answer. Added 2026-10-11.
      */
     APPROVAL,
+    /**
+     * Speaking up, slice 1: a moment Ada said out loud on her own ("Said: Meka, your 07:42 is cancelled. …"), once per
+     * notice whichever device said it. Nothing to undo. Added 2026-10-21; older apps skip it.
+     */
+    SPOKE,
 }
 
 /** One field MEKA changed: what it was, and what MEKA set. */
@@ -169,7 +174,7 @@ data class ActivityView(
  */
 enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>) {
     ALL("All", ActivityKind.entries.toSet()),
-    REMINDERS("Reminders", setOf(ActivityKind.REMINDED, ActivityKind.DIGEST)),
+    REMINDERS("Reminders", setOf(ActivityKind.REMINDED, ActivityKind.DIGEST, ActivityKind.SPOKE)),
     DONE_FOR_YOU("Done for you", setOf(ActivityKind.CHANGED)),
     CALENDAR("Calendar", setOf(ActivityKind.CALENDAR)),
     CALLS("Calls", setOf(ActivityKind.SCREENED, ActivityKind.CALL)),
@@ -783,6 +788,21 @@ class ActivityLog(
             val source = "notice:${n.source.name}"
             write(id, ActivityKind.REMINDED, summary, detail.takeIf { ActivityRules.keepsDetail(source) }, why, source, about = PreventedMissRules.aboutOf(n.key))
         }
+    }
+
+    /** Speaking up: [key]'s notice was said out loud on this device as [line]. Written once, whichever device said it. */
+    fun recordSpoken(key: String, line: String) {
+        val id = SpeakUpRules.activityId(key)
+        if (replica.entity(EntityTypes.AGENT_ACTION, id) != null) return
+        write(id, ActivityKind.SPOKE, SpeakUpRules.activitySummary(line), null, SpeakUpRules.ACTIVITY_WHY, "spoke")
+    }
+
+    /** [key]'s notice was already said out loud (here or on the other device). */
+    fun wasSpoken(key: String): Boolean = replica.entity(EntityTypes.AGENT_ACTION, SpeakUpRules.activityId(key)) != null
+
+    /** How many moments were said out loud since [sinceMs] (the day's cap counts every device). */
+    fun spokenSince(sinceMs: Long): Int = replica.entities(EntityTypes.AGENT_ACTION).count { s ->
+        s[ActivityFields.KIND].textOrNull == ActivityKind.SPOKE.name && (s[ActivityFields.AT].longOrNull ?: 0L) >= sinceMs
     }
 
     /**

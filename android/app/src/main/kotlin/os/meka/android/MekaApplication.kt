@@ -54,6 +54,8 @@ class MekaApplication : Application() {
     val nudger: AfterWorkNudger by lazy { AfterWorkNudger(this, this) }
     /** Notification governor: tiers, quiet hours and the two digests, posted on this phone. */
     val governor: NotificationGovernor by lazy { NotificationGovernor(this, this) }
+    /** Speaking up: Ada says the moments that matter out loud, privately (after the governor posts). */
+    val speakUp: os.meka.android.notify.SpeakUpVoice by lazy { os.meka.android.notify.SpeakUpVoice(this, this) }
     /** Ongoing notifications: the next event's countdown and a running fast. */
     val ongoing: OngoingNotifier by lazy { OngoingNotifier(this, this) }
     /** Home-screen widgets: Next up, Needs you and Fast. */

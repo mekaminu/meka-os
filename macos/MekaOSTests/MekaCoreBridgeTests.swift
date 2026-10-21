@@ -3457,5 +3457,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(HelloRules.shared.WARM_EVERY_MS, 900_000)
         XCTAssertEqual(SpeechRules.shared.AHEAD_AUDIO_MS, 10_000)
     }
+
+    /// Speaking up, slice 1: the Mac speaks only while in use, and the line starts with his name.
+    func testSpeakingUpOnlyWhileTheMacIsInUse() {
+        let rules = SpeakUpRules.shared
+        XCTAssertEqual(rules.macPlace(idleMs: 30_000), SpeakPlace.mac)
+        XCTAssertEqual(rules.macPlace(idleMs: 600_000), SpeakPlace.speaker)
+        XCTAssertEqual(rules.line(spoken: "your 07:42 is cancelled.", address: "Alex"), "Alex, your 07:42 is cancelled.")
+        XCTAssertEqual(MoreItem.speakUp.label, "Speaking up")
+    }
 }
 

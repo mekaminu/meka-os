@@ -327,6 +327,10 @@ data class Notice(
     val postAs: String? = null,
     /** The web page [NoticeAction.PAY] opens (Bills due: where Meka pays it); http(s) only, null for most. */
     val link: String? = null,
+    /** Speaking up, slice 1: the moment Ada may say this out loud ([SpeakUpRules]); null for a silent notice. */
+    val speak: SpeakMoment? = null,
+    /** What she says after his name ("your 07:42 is cancelled. …"); null when [speak] is. */
+    val spoken: String? = null,
 ) {
     /** The platform notification's identity: [postAs], else [key]. */
     val postId: String get() = postAs ?: key

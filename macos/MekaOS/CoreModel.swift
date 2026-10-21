@@ -305,6 +305,8 @@ final class CoreModel {
         name: UserDefaults.standard.string(forKey: CoreModel.alertsKey), fallback: .off
     )
     var showNotifications = false
+    /// Ask → Settings → Speaking up (the JARVIS step, slice 1).
+    var showSpeakUp = false
     /// Search everything: results for the query in the sheet (local; follows edits and sync while it is open).
     private(set) var searchResults: SearchView?
     var showSearch = false
@@ -1449,7 +1451,52 @@ final class CoreModel {
         let postedKeys = await MacNotifier.post(result)
         // Counts only (ADR-013): the weekly review's Interruptions. Called even when nothing posted, so counting starts.
         // Keys (Strings) cross into the core rather than a Swift array of Kotlin notices, which strict concurrency rejects.
-        try? await core.notificationsPostedKeys(result: result, keys: postedKeys)
+        // Speaking up (slice 1) rides the same call, so `result` crosses into the core once: at most one notice said
+        // out loud, and only while he is using the Mac.
+        let idleMs = Int64(CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: UInt32.max)!) * 1000)
+        let place = SpeakUpRules.shared.macPlace(idleMs: idleMs)
+        let pick = try? await core.postedKeysThenSpeak(result: result, keys: postedKeys, place: place, onCall: false, talking: talkActive)
+        if let line = pick?.line { speakUpNow(line) }
+    }
+
+    // MARK: Speaking up (the JARVIS step, slice 1)
+
+    /// A Talk or Hello conversation is running (TalkController sets it): Ada never speaks up over it.
+    var talkActive = false
+    /// Ada is saying a moment on her own: the sidebar's orb shows Speaking.
+    private(set) var speakingUp = false
+    @ObservationIgnored private var speakUpSpeaker: MekaSpeaker?
+
+    /// A soft chime, then the line in Ada's voice.
+    private func speakUpNow(_ line: String) {
+        let speaker = speakUpSpeaker ?? MekaSpeaker()
+        if speakUpSpeaker == nil { speaker.attach(self); speakUpSpeaker = speaker }
+        speakingUp = true
+        let chime = NSSound(named: NSSound.Name("Glass"))
+        chime?.volume = 0.35
+        chime?.play()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(450))
+            speaker.say(line) { [weak self] in self?.speakingUp = false }
+        }
+    }
+
+    /// A click on the orb while she speaks up: stop her.
+    func stopSpeakingUp() {
+        speakUpSpeaker?.stop()
+        speakingUp = false
+    }
+
+    /// Ask → Settings → Speaking up.
+    func speakUpView() async -> SpeakUpView? {
+        guard let core else { return nil }
+        return try? await core.speakUpView()
+    }
+
+    /// A section's button there (a moment's Turn on / Turn off, How often, Mute); the pane as it now reads.
+    func speakUpAction(_ label: String) async -> SpeakUpView? {
+        guard let core else { return nil }
+        return try? await core.speakUpAction(label: label)
     }
 
     /// Whether macOS lets MEKA notify, as last checked (Health, the Notifications sheet); true until checked.

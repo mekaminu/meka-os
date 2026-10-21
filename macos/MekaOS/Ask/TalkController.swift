@@ -29,7 +29,10 @@ import Speech
 @MainActor
 @Observable
 final class TalkController {
-    private(set) var phase: TalkPhase = .ended
+    private(set) var phase: TalkPhase = .ended {
+        // Speaking up: Ada never speaks up over a conversation.
+        didSet { model?.talkActive = phase != .ended }
+    }
     /// Meka's voice level, 0 … 1, smoothed (`TalkOrb.smooth`).
     private(set) var level: Float = 0
     /// The live transcript while listening, then the question as heard.
