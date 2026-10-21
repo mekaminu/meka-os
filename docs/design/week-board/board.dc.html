@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Navilife week board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#08080a}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+.wcard{transition:transform .25s cubic-bezier(.2,.8,.2,1),box-shadow .25s,background .25s;cursor:grab}
+.wcard:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(0,0,0,.45),0 0 0 1px rgba(201,179,126,.35)}
+.wcard:active{cursor:grabbing}
+@keyframes land{0%{transform:scale(.96);box-shadow:0 0 0 2px rgba(232,207,147,.9),0 0 28px rgba(201,179,126,.55)}100%{transform:none;box-shadow:0 0 0 0 rgba(232,207,147,0),0 0 0 rgba(201,179,126,0)}}
+.landed{animation:land .7s ease-out}
+@keyframes spark{0%{transform:scale(.4);opacity:1}100%{transform:scale(2.4);opacity:0}}
+.spark{animation:spark .6s ease-out forwards}
+@keyframes over{0%,100%{box-shadow:inset 0 0 0 1px rgba(230,140,70,.35)}50%{box-shadow:inset 0 0 0 1px rgba(230,140,70,.8),0 0 24px rgba(230,140,70,.18)}}
+.overload{animation:over 2.4s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.wcard,.landed,.spark,.overload{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div style="width:1440px;height:940px;box-sizing:border-box;padding:28px 32px;background:#08080a;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:18px">
+<div style="display:flex;justify-content:space-between;align-items:flex-end;gap:24px">
+<div style="display:flex;flex-direction:column;gap:4px">
+<div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a8a29a">Calendar · Board</div>
+<div style="font-size:30px;font-weight:700;letter-spacing:-.01em">This week · 19 – 25 October</div>
+</div>
+<div style="display:flex;gap:8px;align-items:center">
+<div style="display:flex;background:#141416;border-radius:999px;padding:4px">
+<button type="button" style="border:0;background:transparent;color:#a8a29a;border-radius:999px;padding:8px 16px;font:500 14px DM Sans,sans-serif">Day</button>
+<button type="button" style="border:0;background:transparent;color:#a8a29a;border-radius:999px;padding:8px 16px;font:500 14px DM Sans,sans-serif">Week</button>
+<button type="button" style="border:0;background:#c9b37e;color:#17140e;border-radius:999px;padding:8px 16px;font:600 14px DM Sans,sans-serif">Board</button>
+</div>
+<button type="button" style="border:1px solid #3a352b;background:transparent;color:#c9b37e;border-radius:999px;padding:9px 16px;font:500 14px DM Sans,sans-serif">Plan my week</button>
+</div>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+<sc-for list="{{goals}}" as="g" hint-placeholder-count="3">
+<div style="background:#121214;border-radius:16px;padding:12px 16px;display:flex;align-items:center;gap:14px">
+<div style="width:34px;height:34px;border-radius:50%;background:{{g.ring}};display:flex;align-items:center;justify-content:center">
+<div style="width:26px;height:26px;border-radius:50%;background:#121214;display:flex;align-items:center;justify-content:center;font-size:10px;color:#c9b37e;font-weight:600">{{g.pct}}</div>
+</div>
+<div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+<div style="font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Goal this week</div>
+<div style="font-size:15px;font-weight:600">{{g.title}}</div>
+</div>
+<div style="margin-left:auto;font-size:13px;color:#a8a29a">{{g.count}}</div>
+</div>
+</sc-for>
+</div>
+<div style="flex-grow:1;min-height:0;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px">
+<sc-for list="{{cols}}" as="c" hint-placeholder-count="8">
+<div onDragOver="{{c.over}}" onDragLeave="{{c.leave}}" onDrop="{{c.drop}}" class="{{c.cls}}" style="{{c.style}}">
+<div style="display:flex;flex-direction:column;gap:3px;padding:2px 2px 6px">
+<div style="display:flex;justify-content:space-between;align-items:baseline">
+<div style="{{c.titleStyle}}">{{c.name}}</div>
+<div style="font-size:11px;color:#8f897f">{{c.tag}}</div>
+</div>
+<div style="height:4px;border-radius:2px;background:#232227;overflow:hidden"><div style="{{c.barStyle}}"></div></div>
+<div style="{{c.capStyle}}">{{c.cap}}</div>
+</div>
+<sc-for list="{{c.events}}" as="ev" hint-placeholder-count="1">
+<div style="font-size:11.5px;color:#8f897f;border:1px dashed #2c2a26;border-radius:10px;padding:5px 8px;display:flex;gap:6px"><span style="color:#b9a874">{{ev.t}}</span><span>{{ev.n}}</span></div>
+</sc-for>
+<sc-for list="{{c.cards}}" as="k" hint-placeholder-count="2">
+<div draggable="true" onDragStart="{{k.start}}" onDragEnd="{{k.end}}" onDrop="{{k.dropOn}}" class="{{k.cls}}" style="{{k.style}}">
+<div style="display:flex;gap:8px;align-items:flex-start">
+<button type="button" onClick="{{k.toggle}}" aria-label="Mark done" style="{{k.checkStyle}}">
+<sc-if value="{{k.done}}" hint-placeholder-val="{{false}}"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="#17140e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg></sc-if>
+</button>
+<div style="display:flex;flex-direction:column;gap:5px;min-width:0;flex:1">
+<div style="{{k.titleStyle}}">{{k.title}}</div>
+<div style="display:flex;gap:5px;flex-wrap:wrap">
+<span style="font-size:11px;color:#c9b37e;background:#221f19;border-radius:999px;padding:2px 8px">{{k.est}}</span>
+<sc-if value="{{k.carried}}" hint-placeholder-val="{{false}}"><span style="font-size:11px;color:#f0a86a;background:#2a1f16;border-radius:999px;padding:2px 8px">{{k.carriedText}}</span></sc-if>
+<sc-if value="{{k.goal}}" hint-placeholder-val="{{false}}"><span style="font-size:11px;color:#a8a29a;background:#1d1d21;border-radius:999px;padding:2px 8px">{{k.goal}}</span></sc-if>
+</div>
+</div>
+</div>
+<sc-if value="{{k.sparking}}" hint-placeholder-val="{{false}}"><div class="spark" style="position:absolute;left:10px;top:10px;width:22px;height:22px;border-radius:50%;border:2px solid #e8cf93;pointer-events:none"></div></sc-if>
+</div>
+</sc-for>
+<button type="button" style="margin-top:2px;border:1px dashed #2f2c27;background:transparent;color:#8f897f;border-radius:12px;padding:8px;font:500 12.5px DM Sans,sans-serif;text-align:left">+ Add</button>
+</div>
+</sc-for>
+</div>
+<div style="font-size:12.5px;color:#8a857c">Concept preview with sample content · drag cards between days or up and down · tick one off · amber column = more planned than free time.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":940}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    const T = (id, title, est, col, extra) => Object.assign({ id: id, title: title, est: est, col: col, done: false, carried: 0, goal: '' }, extra || {});
+    this.state = {
+      over: null, landed: null, spark: null,
+      cards: [
+        T('a', 'Book MOT · Golf', 30, 'week'),
+        T('b', 'Renew home insurance', 30, 'week'),
+        T('c', 'Call Mum', 30, 'week', { goal: 'Family' }),
+        T('d', 'Tete 21 feedback fixes', 120, 'week', { goal: 'Ship Navilife' }),
+        T('e', 'Reply to tiger team proposal', 60, 'mon', { carried: 2 }),
+        T('f', 'Draft risk lead brief', 60, 'mon'),
+        T('g', 'Test the new Hello orb', 30, 'mon', { goal: 'Ship Navilife' }),
+        T('h', 'Kestrel backtest review', 60, 'tue'),
+        T('i', 'Pay council tax', 15, 'tue'),
+        T('j', 'Gym · push day', 60, 'wed', { goal: 'Gym 3x' }),
+        T('k', 'Post Vinted return', 15, 'wed'),
+        T('l', 'Side hustle invoices', 60, 'wed'),
+        T('m', 'Prep Friday 1:1 notes', 30, 'thu'),
+        T('n', 'Gym · legs', 60, 'thu', { goal: 'Gym 3x' }),
+        T('o', 'Weekly review', 15, 'fri'),
+        T('p', 'Weekly shop list', 15, 'sat'),
+        T('q', 'Gym · pull day', 60, 'sat', { goal: 'Gym 3x' })
+      ]
+    };
+    this.cols = [
+      { id: 'week', name: 'This week', tag: 'no day yet', free: 0, events: [] },
+      { id: 'mon', name: 'Mon 19', tag: 'Office · today', free: 150, today: true, events: [{ t: '09:30', n: 'AI for Data stand-up' }, { t: '14:00', n: 'Risk review' }] },
+      { id: 'tue', name: 'Tue 20', tag: 'Office', free: 150, events: [{ t: '10:00', n: 'Tiger team sync' }, { t: '19:00', n: 'Piano lesson' }] },
+      { id: 'wed', name: 'Wed 21', tag: 'Home', free: 300, events: [{ t: '12:00', n: 'Dentist' }] },
+      { id: 'thu', name: 'Thu 22', tag: 'Office · early', free: 120, events: [{ t: '15:30', n: 'Leave early' }] },
+      { id: 'fri', name: 'Fri 23', tag: 'Office', free: 180, events: [{ t: '13:00', n: '1:1' }] },
+      { id: 'sat', name: 'Sat 24', tag: 'Weekend', free: 240, events: [{ t: '10:00', n: 'Football · U10' }, { t: '14:00', n: 'Football · U7' }] },
+      { id: 'sun', name: 'Sun 25', tag: 'Weekend', free: 300, events: [{ t: '18:00', n: 'Plan your week' }] }
+    ];
+  }
+  fmt(min) { return min >= 60 ? (Math.round(min / 6) / 10 + 'h').replace('.0h', 'h') : min + 'm'; }
+  move(id, toCol, beforeId) {
+    const cards = this.state.cards.slice();
+    const i = cards.findIndex((x) => x.id === id);
+    if (i < 0) return;
+    const card = Object.assign({}, cards[i], { col: toCol, carried: toCol === cards[i].col ? cards[i].carried : 0 });
+    cards.splice(i, 1);
+    let at = cards.length;
+    if (beforeId) { const j = cards.findIndex((x) => x.id === beforeId); if (j >= 0) at = j; }
+    else { let last = -1; cards.forEach((x, k) => { if (x.col === toCol) last = k; }); at = last + 1; }
+    cards.splice(at, 0, card);
+    this.setState({ cards: cards, over: null, landed: id });
+    clearTimeout(this.lt); this.lt = setTimeout(() => this.setState({ landed: null }), 750);
+  }
+  renderVals() {
+    const st = this.state;
+    const goalsDef = [['Ship Navilife', 'Ship Navilife v1'], ['Family', 'Call Mum twice'], ['Gym 3x', 'Gym three times']];
+    const goals = goalsDef.map(([key, title]) => {
+      const all = st.cards.filter((k) => k.goal === key);
+      const done = all.filter((k) => k.done).length;
+      const pct = all.length ? Math.round(done / all.length * 100) : 0;
+      return { title: title, count: done + ' of ' + all.length + ' done', pct: pct + '%', ring: 'conic-gradient(#c9b37e ' + (pct * 3.6) + 'deg,#2a2721 0)' };
+    });
+    const cols = this.cols.map((c) => {
+      const cards = st.cards.filter((k) => k.col === c.id);
+      const planned = cards.filter((k) => !k.done).reduce((a, k) => a + k.est, 0);
+      const overloaded = c.free > 0 && planned > c.free;
+      const ratio = c.free > 0 ? Math.min(1, planned / c.free) : 0;
+      const isOver = st.over === c.id;
+      const bg = c.today ? '#121215' : (c.id === 'week' ? '#0e0e10' : '#0f0f11');
+      return {
+        name: c.name, tag: c.tag, events: c.events,
+        cls: overloaded ? 'overload' : '',
+        style: 'background:' + bg + ';border-radius:18px;padding:12px 10px;display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;transition:box-shadow .2s,background .2s;' + (isOver ? 'box-shadow:inset 0 0 0 1.5px rgba(232,207,147,.85),0 0 30px rgba(201,179,126,.25);background:#16140f;' : '') + (c.today ? 'outline:1px solid #2e2a22;' : ''),
+        titleStyle: 'font-size:15px;font-weight:700;color:' + (c.today ? '#e8cf93' : '#ededed'),
+        barStyle: 'height:4px;width:' + Math.round(ratio * 100) + '%;background:' + (overloaded ? '#e88a4a' : '#c9b37e') + ';border-radius:2px;transition:width .4s',
+        capStyle: 'font-size:11.5px;color:' + (overloaded ? '#f0a86a' : '#8f897f'),
+        cap: c.free > 0 ? (this.fmt(planned) + ' planned · ' + this.fmt(c.free) + ' free' + (overloaded ? ' · too much' : '')) : (cards.length + ' to place'),
+        over: (e) => { e.preventDefault(); if (st.over !== c.id) this.setState({ over: c.id }); },
+        leave: () => {},
+        drop: (e) => { e.preventDefault(); const id = this.dragId; if (id) this.move(id, c.id, null); this.dragId = null; },
+        cards: cards.map((k) => ({
+          title: k.title, est: this.fmt(k.est), carried: k.carried > 0, carriedText: 'carried ' + k.carried + ' days', goal: k.goal, done: k.done, sparking: st.spark === k.id,
+          cls: 'wcard' + (st.landed === k.id ? ' landed' : ''),
+          style: 'position:relative;background:' + (k.done ? '#111113' : '#1a1a1d') + ';border-radius:14px;padding:10px 10px;opacity:' + (k.done ? '.45' : '1'),
+          titleStyle: 'font-size:13.5px;line-height:1.3;font-weight:500;' + (k.done ? 'text-decoration:line-through;color:#8f897f' : 'color:#ededed'),
+          checkStyle: 'flex:0 0 auto;width:20px;height:20px;border-radius:50%;padding:0;margin-top:1px;cursor:pointer;display:flex;align-items:center;justify-content:center;border:1.5px solid ' + (k.done ? '#c9b37e' : '#5a544a') + ';background:' + (k.done ? '#c9b37e' : 'transparent'),
+          start: (e) => { this.dragId = k.id; try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', k.id); } catch (x) {} },
+          end: () => { this.setState({ over: null }); },
+          dropOn: (e) => { e.preventDefault(); e.stopPropagation(); const id = this.dragId; if (id && id !== k.id) this.move(id, c.id, k.id); this.dragId = null; },
+          toggle: () => {
+            const cards2 = st.cards.map((x) => x.id === k.id ? Object.assign({}, x, { done: !x.done }) : x);
+            this.setState({ cards: cards2, spark: k.done ? null : k.id });
+            clearTimeout(this.sp); this.sp = setTimeout(() => this.setState({ spark: null }), 650);
+          }
+        }))
+      };
+    });
+    return { goals: goals, cols: cols };
+  }
+}
+</script>
+</body>
+</html>

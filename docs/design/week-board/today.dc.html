@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today with roll-over</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.dock{animation:breathe 4.5s ease-in-out infinite}
+@keyframes fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .45s cubic-bezier(.2,.8,.2,1) both}
+@media (prefers-reduced-motion:reduce){.dock,.in{animation:none}}
+</style>
+</helmet>
+<div style="width:390px;height:844px;box-sizing:border-box;padding:22px 18px 0;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:14px;position:relative;overflow:hidden">
+<div style="display:flex;flex-direction:column;gap:3px">
+<div style="font-size:26px;font-weight:700">Good morning, Meka</div>
+<div style="font-size:13px;color:#a8a29a">Tuesday 20 October · office day · leave by 07:32</div>
+</div>
+<div style="background:#121214;border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:#ededed;font-weight:600">{{capLine}}</span><span style="color:#8f897f">2h 30m free</span></div>
+<div style="height:4px;border-radius:2px;background:#232227;overflow:hidden"><div style="{{barStyle}}"></div></div>
+</div>
+<sc-if value="{{showPrompt}}" hint-placeholder-val="{{true}}">
+<div class="in" style="background:#1d1812;border:1px solid #3a2e1c;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px">
+<div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:#f0a86a">Carried 3 days</div>
+<div style="font-size:15px;font-weight:600">Reply to tiger team proposal keeps slipping. What would help?</div>
+<div style="display:flex;gap:8px;flex-wrap:wrap">
+<button type="button" onClick="{{dismiss}}" style="border:0;background:#2a2721;color:#c9b37e;border-radius:999px;padding:9px 14px;font:500 13px DM Sans,sans-serif">Break it down</button>
+<button type="button" onClick="{{dismiss}}" style="border:0;background:#2a2721;color:#ededed;border-radius:999px;padding:9px 14px;font:500 13px DM Sans,sans-serif">Someday</button>
+<button type="button" onClick="{{dismiss}}" style="border:0;background:#2a2721;color:#ededed;border-radius:999px;padding:9px 14px;font:500 13px DM Sans,sans-serif">Drop</button>
+</div>
+</div>
+</sc-if>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#f0a86a">From yesterday</div>
+<sc-for list="{{carried}}" as="k" hint-placeholder-count="2">
+<div style="{{k.style}}">
+<button type="button" onClick="{{k.toggle}}" aria-label="Mark done" style="{{k.check}}"></button>
+<div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
+<div style="{{k.titleStyle}}">{{k.title}}</div>
+<div style="display:flex;gap:5px"><span style="font-size:11px;color:#c9b37e;background:#221f19;border-radius:999px;padding:2px 8px">{{k.est}}</span><span style="font-size:11px;color:#f0a86a;background:#2a1f16;border-radius:999px;padding:2px 8px">{{k.tag}}</span></div>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Today</div>
+<sc-for list="{{today}}" as="k" hint-placeholder-count="3">
+<div style="{{k.style}}">
+<button type="button" onClick="{{k.toggle}}" aria-label="Mark done" style="{{k.check}}"></button>
+<div style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
+<div style="{{k.titleStyle}}">{{k.title}}</div>
+<div style="display:flex;gap:5px"><span style="font-size:11px;color:#c9b37e;background:#221f19;border-radius:999px;padding:2px 8px">{{k.est}}</span><span style="font-size:11px;color:#8f897f">{{k.tag}}</span></div>
+</div>
+</div>
+</sc-for>
+</div>
+<div style="position:absolute;left:12px;right:12px;bottom:14px;height:66px;border-radius:22px;background:#141415;display:flex;justify-content:space-around;align-items:center;font-size:12px;color:#a8a29a">
+<span style="color:#e8cf93">Today</span><span>Needs you</span><span style="width:52px"></span><span>Calendar</span><span>Ask</span>
+</div>
+<div class="dock" style="position:absolute;left:50%;bottom:38px;width:54px;height:54px;margin-left:-27px;border-radius:50%;border:4px solid #000;background:radial-gradient(circle at 38% 34%,#fff4d6 0%,#e8cf93 18%,#c9b37e 42%,#7a6534 78%,#3a2f17 100%);box-shadow:0 0 22px rgba(201,179,126,.45)"></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = { prompt: true, done: {} };
+  }
+  renderVals() {
+    const st = this.state;
+    const mk = (id, title, est, mins, tag) => {
+      const d = !!st.done[id];
+      return {
+        id: id, title: title, est: est, mins: mins, tag: tag, done: d,
+        style: 'display:flex;gap:10px;align-items:flex-start;background:' + (d ? '#0f0f11' : '#1a1a1d') + ';border-radius:14px;padding:11px 12px;opacity:' + (d ? '.45' : '1') + ';transition:all .3s',
+        titleStyle: 'font-size:14.5px;font-weight:500;' + (d ? 'text-decoration:line-through;color:#8f897f' : 'color:#ededed'),
+        check: 'flex:0 0 auto;width:22px;height:22px;border-radius:50%;padding:0;cursor:pointer;border:1.5px solid ' + (d ? '#c9b37e' : '#5a544a') + ';background:' + (d ? '#c9b37e' : 'transparent'),
+        toggle: () => { const n = Object.assign({}, st.done); n[id] = !n[id]; this.setState({ done: n }); }
+      };
+    };
+    const carried = [
+      mk('e', 'Reply to tiger team proposal', '1h', 60, 'carried 3 days'),
+      mk('g', 'Test the new Hello orb', '30m', 30, 'carried 1 day')
+    ];
+    const today = [
+      mk('h', 'Kestrel backtest review', '1h', 60, 'evening'),
+      mk('i', 'Pay council tax', '15m', 15, 'before 17:00'),
+      mk('x', 'Order piano books', '15m', 15, 'Piano 19:00')
+    ];
+    const left = carried.concat(today).filter((k) => !k.done).reduce((a, k) => a + k.mins, 0);
+    const free = 150;
+    const h = Math.floor(left / 60), m = left % 60;
+    return {
+      carried: carried, today: today, showPrompt: st.prompt,
+      dismiss: () => this.setState({ prompt: false }),
+      capLine: (h ? h + 'h ' : '') + (m ? m + 'm' : '') + ' planned',
+      barStyle: 'height:4px;border-radius:2px;width:' + Math.min(100, Math.round(left / free * 100)) + '%;background:' + (left > free ? '#e88a4a' : '#c9b37e') + ';transition:width .4s'
+    };
+  }
+}
+</script>
+</body>
+</html>
