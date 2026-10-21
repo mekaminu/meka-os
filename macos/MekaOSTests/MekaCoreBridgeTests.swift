@@ -1570,6 +1570,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TimelineRules.shared.restLabel(until: nil, work: nil, anytime: 0), "Nothing else planned today")
     }
 
+    /// Week board, slice 2: the Board's words reach Swift.
+    func testWeekBoardWordsReachSwift() {
+        XCTAssertEqual(WeekBoardRules.shared.VIEW_BOARD, "Board")
+        XCTAssertEqual(WeekBoardRules.shared.VIEW_AGENDA, "Agenda")
+        XCTAssertEqual(WeekBoardRules.shared.placeLabel(p: BoardPlace.office), "Office")
+        XCTAssertEqual(WeekBoardRules.shared.placeLabel(p: BoardPlace.away), "Away")
+    }
+
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.
     func testHeldPreviewReachesSwift() {
         let rules = HeldPreviewRules.shared

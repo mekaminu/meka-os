@@ -452,6 +452,14 @@ class MekaCore(
      */
     val calendarView: StateFlow<CalendarView> = _calendar.asStateFlow()
 
+    private val _board = MutableStateFlow(os.meka.core.domain.WeekBoard.EMPTY)
+    /**
+     * Calendar's Board view (Week board, slice 2; [os.meka.core.domain.WeekBoardRules]): a column per day from this
+     * week's Monday for five weeks, each day's tasks as cards in his order, its events as chips and an Office · Home ·
+     * Away marker. Follows sync and edits; moves with the clock.
+     */
+    val weekBoard: StateFlow<os.meka.core.domain.WeekBoard> = _board.asStateFlow()
+
     /** What the search field holds (a screen choice, not synced). */
     private var searchQuery: String = ""
     private val _eventMarks = MutableStateFlow(os.meka.core.domain.EventMarks.NONE)
@@ -2066,6 +2074,56 @@ class MekaCore(
         true
     }
     private val carryUndo = mutableMapOf<String, os.meka.core.domain.Task>()
+
+    // ---- Week board, slice 2: the Board view ----
+
+    /**
+     * Drag on the Board: [taskId] to local [day] (today or later; it keeps its time) at place [toIndex] among that day's
+     * open cards (0 = top). Returns the undo bar's line ("Moved “Book MOT” to Thu 22 Oct"), or null when nothing moved.
+     */
+    suspend fun moveOnBoard(taskId: String, day: Long, toIndex: Int): String? = onCore {
+        val board = _board.value
+        val cal = ZoneCalendar(timeZone)
+        val move = os.meka.core.domain.WeekBoardRules.move(board, taskId, day, toIndex, cal.epochDayOf(nowMs()), cal) ?: return@onCore null
+        placeOnBoard(board, move)
+    }
+
+    /** ⌘← ⌘→ (a day earlier or later) and ⌘↑ ⌘↓ (a place up or down) on the selected card, and the card's menu. */
+    suspend fun nudgeOnBoard(taskId: String, days: Int, places: Int): String? = onCore {
+        val board = _board.value
+        val cal = ZoneCalendar(timeZone)
+        val move = os.meka.core.domain.WeekBoardRules.nudge(board, taskId, days, places, cal.epochDayOf(nowMs()), cal) ?: return@onCore null
+        placeOnBoard(board, move)
+    }
+
+    private fun placeOnBoard(board: os.meka.core.domain.WeekBoard, move: os.meka.core.domain.BoardMove): String {
+        val before = board.dayOf(move.taskId)!!
+        val oldIndex = before.openCards.indexOfFirst { it.id == move.taskId }
+        val title = before.cards.first { it.id == move.taskId }.task.title
+        boardUndo = tasks.placeOnBoard(move)
+        if (move.dayChanged) followBlocks(listOf(move.taskId))
+        val newIndex = (move.ranks[move.taskId] ?: 0L) / os.meka.core.domain.WeekBoardRules.RANK_STEP - 1
+        return os.meka.core.domain.WeekBoardRules.moveLine(title, move, ZoneCalendar(timeZone).epochDayOf(nowMs()), newIndex < oldIndex)
+    }
+
+    /** Undo after [moveOnBoard] or [nudgeOnBoard]: the task's day and the day's order come back. False when nothing to undo. */
+    suspend fun undoBoardMove(): Boolean = onCore {
+        val u = boardUndo ?: return@onCore false
+        boardUndo = null
+        tasks.undoBoard(u).also { if (u.before != u.after) followBlocks(listOf(u.taskId)) }
+    }
+    private var boardUndo: os.meka.core.domain.BoardUndo? = null
+
+    /** Quick add at the foot of a Board column: [text] becomes a task on local [day] (no time), last in that day. */
+    suspend fun addOnBoard(text: String, day: Long): String? {
+        val draft = QuickCapture.draft(text, null) ?: return null
+        return onCore {
+            val id = tasks.create(NewTask(draft.title, notes = draft.notes))
+            val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+            if (day > today) tasks.setWhen(id, day, null)
+            id
+        }
+    }
 
     suspend fun skipOccurrence(taskId: String) = onCore { tasks.skipOccurrence(taskId); followBlocks(listOf(taskId)); Unit }
     /** Moves just this occurrence (or a one-off task) out of Today for [days] days. */
@@ -10561,6 +10619,10 @@ class MekaCore(
         _calendar.value = CalendarAgenda.build(
             all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
             work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
+        )
+        _board.value = os.meka.core.domain.WeekBoardRules.build(
+            all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hoursOf(workState, todayEpochDay()),
+            marks.hidden, _calendar.value::toneOf,
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()

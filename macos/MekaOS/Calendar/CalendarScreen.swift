@@ -89,6 +89,35 @@ struct CalendarScreen: View {
             }
             .padding(.bottom, MekaSpace.m)
 
+            // Week board, slice 2: Agenda · Board; the Board takes the strip's and the agenda's place.
+            CalendarViewSwitch(palette: palette)
+                .padding(.bottom, MekaSpace.m)
+                .staggeredAppear(1)
+            if model.calendarShowsBoard, let board = model.board, !board.weeks.isEmpty {
+                ScrollView {
+                    WeekBoardScreen(board: board, palette: palette)
+                        .padding(.bottom, MekaSpace.xl)
+                }
+                .staggeredAppear(2)
+                .transition(.opacity)
+            } else {
+                agenda(v, lit: lit)
+            }
+        }
+        .padding(.horizontal, MekaSpace.gutterWide)
+        .padding(.top, MekaSpace.xl)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.calendarShowsBoard)
+        .onChange(of: topSection) { _, _ in
+            // Scrolling the agenda keeps the strip on the week in view.
+            let section = v.sections.first { $0.id == topSection } ?? v.sections[0]
+            let w = Int(v.weekIndexOf(epochDay: section.firstDay))
+            if w != week { move(to: w) }
+        }
+    }
+
+    @ViewBuilder
+    private func agenda(_ v: CalendarView, lit: Int64) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
             strip(v, lit: lit).staggeredAppear(2)
 
             Rectangle().fill(palette.hairline).frame(height: 1).padding(.top, MekaSpace.xs)
@@ -107,14 +136,7 @@ struct CalendarScreen: View {
             }
             .scrollPosition(id: $topSection, anchor: .top)
         }
-        .padding(.horizontal, MekaSpace.gutterWide)
-        .padding(.top, MekaSpace.xl)
-        .onChange(of: topSection) { _, _ in
-            // Scrolling the agenda keeps the strip on the week in view.
-            let section = v.sections.first { $0.id == topSection } ?? v.sections[0]
-            let w = Int(v.weekIndexOf(epochDay: section.firstDay))
-            if w != week { move(to: w) }
-        }
+        .transition(.opacity)
     }
 
     private func move(to w: Int) {
@@ -531,4 +553,34 @@ private struct MovesEvent: ViewModifier {
 
 private extension View {
     func movesEvent(_ event: CalendarEvent?) -> some View { modifier(MovesEvent(event: event)) }
+}
+
+/// Agenda · Board above the Calendar (Week board, slice 2): which view the Calendar section shows; the lit half blends
+/// across on the appear spring with a tick haptic.
+struct CalendarViewSwitch: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach([false, true], id: \.self) { isBoard in
+                let lit = model.calendarShowsBoard == isBoard
+                Button {
+                    guard !lit else { return }
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { model.calendarShowsBoard = isBoard }
+                } label: {
+                    Text(isBoard ? WeekBoardRules.shared.VIEW_BOARD : WeekBoardRules.shared.VIEW_AGENDA)
+                        .font(MekaType.caption)
+                        .foregroundStyle(lit ? palette.textPrimary : palette.textTertiary)
+                        .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                        .background(Capsule().fill(lit ? palette.surfaceRaised : Color.clear))
+                }
+                .buttonStyle(MekaPressStyle())
+                .accessibilityAddTraits(lit ? .isSelected : [])
+            }
+        }
+        .background(Capsule().fill(palette.surface))
+    }
 }

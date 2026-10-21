@@ -123,8 +123,10 @@ fun CalendarRoute(core: MekaCore) {
     var addShown by remember { mutableLongStateOf(-1L) }
     addingOn?.let { addShown = it }
     val addHeader = AddHeader(editAccounts.isNotEmpty(), editLines) { day -> addingOn = day }
+    // Week board, slice 2: Agenda · Board under the summary; the choice is kept while the app runs.
+    var board by rememberSaveable { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
-        Agenda(v, handlers, showAgain, addHeader) { openEvent = it }
+        Agenda(core, v, handlers, showAgain, addHeader, board, { board = it }, undo) { openEvent = it }
         MekaPane(visible = openEvent != null) {
             shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }, undo = undo) }
         }
@@ -183,7 +185,8 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
 
 @Composable
 private fun Agenda(
-    v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, add: AddHeader, onEvent: (CalendarEvent) -> Unit,
+    core: MekaCore, v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, add: AddHeader,
+    board: Boolean, onBoard: (Boolean) -> Unit, undo: EventUndo, onEvent: (CalendarEvent) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -226,8 +229,14 @@ private fun Agenda(
             Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             EditLines(add.lines, Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
+            CalendarViewSwitch(board, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)), onBoard)
             Spacer(Modifier.height(MekaSpace.m))
-            WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
+            if (!board) WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
+        }
+        // The Board view: a column per day in place of the Agenda's strip and list.
+        if (board) {
+            WeekBoardView(core, undo, onEvent, Modifier.weight(1f))
+            return@Column
         }
         HorizontalPager(
             state = pager,

@@ -44,6 +44,8 @@ data class Task(
     val remindAtMs: Long? = null,
     /** The day the three-carry prompt was answered ([RollOverRules]); null while it may still ask. */
     val carryAskedDay: Long? = null,
+    /** Its place within its day on the Week board ([WeekBoardRules]); null until he orders that day. */
+    val boardRank: Long? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -95,6 +97,7 @@ data class Task(
                 eventId = s[TaskFields.EVENT_ID].textOrNull,
                 remindAtMs = s[TaskFields.REMIND_AT].longOrNull,
                 carryAskedDay = s[TaskFields.CARRY_ASKED_DAY].longOrNull,
+                boardRank = s[TaskFields.BOARD_RANK].longOrNull,
             )
         }
     }
@@ -504,6 +507,33 @@ class Tasks(
             ActionableFields.SOMEDAY_KIND to (before.somedayKind?.name?.fv() ?: FieldValue.Null),
         )
         replica.commitLocal(EntityTypes.TASK, before.id, fields)
+    }
+
+    /**
+     * A move on the Week board ([WeekBoardRules.move]): the task goes to [BoardMove.toDay] (keeping its time, through
+     * [setWhen]) and the day's cards take their new places. Returns what Undo needs.
+     */
+    fun placeOnBoard(move: BoardMove): BoardUndo {
+        val t = get(move.taskId) ?: throw ValidationException("Task not found")
+        if (t.lifecycle.isTerminal) throw ValidationException("That task is finished")
+        val before = TaskTiming.of(t)
+        val oldRanks = move.ranks.keys.associateWith { get(it)?.boardRank }
+        if (move.dayChanged) setWhen(t.id, move.toDay, move.minuteOfDay)
+        val after = TaskTiming.of(get(t.id)!!)
+        move.ranks.forEach { (id, rank) -> replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.BOARD_RANK to rank.fv())) }
+        return BoardUndo(t.id, before, after, oldRanks)
+    }
+
+    /** Undo for [placeOnBoard]: the task's day and time come back (unless changed since) and the day's old order. */
+    fun undoBoard(u: BoardUndo): Boolean {
+        val timing = if (u.before != u.after) putBack(u.taskId, u.before, u.after) else false
+        var ranks = false
+        u.oldRanks.forEach { (id, rank) ->
+            if (get(id) == null) return@forEach
+            replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.BOARD_RANK to (rank?.fv() ?: FieldValue.Null)))
+            ranks = true
+        }
+        return timing || ranks
     }
 
     fun moveToSomeday(id: String, kind: SomedayKind = SomedayKind.IDEA) {

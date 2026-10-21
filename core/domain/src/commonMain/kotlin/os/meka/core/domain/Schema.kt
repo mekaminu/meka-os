@@ -230,6 +230,11 @@ object TaskFields {
      * ([RollOverRules]); absent until then, so it asks once.
      */
     const val CARRY_ASKED_DAY = "carryAskedDay"
+    /**
+     * Week board, slice 2 (additive, Lww): the task's place within its day on the Board, smaller first
+     * ([WeekBoardRules.RANK_STEP] apart); absent until he orders that day, so the day keeps its usual order.
+     */
+    const val BOARD_RANK = "boardRank"
 }
 
 object ChecklistFields {

@@ -274,6 +274,12 @@ final class CoreModel {
     private(set) var review: WeeklyReviewView?
     /// The Calendar tab: week strips and the next 30 days grouped by day. Follows sync; moves with the clock.
     private(set) var calendar: CalendarView?
+    /// Calendar's Board view (Week board, slice 2): a column per day for five weeks, each day's tasks in his order.
+    private(set) var board: WeekBoard?
+    /// Which view the Calendar section shows: the agenda (false) or the Board; kept while the app runs.
+    var calendarShowsBoard = false
+    /// The card picked on the Board (a click), which ⌘← ⌘→ ⌘↑ ⌘↓ move.
+    var boardSelectedID: String?
     /// The event whose detail sheet is open (calendar redesign, slice 3), from Today or the Calendar section.
     var openEvent: CalendarEvent?
     /// Hidden events and prep tasks (calendar actions), synced with the Fold. MEKA-only: the real calendars are untouched.
@@ -681,6 +687,9 @@ final class CoreModel {
         })
         observers.append(Task { [weak self] in
             for await c in core.calendarView { self?.calendar = c }
+        })
+        observers.append(Task { [weak self] in
+            for await b in core.weekBoard { self?.board = b }
         })
         observers.append(Task { [weak self] in
             for await m in core.eventMarks { self?.eventMarks = m }
@@ -3187,8 +3196,6 @@ final class CoreModel {
         run { try await $0.snooze(taskId: id, days: 1) }
     }
 
-    /// "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3): re-planned to the first free
-    /// stretch from now; the undo bar says where it went ("Moved “Send the invoice” to 15:30") and Undo puts it back.
     /// Roll-over (Week board, slice 1): the three-carry prompt on a "From yesterday" row. Break it down marks it answered
     /// (the view opens the task's steps); Someday and Drop leave with Undo on the bar; Keep stops it asking.
     func answerCarried(_ id: String, _ choice: CarryChoice) {
@@ -3200,6 +3207,48 @@ final class CoreModel {
         }
     }
 
+    // MARK: Week board, slice 2: the Board view
+
+    /// A drop on the Board: the card goes to that day (today or later, keeping its time) at that place; the undo bar
+    /// says where ("Moved “Book MOT” to Thu 22 Oct") and Undo puts it and the day's order back.
+    func moveOnBoard(_ id: String, day: Int64, index: Int) {
+        guard let core else { return }
+        let place = Int32(clamping: index)
+        Task {
+            guard let line = try? await core.moveOnBoard(taskId: id, day: day, toIndex: place) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardMove)
+        }
+    }
+
+    /// ⌘← ⌘→ (a day earlier or later) and ⌘↑ ⌘↓ (a place up or down) on the selected card, and its menu.
+    func nudgeOnBoard(_ id: String, days: Int, places: Int) {
+        guard let core else { return }
+        let d = Int32(clamping: days), p = Int32(clamping: places)
+        Task {
+            guard let line = try? await core.nudgeOnBoard(taskId: id, days: d, places: p) else { return }
+            MekaHaptics.tick()
+            offerEventUndo(line, .boardMove)
+        }
+    }
+
+    /// "+ Add" at the foot of a Board column: a task on that day, last in its order.
+    func addOnBoard(_ text: String, day: Int64) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        run { _ = try await $0.addOnBoard(text: trimmed, day: day) }
+    }
+
+    /// The ring on a Board card: ticked off, with Undo.
+    func completeOnBoard(_ id: String, title: String) {
+        MekaHaptics.light()
+        if boardSelectedID == id { boardSelectedID = nil }
+        run { try await $0.complete(taskId: id) }
+        offerEventUndo("Done “\(title)”", .reopen(id))
+    }
+
+    /// "Move to later" on a late planned task (Fold review 2026-10-09 13:45, item 3): re-planned to the first free
+    /// stretch from now; the undo bar says where it went ("Moved “Send the invoice” to 15:30") and Undo puts it back.
     func moveLater(_ id: String) {
         guard let core else { return }
         Task {
@@ -3552,6 +3601,8 @@ final class CoreModel {
         case .appointment(let done): run { _ = try await $0.undoAppointment(done: done) }
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .carried(let id): run { _ = try await $0.undoCarried(taskId: id) }
+        case .boardMove: run { _ = try await $0.undoBoardMove() }
+        case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
         case .removeSteps(let ids): run { core in for id in ids { try await core.removeStep(stepId: id) } }
@@ -6362,6 +6413,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case appointmentCall(AppointmentCall)
         /// Someday or Drop on a carried task's prompt: it comes back as it was.
         case carried(String)
+        /// A move on the Week board: the card and its day's order go back.
+        case boardMove
+        /// The ring on a Board card: ticked back open.
+        case reopen(String)
         /// Remove on a checklist item: it comes back with its tick and place.
         case restoreStep(String)
         /// Untick all on a checklist: these are ticked again.
