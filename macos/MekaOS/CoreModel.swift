@@ -3296,6 +3296,29 @@ final class CoreModel {
         return try? await core.feelingOffer(feeling: Self.feeling(name))
     }
 
+    /// While Stretched holds the alerts that can wait on this Mac: "Mail and call alerts held till …", else nil.
+    func alertHoldLine() async -> String? {
+        guard let core else { return nil }
+        return try? await core.alertHoldLine()
+    }
+
+    /// Hold alerts till tomorrow (Stretched, his click): the held line on the bar with Undo (which resumes them).
+    func holdAlerts() {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.holdAlerts() else { return }
+            MekaHaptics.tick()
+            offerEventUndo(line, .resumeAlerts)
+        }
+    }
+
+    /// Resume: the hold ends now; held alerts that still apply come on the next look.
+    func resumeAlerts() async {
+        guard let core else { return }
+        _ = try? await core.resumeAlerts()
+        MekaHaptics.tick()
+    }
+
     /// Lighten tomorrow: two of tomorrow's tasks to lighter days, one Undo for both.
     func lightenTomorrow(_ name: String) {
         guard let core else { return }
@@ -3774,6 +3797,7 @@ final class CoreModel {
         case .goalTag: run { _ = try await $0.undoTagOnBoard() }
         case .boardGoal: run { _ = try await $0.undoBoardGoal() }
         case .lighten: run { _ = try await $0.undoLighten() }
+        case .resumeAlerts: run { _ = try await $0.resumeAlerts() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
@@ -6597,6 +6621,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case boardGoal
         /// Lighten tomorrow (Week board, item (11)): every task it moved goes back to tomorrow.
         case lighten
+        /// Hold alerts (Week board, item (11) part 2): the Stretched hold ends now.
+        case resumeAlerts
         /// The ring on a Board card: ticked back open.
         case reopen(String)
         /// Remove on a checklist item: it comes back with its tick and place.

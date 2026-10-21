@@ -59,6 +59,7 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.DailyReceipt
 import os.meka.core.domain.DoneRow
+import os.meka.core.domain.AlertHoldRules
 import os.meka.core.domain.Feeling
 import os.meka.core.domain.FeelingOffer
 import os.meka.core.domain.FeelingRules
@@ -433,7 +434,10 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
     var offer by remember { mutableStateOf<FeelingOffer?>(null) }
     var did by remember { mutableStateOf<String?>(null) }
     var undo by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
+    // Part 2: while Stretched holds the alerts that can wait, the pane says so with Resume.
+    var held by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
+        held = runCatching { core.alertHoldLine() }.getOrNull()
         val f = runCatching { core.feelingToday() }.getOrNull() ?: return@LaunchedEffect
         picked = f
         offer = runCatching { core.feelingOffer(f) }.getOrNull()
@@ -457,6 +461,7 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
             val o = offer
             if (o != null) Column(Modifier.padding(top = MekaSpace.xs)) {
                 Text(o.line, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                o.holdLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
                 Text(FeelingRules.pickedLine(o.feeling), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs),
@@ -481,8 +486,39 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
                             }
                         }
                     }
-                    if (o.lightenLabel != null || o.drop != null) ShutdownChip(FeelingRules.LEAVE) { offer = null }
+                    o.holdLabel?.let { label ->
+                        ShutdownChip(label) {
+                            haptics.tick()
+                            scope.launch {
+                                val line = runCatching { core.holdAlerts() }.getOrNull() ?: return@launch
+                                did = line; undo = { core.resumeAlerts() }
+                            }
+                        }
+                    }
+                    if (o.lightenLabel != null || o.drop != null || o.holdLabel != null) ShutdownChip(FeelingRules.LEAVE) { offer = null }
                 }
+            }
+        }
+        AnimatedVisibility(
+            visible = held != null && did == null,
+            enter = fadeIn(MekaMotion.appear(reduced)),
+            exit = fadeOut(MekaMotion.appear(reduced)),
+        ) {
+            val line = held
+            if (line != null) Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                Text(
+                    AlertHoldRules.RESUME, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) {
+                            haptics.tick()
+                            scope.launch {
+                                runCatching { core.resumeAlerts() }
+                                held = null
+                                picked?.let { f -> offer = runCatching { core.feelingOffer(f) }.getOrNull() }
+                            }
+                        }.minTouch().padding(horizontal = MekaSpace.xs),
+                )
             }
         }
         AnimatedContent(
@@ -502,6 +538,7 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
                                     runCatching { u() }
                                     did = null; undo = null
                                     picked?.let { f -> offer = runCatching { core.feelingOffer(f) }.getOrNull() }
+                                    held = runCatching { core.alertHoldLine() }.getOrNull()
                                 }
                             }.minTouch().padding(horizontal = MekaSpace.xs),
                     )

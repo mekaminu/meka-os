@@ -523,9 +523,16 @@ object Governor {
         state: GovernorState,
         nowMs: Long,
         cal: LocalCalendar,
+        /**
+         * Week board item (11) part 2: while a Stretched hold runs (till this, on this device), the alerts that can wait
+         * ([AlertHoldRules.HELD_SOURCES]) don't post; one that still applies when it ends posts then.
+         */
+        holdUntilMs: Long? = null,
     ): GovernorResult {
         val quietNow = settings.quiet.isQuietAt(nowMs, cal)
-        val tiered = notices.map { it.copy(tier = effectiveTier(it, settings)) }.filter { it.tier != NoticeTier.SILENT }
+        val holding = AlertHoldRules.active(holdUntilMs, nowMs)
+        val tiered = notices.map { it.copy(tier = effectiveTier(it, settings)) }
+            .filter { it.tier != NoticeTier.SILENT && !(holding && AlertHoldRules.holds(it)) }
         val due = tiered.filter { it.atMs <= nowMs }
         fun fresh(n: Notice) = n.key !in state.delivered && (n.expiresAtMs == null || nowMs < n.expiresAtMs)
 
@@ -582,6 +589,7 @@ object Governor {
         if (device != DeviceAlerts.OFF) {
             nextDigestSlot(settings, nowMs, cal)?.let { wakes += it to NoticePrecision.SOFT }
             if (quietNow) wakes += settings.quiet.endAfter(nowMs, cal) to NoticePrecision.SOFT
+            if (holding) wakes += holdUntilMs!! to NoticePrecision.SOFT
             tiered.filter { it.atMs > nowMs && it.tier.interrupts && it.key !in delivered && (it.expiresAtMs == null || it.expiresAtMs > it.atMs) }
                 .forEach { wakes += it.atMs to it.precision }
         }

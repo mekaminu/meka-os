@@ -156,6 +156,9 @@ object UnknownCallNotice {
         if (!WorkAlerts.canPost(context)) return false
         val tag = CallNoticeRules.tag(offer.number) ?: return false
         if (!CallNotification.mayPost(context, tag, CallNoticeRules.Kind.AFTER_CALL)) return true
+        // Week board (11) part 2: while Stretched holds the alerts that can wait, a stranger's after-call note doesn't
+        // ring (the call is in Activity → Calls with Block); urgent call-assistant messages still do.
+        if (heldNow(context)) return true
         ensureChannel(context)
         val notice = CallNoticeRules.Notice(
             title = offer.title, text = offer.line, big = offer.line, sub = null, listen = null, callBack = null,
@@ -195,6 +198,8 @@ object UnknownCallNotice {
         if (!WorkAlerts.canPost(context)) return
         val tag = CallNoticeRules.tag(number) ?: return
         if (!CallNotification.mayPost(context, tag, CallNoticeRules.Kind.AUTO_BLOCKED)) return
+        // Week board (11) part 2: an automatic block can wait while Stretched holds alerts (Activity keeps it, with Undo).
+        if (heldNow(context)) return
         ensureChannel(context)
         val notice = runCatching { (context.applicationContext as MekaApplication).core.autoBlockNotice(number, trigger, atMs, calls, reported) }
             .getOrNull() ?: return
@@ -203,6 +208,10 @@ object UnknownCallNotice {
             reportText = BlockedCallerRules.reportText(number))
         send(context, tag, b)
     }
+
+    /** The Stretched hold ([os.meka.core.domain.AlertHoldRules]) is on: the call notes that can wait stay quiet. */
+    private fun heldNow(context: Context): Boolean =
+        runCatching { (context.applicationContext as MekaApplication).core.alertsHeldNow() }.getOrDefault(false)
 
     internal const val KEY_NUMBER = IN_NUMBER
     internal const val KEY_AT = IN_AT

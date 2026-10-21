@@ -1617,7 +1617,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(FeelingRules.shared.pickedLine(f: .tired), "Tired · kept on this device for a week")
         let move = FeelingMove(taskId: "t", title: "Gym", toDay: KotlinLong(value: 12), dayLabel: "Sat")
         XCTAssertEqual(FeelingRules.shared.lightenedLine(moves: [move]), "Tomorrow's lighter · “Gym” to Sat")
-        XCTAssertEqual(FeelingOffer(feeling: .tired, line: "x", moves: [move], drop: nil).lightenLabel, "Lighten tomorrow")
+        XCTAssertEqual(FeelingOffer(feeling: .tired, line: "x", moves: [move], drop: nil, holdLabel: nil, holdLine: nil).lightenLabel, "Lighten tomorrow")
+        // Item (11) part 2: "I'm shattered" to Ada, and Stretched's hold.
+        XCTAssertEqual(FeelingAskRules.shared.request(q: "I'm shattered"), .tired)
+        XCTAssertEqual(FeelingAskRules.shared.request(q: "I've got too much on"), .stretched)
+        XCTAssertNil(FeelingAskRules.shared.request(q: "I'm tired of waiting"))
+        XCTAssertEqual(AlertHoldRules.shared.RESUME, "Resume")
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.

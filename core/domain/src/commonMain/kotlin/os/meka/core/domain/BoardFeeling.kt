@@ -21,6 +21,10 @@ data class FeelingOffer(
     val moves: List<FeelingMove>,
     /** Stretched: one task that could wait on Someday; null otherwise. */
     val drop: FeelingMove? = null,
+    /** Stretched, part 2: "Hold alerts till tomorrow 21:30" ([AlertHoldRules]); null otherwise or while one is on. */
+    val holdLabel: String? = null,
+    /** Stretched, part 2: "I can hold mail and call alerts that can wait till tomorrow 21:30." */
+    val holdLine: String? = null,
 ) {
     val lightenLabel: String? get() = if (moves.isEmpty()) null else FeelingRules.LIGHTEN
     val dropLabel: String? get() = drop?.let { "Someday for “${it.title}”" }
@@ -51,7 +55,14 @@ object FeelingRules {
 
     val CHOICES: List<Feeling> = Feeling.entries
 
-    fun offer(board: WeekBoard, feeling: Feeling, today: Long, calendar: LocalCalendar): FeelingOffer {
+    /**
+     * [nowMs] given (part 2), Stretched also offers to hold the alerts that can wait for a day ([AlertHoldRules]),
+     * unless [holding] already.
+     */
+    fun offer(
+        board: WeekBoard, feeling: Feeling, today: Long, calendar: LocalCalendar,
+        nowMs: Long? = null, holding: Boolean = false,
+    ): FeelingOffer {
         if (feeling == Feeling.GOOD) return FeelingOffer(feeling, "Good to hear. Tomorrow stays as it is.", emptyList())
         val tomorrow = today + 1
         val column = board.day(tomorrow)
@@ -78,7 +89,12 @@ object FeelingRules {
                 .firstOrNull()
                 ?.let { FeelingMove(it.id, it.title, null, "Someday") }
         } else null
-        return FeelingOffer(feeling, line(feeling, moves, drop, column != null && column.openCards.isNotEmpty()), moves, drop)
+        val hold = feeling == Feeling.STRETCHED && nowMs != null && !holding
+        return FeelingOffer(
+            feeling, line(feeling, moves, drop, column != null && column.openCards.isNotEmpty()), moves, drop,
+            holdLabel = if (hold) AlertHoldRules.offerLabel(nowMs!!, calendar) else null,
+            holdLine = if (hold) AlertHoldRules.offerLine(nowMs!!, calendar) else null,
+        )
     }
 
     /** Tomorrow's movable cards, the first to go first. */

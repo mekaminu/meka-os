@@ -78,6 +78,45 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun shatteredToAdaKeepsTheFeelingAndStretchedHoldsTheAlertsThatCanWait() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        fold.tick()
+        val tomorrow = fold.weekBoard.value.todayEpochDay + 1
+        listOf("Book MOT", "Fix the gate").forEach { fold.addOnBoard(it, tomorrow)!! }
+
+        val a = (fold.askMeka("I'm shattered") as os.meka.core.domain.AskOutcome.Answered).answer
+        assertTrue(a.text.startsWith("Sorry to hear it. Let's go easy tomorrow: move "), a.text)
+        assertEquals(os.meka.core.domain.FeelingAskRules.link, a.help)
+        assertTrue(a.cards.isEmpty())
+        assertEquals(os.meka.core.domain.Feeling.TIRED, fold.feelingToday())
+        // The words alone move nothing.
+        assertEquals(2, fold.weekBoard.value.day(tomorrow)!!.openCards.size)
+
+        val s = (fold.askMeka("I've got too much on") as os.meka.core.domain.AskOutcome.Answered).answer
+        assertTrue(s.text.contains("I can hold mail and call alerts that can wait till tomorrow"), s.text)
+        val offer = fold.feelingOffer(os.meka.core.domain.Feeling.STRETCHED)
+        assertTrue(offer.holdLabel!!.startsWith("Hold alerts till tomorrow "))
+        assertFalse(fold.alertsHeldNow())
+        assertNull(fold.alertHoldLine())
+
+        assertTrue(fold.holdAlerts().startsWith("Mail and call alerts held till tomorrow "))
+        assertTrue(fold.alertsHeldNow())
+        assertNull(fold.feelingOffer(os.meka.core.domain.Feeling.STRETCHED).holdLabel)
+        // This device only.
+        fold.syncNow(); mac.syncNow()
+        assertNull(mac.alertHoldLine())
+        assertFalse(mac.alertsHeldNow())
+
+        now += os.meka.core.domain.AlertHoldRules.HOLD_MS
+        assertNull(fold.alertHoldLine())
+        assertFalse(fold.alertsHeldNow())
+        now -= os.meka.core.domain.AlertHoldRules.HOLD_MS
+        fold.holdAlerts()
+        assertEquals(os.meka.core.domain.AlertHoldRules.RESUMED, fold.resumeAlerts())
+        assertFalse(fold.alertsHeldNow())
+    }
+
+    @Test
     fun todayFollowsTheOrderSetOnTheBoardOnBothDevices() = runTest {
         val fold = core("android"); val mac = core("mac")
         val mot = fold.addTask("Book MOT")

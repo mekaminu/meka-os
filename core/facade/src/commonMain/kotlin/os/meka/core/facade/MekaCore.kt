@@ -2151,12 +2151,12 @@ class MekaCore(
         val today = todayEpochDay()
         val log = os.meka.core.domain.FeelingRules.record(feelingLog(), today, feeling)
         runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.FeelingRules.KEY, os.meka.core.domain.FeelingRules.encode(log)) } }
-        os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, today, ZoneCalendar(timeZone))
+        os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, today, ZoneCalendar(timeZone), nowMs(), holdingNow())
     }
 
     /** What Navilife offers for [feeling] now (the pane reopened), without keeping anything. */
     suspend fun feelingOffer(feeling: os.meka.core.domain.Feeling): os.meka.core.domain.FeelingOffer = onCore {
-        os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, todayEpochDay(), ZoneCalendar(timeZone))
+        os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, todayEpochDay(), ZoneCalendar(timeZone), nowMs(), holdingNow())
     }
 
     /**
@@ -2190,6 +2190,79 @@ class MekaCore(
         true
     }
     private var lightenUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
+
+    // ---- Week board, item (11) part 2: "I'm shattered" to Ada, and Stretched holds the alerts that can wait ----
+
+    private val _alertHold = MutableStateFlow<Long?>(null)
+    private var alertHoldLoaded = false
+
+    /** When the Stretched hold on this device ends (ms), or null; kept on this device only, never synced. */
+    val alertHold: StateFlow<Long?> get() = _alertHold
+
+    private fun loadAlertHold(): Long? {
+        if (!alertHoldLoaded) {
+            alertHoldLoaded = true
+            _alertHold.value = os.meka.core.domain.AlertHoldRules.decode(
+                runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.AlertHoldRules.KEY) } }.getOrNull(),
+            )
+        }
+        val until = _alertHold.value
+        if (until != null && !os.meka.core.domain.AlertHoldRules.active(until, nowMs())) saveAlertHold(null)
+        return _alertHold.value
+    }
+
+    private fun saveAlertHold(until: Long?) {
+        _alertHold.value = until
+        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.AlertHoldRules.KEY, os.meka.core.domain.AlertHoldRules.encode(until)) } }
+    }
+
+    private fun holdingNow(): Boolean = os.meka.core.domain.AlertHoldRules.active(loadAlertHold(), nowMs())
+
+    /**
+     * Whether the Stretched hold is on right now, from any thread (the Fold's call notes ask before they post). False
+     * until the core has first read it ([alertHoldLine], [governNotifications] or the first refresh).
+     */
+    fun alertsHeldNow(): Boolean = os.meka.core.domain.AlertHoldRules.active(_alertHold.value, nowMs())
+
+    /** "Mail and call alerts held till tomorrow 21:30 · urgent calls and Always notify still come through", or null. */
+    suspend fun alertHoldLine(): String? = onCore {
+        val until = loadAlertHold() ?: return@onCore null
+        os.meka.core.domain.AlertHoldRules.heldLine(until, nowMs(), ZoneCalendar(timeZone))
+    }
+
+    /**
+     * Stretched's "Hold alerts till tomorrow 21:30", on his tap: for a day the mail and call alerts that can wait don't
+     * ring on this device ([os.meka.core.domain.AlertHoldRules]). Returns the held line; [resumeAlerts] ends it (Undo).
+     */
+    suspend fun holdAlerts(): String = onCore {
+        val now = nowMs()
+        val until = os.meka.core.domain.AlertHoldRules.untilFrom(now)
+        saveAlertHold(until)
+        os.meka.core.domain.AlertHoldRules.heldLine(until, now, ZoneCalendar(timeZone))
+    }
+
+    /** Resume (or Undo after Hold alerts): the hold ends now; held notices that still apply post on the next look. */
+    suspend fun resumeAlerts(): String = onCore {
+        loadAlertHold()
+        saveAlertHold(null)
+        os.meka.core.domain.AlertHoldRules.RESUMED
+    }
+
+    /**
+     * "I'm shattered", "I'm knackered", "I've got too much on" typed in Ask or said to Ada
+     * ([os.meka.core.domain.FeelingAskRules.request]): kept as today's feeling on this device, like tapping it on Shut
+     * down the day, and answered with the offer (no AI, no card) with Open Shut down the day under it, where the taps
+     * are. Nothing moves from the words. Null for anything else.
+     */
+    private suspend fun feelingAsk(q: String): os.meka.core.domain.AskOutcome? {
+        val f = os.meka.core.domain.FeelingAskRules.request(q) ?: return null
+        val offer = setFeeling(f)
+        return os.meka.core.domain.AskOutcome.Answered(
+            os.meka.core.domain.AskAnswer(
+                os.meka.core.domain.FeelingAskRules.answer(offer), emptyList(), help = os.meka.core.domain.FeelingAskRules.link,
+            ),
+        )
+    }
 
     // ---- Week board, slice 4: the week's lane and the Someday tray ----
 
@@ -5057,7 +5130,10 @@ class MekaCore(
      */
     suspend fun governNotifications(state: String?, device: DeviceAlerts): GovernorResult = onCore {
         refresh()
-        Governor.evaluate(currentNotices(), notifyPrefs.settings(), device, GovernorState.decode(state), nowMs(), ZoneCalendar(timeZone))
+        Governor.evaluate(
+            currentNotices(), notifyPrefs.settings(), device, GovernorState.decode(state), nowMs(), ZoneCalendar(timeZone),
+            holdUntilMs = loadAlertHold(),
+        )
     }
 
     /**
@@ -8621,6 +8697,9 @@ class MekaCore(
         if (!beyondHelp) autonomyAsk(q)?.let { return it }
         // AI layer completeness: "end my fast", "resume my fast", "how long left on my fast?" are done and answered here.
         if (!beyondHelp) fastAsk(q)?.let { return it }
+        // Week board (11) part 2: "I'm shattered", "I've got too much on" are kept as today's feeling and answered with
+        // the offer to lighten tomorrow (and, stretched, to hold the alerts that can wait), the taps in Shut down the day.
+        if (!beyondHelp) feelingAsk(q)?.let { return it }
         if (!beyondHelp) readingAsk(q)?.let { return it }
         // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
         if (!beyondHelp) directAdd(q)?.let { return it }
@@ -10637,6 +10716,8 @@ class MekaCore(
     }
 
     private fun refreshOnce() {
+        // Week board (11) part 2: the Stretched hold is read once, so the Fold's call notes can ask from any thread.
+        if (!alertHoldLoaded) loadAlertHold()
         // Rule 13, release 2: the children and clubs the rules name come from About you, never the code.
         if (os.meka.core.domain.Household.use(aboutYou.profile()) && _family.value != null) familyNow(_family.value?.problem)
         // Mail finds, slice 3: with "Renewals and promises from mail" on, new finds add themselves first.

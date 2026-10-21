@@ -339,6 +339,8 @@ struct FeelingSection: View {
     let palette: MekaPalette
     @State private var picked: String?
     @State private var offer: FeelingOffer?
+    /// Part 2: while Stretched holds the alerts that can wait, the sheet says so with Resume.
+    @State private var held: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -355,6 +357,9 @@ struct FeelingSection: View {
             if let o = offer {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(o.line).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    if let hl = o.holdLine {
+                        Text(hl).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    }
                     Text(FeelingRules.shared.pickedLine(f: o.feeling)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     HStack(spacing: MekaSpace.xs) {
                         if let label = o.lightenLabel, let name = picked {
@@ -364,7 +369,10 @@ struct FeelingSection: View {
                             let id = drop.taskId
                             chip(label, selected: false) { model.somedayOnBoard(id); close() }
                         }
-                        if o.lightenLabel != nil || o.drop != nil {
+                        if let label = o.holdLabel {
+                            chip(label, selected: false) { model.holdAlerts(); close() }
+                        }
+                        if o.lightenLabel != nil || o.drop != nil || o.holdLabel != nil {
                             chip(FeelingRules.shared.LEAVE, selected: false) { close() }
                         }
                     }
@@ -372,8 +380,23 @@ struct FeelingSection: View {
                 }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
+            if let line = held {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Spacer(minLength: MekaSpace.xs)
+                    Button(AlertHoldRules.shared.RESUME) {
+                        Task {
+                            await model.resumeAlerts()
+                            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { held = nil }
+                        }
+                    }
+                    .buttonStyle(.plain).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
+                .transition(.opacity)
+            }
         }
         .task {
+            held = await model.alertHoldLine()
             guard let name = await model.feelingToday() else { return }
             picked = name
             offer = await model.feelingOffer(name)
