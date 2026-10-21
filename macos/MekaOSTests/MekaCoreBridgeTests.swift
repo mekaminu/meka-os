@@ -3294,6 +3294,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertNil(accepted)
         let undidPlan = try await core.undoWeekPlan()
         XCTAssertFalse(undidPlan.boolValue)
+        // Item (6) part 2: "plan my week" said to Ada on the Mac opens Plan your week; the card's words reach Swift.
+        let planSaid = TalkFlow.shared.heard(s: TalkFlow.shared.start().session, utterance: "plan my week",
+                                             places: TalkOpenRules.shared.MAC)
+        XCTAssertEqual((planSaid.effects.first as? TalkEffectSpeak)?.text, PlanWeekNudgeRules.shared.OPENING)
+        XCTAssertEqual((TalkFlow.shared.spoke(s: planSaid.session).effects.last as? TalkEffectOpen)?.place, TalkPlace.planWeek)
+        XCTAssertTrue(PlanWeekNudgeRules.shared.isRequest(q: "let's plan next week"))
+        XCTAssertEqual(PlanWeekNudgeRules.shared.YES, "Plan now")
         // Slice 6b-2a: Reply, sent by the server only after Send.
         let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
         XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)

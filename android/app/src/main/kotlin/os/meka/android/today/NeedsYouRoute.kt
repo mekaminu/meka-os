@@ -222,6 +222,11 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                 }
                 // Review opens its own list, slice 1: the card's own sheet (Empty Junk: who, ticks, Approve).
                 DecisionEffect.OPEN_REVIEW -> { junkReview.value = card.id }
+                // Week board item (6) part 2: Plan now on Sunday's card opens Calendar on the Board with Plan your week up.
+                DecisionEffect.OPEN_PLAN_WEEK -> (context as? os.meka.android.MekaApplication)?.let { app ->
+                    app.openDestination.value = os.meka.android.shell.ShellDestination.CALENDAR
+                    app.openPlanWeek.value = true
+                }
                 DecisionEffect.SET_ASIDE -> {
                     aside.value = aside.value - card.id + card.id
                     undo.show(NeedsYouStackRules.message(card, move)) { aside.value = aside.value - card.id }

@@ -472,4 +472,40 @@ class WeekBoardFacadeTest {
         assertNull(fold.acceptWeekPlan(chosen.choose(gate, null)))
     }
 
+    @Test
+    fun sundaysPlanYourWeekCardOpensTheFlowAndLeavesEverywhereOncePlanned() = runTest {
+        now = 1_792_953_000_000L // Sun 25 Oct 2026, 18:30 in London
+        val fold = core("android"); val mac = core("mac")
+        val mot = fold.addTask("Book MOT")
+        fold.tick()
+        val monday = fold.weekBoard.value.weeks[0].startEpochDay
+        fold.parkOnBoard(mot, monday, 0)
+        fold.tick()
+        val card = fold.needsYouStack.value.cards.single { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK }
+        assertEquals("Plan next week", card.title)
+        assertEquals("Sunday evening · 1 task to place · about 5 minutes", card.why)
+        fold.syncNow(); mac.syncNow(); mac.tick()
+        assertTrue(mac.needsYouStack.value.cards.any { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK })
+
+        // Typed, it's answered with the spread; nothing moves.
+        val typed = (fold.askMeka("plan my week") as os.meka.core.domain.AskOutcome.Answered).answer
+        assertTrue(typed.text.startsWith("Plan next week, "), typed.text)
+        assertEquals(listOf(mot), fold.weekBoard.value.weeks[0].lane.map { it.id })
+
+        // Accepted on the Fold: gone there and on the Mac; Undo brings it back.
+        assertTrue(fold.acceptWeekPlan(fold.planWeek())!!.startsWith("Week planned · 1 task"))
+        fold.tick()
+        assertTrue(fold.needsYouStack.value.cards.none { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK })
+        fold.syncNow(); mac.syncNow(); mac.tick()
+        assertTrue(mac.needsYouStack.value.cards.none { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK })
+        assertTrue(fold.undoWeekPlan())
+        fold.tick()
+        assertTrue(fold.needsYouStack.value.cards.any { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK })
+
+        // Monday noon it has gone on its own.
+        now += 17 * 3_600_000L + 31 * 60_000L
+        fold.tick()
+        assertTrue(fold.needsYouStack.value.cards.none { it.kind == os.meka.core.domain.DecisionKind.PLAN_WEEK })
+    }
+
 }

@@ -387,6 +387,8 @@ final class TalkController {
             else if open.place == TalkPlace.reflect { model?.openReflectionFromTalk() }
             // "Shut down the day" (Done for the day, completeness 2): Today with the shutdown sheet up.
             else if open.place == TalkPlace.shutdown { model?.openShutdownFromTalk() }
+            // "Plan my week" (Week board item (6) part 2): Calendar on the Board with Plan your week up.
+            else if open.place == TalkPlace.planWeek { model?.openPlanWeek() }
         } else if let openHelp = effect as? TalkEffectOpenHelp {
             // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens its sheet, as the
             // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.

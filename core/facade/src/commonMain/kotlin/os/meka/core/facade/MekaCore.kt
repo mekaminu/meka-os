@@ -209,6 +209,8 @@ class MekaCore(
     private val kidChores = os.meka.core.domain.KidChores(replica)
     private val discordStore = os.meka.core.domain.DiscordStore(replica)
     private val weekAheadSettings = os.meka.core.domain.WeekAheadSettings(replica)
+    /** Week board item (6) part 2: the week last planned with Accept plan (synced), so Sunday's card leaves everywhere. */
+    private val planWeekMarks = os.meka.core.domain.PlanWeekMarks(replica)
     private val autonomy = os.meka.core.domain.Autonomy(replica, nowMs)
     private val goals = Goals(replica, ids::next, nowMs, ZoneCalendar(timeZone))
     private val fasting = Fasting(replica, ids::next, nowMs, ZoneCalendar(timeZone))
@@ -2292,10 +2294,37 @@ class MekaCore(
      * Plan your week ([os.meka.core.domain.PlanWeekRules]): this week (next week on a Sunday) as a guided flow — what's
      * left from last week, what's fixed, the week's goals and a suggested spread. Nothing moves until [acceptWeekPlan].
      */
-    suspend fun planWeek(): os.meka.core.domain.WeekPlan = onCore {
+    suspend fun planWeek(): os.meka.core.domain.WeekPlan = onCore { planWeekFrom(boardNow()) }
+
+    private fun planWeekFrom(board: os.meka.core.domain.WeekBoard): os.meka.core.domain.WeekPlan {
         val cal = ZoneCalendar(timeZone)
         val shown = os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) }
-        os.meka.core.domain.PlanWeekRules.plan(boardNow(), shown, cal.epochDayOf(nowMs()), cal)
+        return os.meka.core.domain.PlanWeekRules.plan(board, shown, cal.epochDayOf(nowMs()), cal)
+    }
+
+    /**
+     * Item (6) part 2: Sunday's Plan your week card for Needs you ([os.meka.core.domain.PlanWeekNudgeRules.card]), from
+     * the week ahead's time until Monday noon, unless that week is already planned; null otherwise.
+     */
+    private fun planWeekCard(board: os.meka.core.domain.WeekBoard): os.meka.core.domain.DecisionCard? {
+        val cal = ZoneCalendar(timeZone)
+        val setting = weekAheadSettings.setting()
+        val week = os.meka.core.domain.PlanWeekNudgeRules.weekDue(nowMs(), cal, setting) ?: return null
+        val done = planWeekMarks.doneWeek()
+        if (done == week) return null
+        return os.meka.core.domain.PlanWeekNudgeRules.card(planWeekFrom(board), nowMs(), cal, setting, done)
+    }
+
+    /**
+     * "Plan my week" typed in Ask ([os.meka.core.domain.PlanWeekNudgeRules.isRequest]): answered here with the
+     * suggested spread and where to accept it, no AI and no card; nothing moves. (Said to Ada it opens the flow.)
+     */
+    private suspend fun planWeekAsk(q: String): os.meka.core.domain.AskOutcome? {
+        if (!os.meka.core.domain.PlanWeekNudgeRules.isRequest(q)) return null
+        val plan = onCore { planWeekFrom(boardNow()) }
+        return os.meka.core.domain.AskOutcome.Answered(
+            os.meka.core.domain.AskAnswer(os.meka.core.domain.PlanWeekNudgeRules.answer(plan, helpOnMac), emptyList()),
+        )
     }
 
     /**
@@ -2318,6 +2347,8 @@ class MekaCore(
             days += day
         }
         planUndo = undos
+        // Item (6) part 2: the week is planned, so Sunday's card leaves on every device (Undo brings it back).
+        planMarkUndo = if (undos.isEmpty()) null else planWeekMarks.mark(plan.weekStart) ?: -1L
         if (undos.isEmpty()) null else os.meka.core.domain.PlanWeekRules.acceptedLine(undos.size, days.size)
     }
 
@@ -2325,11 +2356,15 @@ class MekaCore(
     suspend fun undoWeekPlan(): Boolean = onCore {
         val undos = planUndo
         planUndo = emptyList()
+        planMarkUndo?.let { before -> planWeekMarks.mark(before.takeIf { it >= 0 }) }
+        planMarkUndo = null
         if (undos.isEmpty()) return@onCore false
         undos.asReversed().forEach { u -> if (tasks.undoBoard(u)) followBlocks(listOf(u.taskId)) }
         true
     }
     private var planUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
+    /** The planned week before the last Accept (-1: none), put back by [undoWeekPlan]; null when nothing to put back. */
+    private var planMarkUndo: Long? = null
 
     // ---- Week board, item (11) part 2: "I'm shattered" to Ada, and Stretched holds the alerts that can wait ----
 
@@ -8890,6 +8925,8 @@ class MekaCore(
         // Week board (11) part 2: "I'm shattered", "I've got too much on" are kept as today's feeling and answered with
         // the offer to lighten tomorrow (and, stretched, to hold the alerts that can wait), the taps in Shut down the day.
         if (!beyondHelp) feelingAsk(q)?.let { return it }
+        // Week board item (6) part 2: "plan my week" typed is answered with the suggested spread and where to accept it.
+        if (!beyondHelp) planWeekAsk(q)?.let { return it }
         if (!beyondHelp) readingAsk(q)?.let { return it }
         // "The mic should just add it", slice 1: "add …", "remind me to …", "put … on the shopping" are done now.
         if (!beyondHelp) directAdd(q)?.let { return it }
@@ -11269,6 +11306,8 @@ class MekaCore(
             if (_today.value.pressure != soon) _today.value = _today.value.copy(pressure = soon)
             _brief.value = _brief.value.let { b -> b.copy(pressureLine = soon?.line, story = b.story.copy(pressure = soon?.spoken)) }
         }
+        // Item (6) part 2: Sunday evening's Plan your week card in Needs you, until Monday noon or a plan is accepted.
+        _needsYouStack.value = os.meka.core.domain.NeedsYouStackRules.withPlanWeek(_needsYouStack.value, planWeekCard(_board.value))
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()
         _editsSeen.value = editsNow

@@ -37,9 +37,11 @@ enum class DecisionEffect { COMPLETE_TASK, SNOOZE_TASK, OPEN_TASK, OPEN_LISTS, S
     /** Clean-ups (2026-10-19): Allow on a new phone or Mac asking to join ([DeviceJoinRules]); the card's id is the ask. */
     ALLOW_DEVICE,
     /** Not this one on a new device's ask: the server refuses it. */
-    REFUSE_DEVICE }
+    REFUSE_DEVICE,
+    /** Week board item (6) part 2: opens Plan your week (Calendar → Board's guided flow); nothing moves until Accept. */
+    OPEN_PLAN_WEEK }
 
-enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT, MAIL_CLEANUP, DEVICE_JOIN }
+enum class DecisionKind { CONFLICT, OVERDUE, DUE_TODAY, LISTS, CREDIT, MAIL_CLEANUP, DEVICE_JOIN, PLAN_WEEK }
 
 data class DecisionCard(
     /** The task's id, or [NeedsYouStackRules.LISTS_ID]. */
@@ -129,6 +131,17 @@ object NeedsYouStackRules {
         return NeedsYouStack(cards)
     }
 
+    /**
+     * [stack] with Sunday's Plan your week card ([PlanWeekNudgeRules.card]) after the task and credit cards, before the
+     * mail clean-ups and the lists card; any earlier one replaced, none when [card] is null.
+     */
+    fun withPlanWeek(stack: NeedsYouStack, card: DecisionCard?): NeedsYouStack {
+        val rest = stack.cards.filter { it.kind != DecisionKind.PLAN_WEEK }
+        if (card == null) return if (rest.size == stack.cards.size) stack else NeedsYouStack(rest)
+        val at = rest.indexOfFirst { it.kind == DecisionKind.MAIL_CLEANUP || it.kind == DecisionKind.LISTS }.let { if (it < 0) rest.size else it }
+        return NeedsYouStack(rest.take(at) + card + rest.drop(at))
+    }
+
     private fun card(item: NeedsYouItem, todayDay: Long, calendar: LocalCalendar): DecisionCard {
         val t = item.task
         return when (item.reason) {
@@ -191,7 +204,8 @@ object NeedsYouStackRules {
         DecisionEffect.APPROVE_BACKLOG -> MailBacklogRules.APPROVED_BAR
         DecisionEffect.ALLOW_DEVICE -> DeviceJoinRules.ALLOWED_BAR
         DecisionEffect.REFUSE_DEVICE -> DeviceJoinRules.REFUSED_BAR
-        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK, DecisionEffect.OPEN_MAIL, DecisionEffect.OPEN_REVIEW -> card.title
+        DecisionEffect.OPEN_TASK, DecisionEffect.OPEN_LISTS, DecisionEffect.OPEN_LINK, DecisionEffect.OPEN_MAIL, DecisionEffect.OPEN_REVIEW,
+        DecisionEffect.OPEN_PLAN_WEEK -> card.title
     }
 
     /** The hint under the top card: "→ Done · ← Tomorrow · ↑ Open". */

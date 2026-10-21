@@ -15,7 +15,7 @@ package os.meka.core.domain
  * doesn't appear on the Fold 8") only on a device that has one: the Fold asks with [TalkOpenRules.FOLD]; the Mac keeps
  * [TalkOpenRules.DEFAULT], so "bedside clock" there is a question like any other.
  */
-enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT, SHUTDOWN }
+enum class TalkPlace { PLAN, BEDSIDE, INBOX, CAR, VOICE_NOTE, REFLECT, SHUTDOWN, PLAN_WEEK }
 
 object TalkOpenRules {
     /** What MEKA says before the planner opens. */
@@ -39,19 +39,19 @@ object TalkOpenRules {
     const val OPENED_SHUTDOWN = "Opened Shut down the day."
 
     /** What a device without a bedside clock (the Mac) can open. */
-    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT, TalkPlace.SHUTDOWN)
+    val DEFAULT: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK)
 
     /**
      * The Fold: the planner, the bedside clock, the ten-minute inbox and Find my car (car and parking, slice 1: where
      * the car is parked is kept on the phone only, so the Mac has nothing to open).
      */
-    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN)
+    val FOLD: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.BEDSIDE, TalkPlace.INBOX, TalkPlace.CAR, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK)
 
     /**
      * The Mac (voice notes into actions, slice 3): the planner, the ten-minute inbox and a voice note, which the Mac now
      * records too; no bedside clock and no Find my car (the parked spot stays on the phone).
      */
-    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN)
+    val MAC: Set<TalkPlace> = setOf(TalkPlace.PLAN, TalkPlace.INBOX, TalkPlace.VOICE_NOTE, TalkPlace.REFLECT, TalkPlace.SHUTDOWN, TalkPlace.PLAN_WEEK)
 
     /** The Galaxy Watch's Capture (voice notes into actions, slice 4): only a voice note opens from what it hears. */
     val WATCH: Set<TalkPlace> = setOf(TalkPlace.VOICE_NOTE)
@@ -149,6 +149,31 @@ object TalkOpenRules {
         add(listOf("evening", "shutdown")); add(listOf("my", "evening", "shutdown")); add(listOf("done", "today")); add(listOf("i'm", "done", "today"))
     }
 
+    /**
+     * Week board item (6) part 2: "plan my week", "let's plan next week", "plan the week ahead", "help me plan out my
+     * week", "weekly plan", "open plan your week", "sort out my week" (what's left once [DROP] is gone). Opens Plan your
+     * week; nothing moves until Accept plan there. "Plan my week around the match" has more in it and stays a question.
+     */
+    private val PLAN_WEEK: Set<List<String>> = buildSet {
+        val weeks = listOf(
+            listOf("my", "week"), listOf("the", "week"), listOf("week"), listOf("next", "week"), listOf("this", "week"),
+            listOf("my", "next", "week"), listOf("the", "next", "week"), listOf("the", "week", "ahead"), listOf("my", "week", "ahead"),
+            listOf("week", "ahead"), listOf("the", "coming", "week"), listOf("my", "coming", "week"), listOf("the", "weeks"),
+        )
+        for (pre in listOf(emptyList(), listOf("open"), listOf("start"), listOf("time"), listOf("do"))) {
+            for (verb in listOf(listOf("plan"), listOf("sort"), listOf("organise"), listOf("organize"), listOf("map"))) {
+                weeks.forEach { add(pre + verb + it); add(pre + verb + it + "please") }
+            }
+        }
+        for (pre in listOf(emptyList(), listOf("open"), listOf("start"), listOf("do"), listOf("my"), listOf("the"))) {
+            for (n in listOf(listOf("weekly", "plan"), listOf("week", "plan"), listOf("weekly", "planning"), listOf("week's", "plan"))) {
+                if (pre.isEmpty() && n.first() == "week") continue // "week plan" alone is too little
+                add(pre + n)
+            }
+        }
+        add(listOf("plan", "your", "week")); add(listOf("open", "plan", "your", "week"))
+    }
+
     /** "Bedside clock", "open the bedside clock", "show me the bedside clock", "night clock", "bedside mode". */
     private val BEDSIDE = setOf(
         listOf("bedside", "clock"), listOf("the", "bedside", "clock"), listOf("open", "bedside", "clock"),
@@ -159,7 +184,7 @@ object TalkOpenRules {
 
     /** Words around the request that change nothing ("ok MEKA, can you plan my day for me please"). */
     private val DROP = setOf(
-        "please", "meka", "navilife", "hey", "ok", "okay", "yes", "yeah", "yep", "sure", "go", "ahead", "and", "then", "so", "now", "just",
+        "please", "meka", "navilife", "ada", "hey", "ok", "okay", "yes", "yeah", "yep", "sure", "go", "ahead", "and", "then", "so", "now", "just",
         "um", "umm", "uh", "er", "erm", "can", "could", "would", "will", "you", "me", "for", "let's", "lets", "let", "us",
         "i", "want", "to", "like", "help", "need", "out",
     )
@@ -194,6 +219,7 @@ object TalkOpenRules {
             ws in VOICE_NOTE && TalkPlace.VOICE_NOTE in places -> TalkPlace.VOICE_NOTE
             ws in REFLECT && TalkPlace.REFLECT in places -> TalkPlace.REFLECT
             ws in SHUTDOWN && TalkPlace.SHUTDOWN in places -> TalkPlace.SHUTDOWN
+            ws in PLAN_WEEK && TalkPlace.PLAN_WEEK in places -> TalkPlace.PLAN_WEEK
             else -> null
         }
     }
@@ -207,6 +233,7 @@ object TalkOpenRules {
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENING
         TalkPlace.REFLECT -> ReflectionRules.OPENING
         TalkPlace.SHUTDOWN -> OPENING_SHUTDOWN
+        TalkPlace.PLAN_WEEK -> PlanWeekNudgeRules.OPENING
     }
 
     /** What the conversation remembers about opening [place]. */
@@ -218,6 +245,7 @@ object TalkOpenRules {
         TalkPlace.VOICE_NOTE -> VoiceNoteRules.OPENED
         TalkPlace.REFLECT -> ReflectionRules.OPENED
         TalkPlace.SHUTDOWN -> OPENED_SHUTDOWN
+        TalkPlace.PLAN_WEEK -> PlanWeekNudgeRules.OPENED
     }
 }
 

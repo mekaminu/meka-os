@@ -299,6 +299,8 @@ private struct ShellSheetsB: ViewModifier {
             // The brief and the shutdown open from Today's cards and from Ask's More, so they live on the shell too.
             .sheet(isPresented: Binding(get: { model.showBrief }, set: { model.showBrief = $0 })) { BriefSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showShutdown }, set: { model.showShutdown = $0 })) { ShutdownSheet(palette: palette) }
+            // Plan your week (Week board item (6)): from the Board, Sunday's Needs you card and "plan my week".
+            .sheet(isPresented: Binding(get: { model.showPlanWeek }, set: { model.showPlanWeek = $0 })) { PlanWeekSheet(palette: palette) }
             // School (Ask → More): Theo's and Finn's days off, dates and weekly things.
             .sheet(isPresented: Binding(get: { model.showSchool }, set: { model.showSchool = $0 })) { SchoolSheet(palette: palette) }
             // Dinners (Ask → More): favourites, the week's dinners and their shopping (meal plan, slice 1).

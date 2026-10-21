@@ -127,6 +127,12 @@ fun CalendarRoute(core: MekaCore) {
     var board by rememberSaveable { mutableStateOf(false) }
     // Week board item (6): Plan your week, from the Board's header.
     var planning by remember { mutableStateOf(false) }
+    // Item (6) part 2: "plan my week" said to Ada, or Plan now on Sunday's Needs you card, lands here with the pane up.
+    val planApp = androidx.compose.ui.platform.LocalContext.current.applicationContext as? os.meka.android.MekaApplication
+    val askedToPlan = planApp?.openPlanWeek?.collectAsState()?.value ?: false
+    LaunchedEffect(askedToPlan) {
+        if (askedToPlan) { board = true; planning = true; planApp?.openPlanWeek?.value = false }
+    }
     Box(Modifier.fillMaxSize()) {
         Agenda(core, v, handlers, showAgain, addHeader, board, { board = it }, undo, onPlanWeek = { planning = true }) { openEvent = it }
         MekaPane(visible = planning) {

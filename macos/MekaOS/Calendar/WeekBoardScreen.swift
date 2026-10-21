@@ -40,7 +40,6 @@ struct WeekBoardScreen: View {
     @State private var direction = 0
     @State private var target: Int64?
     @State private var trayOpen = false
-    @State private var planning = false
 
     var body: some View {
         let w = board.weeks[min(week, board.weeks.count - 1)]
@@ -54,7 +53,7 @@ struct WeekBoardScreen: View {
                 }
                 Spacer()
                 // Item (6): Plan your week opens the guided sheet.
-                Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); planning = true }
+                Button(PlanWeekRules.shared.OPEN) { MekaHaptics.tick(); model.showPlanWeek = true }
                     .foregroundStyle(palette.accent).font(MekaType.itemMeta)
                     .keyboardShortcut("p", modifiers: [.command, .shift])
                     .help("Plan your week (⇧⌘P)")
@@ -96,7 +95,6 @@ struct WeekBoardScreen: View {
             .animation(MekaMotion.replan(reduced: reduceMotion), value: w.days.map { $0.cards.map(\.id) })
         }
         .background(keyboard)
-        .sheet(isPresented: $planning) { PlanWeekSheet(palette: palette) }
     }
 
     /// Drop-target keys besides a day's epoch day.

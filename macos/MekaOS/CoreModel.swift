@@ -278,6 +278,8 @@ final class CoreModel {
     private(set) var board: WeekBoard?
     /// Which view the Calendar section shows: the agenda (false) or the Board; kept while the app runs.
     var calendarShowsBoard = false
+    /// Plan your week's sheet (Week board item (6)): from the Board's header, Sunday's Needs you card or "plan my week".
+    var showPlanWeek = false
     /// The card picked on the Board (a click), which ⌘← ⌘→ ⌘↑ ⌘↓ move.
     var boardSelectedID: String?
     /// The event whose detail sheet is open (calendar redesign, slice 3), from Today or the Calendar section.
@@ -937,6 +939,15 @@ final class CoreModel {
         showBrief = false
         showPlan = false
         showShutdown = true
+    }
+
+    /// "Plan my week" said to Ada, or Plan now on Sunday's Needs you card (Week board item (6) part 2): Calendar opens
+    /// on the Board with Plan your week up; nothing moves until Accept plan there.
+    func openPlanWeek() {
+        go(to: .calendar, reduced: MotionSetting.reduced)
+        showBrief = false
+        calendarShowsBoard = true
+        showPlanWeek = true
     }
 
     /// "Take me there" said to Talk after a help answer (Ask knows how Navilife works, slice 3): Ask comes forward and
@@ -6510,6 +6521,10 @@ final class CoreModel {
         case .openReview:
             // Review opens its own list, slice 1: the card's own sheet (Empty Junk: who, a tick per sender, Approve).
             openJunkReview(card.id)
+        case .openPlanWeek:
+            // Week board item (6) part 2: Plan now on Sunday's card opens Plan your week over the Board.
+            MekaHaptics.tick()
+            openPlanWeek()
         case .setAside:
             MekaHaptics.light()
             withAnimation(MekaMotion.replan(reduced: reduced)) {

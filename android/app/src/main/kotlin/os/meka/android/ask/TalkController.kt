@@ -368,6 +368,12 @@ class TalkController(
                 os.meka.core.domain.TalkPlace.PLAN -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openPlan?.value = true }
                 // Done for the day, completeness 2: "shut down the day" lands on Today with Shut down the day open.
                 os.meka.core.domain.TalkPlace.SHUTDOWN -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openShutdown?.value = true }
+                // Week board item (6) part 2: "plan my week" opens Calendar on the Board with Plan your week up.
+                os.meka.core.domain.TalkPlace.PLAN_WEEK -> {
+                    val app = context.applicationContext as? os.meka.android.MekaApplication
+                    app?.openDestination?.value = os.meka.android.shell.ShellDestination.CALENDAR
+                    app?.openPlanWeek?.value = true
+                }
                 // Bedside clock slice 1: "bedside clock" said to Talk opens it; ‹ Back leaves it.
                 os.meka.core.domain.TalkPlace.BEDSIDE -> { (context.applicationContext as? os.meka.android.MekaApplication)?.openBedside?.value = true }
                 // Car and parking, slice 1: "where did I park?" opens Ask → Life → Car with Find my car open.
