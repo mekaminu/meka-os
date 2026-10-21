@@ -5219,6 +5219,8 @@ class MekaCore(
         val board = route.commute(officeToday(), now, cal)?.let { route.liveBoard(lineStatus.snapshot(), it, now) }
         val train = board?.let { route.upcoming(it, now, cal, n = 1).firstOrNull() }
         val trainAway = train?.let { d -> ((if (d.cancelled) d.depMin else (d.expMin ?: d.depMin)) - minute).mod(1440) }
+        // The orb says hello like a person: a different opener each tap, with his name, chosen here (no AI wait).
+        val opener = helloOpener(now, cal, welcome)
         os.meka.core.domain.HelloRules.greeting(
             os.meka.core.domain.HelloFacts(
                 minuteOfDay = minute,
@@ -5234,8 +5236,43 @@ class MekaCore(
                 dueToday = cards.filter { it.kind == os.meka.core.domain.DecisionKind.DUE_TODAY }.map { it.title },
                 quiet = _notifySettings.value.quiet.isQuietAt(now, cal),
                 welcome = welcome,
+                opener = opener,
             ),
         )
+    }
+
+    /** This device's [os.meka.core.domain.HelloOpenerMemory]; empty when none or unreadable. Caller is on the core. */
+    private fun helloOpenerMemory(): os.meka.core.domain.HelloOpenerMemory = os.meka.core.domain.HelloOpeners.decode(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.HelloOpeners.KEY) } }.getOrNull(),
+    )
+
+    /** Whether Ada already introduced herself today on this device (the hello's or the companion's first). Caller is on the core. */
+    private fun adaIntroducedToday(day: Long): Boolean = os.meka.core.domain.AdaRules.dayOf(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.AdaRules.INTRO_KEY) } }.getOrNull(),
+    ) == day
+
+    /**
+     * The orb says hello like a person: picks this tap's opener ([os.meka.core.domain.HelloOpeners.pick]), keeps it
+     * among the recent ones on this device, marks Ada's introduction for the day when it is the first hello, and makes
+     * the next openers ready in Ada's voice in the background. Caller is on the core.
+     */
+    private fun helloOpener(now: Long, cal: ZoneCalendar, welcome: Boolean): os.meka.core.domain.HelloOpener {
+        val o = os.meka.core.domain.HelloOpeners
+        val day = cal.epochDayOf(now)
+        val memory = helloOpenerMemory()
+        val moment = o.moment(cal.minuteOfDay(now), day, now, memory, adaIntroducedToday(day), welcome)
+        val opener = o.pick(moment, memory.recent, day)
+        runCatching {
+            localStore.transaction {
+                localStore.setLocalValue(o.KEY, o.encode(o.said(memory, opener, now)))
+                if (moment.first) localStore.setLocalValue(os.meka.core.domain.AdaRules.INTRO_KEY, day.toString())
+            }
+        }
+        if (speechApi != null && warmedName != null) {
+            val w = warmedWelcome
+            scope.launch { runCatching { warmHello(w) } }
+        }
+        return opener
     }
 
     /**
@@ -9657,7 +9694,10 @@ class MekaCore(
             // One name everywhere: the hello that asks his name is ready too while it would still ask.
             val ask = if (!os.meka.core.domain.CallNameRules.asks(name, nameAskedHere || aboutYou.nameAsked())) emptyList()
             else listOf(os.meka.core.domain.CallNameRules.askGreeting(minute, welcome).spoken)
-            ask + os.meka.core.domain.HelloRules.warmLines(minute, name, welcome)
+            // The orb says hello like a person: the openers the next taps would say (now, in an hour, a quick second tap).
+            val now = nowMs()
+            val day = ZoneCalendar(timeZone).epochDayOf(now)
+            ask + os.meka.core.domain.HelloOpeners.warm(minute, day, now, helloOpenerMemory(), adaIntroducedToday(day), welcome, name)
         }
         lines.forEach { if (!speechPrefetch(it)) return }
         // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.

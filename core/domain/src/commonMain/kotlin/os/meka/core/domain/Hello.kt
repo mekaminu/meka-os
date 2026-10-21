@@ -29,6 +29,11 @@ data class HelloFacts(
     val quiet: Boolean = false,
     /** Slice 3: the Mac's welcome back after a while away ([WelcomeBackRules]): "Welcome back, Meka." opens it. */
     val welcome: Boolean = false,
+    /**
+     * The orb says hello like a person: the opener chosen for this tap ([HelloOpeners.pick]). With it the greeting is
+     * the opener, at most one touch from his day, then the opener's question; without it the plain template.
+     */
+    val opener: HelloOpener? = null,
 )
 
 enum class HelloKind { NEEDS_YOU, EVENT, TRAIN, PARTNER, DUE }
@@ -119,7 +124,14 @@ object HelloRules {
         return (clear.mapNotNull { it.firstOrNull() } + back + clear.flatMap { it.drop(1) }).distinct()
     }
 
+    /** With an opener, at most this many things from his day: one light touch, the rest only if he asks. */
+    const val OPENER_POINTS = 1
+
     fun greeting(f: HelloFacts): HelloGreeting {
+        f.opener?.let { o ->
+            val touch = points(f).take(OPENER_POINTS)
+            return HelloGreeting(o.openFor(f.name), touch, o.ask, touch.mapNotNull { HelloCards.card(it.kind, f) })
+        }
         val name = firstName(f.name)
         val opening = (if (f.welcome) WelcomeBackRules.OPENING else salutation(f.minuteOfDay)) + (name?.let { ", $it." } ?: ".")
         val points = points(f)

@@ -80,7 +80,7 @@ class SpeechAheadFacadeTest {
         c.warmHello()
         val asked = server.said.size
         c.warmHello(welcome = true)
-        assertEquals(listOf("Welcome back."), server.said.drop(asked))
+        assertTrue("Welcome back." in server.said.drop(asked), server.said.drop(asked).toString())
     }
 
     @Test

@@ -53,13 +53,13 @@ class CallNameFacadeTest {
         assertEquals("Alex", fold.aboutYouView.value.callName)
         // Every opener has it now, and Today says the same name.
         val hello = fold.hello()
-        assertEquals("Good morning, Alex.", hello.opening)
+        assertTrue("Alex" in hello.opening, hello.opening)
         assertEquals("Good morning, Alex", CallNameRules.todayGreeting(10, fold.aboutYouView.value.callName))
         assertTrue(fold.briefScriptNow().startsWith("Good morning, Alex."))
         // Undo puts it back to empty, and the hello doesn't ask again (it asked once).
         assertTrue(fold.undoAsk(assertIs<AskUndo.PutBackName>(done.undo)))
         assertNull(fold.aboutYouView.value.callName)
-        assertEquals("Good morning.", fold.hello().opening)
+        assertTrue("Alex" !in fold.hello().opening)
         assertNotEquals(CallNameRules.ASK, fold.hello().closing)
         assertTrue(fold.briefScriptNow().startsWith("Good morning. "))
         // The Mac knows it was asked: it doesn't ask again either.
