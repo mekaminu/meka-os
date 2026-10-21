@@ -48,11 +48,24 @@ data class ModelRequest(
     val system: String,
     val turns: List<ModelTurn>,
     val maxTokens: Int = 1024,
+    /**
+     * Talking to Ada like a conversation, slice 3 (prompt caching): how many leading characters of [system] never change
+     * between calls (Ask's long instructions), so the provider can mark them for the model's prompt cache; 0 caches
+     * nothing. What follows them (his name, the voice lines) is sent after, uncached.
+     */
+    val cacheSystemChars: Int = 0,
+    /**
+     * Slice 3 too: how many leading [turns] are the conversation so far, unchanged since the last call (the earlier
+     * questions and answers), so the provider can mark the end of them for the cache; 0 marks none.
+     */
+    val cacheTurns: Int = 0,
 ) {
     init {
         require(FEATURE.matches(feature)) { "feature" }
         require(turns.isNotEmpty() && turns.first().role == ModelTurn.Role.USER) { "turns" }
         require(maxTokens > 0) { "maxTokens" }
+        require(cacheSystemChars in 0..system.length) { "cacheSystemChars" }
+        require(cacheTurns in 0 until turns.size) { "cacheTurns" }
     }
 
     companion object {
@@ -151,6 +164,21 @@ object ModelPrices {
 
     fun costMicroUsd(model: String, inputTokens: Int, outputTokens: Int): Long =
         of(model).let { it.inputMicroUsd * inputTokens + it.outputMicroUsd * outputTokens }
+
+    /**
+     * Talking to Ada like a conversation, slice 3: a call that used the prompt cache. [inputTokens] is every input token
+     * (as [ModelOutcome.Answered.inputTokens] counts them), of which [cacheWriteTokens] were written to the cache (at
+     * 1.25× the input price) and [cacheReadTokens] read from it (at 0.1×); the rest at the input price. Rounded up, so
+     * the meter never under-counts.
+     */
+    fun costMicroUsd(model: String, inputTokens: Int, outputTokens: Int, cacheWriteTokens: Int, cacheReadTokens: Int): Long {
+        val p = of(model)
+        val write = cacheWriteTokens.coerceIn(0, inputTokens)
+        val read = cacheReadTokens.coerceIn(0, inputTokens - write)
+        val plain = (inputTokens - write - read).toLong()
+        val twentieths = p.inputMicroUsd * (20 * plain + 25L * write + 2L * read)
+        return (twentieths + 19) / 20 + p.outputMicroUsd * outputTokens
+    }
 }
 
 /** One month's use of the AI layer, per feature. Counts only: no prompt, answer or anything of Meka's is kept. */
@@ -291,6 +319,10 @@ class AiBudget(
     fun record(feature: String, model: String, inputTokens: Int, outputTokens: Int) =
         meter(feature, inputTokens, outputTokens, ModelPrices.costMicroUsd(model, inputTokens, outputTokens))
 
+    /** As [record], for a call that wrote to or read from the prompt cache (priced by [ModelPrices.costMicroUsd]). */
+    fun record(feature: String, model: String, inputTokens: Int, outputTokens: Int, cacheWriteTokens: Int, cacheReadTokens: Int) =
+        meter(feature, inputTokens, outputTokens, ModelPrices.costMicroUsd(model, inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens))
+
     /**
      * Counts one priced use that isn't a model call (Navilife's voice: a Polly clip, voice completeness 2026-10-19)
      * against [feature], at [microUsd], with the same alerts. No tokens; nothing of what was said is kept.
@@ -371,9 +403,27 @@ class AnthropicProvider(
     private fun bodyOf(request: ModelRequest, model: String, stream: Boolean): String = buildJsonObject {
         put("model", model)
         put("max_tokens", request.maxTokens.coerceAtMost(ModelRequest.MAX_OUTPUT_TOKENS))
-        if (request.system.isNotBlank()) put("system", request.system)
+        if (request.system.isNotBlank()) {
+            if (request.cacheSystemChars > 0) {
+                // Slice 3 of the conversation item: the unchanging instructions first, marked for the prompt cache.
+                val fixed = request.system.substring(0, request.cacheSystemChars)
+                val rest = request.system.substring(request.cacheSystemChars)
+                putJsonArray("system") {
+                    addJsonObject { put("type", "text"); put("text", fixed); put("cache_control", EPHEMERAL) }
+                    if (rest.isNotBlank()) addJsonObject { put("type", "text"); put("text", rest) }
+                }
+            } else put("system", request.system)
+        }
         putJsonArray("messages") {
-            request.turns.forEach { t -> addJsonObject { put("role", t.role.wire); put("content", t.text) } }
+            request.turns.forEachIndexed { i, t ->
+                addJsonObject {
+                    put("role", t.role.wire)
+                    if (request.cacheTurns > 0 && i == request.cacheTurns - 1) {
+                        // The end of the conversation so far: the next call starts with the same turns.
+                        putJsonArray("content") { addJsonObject { put("type", "text"); put("text", t.text); put("cache_control", EPHEMERAL) } }
+                    } else put("content", t.text)
+                }
+            }
         }
         if (stream) put("stream", true)
     }.toString()
@@ -414,6 +464,8 @@ class AnthropicProvider(
         var model = asked
         var input = 0
         var output = 0
+        var cacheWrite = 0
+        var cacheRead = 0
         var stop: String? = null
         var failed: String? = null
         val errorBody = StringBuilder()
@@ -429,9 +481,9 @@ class AnthropicProvider(
                         val m = o["message"]?.jsonObject
                         m?.get("model")?.jsonPrimitive?.content?.let { model = it }
                         val u = m?.get("usage")?.jsonObject
-                        input = (u?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0) +
-                            (u?.get("cache_creation_input_tokens")?.jsonPrimitive?.intOrNull ?: 0) +
-                            (u?.get("cache_read_input_tokens")?.jsonPrimitive?.intOrNull ?: 0)
+                        cacheWrite = u?.get("cache_creation_input_tokens")?.jsonPrimitive?.intOrNull ?: 0
+                        cacheRead = u?.get("cache_read_input_tokens")?.jsonPrimitive?.intOrNull ?: 0
+                        input = (u?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0) + cacheWrite + cacheRead
                         output = u?.get("output_tokens")?.jsonPrimitive?.intOrNull ?: output
                     }
                     "content_block_delta" -> {
@@ -452,11 +504,11 @@ class AnthropicProvider(
                 }
             }
         }.getOrElse {
-            if (input > 0 || output > 0) budget.record(request.feature, model, input, output)
+            if (input > 0 || output > 0) budget.record(request.feature, model, input, output, cacheWrite, cacheRead)
             return ModelOutcome.Failed("Couldn't reach Anthropic")
         }
         if (code !in 200..299) return failure(code)
-        if (input > 0 || output > 0) budget.record(request.feature, model, input, output)
+        if (input > 0 || output > 0) budget.record(request.feature, model, input, output, cacheWrite, cacheRead)
         if (failed != null) return if (failed == "overloaded_error") failure(529) else ModelOutcome.Failed("Anthropic's answer stopped part way")
         return ModelOutcome.Answered(text.toString(), model, input, output, stop)
     }
@@ -467,12 +519,12 @@ class AnthropicProvider(
             .filter { it.jsonObject["type"]?.jsonPrimitive?.content == "text" }
             .joinToString("") { it.jsonObject["text"]!!.jsonPrimitive.content }
         val usage = o["usage"]?.jsonObject
-        val input = (usage?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0) +
-            (usage?.get("cache_creation_input_tokens")?.jsonPrimitive?.intOrNull ?: 0) +
-            (usage?.get("cache_read_input_tokens")?.jsonPrimitive?.intOrNull ?: 0)
+        val cacheWrite = usage?.get("cache_creation_input_tokens")?.jsonPrimitive?.intOrNull ?: 0
+        val cacheRead = usage?.get("cache_read_input_tokens")?.jsonPrimitive?.intOrNull ?: 0
+        val input = (usage?.get("input_tokens")?.jsonPrimitive?.intOrNull ?: 0) + cacheWrite + cacheRead
         val output = usage?.get("output_tokens")?.jsonPrimitive?.int ?: 0
         val model = o["model"]?.jsonPrimitive?.content ?: asked
-        budget.record(feature, model, input, output)
+        budget.record(feature, model, input, output, cacheWrite, cacheRead)
         ModelOutcome.Answered(answer, model, input, output, o["stop_reason"]?.jsonPrimitive?.content)
     }.getOrElse { ModelOutcome.Failed("Anthropic's answer couldn't be read") }
 
@@ -480,6 +532,8 @@ class AnthropicProvider(
         const val MESSAGES_URL = "https://api.anthropic.com/v1/messages"
         /** The warm-up's request: one model's name, nothing else ([touch]). */
         const val WARM_URL = "https://api.anthropic.com/v1/models?limit=1"
+        /** The prompt cache's mark (five minutes, renewed by each call that reads it). */
+        private val EPHEMERAL = buildJsonObject { put("type", "ephemeral") }
     }
 }
 

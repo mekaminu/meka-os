@@ -163,7 +163,55 @@ class AiModelsTest {
         val (p, budget, http) = setup()
         http.answer = """{"model":"claude-haiku-9","content":[],"usage":{"input_tokens":10,"cache_read_input_tokens":90,"output_tokens":0}}"""
         assertEquals(100, assertIs<ModelOutcome.Answered>(p.complete(ask())).inputTokens)
-        assertEquals(100, budget.state().spentMicroUsd)
+        // Slice 3 of the conversation item: cache reads at a tenth of the input price (10 + 9 micro-dollars).
+        assertEquals(19, budget.state().spentMicroUsd)
+    }
+
+    @Test
+    fun cachedInputIsPricedAtTheCachesRatesAndRoundedUp() {
+        // Haiku ($1 in): 1000 plain, 1000 written at 1.25×, 1000 read at 0.1×, plus 100 out at $5.
+        assertEquals(1000 + 1250 + 100 + 500L, ModelPrices.costMicroUsd("claude-haiku-9", 3000, 100, 1000, 1000))
+        assertEquals(ModelPrices.costMicroUsd("claude-haiku-9", 500, 10), ModelPrices.costMicroUsd("claude-haiku-9", 500, 10, 0, 0))
+        assertEquals(1L, ModelPrices.costMicroUsd("claude-haiku-9", 3, 0, 0, 3)) // 0.3 rounds up, never down to free
+        // More cache tokens than input can't make a call cheaper than nothing.
+        assertEquals(13L, ModelPrices.costMicroUsd("claude-haiku-9", 10, 0, 50, 50))
+    }
+
+    @Test
+    fun theUnchangingInstructionsAndTheEarlierTurnsAreMarkedForThePromptCache() {
+        val (p, budget, http) = setup()
+        http.answer = """{"model":"claude-haiku-9","content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":100,"cache_creation_input_tokens":0,"cache_read_input_tokens":6000,"output_tokens":10}}"""
+        val turns = listOf(
+            ModelTurn(ModelTurn.Role.USER, "Question: first"),
+            ModelTurn(ModelTurn.Role.ASSISTANT, "{\"answer\":\"one\"}"),
+            ModelTurn(ModelTurn.Role.USER, "Question: second"),
+        )
+        val fixed = "You are Ada. " + "Long rules. ".repeat(20)
+        val out = assertIs<ModelOutcome.Answered>(p.complete(ModelRequest("ask", ModelTier.SMALL, fixed + "\nHis name is Alex.", turns, 600, fixed.length, 2)))
+        assertEquals(6100, out.inputTokens)
+        val sent = Json.parseToJsonElement(http.calls.last().third!!).jsonObject
+        val system = sent["system"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(2, system.size)
+        assertEquals(fixed, system[0]["text"]!!.jsonPrimitive.content)
+        assertEquals("ephemeral", system[0]["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("\nHis name is Alex.", system[1]["text"]!!.jsonPrimitive.content)
+        assertFalse("cache_control" in system[1])
+        val messages = sent["messages"]!!.jsonArray.map { it.jsonObject }
+        assertEquals("Question: first", messages[0]["content"]!!.jsonPrimitive.content)
+        val marked = messages[1]["content"]!!.jsonArray.single().jsonObject
+        assertEquals("{\"answer\":\"one\"}", marked["text"]!!.jsonPrimitive.content)
+        assertEquals("ephemeral", marked["cache_control"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+        assertEquals("Question: second", messages[2]["content"]!!.jsonPrimitive.content) // the new turn, uncached
+        // 100 plain + 6000 read at a tenth + 10 out at $5.
+        assertEquals(100 + 600 + 50L, budget.state().spentMicroUsd)
+        // Nothing marked: the plain shapes, as before.
+        p.complete(ask())
+        val plain = Json.parseToJsonElement(http.calls.last().third!!).jsonObject
+        assertEquals("You are Navilife.", plain["system"]!!.jsonPrimitive.content)
+        assertEquals("What's on today?", plain["messages"]!!.jsonArray.single().jsonObject["content"]!!.jsonPrimitive.content)
+        // A mark past the instructions or onto the newest turn is refused.
+        assertFailsWith<IllegalArgumentException> { ModelRequest("ask", ModelTier.SMALL, "abc", turns, 600, 4) }
+        assertFailsWith<IllegalArgumentException> { ModelRequest("ask", ModelTier.SMALL, "abc", turns, 600, 0, 3) }
     }
 
     @Test

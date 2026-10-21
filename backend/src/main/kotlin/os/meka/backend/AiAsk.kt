@@ -54,12 +54,16 @@ class AskService(
         val recalled = if (r.recall.isNotEmpty()) sir + "\n" + RECALL else sir
         val base = if (isOpen && web == null) recalled + "\n" + NOTE else recalled
         val system = if (r.voice) base + "\n" + VOICE else base
+        // Talking to Ada like a conversation, slice 3: the long instructions ([SYSTEM]) are the same on every call and
+        // the earlier turns the same as last time, so both are marked for the model's prompt cache; only what's new
+        // (his name and voice lines, today, the question) is read afresh.
+        val cachedTurns = r.history.size * 2
         // The companion, slice 2: a searched question is a companion turn too, metered as Chat.
-        if (!isOpen) return ModelRequest(if (r.voice) FEATURE_TALK else FEATURE, ModelTier.SMALL, system, turns(r), MAX_TOKENS)
+        if (!isOpen) return ModelRequest(if (r.voice) FEATURE_TALK else FEATURE, ModelTier.SMALL, system, turns(r), MAX_TOKENS, SYSTEM.length, cachedTurns)
         val frugal = runCatching { budgetLevel() }.getOrNull().let { it == AiBudget.Level.ALERT || it == AiBudget.Level.OVER }
         return ModelRequest(
-            os.meka.core.domain.CompanionRules.FEATURE, if (frugal) ModelTier.SMALL else ModelTier.FRONTIER, system, turns(r, web),
-            if (r.voice) MAX_TOKENS else OPEN_MAX_TOKENS,
+            os.meka.core.domain.CompanionRules.FEATURE, tierFor(isOpen = true, voice = r.voice, frugal = frugal), system, turns(r, web),
+            if (r.voice) MAX_TOKENS else OPEN_MAX_TOKENS, SYSTEM.length, cachedTurns,
         )
     }
 
@@ -198,6 +202,16 @@ class AskService(
         /** A spoken answer (Talk to MEKA) is metered on its own, so Activity can count Talk's day. */
         const val FEATURE_TALK = "ask.talk"
         const val MAX_TOKENS = 600
+
+        /**
+         * Talking to Ada like a conversation, slice 3 (faster brains): which model answers. Every spoken turn and every
+         * quick look-up is on the small, quick model (the newest Haiku), since what matters aloud is how soon her first
+         * sentence comes; only a typed open turn (a long question, planning, advice) gets the larger one, and not from
+         * the budget's 70 % alert. Each tier is the newest of its family ([ModelCatalog]); the server's own timings
+         * (slice 2, with the model's name) show the first sentence's time for each.
+         */
+        fun tierFor(isOpen: Boolean, voice: Boolean, frugal: Boolean): ModelTier =
+            if (isOpen && !voice && !frugal) ModelTier.FRONTIER else ModelTier.SMALL
         /** A typed open turn's room: a short paragraph inside the JSON answer ([AskCodec.MAX_ANSWER] characters). */
         const val OPEN_MAX_TOKENS = 900
         /** The device's own list of kinds (one list, so the server and the device never disagree; the companion, slice 6). */

@@ -157,6 +157,7 @@ class AiAskTest {
         assertTrue(last.startsWith("Since then he did: Moved “Book dentist” to Tomorrow · 09:00\n<today"), last)
         assertTrue(last.endsWith("Question: and the CR to Friday"), last)
         assertEquals(1, sent.turns.count { "<today" in it.text })
+        assertEquals(4, sent.cacheTurns) // slice 3 of the conversation item: the earlier turns end at Ada's last answer
         assertTrue("answer will be spoken" in sent.system)
         assertEquals(AskService.FEATURE_TALK, sent.feature) // Talk is counted on its own for Activity's day
         // A one-off question is the single turn it always was, without the voice line.
@@ -240,6 +241,28 @@ class AiAskTest {
         // A quick look-up is Ada too.
         AskService(model).ask(request)
         assertTrue(model.asked.last().system.startsWith("You are Ada"))
+    }
+
+    @Test
+    fun spokenTurnsAreOnTheQuickModelAndTheFixedInstructionsAndEarlierTurnsAreCached() {
+        // Talking to Ada like a conversation, slice 3: aloud, even an open question goes to the small, quick model.
+        val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
+        AskService(model, budgetLevel = { AiBudget.Level.OK }).ask(request.copy(question = "Any ideas for half term?", voice = true))
+        val spoken = model.asked.last()
+        assertEquals(ModelTier.SMALL, spoken.tier)
+        assertEquals(os.meka.core.domain.CompanionRules.FEATURE, spoken.feature)
+        // Typed, the same question still gets the larger one.
+        AskService(model, budgetLevel = { AiBudget.Level.OK }).ask(request.copy(question = "Any ideas for half term?"))
+        assertEquals(ModelTier.FRONTIER, model.asked.last().tier)
+        // The long instructions lead every request unchanged and are marked for the cache; his name comes after.
+        AskService(model).ask(request.copy(name = "Alex"))
+        val sent = model.asked.last()
+        assertEquals(AskService.SYSTEM.length, sent.cacheSystemChars)
+        assertTrue(sent.system.startsWith(AskService.SYSTEM))
+        assertTrue("Alex" in sent.system.substring(sent.cacheSystemChars))
+        assertEquals(0, sent.cacheTurns) // a first question has no earlier turns to keep
+        assertEquals(AskService.tierFor(isOpen = false, voice = false, frugal = false), ModelTier.SMALL)
+        assertEquals(AskService.tierFor(isOpen = true, voice = false, frugal = true), ModelTier.SMALL)
     }
 
     @Test
