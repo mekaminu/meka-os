@@ -3465,6 +3465,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(rules.macPlace(idleMs: 600_000), SpeakPlace.speaker)
         XCTAssertEqual(rules.line(spoken: "your 07:42 is cancelled.", address: "Alex"), "Alex, your 07:42 is cancelled.")
         XCTAssertEqual(MoreItem.speakUp.label, "Speaking up")
+        // Slice 3: tomorrow stacking up, its own switch and its own row in Notifications.
+        XCTAssertEqual(SpeakMoment.pressure.label, "Tomorrow stacking up")
+        XCTAssertEqual(NoticeSource.pressure.label, "Tomorrow stacking up (the evening before)")
+        XCTAssertEqual(rules.PRESSURE_AT_MIN, 19 * 60 + 30)
     }
 }
 

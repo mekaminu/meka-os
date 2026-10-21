@@ -92,4 +92,26 @@ class SpeakUpFacadeTest {
             assertNull(c.speakUpUrgent(item.copy(id = "w2"), lists, SpeakPlace.PRIVATE, onCall = false, talking = false))
         } finally { c.close() }
     }
+
+    /** Slice 3: tomorrow stacking up is a heads-up at 19:30 the evening before, said once with his name. */
+    @Test
+    fun tomorrowStackingUpIsSaidOnceInTheEvening() = runTest {
+        now = 1_792_607_700_000L // Wed 21 Oct 2026, 19:35 in London
+        val c = core()
+        try {
+            c.setAboutYou(AboutField.SHOWN_NAME, "Alex Smith")
+            c.tick()
+            val tomorrow = c.weekBoard.value.todayEpochDay + 1
+            listOf("Call the garage" to 19, "Wrap the present" to 20, "Pack the kit" to 21).forEach { (title, hour) ->
+                c.addOnBoard(title, tomorrow)!!.also { c.setWhen(it, tomorrow, hour * 60) }
+            }
+            val r = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+            val n = r.post.single { it.source == NoticeSource.PRESSURE }
+            assertEquals("Tomorrow evening is stacking up", n.title)
+            assertEquals(SpeakMoment.PRESSURE, n.speak)
+            val pick = c.speakUp(r, listOf(n.key), SpeakPlace.BEDSIDE, onCall = false, talking = false)
+            assertTrue(pick!!.line.startsWith("Alex, tomorrow evening is stacking up: Call the garage, Wrap the present and Pack the kit."), pick.line)
+            assertNull(c.speakUp(r, listOf(n.key), SpeakPlace.BEDSIDE, onCall = false, talking = false))
+        } finally { c.close() }
+    }
 }

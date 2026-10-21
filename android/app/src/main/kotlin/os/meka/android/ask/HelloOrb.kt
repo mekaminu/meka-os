@@ -200,16 +200,21 @@ fun HelloOrbView(
  * quietens with the clock and holds still (no frames drawn all night). Reduced motion: no press scale, a still glow.
  */
 @Composable
-fun BedsideHelloOrb(needsYou: Int, onHello: () -> Unit, modifier: Modifier = Modifier, dim: Boolean = false, onPlaced: (Offset) -> Unit = {}) {
+fun BedsideHelloOrb(
+    needsYou: Int, onHello: () -> Unit, modifier: Modifier = Modifier, dim: Boolean = false, onPlaced: (Offset) -> Unit = {},
+    /** Speaking up, slice 3: Ada is saying a moment on her own; the orb shows Speaking (lit even in quiet dimming). */
+    speaking: Boolean = false,
+) {
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && !reduced) 0.97f else 1f, MekaMotion.complete(reduced), label = "helloPress")
-    val alpha by animateFloatAsState(if (dim) 0.45f else 1f, MekaMotion.themeBlend(reduced), label = "helloDim")
-    val line = HelloOrb.restingLine(needsYou, mac = false)
+    val alpha by animateFloatAsState(if (dim && !speaking) 0.45f else 1f, MekaMotion.themeBlend(reduced), label = "helloDim")
+    val line = if (speaking) os.meka.core.domain.HelloDock.label(TalkPhase.SPEAKING, needsYou) else HelloOrb.restingLine(needsYou, mac = false)
+    val state = HelloOrb.state(if (speaking) TalkPhase.SPEAKING else TalkPhase.ENDED, needsYou)
     HelloOrbView(
-        HelloOrb.state(TalkPhase.ENDED, needsYou), 0f, size = HelloOrb.BEDSIDE_SIZE.dp, still = dim,
+        state, os.meka.core.domain.HelloDock.level(state), size = HelloOrb.BEDSIDE_SIZE.dp, still = dim && !speaking,
         modifier = modifier.onGloballyPositioned { onPlaced(it.boundsInWindow().center) }
             .scale(scale).graphicsLayer { this.alpha = alpha }.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(interactionSource = source, indication = null, role = Role.Button) { haptics.light(); onHello() }

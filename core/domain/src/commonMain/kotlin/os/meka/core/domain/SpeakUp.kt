@@ -9,13 +9,14 @@ import os.meka.core.sync.Replica
  * The moments Ada says out loud on her own (Meka 2026-10-20 19:49), each its own switch in Ask → Settings → Speaking up.
  * A notice carries its moment ([Notice.speak]) and the words to say after his name ([Notice.spoken]) when it is one;
  * everything else stays a silent notification. Slice 1 has the train and time to leave; slice 2 an urgent message from
- * family or Always notify; the rest of the list (an event in 10 minutes, tomorrow's pressure, a reply he was waiting
- * for) follows. Listed most important first: when two are due at once, the first is said.
+ * family or Always notify; slice 3 tomorrow stacking up, once in the evening; the rest of the list (an event in 10
+ * minutes, a reply he was waiting for) follows. Listed most important first: when two are due at once, the first is said.
  */
 enum class SpeakMoment(val label: String, val line: String, val defaultOn: Boolean) {
     URGENT("Urgent from family", "A message or call from family or someone on Always notify that says it's urgent", true),
     TRAIN("Your train", "Cancelled, or 10 minutes or more late, in the 2 hours before you leave", true),
     LEAVE_NOW("Time to leave", "For an event or a booked session with its travel time set", true),
+    PRESSURE("Tomorrow stacking up", "Once in the evening, when tomorrow has three or more things on it", true),
 }
 
 /** "Speak less / speak more": how many moments a day at most. */
@@ -267,6 +268,41 @@ object SpeakUpRules {
 
     /** The alert's key for [pickOne] and Activity: once per message across devices. */
     fun urgentKey(item: CapturedItem): String = "urgent:${item.id}"
+
+    // ---- Slice 3: tomorrow stacking up, said once in the evening ----
+
+    /** The evening heads-up's time (after the bins' 19:00), and when it stops being worth saying. */
+    const val PRESSURE_AT_MIN = 19 * 60 + 30
+    const val PRESSURE_UNTIL_MIN = 22 * 60
+
+    /**
+     * "tomorrow is stacking up: Trip form, Council tax and Gym. Today has a way to lighten it." ([DayPressure.spoken],
+     * with the hint when there is a one-tap fix on Today).
+     */
+    fun pressureWords(p: DayPressure): String =
+        p.spoken.trim() + if (p.fixes.isNotEmpty()) " Today has a way to lighten it." else ""
+
+    /**
+     * The evening heads-up for tomorrow stacking up ([PressureRules], Week board item (10)): one notice at
+     * [PRESSURE_AT_MIN] the evening before, standing till [PRESSURE_UNTIL_MIN], once per day (its key is tomorrow's
+     * day), Ada saying it when she may ([SpeakMoment.PRESSURE]). "Tomorrow is stacking up" · "Trip form, Council tax
+     * and Gym · Move “Gym” to Fri". Null when [tomorrow] isn't tomorrow's or it is too late in the evening.
+     */
+    fun pressureNotice(tomorrow: DayPressure?, nowMs: Long, cal: LocalCalendar): Notice? {
+        val p = tomorrow ?: return null
+        val day = cal.epochDayOf(nowMs)
+        if (p.epochDay != day + 1 || p.items.isEmpty()) return null
+        val until = cal.toEpochMs(day, PRESSURE_UNTIL_MIN)
+        if (nowMs >= until) return null
+        val titles = PressureRules.names(if (p.evening) p.items.filter { it.evening } else p.items)
+        return Notice(
+            key = "pressure:${p.epochDay}", source = NoticeSource.PRESSURE, tier = NoticeTier.HEADS_UP,
+            title = "${p.dayName} is stacking up",
+            text = listOfNotNull(titles, p.fixes.firstOrNull()?.label).joinToString(" · "),
+            atMs = cal.toEpochMs(day, PRESSURE_AT_MIN), target = NoticeTarget.TODAY, expiresAtMs = until,
+            speak = SpeakMoment.PRESSURE, spoken = pressureWords(p),
+        )
+    }
 
     // ---- Slice 2: "shh" said to Ada in Talk ----
 

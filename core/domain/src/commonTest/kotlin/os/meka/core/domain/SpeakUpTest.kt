@@ -148,4 +148,35 @@ class SpeakUpTest {
         assertFalse(TalkEffect.MuteSpeakingUp in TalkFlow.heard(hello, "not now").effects)
         assertTrue(TalkEffect.MuteSpeakingUp in TalkFlow.heard(hello, "quiet please").effects)
     }
+
+    /** Slice 3: the evening heads-up for tomorrow stacking up, once, 19:30 to 22:00, never for another day. */
+    @Test
+    fun tomorrowStackingUpInTheEvening() {
+        val day = cal.epochDayOf(now)
+        val items = listOf(
+            PressureItem(PressureKind.DUE, "Trip form", "t1"), PressureItem(PressureKind.BILL, "Council tax"),
+            PressureItem(PressureKind.LATE, "Gym", "t2", evening = true),
+        )
+        val fix = PressureFix("t2", "Gym", day + 3, "Move “Gym” to Sat", earlier = false)
+        val p = DayPressure(day + 1, "Tomorrow", false, items, "Tomorrow is stacking up: Trip form, Council tax and Gym",
+            "Stacking up: Trip form, Council tax and Gym", "Tomorrow is stacking up: Trip form, Council tax and Gym.", listOf(fix))
+        val n = SpeakUpRules.pressureNotice(p, now, cal)!!
+        assertEquals("pressure:${day + 1}", n.key)
+        assertEquals(NoticeSource.PRESSURE, n.source)
+        assertEquals("Tomorrow is stacking up", n.title)
+        assertEquals("Trip form, Council tax and Gym · Move “Gym” to Sat", n.text)
+        assertEquals(cal.toEpochMs(day, SpeakUpRules.PRESSURE_AT_MIN), n.atMs)
+        assertEquals(cal.toEpochMs(day, SpeakUpRules.PRESSURE_UNTIL_MIN), n.expiresAtMs)
+        assertEquals(SpeakMoment.PRESSURE, n.speak)
+        assertEquals("Alex, tomorrow is stacking up: Trip form, Council tax and Gym. Today has a way to lighten it.",
+            SpeakUpRules.line(n.spoken!!, "Alex"))
+        assertEquals("Tomorrow is stacking up: Trip form, Council tax and Gym.", SpeakUpRules.pressureWords(p.copy(fixes = emptyList())))
+        // Only tomorrow's, and not once the evening is over.
+        assertNull(SpeakUpRules.pressureNotice(p.copy(epochDay = day + 2), now, cal))
+        assertNull(SpeakUpRules.pressureNotice(p, cal.toEpochMs(day, SpeakUpRules.PRESSURE_UNTIL_MIN), cal))
+        assertNull(SpeakUpRules.pressureNotice(null, now, cal))
+        // Its own switch, on to start, listed last.
+        assertTrue(SpeakUpSettings().isOn(SpeakMoment.PRESSURE))
+        assertEquals(SpeakMoment.PRESSURE.label, SpeakUpRules.view(SpeakUpSettings(), 0, now, cal).sections[SpeakMoment.entries.size - 1].label)
+    }
 }

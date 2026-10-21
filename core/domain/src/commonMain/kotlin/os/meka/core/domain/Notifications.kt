@@ -263,6 +263,11 @@ enum class NoticeSource(val label: String, val defaultTier: NoticeTier) {
      * and 1 more · in From your mail". Opens Needs you.
      */
     PROTECTED_MAIL("Work mail that waited (protected time)", NoticeTier.HEADS_UP),
+    /**
+     * Speaking up, slice 3 ([SpeakUpRules.pressureNotice]): at 19:30 the evening before a day stacking up,
+     * "Tomorrow is stacking up" · "Trip form, Council tax and Gym · Move “Gym” to Fri", said by Ada when she may.
+     */
+    PRESSURE("Tomorrow stacking up (the evening before)", NoticeTier.HEADS_UP),
     RENEWAL("Renewals and bills due", NoticeTier.DIGEST),
     CHASE("Things to chase", NoticeTier.DIGEST),
     /** People, slice 1: a promise Meka made whose day has come ("Promised: Fix the bike" · "Jordan · due today"). */
@@ -720,6 +725,7 @@ object Governor {
         NoticeSource.MEETING_PREP -> if (n == 1) "a meeting to prepare for" else "$n meetings to prepare for"
         NoticeSource.BALANCE -> "an area short of its target"
         NoticeSource.PROTECTED_MAIL -> "work mail that waited"
+        NoticeSource.PRESSURE -> "tomorrow stacking up"
         NoticeSource.RENEWAL -> plural(n, "renewal") + " due"
         NoticeSource.CHASE -> "$n to chase"
         NoticeSource.PROMISE -> if (n == 1) "a promise due" else "$n promises due"
@@ -843,6 +849,8 @@ object NoticeSources {
         /** Protected time, slice 6: the setting and the work schedule, for the morning note on what waited. */
         protectedTime: ProtectedSetting? = null,
         workSchedule: WorkSchedule? = null,
+        /** Speaking up, slice 3: tomorrow if it is stacking up ([PressureRules]), for the evening heads-up. */
+        pressure: DayPressure? = null,
     ): List<Notice> {
         val day = cal.epochDayOf(nowMs)
         val todayStart = cal.toEpochMs(day, 0)
@@ -1002,6 +1010,8 @@ object NoticeSources {
         out += ParkingTimerRules.notices(parkingTimers, cars, nowMs, cal)
         out += KidsRules.notices(kids, kidRecords, nowMs, cal)
         out += BalanceRules.notices(balance, nowMs, cal)
+        // Speaking up, slice 3: tomorrow stacking up, once in the evening (Ada says it when she may).
+        SpeakUpRules.pressureNotice(pressure, nowMs, cal)?.let { out += it }
         if (workSchedule != null) ProtectedMailRules.morningNotice(mail, protectedTime, nowMs, workSchedule, holidays, cal)?.let { out += it }
         // Meeting prep, slice 1: who's coming and what's open with them, fifteen minutes before a meeting.
         out += MeetingPrepRules.notices(events, marks, mail, lists.promised, lists.waiting, nowMs, cal, prepLeadMin)

@@ -11578,6 +11578,8 @@ class MekaCore(
             moneyLook = moneyLookItems(),
             // Balance view, slice 4: Thursday evening's nudge when an area is well short as planned.
             balance = balanceNudge,
+            // Speaking up, slice 3: tomorrow stacking up, for the evening heads-up Ada says.
+            pressure = _board.value.days.firstNotNullOfOrNull { d -> d.pressure?.takeIf { it.epochDay == todayEpochDay() + 1 } },
             // Protected time, slice 6: at 07:00 the morning it ends, one note for the business mail that waited.
             protectedTime = protectedTime.setting(), workSchedule = work.schedule(),
         )

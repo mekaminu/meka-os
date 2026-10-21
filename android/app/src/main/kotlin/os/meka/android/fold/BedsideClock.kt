@@ -176,6 +176,9 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
     // ‹ Back (bedside clock slice 1): leaves the clock for the app; on a table stand it stays away until the Fold stops standing.
     BackHandler(enabled = !dayOpen && !talkOpen && newsOpen == null && open == null) { onBack() }
     val talkApp = context.applicationContext as? os.meka.android.MekaApplication
+    // Speaking up, slice 3: while Ada says a moment on her own, the bedside orb lights as Speaking; a tap stops her.
+    val speakFlow = remember(talkApp) { talkApp?.speakUp?.speaking ?: kotlinx.coroutines.flow.MutableStateFlow(false) }
+    val speakingUp by speakFlow.collectAsState()
     val density = LocalDensity.current
     var topInWindow by remember { mutableIntStateOf(0) }
     var heightPx by remember { mutableIntStateOf(0) }
@@ -221,7 +224,8 @@ fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
                 v, Modifier.fillMaxWidth().weight(1f).windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                 needsYou = needsYouStack.cards.size,
                 wakeListening = wakeListening,
-                onHello = startHello,
+                onHello = { if (speakingUp) talkApp?.speakUp?.stop() else startHello() },
+                speaking = speakingUp,
                 onOrbPlaced = { orbAt = it },
             ) {
                 open = it
@@ -338,7 +342,7 @@ private fun RollingTime(time: String, color: androidx.compose.ui.graphics.Color,
 @Composable
 private fun DayHalf(
     v: BedsideView, modifier: Modifier, needsYou: Int, wakeListening: Boolean, onHello: () -> Unit,
-    onOrbPlaced: (androidx.compose.ui.geometry.Offset) -> Unit = {}, onOpen: (BedsideOpens) -> Unit,
+    onOrbPlaced: (androidx.compose.ui.geometry.Offset) -> Unit = {}, speaking: Boolean = false, onOpen: (BedsideOpens) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -351,7 +355,7 @@ private fun DayHalf(
         Row(Modifier.fillMaxWidth().appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
             Text(v.alarmLine, style = MekaType.itemMeta, color = alarmColor, modifier = Modifier.weight(1f))
             // "Hello, Navilife" slice 2: the Hello orb where the mic was; a tap greets him, then listens.
-            os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim, onPlaced = onOrbPlaced)
+            os.meka.android.ask.BedsideHelloOrb(needsYou, onHello, dim = v.dim, onPlaced = onOrbPlaced, speaking = speaking)
         }
         // Slice 3: while it listens for the phrase, a brass dot and the line say so (the visible indicator).
         os.meka.android.ask.HelloWakeLine(wakeListening, Modifier.align(Alignment.End))
