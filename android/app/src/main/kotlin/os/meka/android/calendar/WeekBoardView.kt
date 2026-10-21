@@ -848,7 +848,7 @@ private fun AddGoalChip(
         Column(
             Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button) { haptics.tick(); menu = true }
-                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+                .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
         ) {
             Text(BoardGoalRules.ADD, style = MekaType.caption, color = Meka.colors.accent)
             if (empty) Text(BoardGoalRules.EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
