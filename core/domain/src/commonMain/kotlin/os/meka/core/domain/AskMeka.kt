@@ -44,6 +44,11 @@ data class AskContext(
      * sent as the request's `name` so the companion calls him what Today and the orb do.
      */
     val callName: String? = null,
+    /**
+     * The companion is called Ada, slice 1: the first conversation of the day on this device ([AdaRules.introduces]),
+     * when she may say "Ada here" once; sent as the request's `introduce`.
+     */
+    val introduce: Boolean = false,
 ) {
     companion object {
         val EMPTY = AskContext("", "", emptyList(), emptyMap(), untrusted = false)

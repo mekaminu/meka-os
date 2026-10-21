@@ -225,6 +225,24 @@ class AiAskTest {
     }
 
     @Test
+    fun theCompanionIsAdaAndIntroducesHerselfOnlyInTheDaysFirstConversation() {
+        // The companion is called Ada, slice 1.
+        val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
+        AskService(model).ask(request.copy(question = "Any ideas for half term?", introduce = true))
+        val first = model.asked.last().system
+        assertTrue(first.startsWith("You are Ada, the personal assistant inside Navilife"), first.take(80))
+        assertTrue("you may say who you are once" in first)
+        assertFalse("Don't say your own name" in first)
+        AskService(model).ask(request.copy(question = "Any ideas for half term?"))
+        val later = model.asked.last().system
+        assertTrue("Don't say your own name" in later)
+        assertFalse("you may say who you are once" in later)
+        // A quick look-up is Ada too.
+        AskService(model).ask(request)
+        assertTrue(model.asked.last().system.startsWith("You are Ada"))
+    }
+
+    @Test
     fun fromTheBudgetsAlertOpenTurnsStayOnTheSmallModel() {
         val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
         AskService(model, budgetLevel = { AiBudget.Level.ALERT }).ask(request.copy(question = "Any ideas for half term?"))

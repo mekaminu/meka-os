@@ -8246,6 +8246,8 @@ class MekaCore(
                 .copy(
                     callSir = mekaVoice.callsSir(), recall = companionRecall(q, history, cal),
                     callName = os.meka.core.domain.CallNameRules.called(aboutYou.profile().shownName),
+                    // The companion is called Ada, slice 1: she may say "Ada here" in the day's first conversation.
+                    introduce = adaIntroduces(history, cal),
                 )
         }
         // Voice completeness, slice 3: a spoken question whose answer Navilife's voice will say asks for the first piece
@@ -8607,6 +8609,20 @@ class MekaCore(
 
     /** Chooses MEKA's voice on every device (null: MEKA's default). False, and nothing saved, for a name that can't be one. */
     suspend fun chooseMekaVoice(name: String?): Boolean = onCore { mekaVoice.choose(name) }
+
+    /**
+     * The companion is called Ada, slice 1: whether this question may let her introduce herself (the first conversation
+     * of the day on this device, [os.meka.core.domain.AdaRules.introduces]); marks the day when it does. Caller is on the core.
+     */
+    private fun adaIntroduces(history: List<os.meka.core.domain.TalkTurn>, cal: ZoneCalendar): Boolean {
+        val today = cal.epochDayOf(nowMs())
+        val last = os.meka.core.domain.AdaRules.dayOf(
+            runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.AdaRules.INTRO_KEY) } }.getOrNull(),
+        )
+        if (!os.meka.core.domain.AdaRules.introduces(last, today, history.size)) return false
+        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.AdaRules.INTRO_KEY, today.toString()) } }
+        return true
+    }
 
     /** The companion, slice 5: the notes sent with [q], or none. Caller is on the core. */
     private fun companionRecall(q: String, history: List<os.meka.core.domain.TalkTurn>, cal: ZoneCalendar): List<String> {

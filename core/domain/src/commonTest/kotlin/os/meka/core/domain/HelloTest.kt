@@ -152,6 +152,36 @@ class HelloTest {
     }
 
     @Test
+    fun heyAdaWakesHerAndNearWordsDont() {
+        // The companion is called Ada (Meka 2026-10-20 21:04); "Hello Navilife" keeps working.
+        assertTrue(HelloWakeRules.heard("Hey Ada"))
+        assertTrue(HelloWakeRules.heard("hello Ada, what's on tomorrow"))
+        assertTrue(HelloWakeRules.heard("hi ada"))
+        assertTrue(HelloWakeRules.heard("OK, Aida!"))
+        assertTrue(HelloWakeRules.heard("Hello Navilife"))
+        assertEquals(false, HelloWakeRules.heard("hey other"))
+        assertEquals(false, HelloWakeRules.heard("hello data"))
+        assertEquals(false, HelloWakeRules.heard("hey there"))
+        assertEquals(false, HelloWakeRules.heard("hey aider"))
+        assertEquals(false, HelloWakeRules.heard("I was talking to Ada at work")) // no greeting before it
+        assertEquals(false, HelloWakeRules.heard("Ada")) // the short name alone isn't enough
+        assertEquals("Say “Hey Ada”", HelloWakeRules.LABEL)
+        assertEquals("Listening for “Hey Ada”", HelloWakeRules.LISTENING_LINE)
+        assertEquals("Ada", HelloEntrance.LABEL)
+    }
+
+    @Test
+    fun adaIntroducesHerselfOnlyAtTheStartOfTheDaysFirstConversation() {
+        assertTrue(AdaRules.introduces(lastDay = null, today = 100, earlierTurns = 0))
+        assertTrue(AdaRules.introduces(lastDay = 99, today = 100, earlierTurns = 0))
+        assertEquals(false, AdaRules.introduces(lastDay = 100, today = 100, earlierTurns = 0))
+        assertEquals(false, AdaRules.introduces(lastDay = 99, today = 100, earlierTurns = 2))
+        assertEquals(100L, AdaRules.dayOf(" 100 "))
+        assertEquals(null, AdaRules.dayOf("x"))
+        assertEquals(null, AdaRules.dayOf(null))
+    }
+
+    @Test
     fun theWakePhraseListensOnlyWhereAndWhenItShould() {
         assertTrue(HelloWakeRules.listens(on = true, micAllowed = true, place = true, talking = false, charging = true, quiet = false))
         assertEquals(false, HelloWakeRules.listens(on = false, micAllowed = true, place = true, talking = false)) // off by default
@@ -210,10 +240,10 @@ class HelloTest {
         // A tap says hello at rest; during a conversation it goes back to it.
         assertEquals(DockTap.HELLO, HelloDock.tap(TalkPhase.ENDED))
         assertEquals(DockTap.CONVERSATION, HelloDock.tap(TalkPhase.THINKING))
-        assertEquals("Say hello to Navilife", HelloDock.label(TalkPhase.ENDED, 0))
-        assertEquals("Say hello to Navilife · 1 thing needs you", HelloDock.label(TalkPhase.ENDED, 1))
-        assertEquals("Say hello to Navilife · 3 things need you", HelloDock.label(TalkPhase.ENDED, 3))
-        assertEquals("Navilife is listening · back to the conversation", HelloDock.label(TalkPhase.LISTENING, 3))
+        assertEquals("Say hello to Ada", HelloDock.label(TalkPhase.ENDED, 0))
+        assertEquals("Say hello to Ada · 1 thing needs you", HelloDock.label(TalkPhase.ENDED, 1))
+        assertEquals("Say hello to Ada · 3 things need you", HelloDock.label(TalkPhase.ENDED, 3))
+        assertEquals("Ada is listening · back to the conversation", HelloDock.label(TalkPhase.LISTENING, 3))
     }
 
     @Test

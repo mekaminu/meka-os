@@ -215,6 +215,16 @@ class AskCodecTest {
     }
 
     @Test
+    fun theDaysFirstConversationTravelsAsIntroduce() {
+        // The companion is called Ada, slice 1: left out when false; only a JSON true reads as true.
+        val first = req.copy(introduce = true)
+        assertEquals(first, AskCodec.decodeRequest(AskCodec.encodeRequest(first)))
+        assertFalse(AskCodec.encodeRequest(req).contains("introduce"))
+        val asText = AskCodec.encodeRequest(req).replaceFirst("{", """{"introduce":"true",""")
+        assertEquals(req, AskCodec.decodeRequest(asText))
+    }
+
+    @Test
     fun notesOfEarlierChatsTravelWithTheQuestionAndAnAnswerMayCarryOne() {
         // The companion, slice 5.
         val recalled = req.copy(recall = listOf("Sun 18 Oct · Talked through heat pumps", "Tue 20 Oct · Weighing Spanish lessons"))

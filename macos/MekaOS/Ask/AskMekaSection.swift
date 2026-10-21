@@ -288,7 +288,7 @@ struct AskMekaSection: View {
                                          level: 0, palette: palette, entranceAt: talk.entranceAt)
                         }
                         .buttonStyle(MekaPressStyle())
-                        .help("Say hello to Navilife")
+                        .help("Say hello to Ada")
                         .accessibilityLabel("Navilife · \(line)")
                         Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }

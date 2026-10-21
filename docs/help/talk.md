@@ -1,13 +1,13 @@
 ---
 id: talk
 title: Talk
-keywords: talk, talk to navilife, voice, speak, side button, headphones, hey navilife, hello navilife, greeting, orb, wake word, microphone
+keywords: talk, talk to navilife, ada, hey ada, talk to ada, voice, speak, side button, headphones, hey navilife, hello navilife, greeting, orb, wake word, microphone
 fold: TALK
 fold_where: Ask → the mic in the field, or Ask → Settings → Talk for the side button
 mac: TALK
 mac_where: Ask → the mic in the field, or ⌥Space anywhere
 ---
-what: talk to Navilife instead of typing: it answers aloud and anything it proposes still waits for your yes.
+what: talk to Ada, Navilife's assistant, instead of typing: it answers aloud and anything it proposes still waits for your yes.
 how: Tap the mic in Ask's field. Under Settings → Talk you can make the side button or your headphones' button start it, and have it listen when Navilife opens.
 mac_how: Click the mic in Ask's field or press ⌥Space; macOS asks for the microphone and speech recognition the first time.
 tip: Tap the orb while it speaks to interrupt.
@@ -19,7 +19,8 @@ tip: Tap the small gold orb in the bar and Navilife makes an entrance: the orb f
 tip: As Navilife says hello, the things it mentions rise in as cards round the orb: what needs you, your train with its live status, your next event, what your partner asked for. Tap one to go straight there. When an answer offers something to do, its card rises there too with its button; nothing happens until you tap it. On the Mac the greeting's cards rise under the Ask orb.
 tip: On the first open of the morning a short version plays once, without speaking. On the Mac the orb gathers itself the same way before it greets you. With reduced motion it simply fades in.
 tip: Say hello from anywhere: on the Fold standing half folded (the bedside clock) tap the orb beside the alarm line; on the Mac click Say hello at the foot of the sidebar or in the menu bar, or press ⌥Space when you've been away a couple of hours (otherwise ⌥Space just listens). The greeting also says when your partner has asked you for something.
-tip: On the stand, a tap on the bedside orb (or “Hello Navilife”) makes the same entrance from that orb over the clock, a calm fade instead in quiet hours, and shrinks back into it when you're done; the clock returns.
-tip: Say “Hello Navilife” to start: turn it on in Ask → More → Talk. The Fold listens for it only on its stand (the bedside clock) while charging and outside quiet hours; the Mac only while Navilife is in front. Your words are recognised on the device and never sent, and a line beside the orb shows while it listens.
+tip: On the stand, a tap on the bedside orb (or “Hey Ada”) makes the same entrance from that orb over the clock, a calm fade instead in quiet hours, and shrinks back into it when you're done; the clock returns.
+tip: Ada is Navilife's assistant: the orb and the voice you talk to.
+tip: Say “Hey Ada” (or “Hello Ada”; “Hello Navilife” still works) to start: turn it on in Ask → More → Talk. The Fold listens for it only on its stand (the bedside clock) while charging and outside quiet hours; the Mac only while Navilife is in front. Your words are recognised on the device and never sent, and a line beside the orb shows while it listens.
 tip: Back at the Mac after two hours or more, Navilife welcomes you back with what matters now (never in quiet hours or protected time). Press Esc or ⌥Space to skip it, or turn Welcome back off in Ask → More → Talk.
 tip: A longer spoken answer starts as soon as its first sentence is ready: Navilife says that while it writes the rest, then carries on; talk over it and it stops and listens. Only its own words are said early, and anything it offers to do still waits for your yes.

@@ -795,6 +795,7 @@ class HttpSyncTransport(
             callMe = if (context.callSir) AskCodec.CALL_SIR else null,
             recall = context.recall.filter { it.isNotBlank() }.map { it.take(AskCodec.MAX_LINE) }.takeLast(AskCodec.MAX_RECALL),
             name = AskCodec.plainName(context.callName),
+            introduce = context.introduce,
         ),
     )
 

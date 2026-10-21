@@ -85,6 +85,11 @@ object AskCodec {
          * out of the JSON when null; an older server ignores it, and anything that isn't a plain name reads as null.
          */
         val name: String? = null,
+        /**
+         * The companion is called Ada, slice 1: the first conversation of the day on this device, when she may
+         * introduce herself once ("Ada here"). Left out of the JSON when false; an older server ignores it.
+         */
+        val introduce: Boolean = false,
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -176,6 +181,7 @@ object AskCodec {
         if (r.callMe == CALL_SIR) put("callMe", CALL_SIR)
         if (r.recall.isNotEmpty()) putJsonArray("recall") { r.recall.forEach { add(JsonPrimitive(it)) } }
         plainName(r.name)?.let { put("name", it) }
+        if (r.introduce) put("introduce", true)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("ask request") {
@@ -221,7 +227,8 @@ object AskCodec {
         }
         require(recall.size <= MAX_RECALL) { "recall" }
         val name = plainName((o["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content)
-        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name)
+        val introduce = (o["introduce"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name, introduce)
     }
 
     /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */

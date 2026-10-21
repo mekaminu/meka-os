@@ -68,7 +68,7 @@ struct TalkSheet: View {
                     } else if let action = s.action, s.label == BargeInRules.shared.LABEL {
                         switchButton(action, "talk over Navilife to interrupt") { toggleTalkOver() }
                     } else if let action = s.action, s.label == HelloWakeRules.shared.LABEL {
-                        switchButton(action, "say Hello Navilife to start") { toggleWake() }
+                        switchButton(action, "say Hey Ada to start") { toggleWake() }
                     } else if let action = s.action, s.label == WelcomeBackRules.shared.LABEL {
                         switchButton(action, "welcome back after a while away") { toggleWelcome() }
                     }
