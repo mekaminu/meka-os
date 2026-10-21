@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fasting</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#000}
+a{color:#c9b37e}a:hover{color:#e3d3a6}
+@keyframes glow{0%,100%{opacity:.55}50%{opacity:1}}
+.tip{animation:glow 2.4s ease-in-out infinite}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.in{animation:fadeup .4s cubic-bezier(.2,.8,.2,1) both}
+.ringfill{transition:stroke-dashoffset .9s cubic-bezier(.2,.8,.2,1)}
+@media (prefers-reduced-motion:reduce){.tip,.in{animation:none}.ringfill{transition:none}}
+</style>
+</helmet>
+<div style="width:390px;height:1560px;box-sizing:border-box;padding:20px 18px 40px;background:#000;color:#ededed;font-family:DM Sans,system-ui,sans-serif;display:flex;flex-direction:column;gap:18px">
+
+<div style="display:flex;justify-content:space-between;align-items:center">
+<a href="#" style="font-size:14px;text-decoration:none">‹ Goals and habits</a>
+<button type="button" style="border:0;background:#1a1a1d;color:#c9b37e;border-radius:999px;padding:7px 13px;font:500 13px DM Sans,sans-serif">16:8</button>
+</div>
+<div style="font-size:28px;font-weight:700;margin-top:-4px">Fasting</div>
+
+<div style="position:relative;width:300px;height:300px;align-self:center">
+<svg width="300" height="300" viewBox="0 0 300 300" aria-hidden="true" style="position:absolute;inset:0;transform:rotate(-90deg)">
+<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f3dfaa"></stop><stop offset="1" stop-color="#b8975a"></stop></linearGradient></defs>
+<circle cx="150" cy="150" r="126" fill="none" stroke="#1c1b1e" stroke-width="16"></circle>
+<circle class="ringfill" cx="150" cy="150" r="126" fill="none" stroke="url(#g)" stroke-width="16" stroke-linecap="round" stroke-dasharray="791.7" stroke-dashoffset="{{dashOffset}}"></circle>
+</svg>
+<sc-for list="{{marks}}" as="m" hint-placeholder-count="4">
+<div style="{{m.style}}" title="{{m.label}}"></div>
+</sc-for>
+<div class="tip" style="{{tipStyle}}"></div>
+<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+<div style="font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:#a8a29a">{{topLine}}</div>
+<div style="font-size:46px;font-weight:700;letter-spacing:-.01em">{{bigTime}}</div>
+<div style="font-size:13px;color:#c9b37e">{{subLine}}</div>
+</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+<button type="button" style="background:#121214;border:0;border-radius:14px;padding:12px 14px;text-align:left;color:#ededed;font-family:DM Sans,sans-serif;display:flex;flex-direction:column;gap:3px"><span style="font-size:11.5px;color:#a8a29a">Started</span><span style="font-size:16px;font-weight:600">Tue 20:00 ✎</span></button>
+<button type="button" style="background:#121214;border:0;border-radius:14px;padding:12px 14px;text-align:left;color:#ededed;font-family:DM Sans,sans-serif;display:flex;flex-direction:column;gap:3px"><span style="font-size:11.5px;color:#a8a29a">Goal</span><span style="font-size:16px;font-weight:600">Wed 12:00 · 16h ✎</span></button>
+</div>
+
+<button type="button" onClick="{{toggle}}" style="{{mainBtn}}">{{mainLabel}}</button>
+<div style="text-align:center;font-size:12.5px;color:#8f897f;margin-top:-8px">Longer fast or started earlier? <a href="#">More options</a></div>
+
+<div class="in" style="background:#17140f;border:1px solid #3a2e1c;border-radius:18px;padding:16px;display:flex;flex-direction:column;gap:8px">
+<div style="font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:#e8cf93">What’s happening now</div>
+<div style="font-size:18px;font-weight:700">{{now.name}}</div>
+<div style="font-size:14px;line-height:1.5;color:#d8d2c6">{{now.body}}</div>
+<div style="display:flex;align-items:center;gap:8px"><span style="{{now.badge}}">{{now.ev}}</span><span style="font-size:12px;color:#8f897f">{{now.next}}</span></div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">Stages · tap for more</div>
+<sc-for list="{{stages}}" as="s" hint-placeholder-count="7">
+<button type="button" onClick="{{s.pick}}" style="{{s.row}}">
+<span style="{{s.dot}}"></span>
+<span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;text-align:left">
+<span style="display:flex;justify-content:space-between;gap:8px"><span style="font-size:14.5px;font-weight:600">{{s.name}}</span><span style="font-size:12px;color:#8f897f;white-space:nowrap">{{s.when}}</span></span>
+<sc-if value="{{s.open}}" hint-placeholder-val="{{false}}">
+<span style="font-size:13px;line-height:1.5;color:#d8d2c6">{{s.body}}</span>
+<span style="{{s.badge}}">{{s.ev}}</span>
+</sc-if>
+</span>
+</button>
+</sc-for>
+<div style="font-size:11.5px;line-height:1.5;color:#8f897f">Timings are typical, not exact: they vary with your last meal, activity and body. For fasts over 72 hours, or if you take medication or have a health condition, check with your GP first.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">This week</span><span style="font-size:13px;color:#c9b37e">4 of 6 on goal · 3-day streak</span></div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px">
+<sc-for list="{{week}}" as="d" hint-placeholder-count="7">
+<div style="display:flex;flex-direction:column;align-items:center;gap:5px">
+<svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true" style="transform:rotate(-90deg)"><circle cx="20" cy="20" r="16" fill="none" stroke="#1c1b1e" stroke-width="5"></circle><circle cx="20" cy="20" r="16" fill="none" stroke="{{d.col}}" stroke-width="5" stroke-linecap="round" stroke-dasharray="100.5" stroke-dashoffset="{{d.off}}"></circle></svg>
+<span style="{{d.lab}}">{{d.day}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:8px">
+<div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:#a8a29a">History</div>
+<sc-for list="{{history}}" as="h" hint-placeholder-count="4">
+<div style="display:flex;align-items:center;gap:12px;background:#121214;border-radius:14px;padding:11px 14px">
+<span style="{{h.dot}}"></span>
+<span style="flex:1;font-size:14px">{{h.when}}</span>
+<span style="font-size:14px;font-weight:600">{{h.len}}</span>
+<span style="font-size:12px;color:#8f897f;width:62px;text-align:right">{{h.goal}}</span>
+</div>
+</sc-for>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"hours":{"editor":"range","min":0,"max":30,"step":0.5,"default":13.5,"section":"Preview"},"$preview":{"width":390,"height":1560}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { open: null, ended: false }; }
+  renderVals() {
+    const st = this.state;
+    const h = st.ended ? 0 : (this.props.hours ?? 13.5);
+    const goal = 16, C = 791.7;
+    const frac = Math.min(1, h / goal);
+    const ang = frac * 2 * Math.PI - Math.PI / 2;
+    const tipX = 150 + Math.cos(ang) * 126, tipY = 150 + Math.sin(ang) * 126;
+    const fmt = (x) => { const hh = Math.floor(x), mm = Math.round((x - hh) * 60); return hh + ':' + (mm < 10 ? '0' : '') + mm; };
+    const left = Math.max(0, goal - h);
+    const S = [
+      { id: 'digest', from: 0, to: 4, name: 'Digesting', when: '0–4h', body: 'Your blood sugar and insulin rise after your last meal, then start to settle as digestion finishes.', ev: 'Well established' },
+      { id: 'sugar', from: 4, to: 12, name: 'Blood sugar settling', when: '4–12h', body: 'Insulin falls and your body draws on glycogen, the sugar stored in your liver, to keep blood sugar steady.', ev: 'Well established' },
+      { id: 'fat', from: 12, to: 16, name: 'Switching to fat', when: '12–16h', body: 'As glycogen runs low, your body burns more fat for fuel and ketone levels begin to rise. Timing varies a lot from person to person.', ev: 'Well established' },
+      { id: 'ketones', from: 16, to: 24, name: 'Ketones rising', when: '16–24h', body: 'Ketones keep climbing and many people find hunger eases off. Keep drinking water.', ev: 'Good evidence' },
+      { id: 'gh', from: 24, to: 48, name: 'Growth hormone up', when: '24h+', body: 'Studies show growth hormone rises during longer fasts, which helps preserve muscle while you burn fat.', ev: 'Moderate evidence' },
+      { id: 'auto', from: 24, to: 72, name: 'Cell clean-up (autophagy)', when: 'likely 24h+', body: 'Fasting is thought to increase autophagy, the body recycling worn-out parts of cells. When it starts in people isn’t known: most of the evidence is from animal studies.', ev: 'Early evidence' },
+      { id: 'long', from: 48, to: 999, name: 'Deep ketosis', when: '48–72h', body: 'Ketones are high and fat is the main fuel. Electrolytes (salt, potassium, magnesium) matter more now. Beyond 72 hours, only with your GP’s say-so.', ev: 'Good evidence' }
+    ];
+    const evStyle = (e) => {
+      const strong = e === 'Well established' || e === 'Good evidence';
+      const early = e === 'Early evidence';
+      return 'align-self:flex-start;font-size:11px;border-radius:999px;padding:3px 9px;' + (strong ? 'background:#22201a;color:#e8cf93' : early ? 'background:#2a1f16;color:#f0a86a' : 'background:#1f1f23;color:#c7c2b8');
+    };
+    const curIdx = S.findIndex((s) => h >= s.from && h < s.to && s.id !== 'auto');
+    const cur = S[curIdx < 0 ? 0 : curIdx];
+    const nextS = S.find((s) => s.from > h && s.id !== 'auto');
+    const pill = 'border:0;border-radius:999px;padding:15px;font:600 16px DM Sans,sans-serif;cursor:pointer;';
+    return {
+      dashOffset: C * (1 - frac),
+      tipStyle: 'position:absolute;width:22px;height:22px;border-radius:50%;background:#fff1cf;box-shadow:0 0 18px 6px rgba(232,207,147,.55);left:' + (tipX - 11) + 'px;top:' + (tipY - 11) + 'px;' + (h <= 0 ? 'display:none' : ''),
+      marks: [4, 8, 12, 16].map((m) => {
+        const a = (m / goal) * 2 * Math.PI - Math.PI / 2, x = 150 + Math.cos(a) * 126, y = 150 + Math.sin(a) * 126, on = h >= m;
+        return { label: m + 'h', style: 'position:absolute;width:10px;height:10px;border-radius:50%;left:' + (x - 5) + 'px;top:' + (y - 5) + 'px;background:' + (on ? '#1a1408' : '#3a3833') + ';border:2px solid ' + (on ? '#1a1408' : '#000') };
+      }),
+      topLine: st.ended ? 'Not fasting' : (h >= goal ? 'Goal reached' : 'Fasting'),
+      bigTime: st.ended ? '—' : fmt(h),
+      subLine: st.ended ? 'Next fast from 20:00' : (h >= goal ? '+' + fmt(h - goal) + ' past your goal' : 'Ends in ' + fmt(left) + ' · 12:00'),
+      mainLabel: st.ended ? 'Start fast' : 'End fast',
+      mainBtn: pill + (st.ended ? 'background:#c9b37e;color:#1a1408' : 'background:#1a1a1d;color:#e8cf93;border:1px solid #c9b37e'),
+      toggle: () => this.setState({ ended: !st.ended }),
+      now: { name: cur.name, body: cur.body, ev: cur.ev, badge: evStyle(cur.ev), next: nextS ? 'Next: ' + nextS.name.toLowerCase() + ' in ' + fmt(nextS.from - h) : '' },
+      stages: S.map((s) => {
+        const reached = !st.ended && h >= s.from, here = !st.ended && h >= s.from && h < s.to, open = st.open === s.id;
+        const c = here ? '#e8cf93' : reached ? '#c9b37e' : '#3a3833';
+        return {
+          name: s.name, when: s.when, body: s.body, ev: s.ev, open: open, badge: evStyle(s.ev),
+          pick: () => this.setState({ open: open ? null : s.id }),
+          dot: 'flex:0 0 auto;margin-top:5px;width:10px;height:10px;border-radius:50%;background:' + c + (here ? ';box-shadow:0 0 10px #e8cf93' : ''),
+          row: 'display:flex;gap:12px;align-items:flex-start;width:100%;box-sizing:border-box;border:0;cursor:pointer;color:#ededed;font-family:DM Sans,sans-serif;border-radius:14px;padding:12px 14px;background:' + (here ? '#1c1912' : '#121214') + ';opacity:' + (reached || here ? '1' : '.7')
+        };
+      }),
+      week: [['Thu', 1], ['Fri', 1.1], ['Sat', 0.6], ['Sun', 1], ['Mon', 1], ['Tue', 1.05], ['Wed', frac]].map((d, i) => {
+        const v = Math.min(1, d[1]), today = i === 6;
+        return { day: d[0], off: 100.5 * (1 - v), col: d[1] >= 1 ? '#c9b37e' : (today ? '#e8cf93' : '#6b5a36'),
+          lab: 'font-size:11.5px;' + (today ? 'color:#e8cf93;font-weight:600' : 'color:#8f897f') };
+      }),
+      history: [
+        { when: 'Tue 20 → Wed 21', len: '16h 40m', goal: 'on goal' },
+        { when: 'Mon 19 → Tue 20', len: '16h 05m', goal: 'on goal' },
+        { when: 'Sun 18 → Mon 19', len: '17h 10m', goal: 'on goal' },
+        { when: 'Sat 17 → Sun 18', len: '9h 30m', goal: '6h short' }
+      ].map((x) => Object.assign({}, x, { dot: 'width:9px;height:9px;border-radius:50%;background:' + (x.goal === 'on goal' ? '#c9b37e' : '#6b5a36') }))
+    };
+  }
+}
+</script>
+</body>
+</html>
