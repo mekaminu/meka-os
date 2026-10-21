@@ -79,7 +79,7 @@ class ShellNavTest {
             ShellNav.daily().map { it.label },
         )
         assertEquals(
-            listOf("About you", "Work mode", "Protected time", "Notifications", "Appearance", "Ada's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What Navilife may do", "Navilife's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
+            listOf("About you", "Work mode", "Protected time", "Notifications", "Speaking up", "Appearance", "Ada's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What Navilife may do", "Navilife's AI", "Activity", "Setup", "Health", "Vault", "Your data"),
             ShellNav.settings(connected = true).map { it.label },
         )
         assertFalse(MoreItem.WATCH in ShellNav.settings(connected = false))
