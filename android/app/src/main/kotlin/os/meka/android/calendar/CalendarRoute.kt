@@ -231,7 +231,24 @@ private fun Agenda(
         }
     }
 
+    // Week board by hand, slice 3: folded on the Board, a compact header so the board starts high: "Calendar" with
+    // Agenda · Board on one row, the summary and the calendars' key left to the Agenda.
+    val compactBoard = board && androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp < 600
     Column(Modifier.fillMaxSize().background(Meka.colors.background)) {
+        if (compactBoard) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.m, bottom = MekaSpace.xs)
+                    .appear(rememberAppearance(0)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Calendar", style = MekaType.nowTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                CalendarViewSwitch(board, onChange = onBoard)
+                if (add.canAdd) AddEventButton(onClick = { add.onAdd(lit) })
+            }
+            EditLines(add.lines, Modifier.padding(horizontal = MekaSpace.gutter))
+            WeekBoardView(core, undo, onEvent, Modifier.weight(1f), onPlanWeek)
+            return@Column
+        }
         Column(Modifier.padding(start = MekaSpace.gutter, end = MekaSpace.gutter, top = MekaSpace.xl)) {
             Row(Modifier.fillMaxWidth().appear(rememberAppearance(0)), verticalAlignment = Alignment.CenterVertically) {
                 Text("Calendar", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))

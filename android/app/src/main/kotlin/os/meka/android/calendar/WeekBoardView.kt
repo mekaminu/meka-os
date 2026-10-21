@@ -41,6 +41,13 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
 import os.meka.core.domain.BoardHandRules
+import os.meka.core.domain.BoardFoldRules
+import os.meka.core.domain.DayStripPill
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.semantics.selected
 import os.meka.core.domain.BoardLookRules
 import os.meka.core.domain.CardChip
 import os.meka.core.domain.CardChipKind
@@ -201,6 +208,10 @@ fun WeekBoardView(
     val cards = remember { mutableStateMapOf<String, Rect>() }
     // Slice 9: the free times in each day's timeline (unfolded), keyed by day and start.
     val freeSlots = remember { mutableStateMapOf<Pair<Long, Long>, Rect>() }
+    // By hand, slice 3 (folded): the 7-day strip's pills, drop targets for a held card; and the day in view, kept
+    // across a fold or unfold.
+    val pills = remember { mutableStateMapOf<Long, Rect>() }
+    var focusDay by rememberSaveable { mutableStateOf<Long?>(null) }
     var origin by remember { mutableStateOf(Offset.Zero) }
     // By hand, slice 1: the day whose "+ Add a task" field is open (one at a time) and where it is, so a tap anywhere
     // else closes it; each day's own vertical scroll (for the edge auto-scroll); the card that just landed (its spring
@@ -214,9 +225,13 @@ fun WeekBoardView(
     LaunchedEffect(landed) { if (landed != null) { delay(LAND_MS); landed = null } }
     // Slice 2: the free-time drop targets only show while a card is held, so their places are forgotten when it lands.
     LaunchedEffect(drag == null) { if (drag == null) freeSlots.clear() }
+    val hoveredPill by remember {
+        derivedStateOf { drag?.let { d -> pills.entries.firstOrNull { (_, r) -> r.contains(d.pointer) }?.key } }
+    }
     val hovered by remember {
         derivedStateOf {
             drag?.let { d ->
+                if (hoveredPill != null) return@let null
                 columns.entries.firstOrNull { (k, r) -> k < 0 && r.contains(d.pointer) }?.key
                     ?: columns.entries.firstOrNull { (k, r) -> k >= 0 && d.pointer.x >= r.left && d.pointer.x < r.right && d.pointer.y >= r.top }?.key
             }
@@ -236,6 +251,7 @@ fun WeekBoardView(
         }
     }
     LaunchedEffect(hovered) { if (drag != null && hovered != null) haptics.tick() }
+    LaunchedEffect(hoveredPill) { if (drag != null && hoveredPill != null) haptics.tick() }
     LaunchedEffect(hoveredFree) { if (drag != null && hoveredFree != null) haptics.tick() }
     fun showLine(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } } }
     val onPark: (BoardCard, Long) -> Unit = { card, week -> scope.launch { showLine(runCatching { core.parkOnBoard(card.id, week, Int.MAX_VALUE) }.getOrNull()) } }
@@ -259,25 +275,57 @@ fun WeekBoardView(
             },
     ) {
         val wide = maxWidth >= 600.dp
-        val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / 7 else maxWidth * 0.8f
+        // By hand, slice 3: folded, one day fills the width (paged with a snap, never stopping between two days).
+        val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / 7 else maxWidth - MekaSpace.xs * 2
         val colPx = with(density) { colWidth.toPx() }
         val scroll = rememberScrollState()
-        // Start on today's column (unfolded: this week).
-        LaunchedEffect(Unit) {
-            val index = board.days.indexOfFirst { it.isToday }.coerceAtLeast(0)
-            scroll.scrollTo(((if (wide) index - index % 7 else index) * colPx).toInt())
+        val dayCount = board.days.size
+        val daySnap = remember(colPx, dayCount, reduced) {
+            DaySnapFling(colPx, dayCount, { scroll.value.toFloat() }, with(density) { BoardFoldRules.FLING_DP_PER_S.dp.toPx() }, reduced) { haptics.tick() }
+        }
+        val turnTo: (Int) -> Unit = { index ->
+            val page = index.coerceIn(0, (dayCount - 1).coerceAtLeast(0))
+            daySnap.settled = page
+            val target = (page * colPx).toInt()
+            scope.launch { if (reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target, spring(dampingRatio = 0.9f, stiffness = 500f)) }
+        }
+        // Start on today's column (unfolded: this week); across a fold or unfold, the same day stays in view. Then keep
+        // note of the day in view (folded: the page; unfolded: today in the week shown, else its Monday), and a tick as
+        // each folded page settles.
+        val daysNow by rememberUpdatedState(board.days)
+        LaunchedEffect(wide, colPx) {
+            val index = BoardFoldRules.focusAfterFold(daysNow, focusDay)
+            scroll.scrollTo(((if (wide) BoardFoldRules.weekStartIndex(index) else index) * colPx).toInt())
+            daySnap.settled = index
+            snapshotFlow { BoardFoldRules.pageOf(scroll.value.toFloat(), colPx, dayCount) }.collect { page ->
+                focusDay = if (wide) BoardFoldRules.focusInWeek(daysNow, page / 7) else daysNow.getOrNull(page)?.epochDay
+            }
         }
         // Near an edge while dragging, the board scrolls along.
         LaunchedEffect(drag != null) {
+            var edgeDir = 0
+            var edgeSince = 0L
             while (drag != null) {
                 withFrameNanos { }
                 val d = drag ?: break
                 val edge = with(density) { BoardHandRules.EDGE.dp.toPx() }
                 val most = with(density) { BoardHandRules.MAX_STEP.dp.toPx() }
                 val width = with(density) { maxWidth.toPx() }
-                // Across the days, and up and down the day under the finger, faster the nearer the edge.
-                val across = BoardHandRules.edgeStep(d.pointer.x - origin.x, 0f, width, edge, most)
-                if (across != 0f) scroll.scrollBy(across)
+                // Across the days, and up and down the day under the finger, faster the nearer the edge. Folded, a
+                // card held at the lane's edge turns a whole page instead, after a short wait.
+                if (wide) {
+                    val across = BoardHandRules.edgeStep(d.pointer.x - origin.x, 0f, width, edge, most)
+                    if (across != 0f) scroll.scrollBy(across)
+                } else {
+                    val dir = if (hoveredPill != null) 0 else BoardFoldRules.edgeFlip(d.pointer.x - origin.x, width, edge)
+                    val now = withFrameNanos { it } / 1_000_000L
+                    if (dir == 0 || dir != edgeDir) { edgeDir = dir; edgeSince = now }
+                    else if (now - edgeSince >= BoardFoldRules.FLIP_MS) {
+                        edgeSince = now
+                        haptics.tick()
+                        turnTo(BoardFoldRules.pageOf(scroll.value.toFloat(), colPx, dayCount) + dir)
+                    }
+                }
                 val day = hovered?.takeIf { it >= 0 }
                 val col = day?.let { columns[it] }
                 val down = col?.let { BoardHandRules.edgeStep(d.pointer.y, it.top, it.bottom, edge, most) } ?: 0f
@@ -293,9 +341,19 @@ fun WeekBoardView(
             val d = drag
             val at = hovered
             val free = hoveredFree
+            val pill = hoveredPill
             val place = insertAt
             val week = board.weeks.getOrNull(weekIndex)
             drag = null
+            // Folded: dropped on a day's pill, it moves to the end of that day (the lane follows to show it land).
+            if (d != null && pill != null) {
+                board.day(pill)?.takeIf { it.canDrop }?.let { target ->
+                    landed = d.card.id
+                    turnTo(board.days.indexOfFirst { it.epochDay == target.epochDay })
+                    scope.launch { showLine(runCatching { core.moveOnBoard(d.card.id, target.epochDay, Int.MAX_VALUE) }.getOrNull()) }
+                }
+                return@drop
+            }
             if (d == null || at == null) return@drop
             landed = d.card.id
             when {
@@ -341,9 +399,18 @@ fun WeekBoardView(
                     onPark = onPark, onSomeday = onSomeday, onTag = onTag,
                     modifier = Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)),
                 )
+                // By hand, slice 3: folded, the week's seven days as pills; tap one to go to it, drop a card on one.
+                if (!wide) {
+                    DayStrip(
+                        pills = BoardFoldRules.strip(week), inView = focusDay, hovered = hoveredPill,
+                        onBounds = { day, r -> pills[day] = r }, onGone = { day -> pills.remove(day) },
+                        onTap = { day -> haptics.tick(); turnTo(board.days.indexOfFirst { it.epochDay == day }) },
+                        modifier = Modifier.padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.xs).appear(rememberAppearance(3)),
+                    )
+                }
             }
             Row(
-                Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null)
+                Modifier.fillMaxSize().horizontalScroll(scroll, enabled = drag == null, flingBehavior = if (wide) null else daySnap)
                     .padding(horizontal = if (wide) MekaSpace.gutter else MekaSpace.xs)
                     .appear(rememberAppearance(4)),
             ) {
@@ -446,6 +513,98 @@ fun WeekBoardView(
 private const val LIFT = 1.04f
 /** How long a dropped card's landing glow and spring last. */
 private const val LAND_MS = 700L
+
+/**
+ * By hand, slice 3: folded, a fling always settles on a whole day ([BoardFoldRules.snapPage]): a quick swipe one day
+ * the way it went, a slow drag the nearest; it settles on a firm spring (Reduced motion: it jumps), tick haptic when
+ * the day changed.
+ */
+private class DaySnapFling(
+    private val pagePx: Float, private val pages: Int, private val offset: () -> Float, private val threshold: Float,
+    private val reduced: Boolean, private val onNewDay: () -> Unit,
+) : FlingBehavior {
+    /** The page last settled on (set by the board when it jumps there itself). */
+    var settled = -1
+
+    override suspend fun ScrollScope.performFling(initialVelocity: Float): Float {
+        val target = BoardFoldRules.snapPage(offset(), pagePx, initialVelocity, threshold, pages)
+        val distance = target * pagePx - offset()
+        if (reduced) scrollBy(distance) else {
+            var last = 0f
+            androidx.compose.animation.core.animate(0f, distance, initialVelocity, spring(dampingRatio = 0.9f, stiffness = 500f)) { value, _ ->
+                scrollBy(value - last)
+                last = value
+            }
+        }
+        if (settled >= 0 && target != settled) onNewDay()
+        settled = target
+        return 0f
+    }
+}
+
+/**
+ * By hand, slice 3: the folded Board's strip of the week's seven days ("Mon 19" … "Sun 25"): the day in view lit, today
+ * in gold, a dot under a day with open tasks (amber when it is stacking up). Tap one to go to it; while a card is held
+ * a pill under it swells (1.15, the approve spring) and glows gold, and letting go there moves the card to that day.
+ * Reduced motion: no swell, the colours cross-fade.
+ */
+@Composable
+private fun DayStrip(
+    pills: List<DayStripPill>, inView: Long?, hovered: Long?, onBounds: (Long, Rect) -> Unit, onGone: (Long) -> Unit,
+    onTap: (Long) -> Unit, modifier: Modifier,
+) {
+    val reduced = Meka.reducedMotion
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        pills.forEach { p ->
+            key(p.epochDay) {
+                androidx.compose.runtime.DisposableEffect(p.epochDay) { onDispose { onGone(p.epochDay) } }
+                val lit = p.epochDay == inView
+                val over = hovered == p.epochDay && p.canDrop
+                val swell by animateFloatAsState(if (over && !reduced) BoardFoldRules.PILL_SWELL else 1f, spring(dampingRatio = 0.6f, stiffness = 600f), label = "pill-swell")
+                val fill by animateColorAsState(
+                    when {
+                        over -> Meka.colors.accent.copy(alpha = 0.22f)
+                        lit -> Meka.colors.surfaceRaised
+                        else -> Meka.colors.surface
+                    },
+                    MekaMotion.appear(reduced), label = "pill-fill",
+                )
+                val edge by animateColorAsState(
+                    if (over || (lit && p.isToday)) Meka.colors.accent else if (lit) Meka.colors.hairline else Meka.colors.hairline.copy(alpha = 0f),
+                    MekaMotion.appear(reduced), label = "pill-edge",
+                )
+                val ink = when {
+                    p.isToday -> Meka.colors.accent
+                    p.isPast -> Meka.colors.textTertiary
+                    else -> Meka.colors.textPrimary
+                }
+                Column(
+                    Modifier.weight(1f).zIndex(if (over) 1f else 0f)
+                        .graphicsLayer { scaleX = swell; scaleY = swell }
+                        .onGloballyPositioned { if (p.canDrop) onBounds(p.epochDay, it.boundsInRoot()) }
+                        .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
+                        .border(1.dp, edge, RoundedCornerShape(MekaRadius.m))
+                        .clickable(role = Role.Tab) { onTap(p.epochDay) }
+                        .semantics { contentDescription = p.accessibilityLabel; selected = lit }
+                        .padding(vertical = MekaSpace.xs),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(p.weekday, style = MekaType.micro, color = if (p.isToday) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+                    Text(p.number, style = MekaType.metaStrong, color = ink, maxLines = 1)
+                    Box(
+                        Modifier.padding(top = MekaSpace.xxs).size(4.dp).clip(CircleShape).background(
+                            when {
+                                p.stacking -> Meka.colors.calendar3
+                                p.hasTasks -> Meka.colors.textSecondary
+                                else -> Meka.colors.textSecondary.copy(alpha = 0f)
+                            },
+                        ),
+                    )
+                }
+            }
+        }
+    }
+}
 
 private data class BoardDrag(val card: BoardCard, val pointer: Offset, val grab: Offset)
 

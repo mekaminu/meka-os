@@ -1,0 +1,118 @@
+package os.meka.core.domain
+
+/** One pill of the folded Board's 7-day strip ("Mon 19"): today gold, a dot when it has tasks, amber when stacking up. */
+data class DayStripPill(
+    val epochDay: Long,
+    /** "Mon" */
+    val weekday: String,
+    /** "19" */
+    val number: String,
+    val isToday: Boolean,
+    val isPast: Boolean,
+    /** A dot under the number: the day has open tasks. */
+    val hasTasks: Boolean,
+    /** Amber: the day is stacking up ([BoardDay.pressure]). */
+    val stacking: Boolean,
+    /** Screen readers: "Thursday 22 October, 3 tasks, stacking up". */
+    val accessibilityLabel: String,
+) {
+    /** A held card can be dropped on it (today and later). */
+    val canDrop: Boolean get() = !isPast
+}
+
+/**
+ * The Week board folded, on the cover screen (by hand, slice 3; Meka 2026-10-21 19:06: one lane stopped half-scrolled
+ * between days "doesn't make sense and looks weird"), non-AI and pure:
+ * - one day at a time, full width, paged with a snap ([snapPage]): a swipe moves one day, a slow drag settles on the
+ *   nearest, never between two days;
+ * - a strip of the week's seven days across the top ([strip]): tap a pill to jump to that day, and drop a held card on
+ *   a pill to move it there (the pill swells while it hovers);
+ * - while a card is held near the lane's left or right edge, the lane turns a page after [FLIP_MS] ([edgeFlip]);
+ * - unfolding keeps the same day in view ([focusAfterFold]).
+ */
+object BoardFoldRules {
+    /** A swipe faster than this (dp/s) turns a page whichever way it was going; slower settles on the nearest day. */
+    const val FLING_DP_PER_S = 400f
+
+    /** How long a held card must stay at the lane's edge before the next or previous day comes in (ms). */
+    const val FLIP_MS = 550L
+
+    /** A hovered pill swells to this. */
+    const val PILL_SWELL = 1.15f
+
+    /** The seven pills for [week]. */
+    fun strip(week: BoardWeek): List<DayStripPill> = week.days.map(::pill)
+
+    fun pill(day: BoardDay): DayStripPill {
+        val open = day.openCards.size
+        val label = buildString {
+            append(day.accessibilityLabel.substringBefore(',').ifEmpty { "${day.weekday} ${day.number}" })
+            if (day.isToday) append(", today")
+            append(
+                when (open) {
+                    0 -> ", nothing to do"
+                    1 -> ", 1 task"
+                    else -> ", $open tasks"
+                },
+            )
+            if (day.pressure != null) append(", stacking up")
+            if (!day.isPast) append(". Drop a task here to move it to this day")
+        }
+        return DayStripPill(
+            epochDay = day.epochDay, weekday = day.weekday, number = day.number, isToday = day.isToday, isPast = day.isPast,
+            hasTasks = open > 0, stacking = day.pressure != null, accessibilityLabel = label,
+        )
+    }
+
+    /** The day in view for a scroll [offset] (px) with pages [page] px wide: the nearest. */
+    fun pageOf(offset: Float, page: Float, pages: Int): Int {
+        if (pages <= 0 || page <= 0f) return 0
+        return kotlin.math.round(offset / page).toInt().coerceIn(0, pages - 1)
+    }
+
+    /**
+     * Where a fling settles: with a quick swipe ([velocity] px/s beyond [threshold] px/s, positive towards later
+     * days) the next page that way from where the finger left it; otherwise the nearest. Always a whole day.
+     */
+    fun snapPage(offset: Float, page: Float, velocity: Float, threshold: Float, pages: Int): Int {
+        if (pages <= 0 || page <= 0f) return 0
+        val at = offset / page
+        val to = when {
+            velocity > threshold -> kotlin.math.ceil(at - EPSILON)
+            velocity < -threshold -> kotlin.math.floor(at + EPSILON)
+            else -> kotlin.math.round(at)
+        }
+        return to.toInt().coerceIn(0, pages - 1)
+    }
+
+    /** While a card is held: -1 at the lane's left edge (the day before), +1 at its right edge, 0 elsewhere. */
+    fun edgeFlip(x: Float, width: Float, edge: Float): Int = when {
+        width <= 0f -> 0
+        x < edge -> -1
+        x > width - edge -> 1
+        else -> 0
+    }
+
+    /**
+     * The day to keep in view across a fold or unfold: the day folded in view when folding out; unfolding shows that
+     * day's week. With nothing in view yet, today. [days] are the board's days in order; returns an index into them.
+     */
+    fun focusAfterFold(days: List<BoardDay>, focus: Long?): Int {
+        val byFocus = focus?.let { f -> days.indexOfFirst { it.epochDay == f } } ?: -1
+        if (byFocus >= 0) return byFocus
+        return days.indexOfFirst { it.isToday }.coerceAtLeast(0)
+    }
+
+    /** Unfolded, the first column of the week holding day [index]. */
+    fun weekStartIndex(index: Int): Int = index - index % 7
+
+    /**
+     * The day folded in view when unfolded at week [weekIndex]: today if that week holds it, else its Monday.
+     */
+    fun focusInWeek(days: List<BoardDay>, weekIndex: Int): Long? {
+        val week = days.drop(weekIndex * 7).take(7)
+        return (week.firstOrNull { it.isToday } ?: week.firstOrNull())?.epochDay
+    }
+
+    private const val EPSILON = 0.02f
+}
