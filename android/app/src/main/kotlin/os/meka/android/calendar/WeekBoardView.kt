@@ -57,6 +57,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -126,6 +127,9 @@ import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
 import os.meka.core.domain.BoardGoal
 import os.meka.core.domain.BoardGoalRules
+import os.meka.core.domain.BoardTidyRules
+import os.meka.core.domain.BoardTray
+import os.meka.core.domain.TrayChip
 import os.meka.core.domain.GoalPickChoice
 import os.meka.core.domain.BoardSource
 import os.meka.core.domain.BoardWeek
@@ -221,6 +225,11 @@ fun WeekBoardView(
     val dayScrolls = remember { HashMap<Long, ScrollState>() }
     var landed by remember { mutableStateOf<String?>(null) }
     val settling = remember { mutableStateMapOf<String, Pair<Long, Int>>() }
+    // By hand, slice 4: the past days he opened (the rest fold narrow, unfolded), the tray open under its chip (folded,
+    // as a sheet), and whether a held card came out of that sheet (it closes once the card is let go).
+    var openedPast by remember { mutableStateOf(emptySet<Long>()) }
+    var openTray by remember { mutableStateOf<BoardTray?>(null) }
+    var fromSheet by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(landed) { if (landed != null) { delay(LAND_MS); landed = null } }
     // Slice 2: the free-time drop targets only show while a card is held, so their places are forgotten when it lands.
@@ -278,6 +287,15 @@ fun WeekBoardView(
         // By hand, slice 3: folded, one day fills the width (paged with a snap, never stopping between two days).
         val colWidth = if (wide) (maxWidth - MekaSpace.gutter * 2) / 7 else maxWidth - MekaSpace.xs * 2
         val colPx = with(density) { colWidth.toPx() }
+        // By hand, slice 4: unfolded, each week's days share the width (folded past days narrow, no lane over 250 dp);
+        // folded, every page is the full width. Scroll places come from these widths.
+        val widths: List<androidx.compose.ui.unit.Dp> =
+            if (wide) BoardTidyRules.laneWidths(board.days, (maxWidth - MekaSpace.gutter * 2).value, openedPast).map { it.dp }
+            else List(board.days.size) { colWidth }
+        val widthsPx = widths.map { with(density) { it.toPx() } }
+        val startsPx = BoardTidyRules.starts(widthsPx)
+        val widthsNow by rememberUpdatedState(widthsPx)
+        val weekStartPx: (Int) -> Int = { w -> (startsPx.getOrNull(w * 7) ?: 0f).toInt() }
         val scroll = rememberScrollState()
         val dayCount = board.days.size
         val daySnap = remember(colPx, dayCount, reduced) {
@@ -295,9 +313,11 @@ fun WeekBoardView(
         val daysNow by rememberUpdatedState(board.days)
         LaunchedEffect(wide, colPx) {
             val index = BoardFoldRules.focusAfterFold(daysNow, focusDay)
-            scroll.scrollTo(((if (wide) BoardFoldRules.weekStartIndex(index) else index) * colPx).toInt())
+            scroll.scrollTo(if (wide) weekStartPx(index / 7) else (index * colPx).toInt())
             daySnap.settled = index
-            snapshotFlow { BoardFoldRules.pageOf(scroll.value.toFloat(), colPx, dayCount) }.collect { page ->
+            snapshotFlow {
+                if (wide) BoardTidyRules.indexAt(scroll.value.toFloat(), widthsNow) else BoardFoldRules.pageOf(scroll.value.toFloat(), colPx, dayCount)
+            }.collect { page ->
                 focusDay = if (wide) BoardFoldRules.focusInWeek(daysNow, page / 7) else daysNow.getOrNull(page)?.epochDay
             }
         }
@@ -333,13 +353,18 @@ fun WeekBoardView(
             }
         }
 
-        val weekIndex by remember(board, colPx) { derivedStateOf { ((scroll.value + colPx / 2) / colPx / 7).toInt().coerceIn(0, board.weeks.size - 1) } }
+        val weekIndex by remember(board, colPx, wide) {
+            derivedStateOf {
+                val at = if (wide) BoardTidyRules.indexAt(scroll.value.toFloat(), widthsNow) else ((scroll.value + colPx / 2) / colPx).toInt()
+                (at / 7).coerceIn(0, board.weeks.size - 1)
+            }
+        }
         val pick: (BoardCard, Offset) -> Unit = { card, at -> haptics.tick(); drag = BoardDrag(card, at, at - (cards[card.id]?.topLeft ?: at)) }
         val dragBy: (Offset) -> Unit = { delta -> drag = drag?.let { it.copy(pointer = it.pointer + delta) } }
         val dropCard: () -> Unit = drop@{
             // Read where it is over before letting go of it: these follow the held card and clear with it.
             val d = drag
-            val at = hovered
+            val at = hovered?.let { when (it) { LANE_OPEN -> LANE; TRAY_OPEN -> TRAY; else -> it } }
             val free = hoveredFree
             val pill = hoveredPill
             val place = insertAt
@@ -384,21 +409,60 @@ fun WeekBoardView(
         }
 
         Column(Modifier.fillMaxSize()) {
-            WeekHeader(board, weekIndex, scroll, colPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview)
+            WeekHeader(board, weekIndex, scroll, weekStartPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview)
             board.weeks.getOrNull(weekIndex)?.let { week ->
-                GoalsLane(
-                    week = week, core = core, undo = undo, hovered = if (drag != null) hovered else null,
-                    onBounds = { key, r -> columns[key] = r },
-                    modifier = Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)),
-                )
-                LaneAndTray(
-                    week = week, board = board, laneWidth = colWidth, hovered = if (drag != null) hovered else null, dragging = drag?.card?.id,
-                    onBounds = { key, r -> columns[key] = r }, onCardBounds = { id, r -> cards[id] = r },
-                    onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
-                    onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
-                    onPark = onPark, onSomeday = onSomeday, onTag = onTag,
-                    modifier = Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)),
-                )
+                // By hand, slice 4: the week's goals as small gold pills and the two trays as chips (unfolded on one
+                // row, folded on two); an open tray's cards unfolded in a lane under them.
+                val chips = BoardTidyRules.trayChips(week, board, openTray)
+                LaunchedEffect(chips.map { it.count }) { openTray = BoardTidyRules.stillOpen(openTray, chips) }
+                val onTrayTap: (TrayChip) -> Unit = { chip -> haptics.tick(); openTray = BoardTidyRules.toggle(openTray, chip) }
+                val goalsLane: @Composable (Modifier) -> Unit = { mod ->
+                    GoalsLane(
+                        week = week, core = core, undo = undo, hovered = if (drag != null) hovered else null,
+                        onBounds = { key, r -> columns[key] = r }, modifier = mod,
+                    )
+                }
+                val trayChips: @Composable (Modifier) -> Unit = { mod ->
+                    TrayChips(
+                        chips, openTray, hovered = if (drag != null) hovered else null,
+                        onBounds = { key, r -> columns[key] = r }, onGone = { key -> columns.remove(key) }, onTap = onTrayTap, modifier = mod,
+                    )
+                }
+                if (wide) {
+                    Row(Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).appear(rememberAppearance(3)), verticalAlignment = Alignment.CenterVertically) {
+                        goalsLane(Modifier.weight(1f))
+                        Spacer(Modifier.width(MekaSpace.xs))
+                        trayChips(Modifier)
+                    }
+                } else {
+                    Column(Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        if (week.goals.isNotEmpty() || week.canAddGoal) goalsLane(Modifier)
+                        trayChips(Modifier)
+                    }
+                }
+                val tray = openTray
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = wide && tray != null,
+                    enter = androidx.compose.animation.expandVertically(MekaMotion.appear(reduced)) + androidx.compose.animation.fadeIn(MekaMotion.appear(reduced)),
+                    exit = androidx.compose.animation.shrinkVertically(MekaMotion.appear(reduced)) + androidx.compose.animation.fadeOut(MekaMotion.appear(reduced)),
+                ) {
+                    if (tray != null) {
+                        val laneKey = if (tray == BoardTray.NO_DAY) LANE_OPEN else TRAY_OPEN
+                        val lit = drag != null && hovered == laneKey
+                        val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "open-lane-glow")
+                        androidx.compose.runtime.DisposableEffect(laneKey) { onDispose { columns.remove(laneKey) } }
+                        TrayCards(
+                            tray, week, board, stacked = false, cardWidth = 200.dp, dragging = drag?.card?.id,
+                            onCardBounds = { id, r -> cards[id] = r }, onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
+                            onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
+                            onPark = onPark, onSomeday = onSomeday, onTag = onTag,
+                            modifier = Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).fillMaxWidth()
+                                .onGloballyPositioned { columns[laneKey] = it.boundsInRoot() }
+                                .clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+                                .border(1.dp, glow, RoundedCornerShape(MekaRadius.m)).padding(MekaSpace.xs),
+                        )
+                    }
+                }
                 // By hand, slice 3: folded, the week's seven days as pills; tap one to go to it, drop a card on one.
                 if (!wide) {
                     DayStrip(
@@ -414,13 +478,15 @@ fun WeekBoardView(
                     .padding(horizontal = if (wide) MekaSpace.gutter else MekaSpace.xs)
                     .appear(rememberAppearance(4)),
             ) {
-                board.days.forEach { day ->
+                board.days.forEachIndexed { index, day ->
                     val gap = insertAt?.takeIf { it.first == day.epochDay }?.let { (_, to) ->
                         drag?.let { d -> BoardHandRules.gapBefore(day.openCards.map { it.id }, d.card.id, to) }
                     }
                     DayColumn(
                         day = day,
-                        width = colWidth,
+                        width = widths.getOrElse(index) { colWidth },
+                        collapsed = wide && BoardTidyRules.collapsed(day, openedPast),
+                        onFold = if (wide && day.isPast) ({ haptics.tick(); openedPast = if (day.epochDay in openedPast) openedPast - day.epochDay else openedPast + day.epochDay }) else null,
                         gapAt = gap,
                         gapHeight = drag?.let { d -> cards[d.card.id]?.let { with(density) { it.height.toDp() } } } ?: MekaSpace.xxl,
                         held = settling.filterValues { it.first == day.epochDay }.mapValues { it.value.second },
@@ -495,11 +561,34 @@ fun WeekBoardView(
             }
         }
 
+        // By hand, slice 4: folded, an open tray is a sheet over the day; it steps aside while one of its cards is held
+        // and closes once that card is let go.
+        val sheetTray = openTray
+        if (!wide && sheetTray != null) {
+            board.weeks.getOrNull(weekIndex)?.let { week ->
+                LaunchedEffect(drag != null) {
+                    if (drag != null) fromSheet = true
+                    else if (fromSheet) { fromSheet = false; openTray = null }
+                }
+                TraySheet(
+                    title = BoardTidyRules.trayChips(week, board).first { it.tray == sheetTray }.label,
+                    hidden = drag != null, onClose = { haptics.tick(); openTray = null },
+                ) {
+                    TrayCards(
+                        sheetTray, week, board, stacked = true, cardWidth = colWidth, dragging = drag?.card?.id,
+                        onCardBounds = { id, r -> cards[id] = r }, onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
+                        onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
+                        onPark = onPark, onSomeday = onSomeday, onTag = onTag, modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+
         // The card being dragged follows the finger, lifted (Reduced motion: no lift).
         drag?.let { d ->
             val at = d.pointer - d.grab - origin
             Box(
-                Modifier.zIndex(2f).width(colWidth - MekaSpace.xs)
+                Modifier.zIndex(3f).width(cards[d.card.id]?.let { with(density) { it.width.toDp() } } ?: (colWidth - MekaSpace.xs))
                     .graphicsLayer {
                         translationX = at.x; translationY = at.y
                         if (!reduced) { scaleX = LIFT; scaleY = LIFT; shadowElevation = 12.dp.toPx() }
@@ -611,20 +700,23 @@ private data class BoardDrag(val card: BoardCard, val pointer: Offset, val grab:
 /** Drop-target keys besides a day's epoch day: the week's lane and the Someday tray. */
 private const val LANE = -1L
 private const val TRAY = -2L
+/** By hand, slice 4: the open No day yet lane and the open Someday lane (unfolded), the same targets as their chips. */
+private const val LANE_OPEN = -3L
+private const val TRAY_OPEN = -4L
 /** Slice 7: the week's goals are drop targets GOAL_KEY, GOAL_KEY - 1, GOAL_KEY - 2 (first, second, third). */
 private const val GOAL_KEY = -10L
 
 /** "This week · 19–25 Oct" with ‹ › stepping a week; follows the board as it scrolls. */
 @Composable
 private fun WeekHeader(
-    board: WeekBoard, week: Int, scroll: ScrollState, colPx: Float, modifier: Modifier, onPlanWeek: (() -> Unit)?, onReview: () -> Unit,
+    board: WeekBoard, week: Int, scroll: ScrollState, weekStartPx: (Int) -> Int, modifier: Modifier, onPlanWeek: (() -> Unit)?, onReview: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
     val w = board.weeks[week]
     fun go(to: Int) {
-        val target = (to * 7 * colPx).toInt()
+        val target = weekStartPx(to)
         haptics.tick()
         scope.launch { if (reduced) scroll.scrollTo(target) else scroll.animateScrollTo(target, MekaMotion.replan<Float>(false)) }
     }
@@ -673,6 +765,10 @@ private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: 
 private fun DayColumn(
     day: BoardDay,
     width: androidx.compose.ui.unit.Dp,
+    /** By hand, slice 4: a past day folded narrow (its number, weekday and "3 done"); tap to open it. */
+    collapsed: Boolean,
+    /** Opens a folded past day, or folds an opened one again (unfolded only); null elsewhere. */
+    onFold: (() -> Unit)?,
     /** By hand: where the gold gap opens for a held card (an index into the day's open cards), and its height. */
     gapAt: Int?,
     gapHeight: androidx.compose.ui.unit.Dp,
@@ -730,6 +826,10 @@ private fun DayColumn(
     )
     val vScroll = rememberScrollState()
     SideEffect { onScrollState(vScroll) }
+    if (collapsed) {
+        CollapsedPastDay(day, width, onBounds, onOpen = { onFold?.invoke() })
+        return
+    }
     Column(
         Modifier.width(width).fillMaxHeight().padding(horizontal = MekaSpace.xxs)
             .onGloballyPositioned { onBounds(it.boundsInRoot()) }
@@ -741,7 +841,14 @@ private fun DayColumn(
     ) {
         // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold, then
         // "2 of 5 done" over a thin gold bar (a past day only what was done) and the day's capacity.
-        Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = day.accessibilityLabel }) {
+        Column(
+            Modifier.fillMaxWidth()
+                .then(if (onFold != null) Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onFold() } else Modifier)
+                .clearAndSetSemantics {
+                    contentDescription = day.accessibilityLabel + if (onFold != null) ". Tap to fold it" else ""
+                    if (onFold != null) onClick { onFold(); true }
+                },
+        ) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(day.number, style = MekaType.nowTitle, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
                 Spacer(Modifier.width(MekaSpace.xs))
@@ -822,6 +929,33 @@ private fun DayColumn(
                 if (openIndex == openIds.size - 1) GapSlot(gapAt != null && gapAt >= openIds.size, gapHeight)
             }
         }
+    }
+}
+
+/**
+ * By hand, slice 4: a past day folded narrow, unfolded: its big number over the weekday and "3 done" (or "Nothing
+ * done"), quiet on the background. Tap it to open the day at full width (the lanes ease to their new widths).
+ */
+@Composable
+private fun CollapsedPastDay(day: BoardDay, width: androidx.compose.ui.unit.Dp, onBounds: (Rect) -> Unit, onOpen: () -> Unit) {
+    val done = day.cards.count { it.done }
+    Column(
+        Modifier.width(width).fillMaxHeight().padding(horizontal = MekaSpace.xxs)
+            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onOpen)
+            .clearAndSetSemantics { contentDescription = BoardTidyRules.collapsedLabel(day); onClick { onOpen(); true } }
+            .padding(vertical = MekaSpace.m),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(day.number, style = MekaType.nowTitle, color = Meka.colors.textSecondary, maxLines = 1)
+        Text(day.weekday, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+        Spacer(Modifier.height(MekaSpace.xs))
+        // "3 done" stacked to fit the narrow lane ("Nothing done" when none was), never a dash.
+        if (done == 0) Text("Nothing", style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+        else Text("$done", style = MekaType.metaStrong, color = Meka.colors.accent, maxLines = 1)
+        Text("done", style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
     }
 }
 
@@ -1345,18 +1479,68 @@ fun CalendarViewSwitch(board: Boolean, modifier: Modifier = Modifier, onChange: 
 }
 
 /**
- * Above the days (slice 4): the week in view's lane, "No day yet" with its cards side by side (parked for the week, off
- * Today until they get a day), and the folded Someday tray; tap the tray to open its cards. Both glow gold while a card
- * is over them. Cards here drag and have the same menu as a day's.
+ * By hand, slice 4: "No day yet · 3" and "Someday · 12" as two small chips on one row (each a drop target that glows
+ * gold and swells while a card is over it). Tap one with cards to open it, one at a time ([BoardTidyRules.toggle]);
+ * an empty one never opens into an empty box. Removed targets are forgotten so a closed tray is never dropped on.
  */
 @Composable
-private fun LaneAndTray(
+private fun TrayChips(
+    chips: List<TrayChip>,
+    open: BoardTray?,
+    hovered: Long?,
+    onBounds: (Long, Rect) -> Unit,
+    onGone: (Long) -> Unit,
+    onTap: (TrayChip) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val reduced = Meka.reducedMotion
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        chips.forEach { chip ->
+            val key = if (chip.tray == BoardTray.NO_DAY) LANE else TRAY
+            val lit = hovered == key
+            val isOpen = open == chip.tray
+            val glow by animateColorAsState(
+                when { lit || isOpen -> Meka.colors.accent; else -> Meka.colors.hairline }, MekaMotion.appear(reduced), label = "tray-glow-$key",
+            )
+            val swell by animateFloatAsState(if (lit && !reduced) BoardFoldRules.PILL_SWELL else 1f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "tray-swell-$key")
+            androidx.compose.runtime.DisposableEffect(key) { onDispose { onGone(key) } }
+            Row(
+                Modifier.heightIn(min = 32.dp)
+                    .onGloballyPositioned { onBounds(key, it.boundsInRoot()) }
+                    .graphicsLayer { scaleX = swell; scaleY = swell }
+                    .clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(if (lit || isOpen) Meka.colors.surfaceRaised else Meka.colors.surface)
+                    .border(1.dp, glow, RoundedCornerShape(MekaRadius.pill))
+                    .clickable(enabled = chip.canOpen || isOpen, role = Role.Button) { onTap(chip) }
+                    .clearAndSetSemantics { contentDescription = chip.accessibilityLabel }
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    chip.label, style = MekaType.caption, maxLines = 1,
+                    color = when { isOpen -> Meka.colors.accent; chip.canOpen -> Meka.colors.textPrimary; else -> Meka.colors.textTertiary },
+                )
+                if (chip.canOpen) {
+                    Spacer(Modifier.width(MekaSpace.xxs))
+                    Text(if (isOpen) "▴" else "▾", style = MekaType.micro, color = Meka.colors.textTertiary)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * By hand, slice 4: an open tray's cards. Unfolded, a lane under the chips with its cards side by side; folded, the same
+ * cards stacked in a sheet. They drag out onto a day (or a pill) and have the same menu as a day's.
+ */
+@Composable
+private fun TrayCards(
+    tray: BoardTray,
     week: BoardWeek,
     board: WeekBoard,
-    laneWidth: androidx.compose.ui.unit.Dp,
-    hovered: Long?,
+    stacked: Boolean,
+    cardWidth: androidx.compose.ui.unit.Dp,
     dragging: String?,
-    onBounds: (Long, Rect) -> Unit,
     onCardBounds: (String, Rect) -> Unit,
     onPick: (BoardCard, Offset) -> Unit,
     onDrag: (Offset) -> Unit,
@@ -1368,77 +1552,63 @@ private fun LaneAndTray(
     onTag: (BoardCard, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val reduced = Meka.reducedMotion
-    val haptics = rememberMekaHaptics()
-    var trayOpen by remember { mutableStateOf(false) }
-    val cardWidth = laneWidth.coerceIn(140.dp, 200.dp)
-    @Composable
-    fun zone(key: Long, lit: Boolean, mod: Modifier, content: @Composable () -> Unit) {
-        val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "zone-glow-$key")
-        val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface, MekaMotion.appear(reduced), label = "zone-fill-$key")
-        Box(
-            mod.onGloballyPositioned { onBounds(key, it.boundsInRoot()) }
-                .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
-                .border(1.dp, glow, RoundedCornerShape(MekaRadius.m)).padding(MekaSpace.xs),
-        ) { content() }
+    val (cards, source, spot) = when (tray) {
+        BoardTray.NO_DAY -> Triple(week.lane, BoardSource.WEEK, week.startEpochDay)
+        BoardTray.SOMEDAY -> Triple(board.someday, BoardSource.SOMEDAY, 0L)
     }
-    Column(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.Top) {
-            zone(LANE, hovered == LANE, Modifier.weight(1f)) {
-                Column {
-                    Row(Modifier.clearAndSetSemantics { contentDescription = week.laneAccessibilityLabel }, verticalAlignment = Alignment.Bottom) {
-                        Text(WeekBoardRules.NO_DAY, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
-                        Spacer(Modifier.width(MekaSpace.xs))
-                        Text(week.laneLine, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    if (week.lane.isNotEmpty()) {
-                        Row(
-                            Modifier.padding(top = MekaSpace.xs).horizontalScroll(rememberScrollState(), enabled = dragging == null),
-                            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                        ) {
-                            week.lane.forEach { card ->
-                                BoardCardRow(
-                                    card, BoardSource.WEEK, week.startEpochDay, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
-                                    onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> }, Modifier.width(cardWidth),
-                                    onTag = onTag,
-                                )
-                            }
-                        }
-                    }
-                }
+    @Composable
+    fun row(card: BoardCard, mod: Modifier) = BoardCardRow(
+        card, source, spot, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
+        onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> }, mod, onTag = onTag,
+    )
+    if (stacked) {
+        Column(modifier.verticalScroll(rememberScrollState(), enabled = dragging == null), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            cards.forEach { card -> key(card.id) { row(card, Modifier.fillMaxWidth()) } }
+        }
+    } else {
+        Row(modifier.horizontalScroll(rememberScrollState(), enabled = dragging == null), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            cards.forEach { card -> key(card.id) { row(card, Modifier.width(cardWidth)) } }
+        }
+    }
+}
+
+/**
+ * By hand, slice 4: folded, an open tray is a sheet that rises from the bottom over the day (a scrim behind; tap it or
+ * the chip to close). While a card from it is held the sheet steps aside (it fades out) so the day and the pills show,
+ * and it closes once the card is let go. Reduced motion: it fades in and out.
+ */
+@Composable
+private fun TraySheet(title: String, hidden: Boolean, onClose: () -> Unit, content: @Composable () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val shown by animateFloatAsState(if (hidden) 0f else 1f, MekaMotion.appear(reduced), label = "tray-sheet")
+    val rise = remember { Animatable(if (reduced) 0f else 1f) }
+    LaunchedEffect(Unit) { rise.animateTo(0f, spring(dampingRatio = 0.85f, stiffness = 500f)) }
+    val scrimTaps = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    Box(Modifier.fillMaxSize().zIndex(1f).alpha(shown)) {
+        Box(
+            Modifier.fillMaxSize().background(Meka.colors.background.copy(alpha = 0.6f))
+                .then(if (hidden) Modifier else Modifier.clickable(interactionSource = scrimTaps, indication = null) { onClose() }),
+        )
+        Column(
+            Modifier.align(Alignment.BottomCenter).fillMaxWidth().fillMaxHeight(0.6f)
+                .graphicsLayer { translationY = rise.value * size.height }
+                // A tap on the sheet itself stays on it (only the scrim closes it).
+                .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false) } }
+                .clip(RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                .background(Meka.colors.surfaceRaised)
+                .border(1.dp, Meka.colors.hairline, RoundedCornerShape(topStart = MekaRadius.l, topEnd = MekaRadius.l))
+                .padding(horizontal = MekaSpace.gutter, vertical = MekaSpace.m),
+        ) {
+            Box(Modifier.align(Alignment.CenterHorizontally).width(MekaSpace.xl).height(4.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline))
+            Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                Text(title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                Text(
+                    "Close", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClose() }
+                        .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+                )
             }
-            zone(TRAY, hovered == TRAY, Modifier.width(cardWidth)) {
-                Column {
-                    Text(
-                        board.somedayTitle + if (board.someday.isEmpty()) "" else if (trayOpen) "  ▴" else "  ▾",
-                        style = MekaType.metaStrong, color = Meka.colors.textSecondary, maxLines = 1,
-                        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s))
-                            .clickable(enabled = board.someday.isNotEmpty(), role = Role.Button) { haptics.tick(); trayOpen = !trayOpen }
-                            .semantics { contentDescription = board.somedayTitle + if (trayOpen) ", open" else ", folded" },
-                    )
-                    if (board.someday.isEmpty()) {
-                        Text(WeekBoardRules.SOMEDAY_EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
-                    }
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = trayOpen && board.someday.isNotEmpty(),
-                        enter = androidx.compose.animation.expandVertically(MekaMotion.appear(reduced)) + androidx.compose.animation.fadeIn(MekaMotion.appear(reduced)),
-                        exit = androidx.compose.animation.shrinkVertically(MekaMotion.appear(reduced)) + androidx.compose.animation.fadeOut(MekaMotion.appear(reduced)),
-                    ) {
-                        Column(
-                            Modifier.padding(top = MekaSpace.xs).height(220.dp).verticalScroll(rememberScrollState(), enabled = dragging == null),
-                            verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-                        ) {
-                            board.someday.forEach { card ->
-                                BoardCardRow(
-                                    card, BoardSource.SOMEDAY, 0L, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
-                                    onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> },
-                                    onTag = onTag,
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+            content()
         }
     }
 }
@@ -1483,26 +1653,39 @@ private fun GoalsLane(
     }
 }
 
+/**
+ * By hand, slice 4: a goal as a small gold pill ("◎ Run 5k  2/4"), its background filling gold as its tasks are done
+ * (all gold once the goal is done). A drop target: it glows gold while a card is over it. Tap it for Off this week.
+ * Reduced motion: the fill and glow cross-fade.
+ */
 @Composable
 private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Rect) -> Unit, onOff: () -> Unit) {
     var menu by remember { mutableStateOf(false) }
-    val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "goal-glow")
-    val fill by animateFloatAsState(g.fill, MekaMotion.appear(reduced), label = "goal-fill")
-    Box(
-        Modifier.widthIn(min = 140.dp, max = 220.dp)
-            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
-            .clip(RoundedCornerShape(MekaRadius.m))
-            .background(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface)
-            .border(1.dp, glow, RoundedCornerShape(MekaRadius.m))
-            .clickable(enabled = g.picked && !g.finished, role = Role.Button) { menu = true }
-            .semantics(mergeDescendants = true) { contentDescription = g.accessibilityLabel }
-            .padding(MekaSpace.xs),
-    ) {
-        Column {
-            Text(g.shortTitle, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(g.line, style = MekaType.micro, color = if (g.finished) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
-            Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
-                Box(Modifier.fillMaxWidth(fill).height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+    val pill = BoardTidyRules.goalPill(g)
+    val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.accent.copy(alpha = 0.45f), MekaMotion.appear(reduced), label = "goal-glow")
+    val fill by animateFloatAsState(pill.fill, MekaMotion.appear(reduced), label = "goal-fill")
+    val tint = Meka.colors.accent.copy(alpha = 0.18f)
+    val swell by animateFloatAsState(if (lit && !reduced) BoardFoldRules.PILL_SWELL else 1f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "goal-swell")
+    Box {
+        Box(
+            Modifier.widthIn(max = 220.dp).heightIn(min = 32.dp)
+                .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+                .graphicsLayer { scaleX = swell; scaleY = swell }
+                .clip(RoundedCornerShape(MekaRadius.pill))
+                .background(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface)
+                .drawBehind { drawRect(tint, size = size.copy(width = size.width * fill)) }
+                .border(1.dp, glow, RoundedCornerShape(MekaRadius.pill))
+                .clickable(enabled = g.picked && !g.finished, role = Role.Button) { menu = true }
+                .semantics(mergeDescendants = true) { contentDescription = pill.accessibilityLabel }
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(pill.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                pill.count?.let {
+                    Spacer(Modifier.width(MekaSpace.xs))
+                    Text(it, style = MekaType.micro, color = if (pill.finished) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
+                }
             }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -1546,13 +1729,19 @@ private fun AddGoalChip(
         return
     }
     Box {
-        Column(
-            Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+        // By hand, slice 4: "+ Goal" is a small pill beside the goals (with the hint beside it while the week has none).
+        Row(
+            Modifier.heightIn(min = 32.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
                 .clickable(role = Role.Button) { haptics.tick(); menu = true }
-                .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(BoardGoalRules.ADD, style = MekaType.caption, color = Meka.colors.accent)
-            if (empty) Text(BoardGoalRules.EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+            if (empty) {
+                Spacer(Modifier.width(MekaSpace.xs))
+                Text(BoardGoalRules.EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+            }
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             offers.forEach { o ->
