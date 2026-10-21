@@ -34,6 +34,7 @@ import os.meka.android.designsystem.CheckRing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextDecoration
 import os.meka.core.domain.WeatherView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -109,6 +110,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import os.meka.android.news.NewsPane
 import os.meka.android.news.NewsTickerStrip
@@ -143,6 +146,7 @@ import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.designsystem.TickRing
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaChoreography
 import os.meka.core.domain.WatchFaceRules
@@ -538,6 +542,13 @@ internal fun todayActions(
         }
     },
     complete = { id -> scope.launch { core.complete(id); if (selected() == id) setSelected(null) } },
+    reopen = { id ->
+        scope.launch {
+            val title = core.today.value.doneToday.firstOrNull { it.id == id }?.title
+            runCatching { core.reopen(id) }
+            if (undo != null && title != null) undo.show(os.meka.core.domain.TodayTickRules.untickedLine(title)) { core.complete(id) }
+        }
+    },
     select = { id -> setSelected(id) },
     rename = { id, t -> TypingSaves.launch { core.rename(id, t) } },
     delete = { id ->
@@ -606,6 +617,8 @@ internal fun todayActions(
 data class TodayActions(
     val add: (String) -> Unit,
     val complete: (String) -> Unit,
+    /** A done row's circle on Today (Week board by hand, slice 6): open again, with Undo on the bar. */
+    val reopen: (String) -> Unit = {},
     val select: (String) -> Unit,
     val rename: (String, String) -> Unit,
     val delete: (String) -> Unit,
@@ -735,6 +748,7 @@ private fun TodayPane(
 ) {
     // "3 earlier" unfolds the finished events in place.
     var earlierOpen by rememberSaveable { mutableStateOf(false) }
+    var doneOpen by rememberSaveable { mutableStateOf(false) }
     // "+2 more" unfolds the rest of the all-day group.
     var allDayOpen by rememberSaveable { mutableStateOf(false) }
     val updater = (LocalContext.current.applicationContext as? MekaApplication)?.updater
@@ -1322,9 +1336,23 @@ private fun TodayPane(
             if (today.doneToday.isNotEmpty()) {
                 // Last, straight under what's above: every section before it already ends with its own spacing, so a
                 // second gap left a large empty stretch above it (Meka's 10:48 screenshots, 2026-10-09).
-                item(key = "done") {
-                    Text("${today.doneToday.size} done today", style = MekaType.caption, color = Meka.colors.textTertiary,
-                        modifier = Modifier.animateItem().appear(rememberAppearance(TodayOrderRules.stagger(TodaySlot.DONE), play)))
+                // The Sunsama tick (Week board by hand, slice 6): the day's done tasks stay on Today, ticked and struck
+                // through, the latest first; a tap on a circle un-ticks it. The row keeps its "d-" key so a ticked
+                // Anytime row glides down into the group.
+                val doneStep = TodayOrderRules.stagger(TodaySlot.DONE)
+                val doneRows = os.meka.core.domain.TodayTickRules.shown(today.doneToday, doneOpen)
+                itemsIndexed(doneRows, key = { _, t -> "d-" + t.id }) { i, t ->
+                    Headed(os.meka.core.domain.TodayTickRules.label(today.doneToday).takeIf { i == 0 },
+                        Modifier.animateItem().appear(rememberAppearance(doneStep, play))) { m ->
+                        DoneTodayRow(t, actions, m)
+                    }
+                }
+                os.meka.core.domain.TodayTickRules.moreLine(today.doneToday, doneOpen)?.let { more ->
+                    item(key = "done-more") {
+                        Text(more, style = MekaType.caption, color = Meka.colors.textTertiary,
+                            modifier = Modifier.animateItem().clip(RoundedCornerShape(MekaRadius.m)).clickable { doneOpen = true }
+                                .minTouch().padding(vertical = MekaSpace.xs))
+                    }
                 }
             }
             }
@@ -1392,6 +1420,11 @@ internal fun TaskRow(
     /** Roll-over: a "From yesterday" row's line ("Carried 2 days"), lit in the accent colour. */
     carriedLine: String? = null,
 ) {
+    // The Sunsama tick (Week board by hand, slice 6): ticked, the row keeps its place struck through for a moment.
+    var ticking by remember(t.id) { mutableStateOf(false) }
+    val titleColor by animateColorAsState(
+        if (ticking) Meka.colors.textTertiary else Meka.colors.textPrimary, MekaMotion.appear(Meka.reducedMotion), label = "ticking",
+    )
     // Just landed from the plan: lit softly, then settles.
     val glow by animateColorAsState(
         if (motion.landed) Meka.colors.surfaceRaised else Color.Transparent, MekaMotion.appear(Meka.reducedMotion), label = "landed",
@@ -1402,10 +1435,11 @@ internal fun TaskRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (time != null) TimeColumn(time, past = false)
-        CompleteButton(t, actions.complete)
+        CompleteButton(t.id, t.title, actions.complete, settle = true, onPressed = { ticking = true })
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
-            Text(os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.body, color = Meka.colors.textPrimary,
+            Text(os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.body, color = titleColor,
+                textDecoration = if (ticking) TextDecoration.LineThrough else null, maxLines = 2, overflow = TextOverflow.Ellipsis,
                 modifier = if (motion.shareTitle) Modifier.sharedTitle(SharedMotion.taskKey(t.id), motion.titleVisible) else Modifier)
             val line = when (reason) {
                 NeedsYouReason.CONFLICT -> "Edited on two devices — choose a version"
@@ -1427,6 +1461,35 @@ internal fun TaskRow(
 }
 
 /**
+ * A task done today, at Today's foot (Week board by hand, slice 6; catalogue "Complete a task"): the circle filled gold
+ * with its tick, the title struck through and dimmed. A tap on the circle un-ticks it (light haptic; the ring empties and
+ * the row rises back among the open ones), a tap on the row opens it as any task does.
+ */
+@Composable
+internal fun DoneTodayRow(t: Task, actions: TodayActions, modifier: Modifier = Modifier) {
+    val haptics = rememberMekaHaptics()
+    val label = os.meka.core.domain.TodayTickRules.untickLabel(t.title)
+    Row(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable { actions.select(t.id) }
+            .minTouch().padding(vertical = MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        TickRing(
+            done = true,
+            modifier = Modifier.size(28.dp).clip(CircleShape)
+                .semantics { contentDescription = label }
+                .clickable(role = Role.Checkbox) { haptics.light(); actions.reopen(t.id) },
+        )
+        Spacer(Modifier.width(MekaSpace.m))
+        Text(
+            os.meka.core.domain.TaskTitleRules.display(t.title), style = MekaType.body, color = Meka.colors.textTertiary,
+            textDecoration = TextDecoration.LineThrough, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/**
  * Completion motion (catalogue "Complete a task"; motion pass 2, slice 4): the accent ring sweeps round, fills, the
  * check strokes in ([CheckRing], [MekaChoreography.checkDrawMs]) with a light haptic, then the row leaves via
  * animateItem. Motion → Off: shown done at once and completed straight away.
@@ -1436,7 +1499,13 @@ internal fun CompleteButton(t: Task, onComplete: (String) -> Unit) = CompleteBut
 
 /** [CompleteButton] for a task known by its id and title (the brief's Today rows), [size] across. */
 @Composable
-internal fun CompleteButton(id: String, title: String, onComplete: (String) -> Unit, size: androidx.compose.ui.unit.Dp = 28.dp) {
+internal fun CompleteButton(
+    id: String, title: String, onComplete: (String) -> Unit, size: androidx.compose.ui.unit.Dp = 28.dp,
+    /** Sunsama-style (Week board by hand, slice 6): after the draw the row keeps its place a moment before it settles. */
+    settle: Boolean = false,
+    /** Told at the tap, so the row can strike its title through at once. */
+    onPressed: (() -> Unit)? = null,
+) {
     var pressed by remember(id) { mutableStateOf(false) }
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -1446,7 +1515,12 @@ internal fun CompleteButton(id: String, title: String, onComplete: (String) -> U
         if (!pressed) return@LaunchedEffect
         val ms = MotionMath.checkDrawMs(reduced)
         if (ms == 0) draw.snapTo(1f) else draw.animateTo(1f, tween(ms, easing = LinearEasing))
-        done(id)
+        val wait = if (settle) os.meka.core.domain.TodayTickRules.settleWaitMs(ms, reduced) else 0L
+        // The tick is his: leaving Today mid-settle still completes it.
+        withContext(NonCancellable) {
+            if (wait > 0) delay(wait)
+            done(id)
+        }
     }
     CheckRing(
         fraction = draw.value,
@@ -1459,6 +1533,7 @@ internal fun CompleteButton(id: String, title: String, onComplete: (String) -> U
                 if (!pressed) {
                     pressed = true
                     haptics.light()
+                    onPressed?.invoke()
                 }
             },
     )

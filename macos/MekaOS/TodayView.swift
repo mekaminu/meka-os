@@ -12,6 +12,7 @@ struct TodayView: View {
     @State private var introPlayed = false
     /// "3 earlier" unfolds the finished events in place.
     @State private var earlierOpen = false
+    @State private var doneOpen = false
     @State private var allDayOpen = false
     /// The Day ring's opening: in full the first time today on this Mac, quickly after, at once with Motion → Off.
     @State private var ringPlay: DayRingPlayback?
@@ -578,13 +579,21 @@ struct TodayView: View {
                             SectionLabel("Anytime today", palette).staggeredAppear(step(.anytime), play: play)
                             ForEach(tl.anytime, id: \.id) { t in TaskRow(task: t, reason: nil, palette: palette).staggeredAppear(step(.anytime), play: play) }
                         }
-                        if !today.doneToday.isEmpty {
+                        if let doneLabel = TodayTickRules.shared.label(doneToday: today.doneToday) {
                             // Straight under the day's section, which already ends with its own spacing (Meka's
-                            // 10:48 screenshots: a double gap left a large empty stretch above it).
-                            Text("\(today.doneToday.count) done today")
-                                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            // 10:48 screenshots: a double gap left a large empty stretch above it). The Sunsama tick
+                            // (Week board by hand, slice 6): the day's done tasks stay, ticked and struck through.
+                            SectionLabel(doneLabel, palette)
                                 .padding(.top, tl.head != nil && tl.anytime.isEmpty ? 0 : MekaSpace.l)
                                 .staggeredAppear(step(.done), play: play)
+                            ForEach(TodayTickRules.shared.shown(doneToday: today.doneToday, open: doneOpen), id: \.id) { t in
+                                DoneTodayRow(task: t, palette: palette).staggeredAppear(step(.done), play: play)
+                            }
+                            if let more = TodayTickRules.shared.moreLine(doneToday: today.doneToday, open: doneOpen) {
+                                Button(more) { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { doneOpen = true } }
+                                    .buttonStyle(.plain).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                    .padding(.vertical, MekaSpace.xs)
+                            }
                         }
                     }
 
@@ -732,6 +741,8 @@ struct TaskRow: View {
     let palette: MekaPalette
     /// Where the row is on screen, so its detail can grow out of it.
     @State private var frame: CGRect = .zero
+    /// The Sunsama tick (Week board by hand, slice 6): ticked, the row keeps its place struck through for a moment.
+    @State private var ticking = false
 
     /// On the timeline: the time column on the left and the core's line ("30 min · ↻ Every weekday") under the title.
     let time: String?
@@ -758,9 +769,13 @@ struct TaskRow: View {
                 Text(time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textSecondary)
                     .frame(width: TimelineMetrics.timeColumn - MekaSpace.m, alignment: .leading)
             }
-            CompleteButton(task: task, palette: palette)
+            CompleteButton(id: task.id, title: task.title, palette: palette, settle: true) { ticking = true }
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body)
+                    .strikethrough(ticking, color: palette.textTertiary)
+                    .foregroundStyle(ticking ? palette.textTertiary : palette.textPrimary)
+                    .lineLimit(2)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: ticking)
                 if let line = subtitle {
                     Text(line).font(MekaType.itemMeta)
                         .foregroundStyle(isAlert ? palette.critical : ((late && reason == nil && time != nil) || (carriedLine != nil && reason == nil) ? palette.accent : palette.textSecondary))
@@ -1019,6 +1034,37 @@ private struct UpNextCard: View {
 /// Completion motion (catalogue "Complete a task"; motion pass 2, slice 4): the accent ring sweeps round, fills and
 /// the check strokes in (`CheckRingView`, `checkDraw`) with a light haptic, then the row leaves. Also used by the
 /// evening shutdown. Motion → Off: shown done at once.
+/// A task done today, at Today's foot (Week board by hand, slice 6): the circle filled with its tick, the title struck
+/// through and dimmed. A click on the circle un-ticks it (Undo on the bar ticks it again); on the row, opens it.
+struct DoneTodayRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let task: MekaTask
+    let palette: MekaPalette
+
+    var body: some View {
+        HStack(spacing: MekaSpace.m) {
+            Button { model.reopenOnBoard(task.id, title: task.title) } label: {
+                TickRingView(done: true, palette: palette)
+                    .frame(width: 22, height: 22)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(MekaPressStyle())
+            .accessibilityLabel(TodayTickRules.shared.untickLabel(title: task.title))
+            Text(TaskTitleRules.shared.display(title: task.title)).font(MekaType.body)
+                .strikethrough(true, color: palette.textTertiary)
+                .foregroundStyle(palette.textTertiary)
+                .lineLimit(2)
+            Spacer()
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs)
+        .contentShape(Rectangle())
+        .onTapGesture { model.select(task.id, reduced: reduceMotion) }
+        .transition(.opacity)
+    }
+}
+
 struct CompleteButton: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -1026,6 +1072,10 @@ struct CompleteButton: View {
     let title: String
     let palette: MekaPalette
     var size: CGFloat = 22
+    /// Sunsama-style (Week board by hand, slice 6): after the draw the row keeps its place a moment before it settles.
+    var settle = false
+    /// Told at the click, so the row can strike its title through at once.
+    var onPressed: (() -> Void)?
     @State private var began: Date?
 
     init(task: MekaTask, palette: MekaPalette) {
@@ -1033,11 +1083,13 @@ struct CompleteButton: View {
     }
 
     /// A task known by its id and title (the brief's Today rows, Fold review 2026-10-09 07:26, item 7).
-    init(id: String, title: String, palette: MekaPalette, size: CGFloat = 22) {
+    init(id: String, title: String, palette: MekaPalette, size: CGFloat = 22, settle: Bool = false, onPressed: (() -> Void)? = nil) {
         self.id = id
         self.title = title
         self.palette = palette
         self.size = size
+        self.settle = settle
+        self.onPressed = onPressed
     }
 
     var body: some View {
@@ -1045,10 +1097,13 @@ struct CompleteButton: View {
             guard began == nil else { return }
             began = Date()
             MekaHaptics.light()
+            onPressed?()
             let taskId = id
             let draw = MotionMath.checkDraw(reduced: reduceMotion)
+            let drawMs = Int(draw * 1000)
+            let wait = settle ? Int(TodayTickRules.shared.settleWaitMs(drawMs: Int32(drawMs), reduced: reduceMotion)) : 0
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(Int(draw * 1000) + 50))
+                try? await Task.sleep(for: .milliseconds(drawMs + 50 + wait))
                 model.complete(taskId)
             }
         } label: {
