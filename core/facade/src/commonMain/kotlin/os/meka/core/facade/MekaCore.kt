@@ -6088,9 +6088,10 @@ class MekaCore(
      * The Galaxy Watch's one screen (Galaxy Watch, slice 2): the cover screen's "now" card with only the taps a wrist can
      * make (Done · Tomorrow, Went · Didn't go) and the fast with Start or End. Pure and cheap. Nothing is stored.
      */
-    fun watchHome(): os.meka.core.domain.WatchHomeView =
-        os.meka.core.domain.WatchHomeRules.view(
-            coverNow(), _fasting.value, nowMs(), watchInbox(), watchParking(),
+    fun watchHome(): os.meka.core.domain.WatchHomeView {
+        val now = coverNow()
+        return os.meka.core.domain.WatchHomeRules.view(
+            now, _fasting.value, nowMs(), watchInbox(), watchParking(),
             // Barça match day, slice 4: the match, worked out again at this minute from the last synced score.
             os.meka.core.domain.WatchMatchRules.view(_barcaNear.value, nowMs(), ZoneCalendar(timeZone)),
             // Meeting prep, slice 3: Today's prep (worked out each minute), its countdown at this minute.
@@ -6105,7 +6106,10 @@ class MekaCore(
             watchCommuteNow,
             // Bin days, completeness: tonight's bins, as last worked out on the core's thread.
             watchBinsNow,
+            // Week board, the watch: the day's next three open tasks in his order, the now card's task left out.
+            os.meka.core.domain.WatchTopThreeRules.view(_today.value, now.task?.id, ZoneCalendar(timeZone)),
         )
+    }
 
     /** The watch's bins row, worked out with each refresh (each minute while the watch's screen is on). */
     private var watchBinsNow: os.meka.core.domain.WatchBins? = null

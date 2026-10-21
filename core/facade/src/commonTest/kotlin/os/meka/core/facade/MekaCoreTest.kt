@@ -694,6 +694,30 @@ class MekaCoreTest {
     }
 
     @Test
+    fun theWatchListsTodaysNextThreeInTheBoardsOrderAndTicksOneOffEverywhere() = runTest {
+        val london = TimeZone.of("Europe/London")
+        now = kotlinx.datetime.LocalDateTime(2026, 10, 21, 9, 0).toInstant(london).toEpochMilliseconds() // Wed, BST
+        val fold = core("android"); val watch = core("watch0123456789abcdef")
+        val ids = listOf("Call the plumber", "Book MOT", "Buy milk", "Gym bag", "Post the form").map { fold.addTask(it) }
+        fold.syncNow(); watch.syncNow()
+        val home = watch.watchHome()
+        val top = home.top!!
+        // The now card shows one task; the wrist's list is the next three, never that one again.
+        assertTrue(top.rows.none { it.title == home.title })
+        assertEquals(3, top.rows.size)
+        assertEquals("5 to go", top.countLine)
+        assertEquals("+1 more on your phone", top.moreLine)
+        val first = top.rows.first()
+        watch.complete(first.taskId)
+        assertEquals("1 done · 4 to go", watch.watchHome().top!!.countLine)
+        watch.syncNow(); fold.syncNow()
+        assertTrue(fold.today.value.doneToday.any { it.id == first.taskId })
+        watch.reopen(first.taskId)
+        assertEquals("5 to go", watch.watchHome().top!!.countLine)
+        assertTrue(first.taskId in ids)
+    }
+
+    @Test
     fun theWatchShowsUpNextTakesDoneAndTomorrowAndStartsAndEndsAFastForTheFold() = runTest {
         val london = TimeZone.of("Europe/London")
         now = kotlinx.datetime.LocalDateTime(2026, 10, 10, 16, 30).toInstant(london).toEpochMilliseconds() // Sat, BST

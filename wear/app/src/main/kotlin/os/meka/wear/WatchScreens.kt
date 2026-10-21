@@ -316,6 +316,9 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
             }
         }
 
+        // Week board, the watch: the day's next three open tasks in his order, each ticked off with one tap.
+        TopThreeRows(core, home.top, reduced)
+
         Spacer(Modifier.height(MekaSpace.xs))
         CaptureBlock(core, reduced, listen, onListen)
 
@@ -653,6 +656,137 @@ private fun InboxRow(inbox: os.meka.core.domain.WatchInbox?, reduced: Boolean) {
                 label = "inboxCount",
             ) { line -> Line(line, MekaType.caption.copy(color = C.textPrimary, fontFeatureSettings = "tnum")) }
             v.streakLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary)) }
+        }
+    }
+}
+
+/** How long "Done · Buy milk" with Undo stays after a tick on the wrist. */
+private const val TOP_UNDO_MS = 5_000L
+
+/**
+ * Week board, the watch ("Watch: today's top three only"): under the now card, "TODAY" with "2 done · 5 to go" and the
+ * day's next three open tasks in his Board order (carried ones first, their line in the accent), "+4 more on your
+ * phone" under them. A tap on a row's ring fills it with the accent on the complete spring with a confirm buzz and
+ * ticks the task off (the same Done as the phone's); the list closes up and "Done · Buy milk" with **Undo** stays for
+ * 5 s (Undo reopens it). The section unfolds on the expand spring; rows cross-fade as the list changes (reduced
+ * motion: fades, the ring fills at once).
+ */
+@Composable
+private fun TopThreeRows(core: MekaCore, top: os.meka.core.domain.WatchTopThree?, reduced: Boolean) {
+    val R = os.meka.core.domain.WatchTopThreeRules
+    val last = remember { arrayOfNulls<os.meka.core.domain.WatchTopThree>(1) }
+    if (top != null) last[0] = top
+    val scope = rememberCoroutineScope()
+    var undo by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(undo) { if (undo != null) { delay(TOP_UNDO_MS); undo = null } }
+    AnimatedVisibility(
+        visible = top != null || undo != null,
+        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+        label = "topThree",
+    ) {
+        val v = top ?: last[0] ?: return@AnimatedVisibility
+        Column(
+            Modifier.fillMaxWidth().padding(top = MekaSpace.m),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = v.spoken },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Line(v.label, MekaType.captionStrong.copy(color = C.textSecondary), maxLines = 1)
+                AnimatedContent(
+                    targetState = v.countLine,
+                    transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                    label = "topCount",
+                ) { line -> Line(line, MekaType.caption.copy(color = C.textTertiary, fontFeatureSettings = "tnum"), maxLines = 1) }
+            }
+            AnimatedContent(
+                targetState = if (top == null) emptyList() else v.rows,
+                contentKey = { rows -> rows.joinToString("\u0000") { it.taskId } },
+                transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+                label = "topRows",
+            ) { rows ->
+                Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                    for (r in rows) {
+                        TopRow(r, reduced) {
+                            undo = r.taskId to R.doneLine(r.title)
+                            scope.launch { runCatching { core.complete(r.taskId) } }
+                        }
+                    }
+                }
+            }
+            v.moreLine?.let { Line(it, MekaType.caption.copy(color = C.textTertiary), maxLines = 1) }
+            AnimatedVisibility(
+                visible = undo != null,
+                enter = fadeIn(MekaMotion.appear(reduced)),
+                exit = fadeOut(MekaMotion.appear(reduced)),
+                label = "topUndo",
+            ) {
+                val u = undo
+                Column(
+                    Modifier.fillMaxWidth().padding(top = MekaSpace.xxs).semantics { liveRegion = LiveRegionMode.Polite },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                ) {
+                    if (u != null) {
+                        Line(u.second, MekaType.caption.copy(color = C.textSecondary))
+                        WatchButton(R.UNDO, primary = false, reduced = reduced, haptic = HapticFeedbackConstants.CLOCK_TICK) {
+                            val id = u.first
+                            undo = null
+                            scope.launch { runCatching { core.reopen(id) } }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** One of the top three: a ring to tick it off (48 dp to touch), its title and line, left aligned beside it. */
+@Composable
+private fun TopRow(r: os.meka.core.domain.WatchTopRow, reduced: Boolean, onDone: () -> Unit) {
+    val view = LocalView.current
+    var ticked by remember(r.taskId) { mutableStateOf(false) }
+    val fill by animateFloatAsState(
+        targetValue = if (ticked) 1f else 0f,
+        animationSpec = MekaMotion.complete(reduced),
+        label = "tick",
+    )
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = MekaSpace.touch)
+            .clickable(enabled = !ticked, onClickLabel = "Done") {
+                view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                ticked = true
+                onDone()
+            }
+            .semantics(mergeDescendants = true) { contentDescription = listOfNotNull(r.title, r.line).joinToString(", ") },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    ) {
+        Canvas(Modifier.size(20.dp)) {
+            val stroke = 1.5.dp.toPx()
+            drawCircle(color = C.accent.copy(alpha = 0.55f + 0.45f * fill), radius = size.minDimension / 2 - stroke / 2, style = Stroke(stroke))
+            if (fill > 0f) drawCircle(color = C.accent, radius = (size.minDimension / 2 - stroke) * fill)
+        }
+        Column(Modifier.weight(1f)) {
+            BasicText(
+                text = r.title,
+                style = MekaType.caption.copy(color = if (ticked) C.textTertiary else C.textPrimary),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            r.line?.let {
+                BasicText(
+                    text = it,
+                    style = MekaType.micro.copy(color = if (r.carried) C.accent else C.textTertiary),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }
