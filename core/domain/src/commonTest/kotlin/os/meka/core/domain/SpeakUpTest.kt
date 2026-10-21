@@ -100,4 +100,52 @@ class SpeakUpTest {
         val c = mapOf(SpeakMoment.LEAVE_NOW to false)
         assertEquals(c, SpeakUpRules.decodeChoices(SpeakUpRules.encodeChoices(c)))
     }
+
+    // ---- Slice 2 ----
+
+    private val lists = PeopleLists(family = setOf("Sam"), alwaysNotify = setOf("Jo"))
+    private fun msg(name: String = "Sam", text: String? = "Urgent, call me when you can", at: Long = now - 60_000, group: String? = null) =
+        CapturedItem(id = "w1", app = CaptureApp.WHATSAPP, kind = CaptureKind.MESSAGE, personName = name, text = text,
+            conversation = group, atMs = at)
+
+    @Test
+    fun urgentFromFamilyOrAlwaysNotify() {
+        assertEquals("Sam says it's urgent on WhatsApp: “Urgent, call me when you can.”", SpeakUpRules.urgentWords(msg(), lists, now))
+        assertEquals("Jo says it's urgent on WhatsApp: “Urgent, call me when you can.”", SpeakUpRules.urgentWords(msg("Jo"), lists, now))
+        // A stranger saying urgent, a family message that isn't urgent, a group chat, a stale re-post: silent.
+        assertNull(SpeakUpRules.urgentWords(msg("Pat"), lists, now))
+        assertNull(SpeakUpRules.urgentWords(msg(text = "Running late"), lists, now))
+        assertNull(SpeakUpRules.urgentWords(msg(group = "Family"), lists, now))
+        assertNull(SpeakUpRules.urgentWords(msg(at = now - SpeakUpRules.URGENT_FRESH_MS - 1), lists, now))
+        // A call-assistant message: the summary first, cut to 14 words.
+        val v = CapturedItem(id = "h1", app = CaptureApp.PHONE, kind = CaptureKind.VOICE_MESSAGE, personName = "Sam",
+            text = "it's Sam please ring me back it's urgent", conversation = null, atMs = now, urgent = true,
+            summary = "Sam needs you to ring back about the boys' pickup today because the car has broken down on the way")
+        assertEquals("Sam left your call assistant an urgent message: “Sam needs you to ring back about the boys' pickup today because the car…”",
+            SpeakUpRules.urgentWords(v, lists, now))
+        // His name first, the sender's name kept as it is; the same never-list and its own switch.
+        val words = SpeakUpRules.urgentWords(msg(), lists, now)!!
+        val pick = SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, false, false, 0, now, "Alex", false)
+        assertEquals("Alex, Sam says it's urgent on WhatsApp: “Urgent, call me when you can.”", pick?.line)
+        assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), SpeakContext(SpeakPlace.SPEAKER), false, false, 0, now, "Alex", false))
+        assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, true, false, 0, now, "Alex", false))
+        assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words, SpeakUpSettings(), ctx, false, false, 0, now, "Alex", true))
+        assertNull(SpeakUpRules.pickOne("urgent:w1", SpeakMoment.URGENT, words,
+            SpeakUpSettings(choices = mapOf(SpeakMoment.URGENT to false)), ctx, false, false, 0, now, "Alex", false))
+    }
+
+    @Test
+    fun shhInTalkMutesForTwoHours() {
+        val step = TalkFlow.heard(TalkSession(TalkPhase.LISTENING), "shh")
+        assertEquals(listOf(TalkEffect.MuteSpeakingUp, TalkEffect.Speak(SpeakUpRules.MUTED_REPLY)), step.effects)
+        assertTrue(step.session.endAfterSpeaking)
+        assertEquals(listOf(TalkEffect.End), TalkFlow.spoke(step.session).effects)
+        // "Not now" turning down cards on offer, or answering the hello, stays that answer; "shh" still mutes there.
+        assertTrue(SpeakUpRules.mutesInTalk("not now, Ada", answersSomething = false))
+        assertFalse(SpeakUpRules.mutesInTalk("not now", answersSomething = true))
+        assertTrue(SpeakUpRules.mutesInTalk("shh", answersSomething = true))
+        val hello = TalkFlow.spoke(TalkFlow.greet("Morning. What should I call you?").session).session
+        assertFalse(TalkEffect.MuteSpeakingUp in TalkFlow.heard(hello, "not now").effects)
+        assertTrue(TalkEffect.MuteSpeakingUp in TalkFlow.heard(hello, "quiet please").effects)
+    }
 }

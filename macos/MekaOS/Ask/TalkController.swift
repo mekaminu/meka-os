@@ -396,6 +396,9 @@ final class TalkController {
             // Ask knows how Navilife works, slice 3: "take me there" after a help answer opens its sheet, as the
             // answer's Take me there does. Only a Kotlin enum crosses, on the main actor.
             model?.openHelpFromTalk(openHelp.link.place)
+        } else if effect is TalkEffectMuteSpeakingUp {
+            // Speaking up, slice 2: "shh" to Ada mutes her speaking up for 2 hours on every device.
+            Task { await model?.muteSpeakUp() }
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {

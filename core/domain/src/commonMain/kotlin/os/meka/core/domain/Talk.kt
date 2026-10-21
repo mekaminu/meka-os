@@ -426,6 +426,11 @@ sealed interface TalkEffect {
     data class SpeakRest(val text: String) : TalkEffect
     /** Stop speaking at once (Meka talked over MEKA). */
     data object StopSpeaking : TalkEffect
+    /**
+     * Speaking up, slice 2: "shh" / "not now" said to Ada: mute speaking up for 2 hours on every device
+     * (`MekaCore.muteSpeakUp`). Comes before the line that says so; the conversation ends after that line.
+     */
+    data object MuteSpeakingUp : TalkEffect
     /** The conversation is over: stop listening and speaking, put the orb away. Cards and undo chips stay on screen. */
     data object End : TalkEffect
 }
@@ -492,6 +497,12 @@ object TalkFlow {
         val link = s.help
         // Take me there is offered for the answer it came with; anything said next moves on from it.
         val t = s.copy(help = null)
+        // Speaking up, slice 2: "shh" to Ada mutes her speaking up for 2 hours, says so, and the conversation ends.
+        val justGreeted = t.conversation.turns.lastOrNull()?.question == HelloRules.ASKED
+        if (SpeakUpRules.mutesInTalk(utterance, t.pending.isNotEmpty() || justGreeted)) return TalkStep(
+            t.copy(phase = TalkPhase.SPEAKING, pending = emptyList(), endAfterSpeaking = true),
+            listOf(TalkEffect.MuteSpeakingUp, TalkEffect.Speak(SpeakUpRules.MUTED_REPLY)),
+        )
         // The orb says hello like a person, slice 3: "good thanks, you?" straight after the hello gets Ada's own answer.
         afterHello(t, utterance)?.let { return it }
         return when (val r = TalkRules.reply(utterance, t.pending.size, places, help = link != null)) {

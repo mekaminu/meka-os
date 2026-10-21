@@ -5369,6 +5369,33 @@ class MekaCore(
     }
 
     /**
+     * Speaking up, slice 2: an urgent alert work mode just posted on the Fold ([item], from someone on [lists]' family or
+     * Always notify, saying it's urgent; [SpeakUpRules.urgentWords]) is said out loud, under the same rules as every
+     * moment ([SpeakUpRules.checkMoment]); null when it stays silent. Written to Activity once per message, like [speakUp].
+     */
+    suspend fun speakUpUrgent(
+        item: os.meka.core.domain.CapturedItem, lists: os.meka.core.domain.PeopleLists,
+        place: os.meka.core.domain.SpeakPlace, onCall: Boolean, talking: Boolean,
+    ): os.meka.core.domain.SpeakUpPick? = onCore {
+        val now = nowMs()
+        val words = os.meka.core.domain.SpeakUpRules.urgentWords(item, lists, now) ?: return@onCore null
+        val cal = ZoneCalendar(timeZone)
+        val key = os.meka.core.domain.SpeakUpRules.urgentKey(item)
+        val pick = os.meka.core.domain.SpeakUpRules.pickOne(
+            key, os.meka.core.domain.SpeakMoment.URGENT, words, speakUp.settings(),
+            os.meka.core.domain.SpeakContext(place, onCall, talking),
+            quiet = notifyPrefs.settings().quiet.isQuietAt(now, cal),
+            meeting = os.meka.core.domain.SpeakUpRules.inMeeting(currentEvents(), now),
+            spokenToday = activity.spokenSince(cal.toEpochMs(cal.epochDayOf(now), 0)), nowMs = now,
+            address = os.meka.core.domain.SpeakUpRules.address(aboutYou.profile().shownName, mekaVoice.callsSir()),
+            alreadySaid = activity.wasSpoken(key),
+        ) ?: return@onCore null
+        activity.recordSpoken(pick.key, pick.line)
+        activityChanged()
+        pick
+    }
+
+    /**
      * The Mac's one call after posting: [notificationsPostedKeys] and then [speakUp] with the same [result], so Swift
      * sends the governor's result to the core once (strict concurrency).
      */

@@ -125,5 +125,8 @@ object WorkAlerts {
         } catch (e: SecurityException) {
             // Permission withdrawn between the check and the post: the item is still in the summary.
         }
+        // Speaking up, slice 2: an urgent one from family or Always notify is also said out loud where he can hear it
+        // privately (the core decides, once per message; re-posts with ▶ Listen aren't said again).
+        runCatching { (context.applicationContext as? os.meka.android.MekaApplication)?.speakUp?.considerUrgent(item) }
     }
 }

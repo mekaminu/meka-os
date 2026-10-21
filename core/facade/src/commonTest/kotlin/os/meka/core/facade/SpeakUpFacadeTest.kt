@@ -70,4 +70,26 @@ class SpeakUpFacadeTest {
             assertEquals("Your 08:42 is cancelled.", c.speakUp(result, listOf(train.key), SpeakPlace.PRIVATE, onCall = false, talking = false)?.line)
         } finally { c.close() }
     }
+
+    @Test
+    fun urgentFromFamilySaidOnce() = runTest {
+        val c = core()
+        try {
+            c.setAboutYou(AboutField.SHOWN_NAME, "Alex Smith")
+            val item = os.meka.core.domain.CapturedItem(
+                id = "w1", app = os.meka.core.domain.CaptureApp.WHATSAPP, kind = os.meka.core.domain.CaptureKind.MESSAGE,
+                personName = "Sam", text = "Emergency, ring me", conversation = null, atMs = now - 30_000,
+            )
+            val lists = os.meka.core.domain.PeopleLists(family = setOf("Sam"))
+            assertNull(c.speakUpUrgent(item, os.meka.core.domain.PeopleLists(), SpeakPlace.PRIVATE, onCall = false, talking = false))
+            assertNull(c.speakUpUrgent(item, lists, SpeakPlace.PRIVATE, onCall = true, talking = false))
+            assertEquals("Alex, Sam says it's urgent on WhatsApp: “Emergency, ring me.”",
+                c.speakUpUrgent(item, lists, SpeakPlace.PRIVATE, onCall = false, talking = false)?.line)
+            assertTrue(c.speakUpView().sections.any { "Said today: 1 of 6" in it.steps })
+            // The alert re-posted (▶ Listen arriving) isn't said again; "shh" in Talk mutes the next one.
+            assertNull(c.speakUpUrgent(item, lists, SpeakPlace.PRIVATE, onCall = false, talking = false))
+            c.muteSpeakUp()
+            assertNull(c.speakUpUrgent(item.copy(id = "w2"), lists, SpeakPlace.PRIVATE, onCall = false, talking = false))
+        } finally { c.close() }
+    }
 }

@@ -15,7 +15,9 @@ import kotlinx.coroutines.withContext
 import os.meka.android.MekaApplication
 import os.meka.android.ask.MekaSpeaker
 import os.meka.android.ask.TalkBargeIn
+import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.GovernorResult
+import os.meka.core.domain.SpeakPlace
 import os.meka.core.domain.SpeakUpRules
 import os.meka.core.domain.TalkPhase
 
@@ -37,17 +39,38 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
 
     suspend fun consider(result: GovernorResult, postedKeys: List<String>) {
         if (postedKeys.isEmpty()) return
-        val minute = java.util.Calendar.getInstance().let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
-        val place = SpeakUpRules.place(TalkBargeIn.output(context), bedsideShowing && app.isOnScreen, minute)
         val pick = runCatching {
-            app.core.speakUp(result, postedKeys, place, onCall = onCall(), talking = app.talkPhase.value != TalkPhase.ENDED)
+            app.core.speakUp(result, postedKeys, place(), onCall = onCall(), talking = app.talkPhase.value != TalkPhase.ENDED)
         }.getOrNull() ?: return
+        say(pick.line)
+    }
+
+    /**
+     * Slice 2: an urgent alert work mode just posted ([WorkAlerts]): said when it is from family or Always notify and
+     * says it's urgent, under the same rules (the core decides; once per message).
+     */
+    fun considerUrgent(item: CapturedItem) {
+        main.launch {
+            val lists = runCatching { app.captures.lists.value }.getOrNull() ?: return@launch
+            val pick = runCatching {
+                app.core.speakUpUrgent(item, lists, place(), onCall = onCall(), talking = app.talkPhase.value != TalkPhase.ENDED)
+            }.getOrNull() ?: return@launch
+            say(pick.line)
+        }
+    }
+
+    private fun place(): SpeakPlace {
+        val minute = java.util.Calendar.getInstance().let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
+        return SpeakUpRules.place(TalkBargeIn.output(context), bedsideShowing && app.isOnScreen, minute)
+    }
+
+    private suspend fun say(line: String) {
         withContext(Dispatchers.Main) {
             _speaking.value = true
             chime()
             main.launch {
                 delay(CHIME_MS)
-                speaker.say(pick.line) { _speaking.value = false }
+                speaker.say(line) { _speaking.value = false }
             }
         }
     }

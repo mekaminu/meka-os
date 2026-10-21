@@ -8,10 +8,12 @@ import os.meka.core.sync.Replica
 /**
  * The moments Ada says out loud on her own (Meka 2026-10-20 19:49), each its own switch in Ask → Settings → Speaking up.
  * A notice carries its moment ([Notice.speak]) and the words to say after his name ([Notice.spoken]) when it is one;
- * everything else stays a silent notification. Slice 1 has the train and time to leave; the rest of the list (an
- * urgent call from family, an event in 10 minutes, tomorrow's pressure, a reply he was waiting for) follows.
+ * everything else stays a silent notification. Slice 1 has the train and time to leave; slice 2 an urgent message from
+ * family or Always notify; the rest of the list (an event in 10 minutes, tomorrow's pressure, a reply he was waiting
+ * for) follows. Listed most important first: when two are due at once, the first is said.
  */
 enum class SpeakMoment(val label: String, val line: String, val defaultOn: Boolean) {
+    URGENT("Urgent from family", "A message or call from family or someone on Always notify that says it's urgent", true),
     TRAIN("Your train", "Cancelled, or 10 minutes or more late, in the 2 hours before you leave", true),
     LEAVE_NOW("Time to leave", "For an event or a booked session with its travel time set", true),
 }
@@ -108,8 +110,16 @@ object SpeakUpRules {
         spokenToday: Int, alreadySaid: Boolean, nowMs: Long,
     ): SpeakHold? {
         val m = n.speak ?: return SpeakHold.OFF
+        return checkMoment(m, n.spoken, s, ctx, quiet, meeting, spokenToday, alreadySaid, nowMs)
+    }
+
+    /** [check] for a moment that isn't a governor notice (an urgent alert, slice 2). */
+    fun checkMoment(
+        m: SpeakMoment, spoken: String?, s: SpeakUpSettings, ctx: SpeakContext, quiet: Boolean, meeting: Boolean,
+        spokenToday: Int, alreadySaid: Boolean, nowMs: Long,
+    ): SpeakHold? {
         return when {
-            n.spoken.isNullOrBlank() || !s.isOn(m) -> SpeakHold.OFF
+            spoken.isNullOrBlank() || !s.isOn(m) -> SpeakHold.OFF
             ctx.place == SpeakPlace.SPEAKER -> SpeakHold.NOT_PRIVATE
             quiet -> SpeakHold.QUIET_HOURS
             meeting -> SpeakHold.MEETING
@@ -132,11 +142,19 @@ object SpeakUpRules {
         .firstOrNull { check(it, s, ctx, quiet, meeting, spokenToday, alreadySaid(it.key), nowMs) == null }
         ?.let { SpeakUpPick(it.key, it.speak!!, line(it.spoken!!, address)) }
 
+    /** One moment that isn't a governor notice ([checkMoment]), said as [line] would; null when it stays silent. */
+    fun pickOne(
+        key: String, m: SpeakMoment, spoken: String, s: SpeakUpSettings, ctx: SpeakContext, quiet: Boolean, meeting: Boolean,
+        spokenToday: Int, nowMs: Long, address: String?, alreadySaid: Boolean,
+    ): SpeakUpPick? = if (checkMoment(m, spoken, s, ctx, quiet, meeting, spokenToday, alreadySaid, nowMs) == null)
+        SpeakUpPick(key, m, line(spoken, address, keepCase = m == SpeakMoment.URGENT)) else null
+
     /** "Meka, your 07:42 is cancelled." with a name ("Sir, …" when he chose sir); "Your 07:42 is cancelled." without. */
-    fun line(spoken: String, address: String?): String {
+    fun line(spoken: String, address: String?, keepCase: Boolean = false): String {
         val words = spoken.trim()
         return if (address.isNullOrBlank()) words.replaceFirstChar { it.uppercaseChar() }
-        else "$address, " + words.replaceFirstChar { it.lowercaseChar() }
+        // An urgent alert starts with the sender's name ("Meka, Sam left …"): never lower-cased.
+        else "$address, " + if (keepCase) words else words.replaceFirstChar { it.lowercaseChar() }
     }
 
     /** How Ada addresses him: "Sir" when chosen, else his first name from About you, else none. */
@@ -207,6 +225,60 @@ object SpeakUpRules {
 
     /** Activity's id for [key] said aloud, so it is said (and logged) once across devices. */
     fun activityId(key: String): String = "k" + ActivityRules.fnv64("spoke:$key")
+
+    // ---- Slice 2: an urgent message from family or Always notify ----
+
+    /** At most this many of their words are said ("Sam says it's urgent: “…”"). */
+    const val URGENT_WORDS = 14
+    /** A message older than this when the alert posts (a re-post, a late sync) is never said. */
+    const val URGENT_FRESH_MS = 10 * 60_000L
+
+    /**
+     * The words for an urgent alert ([Capture.breakThrough]), or null when it isn't one to say: only from someone on his
+     * family or Always notify list (or held as family), only when it says it's urgent (a voice message by
+     * [CallNoticeRules.urgent], a message by its own words), never automated, a scam, a group chat or stale. Their own
+     * words (the AI's summary first) are said, cut to [URGENT_WORDS]: it only tells him, nothing in them is acted on
+     * (ADR-006). "Sam left your call assistant an urgent message: “call me when you can.”"
+     */
+    fun urgentWords(item: CapturedItem, lists: PeopleLists, nowMs: Long): String? {
+        val name = item.personName.trim()
+        if (name.isEmpty() || item.automated || item.endedAsScam || item.conversation != null) return null
+        if (nowMs - item.atMs !in 0..URGENT_FRESH_MS) return null
+        if (!(item.family || lists.isFamily(name) || lists.isAlwaysNotify(name))) return null
+        val voice = item.kind == CaptureKind.VOICE_MESSAGE
+        if (!item.isUrgent) return null
+        val said = (item.summary?.takeIf { voice } ?: item.text)?.let(::clip)
+        val head = when (item.kind) {
+            CaptureKind.VOICE_MESSAGE -> "$name left your call assistant an urgent message"
+            CaptureKind.MESSAGE -> "$name says it's urgent on ${item.app.label}"
+            CaptureKind.MISSED_CALL -> return null
+        }
+        return head + (said?.let { ": “$it”" } ?: ".")
+    }
+
+    /** "Call me when you can." — the first [URGENT_WORDS] words as written, ending in a stop or "…". */
+    private fun clip(text: String): String? {
+        val words = text.replace(Regex("\\s+"), " ").trim().split(' ').filter { it.isNotEmpty() }
+        if (words.isEmpty()) return null
+        val cut = words.take(URGENT_WORDS).joinToString(" ")
+        val end = if (words.size > URGENT_WORDS) "…" else if (cut.last() in ".!?") "" else "."
+        return cut + end
+    }
+
+    /** The alert's key for [pickOne] and Activity: once per message across devices. */
+    fun urgentKey(item: CapturedItem): String = "urgent:${item.id}"
+
+    // ---- Slice 2: "shh" said to Ada in Talk ----
+
+    /** What Ada says when told "shh" in a conversation; the conversation ends after it. */
+    const val MUTED_REPLY = "Okay. I'll keep quiet for two hours. Notifications still come through."
+
+    /**
+     * Whether what he said in a conversation mutes speaking up: [isMute], except that "not now" answers a question when
+     * one is open ([answersSomething]: cards on offer, or the hello that may have asked his name) and stays that answer.
+     */
+    fun mutesInTalk(words: String, answersSomething: Boolean): Boolean =
+        isMute(words) && !(answersSomething && words.lowercase().contains("not now"))
 
     /** "shh", "not now", "quiet please", "stop talking": mutes speaking up for [MUTE_MS]. */
     fun isMute(words: String): Boolean {

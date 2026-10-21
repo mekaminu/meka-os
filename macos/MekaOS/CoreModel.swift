@@ -1487,6 +1487,13 @@ final class CoreModel {
         speakingUp = false
     }
 
+    /// "shh" said to Ada in Talk (slice 2): nothing said out loud on any device for 2 hours; stops her if she's speaking up.
+    func muteSpeakUp() async {
+        stopSpeakingUp()
+        guard let core else { return }
+        try? await core.muteSpeakUp()
+    }
+
     /// Ask → Settings → Speaking up.
     func speakUpView() async -> SpeakUpView? {
         guard let core else { return nil }

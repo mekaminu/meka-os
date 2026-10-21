@@ -405,6 +405,11 @@ class TalkController(
                     os.meka.android.shell.OpenItem(os.meka.core.domain.SearchTarget.HELP, "help:" + effect.link.entryId)
             }
             TalkEffect.StopSpeaking -> stopSaying()
+            // Speaking up, slice 2: "shh" to Ada mutes her speaking up for 2 hours on every device.
+            TalkEffect.MuteSpeakingUp -> {
+                scope.launch { runCatching { core.muteSpeakUp() } }
+                (context.applicationContext as? os.meka.android.MekaApplication)?.speakUp?.stop()
+            }
             TalkEffect.End -> {
                 micOverHello = false
                 echoOf = null
