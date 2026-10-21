@@ -36,6 +36,7 @@ class BriefScriptFacadeTest {
     @Test
     fun theBriefNamesTheTaskAndHabitAndTalkReadsTheSameScript() = runTest {
         val fold = core()
+        fold.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Meka") // one name everywhere: the brief says Your name
         fold.addTask("Renew passport")
         fold.addHabit("Gym", 3, HabitTiming.EVENING, 60, null)
         val v = fold.briefView.value
@@ -101,6 +102,7 @@ class BriefScriptFacadeTest {
             householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = server,
             secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
         )
+        fold.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Meka") // one name everywhere: the brief says Your name
         fold.addTask("Renew passport")
         val own = BriefScriptRules.script(fold.briefView.value)
         // AI off: MEKA's own brief.

@@ -1227,6 +1227,7 @@ class MekaCoreTest {
             "The latest technology news. From BBC News: New phone launched. Anything else?",
             m.talkReadOut(os.meka.core.domain.ReadOut(os.meka.core.domain.ReadOut.Kind.TOPIC, "technology")),
         )
+        m.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Meka") // one name everywhere: the brief says Your name
         assertTrue(m.talkReadOut(ro.getValue(os.meka.core.domain.ReadOut.Kind.BRIEF)).startsWith("Good morning, Meka."))
         assertTrue(m.talkReadOut(os.meka.core.domain.ReadOut(os.meka.core.domain.ReadOut.Kind.TOPIC, "health")).startsWith("Health isn't one of your news topics."))
     }

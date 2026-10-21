@@ -1163,6 +1163,13 @@ final class MekaCoreBridgeTests: XCTestCase {
                        "9 to 15 degrees, light rain from 15:00, take a coat")
     }
 
+    /// One name everywhere (2026-10-21): Today's greeting and the brief's title read About you's name through the core.
+    func testCallNameReachesSwift() {
+        XCTAssertEqual(CallNameRules.shared.todayGreeting(hour: 19, shownName: "Alex Smith"), "Good evening, Alex")
+        XCTAssertEqual(CallNameRules.shared.todayGreeting(hour: 2, shownName: nil), "Good night")
+        XCTAssertEqual(CallNameRules.shared.opening(greeting: "Good morning", name: nil), "Good morning.")
+    }
+
     /// A morning brief worth listening to, slice 1: the brief sheet's Listen reads the chief-of-staff script.
     func testBriefScriptReachesSwift() {
         let s = BriefScriptRules.shared.script(v: MorningBriefView.companion.EMPTY, name: "Meka")

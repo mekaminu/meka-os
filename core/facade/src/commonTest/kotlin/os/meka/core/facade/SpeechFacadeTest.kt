@@ -178,6 +178,7 @@ class SpeechFacadeTest {
     fun theSampleIsTheStartOfTodaysBriefKeptPerVoiceSoReplaysAreFree() = runTest {
         now = 1_791_786_600_000L // Mon 12 Oct 2026, 07:30 in London: the morning's brief
         val c = core()
+        c.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Meka") // one name everywhere: the brief says Your name
         c.addTask("Renew passport")
         val brief = os.meka.core.domain.BriefScriptRules.script(c.briefView.value)
         val words = c.speechSampleWords()
