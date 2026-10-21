@@ -41,9 +41,14 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.text.style.TextDecoration
 import kotlinx.coroutines.delay
 import os.meka.core.domain.BoardHandRules
+import os.meka.core.domain.BoardLookRules
+import os.meka.core.domain.CardChip
+import os.meka.core.domain.CardChipKind
+import os.meka.core.domain.DayProgress
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -163,6 +168,12 @@ import os.meka.core.facade.MekaCore
  *
  * Item (6): "Plan your week" in the header opens [PlanWeekPane] over the Calendar.
  *
+ * By hand, slice 2 (the look, [BoardLookRules]): each lane's header is a big day number over its weekday with a small
+ * tag ("Today · Office"), today underlined in gold, "2 of 5 done" over a thin gold bar (a past day: "3 done"); cards are
+ * raised tiles with small chips (time, estimate, carried in amber, repeat, goal in gold); events are slim one-line chips
+ * ("09:30 · Dentist"); free time is one quiet line ("19:00–21:00 · 2h free · +1 more"), and the stretches open as drop
+ * targets only while a card is held (slice 9's timeline, never as empty boxes).
+ *
  * Reduced motion: no lift or scale, colours and moves cross-fade.
  */
 @Composable
@@ -201,6 +212,8 @@ fun WeekBoardView(
     val settling = remember { mutableStateMapOf<String, Pair<Long, Int>>() }
     val focusManager = LocalFocusManager.current
     LaunchedEffect(landed) { if (landed != null) { delay(LAND_MS); landed = null } }
+    // Slice 2: the free-time drop targets only show while a card is held, so their places are forgotten when it lands.
+    LaunchedEffect(drag == null) { if (drag == null) freeSlots.clear() }
     val hovered by remember {
         derivedStateOf {
             drag?.let { d ->
@@ -423,7 +436,7 @@ fun WeekBoardView(
                     .graphicsLayer {
                         translationX = at.x; translationY = at.y
                         if (!reduced) { scaleX = LIFT; scaleY = LIFT; shadowElevation = 12.dp.toPx() }
-                        shape = RoundedCornerShape(MekaRadius.s); clip = true
+                        shape = TILE; clip = true
                     },
             ) { CardFace(d.card, lifted = true) }
         }
@@ -567,39 +580,67 @@ private fun DayColumn(
             .verticalScroll(vScroll, enabled = dragging == null)
             .padding(MekaSpace.xs),
     ) {
-        // Date, marker, count.
+        // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold, then
+        // "2 of 5 done" over a thin gold bar (a past day only what was done) and the day's capacity.
         Column(Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = day.accessibilityLabel }) {
             Row(verticalAlignment = Alignment.Bottom) {
-                Text(day.title, style = MekaType.metaStrong, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
-                day.placeLabel?.let {
-                    Spacer(Modifier.width(MekaSpace.xs))
-                    Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+                Text(day.number, style = MekaType.nowTitle, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
+                Spacer(Modifier.width(MekaSpace.xs))
+                Text(day.weekday, style = MekaType.metaStrong, color = if (day.isToday) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                BoardLookRules.tag(day)?.let {
+                    Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Text(day.countLine, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+            if (day.isToday) {
+                Box(Modifier.padding(top = MekaSpace.xxs).width(MekaSpace.l).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+            }
+            if (day.isPast) {
+                Text(BoardLookRules.pastLine(day), style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+            } else {
+                BoardLookRules.progress(day)?.let { DayProgressBar(it) }
+            }
             day.capacity?.let { CapacityBar(it) }
         }
         day.pressure?.let { PressureNote(it, onEase) }
         // By hand, slice 1: "+ Add a task" at the top of every day from today, always there.
         if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd)
-        // The day's events, faded.
+        // The day's events as slim one-line chips: "09:30 · Dentist" (slice 2), a dot in the calendar's colour.
         if (day.chips.isNotEmpty()) {
             Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 day.chips.forEach { chip ->
                     Row(
-                        Modifier.fillMaxWidth().alpha(0.7f).clip(RoundedCornerShape(MekaRadius.s))
-                            .clickable(role = Role.Button) { onEvent(chip.event) },
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+                            .clickable(role = Role.Button) { onEvent(chip.event) }
+                            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(Modifier.size(6.dp).clip(CircleShape).background(Meka.colors.calendarTone(chip.tone)))
                         Spacer(Modifier.width(MekaSpace.xxs))
-                        Text("${chip.time} ${chip.title}", style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(chip.time, style = MekaType.micro, color = Meka.colors.accent, maxLines = 1)
+                        Spacer(Modifier.width(MekaSpace.xxs))
+                        Text(chip.title, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 day.moreLabel?.let { Text(it, style = MekaType.micro, color = Meka.colors.textTertiary) }
             }
         }
-        if (showFree && day.freeTimes.isNotEmpty()) FreeTimeline(day.freeTimes, dragging != null, freeHovered, onFreeBounds)
+        // Free time: one quiet line; only while a card is held (unfolded) do the stretches open as drop targets.
+        BoardLookRules.freeLine(day.freeTimes)?.let { free ->
+            if (!(showFree && dragging != null)) {
+                Text(
+                    free.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = MekaSpace.xs).clearAndSetSemantics { contentDescription = free.spoken },
+                )
+            }
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showFree && dragging != null && day.freeTimes.isNotEmpty(),
+            enter = if (reduced) androidx.compose.animation.fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(spring(stiffness = 600f)) + androidx.compose.animation.fadeIn(),
+            exit = if (reduced) androidx.compose.animation.fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(spring(stiffness = 600f)) + androidx.compose.animation.fadeOut(),
+        ) {
+            FreeTimeline(day.freeTimes, true, freeHovered, onFreeBounds)
+        }
         Spacer(Modifier.height(MekaSpace.xs))
         // The cards in his order (ticked ones keep their place a moment); while a card is held over the day the others
         // slide apart where it would land, a gold line in the gap.
@@ -709,8 +750,8 @@ private fun BoardCardRow(
                     }
                 } else Modifier,
             )
-            .clip(RoundedCornerShape(MekaRadius.s))
-            .border(1.5.dp, Meka.colors.accent.copy(alpha = glow.value), RoundedCornerShape(MekaRadius.s))
+            .clip(TILE)
+            .border(1.5.dp, Meka.colors.accent.copy(alpha = glow.value), TILE)
             .semantics {
                 contentDescription = card.accessibilityLabel
                 if (card.canMove) { role = Role.Button; onClick { menu = true; true } }
@@ -785,16 +826,19 @@ private fun BoardCardRow(
 }
 
 /**
- * A card: the tick on the left with its own 48 dp target (separate from the card's tap for its menu), the title
- * (body, struck through and dimmed once done), a quiet line under it; carried ones say so in the accent. The lifted card
+ * A card as a raised tile (slice 2, the look): the tick on the left with its own 48 dp target (separate from the card's
+ * tap for its menu), the title (body, up to two lines, struck through and dimmed once done), then small chips (time,
+ * estimate, carried in amber, repeat, goal in gold). A done card sinks to the lane's colour, no chips. The lifted card
  * wears a gold edge.
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = null) {
+    val chips = BoardLookRules.chips(card)
     Row(
         Modifier.fillMaxWidth()
-            .background(if (lifted) Meka.colors.surfaceRaised else Meka.colors.surfaceRaised.copy(alpha = 0.6f))
-            .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, RoundedCornerShape(MekaRadius.s)) else Modifier)
+            .background(if (card.done && !lifted) Meka.colors.surface else Meka.colors.surfaceRaised)
+            .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, TILE) else Modifier)
             .padding(end = MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
@@ -805,14 +849,49 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                 color = if (card.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
                 textDecoration = if (card.done) TextDecoration.LineThrough else null,
             )
-            val meta = card.meta
-            if (meta.isNotEmpty()) {
-                Text(meta, style = MekaType.micro, color = if (card.carried) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            card.goalTag?.let {
-                Text(it, style = MekaType.micro, color = Meka.colors.accent.copy(alpha = if (card.done) 0.5f else 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (chips.isNotEmpty()) {
+                FlowRow(
+                    Modifier.padding(top = MekaSpace.xxs),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                ) { chips.forEach { CardChipPill(it) } }
             }
         }
+    }
+}
+
+/** The tile's shape (slice 2): rounded like the design's cards. */
+private val TILE = RoundedCornerShape(MekaRadius.m)
+
+/** One small chip under a card's title: gold for its estimate and goal, amber when carried, quiet otherwise. */
+@Composable
+private fun CardChipPill(chip: CardChip) {
+    val amber = Meka.colors.calendar3
+    val (ink, fill) = when (chip.kind) {
+        CardChipKind.CARRIED -> amber to amber.copy(alpha = 0.14f)
+        CardChipKind.ESTIMATE, CardChipKind.GOAL -> Meka.colors.accent to Meka.colors.accent.copy(alpha = 0.12f)
+        else -> Meka.colors.textSecondary to Meka.colors.surface
+    }
+    Text(
+        chip.label, style = MekaType.micro, color = ink, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill).padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+    )
+}
+
+/**
+ * "2 of 5 done" under a day's header with a thin bar that fills gold as cards are ticked (slice 2); the width glides
+ * (Reduced motion: it steps).
+ */
+@Composable
+private fun DayProgressBar(p: DayProgress) {
+    val reduced = Meka.reducedMotion
+    val fill by animateFloatAsState(p.fill, MekaMotion.appear(reduced), label = "day-progress")
+    Text(
+        p.line, style = MekaType.micro, color = if (p.complete) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1,
+        modifier = Modifier.padding(top = MekaSpace.xxs),
+    )
+    Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
+        Box(Modifier.fillMaxWidth(fill).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
     }
 }
 
@@ -872,7 +951,7 @@ private fun GapSlot(open: Boolean, height: androidx.compose.ui.unit.Dp) {
         exit = if (reduced) androidx.compose.animation.fadeOut(MekaMotion.appear(true)) else androidx.compose.animation.shrinkVertically(spring(stiffness = 600f)) + androidx.compose.animation.fadeOut(),
     ) {
         Box(
-            Modifier.fillMaxWidth().height(height).clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.accent.copy(alpha = 0.08f)),
+            Modifier.fillMaxWidth().height(height).clip(TILE).background(Meka.colors.accent.copy(alpha = 0.08f)),
             contentAlignment = Alignment.Center,
         ) {
             Box(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))

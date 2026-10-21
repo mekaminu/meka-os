@@ -166,15 +166,27 @@ private struct BoardColumnView: View {
     var body: some View {
         let glow = targeted && day.canDrop
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            VStack(alignment: .leading, spacing: 0) {
+            // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold,
+            // "2 of 5 done" over a thin gold bar (a past day only what was done), then the day's capacity.
+            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-                    Text(day.title).font(MekaType.metaStrong)
+                    Text(day.number).font(MekaType.nowTitle)
                         .foregroundStyle(day.isToday ? palette.accent : palette.textPrimary)
-                    if let place = day.placeLabel {
-                        Text(place).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                    Text(day.weekday).font(MekaType.metaStrong)
+                        .foregroundStyle(day.isToday ? palette.accent : palette.textSecondary)
+                    Spacer(minLength: 0)
+                    if let tag = BoardLookRules.shared.tag(day: day) {
+                        Text(tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
                     }
                 }
-                Text(day.countLine).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                if day.isToday {
+                    Capsule().fill(palette.accent).frame(width: MekaSpace.l, height: 2)
+                }
+                if day.isPast {
+                    Text(BoardLookRules.shared.pastLine(day: day)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                } else if let progress = BoardLookRules.shared.progress(day: day) {
+                    DayProgressBar(progress: progress, palette: palette)
+                }
                 if let capacity = day.capacity {
                     CapacityBar(capacity: capacity, palette: palette)
                 }
@@ -192,16 +204,20 @@ private struct BoardColumnView: View {
 
             if !day.chips.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    // Slice 2: events as slim one-line chips, "09:30 · Dentist", a dot in the calendar's colour.
                     ForEach(day.chips, id: \.id) { chip in
                         Button { model.openEvent = chip.event } label: {
                             HStack(spacing: MekaSpace.xxs) {
                                 CalendarDot(tone: chip.tone, palette: palette)
-                                Text("\(chip.time) \(chip.title)").font(MekaType.micro)
-                                    .foregroundStyle(palette.textSecondary).lineLimit(1)
+                                Text(chip.time).font(MekaType.micro).foregroundStyle(palette.accent).lineLimit(1)
+                                Text(chip.title).font(MekaType.micro).foregroundStyle(palette.textSecondary).lineLimit(1)
+                                Spacer(minLength: 0)
                             }
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                            .background(Capsule().fill(palette.surface))
                         }
                         .buttonStyle(MekaPressStyle())
-                        .opacity(0.7)
+                        .accessibilityLabel(BoardLookRules.shared.eventLine(chip: chip))
                     }
                     if let more = day.moreLabel {
                         Text(more).font(MekaType.micro).foregroundStyle(palette.textTertiary)
@@ -209,9 +225,9 @@ private struct BoardColumnView: View {
                 }
             }
 
+            // Slice 2: free time as quiet lines, never boxes; each is still a drop target that lights up gold.
             if !day.freeTimes.isEmpty {
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(BoardBlockRules.shared.FREE_TITLE.uppercased()).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(day.freeTimes, id: \.startMs) { free in
                         FreeTimeView(free: free, day: day, board: board, palette: palette)
                     }
@@ -364,9 +380,9 @@ private struct FreeTimeView: View {
             .lineLimit(1)
             .padding(.horizontal, MekaSpace.xs)
             .padding(.vertical, MekaSpace.xxs)
-            .frame(maxWidth: .infinity, minHeight: 24 + 40 * CGFloat(free.weight), alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: targeted ? 24 + 40 * CGFloat(free.weight) : 20, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(targeted ? palette.accent.opacity(0.14) : Color.clear))
-            .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(targeted ? palette.accent : palette.hairline, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(palette.accent, lineWidth: targeted ? 1 : 0))
             .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
             .animation(MekaMotion.appear(reduced: reduceMotion), value: targeted)
             .accessibilityElement(children: .ignore)
@@ -421,24 +437,24 @@ private struct BoardCardView: View {
                     .foregroundStyle(card.done ? palette.textTertiary : palette.textPrimary)
                     .strikethrough(card.done, color: palette.textTertiary)
                     .lineLimit(2)
-                let meta = card.meta
-                if !meta.isEmpty {
-                    Text(meta).font(MekaType.micro)
-                        .foregroundStyle(card.carried ? palette.accent : palette.textTertiary)
-                        .lineLimit(1)
-                }
-                if let tag = card.goalTag {
-                    Text(tag).font(MekaType.micro)
-                        .foregroundStyle(palette.accent.opacity(card.done ? 0.5 : 0.85))
-                        .lineLimit(1)
+                // Slice 2: small chips under the title (time, estimate, carried in amber, repeat, goal in gold).
+                let chips = BoardLookRules.shared.chips(card: card)
+                if !chips.isEmpty {
+                    HStack(spacing: MekaSpace.xxs) {
+                        ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                            CardChipPill(chip: chip, palette: palette)
+                        }
+                    }
+                    .padding(.top, MekaSpace.xxs)
                 }
             }
             Spacer(minLength: 0)
         }
         .padding(MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.surfaceRaised.opacity(selected || over ? 1 : 0.6)))
-        .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(palette.accent.opacity(selected ? 0.8 : 0), lineWidth: 1))
+        // Slice 2: a raised tile; a done one sinks to the lane's colour.
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(card.done ? palette.surface : palette.surfaceRaised))
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent.opacity(selected ? 0.8 : (over ? 0.4 : 0)), lineWidth: 1))
         .overlay(alignment: .top) {
             // Where a held card would land: a gold line above this one.
             Rectangle().fill(palette.accent).frame(height: 2).opacity(over ? 1 : 0).offset(y: -MekaSpace.xxs - 1)
@@ -571,6 +587,50 @@ private struct BoardTick: View {
             spark = false
             withAnimation(.easeOut(duration: 0.6)) { spark = true }
         }
+    }
+}
+
+/// One small chip under a card's title (slice 2): gold for its estimate and goal, amber when carried, quiet otherwise.
+private struct CardChipPill: View {
+    let chip: CardChip
+    let palette: MekaPalette
+
+    var body: some View {
+        let ink: Color
+        let fill: Color
+        switch chip.kind {
+        case .carried: ink = palette.calendar3; fill = palette.calendar3.opacity(0.14)
+        case .estimate, .goal: ink = palette.accent; fill = palette.accent.opacity(0.12)
+        default: ink = palette.textSecondary; fill = palette.surface
+        }
+        return Text(chip.label).font(MekaType.micro).foregroundStyle(ink).lineLimit(1)
+            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+            .background(Capsule().fill(fill))
+    }
+}
+
+/// "2 of 5 done" under a day's header with a thin bar that fills gold as cards are ticked (slice 2); the width glides
+/// (Reduce Motion: it steps).
+private struct DayProgressBar: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let progress: DayProgress
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(progress.line).font(MekaType.micro)
+                .foregroundStyle(progress.complete ? palette.accent : palette.textTertiary)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.hairline)
+                    Capsule().fill(palette.accent).frame(width: geo.size.width * CGFloat(progress.fill))
+                }
+            }
+            .frame(height: 2)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: progress.fill)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(progress.line)
     }
 }
 
