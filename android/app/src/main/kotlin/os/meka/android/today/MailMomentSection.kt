@@ -156,6 +156,8 @@ private fun MomentSession(session: MailMomentSession, core: MekaCore, undo: (Str
                     row,
                     onDone = { haptics.medium(); answer { core.doneMailItem(row.id) } },
                     onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
+                    onToDay = { day -> haptics.medium(); answer { core.mailToDay(row.id, day) } },
+                    toDays = { core.boardFeedDays() },
                     onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
                     onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
                     onDraft = { core.draftMailReply(row.id) },

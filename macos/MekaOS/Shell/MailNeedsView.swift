@@ -72,7 +72,9 @@ struct MailNeedsView: View {
                                                  book: { model.bookMeetingPick(row.id) },
                                                  notNeeded: { model.dismissMailDraft(row.id) },
                                                  read: { images in await model.readMailItem(row.id, images: images) },
-                                                 attachment: { v, a in await model.openMailAttachment(v, a) })
+                                                 attachment: { v, a in await model.openMailAttachment(v, a) },
+                                                 toDay: { day in model.mailToDay(row.id, day: day) },
+                                                 toDays: { model.boardFeedDays() })
                             }
                             if let more = card.moreLine {
                                 Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
@@ -201,6 +203,9 @@ struct MailNeedsRowView: View {
     var read: (@MainActor (Bool) async -> MailReaderView?)? = nil
     /// Read the full email, slice 2: open one of the reader's attachments (nil: listed only).
     var attachment: (@MainActor (MailReaderView, MailAttachmentRow) async -> MailFileOpened)? = nil
+    /// Week board item (5): To a day… puts the email's task on one of `toDays` (nil: not offered here).
+    var toDay: (@MainActor (Int64) -> Void)? = nil
+    var toDays: @MainActor () -> [FeedDay] = { [] }
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @State private var reading = false
     @State private var replying = false
@@ -212,9 +217,10 @@ struct MailNeedsRowView: View {
     @State private var suggesting = false
     @State private var showLinked = false
     @State private var showMore = false
+    @State private var choosingDay = false
 
     private var rowActions: MailRowActions {
-        MailRowActionRules.shared.actions(row: row, tidy: alwaysTidy != nil, block: block != nil, unsubscribe: unsubscribe != nil)
+        MailRowActionRules.shared.actions(row: row, tidy: alwaysTidy != nil, block: block != nil, unsubscribe: unsubscribe != nil, toDay: toDay != nil)
     }
 
     private func offered(_ a: MailRowAction) -> Bool {
@@ -255,6 +261,7 @@ struct MailNeedsRowView: View {
         else if a == MailRowAction.unsubscribe { unsubscribe?() }
         else if a == MailRowAction.alwaysTidy { alwaysTidy?() }
         else if a == MailRowAction.bin || a == MailRowAction.block { block?() }
+        else if a == MailRowAction.toDay { MekaHaptics.tick(); choosingDay.toggle() }
     }
 
     var body: some View {
@@ -374,9 +381,23 @@ struct MailNeedsRowView: View {
                 }
             }
             .padding(.top, MekaSpace.xxs)
+            // Week board item (5): the days To a day… offers unfold under the answers; a click on one sends it there.
+            if choosingDay, let toDay {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(BoardFeedRules.shared.PICK).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(toDays(), id: \.day) { d in
+                            MailNeedsPill(label: d.label, palette: palette, spoken: "\(d.spoken): \(row.subject)",
+                                          action: { choosingDay = false; toDay(d.day) })
+                        }
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
         }
         .animation(MekaMotion.expand(reduced: reduceMotion), value: replying)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showMore)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: choosingDay)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: showLinked)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: row.autoDraft)
         .animation(MekaMotion.expand(reduced: reduceMotion), value: fullDraft)

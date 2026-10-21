@@ -70,7 +70,7 @@ object MailNoteRules {
 }
 
 /** The answers an email row in From your mail can offer (both apps draw them from [MailRowActionRules]). */
-enum class MailRowAction { BOOK, SUGGEST, REPLY, DONE, TASK, BIN, WAITING, SNOOZE, UNSUBSCRIBE, ALWAYS_TIDY, BLOCK }
+enum class MailRowAction { BOOK, SUGGEST, REPLY, DONE, TASK, BIN, WAITING, SNOOZE, UNSUBSCRIBE, ALWAYS_TIDY, BLOCK, TO_DAY }
 
 /** What the row shows straight away, and what waits under ⋯ More. */
 data class MailRowActions(val shown: List<MailRowAction>, val more: List<MailRowAction>)
@@ -88,10 +88,10 @@ object MailRowActionRules {
 
     /**
      * The row's answers. [tidy], [block] and [unsubscribe] say whether this surface offers them at all (the ten-minute
-     * inbox and the card do; null callbacks elsewhere).
+     * inbox and the card do; null callbacks elsewhere). [toDay] (Week board item (5)) puts **To a day…** first under More.
      */
-    fun actions(row: MailNeedsRow, tidy: Boolean = true, block: Boolean = true, unsubscribe: Boolean = true): MailRowActions {
-        if (row.note != null) return MailRowActions(listOf(MailRowAction.TASK, MailRowAction.DONE), listOf(MailRowAction.SNOOZE))
+    fun actions(row: MailNeedsRow, tidy: Boolean = true, block: Boolean = true, unsubscribe: Boolean = true, toDay: Boolean = false): MailRowActions {
+        if (row.note != null) return MailRowActions(listOf(MailRowAction.TASK, MailRowAction.DONE), listOfNotNull(MailRowAction.TO_DAY.takeIf { toDay }, MailRowAction.SNOOZE))
         val shown = buildList {
             if (row.canBook) add(MailRowAction.BOOK)
             if (row.asksToMeet) add(MailRowAction.SUGGEST)
@@ -101,6 +101,7 @@ object MailRowActionRules {
             if (block && row.canBlock && row.scam) add(MailRowAction.BIN)
         }
         val more = buildList {
+            if (toDay) add(MailRowAction.TO_DAY)
             add(MailRowAction.WAITING)
             add(MailRowAction.SNOOZE)
             if (unsubscribe && row.canUnsubscribe) add(MailRowAction.UNSUBSCRIBE)
@@ -123,6 +124,7 @@ object MailRowActionRules {
         MailRowAction.UNSUBSCRIBE -> MailCardUnsubRules.UNSUBSCRIBE
         MailRowAction.ALWAYS_TIDY -> MailSenderRuleRules.ALWAYS_TIDY
         MailRowAction.BLOCK -> MailSenderRuleRules.BLOCK
+        MailRowAction.TO_DAY -> BoardFeedRules.TO_DAY
     }
 
     /** What a screen reader says for it. */
@@ -138,6 +140,7 @@ object MailRowActionRules {
         MailRowAction.UNSUBSCRIBE -> "Unsubscribe from ${row.from} and archive this email"
         MailRowAction.ALWAYS_TIDY -> "Archive this, and ${row.from}'s future emails skip your inbox and go to Archive"
         MailRowAction.BLOCK -> "Block ${row.from}: this email and their later ones go to Trash"
+        MailRowAction.TO_DAY -> BoardFeedRules.spoken(row.subject)
     }
 
     /** Bin & block keeps the critical colour; every other answer wears the accent. */

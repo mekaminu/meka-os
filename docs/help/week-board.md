@@ -1,7 +1,7 @@
 ---
 id: week-board
 title: Week board
-keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time, goals this week, week's goals, tag a task to a goal, goal progress, stacking up, busy day, too much on, pressure warning, overloaded day
+keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time, goals this week, week's goals, tag a task to a goal, goal progress, stacking up, busy day, too much on, pressure warning, overloaded day, email to a day, add to week
 fold: none
 fold_where: Calendar → Board
 mac: none
@@ -22,3 +22,4 @@ tip: Across the top of the Board are the week's goals, up to three: "+ Goal" pic
 tip: Drop a card on a goal (or pick it under For a goal in the card's menu) and the card says "◎ Run 5k"; each goal shows how many of that week's tasks for it are done, like "2 of 4 done". Every change has Undo.
 tip: When three or more things land on one day (tasks due, bills and renewals, tasks carried over, evening events), that day's column wears an amber edge and says "Stacking up: Trip form, Council tax and Gym". One tap under it moves one of its tasks to a lighter day or does one of its due tasks today, with Undo.
 tip: Within two days, the same "Friday is stacking up" line shows on Today and in the morning brief, with the same taps, and the orb mentions it when you say hello.
+tip: To put an email on your week, open ⋯ More on it in From your mail and tap To a day…, then a day (Today, Tomorrow, the rest of this week, or next week's): it becomes a task last on that day's column, named from the subject, and the email is archived at the next check, with Undo on the bar.

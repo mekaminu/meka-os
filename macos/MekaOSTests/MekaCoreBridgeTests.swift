@@ -3265,6 +3265,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(unknownTask, MailNeedsRules.shared.UNKNOWN)
         let unknownWaiting = try await core.waitingFromMailItem(id: "nothing")
         XCTAssertEqual(unknownWaiting, MailNeedsRules.shared.UNKNOWN)
+        // Week board item (5): To a day… on an unknown id says so; the days and the label reach Swift.
+        let unknownToDay = try await core.mailToDay(id: "nothing", day: 0)
+        XCTAssertEqual(unknownToDay, MailNeedsRules.shared.UNKNOWN)
+        XCTAssertEqual(core.boardFeedDays().first?.label, "Today")
+        XCTAssertEqual(BoardFeedRules.shared.TO_DAY, "To a day…")
         // Slice 6b-2a: Reply, sent by the server only after Send.
         let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
         XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)

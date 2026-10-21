@@ -5868,6 +5868,22 @@ final class CoreModel {
         }
     }
 
+    /// Week board item (5): To a day… on an email — its task on that day's Board column, the email archived at the
+    /// server's next check, Undo on the bar. Only the id (a String) and the day (an Int64) cross.
+    func mailToDay(_ id: String, day: Int64) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.mailToDay(id: id, day: day)
+                offerEventUndo(line, .mailItem)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
+    /// The days To a day… offers now (Today, Tomorrow, the rest of the week, into next week until five).
+    func boardFeedDays() -> [FeedDay] { core?.boardFeedDays() ?? [] }
+
     /// Waiting for on an email in "From your mail" (slice 6b-1): in Waiting for from the sender, chase in 3 days, the
     /// email archived; Undo on the bar. Only the id crosses.
     func waitingFromMailItem(_ id: String) {

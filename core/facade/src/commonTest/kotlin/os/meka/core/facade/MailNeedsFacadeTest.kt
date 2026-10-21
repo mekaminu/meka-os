@@ -186,6 +186,40 @@ class MailNeedsFacadeTest {
         .filter { it.entityType == EntityTypes.TASK && it.entityId == id }.associate { it.field to it.value }
 
     @Test
+    fun toADayPutsTheEmailsTaskOnThatDaysBoardColumnAndUndoTakesItBack() = runTest {
+        val a = email("m1", "Sam Taylor", "Re: Kit list for Saturday", hour)
+        val fold = core("android")
+        val mac = core("mac")
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        fold.tick()
+        // Sat 17 Oct: Today, Tomorrow, then next week's by date until five.
+        val days = fold.boardFeedDays()
+        assertEquals(listOf("Today", "Tomorrow", "Mon 19", "Tue 20", "Wed 21"), days.map { it.label })
+        val mon = days[2].day
+        assertEquals("Task “Kit list for Saturday” on Mon 19 Oct · email archived at Navilife's next check", fold.mailToDay(a, mon))
+        assertNull(fold.mailNeeds.value)
+        fold.tick()
+        val id = MailNeedsRules.taskId(a)
+        assertEquals(mon, fold.weekBoard.value.dayOf(id)?.epochDay)
+        assertTrue(fold.syncNow()); assertTrue(mac.syncNow())
+        mac.tick()
+        assertEquals(mon, mac.weekBoard.value.dayOf(id)?.epochDay)
+        assertTrue(serverOps.after("hh", 0, 100_000).map { it.op }.any { it.entityId == a && it.field == MailItemFields.DONE_ASKED_AT })
+
+        now += 1_000
+        fold.undoMailItem()
+        fold.tick()
+        assertEquals(listOf(a), fold.mailNeeds.value?.rows?.map { it.id })
+        assertNull(fold.weekBoard.value.dayOf(id))
+        // Today's chip: on Today's column, with no day of its own (like the column's + Add).
+        now += 1_000
+        assertEquals("Task “Kit list for Saturday” for today · email archived at Navilife's next check", fold.mailToDay(a, days[0].day))
+        fold.tick()
+        assertEquals(days[0].day, fold.weekBoard.value.dayOf(id)?.epochDay)
+        assertEquals(MailNeedsRules.UNKNOWN, fold.mailToDay("nothing", mon))
+    }
+
+    @Test
     fun taskMakesOneTaskOnBothDevicesArchivesTheEmailAndUndoTakesItBack() = runTest {
         val a = email("m1", "Sam Taylor", "Re: Kit list for Saturday", hour)
         val fold = core("android")

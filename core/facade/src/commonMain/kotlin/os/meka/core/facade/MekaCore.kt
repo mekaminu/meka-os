@@ -7242,11 +7242,30 @@ class MekaCore(
      * whose email and which account) and the email is Done (archived at the server's next check). One task per email,
      * so a tap on both apps makes one. Undo deletes the task and brings the card back. Returns the line to show.
      */
-    suspend fun taskFromMailItem(id: String): String = onCore {
+    suspend fun taskFromMailItem(id: String): String = onCore { mailToTask(id, null) }
+
+    /**
+     * Week board item (5): **To a day…** on an email in From your mail — the same task as [taskFromMailItem], put on local
+     * [day] ([os.meka.core.domain.BoardFeedRules.days]' chips; never before today) last in that day's Board column. Undo
+     * ([undoMailItem]) deletes the task and brings the card back. Returns the line to show.
+     */
+    suspend fun mailToDay(id: String, day: Long): String = onCore { mailToTask(id, day) }
+
+    /** The chips To a day… offers now (Today, Tomorrow, the rest of the week, into next week until five). */
+    fun boardFeedDays(): List<os.meka.core.domain.FeedDay> =
+        os.meka.core.domain.BoardFeedRules.days(ZoneCalendar(timeZone).epochDayOf(nowMs()))
+
+    private fun mailToTask(id: String, day: Long?): String {
         val R = os.meka.core.domain.MailNeedsRules
-        val item = activity.mailItems().firstOrNull { it.id == id } ?: return@onCore R.UNKNOWN
+        val item = activity.mailItems().firstOrNull { it.id == id } ?: return R.UNKNOWN
         val group = mailGroup(id)
-        val taskId = tasks.createWithId(R.taskId(id), os.meka.core.domain.NewTask(R.taskTitle(item), notes = R.taskNotes(item, ZoneCalendar(timeZone))))
+        val cal = ZoneCalendar(timeZone)
+        val taskId = tasks.createWithId(R.taskId(id), os.meka.core.domain.NewTask(R.taskTitle(item), notes = R.taskNotes(item, cal)))
+        val today = cal.epochDayOf(nowMs())
+        val onDay = day?.let { os.meka.core.domain.BoardFeedRules.dayFor(it, today) }
+        // Like the column's + Add: a later day is its plan day (no time); Today's column holds it with no day. A new task
+        // has no Board place yet, so it sits last in that day's order.
+        if (onDay != null && onDay > today) tasks.setWhen(taskId, onDay, null)
         replica.commitLocal(os.meka.core.domain.EntityTypes.MAIL_ITEM, id, R.taskFields(taskId, nowMs()))
         val undoLinked = doneLinked(group)
         mailNeedsUndo = {
@@ -7255,7 +7274,8 @@ class MekaCore(
             undoLinked()
         }
         mailNeedsChanged()
-        os.meka.core.domain.MailLinkRules.taskLine(group.size)
+        if (onDay != null) os.meka.core.domain.BoardFeedRules.mailLine(R.taskTitle(item), onDay, today, group.size)
+        else os.meka.core.domain.MailLinkRules.taskLine(group.size)
     }
 
     /**

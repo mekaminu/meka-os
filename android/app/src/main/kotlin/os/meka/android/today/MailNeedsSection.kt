@@ -66,6 +66,7 @@ import os.meka.core.domain.MailSendAllRules
 import os.meka.core.domain.MeetingRequestRules
 import os.meka.core.domain.MailRowAction
 import os.meka.core.domain.MailRowActionRules
+import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.MailReaderRules
 import os.meka.core.domain.MailReaderView
 import os.meka.core.facade.MekaCore
@@ -175,6 +176,8 @@ internal fun MailNeedsSection(
                             onEditor = { t -> if (t == null) texts.remove(row.id) else texts[row.id] = t },
                             onDone = { haptics.medium(); answer { core.doneMailItem(row.id) } },
                             onTask = { haptics.medium(); answer { core.taskFromMailItem(row.id) } },
+                            onToDay = { day -> haptics.medium(); answer { core.mailToDay(row.id, day) } },
+                            toDays = { core.boardFeedDays() },
                             onWaiting = { haptics.medium(); answer { core.waitingFromMailItem(row.id) } },
                             onSnooze = { haptics.light(); answer { core.snoozeMailItem(row.id) } },
                             // Slice 10b: Done, and Autopilot tidies this sender's later emails as they arrive.
@@ -233,6 +236,9 @@ internal fun MailNeedsRowView(
     onRead: (suspend (Boolean) -> MailReaderView)? = null,
     /** Read the full email, slice 2: open one of the reader's attachments (null: listed only). */
     onAttachment: (suspend (MailReaderView, Int) -> os.meka.core.domain.MailAttachmentOpened)? = null,
+    /** Week board item (5): To a day… puts the email's task on one of [toDays] (null: not offered here). */
+    onToDay: ((Long) -> Unit)? = null,
+    toDays: () -> List<os.meka.core.domain.FeedDay> = { emptyList() },
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -413,8 +419,10 @@ internal fun MailNeedsRowView(
         }
         // Junk fix slice 3: every answer wears the accent (Bin & block the critical colour); Reply · Done · Task show and the
         // rest unfold under ⋯ More (expand spring; reduced motion: cross-fade). They wrap on the narrow cover screen.
-        val actions = MailRowActionRules.actions(row, tidy = onAlwaysTidy != null, block = onBlock != null, unsubscribe = onUnsubscribe != null)
+        val actions = MailRowActionRules.actions(row, tidy = onAlwaysTidy != null, block = onBlock != null, unsubscribe = onUnsubscribe != null, toDay = onToDay != null)
         var more by rememberSaveable(row.id) { mutableStateOf(false) }
+        // Week board item (5): To a day… unfolds the days under the answers; a tap on one sends it there.
+        var choosingDay by rememberSaveable(row.id) { mutableStateOf(false) }
         fun perform(a: MailRowAction) {
             when (a) {
                 MailRowAction.BOOK -> onBook?.invoke()
@@ -437,6 +445,7 @@ internal fun MailNeedsRowView(
                 MailRowAction.UNSUBSCRIBE -> onUnsubscribe?.invoke()
                 MailRowAction.ALWAYS_TIDY -> onAlwaysTidy?.invoke()
                 MailRowAction.BIN, MailRowAction.BLOCK -> onBlock?.invoke()
+                MailRowAction.TO_DAY -> { haptics.tick(); choosingDay = !choosingDay }
             }
         }
         fun pillLabel(a: MailRowAction): String =
@@ -466,6 +475,17 @@ internal fun MailNeedsRowView(
             }
             if (more) actions.more.forEach { a ->
                 MailNeedsPill(pillLabel(a), spoken = MailRowActionRules.spoken(a, row), critical = MailRowActionRules.critical(a), onClick = { perform(a) })
+            }
+        }
+        // The days unfold on the expand spring (reduced motion: cross-fade); the email leaves once one is tapped.
+        AnimatedVisibility(choosingDay && onToDay != null, enter = unfold(), exit = fold()) {
+            Column(Modifier.fillMaxWidth().testTag("mail-to-day-${row.id}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(BoardFeedRules.PICK, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    toDays().forEach { d ->
+                        MailNeedsPill(d.label, spoken = "${d.spoken}: ${row.subject}", onClick = { choosingDay = false; onToDay?.invoke(d.day) })
+                    }
+                }
             }
         }
         // The reader, with this card's own answers at its foot (each closes the reader first; Reply opens the editor here).
