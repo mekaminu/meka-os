@@ -71,4 +71,38 @@ object BoardFeedRules {
     /** What a screen reader says for To a day… under a Discord post. */
     fun ideaSpoken(author: String): String =
         "Put $author's post on a day of your week as a task to look at. A note only, nothing is traded"
+
+    // ---- Item (5) part 3: an overdue or due-today card in Needs you to a later day ----
+
+    /** Only a task's overdue or due-today card offers To a day… (a conflict is chosen first; the others aren't tasks). */
+    fun canSendToDay(card: DecisionCard): Boolean =
+        card.taskId != null && (card.kind == DecisionKind.OVERDUE || card.kind == DecisionKind.DUE_TODAY)
+
+    /** The chips under such a card: from tomorrow on, since Done (or the Board's Today column) covers today. */
+    fun needsDays(today: Long): List<FeedDay> = days(today).drop(1)
+
+    /** The day a Needs you chip asks for: never today or before (a chip left open past midnight means tomorrow). */
+    fun needsDayFor(chosen: Long, today: Long): Long = maxOf(chosen, today + 1)
+
+    /**
+     * "Moved “Pay council tax” to Fri 23 Oct · still due today" (to tomorrow by name). The due date is a deadline and
+     * stays; the line says so when the task now sits after it.
+     */
+    fun needsLine(title: String, day: Long, dueDay: Long?, today: Long): String {
+        val t = TaskTitleRules.display(title)
+        val to = if (day == today + 1) "tomorrow" else CivilDate.shortLabel(day)
+        val due = when {
+            dueDay == null || dueDay >= day -> ""
+            dueDay == today -> " · still due today"
+            dueDay == today - 1 -> " · still due yesterday"
+            else -> " · still due ${CivilDate.shortLabel(dueDay)}"
+        }
+        return "Moved “$t” to $to$due"
+    }
+
+    /** What a screen reader says for To a day… on a Needs you card. */
+    fun needsSpoken(title: String): String = "Put $title on a later day of your week. Its due date stays"
+
+    /** A card whose task can't go to another day (finished meanwhile, or not on the Board). */
+    const val CANT_MOVE = "That one can't go to another day"
 }

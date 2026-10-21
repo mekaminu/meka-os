@@ -3221,6 +3221,24 @@ final class CoreModel {
         }
     }
 
+    /// Week board item (5) part 3: the days To a day… offers under an overdue or due-today card (tomorrow on).
+    func needsYouFeedDays() -> [FeedDay] { core?.needsYouFeedDays() ?? [] }
+
+    /// Week board item (5) part 3: To a day… on an overdue or due-today card in Needs you — the task goes to that day of
+    /// the Board (its due date kept), leaving Needs you till then. Only the task's id (a String) and the day (an Int64)
+    /// cross; Undo on the bar puts it back.
+    func needsYouToDay(_ taskId: String, day: Int64) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        if selectedID == taskId { selectedID = nil }
+        Task {
+            do {
+                let line = try await core.needsYouToDay(taskId: taskId, day: day)
+                offerEventUndo(line, line == BoardFeedRules.shared.CANT_MOVE ? nil : .boardMove)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Week board item (10): a stacking-up day's one-tap fix (on the Board, Today or the brief): the task moves to the
     /// fix's day as a Board move; the undo bar says so ("Moved “Gym” to Sat") and Undo puts it back.
     func easePressure(taskId: String, toDay: Int64) {

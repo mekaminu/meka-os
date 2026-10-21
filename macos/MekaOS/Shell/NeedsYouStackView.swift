@@ -16,6 +16,8 @@ struct NeedsYouStackView: View {
     @State private var armed: DecisionMove?
     @State private var gone: Set<String> = []
     @State private var busy = false
+    /// Week board item (5) part 3: the card whose "Which day?" chips are open.
+    @State private var choosingDay: String?
     @FocusState private var focused: Bool
 
     private let thresholdX: CGFloat = 110
@@ -61,6 +63,36 @@ struct NeedsYouStackView: View {
                         .help("Right arrow")
                 }
                 .controlSize(.large)
+
+                // Week board item (5) part 3: To a day… under an overdue or due-today card unfolds the days from
+                // tomorrow; a click puts the task on that day of the Board (its due date kept) and the card leaves.
+                if BoardFeedRules.shared.canSendToDay(card: top), let taskId = top.taskId {
+                    VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                        Button(BoardFeedRules.shared.TO_DAY) {
+                            MekaHaptics.tick()
+                            choosingDay = choosingDay == top.id ? nil : top.id
+                        }
+                        .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                        .accessibilityLabel(BoardFeedRules.shared.needsSpoken(title: top.title))
+                        if choosingDay == top.id {
+                            VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                Text(BoardFeedRules.shared.PICK).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                                HStack(spacing: MekaSpace.xs) {
+                                    ForEach(model.needsYouFeedDays(), id: \.day) { d in
+                                        MailNeedsPill(label: d.label, palette: palette, spoken: "\(d.spoken): \(top.title)", action: {
+                                            choosingDay = nil
+                                            let id = top.id
+                                            withAnimation(reduceMotion ? .easeOut(duration: 0.12) : MekaMotion.approve(reduced: false)) { _ = gone.insert(id) }
+                                            model.needsYouToDay(taskId, day: d.day)
+                                        })
+                                    }
+                                }
+                            }
+                            .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    .animation(MekaMotion.expand(reduced: reduceMotion), value: choosingDay)
+                }
 
                 if let more = NeedsYouStackRules.shared.moreLine(shown: Int32(shown.count)) {
                     Text(more).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)

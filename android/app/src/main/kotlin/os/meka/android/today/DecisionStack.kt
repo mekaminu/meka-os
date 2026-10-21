@@ -1,6 +1,7 @@
 package os.meka.android.today
 
 import os.meka.android.designsystem.containerOrigin
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -11,6 +12,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -25,6 +30,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +41,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -52,7 +59,11 @@ import os.meka.android.designsystem.MotionMath
 import os.meka.android.designsystem.SwipeActionIcon
 import os.meka.android.designsystem.SwipeGlyph
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.android.lists.fold
+import os.meka.android.lists.unfold
+import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.DecisionCard
+import os.meka.core.domain.FeedDay
 import os.meka.core.domain.DecisionEffect
 import os.meka.core.domain.DecisionMove
 import os.meka.core.domain.NeedsYouStackRules
@@ -70,6 +81,10 @@ fun DecisionStackView(
     cards: List<DecisionCard>,
     onMove: (DecisionCard, DecisionMove) -> Unit,
     modifier: Modifier = Modifier,
+    /** Week board item (5) part 3: the days To a day… offers under an overdue or due-today card (tomorrow on). */
+    toDays: () -> List<FeedDay> = { emptyList() },
+    /** A day chip tapped under the top card: its task goes to that day of the Board; Undo on the bar. */
+    onToDay: (DecisionCard, Long) -> Unit = { _, _ -> },
 ) {
     // Cards already done or snoozed stay hidden until the core drops them (a frame or two), so they don't flash back.
     var gone by remember { mutableStateOf(emptySet<String>()) }
@@ -103,7 +118,7 @@ fun DecisionStackView(
                 TopCard(top, widthPx, onMove = { move, flies ->
                     if (flies && top.effect(move) != DecisionEffect.SET_ASIDE) gone = gone + top.id
                     onMove(top, move)
-                })
+                }, toDays = toDays, onToDay = { day -> gone = gone + top.id; onToDay(top, day) })
             }
         }
         NeedsYouStackRules.moreLine(shown.size)?.let {
@@ -114,7 +129,10 @@ fun DecisionStackView(
 
 /** The top card with its drag, fly-off and the three buttons under it. */
 @Composable
-private fun TopCard(card: DecisionCard, widthPx: Float, onMove: (DecisionMove, Boolean) -> Unit) {
+private fun TopCard(
+    card: DecisionCard, widthPx: Float, onMove: (DecisionMove, Boolean) -> Unit,
+    toDays: () -> List<FeedDay> = { emptyList() }, onToDay: (Long) -> Unit = {},
+) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -225,6 +243,44 @@ private fun TopCard(card: DecisionCard, widthPx: Float, onMove: (DecisionMove, B
             StackButton("← ${card.laterLabel}", primary = false, Modifier.weight(1f)) { perform(DecisionMove.LATER) }
             StackButton("↑ ${card.openLabel}", primary = false, Modifier.weight(1f)) { perform(DecisionMove.OPEN) }
             StackButton("${card.yesLabel} →", primary = true, Modifier.weight(1f)) { perform(DecisionMove.YES) }
+        }
+        if (BoardFeedRules.canSendToDay(card)) CardToDay(card, toDays) { day ->
+            // The card fades as it leaves for that day (reduced motion: at once); the next one rises.
+            scope.launch {
+                if (!reduced) fade.animateTo(0f, tween(160))
+                onToDay(day)
+                fade.snapTo(1f)
+            }
+        }
+    }
+}
+
+/**
+ * Week board item (5) part 3: **To a day…** under an overdue or due-today card unfolds "Which day?" and the chips from
+ * tomorrow (expand spring; reduced motion: cross-fade); a tap puts the task on that day of the Board, its due date kept.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CardToDay(card: DecisionCard, toDays: () -> List<FeedDay>, onToDay: (Long) -> Unit) {
+    val haptics = rememberMekaHaptics()
+    var choosing by rememberSaveable(card.id) { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text(
+            BoardFeedRules.TO_DAY, style = MekaType.itemMeta, color = Meka.colors.accent,
+            modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                .clickable(role = Role.Button) { haptics.tick(); choosing = !choosing }
+                .padding(horizontal = MekaSpace.xs).wrapContentHeight(Alignment.CenterVertically)
+                .semantics { contentDescription = BoardFeedRules.needsSpoken(card.title) },
+        )
+        AnimatedVisibility(choosing, enter = unfold(), exit = fold()) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                Text(BoardFeedRules.PICK, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(horizontal = MekaSpace.xs))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    toDays().forEach { d ->
+                        MailNeedsPill(d.label, spoken = "${d.spoken}: ${card.title}", onClick = { haptics.medium(); choosing = false; onToDay(d.day) })
+                    }
+                }
+            }
         }
     }
 }

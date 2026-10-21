@@ -377,4 +377,25 @@ class WeekBoardFacadeTest {
         assertTrue(fold.undoBoardMove())
         assertEquals(p.line, fold.today.value.pressure?.line)
     }
+
+    @Test
+    fun aNeedsYouCardToADayLeavesTodayForThatDayAndUndoes() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val tax = fold.addTask("Pay council tax")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        assertEquals("Tomorrow", fold.needsYouFeedDays().first().label)
+        // A chip for today (left open past midnight) means tomorrow.
+        assertEquals("Moved “Pay council tax” to tomorrow", fold.needsYouToDay(tax, today))
+        assertEquals(listOf(tax), fold.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+        assertTrue(fold.today.value.upNext?.id != tax && fold.today.value.yourDay.none { it.id == tax })
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf(tax), mac.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+
+        assertTrue(fold.undoBoardMove())
+        assertEquals(tax, fold.today.value.upNext?.id)
+        fold.complete(tax)
+        assertEquals(os.meka.core.domain.BoardFeedRules.CANT_MOVE, fold.needsYouToDay(tax, today + 2))
+        assertEquals(os.meka.core.domain.BoardFeedRules.CANT_MOVE, fold.needsYouToDay("nope", today + 2))
+    }
 }

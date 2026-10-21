@@ -70,4 +70,27 @@ class BoardFeedTest {
         assertEquals(listOf(true, false), rows.map { it.onWeek })
         assertEquals(listOf(true, true), rows.map { it.kept })
     }
+
+    @Test
+    fun aNeedsYouCardGoesToALaterDayAndSaysItsDueDateStays() {
+        // From tomorrow on: Done covers today.
+        assertEquals(listOf("Tomorrow", "Fri", "Sat", "Sun"), BoardFeedRules.needsDays(wed).map { it.label })
+        assertEquals(wed + 1, BoardFeedRules.needsDayFor(wed - 1, wed))
+        assertEquals(wed + 1, BoardFeedRules.needsDayFor(wed, wed))
+        assertEquals(wed + 3, BoardFeedRules.needsDayFor(wed + 3, wed))
+        assertEquals("Moved “Pay council tax” to tomorrow · still due today", BoardFeedRules.needsLine("Pay council tax", wed + 1, wed, wed))
+        assertEquals("Moved “Pay council tax” to Fri 23 Oct · still due yesterday", BoardFeedRules.needsLine("Pay council tax", wed + 2, wed - 1, wed))
+        assertEquals("Moved “Pay council tax” to Fri 23 Oct · still due Mon 19 Oct", BoardFeedRules.needsLine("Pay council tax", wed + 2, wed - 2, wed))
+        assertEquals("Moved “Gym” to Fri 23 Oct", BoardFeedRules.needsLine("Gym", wed + 2, null, wed))
+        assertEquals("Moved “Gym” to Fri 23 Oct", BoardFeedRules.needsLine("Gym", wed + 2, wed + 2, wed))
+        // Only a task's overdue and due-today cards offer it.
+        fun card(kind: DecisionKind, task: String? = "t1") = DecisionCard(
+            "c", kind, "Pay", "why", task, "Done", "Tomorrow", "Open",
+            DecisionEffect.COMPLETE_TASK, DecisionEffect.SNOOZE_TASK, DecisionEffect.OPEN_TASK, urgent = false,
+        )
+        assertTrue(BoardFeedRules.canSendToDay(card(DecisionKind.OVERDUE)))
+        assertTrue(BoardFeedRules.canSendToDay(card(DecisionKind.DUE_TODAY)))
+        assertTrue(!BoardFeedRules.canSendToDay(card(DecisionKind.CONFLICT)))
+        assertTrue(!BoardFeedRules.canSendToDay(card(DecisionKind.LISTS, null)))
+    }
 }

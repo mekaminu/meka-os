@@ -54,6 +54,7 @@ import os.meka.core.domain.TriageReplyRules
 import os.meka.android.work.ChatSummarise
 import os.meka.android.work.LiveReplies
 import os.meka.core.domain.DecisionEffect
+import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.DecisionMove
 import os.meka.core.domain.NeedsYouStackRules
 import os.meka.core.domain.NeedsYouMeanwhileRules
@@ -163,6 +164,8 @@ internal class DecisionMoves(
     val archivedAll: MutableState<Boolean> = mutableStateOf(false),
     /** Review opens its own list, slice 1: the Empty Junk card whose review is open over the screen ([JunkReviewHost]). */
     val junkReview: MutableState<String?> = mutableStateOf(null),
+    /** Week board item (5) part 3: To a day… on an overdue or due-today card; Undo on the bar. */
+    val onToDay: (DecisionCard, Long) -> Unit = { _, _ -> },
 ) {
     val setAside: List<String> get() = aside.value
 }
@@ -345,7 +348,14 @@ internal fun rememberDecisionMoves(core: MekaCore, undo: EventUndo, openTask: (S
                     ?.let { done -> undo.show(done.line) { core.undoSchoolCover(done) } }
                 Unit
             }
-        }, openTask = { latestOpenTask(it) }, junkReview = junkReview)
+        }, openTask = { latestOpenTask(it) }, junkReview = junkReview, onToDay = { card, day ->
+            // Week board item (5) part 3: the overdue or due-today task to that day of the Board; Undo puts it back.
+            val id = card.taskId
+            if (id != null) scope.launch {
+                val line = runCatching { core.needsYouToDay(id, day) }.getOrNull() ?: return@launch
+                if (line != BoardFeedRules.CANT_MOVE) undo.show(line) { core.undoBoardMove(); Unit } else undo.show(line, null)
+            }
+        })
     }
 }
 
@@ -627,7 +637,8 @@ internal fun NeedsYouColumn(
             meanwhileItems(meanwhile, play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         } else if (cards.isNotEmpty()) {
             item(key = "stack") {
-                DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)))
+                DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
+                    toDays = { core.needsYouFeedDays() }, onToDay = moves.onToDay)
             }
         }
     }

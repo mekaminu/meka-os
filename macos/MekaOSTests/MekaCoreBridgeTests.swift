@@ -3274,6 +3274,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         let unknownIdea = try await core.discordIdeaToDay(postId: "nothing", day: 0)
         XCTAssertEqual(unknownIdea, DiscordRules.shared.CANT_KEEP)
         XCTAssertEqual(DiscordRules.shared.ON_WEEK_CHIP, "On your week")
+        // Item (5) part 3: To a day… on an unknown Needs you task says so; the chips start tomorrow.
+        let unknownNeeds = try await core.needsYouToDay(taskId: "nothing", day: 0)
+        XCTAssertEqual(unknownNeeds, BoardFeedRules.shared.CANT_MOVE)
+        XCTAssertEqual(core.needsYouFeedDays().first?.label, "Tomorrow")
         // Slice 6b-2a: Reply, sent by the server only after Send.
         let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
         XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)

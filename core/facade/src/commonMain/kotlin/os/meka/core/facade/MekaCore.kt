@@ -2129,6 +2129,31 @@ class MekaCore(
         fix?.doneLine ?: line
     }
 
+    // ---- Week board, item (5) part 3: an overdue or due-today card in Needs you to a later day ----
+
+    /** The chips To a day… offers under an overdue or due-today card in Needs you (tomorrow on). */
+    fun needsYouFeedDays(): List<os.meka.core.domain.FeedDay> =
+        os.meka.core.domain.BoardFeedRules.needsDays(ZoneCalendar(timeZone).epochDayOf(nowMs()))
+
+    /**
+     * **To a day…** on an overdue or due-today card in Needs you: [taskId] to local [day] (tomorrow or later) as a Board
+     * move, last in that day's order with no time, so it leaves Needs you until then; its due date (a deadline) stays,
+     * and the line says so. Returns the undo bar's line ("Moved “Pay council tax” to Fri 23 Oct · still due today") or
+     * [os.meka.core.domain.BoardFeedRules.CANT_MOVE]; Undo is [undoBoardMove].
+     */
+    suspend fun needsYouToDay(taskId: String, day: Long): String = onCore {
+        val R = os.meka.core.domain.BoardFeedRules
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val t = tasks.get(taskId) ?: return@onCore R.CANT_MOVE
+        val onDay = R.needsDayFor(day, today)
+        val board = boardNow()
+        val move = os.meka.core.domain.WeekBoardRules.move(board, taskId, onDay, Int.MAX_VALUE, today, cal) ?: return@onCore R.CANT_MOVE
+        // A card goes to the day itself: no time carried over from today's timeline.
+        placeOnBoard(board, move.copy(minuteOfDay = null))
+        R.needsLine(t.title, onDay, t.dueAtMs?.let(cal::epochDayOf), today)
+    }
+
     // ---- Week board, item (11): "How are you feeling?" ----
 
     /** The Board as it is right now, built afresh from the replica (between the moves of one tap). */
