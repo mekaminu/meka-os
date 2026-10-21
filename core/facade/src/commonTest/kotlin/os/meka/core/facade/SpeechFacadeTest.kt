@@ -250,7 +250,7 @@ class SpeechFacadeTest {
         val c = core()
         c.warmVoice()
         // Talking to Ada like a conversation, slice 1: no "One moment…" is made ahead any more.
-        assertTrue(server.said.none { it.startsWith("One moment") })
+        assertTrue(server.said.none { it.first.startsWith("One moment") })
         val asked = server.said.size
         // 7 s to answer: too slow without a hold (4 s), in time with one (4 s + 6 s).
         server.slowMs = 7_000
