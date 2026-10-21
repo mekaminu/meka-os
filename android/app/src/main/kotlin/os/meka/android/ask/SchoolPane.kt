@@ -90,6 +90,8 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
     val uri = LocalUriHandler.current
     var termsSaid by remember { mutableStateOf<String?>(null) }
     var insetSaid by remember { mutableStateOf<String?>(null) }
+    // Week board item (5) part 4: the date row To a day… last answered, its line, and whether Undo applies.
+    var toDay by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
     val insetColor by animateColorAsState(
         if (insetSaid == SchoolTerms.INSET_NONE) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "school-inset",
     )
@@ -193,7 +195,23 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
         }
         val remove: (SchoolRow) -> Unit = { row -> haptics.tick(); scope.launch { runCatching { core.removeSchool(row.id) } } }
         group("Days off", "off", v.off, 3, remove)
-        group("Dates", "dates", v.dates, 3 + v.off.size, remove)
+        group("Dates", "dates", v.dates, 3 + v.off.size, remove) { row ->
+            // Week board item (5) part 4: getting ready for a school date as a task on a day of the Board.
+            val date = row.day
+            if (date != null) DateToDay(
+                key = row.id, title = row.title, days = { core.dateFeedDays(date) },
+                said = toDay?.takeIf { it.first == row.id }?.second,
+                onToDay = { day ->
+                    scope.launch {
+                        val line = runCatching { core.schoolDateToDay(row.id, day) }.getOrNull() ?: return@launch
+                        toDay = Triple(row.id, line, line.startsWith("Task "))
+                    }
+                },
+                onUndo = if (toDay?.let { it.first == row.id && it.third } == true) {
+                    { scope.launch { runCatching { core.undoDateToDay() }; toDay = null }; Unit }
+                } else null,
+            )
+        }
         group("Every week", "weekly", v.weekly, 3 + v.off.size + v.dates.size, remove)
         item(key = "shared") {
             Text(SchoolRules.SHARED, style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -202,13 +220,19 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
     }
 }
 
-private fun LazyListScope.group(label: String, key: String, rows: List<SchoolRow>, firstStep: Int, remove: (SchoolRow) -> Unit) {
+private fun LazyListScope.group(
+    label: String, key: String, rows: List<SchoolRow>, firstStep: Int, remove: (SchoolRow) -> Unit,
+    under: (@Composable (SchoolRow) -> Unit)? = null,
+) {
     if (rows.isEmpty()) return
     item(key = "label-$key") {
         SectionLabel(label.uppercase(), Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(firstStep)))
     }
     itemsIndexed(rows, key = { _, r -> "school-${r.id}" }) { i, r ->
-        SchoolRowView(r, Modifier.animateItem().appear(rememberAppearance(firstStep + 1 + i))) { remove(r) }
+        Column(Modifier.animateItem().appear(rememberAppearance(firstStep + 1 + i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            SchoolRowView(r, Modifier) { remove(r) }
+            under?.invoke(r)
+        }
     }
 }
 

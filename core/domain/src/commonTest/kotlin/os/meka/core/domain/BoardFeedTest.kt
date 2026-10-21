@@ -93,4 +93,28 @@ class BoardFeedTest {
         assertTrue(!BoardFeedRules.canSendToDay(card(DecisionKind.CONFLICT)))
         assertTrue(!BoardFeedRules.canSendToDay(card(DecisionKind.LISTS, null)))
     }
+
+    @Test
+    fun aSchoolDateOrABirthdayGoesToADayUpToItsDate() {
+        // A trip on Friday: today, tomorrow and Friday; nothing after it, nothing once it's gone.
+        assertEquals(listOf("Today", "Tomorrow", "Fri"), BoardFeedRules.dateDays(wed, wed + 2).map { it.label })
+        assertEquals(listOf("Today"), BoardFeedRules.dateDays(wed, wed).map { it.label })
+        assertTrue(BoardFeedRules.dateDays(wed, wed - 1).isEmpty())
+        // Weeks away: the usual five chips.
+        assertEquals(5, BoardFeedRules.dateDays(wed, wed + 30).size)
+        // Never before today, never after the date.
+        assertEquals(wed, BoardFeedRules.dateDayFor(wed - 1, wed, wed + 2))
+        assertEquals(wed + 2, BoardFeedRules.dateDayFor(wed + 4, wed, wed + 2))
+        assertEquals(wed + 1, BoardFeedRules.dateDayFor(wed + 1, wed, wed + 2))
+        assertEquals("Ready for Trip to the zoo · Alex · Fri 23 Oct", BoardFeedRules.schoolTitle("Trip to the zoo", "Alex", wed + 2))
+        assertEquals("Ready for Non-uniform day · Fri 23 Oct", BoardFeedRules.schoolTitle(" Non-uniform day ", "", wed + 2))
+        assertEquals("Gift for Mum's birthday · Sat 31 Oct", BoardFeedRules.giftTitle("Mum's birthday", wed + 10))
+        assertEquals("Order by Tuesday 27 October for delivery in time\nIdeas: Scarf, Book\nFrom Gifts", BoardFeedRules.giftNotes(wed + 6, wed, listOf("Scarf", " ", "Book")))
+        assertEquals("The order-by day has passed\nFrom Gifts", BoardFeedRules.giftNotes(wed - 1, wed, emptyList()))
+        assertEquals("Task “Gym” for tomorrow · on your Board", BoardFeedRules.dateLine("Gym", wed + 1, wed))
+        assertEquals("Task “Gym” on Fri 23 Oct · on your Board", BoardFeedRules.dateLine("Gym", wed + 2, wed))
+        // One id per thing and date; a removed one makes room for the next.
+        assertEquals("tbsx1-${wed + 2}", BoardFeedRules.dateTaskId("s", "x1", wed + 2))
+        assertEquals("tbgo1-${wed + 2}-2", BoardFeedRules.dateTaskId("g", "o1", wed + 2, 2))
+    }
 }

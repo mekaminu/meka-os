@@ -244,11 +244,83 @@ struct SchoolSheet: View {
                 .padding(.top, MekaSpace.m)
                 .staggeredAppear(first)
             ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                SchoolRowView(row: row, palette: palette) { model.removeSchool(row.id) }
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
-                    .staggeredAppear(first + 1 + i)
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    SchoolRowView(row: row, palette: palette) { model.removeSchool(row.id) }
+                    // Week board item (5) part 4: getting ready for a school date as a task on a day of the Board.
+                    if let date = row.day?.int64Value {
+                        DateToDayView(kind: .school, id: row.id, title: row.title, date: date, palette: palette)
+                            .padding(.leading, MekaSpace.m)
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                .staggeredAppear(first + 1 + i)
             }
         }
+    }
+}
+
+/// Week board item (5) part 4: **To a day…** under a school date (School) or a birthday (Gifts), like the Fold's
+/// DateToDay. The click (tick) unfolds "Which day?" and the days from today up to the date (expand spring); a day's click
+/// (medium haptic) folds them away and makes the task on that day of the Board; what it did fades in with Undo. Only the
+/// thing's id (a String) and the day (an Int64) cross to the core. Reduce Motion: cross-fades.
+struct DateToDayView: View {
+    enum Kind { case school, gift }
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let kind: Kind
+    let id: String
+    let title: String
+    let date: Int64
+    let palette: MekaPalette
+    @State private var choosing = false
+    @State private var said: String?
+    @State private var undoable = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Button(BoardFeedRules.shared.TO_DAY) { MekaHaptics.tick(); choosing.toggle() }
+                .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                .accessibilityLabel(BoardFeedRules.shared.dateSpoken(title: title))
+            if choosing {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(BoardFeedRules.shared.PICK).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    HStack(spacing: MekaSpace.xs) {
+                        ForEach(model.dateFeedDays(date), id: \.day) { d in
+                            MailNeedsPill(label: d.label, palette: palette, spoken: "\(d.spoken): \(title)", action: {
+                                choosing = false
+                                let day = d.day
+                                let thing = id
+                                Task {
+                                    let line = kind == .school
+                                        ? await model.schoolDateToDay(thing, day: day)
+                                        : await model.giftToDay(thing, day: day)
+                                    said = line
+                                    undoable = line?.hasPrefix("Task ") == true
+                                }
+                            })
+                        }
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+            if let line = said {
+                HStack(spacing: MekaSpace.xs) {
+                    Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    if undoable {
+                        Button("Undo") {
+                            MekaHaptics.tick()
+                            undoable = false
+                            said = nil
+                            Task { await model.undoDateToDay() }
+                        }
+                        .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                    }
+                }
+                .transition(.opacity)
+            }
+        }
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: choosing)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
     }
 }
 

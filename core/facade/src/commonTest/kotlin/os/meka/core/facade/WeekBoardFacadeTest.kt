@@ -398,4 +398,45 @@ class WeekBoardFacadeTest {
         assertEquals(os.meka.core.domain.BoardFeedRules.CANT_MOVE, fold.needsYouToDay(tax, today + 2))
         assertEquals(os.meka.core.domain.BoardFeedRules.CANT_MOVE, fold.needsYouToDay("nope", today + 2))
     }
+
+    @Test
+    fun aSchoolDateAndABirthdayGoToADayOnceEachAndUndo() = runTest {
+        // Week board item (5) part 4: To a day… in School and Gifts.
+        val R = os.meka.core.domain.BoardFeedRules
+        val fold = core("android"); val mac = core("mac")
+        fold.addSchool("Trip to the zoo 10 Oct")
+        fold.addOccasion("Sam's birthday 12 Oct")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val trip = fold.schoolView.value.dates.single()
+        assertEquals(today + 2, trip.day)
+        // Today up to the trip's Saturday.
+        assertEquals(listOf("Today", "Tomorrow", "Sat"), fold.dateFeedDays(today + 2).map { it.label })
+        val title = R.schoolTitle(trip.title, "", today + 2)
+        assertEquals(R.dateLine(title, today + 1, today), fold.schoolDateToDay(trip.id, today + 1))
+        val card = fold.weekBoard.value.day(today + 1)!!.openCards.single()
+        assertEquals(title, card.task.title)
+        // A second tap, or the Mac's after a sync, makes no other.
+        assertEquals(R.DATE_ALREADY, fold.schoolDateToDay(trip.id, today + 2))
+        fold.syncNow(); mac.syncNow()
+        assertEquals(R.DATE_ALREADY, mac.schoolDateToDay(trip.id, today))
+        assertEquals(listOf(card.id), mac.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+        // Undo takes it off; another tap makes a fresh one, never after the date.
+        assertTrue(fold.undoDateToDay())
+        assertTrue(fold.weekBoard.value.day(today + 1)!!.openCards.isEmpty())
+        assertEquals(R.dateLine(title, today + 2, today), fold.schoolDateToDay(trip.id, today + 6))
+        assertEquals(listOf(title), fold.weekBoard.value.day(today + 2)!!.openCards.map { it.task.title })
+
+        // A birthday: its gift as a task, the order-by day in its notes; nothing is ordered.
+        val sam = fold.giftsView.value.rows.single()
+        assertEquals(today + 4, sam.day)
+        val gift = R.giftTitle(sam.title, today + 4)
+        assertEquals(R.dateLine(gift, today + 1, today), fold.giftToDay(sam.id, today + 1))
+        val g = fold.weekBoard.value.day(today + 1)!!.openCards.single()
+        assertEquals(gift, g.task.title)
+        assertTrue(g.task.notes.orEmpty().endsWith("From Gifts"))
+        assertEquals(R.DATE_UNKNOWN, fold.giftToDay("nope", today + 1))
+        assertEquals(R.DATE_UNKNOWN, fold.schoolDateToDay("nope", today + 1))
+        assertFalse(mac.undoDateToDay())
+    }
 }

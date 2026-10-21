@@ -16,6 +16,7 @@ import os.meka.core.sync.SyncTransport
 import os.meka.core.sync.TransportException
 import os.meka.core.sync.fv
 import kotlin.random.Random
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -45,10 +46,19 @@ class VoiceMessageFacadeTest {
 
     private val server = Server(SyncService(ops))
 
+    private val cores = mutableListOf<MekaCore>()
+
     private fun core() = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = server,
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
-    )
+    ).also { cores += it }
+
+    /**
+     * The 5 s Undo timers this class starts outlive the test; closing the cores stops them, so a late write can't
+     * refresh a finished core (and the household names every core shares) while the next test class runs.
+     */
+    @AfterTest
+    fun closeCores() { cores.forEach { it.close() }; cores.clear() }
 
     /** MEKA's server took a message on [call] (and kept its recording when [audio]). */
     private fun serverWrites(call: String, audio: Boolean): String {

@@ -3278,6 +3278,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         let unknownNeeds = try await core.needsYouToDay(taskId: "nothing", day: 0)
         XCTAssertEqual(unknownNeeds, BoardFeedRules.shared.CANT_MOVE)
         XCTAssertEqual(core.needsYouFeedDays().first?.label, "Tomorrow")
+        // Item (5) part 4: To a day… on an unknown school date or birthday says so; nothing to undo.
+        let unknownDate = try await core.schoolDateToDay(itemId: "nothing", day: 0)
+        XCTAssertEqual(unknownDate, BoardFeedRules.shared.DATE_UNKNOWN)
+        let unknownGift = try await core.giftToDay(occasionId: "nothing", day: 0)
+        XCTAssertEqual(unknownGift, BoardFeedRules.shared.DATE_UNKNOWN)
+        XCTAssertTrue(core.dateFeedDays(date: 0).isEmpty)
         // Slice 6b-2a: Reply, sent by the server only after Send.
         let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
         XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)

@@ -74,6 +74,8 @@ fun GiftsPane(core: MekaCore, onClose: () -> Unit) {
     val v by core.giftsView.collectAsState()
     var said by remember { mutableStateOf<GiftAdded?>(null) }
     var open by remember { mutableStateOf<String?>(null) }
+    // Week board item (5) part 4: the occasion To a day… last answered, its line, and whether Undo applies.
+    var toDay by remember { mutableStateOf<Triple<String, String, Boolean>?>(null) }
     val saidColor by animateColorAsState(
         if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "gifts-said",
     )
@@ -129,6 +131,23 @@ fun GiftsPane(core: MekaCore, onClose: () -> Unit) {
                 onRemoveIdea = { id -> haptics.tick(); scope.launch { runCatching { core.removeGiftIdea(id) } } },
                 onSorted = { sorted -> haptics.light(); scope.launch { runCatching { core.setGiftSorted(r.id, sorted) } } },
                 onRemove = { haptics.tick(); open = null; scope.launch { runCatching { core.removeOccasion(r.id) } } },
+                toDay = {
+                    // Week board item (5) part 4: the gift as a task on a day of the Board, up to the day itself.
+                    val date = r.day
+                    if (date != null && !r.sorted) DateToDay(
+                        key = r.id, title = r.title, days = { core.dateFeedDays(date) },
+                        said = toDay?.takeIf { it.first == r.id }?.second,
+                        onToDay = { day ->
+                            scope.launch {
+                                val line = runCatching { core.giftToDay(r.id, day) }.getOrNull() ?: return@launch
+                                toDay = Triple(r.id, line, line.startsWith("Task "))
+                            }
+                        },
+                        onUndo = if (toDay?.let { it.first == r.id && it.third } == true) {
+                            { scope.launch { runCatching { core.undoDateToDay() }; toDay = null }; Unit }
+                        } else null,
+                    )
+                },
             )
         }
         item(key = "note") {
@@ -148,6 +167,7 @@ private fun GiftRowView(
     onRemoveIdea: (String) -> Unit,
     onSorted: (Boolean) -> Unit,
     onRemove: () -> Unit,
+    toDay: @Composable () -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     val noteColor by animateColorAsState(
@@ -193,6 +213,7 @@ private fun GiftRowView(
                     }
                 }
                 Field(GiftRules.IDEA_HINT) { text -> onIdea(text) }
+                toDay()
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         if (row.sorted) "Not sorted yet" else "Gift sorted", style = MekaType.itemMeta, color = Meka.colors.accent,

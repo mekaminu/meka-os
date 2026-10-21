@@ -1,7 +1,7 @@
 ---
 id: week-board
 title: Week board
-keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time, goals this week, week's goals, tag a task to a goal, goal progress, stacking up, busy day, too much on, pressure warning, overloaded day, email to a day, add to week, discord post to a day, overdue to a day, due today to another day, needs you to a day
+keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time, goals this week, week's goals, tag a task to a goal, goal progress, stacking up, busy day, too much on, pressure warning, overloaded day, email to a day, add to week, discord post to a day, overdue to a day, due today to another day, needs you to a day, school date to a day, school trip task, birthday gift task, gift to a day
 fold: none
 fold_where: Calendar → Board
 mac: none
@@ -25,3 +25,4 @@ tip: Within two days, the same "Friday is stacking up" line shows on Today and i
 tip: To put an email on your week, open ⋯ More on it in From your mail and tap To a day…, then a day (Today, Tomorrow, the rest of this week, or next week's): it becomes a task last on that day's column, named from the subject, and the email is archived at the next check, with Undo on the bar.
 tip: To put a Discord post on your week, tap To a day… under it in Needs you (beside Keep as idea), then a day: it becomes a task to look at it, last on that day's column, and the post reads "On your week". A note only, nothing is traded, with Undo on the bar.
 tip: To give an overdue or due-today task a later day, tap To a day… under its card in Needs you, then a day: it leaves Needs you and sits last on that day's Board column, its due date kept (the line says "still due …"), with Undo on the bar.
+tip: To get ready for a school date (a trip, a non-uniform day) or a birthday, tap To a day… under it in School, or in the opened birthday in Gifts, then a day up to the date itself: it becomes a task on that day's column ("Ready for Trip to the zoo · Fri 20 Nov" or "Gift for … · Sat 31 Oct", with the order-by day and your ideas in its notes), once per date, with Undo. Nothing is ordered.

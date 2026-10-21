@@ -96,6 +96,8 @@ data class SchoolRow(
     val spoken: String,
     /** Where it came from, quietly: "Council dates · checked 14 Oct 2026 · check with the school"; null when he typed it. */
     val source: String? = null,
+    /** A one-off date's day (epoch day), for its To a day… chips (Week board item (5) part 4); null on other rows. */
+    val day: Long? = null,
 )
 
 /**
@@ -466,7 +468,7 @@ object SchoolRules {
             val line = "${dayWord(d.startDay, today)} · ${whoLabel(d.who)}"
             val note = reminderNote(d, today)
             val source = SchoolTerms.sourceLine(d)
-            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note, source).joinToString(". "), source)
+            SchoolRow(d.id, d.title, line, note, listOfNotNull(d.title, line, note, source).joinToString(". "), source, day = d.startDay)
         }
         val weeklyRows = weekly.map { w ->
             val line = "Every ${CivilDate.DAY_LONG[w.weekday - 1]} · ${whoLabel(w.who)}"

@@ -105,4 +105,56 @@ object BoardFeedRules {
 
     /** A card whose task can't go to another day (finished meanwhile, or not on the Board). */
     const val CANT_MOVE = "That one can't go to another day"
+
+    // ---- Item (5) part 4: a school date or a family date (a birthday, an anniversary) to a day ----
+
+    /**
+     * The chips To a day… offers under a dated thing on [date] (a school trip, a birthday): today's chips up to and
+     * including that day, since getting ready for it after it is no use. None once it has passed.
+     */
+    fun dateDays(today: Long, date: Long): List<FeedDay> = if (date < today) emptyList() else days(today).filter { it.day <= date }
+
+    /** The day a chip asks for: never before today (a chip left open past midnight), never after the date itself. */
+    fun dateDayFor(chosen: Long, today: Long, date: Long): Long = minOf(maxOf(chosen, today), maxOf(date, today))
+
+    /** "Ready for Trip to the zoo · Alex · Fri 20 Nov" (a date for both children names no one). */
+    fun schoolTitle(title: String, who: String, date: Long): String =
+        listOfNotNull("Ready for ${title.trim()}", who.trim().takeIf { it.isNotEmpty() }, CivilDate.shortLabel(date)).joinToString(" · ")
+
+    /** The school task's notes: where it came from. */
+    fun schoolNotes(date: Long): String = "From School · the date is ${CivilDate.longLabel(date)}"
+
+    /** "Gift for Mum's birthday · Sat 31 Oct". */
+    fun giftTitle(occasion: String, date: Long): String = "Gift for ${occasion.trim()} · ${CivilDate.shortLabel(date)}"
+
+    /** The gift task's notes: the order-by day and his ideas, so the task holds what Gifts knows. */
+    fun giftNotes(orderBy: Long, today: Long, ideas: List<String>): String = listOfNotNull(
+        if (orderBy >= today) "Order by ${CivilDate.longLabel(orderBy)} for delivery in time" else "The order-by day has passed",
+        ideas.map { it.trim() }.filter { it.isNotEmpty() }.takeIf { it.isNotEmpty() }?.joinToString(", ", prefix = "Ideas: "),
+        "From Gifts",
+    ).joinToString("\n")
+
+    /** "Task “Ready for Trip to the zoo · Alex · Fri 20 Nov” on Thu 19 Nov · on your Board" (today / tomorrow by name). */
+    fun dateLine(title: String, day: Long, today: Long): String {
+        val on = when (day) {
+            today -> "for today"
+            today + 1 -> "for tomorrow"
+            else -> "on ${CivilDate.shortLabel(day)}"
+        }
+        return "Task “${TaskTitleRules.display(title)}” $on · on your Board"
+    }
+
+    /**
+     * The id of the task To a day… makes for [kind] ("s" school, "g" gift) [sourceId] on [date], so the Fold and the
+     * Mac tapping at once make one; [n] counts past ones Undo removed (a removed id never comes back, ADR-003).
+     */
+    fun dateTaskId(kind: String, sourceId: String, date: Long, n: Int = 1): String =
+        "tb$kind$sourceId-$date" + (if (n > 1) "-$n" else "")
+
+    /** What a screen reader says for To a day… on a school date or a birthday. */
+    fun dateSpoken(title: String): String = "Put getting ready for $title on a day of your week as a task"
+
+    const val DATE_ALREADY = "Already on your week"
+    const val DATE_PASSED = "That date has passed"
+    const val DATE_UNKNOWN = "That date isn't there any more"
 }

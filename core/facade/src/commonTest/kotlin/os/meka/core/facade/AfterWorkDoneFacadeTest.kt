@@ -9,6 +9,7 @@ import os.meka.core.domain.CapturedItem
 import os.meka.core.domain.PeopleLists
 import os.meka.core.sync.InMemoryReplicaStore
 import kotlin.random.Random
+import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -19,10 +20,19 @@ import kotlin.time.TimeSource
 class AfterWorkDoneFacadeTest {
     private var now = 1_791_622_800_000L
 
+    private val cores = mutableListOf<MekaCore>()
+
     private fun core() = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
-    )
+    ).also { cores += it }
+
+    /**
+     * The 5 s Undo timers this class starts outlive the test; closing the cores stops them, so a late write can't
+     * refresh a finished core (and the household names every core shares) while the next test class runs.
+     */
+    @AfterTest
+    fun closeCores() { cores.forEach { it.close() }; cores.clear() }
 
     private fun msg(who: String, text: String, at: Long) =
         CapturedItem(Capture.itemId(CaptureApp.WHATSAPP, CaptureKind.MESSAGE, who, null, at, text), CaptureApp.WHATSAPP, CaptureKind.MESSAGE, who, text, null, at)

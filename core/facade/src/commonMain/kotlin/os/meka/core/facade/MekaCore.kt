@@ -2154,6 +2154,73 @@ class MekaCore(
         R.needsLine(t.title, onDay, t.dueAtMs?.let(cal::epochDayOf), today)
     }
 
+    // ---- Week board, item (5) part 4: a school date or a family date to a day ----
+
+    /** The chips To a day… offers under a school date or a birthday on local [date] (today up to that day). */
+    fun dateFeedDays(date: Long): List<os.meka.core.domain.FeedDay> =
+        os.meka.core.domain.BoardFeedRules.dateDays(ZoneCalendar(timeZone).epochDayOf(nowMs()), date)
+
+    /**
+     * **To a day…** on a one-off school date (a trip, a non-uniform day, a payment) in School: a task "Ready for Trip to
+     * the zoo · Alex · Fri 20 Nov" on local [day] (today up to the date), last in that day's Board column. One per date
+     * across devices; Undo is [undoDateToDay]. Returns the bar's line.
+     */
+    suspend fun schoolDateToDay(itemId: String, day: Long): String = onCore {
+        val R = os.meka.core.domain.BoardFeedRules
+        val item = school.items().firstOrNull { it.id == itemId && it.kind == os.meka.core.domain.SchoolKind.DAY }
+            ?: return@onCore R.DATE_UNKNOWN
+        val date = item.startDay
+        dateToDay("s", item.id, date, day, R.schoolTitle(item.title, item.who, date), R.schoolNotes(date))
+    }
+
+    /**
+     * **To a day…** on a birthday or anniversary in Gifts: a task "Gift for Mum's birthday · Sat 31 Oct" (its notes the
+     * order-by day and his ideas) on local [day] (today up to the occasion), last in that day's Board column. One per
+     * occasion and year across devices; Undo is [undoDateToDay]. Nothing is ordered. Returns the bar's line.
+     */
+    suspend fun giftToDay(occasionId: String, day: Long): String = onCore {
+        val R = os.meka.core.domain.BoardFeedRules
+        val G = os.meka.core.domain.GiftRules
+        val o = gifts.items().firstOrNull { it.id == occasionId } ?: return@onCore R.DATE_UNKNOWN
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        val date = G.next(o, today)
+        dateToDay("g", o.id, date, day, R.giftTitle(G.title(o), date), R.giftNotes(G.orderBy(o, date), today, o.ideas.map { it.text }))
+    }
+
+    /** Undo after [schoolDateToDay] or [giftToDay]: the task it made leaves the Board. False when nothing to undo. */
+    suspend fun undoDateToDay(): Boolean = onCore {
+        val id = dateToDayUndo ?: return@onCore false
+        dateToDayUndo = null
+        if (liveTask(id)) tasks.delete(id)
+        true
+    }
+    private var dateToDayUndo: String? = null
+
+    /** Caller is on the core. */
+    private fun dateToDay(kind: String, sourceId: String, date: Long, day: Long, title: String, notes: String): String {
+        val R = os.meka.core.domain.BoardFeedRules
+        val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
+        if (date < today) return R.DATE_PASSED
+        // The first id not used yet: an open task there means it's already on his week; a done or removed one (Undo)
+        // leaves room for a fresh one.
+        var id: String? = null
+        for (n in 1..MAX_DATE_TASKS) {
+            val candidate = R.dateTaskId(kind, sourceId, date, n)
+            val e = replica.entity(os.meka.core.domain.EntityTypes.TASK, candidate)
+            if (e == null) { id = candidate; break }
+            if (e.deleted) continue
+            if (tasks.get(candidate)?.lifecycle?.isTerminal == true) continue
+            return R.DATE_ALREADY
+        }
+        val taskId = id ?: return R.DATE_ALREADY
+        tasks.createWithId(taskId, os.meka.core.domain.NewTask(title, notes = notes))
+        val onDay = R.dateDayFor(day, today, date)
+        // Like the column's + Add: a later day is its plan day (no time); Today's column holds it with no day.
+        if (onDay > today) tasks.setWhen(taskId, onDay, null)
+        dateToDayUndo = taskId
+        return R.dateLine(title, onDay, today)
+    }
+
     // ---- Week board, item (11): "How are you feeling?" ----
 
     /** The Board as it is right now, built afresh from the replica (between the moves of one tap). */
@@ -6249,6 +6316,8 @@ class MekaCore(
     companion object {
         /** Passes [refresh] makes at most when commits keep arriving while it runs (each pass sees them all). */
         private const val MAX_REFRESH_PASSES = 4
+        /** Fresh tasks To a day… may make for one school date or birthday after Undo removed earlier ones. */
+        private const val MAX_DATE_TASKS = 20
         const val FOREGROUND_SYNC_MS: Long = 30_000L
         /** Full news hub, slice 5: how often opening News asks the server which feeds aren't coming through. */
         const val NEWS_DOWN_EVERY_MS: Long = 10 * 60_000L

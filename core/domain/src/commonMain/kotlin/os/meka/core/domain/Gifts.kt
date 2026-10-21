@@ -76,6 +76,8 @@ data class GiftRow(
     val sorted: Boolean,
     val ideas: List<GiftIdeaRow>,
     val spoken: String,
+    /** The occasion's next day (epoch day), for its To a day… chips (Week board item (5) part 4). */
+    val day: Long? = null,
 )
 
 data class GiftsView(val rows: List<GiftRow>, val summary: String) {
@@ -347,6 +349,7 @@ object GiftRules {
                 id = o.id, title = title(o), line = line, note = note, noteLit = lit, sorted = sorted,
                 ideas = o.ideas.map { GiftIdeaRow(it.id, it.text) },
                 spoken = listOfNotNull(title(o), line, note, ideasLine(o)).joinToString(". "),
+                day = day,
             )
         }
         val first = soonest.first()

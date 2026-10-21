@@ -134,6 +134,10 @@ private struct GiftRowView: View {
                             idea = ""
                             model.addGiftIdea(row.id, typed)
                         }
+                    // Week board item (5) part 4: the gift as a task on a day of the Board, up to the day itself.
+                    if let date = row.day?.int64Value, !row.sorted {
+                        DateToDayView(kind: .gift, id: row.id, title: row.title, date: date, palette: palette)
+                    }
                     HStack(spacing: MekaSpace.m) {
                         Button(row.sorted ? "Not sorted yet" : "Gift sorted") { model.setGiftSorted(row.id, !row.sorted) }
                             .buttonStyle(MekaPressStyle())

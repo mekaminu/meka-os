@@ -3239,6 +3239,37 @@ final class CoreModel {
         }
     }
 
+    /// Week board item (5) part 4: the days To a day… offers under a school date or a birthday (today up to it).
+    func dateFeedDays(_ date: Int64) -> [FeedDay] { core?.dateFeedDays(date: date) ?? [] }
+
+    /// Week board item (5) part 4: To a day… on a school date — "Ready for …" as a task on that day of the Board. Only
+    /// the item's id (a String) and the day (an Int64) cross; returns the line to show (Undo: undoDateToDay).
+    func schoolDateToDay(_ itemId: String, day: Int64) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.medium()
+        do { return try await core.schoolDateToDay(itemId: itemId, day: day) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Week board item (5) part 4: To a day… on a birthday or anniversary — "Gift for …" as a task on that day of the
+    /// Board (nothing is ordered). Only the occasion's id and the day cross; returns the line to show.
+    func giftToDay(_ occasionId: String, day: Int64) async -> String? {
+        guard let core else { return nil }
+        MekaHaptics.medium()
+        do { return try await core.giftToDay(occasionId: occasionId, day: day) } catch {
+            lastError = error.localizedDescription
+            return nil
+        }
+    }
+
+    /// Undo after schoolDateToDay or giftToDay: the task it made leaves the Board.
+    func undoDateToDay() async {
+        guard let core else { return }
+        do { _ = try await core.undoDateToDay() } catch { lastError = error.localizedDescription }
+    }
+
     /// Week board item (10): a stacking-up day's one-tap fix (on the Board, Today or the brief): the task moves to the
     /// fix's day as a Board move; the undo bar says so ("Moved “Gym” to Sat") and Undo puts it back.
     func easePressure(taskId: String, toDay: Int64) {
