@@ -83,6 +83,9 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BoardCapacity
 import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
+import os.meka.core.domain.BoardGoal
+import os.meka.core.domain.BoardGoalRules
+import os.meka.core.domain.GoalPickChoice
 import os.meka.core.domain.BoardSource
 import os.meka.core.domain.BoardWeek
 import os.meka.core.domain.CalendarEvent
@@ -114,6 +117,11 @@ import os.meka.core.facade.MekaCore
  * onto the tray to put it on Someday, or out of either onto a day; a card's menu has the same moves (No day this week ·
  * Someday). The lane and tray glow gold like a column while a card is over them.
  *
+ * Slice 7: across the top, the week's goals (up to three, picked here with "+ Goal" or in the week ahead; this week
+ * with none picked shows Today's This-week goals), each with "2 of 4 done" over a slim gold bar from the week's tasks
+ * tagged to it. Drop a card on a goal to tag it, or use the card menu's FOR A GOAL; a tagged card says "◎ Run 5k". Tap
+ * a goal for Off this week; "+ Goal" offers open goals or a new one typed. Every change has Undo.
+ *
  * Reduced motion: no lift or scale, colours and moves cross-fade.
  */
 @Composable
@@ -143,6 +151,12 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
     fun showLine(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } } }
     val onPark: (BoardCard, Long) -> Unit = { card, week -> scope.launch { showLine(runCatching { core.parkOnBoard(card.id, week, Int.MAX_VALUE) }.getOrNull()) } }
     val onSomeday: (BoardCard) -> Unit = { card -> scope.launch { showLine(runCatching { core.somedayOnBoard(card.id) }.getOrNull()) } }
+    val onTag: (BoardCard, String?) -> Unit = { card, goal ->
+        scope.launch {
+            val line = runCatching { core.tagOnBoard(card.id, goal) }.getOrNull()
+            if (line != null) { haptics.light(); undo.show(line) { core.undoTagOnBoard() } }
+        }
+    }
 
     BoxWithConstraints(modifier.fillMaxSize().onGloballyPositioned { origin = it.positionInRoot() }) {
         val wide = maxWidth >= 600.dp
@@ -181,6 +195,7 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
             val week = board.weeks.getOrNull(weekIndex)
             if (d == null || at == null) return@drop
             when {
+                at <= GOAL_KEY && week != null -> week.goals.getOrNull((GOAL_KEY - at).toInt())?.takeIf { !it.finished }?.let { onTag(d.card, it.goalId) }
                 at == LANE && week != null -> {
                     val index = week.lane.filter { it.id != d.card.id }.count { c -> (cards[c.id]?.center?.x ?: 0f) < d.pointer.x }
                     scope.launch { showLine(runCatching { core.parkOnBoard(d.card.id, week.startEpochDay, index) }.getOrNull()) }
@@ -196,12 +211,17 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
         Column(Modifier.fillMaxSize()) {
             WeekHeader(board, weekIndex, scroll, colPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)))
             board.weeks.getOrNull(weekIndex)?.let { week ->
+                GoalsLane(
+                    week = week, core = core, undo = undo, hovered = if (drag != null) hovered else null,
+                    onBounds = { key, r -> columns[key] = r },
+                    modifier = Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)),
+                )
                 LaneAndTray(
                     week = week, board = board, laneWidth = colWidth, hovered = if (drag != null) hovered else null, dragging = drag?.card?.id,
                     onBounds = { key, r -> columns[key] = r }, onCardBounds = { id, r -> cards[id] = r },
                     onPick = pick, onDrag = dragBy, onDrop = dropCard, onCancel = { drag = null },
                     onMoveTo = { card, to -> scope.launch { showLine(runCatching { core.moveOnBoard(card.id, to, Int.MAX_VALUE) }.getOrNull()) } },
-                    onPark = onPark, onSomeday = onSomeday,
+                    onPark = onPark, onSomeday = onSomeday, onTag = onTag,
                     modifier = Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(3)),
                 )
             }
@@ -253,6 +273,7 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
                         },
                         board = board,
                         onEvent = onEvent,
+                        onTag = onTag,
                     )
                 }
             }
@@ -280,6 +301,8 @@ private data class BoardDrag(val card: BoardCard, val pointer: Offset, val grab:
 /** Drop-target keys besides a day's epoch day: the week's lane and the Someday tray. */
 private const val LANE = -1L
 private const val TRAY = -2L
+/** Slice 7: the week's goals are drop targets GOAL_KEY, GOAL_KEY - 1, GOAL_KEY - 2 (first, second, third). */
+private const val GOAL_KEY = -10L
 
 /** "This week · 19–25 Oct" with ‹ › stepping a week; follows the board as it scrolls. */
 @Composable
@@ -339,6 +362,7 @@ private fun DayColumn(
     onBlock: (BoardCard, BlockSlot) -> Unit,
     board: WeekBoard,
     onEvent: (CalendarEvent) -> Unit,
+    onTag: (BoardCard, String?) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val glow by animateColorAsState(if (hovered) Meka.colors.accent else Meka.colors.hairline.copy(alpha = 0f), MekaMotion.appear(reduced), label = "board-glow")
@@ -394,7 +418,7 @@ private fun DayColumn(
                 BoardCardRow(
                     card, BoardSource.DAY, day.epochDay, day.openCards, board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop, onCancel,
                     onMove, onMoveTo, onPark, onSomeday, onDone, onEstimate,
-                    onBlockOffer = onBlockOffer, onBlock = onBlock,
+                    onBlockOffer = onBlockOffer, onBlock = onBlock, onTag = onTag,
                 )
             }
         }
@@ -430,6 +454,8 @@ private fun BoardCardRow(
     /** Slice 6: a day's card offers Block time (read as the menu opens); null in the lane and the tray. */
     onBlockOffer: (suspend (BoardCard) -> BlockOffer?)? = null,
     onBlock: ((BoardCard, BlockSlot) -> Unit)? = null,
+    /** Slice 7: FOR A GOAL — one of its week's goals, or none. */
+    onTag: ((BoardCard, String?) -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
     var offer by remember(card.id) { mutableStateOf<BlockOffer?>(null) }
@@ -489,6 +515,16 @@ private fun BoardCardRow(
                 )
                 card.estimateChoices.forEach { c -> entry(c.menuLabel) { if (!c.selected) onEstimate(card, c.minutes) } }
                 if (card.estimate != null) entry(TaskEstimateRules.CLEAR) { onEstimate(card, null) }
+                // Slice 7: FOR A GOAL — the week's goals (the one it has ticked), or No goal.
+                val tags = if (onTag != null) BoardGoalRules.tagChoices(board, card.id) else emptyList()
+                if (tags.isNotEmpty()) {
+                    Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
+                    Text(
+                        BoardGoalRules.MENU_TITLE, style = MekaType.micro, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+                    )
+                    tags.forEach { t -> entry(t.label) { if (!t.selected) onTag?.invoke(card, t.goalId) } }
+                }
                 // Slice 6: Block time — a free start in the day; his tap adds the block to his calendar (Undo on the bar).
                 offer?.let { o ->
                     Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
@@ -532,6 +568,9 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onDone: (() -> Unit)? = n
             val meta = card.meta
             if (meta.isNotEmpty()) {
                 Text(meta, style = MekaType.micro, color = if (card.carried) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            card.goalTag?.let {
+                Text(it, style = MekaType.micro, color = Meka.colors.accent.copy(alpha = if (card.done) 0.5f else 0.85f), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }
@@ -625,6 +664,7 @@ private fun LaneAndTray(
     onMoveTo: (BoardCard, Long) -> Unit,
     onPark: (BoardCard, Long) -> Unit,
     onSomeday: (BoardCard) -> Unit,
+    onTag: (BoardCard, String?) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val reduced = Meka.reducedMotion
@@ -659,6 +699,7 @@ private fun LaneAndTray(
                                 BoardCardRow(
                                     card, BoardSource.WEEK, week.startEpochDay, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
                                     onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> }, Modifier.width(cardWidth),
+                                    onTag = onTag,
                                 )
                             }
                         }
@@ -690,12 +731,144 @@ private fun LaneAndTray(
                                 BoardCardRow(
                                     card, BoardSource.SOMEDAY, 0L, emptyList(), board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop,
                                     onCancel, { _, _, _ -> }, onMoveTo, onPark, onSomeday, null, { _, _ -> },
+                                    onTag = onTag,
                                 )
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/**
+ * The week's goals across the top of the Board (slice 7): up to three, each its title, "2 of 4 done" and a slim bar
+ * that fills gold as its tasks are done (all gold once the goal is done). Each is a drop target (it glows gold while a
+ * card is over it; letting go tags the card). Tap a goal for Off this week; "+ Goal" offers open goals not picked yet
+ * and New goal… to type one. Reduced motion: the bar and glow cross-fade.
+ */
+@Composable
+private fun GoalsLane(
+    week: BoardWeek,
+    core: MekaCore,
+    undo: EventUndo,
+    hovered: Long?,
+    onBounds: (Long, Rect) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    val scope = rememberCoroutineScope()
+    fun show(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardGoal() } } }
+    Row(
+        modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        week.goals.forEachIndexed { i, g ->
+            GoalChip(g, lit = hovered == GOAL_KEY - i, reduced = reduced, onBounds = { onBounds(GOAL_KEY - i, it) }) {
+                scope.launch { show(runCatching { core.unpickBoardGoal(g.goalId, week.startEpochDay) }.getOrNull()) }
+            }
+        }
+        if (week.canAddGoal) {
+            AddGoalChip(
+                week = week, empty = week.goals.isEmpty(),
+                choices = { runCatching { core.boardGoalChoices(week.startEpochDay) }.getOrDefault(emptyList()) },
+                onPick = { id -> scope.launch { show(runCatching { core.pickBoardGoal(id, week.startEpochDay) }.getOrNull()) } },
+                onNew = { title -> scope.launch { show(runCatching { core.addBoardGoal(title, week.startEpochDay) }.getOrNull()) } },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GoalChip(g: BoardGoal, lit: Boolean, reduced: Boolean, onBounds: (Rect) -> Unit, onOff: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "goal-glow")
+    val fill by animateFloatAsState(g.fill, MekaMotion.appear(reduced), label = "goal-fill")
+    Box(
+        Modifier.widthIn(min = 140.dp, max = 220.dp)
+            .onGloballyPositioned { onBounds(it.boundsInRoot()) }
+            .clip(RoundedCornerShape(MekaRadius.m))
+            .background(if (lit) Meka.colors.surfaceRaised else Meka.colors.surface)
+            .border(1.dp, glow, RoundedCornerShape(MekaRadius.m))
+            .clickable(enabled = g.picked && !g.finished, role = Role.Button) { menu = true }
+            .semantics(mergeDescendants = true) { contentDescription = g.accessibilityLabel }
+            .padding(MekaSpace.xs),
+    ) {
+        Column {
+            Text(g.shortTitle, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(g.line, style = MekaType.micro, color = if (g.finished) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+            Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
+                Box(Modifier.fillMaxWidth(fill).height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
+            }
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(
+                text = { Text(BoardGoalRules.OFF_WEEK, style = MekaType.itemMeta, color = Meka.colors.textPrimary) },
+                onClick = { menu = false; onOff() },
+            )
+        }
+    }
+}
+
+/** "+ Goal": the open goals not picked for the week (read as it opens), then New goal… to type one. */
+@Composable
+private fun AddGoalChip(
+    week: BoardWeek,
+    empty: Boolean,
+    choices: suspend () -> List<GoalPickChoice>,
+    onPick: (String) -> Unit,
+    onNew: (String) -> Unit,
+) {
+    val haptics = rememberMekaHaptics()
+    var menu by remember { mutableStateOf(false) }
+    var typing by remember { mutableStateOf(false) }
+    var text by remember { mutableStateOf("") }
+    var offers by remember(week.startEpochDay) { mutableStateOf<List<GoalPickChoice>>(emptyList()) }
+    LaunchedEffect(menu) { if (menu) offers = choices() }
+    if (typing) {
+        BasicTextField(
+            value = text,
+            onValueChange = { text = it },
+            singleLine = true,
+            textStyle = MekaType.body.copy(color = Meka.colors.textPrimary),
+            cursorBrush = SolidColor(Meka.colors.accent),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = {
+                if (text.isNotBlank()) onNew(text)
+                text = ""; typing = false
+            }),
+            modifier = Modifier.width(200.dp).padding(MekaSpace.xs).semantics { contentDescription = "New goal for the week" },
+        )
+        return
+    }
+    Box {
+        Column(
+            Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button) { haptics.tick(); menu = true }
+                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+        ) {
+            Text(BoardGoalRules.ADD, style = MekaType.caption, color = Meka.colors.accent)
+            if (empty) Text(BoardGoalRules.EMPTY, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            offers.forEach { o ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(o.title, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(o.horizon, style = MekaType.micro, color = Meka.colors.textTertiary)
+                        }
+                    },
+                    onClick = { menu = false; onPick(o.goalId) },
+                )
+            }
+            DropdownMenuItem(
+                text = { Text(BoardGoalRules.NEW_GOAL, style = MekaType.itemMeta, color = Meka.colors.accent) },
+                onClick = { menu = false; typing = true },
+            )
         }
     }
 }

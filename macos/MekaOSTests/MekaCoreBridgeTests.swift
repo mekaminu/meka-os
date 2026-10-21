@@ -1592,6 +1592,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(none.heading, "Block time · 30m")
         XCTAssertFalse(none.canBlock)
         XCTAssertEqual(none.line, BoardBlockRules.shared.NO_ACCOUNT)
+        // Slice 7: the goals lane.
+        XCTAssertEqual(BoardGoalRules.shared.MENU_TITLE, "For a goal")
+        XCTAssertEqual(BoardGoalRules.shared.tag(goalTitle: "Run 5k"), "◎ Run 5k")
+        XCTAssertEqual(BoardGoalRules.shared.tagLine(taskTitle: "book MOT", goalTitle: nil), "“Book MOT” · no goal")
+        let goal = BoardGoal(goalId: "g", title: "Run 5k", done: 2, total: 4, finished: false, picked: true)
+        XCTAssertEqual(goal.line, "2 of 4 done")
+        XCTAssertEqual(goal.accessibilityLabel, "Goal Run 5k, 2 of 4 done")
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.

@@ -19,6 +19,11 @@ import SwiftUI
 /// and the Someday tray ("Someday · 12", click to open). Drop a card on either to park it or put it on Someday, drag one
 /// out onto a day; the context menu has No day this week · Someday. Both lift with a gold edge while targeted.
 ///
+/// Slice 7: across the top, the week's goals (up to three; this week with none picked shows Today's This-week goals),
+/// each "2 of 4 done" over a slim gold bar from the week's tasks tagged to it. Drop a card on a goal to tag it, or use
+/// the context menu's For a goal; a tagged card says "◎ Run 5k". Right-click a goal for Off this week; "+ Goal" offers
+/// open goals or New goal… to type one. Every change has Undo.
+///
 /// Motion: weeks push across the way you moved; a targeted column lifts (scale 1.01) and its edge blends to gold on the
 /// approve spring; cards glide to their new places (replan). Reduce Motion: cross-fades, no lift.
 struct WeekBoardScreen: View {
@@ -52,6 +57,9 @@ struct WeekBoardScreen: View {
                     .help("Next week")
             }
             .buttonStyle(.borderless)
+
+            BoardGoalsView(week: w, palette: palette, target: $target)
+                .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
 
             HStack(alignment: .top, spacing: MekaSpace.xs) {
                 BoardLaneView(week: w, board: board, palette: palette, targeted: target == laneKey) { on in
@@ -259,6 +267,11 @@ private struct BoardCardView: View {
                         .foregroundStyle(card.carried ? palette.accent : palette.textTertiary)
                         .lineLimit(1)
                 }
+                if let tag = card.goalTag {
+                    Text(tag).font(MekaType.micro)
+                        .foregroundStyle(palette.accent.opacity(card.done ? 0.5 : 0.85))
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
@@ -316,6 +329,17 @@ private struct BoardCardView: View {
                     }
                     if card.estimate != nil {
                         Button(TaskEstimateRules.shared.CLEAR) { model.setEstimateOnBoard(card.id, minutes: nil) }
+                    }
+                }
+                // Slice 7: For a goal — the week's goals (the one it has ticked), or No goal.
+                let tags = BoardGoalRules.shared.tagChoices(board: board, taskId: card.id)
+                if !tags.isEmpty {
+                    Divider()
+                    Section(BoardGoalRules.shared.MENU_TITLE) {
+                        ForEach(Array(tags.enumerated()), id: \.offset) { _, t in
+                            Button(t.label) { model.tagOnBoard(card.id, goal: t.goalId) }
+                                .disabled(t.selected)
+                        }
                     }
                 }
                 // Slice 6: Block time — a free start in the day; his click adds the block to his calendar (Undo on the bar).
@@ -533,5 +557,110 @@ private struct BoardZone: ViewModifier {
             .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(targeted ? palette.accent : palette.hairline, lineWidth: targeted ? 1.5 : 1))
             .scaleEffect(targeted && !reduceMotion ? 1.01 : 1)
             .animation(MekaMotion.approve(reduced: reduceMotion), value: targeted)
+    }
+}
+
+/// The week's goals across the top of the Board (slice 7): up to three, each its title, "2 of 4 done" and a slim bar
+/// that fills gold as its tasks are done. A card dropped on a goal is tagged to it (the goal lifts with a gold edge
+/// while targeted); right-click a goal for Off this week; "+ Goal" offers open goals and New goal…. Reduce Motion:
+/// cross-fades, no lift.
+private struct BoardGoalsView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let week: BoardWeek
+    let palette: MekaPalette
+    @Binding var target: Int64?
+    @State private var offers: [GoalPickChoice] = []
+    @State private var typing = false
+    @State private var text = ""
+
+    var body: some View {
+        HStack(alignment: .center, spacing: MekaSpace.xs) {
+            ForEach(Array(week.goals.enumerated()), id: \.element.goalId) { i, g in
+                chip(g, key: goalKey - Int64(i))
+            }
+            if week.canAddGoal { add }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Drop-target keys for the goals: -10, -11, -12.
+    private let goalKey: Int64 = -10
+
+    private func chip(_ g: BoardGoal, key: Int64) -> some View {
+        let lit = target == key && !g.finished
+        return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(g.shortTitle).font(MekaType.metaStrong).foregroundStyle(palette.textPrimary).lineLimit(1)
+            Text(g.line).font(MekaType.micro).foregroundStyle(g.finished ? palette.accent : palette.textTertiary).lineLimit(1)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.hairline)
+                    Capsule().fill(palette.accent).frame(width: geo.size.width * CGFloat(g.fill))
+                }
+            }
+            .frame(height: 3)
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: g.fill)
+        }
+        .padding(MekaSpace.xs)
+        .frame(minWidth: 160, maxWidth: 240, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(lit ? palette.surfaceRaised : palette.surface))
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(lit ? palette.accent : palette.hairline, lineWidth: lit ? 1.5 : 1))
+        .scaleEffect(lit && !reduceMotion ? 1.01 : 1)
+        .animation(MekaMotion.approve(reduced: reduceMotion), value: lit)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(g.accessibilityLabel)
+        .contextMenu {
+            if g.picked && !g.finished {
+                Button(BoardGoalRules.shared.OFF_WEEK) { model.unpickBoardGoal(g.goalId, week: week.startEpochDay) }
+            }
+        }
+        .dropDestination(for: String.self) { ids, _ in
+            guard !g.finished, let id = ids.first else { return false }
+            model.tagOnBoard(id, goal: g.goalId)
+            return true
+        } isTargeted: { on in
+            if on { target = key } else if target == key { target = nil }
+        }
+    }
+
+    @ViewBuilder
+    private var add: some View {
+        if typing {
+            TextField("New goal", text: $text)
+                .textFieldStyle(.plain)
+                .font(MekaType.body)
+                .frame(width: 200)
+                .onSubmit {
+                    model.addBoardGoal(text, week: week.startEpochDay)
+                    text = ""; typing = false
+                }
+                .onExitCommand { text = ""; typing = false }
+        } else {
+            Menu {
+                ForEach(offers, id: \.goalId) { o in
+                    Button("\(o.title) · \(o.horizon)") { model.pickBoardGoal(o.goalId, week: week.startEpochDay) }
+                }
+                if !offers.isEmpty { Divider() }
+                Button(BoardGoalRules.shared.NEW_GOAL) { typing = true }
+            } label: {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(BoardGoalRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.accent)
+                    if week.goals.isEmpty {
+                        Text(BoardGoalRules.shared.EMPTY).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                    }
+                }
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("Pick a goal for this week")
+            .onHover { inside in
+                guard inside else { return }
+                let ws = week.startEpochDay
+                Task { offers = await model.boardGoalChoices(ws) }
+            }
+            .task(id: week.startEpochDay) { [ws = week.startEpochDay] in
+                offers = await model.boardGoalChoices(ws)
+            }
+        }
     }
 }

@@ -24,8 +24,13 @@ data class BoardCard(
     val carried: Boolean,
     /** Navilife's guess at how long it takes ([TaskEstimateRules.suggest]) while it has no estimate; null otherwise. */
     val suggestedMinutes: Int? = null,
+    /** The goal it is tagged to ([Task.goalId]), by title; null for none or a goal no longer there (slice 7). */
+    val goalTitle: String? = null,
 ) {
     val id: String get() = task.id
+
+    /** "◎ Run 5k" under a card tagged to a goal (slice 7); null for none. */
+    val goalTag: String? get() = BoardGoalRules.tag(goalTitle)
     val canMove: Boolean get() = !done
 
     /** Its time estimate, "30m"; null for none (slice 3). */
@@ -38,7 +43,8 @@ data class BoardCard(
     val estimateChoices: List<EstimateChoice> get() = TaskEstimateRules.choices(task.estimateMinutes, suggestedMinutes)
 
     /** Screen readers: "Book MOT, 14:30, about 30m, carried 2 days". */
-    val accessibilityLabel: String get() = listOfNotNull(title, time, estimate?.let { "about $it" }, line?.lowercase()).joinToString(", ")
+    val accessibilityLabel: String
+        get() = listOfNotNull(title, time, estimate?.let { "about $it" }, line?.lowercase(), goalTitle?.let { "for goal $it" }).joinToString(", ")
 }
 
 /** A day's event as a faded chip above its cards: "09:30 Dentist", "All day Half term". */
@@ -91,7 +97,15 @@ data class BoardWeek(
     val days: List<BoardDay>,
     /** Tasks parked in this week with no day, in his order; this week's also holds those left from earlier weeks. */
     val lane: List<BoardCard> = emptyList(),
+    /** The week's goals across the top, at most three, each with how many of its tasks are done (slice 7). */
+    val goals: List<BoardGoal> = emptyList(),
 ) {
+    /** "+ Goal" is offered while the week has fewer than three goals. */
+    val canAddGoal: Boolean get() = goals.size < BoardGoalRules.MAX
+
+    /** Every card of the week: its days' and its lane's. */
+    val allCards: List<BoardCard> get() = days.flatMap { it.cards } + lane
+
     /** "3 to place" · "Park tasks here for the week" */
     val laneLine: String get() = if (lane.isEmpty()) WeekBoardRules.LANE_EMPTY else "${lane.size} to place"
     /** Screen readers: "This week, no day yet, 3 tasks". */
@@ -228,6 +242,8 @@ object WeekBoardRules {
         hidden: Set<String> = emptySet(),
         toneOf: (CalendarEvent) -> Int = { if (it.isFixture) CalendarTones.FIXTURE else 1 },
         weeks: Int = WEEKS,
+        goals: List<GoalItem> = emptyList(),
+        weekGoals: WeekGoals = WeekGoals.EMPTY,
     ): WeekBoard {
         val today = calendar.epochDayOf(nowMs)
         val firstDay = today - (CivilDate.isoDayOfWeek(today) - 1)
@@ -235,17 +251,19 @@ object WeekBoardRules {
         val shown = DuplicateEvents.merge(events).filter { !DuplicateEvents.hiddenIn(it, hidden) }
 
         val sized = TaskEstimateRules.Sized.of(tasks)
+        val goalTitles = goals.associate { it.id to it.title } + weekGoals.arcs.associate { it.goalId to it.title }
+        val tagged: (BoardCard) -> BoardCard = { c -> c.task.goalId?.let(goalTitles::get)?.let { c.copy(goalTitle = it) } ?: c }
         val byDay = HashMap<Long, MutableList<BoardCard>>()
         val byWeek = HashMap<Long, MutableList<BoardCard>>()
         for (t in tasks) {
             if (parked(t)) {
                 val ws = maxOf(t.boardWeek!!, firstDay)
-                if (ws <= lastDay) byWeek.getOrPut(ws) { mutableListOf() } += laneCard(t, firstDay, sized)
+                if (ws <= lastDay) byWeek.getOrPut(ws) { mutableListOf() } += tagged(laneCard(t, firstDay, sized))
                 continue
             }
             val day = columnOf(t, today, calendar) ?: continue
             if (day !in firstDay..lastDay) continue
-            byDay.getOrPut(day) { mutableListOf() } += card(t, today, calendar, sized)
+            byDay.getOrPut(day) { mutableListOf() } += tagged(card(t, today, calendar, sized))
         }
 
         val boardWeeks = (0 until weeks).map { w ->
@@ -260,12 +278,12 @@ object WeekBoardRules {
                 range = CalendarAgenda.rangeLabel(ws, ws + 6),
                 days = (ws until ws + 7).map { d -> day(d, today, nowMs, byDay[d].orEmpty(), shown, calendar, work, toneOf) },
                 lane = orderLane(byWeek[ws].orEmpty()),
-            )
+            ).let { bw -> bw.copy(goals = BoardGoalRules.lane(ws, today, goals, weekGoals, bw.allCards)) }
         }
         val someday = tasks.filter { it.lifecycle == Lifecycle.SOMEDAY }
             .sortedWith(compareByDescending<Task> { it.createdAtMs }.thenBy { it.id })
             .map { t ->
-                BoardCard(t, TaskTitleRules.display(t.title), null, ListRules.kindLabel(t.somedayKind ?: SomedayKind.IDEA), done = false, carried = false)
+                tagged(BoardCard(t, TaskTitleRules.display(t.title), null, ListRules.kindLabel(t.somedayKind ?: SomedayKind.IDEA), done = false, carried = false))
             }
         return WeekBoard(today, boardWeeks, someday)
     }

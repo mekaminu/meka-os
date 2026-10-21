@@ -182,4 +182,55 @@ class WeekBoardFacadeTest {
         assertEquals("", fold.weekBoard.value.day(today + 2)!!.cards.single().meta)
         assertFalse(fold.undoBlock())
     }
+
+    @Test
+    fun goalsPickedOnTheBoardCountTheirTaggedTasksOnBothDevicesWithUndo() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val run = fold.addGoal("Run 5k", null, os.meka.core.domain.GoalHorizon.MONTH)
+        val loft = fold.addGoal("Tidy the loft", null, os.meka.core.domain.GoalHorizon.WEEK)
+        val shoes = fold.addTask("Buy running shoes")
+        fold.tick()
+        val week = fold.weekBoard.value.weeks[0].startEpochDay
+        // This week's This-week goal shows with no pick, as on Today.
+        assertEquals(listOf(loft), fold.weekBoard.value.weeks[0].goals.map { it.goalId })
+        assertEquals(listOf(run), fold.boardGoalChoices(week).map { it.goalId })
+
+        assertEquals("“Run 5k” is one of this week's goals", fold.pickBoardGoal(run, week))
+        assertEquals(listOf(loft, run), fold.weekBoard.value.weeks[0].goals.map { it.goalId }, "the This-week goal is kept")
+        assertTrue(fold.weekBoard.value.weeks[0].goals.all { it.picked })
+        assertNull(fold.pickBoardGoal(run, week), "already there")
+
+        assertEquals("“Buy running shoes” · for “Run 5k”", fold.tagOnBoard(shoes, run))
+        val g = fold.weekBoard.value.weeks[0].goals.first { it.goalId == run }
+        assertEquals("0 of 1 done", g.line)
+        assertEquals("◎ Run 5k", fold.weekBoard.value.find(shoes)!!.card.goalTag)
+        assertNull(fold.tagOnBoard(shoes, run), "no change")
+
+        fold.complete(shoes)
+        assertEquals("1 of 1 done", fold.weekBoard.value.weeks[0].goals.first { it.goalId == run }.line)
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals("1 of 1 done", mac.weekBoard.value.weeks[0].goals.first { it.goalId == run }.line)
+
+        // A new goal typed on next week's lane, and Undo takes it away again.
+        val next = mac.weekBoard.value.weeks[1].startEpochDay
+        assertEquals("“Garden ready” is one of next week's goals", mac.addBoardGoal("Garden ready", next))
+        assertEquals(listOf("Garden ready"), mac.weekBoard.value.weeks[1].goals.map { it.title })
+        assertTrue(mac.undoBoardGoal())
+        assertTrue(mac.weekBoard.value.weeks[1].goals.isEmpty())
+        assertTrue(mac.goalsView.value.goals.none { it.title == "Garden ready" })
+
+        // Off this week, and back with Undo; the tag stays.
+        assertEquals("“Run 5k” is off this week's goals", mac.unpickBoardGoal(run, week))
+        assertEquals(listOf(loft), mac.weekBoard.value.weeks[0].goals.map { it.goalId })
+        assertTrue(mac.undoBoardGoal())
+        assertEquals(listOf(loft, run), mac.weekBoard.value.weeks[0].goals.map { it.goalId })
+        assertFalse(mac.undoBoardGoal())
+
+        val gate = mac.addTask("Fix the gate")
+        assertEquals("“Fix the gate” · for “Tidy the loft”", mac.tagOnBoard(gate, loft))
+        assertTrue(mac.undoTagOnBoard())
+        assertNull(mac.weekBoard.value.find(gate)!!.card.goalTag)
+        assertFalse(mac.undoTagOnBoard())
+    }
 }

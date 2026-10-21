@@ -3291,6 +3291,55 @@ final class CoreModel {
         }
     }
 
+    // MARK: Week board, slice 7: the goals lane
+
+    /// "For a goal" on a Board card, or a card dropped on a goal: tagged to that goal (nil: no goal), with Undo.
+    func tagOnBoard(_ id: String, goal: String?) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.tagOnBoard(taskId: id, goalId: goal) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .goalTag)
+        }
+    }
+
+    /// "+ Goal" on a week's goals lane: the open goals not picked for it yet, read as the menu opens.
+    func boardGoalChoices(_ week: Int64) async -> [GoalPickChoice] {
+        guard let core else { return [] }
+        return (try? await core.boardGoalChoices(weekStart: week)) ?? []
+    }
+
+    /// A goal picked for the week on the Board (at most three), with Undo.
+    func pickBoardGoal(_ goal: String, week: Int64) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.pickBoardGoal(goalId: goal, weekStart: week) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardGoal)
+        }
+    }
+
+    /// New goal… on the lane: a This-week goal picked for that week, with Undo.
+    func addBoardGoal(_ title: String, week: Int64) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let core, !trimmed.isEmpty else { return }
+        Task {
+            guard let line = try? await core.addBoardGoal(title: trimmed, weekStart: week) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardGoal)
+        }
+    }
+
+    /// Off this week on a lane goal (its tasks keep their tag), with Undo.
+    func unpickBoardGoal(_ goal: String, week: Int64) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.unpickBoardGoal(goalId: goal, weekStart: week) else { return }
+            MekaHaptics.tick()
+            offerEventUndo(line, .boardGoal)
+        }
+    }
+
     /// The ring on a Board card: ticked off, with Undo.
     func completeOnBoard(_ id: String, title: String) {
         MekaHaptics.light()
@@ -3656,6 +3705,8 @@ final class CoreModel {
         case .boardMove: run { _ = try await $0.undoBoardMove() }
         case .estimate: run { _ = try await $0.undoEstimate() }
         case .block: run { _ = try await $0.undoBlock() }
+        case .goalTag: run { _ = try await $0.undoTagOnBoard() }
+        case .boardGoal: run { _ = try await $0.undoBoardGoal() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
@@ -6473,6 +6524,10 @@ struct EventUndoOffer: Identifiable, Equatable {
         case estimate
         /// Block time on a Board card (slice 6): the block is taken back (or follows the task back) and the task's time returns.
         case block
+        /// For a goal on a Board card (slice 7): the goal it had comes back.
+        case goalTag
+        /// A goal picked, typed or taken off a week on the Board (slice 7): taken back.
+        case boardGoal
         /// The ring on a Board card: ticked back open.
         case reopen(String)
         /// Remove on a checklist item: it comes back with its tick and place.

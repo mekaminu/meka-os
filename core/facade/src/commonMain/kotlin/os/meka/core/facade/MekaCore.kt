@@ -2250,6 +2250,93 @@ class MekaCore(
         true
     }
 
+    // ---- Week board, slice 7: the goals lane ----
+
+    private fun goalTitleOf(id: String): String? =
+        _goals.value.goals.firstOrNull { it.id == id }?.title ?: _goals.value.week.arcs.firstOrNull { it.goalId == id }?.title
+
+    /**
+     * "For a goal" on a Board card (or a card dropped on a goal in the lane): tags [taskId] to [goalId], or to no goal
+     * with null. Returns the undo bar's line ("“Book MOT” · for “Run 5k”"), or null when nothing changed;
+     * [undoTagOnBoard] puts back the goal it had.
+     */
+    suspend fun tagOnBoard(taskId: String, goalId: String?): String? = onCore {
+        val task = tasks.get(taskId) ?: return@onCore null
+        if (task.goalId == goalId || task.lifecycle == os.meka.core.domain.Lifecycle.DONE) return@onCore null
+        if (goalId != null && !goals.goalExists(goalId)) return@onCore null
+        goals.setTaskGoal(taskId, goalId)
+        tagUndo = taskId to task.goalId
+        os.meka.core.domain.BoardGoalRules.tagLine(task.title, goalId?.let(::goalTitleOf))
+    }
+
+    /** Undo after [tagOnBoard]. False when nothing to undo. */
+    suspend fun undoTagOnBoard(): Boolean = onCore {
+        val (id, before) = tagUndo ?: return@onCore false
+        tagUndo = null
+        goals.setTaskGoal(id, before?.takeIf { goals.goalExists(it) })
+        true
+    }
+    private var tagUndo: Pair<String, String?>? = null
+
+    /** "+ Goal" on the Board's goals lane for the week starting [weekStart]: open goals not picked for it yet. */
+    suspend fun boardGoalChoices(weekStart: Long): List<os.meka.core.domain.GoalPickChoice> = onCore {
+        val week = _board.value.week(weekStart) ?: return@onCore emptyList()
+        os.meka.core.domain.BoardGoalRules.pickChoices(_goals.value.goals, week)
+    }
+
+    private class GoalPickUndo(val weekStart: Long, val picked: List<String>, val unpicked: String?, val created: String?)
+    private var goalPickUndo: GoalPickUndo? = null
+
+    /**
+     * Picks [goalId] as one of the goals for the week starting [weekStart] (at most three). This week's This-week goals
+     * shown with no pick are picked with it, so they stay on the lane. Returns "“Run 5k” is one of this week's goals",
+     * or null when it can't be picked (the week is full, or the goal is finished); [undoBoardGoal] takes it back.
+     */
+    suspend fun pickBoardGoal(goalId: String, weekStart: Long): String? = onCore { pickNow(goalId, weekStart, created = null) }
+
+    private fun pickNow(goalId: String, weekStart: Long, created: String?): String? {
+        val week = _board.value.week(weekStart) ?: return null
+        if (!week.canAddGoal || week.goals.any { it.goalId == goalId }) return null
+        val kept = week.goals.filter { !it.picked && !it.finished }.map { it.goalId }.filter { goals.pickForWeek(it, weekStart, true) }
+        if (!goals.pickForWeek(goalId, weekStart, true)) {
+            kept.forEach { goals.pickForWeek(it, weekStart, false) }
+            return null
+        }
+        goalPickUndo = GoalPickUndo(weekStart, kept + goalId, null, created)
+        val title = goalTitleOf(goalId) ?: created?.let { _goals.value.goals.firstOrNull { g -> g.id == it }?.title } ?: "That goal"
+        return os.meka.core.domain.BoardGoalRules.pickLine(title, week, on = true)
+    }
+
+    /** "New goal…" on the lane: [title] becomes a This-week goal picked for the week starting [weekStart]. */
+    suspend fun addBoardGoal(title: String, weekStart: Long): String? = onCore {
+        val clean = title.trim()
+        val week = _board.value.week(weekStart) ?: return@onCore null
+        if (clean.isEmpty() || !week.canAddGoal) return@onCore null
+        val id = goals.addGoal(clean, null, GoalHorizon.WEEK)
+        pickNow(id, weekStart, created = id)?.let { return@onCore os.meka.core.domain.BoardGoalRules.pickLine(clean, week, on = true) }
+        goals.deleteGoal(id)
+        null
+    }
+
+    /** "Off this week" on a lane goal: no longer one of that week's goals (its tasks keep their tag). */
+    suspend fun unpickBoardGoal(goalId: String, weekStart: Long): String? = onCore {
+        val week = _board.value.week(weekStart) ?: return@onCore null
+        val g = week.goals.firstOrNull { it.goalId == goalId && it.picked && !it.finished } ?: return@onCore null
+        if (!goals.pickForWeek(goalId, weekStart, false)) return@onCore null
+        goalPickUndo = GoalPickUndo(weekStart, emptyList(), goalId, null)
+        os.meka.core.domain.BoardGoalRules.pickLine(g.title, week, on = false)
+    }
+
+    /** Undo after [pickBoardGoal], [addBoardGoal] or [unpickBoardGoal]. False when nothing to undo. */
+    suspend fun undoBoardGoal(): Boolean = onCore {
+        val u = goalPickUndo ?: return@onCore false
+        goalPickUndo = null
+        u.picked.forEach { if (goals.goalExists(it)) goals.pickForWeek(it, u.weekStart, false) }
+        u.unpicked?.let { if (goals.goalExists(it)) goals.pickForWeek(it, u.weekStart, true) }
+        u.created?.let { if (goals.goalExists(it)) goals.deleteGoal(it) }
+        true
+    }
+
     /** Quick add at the foot of a Board column: [text] becomes a task on local [day] (no time), last in that day. */
     suspend fun addOnBoard(text: String, day: Long): String? {
         val draft = QuickCapture.draft(text, null) ?: return null
@@ -10761,6 +10848,7 @@ class MekaCore(
         _board.value = os.meka.core.domain.WeekBoardRules.build(
             all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
             marks.hidden, _calendar.value::toneOf,
+            goals = _goals.value.goals, weekGoals = _goals.value.week,
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()
