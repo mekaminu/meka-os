@@ -34,9 +34,11 @@ data class HelloFacts(
      * the opener, at most one touch from his day, then the opener's question; without it the plain template.
      */
     val opener: HelloOpener? = null,
+    /** Week board item (10): the first day stacking up within two days, as the hello mentions it; null for none. */
+    val pressure: DayPressure? = null,
 )
 
-enum class HelloKind { NEEDS_YOU, EVENT, TRAIN, PARTNER, DUE }
+enum class HelloKind { NEEDS_YOU, EVENT, TRAIN, PARTNER, DUE, PRESSURE }
 
 /** One thing the greeting says, and which card would rise beside the orb for it (a later slice draws the cards). */
 data class HelloPoint(val kind: HelloKind, val text: String)
@@ -145,6 +147,7 @@ object HelloRules {
         next(f)?.let { out += it }
         if (!f.quiet) {
             partnerLine(f.partnerName, f.partnerAsks)?.let { out += HelloPoint(HelloKind.PARTNER, it) }
+            f.pressure?.let { out += HelloPoint(HelloKind.PRESSURE, it.spoken) }
             dueLine(f.dueToday)?.let { out += HelloPoint(HelloKind.DUE, it) }
         }
         return out.take(if (f.quiet) QUIET_POINTS else MAX_POINTS)
@@ -569,6 +572,9 @@ object HelloCards {
         )
         HelloKind.DUE -> f.dueToday.firstOrNull()?.let { first ->
             HelloCard(kind, "DUE TODAY", first.trim(), more(f.dueToday.size), HelloOpen.TODAY)
+        }
+        HelloKind.PRESSURE -> f.pressure?.let { p ->
+            HelloCard(kind, "STACKING UP", p.dayName, "${p.items.size} things", HelloOpen.CALENDAR, warm = true)
         }
     }
 

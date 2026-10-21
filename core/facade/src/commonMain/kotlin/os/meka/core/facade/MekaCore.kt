@@ -2106,6 +2106,26 @@ class MekaCore(
         return os.meka.core.domain.WeekBoardRules.moveLine(title, move, ZoneCalendar(timeZone).epochDayOf(nowMs()), newIndex < oldIndex)
     }
 
+    // ---- Week board, item (10): pressure warnings ----
+
+    /**
+     * A stacking-up day's one-tap fix ([os.meka.core.domain.PressureFix], on the Board, Today or the brief): [taskId] to
+     * local [day] (last in that day, keeping its time). A task already sitting in that day's column (one due later with
+     * no day of its own) is placed there for good, so it stops counting on its due day. Returns the undo bar's line
+     * ("Moved “Gym” to Fri" · "“Trip form” is on for today"), or null when nothing moved; Undo is [undoBoardMove].
+     */
+    suspend fun easePressure(taskId: String, day: Long): String? = onCore {
+        val board = _board.value
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val fix = board.days.mapNotNull { it.pressure }.flatMap { it.fixes }.firstOrNull { it.taskId == taskId && it.toDay == day }
+        val move = os.meka.core.domain.WeekBoardRules.move(board, taskId, day, Int.MAX_VALUE, today, cal)
+            ?: os.meka.core.domain.PressureRules.claim(board, taskId, day)
+            ?: return@onCore null
+        val line = placeOnBoard(board, move)
+        fix?.doneLine ?: line
+    }
+
     // ---- Week board, slice 4: the week's lane and the Someday tray ----
 
     /**
@@ -5538,6 +5558,8 @@ class MekaCore(
                 quiet = _notifySettings.value.quiet.isQuietAt(now, cal),
                 welcome = welcome,
                 opener = opener,
+                // Week board item (10): a day stacking up within two days.
+                pressure = _today.value.pressure,
             ),
         )
     }
@@ -10849,7 +10871,17 @@ class MekaCore(
             all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
             marks.hidden, _calendar.value::toneOf,
             goals = _goals.value.goals, weekGoals = _goals.value.week,
+            // Week board item (10): bills and renewals due count towards a day stacking up.
+            bills = os.meka.core.domain.PressureRules.bills(renewals.items()),
         )
+        // Item (10): the first day stacking up within two days, as a line on Today and in the morning brief.
+        run {
+            val soon = os.meka.core.domain.PressureRules.soonest(
+                _board.value.days.mapNotNull { it.pressure }.associateBy { it.epochDay }, todayDay,
+            )
+            if (_today.value.pressure != soon) _today.value = _today.value.copy(pressure = soon)
+            _brief.value = _brief.value.let { b -> b.copy(pressureLine = soon?.line, story = b.story.copy(pressure = soon?.spoken)) }
+        }
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)
         val editsNow = calendarEdits.all()
         _editsSeen.value = editsNow

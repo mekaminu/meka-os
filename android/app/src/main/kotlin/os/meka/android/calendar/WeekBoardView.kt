@@ -89,6 +89,8 @@ import os.meka.core.domain.GoalPickChoice
 import os.meka.core.domain.BoardSource
 import os.meka.core.domain.BoardWeek
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.DayPressure
+import os.meka.core.domain.PressureFix
 import os.meka.core.domain.TaskEstimateRules
 import os.meka.core.domain.BlockOffer
 import os.meka.core.domain.BlockSlot
@@ -274,6 +276,9 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
                         board = board,
                         onEvent = onEvent,
                         onTag = onTag,
+                        onEase = { fix ->
+                            scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) }
+                        },
                     )
                 }
             }
@@ -363,9 +368,18 @@ private fun DayColumn(
     board: WeekBoard,
     onEvent: (CalendarEvent) -> Unit,
     onTag: (BoardCard, String?) -> Unit,
+    onEase: (PressureFix) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
-    val glow by animateColorAsState(if (hovered) Meka.colors.accent else Meka.colors.hairline.copy(alpha = 0f), MekaMotion.appear(reduced), label = "board-glow")
+    // Item (10): a day stacking up wears an amber edge (the gold landing edge wins while a card is held over it).
+    val glow by animateColorAsState(
+        when {
+            hovered -> Meka.colors.accent
+            day.pressure != null -> Meka.colors.calendar3.copy(alpha = 0.7f)
+            else -> Meka.colors.hairline.copy(alpha = 0f)
+        },
+        MekaMotion.appear(reduced), label = "board-glow",
+    )
     val fill by animateColorAsState(
         when {
             hovered -> Meka.colors.surfaceRaised
@@ -395,6 +409,7 @@ private fun DayColumn(
             Text(day.countLine, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
             day.capacity?.let { CapacityBar(it) }
         }
+        day.pressure?.let { PressureNote(it, onEase) }
         // The day's events, faded.
         if (day.chips.isNotEmpty()) {
             Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
@@ -593,6 +608,30 @@ private fun CapacityBar(c: BoardCapacity) {
     Text(c.line, style = MekaType.micro, color = if (c.over) amber else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
     Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
         Box(Modifier.fillMaxWidth(fill).height(3.dp).alpha(breath).clip(RoundedCornerShape(MekaRadius.pill)).background(tone))
+    }
+}
+
+/**
+ * Item (10): "Stacking up: Trip form, Council tax and Gym" in amber under a day's capacity, with its one-tap fixes in
+ * the accent ("Move “Gym” to Sat" · "Do “Trip form” today"); a tap moves the task with a light haptic and Undo on the
+ * bar. Cross-fades in and out as the day changes (Reduced motion: the same, a plain fade).
+ */
+@Composable
+private fun PressureNote(p: DayPressure, onEase: (PressureFix) -> Unit) {
+    androidx.compose.animation.Crossfade(p, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "board-pressure") { now ->
+        Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs)) {
+            Text(
+                now.short, style = MekaType.micro, color = Meka.colors.calendar3, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.semantics { contentDescription = now.spoken },
+            )
+            now.fixes.forEach { fix ->
+                Text(
+                    fix.label, style = MekaType.micro, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = MekaSpace.xxs).clip(RoundedCornerShape(MekaRadius.s))
+                        .clickable(role = Role.Button) { onEase(fix) }.padding(vertical = MekaSpace.xxs),
+                )
+            }
+        }
     }
 }
 

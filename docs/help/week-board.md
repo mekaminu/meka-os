@@ -1,7 +1,7 @@
 ---
 id: week-board
 title: Week board
-keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time, goals this week, week's goals, tag a task to a goal, goal progress
+keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time, goals this week, week's goals, tag a task to a goal, goal progress, stacking up, busy day, too much on, pressure warning, overloaded day
 fold: none
 fold_where: Calendar → Board
 mac: none
@@ -19,3 +19,5 @@ tip: Today follows the order you set on the Board's Today column: the tasks with
 tip: To block time for a task in your calendar, tap its card (right-click on the Mac) and pick a start under Block time: the free times that day for its estimate (30 minutes if it has none). The task is planned then and its block is added to your Google or Outlook calendar as busy time, only when you tap, with Undo on the bar; a task that already has a block moves it instead.
 tip: Across the top of the Board are the week's goals, up to three: "+ Goal" picks one of your open goals for that week or makes a new one; this week with none picked shows the same goals as Today's "This week" line. Tap a goal (right-click on the Mac) for Off this week.
 tip: Drop a card on a goal (or pick it under For a goal in the card's menu) and the card says "◎ Run 5k"; each goal shows how many of that week's tasks for it are done, like "2 of 4 done". Every change has Undo.
+tip: When three or more things land on one day (tasks due, bills and renewals, tasks carried over, evening events), that day's column wears an amber edge and says "Stacking up: Trip form, Council tax and Gym". One tap under it moves one of its tasks to a lighter day or does one of its due tasks today, with Undo.
+tip: Within two days, the same "Friday is stacking up" line shows on Today and in the morning brief, with the same taps, and the orb mentions it when you say hello.

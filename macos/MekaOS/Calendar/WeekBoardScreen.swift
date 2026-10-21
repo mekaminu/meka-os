@@ -117,6 +117,27 @@ struct WeekBoardScreen: View {
     }
 }
 
+/// Week board item (10): a stacking-up day's amber line and its fixes as accent buttons (press style, light haptic, Undo).
+private struct PressureNote: View {
+    @Environment(CoreModel.self) private var model
+    let pressure: DayPressure
+    let palette: MekaPalette
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(pressure.short).font(MekaType.micro).foregroundStyle(palette.calendar3).lineLimit(3)
+                .accessibilityLabel(pressure.spoken)
+            ForEach(pressure.fixes, id: \.label) { fix in
+                Button { model.easePressure(taskId: fix.taskId, toDay: fix.toDay) } label: {
+                    Text(fix.label).font(MekaType.micro).foregroundStyle(palette.accent).lineLimit(2)
+                }
+                .buttonStyle(MekaPressStyle())
+            }
+        }
+        .contentTransition(.opacity)
+    }
+}
+
 private struct BoardColumnView: View {
     @Environment(CoreModel.self) private var model
     @Environment(\.mekaReduceMotion) private var reduceMotion
@@ -146,6 +167,11 @@ private struct BoardColumnView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(day.accessibilityLabel)
+
+            // Item (10): "Stacking up: Trip form, Council tax and Gym" in amber, with its one-tap fixes.
+            if let pressure = day.pressure {
+                PressureNote(pressure: pressure, palette: palette)
+            }
 
             if !day.chips.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -183,6 +209,10 @@ private struct BoardColumnView: View {
                 .fill(glow ? palette.surfaceRaised : (day.isToday ? palette.surface : Color.clear))
         )
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent, lineWidth: glow ? 1.5 : 0))
+        // Item (10): a day stacking up wears an amber edge (the gold landing edge covers it while a card is held over).
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.m)
+            .strokeBorder(palette.calendar3.opacity(0.7), lineWidth: day.pressure != nil && !glow ? 1 : 0))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: day.pressure?.short)
         .scaleEffect(glow && !reduceMotion ? 1.01 : 1)
         .opacity(day.isPast ? 0.6 : 1)
         .animation(MekaMotion.approve(reduced: reduceMotion), value: glow)

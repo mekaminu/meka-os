@@ -232,6 +232,10 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                 v.planLine?.let { plan ->
                     Text(plan, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
+                // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber.
+                v.pressureLine?.let { line ->
+                    Text(line, style = MekaType.itemMeta, color = Meka.colors.calendar3, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                }
             }
         }
         // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a tick circle for a

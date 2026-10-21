@@ -1599,6 +1599,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         let goal = BoardGoal(goalId: "g", title: "Run 5k", done: 2, total: 4, finished: false, picked: true)
         XCTAssertEqual(goal.line, "2 of 4 done")
         XCTAssertEqual(goal.accessibilityLabel, "Goal Run 5k, 2 of 4 done")
+        // Item (10): pressure warnings.
+        XCTAssertEqual(PressureRules.shared.MIN_ITEMS, 3)
+        XCTAssertEqual(PressureRules.shared.dayName(d: 10, today: 10, evening: true), "This evening")
+        XCTAssertEqual(PressureRules.shared.dayName(d: 11, today: 10, evening: false), "Tomorrow")
+        let fix = PressureFix(taskId: "t", title: "Gym", toDay: 12, label: "Move “Gym” to Sat", earlier: false)
+        XCTAssertEqual(fix.doneLine, "Moved “Gym” to Sat")
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.

@@ -74,6 +74,8 @@ data class Today(
      * of Today under "From yesterday" ([RollOverRules]); not in Needs you, Up next or the timeline.
      */
     val fromYesterday: List<CarriedTask> = emptyList(),
+    /** Week board item (10): the first day stacking up within two days ("Thursday is stacking up: …") with its fixes. */
+    val pressure: DayPressure? = null,
 ) {
     /** The Up next task is a planned task whose time has gone by ([LateTaskRules.isLate]). */
     fun upNextLate(nowMs: Long): Boolean = upNext?.let { LateTaskRules.isLate(it, nowMs) } ?: false

@@ -1007,6 +1007,31 @@ private fun TodayPane(
                                 modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = l.spoken })
                         }
                     }
+                    // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
+                    // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
+                    today.pressure?.let { pressure ->
+                        Crossfade(pressure, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "pressure-line") { p ->
+                            Column(Modifier.padding(top = MekaSpace.xxs)) {
+                                Text(p.line, style = MekaType.caption, color = Meka.colors.calendar3, maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis, modifier = Modifier.semantics { contentDescription = p.spoken })
+                                if (core != null && p.fixes.isNotEmpty()) {
+                                    Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+                                        p.fixes.forEach { fix ->
+                                            Text(
+                                                fix.label, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1,
+                                                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) {
+                                                    carryScope.launch {
+                                                        val line = runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()
+                                                        if (line != null) undo?.show(line) { core.undoBoardMove() }
+                                                    }
+                                                }.padding(vertical = MekaSpace.xxs),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     today.dateNight?.let { night ->
                         Crossfade(night, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "date-night-line") { l ->

@@ -233,4 +233,34 @@ class WeekBoardFacadeTest {
         assertNull(mac.weekBoard.value.find(gate)!!.card.goalTag)
         assertFalse(mac.undoTagOnBoard())
     }
+
+    /** Item (10): a stacking-up evening on the Board, Today, the brief and the hello; its fix moves one with Undo. */
+    @Test
+    fun aStackingUpEveningShowsEverywhereAndItsFixMovesOneWithUndo() = runTest {
+        val fold = core("android")
+        fold.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Alex Smith")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val sat = today + 2
+        val ids = listOf("Call the garage" to 19, "Wrap the present" to 20, "Pack the kit" to 21).map { (title, hour) ->
+            fold.addOnBoard(title, sat)!!.also { fold.setWhen(it, sat, hour * 60) }
+        }
+        fold.tick()
+        val p = fold.weekBoard.value.day(sat)!!.pressure!!
+        assertEquals("Saturday evening is stacking up: Call the garage, Wrap the present and Pack the kit", p.line)
+        assertEquals(p, fold.today.value.pressure)
+        assertEquals(p.line, fold.briefView.value.pressureLine)
+        val hello = fold.hello()
+        assertTrue(hello.spoken.contains("Saturday evening is stacking up"), hello.spoken)
+
+        val fix = p.fixes.single()
+        assertEquals("Move “Pack the kit” to Sun", fix.label)
+        assertEquals("Moved “Pack the kit” to Sun", fold.easePressure(fix.taskId, fix.toDay))
+        assertNull(fold.weekBoard.value.day(sat)!!.pressure)
+        assertNull(fold.today.value.pressure)
+        assertEquals(listOf(ids[2]), fold.weekBoard.value.day(sat + 1)!!.cards.map { it.id })
+
+        assertTrue(fold.undoBoardMove())
+        assertEquals(p.line, fold.today.value.pressure?.line)
+    }
 }

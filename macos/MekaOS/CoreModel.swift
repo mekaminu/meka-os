@@ -3221,6 +3221,17 @@ final class CoreModel {
         }
     }
 
+    /// Week board item (10): a stacking-up day's one-tap fix (on the Board, Today or the brief): the task moves to the
+    /// fix's day as a Board move; the undo bar says so ("Moved “Gym” to Sat") and Undo puts it back.
+    func easePressure(taskId: String, toDay: Int64) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.easePressure(taskId: taskId, day: toDay) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .boardMove)
+        }
+    }
+
     /// ⌘← ⌘→ (a day earlier or later) and ⌘↑ ⌘↓ (a place up or down) on the selected card, and its menu.
     func nudgeOnBoard(_ id: String, days: Int, places: Int) {
         guard let core else { return }

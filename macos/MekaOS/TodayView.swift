@@ -316,6 +316,27 @@ struct TodayView: View {
                             .accessibilityLabel(thing.spoken)
                             .staggeredAppear(0, play: play)
                     }
+                    // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber within two
+                    // days, with its one-tap fixes in the accent (a Board move, Undo on the bar); cross-fades.
+                    if let pressure = model.today?.pressure {
+                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                            Text(pressure.line).font(MekaType.caption).foregroundStyle(palette.calendar3).lineLimit(2)
+                                .accessibilityLabel(pressure.spoken)
+                            if !pressure.fixes.isEmpty {
+                                HStack(spacing: MekaSpace.m) {
+                                    ForEach(pressure.fixes, id: \.label) { fix in
+                                        Button { model.easePressure(taskId: fix.taskId, toDay: fix.toDay) } label: {
+                                            Text(fix.label).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)
+                                        }
+                                        .buttonStyle(MekaPressStyle())
+                                    }
+                                }
+                            }
+                        }
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: pressure.line)
+                        .staggeredAppear(0, play: play)
+                    }
                     // Date night, slice 1: "Date night tonight from 19:00" on the day, from noon; lit in the accent, cross-fades.
                     if let night = model.today?.dateNight {
                         Text(night.text).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1)

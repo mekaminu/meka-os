@@ -74,6 +74,8 @@ data class BoardDay(
     val accessibilityLabel: String,
     /** "3h planned · 4h free" (slice 3); null before today. */
     val capacity: BoardCapacity? = null,
+    /** Stacking up (item (10), [PressureRules]): the column glows amber with its line and fixes; null otherwise. */
+    val pressure: DayPressure? = null,
 ) {
     /** "Today" · "Mon 19" */
     val title: String get() = if (isToday) "Today" else "$weekday $number"
@@ -244,6 +246,7 @@ object WeekBoardRules {
         weeks: Int = WEEKS,
         goals: List<GoalItem> = emptyList(),
         weekGoals: WeekGoals = WeekGoals.EMPTY,
+        bills: List<PressureBill> = emptyList(),
     ): WeekBoard {
         val today = calendar.epochDayOf(nowMs)
         val firstDay = today - (CivilDate.isoDayOfWeek(today) - 1)
@@ -285,7 +288,9 @@ object WeekBoardRules {
             .map { t ->
                 tagged(BoardCard(t, TaskTitleRules.display(t.title), null, ListRules.kindLabel(t.somedayKind ?: SomedayKind.IDEA), done = false, carried = false))
             }
-        return WeekBoard(today, boardWeeks, someday)
+        val board = WeekBoard(today, boardWeeks, someday)
+        // Item (10): the days stacking up glow amber with a line and a one-tap fix.
+        return PressureRules.onBoard(board, PressureRules.days(board, shown, bills, nowMs, calendar))
     }
 
     /** A lane card: no time; "From last week" when parked in an earlier week. */

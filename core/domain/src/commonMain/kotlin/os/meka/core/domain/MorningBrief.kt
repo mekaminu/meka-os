@@ -88,6 +88,8 @@ data class MorningBriefView(
     val protectedLine: String? = null,
     /** Week board slice 5: "3 carried over · 5 planned · about 4h" under the day's summary ([BoardTodayRules.plan]); null with nothing to do. */
     val planLine: String? = null,
+    /** Week board item (10): "Thursday is stacking up: Trip form, Council tax and Gym" within two days; null otherwise. */
+    val pressureLine: String? = null,
 ) {
     /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
     val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
