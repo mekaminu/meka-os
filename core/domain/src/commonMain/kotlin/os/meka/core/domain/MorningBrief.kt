@@ -86,6 +86,8 @@ data class MorningBriefView(
     val story: BriefStory = BriefStory.EMPTY,
     /** Protected time, slice 5: "Protected from 19:00 tonight" under the date ([ProtectedRules.briefLine]); null with none. */
     val protectedLine: String? = null,
+    /** Week board slice 5: "3 carried over · 5 planned · about 4h" under the day's summary ([BoardTodayRules.plan]); null with nothing to do. */
+    val planLine: String? = null,
 ) {
     /** [day] as the brief pane draws it (Fold review 2026-10-09 07:26, item 7): see [BriefRules.dayLine]. */
     val dayLines: List<BriefDayLine> get() = day.map(BriefRules::dayLine)
@@ -386,6 +388,7 @@ class MorningBrief(
             first?.let { "first at $it" },
         ).joinToString(" · ")
         val overdue = dayTasks.count { it.dueAtMs != null && it.dueAtMs < now }
+        val plan = BoardTodayRules.plan(dayTasks, all, today)
 
         val workLine = BriefRules.workLine(schedule, holidays, today.epochDay)
 
@@ -412,6 +415,7 @@ class MorningBrief(
             eventCount = dayEvents.size,
             taskCount = dayTasks.size,
             daySummary = daySummary,
+            planLine = plan.line,
             overdueCount = overdue,
             waiting = lists.waiting.take(BriefRules.MAX_WAITING),
             waitingTotal = lists.waiting.size,
@@ -427,7 +431,7 @@ class MorningBrief(
             headlines = NewsRules.forBrief(headlines, newsTopics.filter { it.chosen }.map { it.id }, now, newsFollows, newsRead),
             newsTopics = newsTopics,
             readElsewhereLine = if (readElsewhere) BriefRules.readElsewhereLine(mark?.get(BriefFields.SEEN_ON)?.textOrNull) else null,
-            story = story(dayEvents, dayTasks, schedule, holidays, goals, today, now, workLine, upNextId, work, children),
+            story = story(dayEvents, dayTasks, schedule, holidays, goals, today, now, workLine, upNextId, work, children).copy(plan = plan.sentence),
         )
     }
 

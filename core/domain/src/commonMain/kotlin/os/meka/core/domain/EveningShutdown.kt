@@ -185,6 +185,8 @@ object ShutdownRules {
      */
     fun left(tasks: List<Task>, today: DayWindow): List<Task> = tasks
         .filter { (it.lifecycle == Lifecycle.ACTIVE || it.lifecycle == Lifecycle.INBOX) && !it.waitsForItsDay(today.epochDay) }
+        // Parked in a week on the Board with no day yet (Week board slice 4): not today's.
+        .filter { !WeekBoardRules.parked(it) }
         .filter { t -> t.scheduledAtMs?.let { it < today.endMs } ?: (t.dueAtMs == null || t.dueAtMs < today.endMs) }
         .sortedWith(
             compareBy<Task> { it.scheduledAtMs == null }

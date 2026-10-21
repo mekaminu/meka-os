@@ -151,6 +151,8 @@ data class BriefStory(
     val trading: String? = null,
     /** Protected time, slice 5: "Your evening is protected from 7 o'clock." ([ProtectedRules.briefSentence]), after the kind of day. */
     val protectedTime: String? = null,
+    /** Week board slice 5: "Two carried over from earlier days and five planned, about 4 hours in all." ([DayPlan.sentence]), before the focus. */
+    val plan: String? = null,
 ) {
     companion object {
         val EMPTY = BriefStory()
@@ -213,7 +215,8 @@ object BriefScriptRules {
         // The calendar.
         out += calendar(v, s)
 
-        // Focus.
+        // How the day looks (Week board slice 5), then the focus.
+        s.plan?.let { out += it }
         out += focusLines(s, v)
 
         // Waiting on him: urgent voice messages, then what people asked for, then decisions and chases.

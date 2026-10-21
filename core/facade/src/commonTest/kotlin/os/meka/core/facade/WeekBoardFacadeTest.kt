@@ -50,6 +50,27 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun todayFollowsTheOrderSetOnTheBoardOnBothDevices() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val mot = fold.addTask("Book MOT")
+        now += 60_000L
+        val gate = fold.addTask("Fix the gate")
+        now += 60_000L
+        val bins = fold.addTask("Order new bins")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        assertEquals(mot, fold.today.value.upNext?.id)
+
+        fold.moveOnBoard(bins, today, 0)
+        assertEquals(bins, fold.today.value.upNext?.id)
+        assertEquals(listOf(mot, gate), fold.today.value.yourDay.map { it.id })
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals(bins, mac.today.value.upNext?.id)
+        assertEquals(listOf(mot, gate), mac.today.value.yourDay.map { it.id })
+    }
+
+    @Test
     fun anEstimateSetOnACardCountsOnItsDaySyncsAndUndoes() = runTest {
         val fold = core("android"); val mac = core("mac")
         fold.tick()

@@ -102,6 +102,12 @@ struct BriefSheet: View {
                         Text(v.daySummary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .staggeredAppear(1)
+                        // Week board slice 5: "3 carried over · 5 planned · about 4h".
+                        if let plan = v.planLine {
+                            Text(plan).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                                .contentTransition(.opacity)
+                                .staggeredAppear(1)
+                        }
                         // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a
                         // tick circle for a task (completes it like Today's rows), a dot for an event.
                         ForEach(v.dayLines, id: \.id) { r in

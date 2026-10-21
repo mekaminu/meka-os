@@ -228,6 +228,10 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             Column(Modifier.animateItem().appear(rememberAppearance(1))) {
                 SectionLabel("Today")
                 Text(v.daySummary, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                // Week board slice 5: "3 carried over · 5 planned · about 4h".
+                v.planLine?.let { plan ->
+                    Text(plan, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                }
             }
         }
         // Fold review 2026-10-09 07:26, item 7: titles on one left edge in the regular weight, a tick circle for a

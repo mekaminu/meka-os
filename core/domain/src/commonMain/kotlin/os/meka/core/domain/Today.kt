@@ -157,7 +157,8 @@ object TodayProjection {
         val scheduledToday = rest.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.sortedBy { it.scheduledAtMs }
         // A task parked in a week on the Board with no day yet (Week board slice 4) waits there, not on Today.
         val unscheduled = rest.filter { it.scheduledAtMs == null && (it.dueAtMs == null || it.dueAtMs in today) && !WeekBoardRules.parked(it) }
-            .sortedWith(compareByDescending<Task> { it.priority }.thenBy { it.createdAtMs })
+            // Today follows the Board (Week board slice 5): cards he placed on the Board's Today column first, in his order.
+            .sortedWith(BoardTodayRules.anytimeOrder)
 
         // A planned task whose time has come leads (the earliest, late or not: Fold review 2026-10-09 13:45, item 3),
         // then the next planned one, then anytime.
