@@ -492,6 +492,8 @@ object TalkFlow {
         val link = s.help
         // Take me there is offered for the answer it came with; anything said next moves on from it.
         val t = s.copy(help = null)
+        // The orb says hello like a person, slice 3: "good thanks, you?" straight after the hello gets Ada's own answer.
+        afterHello(t, utterance)?.let { return it }
         return when (val r = TalkRules.reply(utterance, t.pending.size, places, help = link != null)) {
             TalkReply.Silence -> silence(t)
             TalkReply.End -> end(t)
@@ -522,6 +524,19 @@ object TalkFlow {
                 )
             }
         }
+    }
+
+    /**
+     * The orb says hello like a person, slice 3 ([HelloReplyRules]): the first thing said after the hello, when it is
+     * only small talk ("not bad, you?"), is answered at once on the device and Talk listens again; no AI, no question
+     * counted. Only while the hello is the conversation's one turn and nothing is on offer.
+     */
+    private fun afterHello(s: TalkSession, utterance: String): TalkStep? {
+        val hello = s.conversation.turns.singleOrNull()?.takeIf { it.question == HelloRules.ASKED } ?: return null
+        if (s.pending.isNotEmpty()) return null
+        val heard = AskRules.question(utterance) ?: return null
+        val line = HelloReplyRules.reply(hello.answer, heard) ?: return null
+        return say(s.copy(conversation = s.conversation.answered(heard, line)), line)
     }
 
     /** Nothing heard before the recogniser gave up: the conversation ends quietly. */

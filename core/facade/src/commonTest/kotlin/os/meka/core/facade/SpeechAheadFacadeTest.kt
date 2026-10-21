@@ -55,6 +55,14 @@ class SpeechAheadFacadeTest {
     }
 
     @Test
+    fun adasAnswersToGoodThanksYouAreMadeAheadToo() = runTest {
+        val c = core()
+        c.warmHello()
+        val line = os.meka.core.domain.HelloReplyRules.answer(os.meka.core.domain.HelloSmallTalk(os.meka.core.domain.HelloMood.GOOD, true), 0)
+        SpeechRules.pieces(line).forEach { assertTrue(it in server.said, it) }
+    }
+
+    @Test
     fun aTapOnTheOrbFindsItsOpeningInMemory() = runTest {
         val c = core()
         c.warmHello()

@@ -9716,6 +9716,8 @@ class MekaCore(
             )
         }
         lines.forEach { if (!speechPrefetch(it)) return }
+        // The orb says hello like a person, slice 3: Ada's answers to "good thanks, you?" are ready too (no name in them).
+        os.meka.core.domain.HelloReplyRules.warmLines().forEach { if (!speechPrefetch(it)) return }
         // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.
         onCore { os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName) }
             .forEach { if (!speechPrefetch(it)) return }
