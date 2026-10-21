@@ -280,16 +280,17 @@ class AiAskTest {
         assertTrue("Alex" in sent.system.substring(sent.cacheSystemChars))
         // What comes back as a list is said as plain sentences, no markers.
         assertEquals("Fajitas. Chilli from the freezer.", r.answer)
-        assertFalse(os.meka.core.domain.SpokenTurnRules.isListy(r.answer))
+        assertFalse(os.meka.core.domain.SpokenTurnRules.isListy(r.answer!!))
         // A turn that runs on is cut to whole sentences under forty words, keeping its hand-back question.
         val long = "Ha, fair. A heat pump moves warmth from the outside air into the house, a bit like a fridge in reverse. " +
             "It runs on electricity and works best with good insulation and bigger radiators. " +
             "Running costs depend a lot on your tariff and how well the house holds heat. Want me to note it?"
         model.outcome = answered(long + "\n<after>{\"note\":\"Talked about heat pumps\"}</after>")
         val spoken = AskService(model).ask(request.copy(question = "what's a heat pump?", voice = true))
-        assertFalse("Running costs" in spoken.answer, spoken.answer)
-        assertTrue(spoken.answer.endsWith("Want me to note it?"), spoken.answer)
-        assertTrue(os.meka.core.domain.SpokenTurnRules.wordCount(spoken.answer) <= 52)
+        val said = spoken.answer!!
+        assertFalse("Running costs" in said, said)
+        assertTrue(said.endsWith("Want me to note it?"), said)
+        assertTrue(os.meka.core.domain.SpokenTurnRules.wordCount(said) <= 52)
         assertEquals("Talked about heat pumps", spoken.note)
         // Asked for detail, or typed, nothing is cut.
         assertEquals(long, AskService(model).ask(request.copy(question = "explain heat pumps in detail", voice = true)).answer)
