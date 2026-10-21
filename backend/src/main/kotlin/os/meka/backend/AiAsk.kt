@@ -47,23 +47,25 @@ class AskService(
         // The companion, slice 3: "sir" when he chose it in Settings → Voice.
         // One name everywhere, slice 2: his name from About you → Your name (none in the code), or no name at all.
         // The companion is called Ada, slice 1: she may say "Ada here" in the day's first conversation, else not.
-        val named = SYSTEM + "\n" + nameLine(r.name) + "\n" + introLine(r.introduce)
+        // Talking to Ada like a conversation, slice 5: a spoken turn's conversation instructions ([VOICE]) are fixed
+        // too, so they follow the long instructions inside the cached part.
+        val fixed = if (r.voice) SYSTEM + "\n" + VOICE else SYSTEM
+        val named = fixed + "\n" + nameLine(r.name) + "\n" + introLine(r.introduce)
         val sir = if (r.callMe == AskCodec.CALL_SIR) named + "\n" + CALL_SIR else named
         // The companion, slice 5: notes of earlier chats came with the question; an open turn that read no web may
         // leave one short note of its own for the device to keep.
         val recalled = if (r.recall.isNotEmpty()) sir + "\n" + RECALL else sir
-        val base = if (isOpen && web == null) recalled + "\n" + NOTE else recalled
-        val system = if (r.voice) base + "\n" + VOICE else base
-        // Talking to Ada like a conversation, slice 3: the long instructions ([SYSTEM]) are the same on every call and
-        // the earlier turns the same as last time, so both are marked for the model's prompt cache; only what's new
-        // (his name and voice lines, today, the question) is read afresh.
+        val system = if (isOpen && web == null) recalled + "\n" + NOTE else recalled
+        // Talking to Ada like a conversation, slice 3: the long instructions ([SYSTEM], and [VOICE] when spoken) are the
+        // same on every call and the earlier turns the same as last time, so both are marked for the model's prompt
+        // cache; only what's new (his name, today, the question) is read afresh.
         val cachedTurns = r.history.size * 2
         // The companion, slice 2: a searched question is a companion turn too, metered as Chat.
-        if (!isOpen) return ModelRequest(if (r.voice) FEATURE_TALK else FEATURE, ModelTier.SMALL, system, turns(r), MAX_TOKENS, SYSTEM.length, cachedTurns)
+        if (!isOpen) return ModelRequest(if (r.voice) FEATURE_TALK else FEATURE, ModelTier.SMALL, system, turns(r), MAX_TOKENS, fixed.length, cachedTurns)
         val frugal = runCatching { budgetLevel() }.getOrNull().let { it == AiBudget.Level.ALERT || it == AiBudget.Level.OVER }
         return ModelRequest(
             os.meka.core.domain.CompanionRules.FEATURE, tierFor(isOpen = true, voice = r.voice, frugal = frugal), system, turns(r, web),
-            if (r.voice) MAX_TOKENS else OPEN_MAX_TOKENS, SYSTEM.length, cachedTurns,
+            if (r.voice) MAX_TOKENS else OPEN_MAX_TOKENS, fixed.length, cachedTurns,
         )
     }
 
@@ -170,7 +172,10 @@ class AskService(
                 // device; never from an answer that read other people's words on the web.
                 val note = if (web != null || !isOpenTurn(r, null)) null
                 else AskCodec.modelNote(text)?.let { os.meka.core.domain.CompanionMemoryRules.clean(it) }
-                val answered = AskCodec.Response(AskCodec.Response.ANSWERED, words.ifBlank { "No answer" }, kept, sources = sources, note = note)
+                // Talking to Ada like a conversation, slice 5: spoken words are talk, never a list or a lecture; a
+                // conversation turn is cut to its spoken length, a look-up of his day keeps every fact.
+                val said = if (r.voice) os.meka.core.domain.SpokenTurnRules.tidy(words, r.question, cut = isOpenTurn(r, web)) else words
+                val answered = AskCodec.Response(AskCodec.Response.ANSWERED, said.ifBlank { "No answer" }, kept, sources = sources, note = note)
                 // Slice 9: the device already has the first piece when it went ahead and is still the answer's first.
                 if (firstAlready != null && os.meka.core.domain.TalkRules.firstPiece(answered.answer) == firstAlready) answered
                 else withFirstClip(r, answered)
@@ -288,16 +293,27 @@ class AskService(
 
         /** The companion, slice 5: an open turn may leave one note of itself for the device to keep. */
         val NOTE = """
-            This is a conversation, not a quick look-up. When it is about something worth picking up another day (a topic he's exploring, a plan or choice he's weighing, something he decided, an interest), add "note" to your JSON: one short line, under twenty words, about him in the third person, saying what you talked about and where it got to ("Talked through heat pumps vs a new boiler; leaning heat pump"). Leave "note" out for small talk, a joke, a one-off fact or anything already in an <earlier_chats> note unless it moved on. Never put a password, a number, an address, money figures, health details or other people's private matters in it.
+            This is a conversation, not a quick look-up. When it is about something worth picking up another day (a topic he's exploring, a plan or choice he's weighing, something he decided, an interest), add "note" to your reply (in your JSON, or in the block after your words when you are speaking): one short line, under twenty words, about him in the third person, saying what you talked about and where it got to ("Talked through heat pumps vs a new boiler; leaning heat pump"). Leave "note" out for small talk, a joke, a one-off fact or anything already in an <earlier_chats> note unless it moved on. Never put a password, a number, an address, money figures, health details or other people's private matters in it.
         """.trimIndent()
 
         /**
          * Talk to MEKA (spoken answers): short, plain sentences that read well aloud, and no asking to tap, since MEKA
-         * offers each card aloud itself.
+         * offers each card aloud itself. Talking to Ada like a conversation, slice 5: the spoken-conversation prompt
+         * (react, answer, hand back; under forty words unless he asks for detail; good and bad turns), checked again by
+         * [os.meka.core.domain.SpokenTurnRules.tidy] on the words that come back.
          */
         val VOICE = """
-            He is talking to you aloud and your answer will be spoken: one or two short sentences (three at most for an open question), like a person talking, no lists, symbols, emoji or markdown, times as HH:MM. Don't ask him to tap or confirm; Navilife offers each action aloud itself.
-            Earlier turns are the conversation so far; use them to understand what "it" or "that" means. The <today> block in the latest turn is the current picture of the day.
+            He is talking to you aloud and your answer will be spoken. This is a conversation, like a phone call with a friend who knows his day, not a written answer:
+            - One to three short sentences, under forty words, unless he asks you to explain, go into detail or tell him more. Times as HH:MM.
+            - React first, the way a person would, when there is something to react to ("Oh nice.", "Ah, that's annoying.", "Ha, fair."), then answer. Don't react to a plain look-up with fake enthusiasm.
+            - Then, often but not every time, hand it back: a short question or a natural follow-up ("Want me to pencil it in?", "How did the match go?"). Never "Is there anything else I can help with?".
+            - Say it the way you'd say it out loud: contractions, plain words, no lists, no bullet points, no numbering, no headings, no "Here are some options", no "firstly… secondly", no symbols, emoji or markdown. With several things, pick the best one or two and say them in a sentence ("Fajitas would be quick, or there's chilli in the freezer.").
+            - Use his name now and then (see below), never in every turn.
+            - Remember what was just said and refer back to it ("Still thinking about the heat pump?"); earlier turns are the conversation so far, so use them to understand what "it" or "that" means. The <today> block in the latest turn is the current picture of the day.
+            - You can be playful, and you have opinions when he asks for one ("Honestly? I'd go for the heat pump."); say what you'd do and why in a line. Never lecture, moralise or pile on caveats.
+            - Don't ask him to tap or confirm; Navilife offers each action aloud itself.
+            Good turns: "Oh nice! Friday's clear after six, so that works. Want me to add it?" · "Ah, that's annoying. The 07:42 is cancelled, but the 07:58 gets you in by nine." · "Honestly? I'd drive, the trains are a mess on Saturday. Are the boys coming?" · "Ha, fair. Ten minutes on the timer, then."
+            Bad turns: "Here are some options for dinner tonight: 1. Fajitas 2. Chilli 3. Pasta." · "Certainly! I'd be happy to help you with that. There are several factors to consider…" · "Event: Dentist. Time: 16:00. Location: High Street." · reading out a whole day item by item.
             Because your answer is spoken, this replaces the JSON reply above: write your words first, as plain text, with nothing before them, so they can be said while you write. Then, only if you propose an action, used a <web> block or are asked for a note, add one line after your words: $AFTER_OPEN{"actions":[…],"sources":[1,2],"note":"…"}$AFTER_CLOSE with only the fields you need; otherwise just end with your words. Nothing inside it is said, so never put words for him there, and never write JSON before your words.
         """.trimIndent()
 

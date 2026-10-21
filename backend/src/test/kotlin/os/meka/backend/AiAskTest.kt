@@ -267,6 +267,40 @@ class AiAskTest {
     }
 
     @Test
+    fun aSpokenTurnIsAskedToTalkLikeAPersonAndAListOrALectureIsTidiedToTalk() {
+        // Talking to Ada like a conversation, slice 5: the spoken-conversation prompt, cached with the fixed instructions.
+        val model = FakeModel(answered("Here are some options:\n- Fajitas\n- Chilli from the freezer"))
+        val r = AskService(model).ask(request.copy(question = "what should I cook tonight?", voice = true, name = "Alex"))
+        val sent = model.asked.last()
+        listOf("React first", "hand it back", "under forty words", "no lists", "Good turns:", "Bad turns:", "Never lecture").forEach {
+            assertTrue(it in sent.system, it)
+        }
+        assertEquals(AskService.SYSTEM.length + 1 + AskService.VOICE.length, sent.cacheSystemChars)
+        assertTrue(sent.system.substring(0, sent.cacheSystemChars).endsWith(AskService.VOICE))
+        assertTrue("Alex" in sent.system.substring(sent.cacheSystemChars))
+        // What comes back as a list is said as plain sentences, no markers.
+        assertEquals("Fajitas. Chilli from the freezer.", r.answer)
+        assertFalse(os.meka.core.domain.SpokenTurnRules.isListy(r.answer))
+        // A turn that runs on is cut to whole sentences under forty words, keeping its hand-back question.
+        val long = "Ha, fair. A heat pump moves warmth from the outside air into the house, a bit like a fridge in reverse. " +
+            "It runs on electricity and works best with good insulation and bigger radiators. " +
+            "Running costs depend a lot on your tariff and how well the house holds heat. Want me to note it?"
+        model.outcome = answered(long + "\n<after>{\"note\":\"Talked about heat pumps\"}</after>")
+        val spoken = AskService(model).ask(request.copy(question = "what's a heat pump?", voice = true))
+        assertFalse("Running costs" in spoken.answer, spoken.answer)
+        assertTrue(spoken.answer.endsWith("Want me to note it?"), spoken.answer)
+        assertTrue(os.meka.core.domain.SpokenTurnRules.wordCount(spoken.answer) <= 52)
+        assertEquals("Talked about heat pumps", spoken.note)
+        // Asked for detail, or typed, nothing is cut.
+        assertEquals(long, AskService(model).ask(request.copy(question = "explain heat pumps in detail", voice = true)).answer)
+        model.outcome = answered("""{"answer":"$long","actions":[]}""")
+        assertEquals(long, AskService(model).ask(request.copy(question = "what's a heat pump?")).answer)
+        assertFalse("React first" in model.asked.last().system)
+        // A spoken look-up of his day keeps every fact.
+        assertEquals(long, AskService(model).ask(request.copy(question = "what's on tomorrow?", voice = true)).answer)
+    }
+
+    @Test
     fun fromTheBudgetsAlertOpenTurnsStayOnTheSmallModel() {
         val model = FakeModel(answered("""{"answer":"Ok.","actions":[]}"""))
         AskService(model, budgetLevel = { AiBudget.Level.ALERT }).ask(request.copy(question = "Any ideas for half term?"))
