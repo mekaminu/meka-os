@@ -3542,6 +3542,18 @@ class MekaCore(
         undone
     }
 
+    /**
+     * A task made from a request card in Needs you, marked as from there so the Board shows its colour dot (by hand,
+     * slice 5). Caller is on the core.
+     */
+    private fun needsTask(title: String): String {
+        val id = tasks.create(NewTask(title))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.TASK, id, mapOf(
+            os.meka.core.domain.ActionableFields.PROVENANCE_SOURCE to os.meka.core.domain.BoardSourceRules.NEEDS.fv(),
+        ))
+        return id
+    }
+
     private fun doRequest(cardId: String, change: Boolean): RequestDone? {
         val rules = os.meka.core.domain.RequestAcceptRules
         val card = requestCards.find(cardId) ?: return null
@@ -3552,7 +3564,7 @@ class MekaCore(
         val plan = rules.plan(card.proposal, canAddEvent = account != null, change = change) ?: return null
         val done = when (plan) {
             is os.meka.core.domain.RequestPlan.AddTask -> {
-                val id = tasks.create(NewTask(plan.title))
+                val id = needsTask(plan.title)
                 rules.taskDay(plan, today)?.let { day -> tasks.setWhen(id, day, plan.minute) }
                 rules.remindAtMs(plan, today, nowMs(), cal)?.let { tasks.setReminder(id, it) }
                 followBlocks(listOf(id))
@@ -3567,7 +3579,7 @@ class MekaCore(
                     // Refused (a time already gone, say): keep it as a planned task rather than lose the request.
                     is os.meka.core.domain.EventEditResult.Refused -> {
                         val asTask = os.meka.core.domain.RequestPlan.AddTask(plan.title, plan.day, plan.minute, null)
-                        val id = tasks.create(NewTask(plan.title))
+                        val id = needsTask(plan.title)
                         rules.taskDay(asTask, today)?.let { day -> tasks.setWhen(id, day, plan.minute) }
                         followBlocks(listOf(id))
                         RequestDone(rules.doneLine(asTask, card.proposal.kind, today), id, null)
@@ -3594,7 +3606,7 @@ class MekaCore(
                 val trip = os.meka.core.domain.TripRules.tripFor(os.meka.core.domain.TripRules.open(trips.items(), today), plan.entry.day)
                 if (trip == null) {
                     val asTask = rules.bookingAsTask(plan)
-                    val id = tasks.create(NewTask(asTask.title))
+                    val id = needsTask(asTask.title)
                     rules.taskDay(asTask, today)?.let { day -> tasks.setWhen(id, day, asTask.minute) }
                     followBlocks(listOf(id))
                     RequestDone(rules.doneLine(asTask, card.proposal.kind, today), id, null)

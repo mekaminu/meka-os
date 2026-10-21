@@ -48,6 +48,8 @@ data class Task(
     val boardRank: Long? = null,
     /** The Monday of the week it is parked in on the Board's week lane ([WeekBoardRules.parked]); null otherwise. */
     val boardWeek: Long? = null,
+    /** Where it came from (its provenance: "user", "discord", "meka:mail"…); null when unknown (Board slice 5). */
+    val source: String? = null,
 ) {
     val isDone: Boolean get() = lifecycle == Lifecycle.DONE
 
@@ -101,6 +103,7 @@ data class Task(
                 carryAskedDay = s[TaskFields.CARRY_ASKED_DAY].longOrNull,
                 boardRank = s[TaskFields.BOARD_RANK].longOrNull,
                 boardWeek = s[TaskFields.BOARD_WEEK].longOrNull,
+                source = s[ActionableFields.PROVENANCE_SOURCE].textOrNull,
             )
         }
     }

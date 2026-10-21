@@ -33,6 +33,9 @@ data class BoardCard(
     val goalTag: String? get() = BoardGoalRules.tag(goalTitle)
     val canMove: Boolean get() = !done
 
+    /** Where it came from, for the small colour dot (slice 5 by hand); null for what he typed himself. */
+    val source: CardSource? get() = BoardSourceRules.of(task)
+
     /** Its time estimate, "30m"; null for none (slice 3). */
     val estimate: String? get() = task.estimateMinutes?.takeIf { !done }?.let(TaskEstimateRules::label)
 
@@ -44,7 +47,7 @@ data class BoardCard(
 
     /** Screen readers: "Book MOT, 14:30, about 30m, carried 2 days". */
     val accessibilityLabel: String
-        get() = listOfNotNull(title, time, estimate?.let { "about $it" }, line?.lowercase(), goalTitle?.let { "for goal $it" }).joinToString(", ")
+        get() = listOfNotNull(title, time, estimate?.let { "about $it" }, line?.lowercase(), goalTitle?.let { "for goal $it" }, source?.let(BoardSourceRules::spoken)).joinToString(", ")
 }
 
 /** A day's event as a faded chip above its cards: "09:30 Dentist", "All day Half term". */

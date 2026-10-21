@@ -72,6 +72,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -1150,8 +1151,20 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                 ) { chips.forEach { CardChipPill(it) } }
             }
         }
+        // Slice 5: a small colour dot for where it came from (mail, Needs you, Discord, School); the screen reader hears
+        // it in the card's label. Dimmed with the rest of a done card.
+        card.source?.let { src ->
+            Box(
+                Modifier.padding(top = MekaSpace.m, start = MekaSpace.xxs).size(6.dp).clip(CircleShape)
+                    .background(Meka.colors.calendarTone(src.tone).copy(alpha = if (card.done) 0.4f else 1f))
+                    .testTag(SOURCE_DOT_TAG),
+            )
+        }
     }
 }
+
+/** The colour dot on a Board card that came from mail, Needs you, Discord or School (slice 5, UI tests). */
+internal const val SOURCE_DOT_TAG = "board-source-dot"
 
 /** The tile's shape (slice 2): rounded like the design's cards. */
 private val TILE = RoundedCornerShape(MekaRadius.m)

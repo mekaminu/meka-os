@@ -495,6 +495,14 @@ private struct BoardCardView: View {
                 }
             }
             Spacer(minLength: 0)
+            // Slice 5: a small colour dot for where it came from (mail, Needs you, Discord, School).
+            if let source = card.source {
+                Circle()
+                    .fill(palette.calendarTone(source.tone).opacity(card.done ? 0.4 : 1))
+                    .frame(width: 6, height: 6)
+                    .padding(.top, MekaSpace.xs)
+                    .help(source.label)
+            }
         }
         .padding(MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)
