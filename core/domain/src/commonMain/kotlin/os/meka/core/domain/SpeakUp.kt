@@ -90,9 +90,13 @@ object SpeakUpRules {
     /** The Mac counts as "in use" with a key or the mouse touched this recently. */
     const val MAC_ACTIVE_MS = 2 * 60_000L
 
-    /** Where a device would speak: the Mac in use; else headphones/the car; else the bedside clock in the evening. */
-    fun place(output: BargeInOutput, bedsideShowing: Boolean, minuteOfDay: Int): SpeakPlace = when {
-        output == BargeInOutput.HEADPHONES -> SpeakPlace.PRIVATE
+    /**
+     * Where a device would speak: the Mac in use; else headphones/the car; else the bedside clock in the evening.
+     * Slice 5: [inCar] (the Fold driving Android Auto, wired or wireless, where the car's speakers are no headset the
+     * phone lists) counts as the car too.
+     */
+    fun place(output: BargeInOutput, bedsideShowing: Boolean, minuteOfDay: Int, inCar: Boolean = false): SpeakPlace = when {
+        output == BargeInOutput.HEADPHONES || inCar -> SpeakPlace.PRIVATE
         bedsideShowing && minuteOfDay >= EVENING_FROM_MIN -> SpeakPlace.BEDSIDE
         else -> SpeakPlace.SPEAKER
     }

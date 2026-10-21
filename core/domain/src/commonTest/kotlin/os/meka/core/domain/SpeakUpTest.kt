@@ -87,6 +87,9 @@ class SpeakUpTest {
         assertEquals(SpeakPlace.SPEAKER, SpeakUpRules.place(BargeInOutput.SPEAKER, false, 20 * 60))
         assertEquals(SpeakPlace.SPEAKER, SpeakUpRules.place(BargeInOutput.SPEAKER, true, 8 * 60))
         assertEquals(SpeakPlace.BEDSIDE, SpeakUpRules.place(BargeInOutput.SPEAKER, true, 20 * 60))
+        // Slice 5: Android Auto is the car, even with no headset listed (its speakers are the car's own).
+        assertEquals(SpeakPlace.PRIVATE, SpeakUpRules.place(BargeInOutput.SPEAKER, false, 8 * 60, inCar = true))
+        assertEquals(SpeakPlace.PRIVATE, SpeakUpRules.place(BargeInOutput.SPEAKER, true, 20 * 60, inCar = true))
         assertEquals(SpeakPlace.MAC, SpeakUpRules.macPlace(30_000))
         assertEquals(SpeakPlace.SPEAKER, SpeakUpRules.macPlace(10 * 60_000))
         assertEquals(SpeakHold.NOT_PRIVATE, check(c = SpeakContext(SpeakPlace.SPEAKER)))
