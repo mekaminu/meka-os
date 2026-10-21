@@ -1,7 +1,12 @@
 package os.meka.android.calendar
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -74,9 +79,11 @@ import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.BoardCapacity
 import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.TaskEstimateRules
 import os.meka.core.domain.WeekBoard
 import os.meka.core.domain.WeekBoardRules
 import os.meka.core.facade.MekaCore
@@ -92,6 +99,10 @@ import os.meka.core.facade.MekaCore
  * haptic), with "Moved “Book MOT” to Thu 22 Oct · Undo". Near an edge the board scrolls along. Tap a card for Move up ·
  * Move down · Today · Tomorrow · the next days (the same moves without dragging, and for TalkBack). The ring ticks it
  * off (light haptic) and it settles faded at the foot of the day. "+ Add" at a column's foot adds a task to that day.
+ *
+ * Slice 3: a card's menu also asks "How long?" (15m · 30m · 1h · 2h, Navilife's guess marked "suggested", nothing set
+ * until he taps), the card's line shows it ("09:00 · 30m"), and each column from today on shows "3h planned · 4h free"
+ * over a slim bar that fills gold and turns amber (and breathes gently) when the day is over-planned.
  *
  * Reduced motion: no lift or scale, colours and moves cross-fade.
  */
@@ -189,6 +200,12 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
                             }
                         },
                         onAdd = { text -> scope.launch { runCatching { core.addOnBoard(text, day.epochDay) } } },
+                        onEstimate = { card, minutes ->
+                            scope.launch {
+                                val line = runCatching { core.setEstimate(card.id, minutes) }.getOrNull()
+                                if (line != null) { haptics.tick(); undo.show(line) { core.undoEstimate() } }
+                            }
+                        },
                         board = board,
                         onEvent = onEvent,
                     )
@@ -267,6 +284,7 @@ private fun DayColumn(
     onMoveTo: (BoardCard, Long) -> Unit,
     onDone: (BoardCard) -> Unit,
     onAdd: (String) -> Unit,
+    onEstimate: (BoardCard, Int?) -> Unit,
     board: WeekBoard,
     onEvent: (CalendarEvent) -> Unit,
 ) {
@@ -299,6 +317,7 @@ private fun DayColumn(
                 }
             }
             Text(day.countLine, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
+            day.capacity?.let { CapacityBar(it) }
         }
         // The day's events, faded.
         if (day.chips.isNotEmpty()) {
@@ -320,7 +339,7 @@ private fun DayColumn(
         Spacer(Modifier.height(MekaSpace.xs))
         Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             day.cards.forEach { card ->
-                BoardCardRow(card, day, board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop, onCancel, onMove, onMoveTo, onDone)
+                BoardCardRow(card, day, board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop, onCancel, onMove, onMoveTo, onDone, onEstimate)
             }
         }
         if (hovered && day.openCards.isEmpty()) {
@@ -344,6 +363,7 @@ private fun BoardCardRow(
     onMove: (BoardCard, Int, Int) -> Unit,
     onMoveTo: (BoardCard, Long) -> Unit,
     onDone: (BoardCard) -> Unit,
+    onEstimate: (BoardCard, Int?) -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -385,6 +405,14 @@ private fun BoardCardRow(
                     }
                     entry(label) { onMoveTo(card, d) }
                 }
+                // Slice 3: how long it takes, Navilife's guess marked; nothing is set until he taps one.
+                Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
+                Text(
+                    TaskEstimateRules.MENU_TITLE, style = MekaType.micro, color = Meka.colors.textTertiary,
+                    modifier = Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+                )
+                card.estimateChoices.forEach { c -> entry(c.menuLabel) { if (!c.selected) onEstimate(card, c.minutes) } }
+                if (card.estimate != null) entry(TaskEstimateRules.CLEAR) { onEstimate(card, null) }
             }
         }
     }
@@ -412,11 +440,31 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onDone: (() -> Unit)? = n
                 card.title, style = MekaType.body, maxLines = 3, overflow = TextOverflow.Ellipsis,
                 color = if (card.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
             )
-            val meta = listOfNotNull(card.time, card.line).joinToString(" · ")
+            val meta = card.meta
             if (meta.isNotEmpty()) {
                 Text(meta, style = MekaType.micro, color = if (card.carried) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/**
+ * "3h planned · 4h free" under a column's date with a slim bar (slice 3): gold as it fills, amber when the day is
+ * over-planned, breathing gently then (Reduced motion: steady). The bar's width glides as estimates change.
+ */
+@Composable
+private fun CapacityBar(c: BoardCapacity) {
+    val reduced = Meka.reducedMotion
+    val amber = Meka.colors.calendar3
+    val fill by animateFloatAsState(c.fill, MekaMotion.appear(reduced), label = "capacity-fill")
+    val tone by animateColorAsState(if (c.over) amber else Meka.colors.accent, MekaMotion.appear(reduced), label = "capacity-tone")
+    val breath = if (c.over && !reduced) {
+        val t = rememberInfiniteTransition(label = "capacity-breath")
+        t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "capacity-alpha").value
+    } else 1f
+    Text(c.line, style = MekaType.micro, color = if (c.over) amber else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
+        Box(Modifier.fillMaxWidth(fill).height(3.dp).alpha(breath).clip(RoundedCornerShape(MekaRadius.pill)).background(tone))
     }
 }
 

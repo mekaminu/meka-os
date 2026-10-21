@@ -11,6 +11,10 @@ import SwiftUI
 /// ⌘↑ ⌘↓ a place; its context menu has the same moves and the next days. ‹ › (⌘[ ⌘]) step a week. Every move puts
 /// "Moved “Book MOT” to Thu 22 Oct · Undo" on the bar.
 ///
+/// Slice 3: a card's context menu asks "How long?" (15m · 30m · 1h · 2h, Navilife's guess marked "suggested",
+/// nothing set until he picks), the card's line shows it, and each column from today on shows "3h planned · 4h free"
+/// over a slim bar, gold as it fills and amber (breathing gently) when the day is over-planned.
+///
 /// Motion: weeks push across the way you moved; a targeted column lifts (scale 1.01) and its edge blends to gold on the
 /// approve spring; cards glide to their new places (replan). Reduce Motion: cross-fades, no lift.
 struct WeekBoardScreen: View {
@@ -107,6 +111,9 @@ private struct BoardColumnView: View {
                     }
                 }
                 Text(day.countLine).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                if let capacity = day.capacity {
+                    CapacityBar(capacity: capacity, palette: palette)
+                }
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(day.accessibilityLabel)
@@ -206,7 +213,7 @@ private struct BoardCardView: View {
                 Text(card.title).font(MekaType.body)
                     .foregroundStyle(card.done ? palette.textTertiary : palette.textPrimary)
                     .lineLimit(3)
-                let meta = [card.time, card.line].compactMap { $0 }.joined(separator: " · ")
+                let meta = card.meta
                 if !meta.isEmpty {
                     Text(meta).font(MekaType.micro)
                         .foregroundStyle(card.carried ? palette.accent : palette.textTertiary)
@@ -242,6 +249,17 @@ private struct BoardCardView: View {
                 ForEach(Array((0..<7).map { board.todayEpochDay + Int64($0) }.filter { $0 != day.epochDay }), id: \.self) { d in
                     Button(label(d)) { model.moveOnBoard(card.id, day: d, index: Int.max / 2) }
                 }
+                Divider()
+                // Slice 3: how long it takes; Navilife's guess is marked, nothing is set until he picks.
+                Section(TaskEstimateRules.shared.MENU_TITLE) {
+                    ForEach(card.estimateChoices, id: \.minutes) { c in
+                        Button(c.menuLabel) { model.setEstimateOnBoard(card.id, minutes: Int(c.minutes)) }
+                            .disabled(c.selected)
+                    }
+                    if card.estimate != nil {
+                        Button(TaskEstimateRules.shared.CLEAR) { model.setEstimateOnBoard(card.id, minutes: nil) }
+                    }
+                }
             }
         }
     }
@@ -251,6 +269,43 @@ private struct BoardCardView: View {
         if d == board.todayEpochDay + 1 { return "Tomorrow" }
         guard let day = board.day(epochDay: d) else { return "" }
         return "\(day.weekday) \(day.number)"
+    }
+}
+
+/// "3h planned · 4h free" with a slim bar under a column's date (slice 3): gold as it fills, amber when over-planned,
+/// breathing gently then; the width glides as estimates change. Reduce Motion: steady, no glide.
+private struct CapacityBar: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let capacity: BoardCapacity
+    let palette: MekaPalette
+    @State private var breathe = false
+
+    var body: some View {
+        let tone = capacity.over ? palette.calendar3 : palette.accent
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Text(capacity.line).font(MekaType.micro)
+                .foregroundStyle(capacity.over ? palette.calendar3 : palette.textTertiary)
+                .lineLimit(1)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(palette.hairline)
+                    Capsule().fill(tone)
+                        .frame(width: geo.size.width * CGFloat(capacity.fill))
+                        .opacity(capacity.over && breathe ? 0.55 : 1)
+                }
+            }
+            .frame(height: 3)
+        }
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: capacity.fill)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(capacity.spoken)
+        .onAppear { startBreathing() }
+        .onChange(of: capacity.over) { _, _ in startBreathing() }
+    }
+
+    private func startBreathing() {
+        guard capacity.over, !reduceMotion else { breathe = false; return }
+        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { breathe = true }
     }
 }
 

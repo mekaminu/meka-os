@@ -2114,6 +2114,29 @@ class MekaCore(
     }
     private var boardUndo: os.meka.core.domain.BoardUndo? = null
 
+    // ---- Week board, slice 3: time estimates and capacity ----
+
+    /**
+     * "How long?" on a Board card: [minutes] (one of [os.meka.core.domain.TaskEstimateRules.CHOICES]) as the task's
+     * estimate, or null to clear it. Returns the undo bar's line ("“Book MOT” · about 30m"); [undoEstimate] puts back
+     * the one it had.
+     */
+    suspend fun setEstimate(taskId: String, minutes: Int?): String = onCore {
+        val before = tasks.setEstimate(taskId, minutes)
+        estimateUndo = taskId to before
+        val title = os.meka.core.domain.TaskTitleRules.display(tasks.get(taskId)?.title.orEmpty())
+        if (minutes == null) "“$title” · no estimate" else "“$title” · about ${os.meka.core.domain.TaskEstimateRules.label(minutes)}"
+    }
+
+    /** Undo after [setEstimate]. False when nothing to undo. */
+    suspend fun undoEstimate(): Boolean = onCore {
+        val (id, before) = estimateUndo ?: return@onCore false
+        estimateUndo = null
+        tasks.setEstimate(id, before)
+        true
+    }
+    private var estimateUndo: Pair<String, Int?>? = null
+
     /** Quick add at the foot of a Board column: [text] becomes a task on local [day] (no time), last in that day. */
     suspend fun addOnBoard(text: String, day: Long): String? {
         val draft = QuickCapture.draft(text, null) ?: return null

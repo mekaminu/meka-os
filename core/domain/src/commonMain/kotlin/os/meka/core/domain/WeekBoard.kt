@@ -22,12 +22,23 @@ data class BoardCard(
     val line: String?,
     val done: Boolean,
     val carried: Boolean,
+    /** Navilife's guess at how long it takes ([TaskEstimateRules.suggest]) while it has no estimate; null otherwise. */
+    val suggestedMinutes: Int? = null,
 ) {
     val id: String get() = task.id
     val canMove: Boolean get() = !done
 
-    /** Screen readers: "Book MOT, 14:30, carried 2 days". */
-    val accessibilityLabel: String get() = listOfNotNull(title, time, line?.lowercase()).joinToString(", ")
+    /** Its time estimate, "30m"; null for none (slice 3). */
+    val estimate: String? get() = task.estimateMinutes?.takeIf { !done }?.let(TaskEstimateRules::label)
+
+    /** The quiet line under the title: "14:30 · 30m · Carried 2 days". Empty when there's nothing to say. */
+    val meta: String get() = listOfNotNull(time, estimate, line).joinToString(" · ")
+
+    /** The card menu's "How long?" rows: 15m · 30m · 1h · 2h, one ticked or Navilife's guess marked. */
+    val estimateChoices: List<EstimateChoice> get() = TaskEstimateRules.choices(task.estimateMinutes, suggestedMinutes)
+
+    /** Screen readers: "Book MOT, 14:30, about 30m, carried 2 days". */
+    val accessibilityLabel: String get() = listOfNotNull(title, time, estimate?.let { "about $it" }, line?.lowercase()).joinToString(", ")
 }
 
 /** A day's event as a faded chip above its cards: "09:30 Dentist", "All day Half term". */
@@ -55,6 +66,8 @@ data class BoardDay(
     val countLine: String,
     /** "Thursday 22 October, office day, 2 events, 3 tasks" */
     val accessibilityLabel: String,
+    /** "3h planned · 4h free" (slice 3); null before today. */
+    val capacity: BoardCapacity? = null,
 ) {
     /** "Today" · "Mon 19" */
     val title: String get() = if (isToday) "Today" else "$weekday $number"
@@ -148,11 +161,12 @@ object WeekBoardRules {
         val lastDay = firstDay + 7L * weeks - 1
         val shown = DuplicateEvents.merge(events).filter { !DuplicateEvents.hiddenIn(it, hidden) }
 
+        val sized = TaskEstimateRules.Sized.of(tasks)
         val byDay = HashMap<Long, MutableList<BoardCard>>()
         for (t in tasks) {
             val day = columnOf(t, today, calendar) ?: continue
             if (day !in firstDay..lastDay) continue
-            byDay.getOrPut(day) { mutableListOf() } += card(t, today, calendar)
+            byDay.getOrPut(day) { mutableListOf() } += card(t, today, calendar, sized)
         }
 
         val boardWeeks = (0 until weeks).map { w ->
@@ -165,7 +179,7 @@ object WeekBoardRules {
                     else -> CalendarAgenda.rangeLabel(ws, ws + 6)
                 },
                 range = CalendarAgenda.rangeLabel(ws, ws + 6),
-                days = (ws until ws + 7).map { d -> day(d, today, byDay[d].orEmpty(), shown, calendar, work, toneOf) },
+                days = (ws until ws + 7).map { d -> day(d, today, nowMs, byDay[d].orEmpty(), shown, calendar, work, toneOf) },
             )
         }
         return WeekBoard(today, boardWeeks)
@@ -178,7 +192,7 @@ object WeekBoardRules {
         else -> null
     }
 
-    private fun card(t: Task, today: Long, calendar: LocalCalendar): BoardCard {
+    private fun card(t: Task, today: Long, calendar: LocalCalendar, sized: TaskEstimateRules.Sized): BoardCard {
         val done = t.lifecycle == Lifecycle.DONE
         val carriedDays = if (!done && t.scheduledAtMs != null && t.showsFromDay.let { it == null || it <= today }) {
             today - calendar.epochDayOf(t.scheduledAtMs)
@@ -190,7 +204,10 @@ object WeekBoardRules {
             carried -> RollOverRules.line(t, carriedDays)
             else -> t.repeatLabel?.let { "↻ $it" }
         }
-        return BoardCard(t, TaskTitleRules.display(t.title), minute?.let(LocalClock::formatMinute), line, done, carried)
+        return BoardCard(
+            t, TaskTitleRules.display(t.title), minute?.let(LocalClock::formatMinute), line, done, carried,
+            suggestedMinutes = if (done) null else TaskEstimateRules.suggest(t, sized),
+        )
     }
 
     /** His order: placed cards by place; then carried (oldest first), timed by time, the rest as added. Done at the foot. */
@@ -208,7 +225,7 @@ object WeekBoardRules {
     }
 
     private fun day(
-        d: Long, today: Long, cards: List<BoardCard>, events: List<CalendarEvent>, calendar: LocalCalendar, work: WorkHours?,
+        d: Long, today: Long, nowMs: Long, cards: List<BoardCard>, events: List<CalendarEvent>, calendar: LocalCalendar, work: WorkHours?,
         toneOf: (CalendarEvent) -> Int,
     ): BoardDay {
         val w = CalendarAgenda.window(d, calendar)
@@ -231,12 +248,14 @@ object WeekBoardRules {
             if (done > 0) add("$done done")
         }
         val countLine = if (counts.isEmpty()) EMPTY_DAY else counts.joinToString(" · ")
+        val capacity = TaskEstimateRules.capacity(d, today, nowMs, ordered.filter { !it.done }.map { it.task }, events, calendar, work)
         val spoken = buildList {
             add(CivilDate.longLabel(d))
             if (d == today) add("today")
             place?.let { add(placeLabel(it).lowercase() + " day") }
             if (dayEvents.isNotEmpty()) add(plural(dayEvents.size, "event"))
             add(countLine.lowercase())
+            capacity?.let { add(it.spoken) }
         }.joinToString(", ")
         val ymd = CivilDate.fromEpochDay(d)
         return BoardDay(
@@ -252,6 +271,7 @@ object WeekBoardRules {
             cards = ordered,
             countLine = countLine,
             accessibilityLabel = spoken,
+            capacity = capacity,
         )
     }
 

@@ -3239,6 +3239,18 @@ final class CoreModel {
         run { _ = try await $0.addOnBoard(text: trimmed, day: day) }
     }
 
+    /// "How long?" on a Board card (Week board, slice 3): the estimate in minutes, or nil to clear it; the undo bar
+    /// says what was set ("“Book MOT” · about 30m") and Undo puts the old one back.
+    func setEstimateOnBoard(_ id: String, minutes: Int?) {
+        guard let core else { return }
+        let value = minutes.map { KotlinInt(int: Int32(clamping: $0)) }
+        Task {
+            guard let line = try? await core.setEstimate(taskId: id, minutes: value) else { return }
+            MekaHaptics.tick()
+            offerEventUndo(line, .estimate)
+        }
+    }
+
     /// The ring on a Board card: ticked off, with Undo.
     func completeOnBoard(_ id: String, title: String) {
         MekaHaptics.light()
@@ -3602,6 +3614,7 @@ final class CoreModel {
         case .appointmentCall(let call): run { _ = try await $0.undoAppointmentCall(call: call) }
         case .carried(let id): run { _ = try await $0.undoCarried(taskId: id) }
         case .boardMove: run { _ = try await $0.undoBoardMove() }
+        case .estimate: run { _ = try await $0.undoEstimate() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
@@ -6415,6 +6428,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case carried(String)
         /// A move on the Week board: the card and its day's order go back.
         case boardMove
+        /// "How long?" on a Board card: the estimate it had comes back.
+        case estimate
         /// The ring on a Board card: ticked back open.
         case reopen(String)
         /// Remove on a checklist item: it comes back with its tick and place.

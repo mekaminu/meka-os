@@ -1,7 +1,7 @@
 ---
 id: week-board
 title: Week board
-keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks
+keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned
 fold: none
 fold_where: Calendar → Board
 mac: none
@@ -12,3 +12,4 @@ how: Open Calendar and tap Board at the top. Long-press a card and drag it to an
 mac_how: Click Board at the top of Calendar. Drag a card onto another card to take its place, or onto a day's free space to go last. Click a card to select it, then ⌘← ⌘→ move it a day and ⌘↑ ⌘↓ a place; right-click for the same moves.
 tip: A card keeps its time when it moves to another day, and nothing can be moved into the past; Today's column holds tasks with no day, and ones carried over say so in gold.
 tip: Your order is kept for each day and synced between the Fold and the Mac. "+ Add" at the foot of a day adds a task there; the ring ticks one off, and done ones stay faded at the foot of the day you did them.
+tip: Tap a card (right-click on the Mac) and pick How long? — 15m, 30m, 1h or 2h; Navilife marks a guess from similar tasks as suggested, but nothing is set until you pick. Each day from today then shows "3h planned · 4h free" (free time is 09:00 to 21:00 less events, work and the commute) over a slim bar that turns amber when the day is over-planned.

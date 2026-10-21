@@ -1576,6 +1576,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(WeekBoardRules.shared.VIEW_AGENDA, "Agenda")
         XCTAssertEqual(WeekBoardRules.shared.placeLabel(p: BoardPlace.office), "Office")
         XCTAssertEqual(WeekBoardRules.shared.placeLabel(p: BoardPlace.away), "Away")
+        // Slice 3: estimates and capacity.
+        XCTAssertEqual(TaskEstimateRules.shared.label(minutes: 90), "1h 30m")
+        XCTAssertEqual(TaskEstimateRules.shared.MENU_TITLE, "How long?")
+        XCTAssertEqual(TaskEstimateRules.shared.choices(estimate: nil, suggested: KotlinInt(int: 30)).map(\.menuLabel), ["15m", "30m · suggested", "1h", "2h"])
+        XCTAssertEqual(BoardCapacity(plannedMin: 300, freeMin: 240, unsized: 0).line, "5h planned · 1h over")
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.

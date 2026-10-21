@@ -209,6 +209,19 @@ class Tasks(
         if (changes.isNotEmpty()) replica.commitLocal(EntityTypes.TASK, id, changes)
     }
 
+    /**
+     * Sets how long [id] is thought to take (Week board slice 3: one of [TaskEstimateRules.CHOICES] from a card's menu),
+     * or clears it with null. Returns the estimate it had before, for Undo.
+     */
+    fun setEstimate(id: String, minutes: Int?): Int? {
+        if (!TaskEstimateRules.valid(minutes)) throw ValidationException("Estimate must be between 1 minute and 24 hours")
+        val before = (get(id) ?: throw ValidationException("Task not found")).estimateMinutes
+        if (before != minutes) {
+            replica.commitLocal(EntityTypes.TASK, id, mapOf(TaskFields.ESTIMATE_MINUTES to (minutes?.fv() ?: FieldValue.Null)))
+        }
+        return before
+    }
+
     /** Completes a task. Completing an open occurrence of a repeating task also creates the next one. */
     fun complete(id: String) {
         requireExists(id)

@@ -50,6 +50,28 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun anEstimateSetOnACardCountsOnItsDaySyncsAndUndoes() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val id = fold.addOnBoard("Book MOT", today + 2)!!
+        assertEquals("“Book MOT” · about 30m", fold.setEstimate(id, 30))
+        val day = fold.weekBoard.value.day(today + 2)!!
+        assertEquals("30m", day.cards.single().estimate)
+        assertEquals(30, day.capacity!!.plannedMin)
+
+        fold.syncNow(); mac.syncNow()
+        assertEquals("30m", mac.weekBoard.value.day(today + 2)!!.cards.single().estimate)
+
+        assertEquals("“Book MOT” · about 1h", fold.setEstimate(id, 60))
+        assertTrue(fold.undoEstimate())
+        assertEquals("30m", fold.weekBoard.value.day(today + 2)!!.cards.single().estimate)
+        assertFalse(fold.undoEstimate())
+        assertEquals("“Book MOT” · no estimate", fold.setEstimate(id, null))
+        assertNull(fold.weekBoard.value.day(today + 2)!!.cards.single().estimate)
+    }
+
+    @Test
     fun theKeyboardNudgesAndQuickAddLandOnTheirDay() = runTest {
         val c = core("mac")
         c.tick()

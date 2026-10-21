@@ -755,10 +755,10 @@ internal object HelpIndex {
         HelpEntry(
             id = "week-board",
             title = "Week board",
-            keywords = listOf("week board", "board", "board view", "plan the week", "move a task to another day", "drag tasks", "reorder tasks", "kanban", "week view of tasks"),
+            keywords = listOf("week board", "board", "board view", "plan the week", "move a task to another day", "drag tasks", "reorder tasks", "kanban", "week view of tasks", "time estimate", "how long", "planned", "free time", "capacity", "over-planned"),
             what = "your tasks laid out a column per day, from this week's Monday for five weeks, with each day's events as faded chips above them and an Office, Home or Away marker under the date.",
             how = "Open Calendar and tap Board at the top. Long-press a card and drag it to another day, or up and down in its day; let go and it lands there, with Undo on the bar. Tap a card for Move up, Move down and the next days instead.",
-            tips = listOf("A card keeps its time when it moves to another day, and nothing can be moved into the past; Today's column holds tasks with no day, and ones carried over say so in gold.", "Your order is kept for each day and synced between the Fold and the Mac. \"+ Add\" at the foot of a day adds a task there; the ring ticks one off, and done ones stay faded at the foot of the day you did them."),
+            tips = listOf("A card keeps its time when it moves to another day, and nothing can be moved into the past; Today's column holds tasks with no day, and ones carried over say so in gold.", "Your order is kept for each day and synced between the Fold and the Mac. \"+ Add\" at the foot of a day adds a task there; the ring ticks one off, and done ones stay faded at the foot of the day you did them.", "Tap a card (right-click on the Mac) and pick How long? — 15m, 30m, 1h or 2h; Navilife marks a guess from similar tasks as suggested, but nothing is set until you pick. Each day from today then shows \"3h planned · 4h free\" (free time is 09:00 to 21:00 less events, work and the commute) over a slim bar that turns amber when the day is over-planned."),
             fold = null,
             foldWhere = "Calendar → Board",
             mac = null,
