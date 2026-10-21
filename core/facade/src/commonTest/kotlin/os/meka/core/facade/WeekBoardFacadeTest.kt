@@ -50,6 +50,34 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun tiredLightensTomorrowWithOneUndoAndTheFeelingStaysOnThisDevice() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val tomorrow = today + 1
+        val ids = listOf("Book MOT", "Fix the gate", "Order new bins").map { fold.addOnBoard(it, tomorrow)!! }
+        assertNull(fold.feelingToday())
+
+        val offer = fold.setFeeling(os.meka.core.domain.Feeling.TIRED)
+        assertEquals(2, offer.moves.size)
+        assertEquals("Lighten tomorrow", offer.lightenLabel)
+        assertEquals(os.meka.core.domain.Feeling.TIRED, fold.feelingToday())
+
+        val line = fold.lightenTomorrow(os.meka.core.domain.Feeling.TIRED)!!
+        assertTrue(line.startsWith("Tomorrow's lighter · "), line)
+        assertEquals(1, fold.weekBoard.value.day(tomorrow)!!.openCards.size)
+        fold.syncNow(); mac.syncNow()
+        assertEquals(1, mac.weekBoard.value.day(tomorrow)!!.openCards.size)
+        // Never synced: the Mac doesn't know how he felt.
+        assertNull(mac.feelingToday())
+
+        assertTrue(fold.undoLighten())
+        assertEquals(ids.toSet(), fold.weekBoard.value.day(tomorrow)!!.openCards.map { it.id }.toSet())
+        assertFalse(fold.undoLighten())
+        assertTrue(fold.setFeeling(os.meka.core.domain.Feeling.GOOD).moves.isEmpty())
+    }
+
+    @Test
     fun todayFollowsTheOrderSetOnTheBoardOnBothDevices() = runTest {
         val fold = core("android"); val mac = core("mac")
         val mot = fold.addTask("Book MOT")

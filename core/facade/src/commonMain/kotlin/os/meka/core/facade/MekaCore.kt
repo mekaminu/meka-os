@@ -2126,6 +2126,71 @@ class MekaCore(
         fix?.doneLine ?: line
     }
 
+    // ---- Week board, item (11): "How are you feeling?" ----
+
+    /** The Board as it is right now, built afresh from the replica (between the moves of one tap). */
+    private fun boardNow(): os.meka.core.domain.WeekBoard = os.meka.core.domain.WeekBoardRules.build(
+        tasks.all(), boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork, boardHidden, _calendar.value::toneOf,
+        goals = _goals.value.goals, weekGoals = _goals.value.week,
+        bills = os.meka.core.domain.PressureRules.bills(renewals.items()),
+    )
+
+    private fun feelingLog(): Map<Long, os.meka.core.domain.Feeling> = os.meka.core.domain.FeelingRules.decode(
+        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.FeelingRules.KEY) } }.getOrNull(),
+    )
+
+    /** How he said he feels today on this device (Shut down the day), or null. Kept on this device only, a week. */
+    suspend fun feelingToday(): os.meka.core.domain.Feeling? = onCore { feelingLog()[todayEpochDay()] }
+
+    /**
+     * Good · Tired · Stretched on Shut down the day ([os.meka.core.domain.FeelingRules]): kept for today on this device
+     * only (never synced, forgotten after a week), and returns what Navilife offers: for Tired, up to two of tomorrow's
+     * tasks to lighter days; for Stretched, that and one that could wait on Someday. Nothing moves until he taps.
+     */
+    suspend fun setFeeling(feeling: os.meka.core.domain.Feeling): os.meka.core.domain.FeelingOffer = onCore {
+        val today = todayEpochDay()
+        val log = os.meka.core.domain.FeelingRules.record(feelingLog(), today, feeling)
+        runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.FeelingRules.KEY, os.meka.core.domain.FeelingRules.encode(log)) } }
+        os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, today, ZoneCalendar(timeZone))
+    }
+
+    /** What Navilife offers for [feeling] now (the pane reopened), without keeping anything. */
+    suspend fun feelingOffer(feeling: os.meka.core.domain.Feeling): os.meka.core.domain.FeelingOffer = onCore {
+        os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, todayEpochDay(), ZoneCalendar(timeZone))
+    }
+
+    /**
+     * "Lighten tomorrow": the offer for [feeling], worked out afresh, each task to its lighter day (last in that day,
+     * keeping its time; its calendar block follows). Returns the undo bar's line ("Tomorrow's lighter · “Gym” to Sat"),
+     * or null when nothing moved; [undoLighten] puts every one back.
+     */
+    suspend fun lightenTomorrow(feeling: os.meka.core.domain.Feeling): String? = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val offer = os.meka.core.domain.FeelingRules.offer(boardNow(), feeling, today, cal)
+        val undos = mutableListOf<os.meka.core.domain.BoardUndo>()
+        val moved = mutableListOf<os.meka.core.domain.FeelingMove>()
+        for (m in offer.moves) {
+            val to = m.toDay ?: continue
+            val move = os.meka.core.domain.WeekBoardRules.move(boardNow(), m.taskId, to, Int.MAX_VALUE, today, cal) ?: continue
+            undos += tasks.placeOnBoard(move)
+            followBlocks(listOf(m.taskId))
+            moved += m
+        }
+        lightenUndo = undos
+        if (moved.isEmpty()) null else os.meka.core.domain.FeelingRules.lightenedLine(moved)
+    }
+
+    /** Undo after [lightenTomorrow]: each task back on tomorrow in its place. False when nothing to undo. */
+    suspend fun undoLighten(): Boolean = onCore {
+        val undos = lightenUndo
+        lightenUndo = emptyList()
+        if (undos.isEmpty()) return@onCore false
+        undos.asReversed().forEach { u -> if (tasks.undoBoard(u)) followBlocks(listOf(u.taskId)) }
+        true
+    }
+    private var lightenUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
+
     // ---- Week board, slice 4: the week's lane and the Someday tray ----
 
     /**
@@ -2189,6 +2254,7 @@ class MekaCore(
 
     /** The events and work hours the Board was last built with, so Block time offers the same free time it shows. */
     private var boardEvents: List<os.meka.core.domain.CalendarEvent> = emptyList()
+    private var boardHidden: Set<String> = emptySet()
     private var boardWork: os.meka.core.domain.WorkHours? = null
 
     private class BlockUndo(
@@ -10916,6 +10982,7 @@ class MekaCore(
         )
         boardEvents = marks.forCalendarTab(allEvents)
         boardWork = hoursOf(workState, todayEpochDay())
+        boardHidden = marks.hidden
         _board.value = os.meka.core.domain.WeekBoardRules.build(
             all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
             marks.hidden, _calendar.value::toneOf,

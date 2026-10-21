@@ -3266,6 +3266,46 @@ final class CoreModel {
         }
     }
 
+    // MARK: Week board, item (11): "How are you feeling?"
+
+    /// The Kotlin feeling for a name, made where it is used so no Kotlin value crosses isolation twice.
+    nonisolated static func feeling(_ name: String) -> Feeling {
+        switch name {
+        case "TIRED": return .tired
+        case "STRETCHED": return .stretched
+        default: return .good
+        }
+    }
+
+    /// How he said he feels today on this Mac ("TIRED"), or nil. Kept on this Mac only, for a week.
+    func feelingToday() async -> String? {
+        guard let core else { return nil }
+        return (try? await core.feelingToday())?.name
+    }
+
+    /// Good · Tired · Stretched picked: kept here, and what Navilife offers (nothing moves until his click).
+    func setFeeling(_ name: String) async -> FeelingOffer? {
+        guard let core else { return nil }
+        MekaHaptics.tick()
+        return try? await core.setFeeling(feeling: Self.feeling(name))
+    }
+
+    /// The offer for a feeling picked earlier today (the sheet reopened), keeping nothing.
+    func feelingOffer(_ name: String) async -> FeelingOffer? {
+        guard let core else { return nil }
+        return try? await core.feelingOffer(feeling: Self.feeling(name))
+    }
+
+    /// Lighten tomorrow: two of tomorrow's tasks to lighter days, one Undo for both.
+    func lightenTomorrow(_ name: String) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.lightenTomorrow(feeling: Self.feeling(name)) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .lighten)
+        }
+    }
+
     /// "+ Add" at the foot of a Board column: a task on that day, last in its order.
     func addOnBoard(_ text: String, day: Int64) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3733,6 +3773,7 @@ final class CoreModel {
         case .block: run { _ = try await $0.undoBlock() }
         case .goalTag: run { _ = try await $0.undoTagOnBoard() }
         case .boardGoal: run { _ = try await $0.undoBoardGoal() }
+        case .lighten: run { _ = try await $0.undoLighten() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
@@ -6554,6 +6595,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case goalTag
         /// A goal picked, typed or taken off a week on the Board (slice 7): taken back.
         case boardGoal
+        /// Lighten tomorrow (Week board, item (11)): every task it moved goes back to tomorrow.
+        case lighten
         /// The ring on a Board card: ticked back open.
         case reopen(String)
         /// Remove on a checklist item: it comes back with its tick and place.

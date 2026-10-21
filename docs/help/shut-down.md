@@ -1,7 +1,7 @@
 ---
 id: shut-down
 title: Shut down the day
-keywords: shut down the day, shut down, shutdown, done for the day, end of day, wake alarm
+keywords: shut down the day, shut down, shutdown, done for the day, end of day, wake alarm, how are you feeling, tired, stretched, lighten tomorrow
 fold: SHUTDOWN
 fold_where: Ask → Daily → Shut down the day
 mac: SHUTDOWN
@@ -14,3 +14,4 @@ tip: On the Fold it can end with a photo from this date in past years (On this d
 tip: Before an office day, Tomorrow names your first train and when to leave for it ("First train · the 07:42 · leave by 07:32"), from the train you caught on recent mornings, with how it has run. It needs Home station and Time to the train in About you.
 tip: Not ready yet? Later on the card (or its heads-up) puts it off an hour, never past 23:00. Turn off at the foot of the pane stops the evening card and its heads-up for good (the pane still opens from Ask → Daily); on annual leave days it doesn't come unless you open it.
 tip: Say "shut down the day" to Talk to open it. On the Galaxy Watch the evening shows "6 done · 2 left for tomorrow" with Shut down and Later.
+tip: How are you feeling? Pick Good, Tired or Stretched. Tired offers to lighten tomorrow, moving up to two of its tasks (evening ones first) to lighter days; Stretched also names one that could wait on Someday. Nothing moves until you tap, with Undo, and how you felt stays on that device only, for a week.

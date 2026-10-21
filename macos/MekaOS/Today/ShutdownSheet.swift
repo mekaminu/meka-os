@@ -50,6 +50,9 @@ struct ShutdownSheet: View {
                                 .staggeredAppear(1)
                         }
 
+                        // Week board, item (11): how he feels; Tired or Stretched offers to lighten tomorrow.
+                        FeelingSection(palette: palette).padding(.top, MekaSpace.l).staggeredAppear(2)
+
                         SectionLabel(v.tomorrow.label, palette).padding(.top, MekaSpace.l).staggeredAppear(2)
                         // Done for the day: tomorrow's first commitment.
                         if let first = v.firstLine {
@@ -323,5 +326,71 @@ struct DailyReceiptView: View {
             .animation(MekaMotion.appear(reduced: reduceMotion), value: receipt.line + receipt.detail)
         }
         .buttonStyle(MekaPressStyle())
+    }
+}
+
+/// "How are you feeling?" (Week board, item (11)): Good · Tired · Stretched, kept on this Mac only for a week. Tired and
+/// Stretched offer to lighten tomorrow (two tasks to lighter days, one Undo on the bar) and Stretched names one that
+/// could wait on Someday. Motion: the picked chip's fill cross-fades to the accent; the offer slides in under the chips
+/// and goes once a click acts on it (Reduce Motion: fades only).
+struct FeelingSection: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let palette: MekaPalette
+    @State private var picked: String?
+    @State private var offer: FeelingOffer?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            SectionLabel(FeelingRules.shared.QUESTION, palette)
+            HStack(spacing: MekaSpace.xs) {
+                ForEach(FeelingRules.shared.CHOICES, id: \.name) { f in
+                    let name = f.name
+                    chip(f.label, selected: picked == name) {
+                        picked = name
+                        Task { let o = await model.setFeeling(name); withAnimation(MekaMotion.appear(reduced: reduceMotion)) { offer = o } }
+                    }
+                }
+            }
+            if let o = offer {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(o.line).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    Text(FeelingRules.shared.pickedLine(f: o.feeling)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    HStack(spacing: MekaSpace.xs) {
+                        if let label = o.lightenLabel, let name = picked {
+                            chip(label, selected: true) { model.lightenTomorrow(name); close() }
+                        }
+                        if let drop = o.drop, let label = o.dropLabel {
+                            let id = drop.taskId
+                            chip(label, selected: false) { model.somedayOnBoard(id); close() }
+                        }
+                        if o.lightenLabel != nil || o.drop != nil {
+                            chip(FeelingRules.shared.LEAVE, selected: false) { close() }
+                        }
+                    }
+                    .padding(.top, MekaSpace.xxs)
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .task {
+            guard let name = await model.feelingToday() else { return }
+            picked = name
+            offer = await model.feelingOffer(name)
+        }
+    }
+
+    private func close() { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { offer = nil } }
+
+    private func chip(_ label: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label).font(MekaType.caption)
+                .foregroundStyle(selected ? palette.onAccent : palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
+                .background(Capsule().fill(selected ? palette.accent : palette.surfaceRaised))
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: selected)
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(selected ? "\(label), selected" : label)
     }
 }

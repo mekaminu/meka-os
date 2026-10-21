@@ -2,6 +2,9 @@ package os.meka.android.today
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -28,6 +31,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,6 +59,9 @@ import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.DailyReceipt
 import os.meka.core.domain.DoneRow
+import os.meka.core.domain.Feeling
+import os.meka.core.domain.FeelingOffer
+import os.meka.core.domain.FeelingRules
 import os.meka.core.domain.ShutdownItem
 import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.ShutdownView
@@ -142,6 +149,11 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
                     haptics.tick(); act { core.carryAllToTomorrow() }
                 }
             }
+        }
+
+        // Week board, item (11): how he feels; Tired or Stretched offers to lighten tomorrow (his tap, with Undo).
+        item(key = "feeling") {
+            FeelingSection(core, Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(2)))
         }
 
         item(key = "h-tomorrow") {
@@ -404,4 +416,111 @@ internal fun DailyReceiptLine(r: DailyReceipt, onOpen: () -> Unit, modifier: Mod
         }
         Text("Activity ›", style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.padding(start = MekaSpace.xs))
     }
+}
+
+/**
+ * "How are you feeling?" (Week board, item (11)): Good · Tired · Stretched, kept on this phone only for a week. Tired
+ * and Stretched offer to lighten tomorrow (two tasks to lighter days, one Undo) and Stretched names one that could wait
+ * on Someday. Motion: the picked chip's fill cross-fades to the accent; the offer unfolds under the chips (reduced
+ * motion: fades only); what a tap did replaces it with Undo.
+ */
+@Composable
+private fun FeelingSection(core: MekaCore, modifier: Modifier) {
+    val scope = rememberCoroutineScope()
+    val haptics = rememberMekaHaptics()
+    val reduced = Meka.reducedMotion
+    var picked by remember { mutableStateOf<Feeling?>(null) }
+    var offer by remember { mutableStateOf<FeelingOffer?>(null) }
+    var did by remember { mutableStateOf<String?>(null) }
+    var undo by remember { mutableStateOf<(suspend () -> Unit)?>(null) }
+    LaunchedEffect(Unit) {
+        val f = runCatching { core.feelingToday() }.getOrNull() ?: return@LaunchedEffect
+        picked = f
+        offer = runCatching { core.feelingOffer(f) }.getOrNull()
+    }
+    Column(modifier.fillMaxWidth()) {
+        SectionLabel(FeelingRules.QUESTION)
+        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), modifier = Modifier.padding(top = MekaSpace.xxs)) {
+            FeelingRules.CHOICES.forEach { f ->
+                FeelingChip(f.label, selected = picked == f) {
+                    haptics.tick()
+                    picked = f; did = null; undo = null
+                    scope.launch { offer = runCatching { core.setFeeling(f) }.getOrNull() }
+                }
+            }
+        }
+        AnimatedVisibility(
+            visible = offer != null && did == null,
+            enter = if (reduced) fadeIn(MekaMotion.appear(true)) else fadeIn(MekaMotion.appear(false)) + expandVertically(),
+            exit = if (reduced) fadeOut(MekaMotion.appear(true)) else fadeOut(MekaMotion.appear(false)) + shrinkVertically(),
+        ) {
+            val o = offer
+            if (o != null) Column(Modifier.padding(top = MekaSpace.xs)) {
+                Text(o.line, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                Text(FeelingRules.pickedLine(o.feeling), style = MekaType.caption, color = Meka.colors.textTertiary)
+                Row(
+                    Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    o.lightenLabel?.let { label ->
+                        FeelingChip(label, selected = true) {
+                            haptics.light()
+                            scope.launch {
+                                val line = runCatching { core.lightenTomorrow(o.feeling) }.getOrNull() ?: return@launch
+                                did = line; undo = { core.undoLighten() }
+                            }
+                        }
+                    }
+                    val drop = o.drop
+                    if (drop != null) o.dropLabel?.let { label ->
+                        ShutdownChip(label) {
+                            haptics.tick()
+                            scope.launch {
+                                val line = runCatching { core.somedayOnBoard(drop.taskId) }.getOrNull() ?: return@launch
+                                did = line; undo = { core.undoBoardMove() }
+                            }
+                        }
+                    }
+                    if (o.lightenLabel != null || o.drop != null) ShutdownChip(FeelingRules.LEAVE) { offer = null }
+                }
+            }
+        }
+        AnimatedContent(
+            targetState = did,
+            transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
+            label = "feeling-did",
+        ) { line ->
+            if (line != null) Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                undo?.let { u ->
+                    Text(
+                        "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
+                            .clickable(role = Role.Button) {
+                                haptics.tick()
+                                scope.launch {
+                                    runCatching { u() }
+                                    did = null; undo = null
+                                    picked?.let { f -> offer = runCatching { core.feelingOffer(f) }.getOrNull() }
+                                }
+                            }.minTouch().padding(horizontal = MekaSpace.xs),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** A Good · Tired · Stretched chip: the picked one filled in the accent (its fill cross-fades). */
+@Composable
+private fun FeelingChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val fill by animateColorAsState(if (selected) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "feeling-fill")
+    val ink by animateColorAsState(if (selected) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.appear(reduced), label = "feeling-ink")
+    Text(
+        label, style = MekaType.caption, color = ink, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+            .clickable(role = Role.Button) { onClick() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .semantics { contentDescription = if (selected) "$label, selected" else label },
+    )
 }

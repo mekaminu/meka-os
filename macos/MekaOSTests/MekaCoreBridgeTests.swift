@@ -1611,6 +1611,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(PressureRules.shared.dayName(d: 11, today: 10, evening: false), "Tomorrow")
         let fix = PressureFix(taskId: "t", title: "Gym", toDay: 12, label: "Move “Gym” to Sat", earlier: false)
         XCTAssertEqual(fix.doneLine, "Moved “Gym” to Sat")
+        // Item (11): "How are you feeling?" words and the offer reach Swift.
+        XCTAssertEqual(FeelingRules.shared.QUESTION, "How are you feeling?")
+        XCTAssertEqual(FeelingRules.shared.CHOICES.map { $0.label }, ["Good", "Tired", "Stretched"])
+        XCTAssertEqual(FeelingRules.shared.pickedLine(f: .tired), "Tired · kept on this device for a week")
+        let move = FeelingMove(taskId: "t", title: "Gym", toDay: KotlinLong(value: 12), dayLabel: "Sat")
+        XCTAssertEqual(FeelingRules.shared.lightenedLine(moves: [move]), "Tomorrow's lighter · “Gym” to Sat")
+        XCTAssertEqual(FeelingOffer(feeling: .tired, line: "x", moves: [move], drop: nil).lightenLabel, "Lighten tomorrow")
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.
