@@ -2396,7 +2396,7 @@ final class CoreModel {
     /// One piece of MEKA's own words said in MEKA's voice (Amazon Polly through MEKA's server; only these words are
     /// sent), as MP3 data, or nil when the Mac's own voice should say it (chosen, offline, off, over the month, slow).
     /// A long `reading` (the morning brief) waits longer for its first piece (`SpeechRules.firstWaitMs`).
-    /// A `hold` piece may take up to `SpeechRules.HOLD_AUDIO_MS` longer while "One moment…" plays (`SpeechRules.holds`).
+    /// A `hold` piece may take up to `SpeechRules.HOLD_AUDIO_MS` longer, quietly (`SpeechRules.holds`).
     func speechClip(_ text: String, first: Bool, reading: Bool = false, hold: Bool = false) async -> Data? {
         guard let core else { return nil }
         guard let clip = try? await core.speechClip(text: text, first: first, reading: reading, hold: hold) else { return nil }
@@ -2408,21 +2408,6 @@ final class CoreModel {
     func speechOfflineNote() async -> String? {
         guard let core else { return nil }
         return try? await core.speechOfflineNote(mac: true)
-    }
-
-    /// "One moment…" in MEKA's voice, only when already fetched with the common lines (never asks the server).
-    func speechHoldClip() async -> Data? {
-        guard let core else { return nil }
-        guard let clip = try? await core.speechHoldClip() else { return nil }
-        return Data(base64Encoded: clip)
-    }
-
-    /// The orb speed pass, slice 4: the next holding line ("One sec, Meka…") in Navilife's voice, only when it is already
-    /// on the Mac (made ahead with the hello's openers); nil otherwise. Never asks the server. Only the String crosses.
-    func answerHoldClip() async -> Data? {
-        guard let core else { return nil }
-        guard let clip = try? await core.answerHoldClip() else { return nil }
-        return Data(base64Encoded: clip)
     }
 
     /// MEKA's voice isn't to be asked right now (not connected, the Mac's own voice chosen, or the server refused a

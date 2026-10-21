@@ -88,44 +88,22 @@ class MekaSpeaker(
      * never when it was stopped or replaced. A long [reading] (the morning brief) waits longer for its first piece
      * ([SpeechRules.firstWaitMs]) and, when one piece is late, lets the phone say only that piece before MEKA's voice
      * carries on ([SpeechRules.onMiss]). In a conversation where MEKA's voice has been heard ([SpeechRules.holds]) a
-     * late piece never switches voice at once: MEKA says "One moment…" in its own voice (from memory) and waits up to
-     * [SpeechRules.HOLD_AUDIO_MS] more before the phone's voice takes over.
+     * late piece never switches voice at once: it waits quietly up to [SpeechRules.HOLD_AUDIO_MS] more before the
+     * phone's voice takes over (no holding line: talking to Ada like a conversation, slice 1).
      */
     fun say(text: String, reading: Boolean = false, onDone: () -> Unit = {}) {
-        // The orb speed pass, slice 4: a holding line still being said ("One sec, Meka…") is let finish first.
-        val holding = holdJob?.takeIf { it.isActive }
-        holdJob = null
-        if (holding == null) stop() else { line++; job = null }
+        stop()
         // The picker may have changed the phone's voice since this speaker started (prefs are read from memory).
         DeviceVoiceStore.load(context).let { if (it != settings) useDeviceVoice(it) }
         val id = ++line
         speaking = true
         job = scope.launch {
-            try {
-                holding?.join()
-            } catch (e: CancellationException) {
-                holding?.cancel()
-                throw e
-            }
             speakNow(text, reading)
             if (id == line) {
                 speaking = false
                 onDone()
             }
         }
-    }
-
-    /** The holding line being said while an answer is on its way ([holdOn]); the next [say] waits for its end. */
-    private var holdJob: Job? = null
-
-    /**
-     * The orb speed pass, slice 4: plays the holding line's [clip] ("One sec, Meka…", Navilife's voice from memory)
-     * while the answer is on its way; the answer's [say] follows once it is over, never cutting it short. [stop] ends
-     * it at once.
-     */
-    fun holdOn(clip: String) {
-        stop()
-        holdJob = scope.launch { play(clip) }.also { job = it }
     }
 
     /**
@@ -195,7 +173,6 @@ class MekaSpeaker(
         val ahead = SpeechRules.ahead(reading)
         val queue = ArrayDeque<Pending>()
         var asked = 0
-        var held = false
 
         suspend fun fetch(k: Int): Pending {
             val p = pieces[k]
@@ -208,17 +185,12 @@ class MekaSpeaker(
             while (asked < pieces.size && queue.size < ahead) queue.addLast(fetch(asked++))
         }
 
-        // A piece that may hold: its usual wait, then "One moment…" (once a line) and the rest of its budget.
+        // A piece that may hold: its usual wait, then quietly the rest of its budget (no holding line).
         suspend fun clipOf(p: Pending): String? {
             if (!p.hold) return p.clip.await()
             val left = SpeechRules.waitMs(p.first, reading) - (SystemClock.elapsedRealtime() - p.startedAt)
             val inTime = if (left > 0) withTimeoutOrNull(left) { p.clip.await() } else null
-            if (inTime != null || p.clip.isCompleted) return inTime ?: p.clip.await()
-            if (!held) {
-                held = true
-                core.speechHoldClip()?.let { play(it) }
-            }
-            return p.clip.await()
+            return inTime ?: p.clip.await()
         }
 
         var i = 0
@@ -353,8 +325,6 @@ class MekaSpeaker(
     /** Stops whatever is being said, in either voice. */
     fun stop() {
         line++
-        holdJob?.cancel()
-        holdJob = null
         job?.cancel()
         job = null
         player?.let { releasePlayer(it) }

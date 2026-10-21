@@ -246,22 +246,17 @@ class SpeechFacadeTest {
     }
 
     @Test
-    fun aHoldingPieceWaitsLongerAndTheHoldLinePlaysFromMemoryOnly() = runTest {
+    fun aHoldingPieceWaitsLongerAndQuietly() = runTest {
         val c = core()
-        // Not fetched yet: no hold clip, and asking for it never reaches the server.
-        assertNull(c.speechHoldClip())
-        assertTrue(server.said.isEmpty())
         c.warmVoice()
-        assertEquals("bXAz" + os.meka.core.domain.SpeechRules.HOLD_LINE.length, c.speechHoldClip())
+        // Talking to Ada like a conversation, slice 1: no "One moment…" is made ahead any more.
+        assertTrue(server.said.none { it.startsWith("One moment") })
         val asked = server.said.size
         // 7 s to answer: too slow without a hold (4 s), in time with one (4 s + 6 s).
         server.slowMs = 7_000
         assertNull(c.speechClip("Your dentist moved to Friday.", first = true, reading = false, hold = false))
         assertEquals("bXAz" + "Your dentist moved to Friday.".length, c.speechClip("Your dentist moved to Friday.", first = true, reading = false, hold = true))
         assertEquals(asked + 2, server.said.size)
-        // The device's own voice chosen: no hold clip either.
-        assertTrue(c.chooseMekaVoice("device"))
-        assertNull(c.speechHoldClip())
     }
 
     @Test

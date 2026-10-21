@@ -75,17 +75,17 @@ object SpeechRules {
     const val READ_PIECE = 200
 
     /**
-     * What MEKA says, in its own (cached) voice, when a piece is late in a conversation where its voice has already
-     * been heard, instead of switching to the device's voice mid-conversation (Meka, 2026-10-09: "never switch voice").
+     * When a piece is late in a conversation where Ada's voice has already been heard, the device keeps waiting up to
+     * this much longer for it, quietly (the orb still shows her speaking), instead of switching to the device's voice
+     * mid-conversation (Meka, 2026-10-09: "never switch voice"). Nothing is said meanwhile: talking to Ada like a
+     * conversation, slice 1 (2026-10-21) dropped the old "One moment…" holding line.
      */
-    const val HOLD_LINE = "One moment…"
-    /** After [HOLD_LINE] the device keeps waiting up to this much longer for the late piece before its own voice speaks. */
     const val HOLD_AUDIO_MS = 6_000L
     /** MEKA's voice heard within this counts as the same conversation (a holding pause, not a new start). */
     const val CONVERSATION_GAP_MS = 120_000L
 
     /**
-     * Whether a piece of a conversation's line may hold ([HOLD_LINE], then up to [HOLD_AUDIO_MS] more) when late: never
+     * Whether a piece of a conversation's line may hold (wait quietly up to [HOLD_AUDIO_MS] more) when late: never
      * in a long [reading] (the brief has [onMiss]'s piece-by-piece fallback), never while the server is [resting] (it
      * refused: waiting won't help), and only once MEKA's voice was heard in this conversation — at [lastMekaVoiceMs],
      * within [CONVERSATION_GAP_MS] of [nowMs] — so the first answer of a conversation still falls back after its wait.
@@ -172,7 +172,7 @@ object SpeechRules {
     const val FAILED_QUIET_MS = 60_000L
 
     /** Lines MEKA says often, fetched once when a conversation starts so they play at once. */
-    val COMMON: List<String> = listOf(HOLD_LINE, TalkRules.ANYTHING_ELSE, TalkRules.LEFT_IT, TalkRules.NOT_HEARD_CARD)
+    val COMMON: List<String> = listOf(TalkRules.ANYTHING_ELSE, TalkRules.LEFT_IT, TalkRules.NOT_HEARD_CARD)
 
     /**
      * [text] in the pieces it is spoken in: the first sentence alone (so the first audio comes quickly), then the rest

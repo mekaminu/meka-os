@@ -2645,3 +2645,12 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - The Board card's one gesture (tap → menu; held still `BoardHandRules.HOLD_MS` → lift and follow the finger; moving past the touch slop first → left to the board's scroll) moved out of `BoardCardRow` into `internal fun Modifier.boardCardHold(key, onTap, onLift, onMove, onDrop, onCancel)` in WeekBoardView.kt, unchanged in behaviour, so it can be tested on its own.
 - `BoardCardHoldTest` (androidTest, 4; CI compiles it, runs on the Fold or an emulator): a card inside a sideways-scrolling row, held still then dragged sideways, lifts once, follows the finger, drops, and the row's scroll stays at 0; held then dragged down and up, the moves add up (up and down within a day); a quick swipe scrolls the row and lifts nothing; a short press is a tap, not a lift.
 - Not in this slice: the board's screenshot test, which comes with the quality gate's Roborazzi set-up. No server change, no migration, no Mac change.
+
+## Talking to Ada like a conversation (Take first, Meka 2026-10-21 20:32)
+
+### Slice 1 (2026-10-21): no holding lines, only the orb and one late soft tone
+- `AnswerWaitRules` (core): the holding lines ("One sec, Meka…", "Bear with me…", …), their turn-taking and `HOLD_AFTER_MS` are gone; `SPEAKS_WHILE_WAITING = false`; the soft tone now waits `CUE_AFTER_MS = 2_500` (was a tick at 0.3 s), once per question, nothing once the answer has begun.
+- The mid-answer "One moment…" is gone too: `SpeechRules.HOLD_LINE` removed and out of `COMMON`; a late piece in a conversation still waits up to `HOLD_AUDIO_MS` more before the device's voice takes over, but quietly.
+- Facade: `answerHoldClip` and `speechHoldClip` removed; `warmHello` no longer makes holding lines (fewer voice requests).
+- Fold: `TalkController.waitCue` plays `TalkAutoListen.thinkingTone()` (a 0.6 s low two-partial sine that swells and fades, very quiet, sonification stream) instead of the tick and the line; `MekaSpeaker.holdOn`/`holdJob` removed. Mac: the same in `TalkController.waitCue` (`thinkingTone`: Purr at 0.1), `MekaSpeaker.holdOn`/`holdTask` removed, `CoreModel.answerHoldClip`/`speechHoldClip` removed.
+- The speed log's trace is unchanged. Help tip and motion row rewritten. Tests: AnswerWaitTest (3), AnswerHoldFacadeTest (the hello makes no holding line), SpeechFacadeTest (the quiet hold), SpeechTest, MekaCoreBridgeTests. No server change, no migration. Mac checked nightly.

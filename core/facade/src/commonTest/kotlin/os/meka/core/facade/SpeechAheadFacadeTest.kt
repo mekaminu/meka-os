@@ -127,7 +127,7 @@ class SpeechAheadFacadeTest {
     }
 }
 
-/** The orb speed pass, slice 4: the holding line on a slow answer is played from memory, never asked for then. */
+/** Talking to Ada like a conversation, slice 1: the hello made ahead no longer makes any holding line. */
 class AnswerHoldFacadeTest {
     private val now = 1_791_476_100_000L
 
@@ -151,30 +151,12 @@ class AnswerHoldFacadeTest {
     )
 
     @Test
-    fun nothingIsSaidBeforeTheLinesAreMade() = runTest {
-        val c = core()
-        assertEquals(null, c.answerHoldClip())
-        assertTrue(server.said.isEmpty())
-    }
-
-    @Test
-    fun theHoldingLinesAreMadeWithTheHelloAndTakeTurns() = runTest {
+    fun theHelloNoLongerMakesHoldingLines() = runTest {
         val c = core()
         c.warmHello()
-        assertTrue("One sec…" in server.said)
-        val asked = server.said.size
-        val first = c.answerHoldClip()
-        val second = c.answerHoldClip()
-        assertEquals("clip:One sec…", first)
-        assertEquals("clip:Bear with me…", second)
-        assertEquals(asked, server.said.size)
-    }
-
-    @Test
-    fun nothingWithTheDevicesOwnVoice() = runTest {
-        val c = core()
-        c.warmHello()
-        assertTrue(c.chooseMekaVoice("device"))
-        assertEquals(null, c.answerHoldClip())
+        assertTrue(server.said.isNotEmpty())
+        for (line in listOf("One sec", "Bear with me", "Just a moment", "Let me see")) {
+            assertTrue(server.said.none { it.startsWith(line) }, "made ahead: ${server.said}")
+        }
     }
 }

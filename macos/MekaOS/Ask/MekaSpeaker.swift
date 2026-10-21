@@ -44,45 +44,21 @@ final class MekaSpeaker {
     /// voice), never when it was cut short by `stop()` or another line. A long `reading` (the morning brief) waits
     /// longer for its first piece and, when one piece is late, lets the Mac say only that piece before MEKA's voice
     /// carries on (`SpeechRules.onMiss`). In a conversation where MEKA's voice has been heard (`SpeechRules.holds`) a
-    /// late piece never switches voice at once: MEKA says "One moment…" in its own voice (from memory) and waits up to
-    /// `SpeechRules.HOLD_AUDIO_MS` more before the Mac's voice takes over.
+    /// late piece never switches voice at once: it waits quietly up to `SpeechRules.HOLD_AUDIO_MS` more before the
+    /// Mac's voice takes over (no holding line: talking to Ada like a conversation, slice 1).
     func say(_ text: String, reading: Bool = false, done: (@MainActor @Sendable () -> Void)? = nil) {
-        // The orb speed pass, slice 4: a holding line still being said ("One sec, Meka…") is let finish first.
-        let holding = holdTask
-        holdTask = nil
-        if holding == nil { stop() } else { task = nil }
+        stop()
         line += 1
         let id = line
         speaking = true
         loadDeviceVoice()
         task = Task { [weak self] in
-            await withTaskCancellationHandler {
-                await holding?.value
-            } onCancel: {
-                holding?.cancel()
-            }
             guard let self, !Task.isCancelled else { return }
             await self.speakNow(text, reading: reading)
             guard !Task.isCancelled, id == self.line else { return }
             self.speaking = false
             done?()
         }
-    }
-
-    /// The holding line being said while an answer is on its way (`holdOn`); the next `say` waits for its end.
-    @ObservationIgnored private var holdTask: Task<Void, Never>?
-
-    /// The orb speed pass, slice 4: plays the holding line's `clip` ("One sec, Meka…", Navilife's voice from memory)
-    /// while the answer is on its way; the answer's `say` follows once it is over, never cutting it short. `stop()`
-    /// ends it at once.
-    func holdOn(_ clip: Data) {
-        stop()
-        let t = Task { [weak self] in
-            guard let self else { return }
-            _ = await self.play(clip)
-        }
-        holdTask = t
-        task = t
     }
 
     /// The companion, slice 9: says `text` once whatever is being said now is over (the answer's early first
@@ -153,7 +129,6 @@ final class MekaSpeaker {
         var queue: [Pending] = []
         var asked = 0
         do {
-            var held = false
             var i = 0
             while asked < pieces.count && queue.count < ahead {
                 if let p = await self.fetch(pieces, asked, reading: reading) { queue.append(p) }
@@ -165,11 +140,7 @@ final class MekaSpeaker {
                     let p = queue.removeFirst()
                     clip = await self.clipOf(p, reading: reading)
                     if clip == nil && p.hold && !p.box.done && !Task.isCancelled {
-                        // Late: "One moment…" in MEKA's voice (once a line), then the rest of the piece's budget.
-                        if !held {
-                            held = true
-                            if let line = await self.model?.speechHoldClip() { _ = await self.play(line) }
-                        }
+                        // Late: quietly the rest of the piece's budget (no holding line).
                         clip = await p.clip.value
                     }
                 }
@@ -285,8 +256,6 @@ final class MekaSpeaker {
     /// Stops whatever is being said, in either voice.
     func stop() {
         line += 1
-        holdTask?.cancel()
-        holdTask = nil
         task?.cancel()
         task = nil
         player?.stop()

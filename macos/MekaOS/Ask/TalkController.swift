@@ -413,15 +413,15 @@ final class TalkController {
         }
     }
 
-    /// The tick and holding line of the question being answered now (`waitCue`).
+    /// The soft tone of the question being answered now (`waitCue`).
     @ObservationIgnored private var waitTask: Task<Void, Never>?
-    /// The soft thinking tick (kept while it plays).
+    /// The soft thinking tone (kept while it plays).
     @ObservationIgnored private var tickSound: NSSound?
 
-    /// The orb speed pass, slice 4: while the answer to conversation `gen`'s question is on its way (the orb already
-    /// shows Thinking), a soft tick after `AnswerWaitRules.CUE_AFTER_MS` and, still nothing after
-    /// `AnswerWaitRules.HOLD_AFTER_MS`, a holding line in Navilife's voice from memory ("One sec, Meka…"), which the
-    /// answer then follows. Nothing once the answer has begun. Only Data crosses from the core.
+    /// Talking to Ada like a conversation, slice 1: while the answer to conversation `gen`'s question is on its way the
+    /// orb shows Thinking, and only past `AnswerWaitRules.CUE_AFTER_MS` with nothing started does one soft,
+    /// breath-like tone play. Ada never says a holding line ("One sec, Meka…" is gone). Nothing once the answer has
+    /// begun.
     private func waitCue(_ gen: Int) {
         waitTask?.cancel()
         let sent = ContinuousClock.now
@@ -429,11 +429,7 @@ final class TalkController {
             func waited() -> Int64 { Int64((ContinuousClock.now - sent) / .milliseconds(1)) }
             try? await Task.sleep(for: .milliseconds(AnswerWaitRules.shared.CUE_AFTER_MS))
             guard let self, !Task.isCancelled, AnswerWaitRules.shared.cues(waitingMs: waited(), answerStarted: self.answerStarted(gen)) else { return }
-            self.thinkingTick()
-            try? await Task.sleep(for: .milliseconds(AnswerWaitRules.shared.HOLD_AFTER_MS - AnswerWaitRules.shared.CUE_AFTER_MS))
-            guard !Task.isCancelled, AnswerWaitRules.shared.holds(waitingMs: waited(), answerStarted: self.answerStarted(gen), held: false) else { return }
-            guard let clip = await self.model?.answerHoldClip(), !Task.isCancelled, !self.answerStarted(gen) else { return }
-            self.speaker.holdOn(clip)
+            self.thinkingTone()
         }
     }
 
@@ -442,10 +438,10 @@ final class TalkController {
         gen != generation || phase != .thinking || session.early != nil
     }
 
-    /// The soft thinking tick: the system's Tink, quieter than the listening chime.
-    private func thinkingTick() {
-        let sound = NSSound(named: NSSound.Name("Tink"))
-        sound?.volume = 0.12
+    /// The one soft, breath-like tone on a slow answer: the system's Purr, very quiet, never a word.
+    private func thinkingTone() {
+        let sound = NSSound(named: NSSound.Name("Purr"))
+        sound?.volume = 0.1
         sound?.play()
         tickSound = sound
     }

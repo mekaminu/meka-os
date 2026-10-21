@@ -425,7 +425,7 @@ class TalkController(
         }
     }
 
-    /** The tick and holding line of the question being answered now ([waitCue]). */
+    /** The soft tone of the question being answered now ([waitCue]). */
     private var waitJob: kotlinx.coroutines.Job? = null
 
     /**
@@ -483,10 +483,10 @@ class TalkController(
     }
 
     /**
-     * The orb speed pass, slice 4: while the answer to the question of conversation [gen] is on its way (the orb already
-     * shows Thinking), a soft tick after [os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS] and, still nothing after
-     * [os.meka.core.domain.AnswerWaitRules.HOLD_AFTER_MS], a holding line in Navilife's voice from memory
-     * ([MekaCore.answerHoldClip]: "One sec, Meka…"), which the answer then follows. Nothing once the answer has begun.
+     * Talking to Ada like a conversation, slice 1: while the answer to the question of conversation [gen] is on its way
+     * the orb shows Thinking, and only past [os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS] with nothing started does
+     * one soft breath-like tone play. Ada never says a holding line ("One sec, Meka…" is gone). Nothing once the answer
+     * has begun.
      */
     private fun waitCue(gen: Int) {
         waitJob?.cancel()
@@ -495,11 +495,7 @@ class TalkController(
         waitJob = scope.launch {
             delay(os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS)
             if (!os.meka.core.domain.AnswerWaitRules.cues(android.os.SystemClock.elapsedRealtime() - sent, started())) return@launch
-            TalkAutoListen.thinkingTick()
-            delay(os.meka.core.domain.AnswerWaitRules.HOLD_AFTER_MS - os.meka.core.domain.AnswerWaitRules.CUE_AFTER_MS)
-            if (!os.meka.core.domain.AnswerWaitRules.holds(android.os.SystemClock.elapsedRealtime() - sent, started(), held = false)) return@launch
-            val clip = core.answerHoldClip() ?: return@launch
-            if (!started()) speaker.holdOn(clip)
+            TalkAutoListen.thinkingTone()
         }
     }
 

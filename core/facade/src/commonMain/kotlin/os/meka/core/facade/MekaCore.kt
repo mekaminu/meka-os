@@ -9640,8 +9640,7 @@ class MekaCore(
 
     /**
      * [speechClip] that may [hold]: the request runs up to [os.meka.core.domain.SpeechRules.HOLD_AUDIO_MS] past its
-     * usual wait ([os.meka.core.domain.SpeechRules.budgetMs]), while the device says
-     * [os.meka.core.domain.SpeechRules.HOLD_LINE] ([speechHoldClip]) once the usual wait is over, so a late answer in
+     * usual wait ([os.meka.core.domain.SpeechRules.budgetMs]), the device waiting quietly, so a late answer in
      * a conversation stays in MEKA's voice ([os.meka.core.domain.SpeechRules.holds]). Each request's time to answer is
      * kept for Activity ([voiceTimingLine]). Never throws (a cancelled request is simply not counted).
      */
@@ -9707,15 +9706,6 @@ class MekaCore(
                 null
             }
         }
-    }
-
-    /**
-     * [os.meka.core.domain.SpeechRules.HOLD_LINE] in MEKA's voice, only when it is already on the device (fetched with
-     * the common lines by [warmVoice]); null otherwise, and the device then waits without a word. Never asks the server.
-     */
-    suspend fun speechHoldClip(): String? = onCore {
-        val voice = speechVoiceNow() ?: return@onCore null
-        speechCached(voice.name, os.meka.core.domain.SpeechRules.HOLD_LINE)
     }
 
     /**
@@ -10646,9 +10636,7 @@ class MekaCore(
         lines.forEach { if (!speechPrefetchPiece(it)) return }
         // The orb says hello like a person, slice 3: Ada's answers to "good thanks, you?" are ready too (no name in them).
         os.meka.core.domain.HelloReplyRules.warmLines().forEach { if (!speechPrefetchPiece(it)) return }
-        // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.
-        onCore { os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName) }
-            .forEach { if (!speechPrefetch(it)) return }
+        // Talking to Ada like a conversation, slice 1: no holding lines are made any more (Ada never says "One sec").
     }
 
     /**
@@ -10685,27 +10673,6 @@ class MekaCore(
         }
         if (!go) return false
         return try { api.talkWarm() } catch (e: CancellationException) { throw e } catch (e: Exception) { false }
-    }
-
-    /** The holding line said last ([answerHoldClip]), so the next one differs. */
-    private var answerHoldLast: Int? = null
-
-    /**
-     * The orb speed pass, slice 4: the next holding line ([os.meka.core.domain.AnswerWaitRules.holdLines]: "One sec,
-     * Meka…") in Navilife's voice, only when it is already on the device ([warmHello] makes them ahead); the next one
-     * in turn that is here, so never the same twice running. Null otherwise (nothing is said). Never asks the server.
-     */
-    suspend fun answerHoldClip(): String? = onCore {
-        val voice = speechVoiceNow() ?: return@onCore null
-        val lines = os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName)
-        val start = os.meka.core.domain.AnswerWaitRules.nextIndex(answerHoldLast, lines.size)
-        for (k in lines.indices) {
-            val i = (start + k) % lines.size
-            val clip = speechCached(voice.name, lines[i]) ?: continue
-            answerHoldLast = i
-            return@onCore clip
-        }
-        null
     }
 
     /**

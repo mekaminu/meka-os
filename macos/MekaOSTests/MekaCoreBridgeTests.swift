@@ -1303,7 +1303,9 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertFalse(SpeechRules.shared.holds(reading: true, resting: false, lastMekaVoiceMs: KotlinLong(longLong: now), nowMs: now))
         XCTAssertEqual(SpeechRules.shared.waitMs(first: true, reading: false), 4_000)
         XCTAssertEqual(SpeechRules.shared.budgetMs(first: true, reading: false, hold: true), 10_000)
-        XCTAssertEqual(SpeechRules.shared.HOLD_LINE, "One moment…")
+        XCTAssertFalse(SpeechRules.shared.COMMON.contains { $0.hasPrefix("One moment") })
+        XCTAssertFalse(AnswerWaitRules.shared.SPEAKS_WHILE_WAITING)
+        XCTAssertEqual(AnswerWaitRules.shared.CUE_AFTER_MS, 2_500)
         XCTAssertNil(SpeechRules.shared.timingLine(timings: []))
         XCTAssertEqual(SpeechRules.shared.seconds(ms: 1_834), "1.8 s")
     }

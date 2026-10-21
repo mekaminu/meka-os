@@ -134,15 +134,42 @@ object TalkAutoListen {
     }
 
     /**
-     * The orb speed pass, slice 4: the soft thinking tick while an answer is on its way
-     * ([os.meka.core.domain.AnswerWaitRules.cues]): shorter and quieter than [chime].
+     * Talking to Ada like a conversation, slice 1: the one soft, breath-like tone when an answer is slow
+     * ([os.meka.core.domain.AnswerWaitRules.cues], past 2.5 s): a low sine that swells and fades over about 0.6 s,
+     * much quieter than [chime]; never a word.
      */
-    fun thinkingTick() {
-        runCatching {
-            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 18)
-            tone.startTone(ToneGenerator.TONE_PROP_BEEP, 50)
-            android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ tone.release() }, 300)
-        }
+    fun thinkingTone() {
+        Thread {
+            runCatching {
+                val rate = 22_050
+                val n = rate * 600 / 1000
+                val pcm = ShortArray(n) { i ->
+                    val t = i.toDouble() / rate
+                    // A breath: rises and falls (half a sine), two soft low partials.
+                    val env = kotlin.math.sin(Math.PI * i / n)
+                    val v = env * env * (0.7 * kotlin.math.sin(2 * Math.PI * 196.0 * t) + 0.3 * kotlin.math.sin(2 * Math.PI * 294.0 * t))
+                    (v * 0.12 * Short.MAX_VALUE).toInt().toShort()
+                }
+                val track = android.media.AudioTrack.Builder()
+                    .setAudioAttributes(
+                        android.media.AudioAttributes.Builder()
+                            .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
+                            .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build(),
+                    )
+                    .setAudioFormat(
+                        android.media.AudioFormat.Builder().setSampleRate(rate)
+                            .setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                            .setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build(),
+                    )
+                    .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(n * 2)
+                    .build()
+                track.write(pcm, 0, n)
+                track.play()
+                Thread.sleep(700)
+                track.release()
+            }
+        }.start()
     }
 
     private fun bluetoothAudio(context: Context): Boolean = runCatching {

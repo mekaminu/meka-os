@@ -177,9 +177,8 @@ class SpeechTest {
         assertEquals(5_000L, SpeechRules.waitMs(first = true, reading = true))
         assertEquals(10_000L, SpeechRules.budgetMs(first = true, reading = false, hold = true))
         assertEquals(4_000L, SpeechRules.budgetMs(first = true, reading = false, hold = false))
-        // The hold line is fetched with the common lines, so it plays at once, and it is one piece.
-        assertTrue(SpeechRules.HOLD_LINE in SpeechRules.COMMON)
-        assertEquals(listOf(SpeechRules.HOLD_LINE), SpeechRules.pieces(SpeechRules.HOLD_LINE))
+        // Talking to Ada like a conversation, slice 1: the hold is quiet, so no holding line is fetched ahead.
+        assertTrue(SpeechRules.COMMON.none { it.startsWith("One moment") })
     }
 
     @Test
