@@ -2286,6 +2286,51 @@ class MekaCore(
     }
     private var lightenUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
 
+    // ---- Week board, item (6): Plan your week ----
+
+    /**
+     * Plan your week ([os.meka.core.domain.PlanWeekRules]): this week (next week on a Sunday) as a guided flow — what's
+     * left from last week, what's fixed, the week's goals and a suggested spread. Nothing moves until [acceptWeekPlan].
+     */
+    suspend fun planWeek(): os.meka.core.domain.WeekPlan = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val shown = os.meka.core.domain.DuplicateEvents.merge(boardEvents).filter { !os.meka.core.domain.DuplicateEvents.hiddenIn(it, boardHidden) }
+        os.meka.core.domain.PlanWeekRules.plan(boardNow(), shown, cal.epochDayOf(nowMs()), cal)
+    }
+
+    /**
+     * Accept plan: each row he left with a day goes there (last in that day's order, no time; its calendar block
+     * follows), worked out afresh move by move. Returns the undo bar's line ("Week planned · 6 tasks over 4 days"), or
+     * null when nothing moved; [undoWeekPlan] puts every one back.
+     */
+    suspend fun acceptWeekPlan(plan: os.meka.core.domain.WeekPlan): String? = onCore {
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val undos = mutableListOf<os.meka.core.domain.BoardUndo>()
+        val days = mutableSetOf<Long>()
+        for (row in plan.placing) {
+            val day = row.chosen ?: continue
+            if (day < today) continue
+            val board = boardNow()
+            val move = os.meka.core.domain.WeekBoardRules.move(board, row.taskId, day, Int.MAX_VALUE, today, cal) ?: continue
+            undos += tasks.placeOnBoard(move.copy(minuteOfDay = null))
+            followBlocks(listOf(row.taskId))
+            days += day
+        }
+        planUndo = undos
+        if (undos.isEmpty()) null else os.meka.core.domain.PlanWeekRules.acceptedLine(undos.size, days.size)
+    }
+
+    /** Undo after [acceptWeekPlan]: every task back where it was, in its place. False when nothing to undo. */
+    suspend fun undoWeekPlan(): Boolean = onCore {
+        val undos = planUndo
+        planUndo = emptyList()
+        if (undos.isEmpty()) return@onCore false
+        undos.asReversed().forEach { u -> if (tasks.undoBoard(u)) followBlocks(listOf(u.taskId)) }
+        true
+    }
+    private var planUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
+
     // ---- Week board, item (11) part 2: "I'm shattered" to Ada, and Stretched holds the alerts that can wait ----
 
     /** When the Stretched hold on this device ends (ms), or null; kept on this device only, never synced. */

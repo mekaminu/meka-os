@@ -132,10 +132,14 @@ import os.meka.core.facade.MekaCore
  * 10:00–10:30 in Google · Undo"); a stretch too short says so and nothing moves. While a card is held the free times
  * light up and the one under it glows gold with "Drop to block here".
  *
+ * Item (6): "Plan your week" in the header opens [PlanWeekPane] over the Calendar.
+ *
  * Reduced motion: no lift or scale, colours and moves cross-fade.
  */
 @Composable
-fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> Unit, modifier: Modifier = Modifier) {
+fun WeekBoardView(
+    core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> Unit, modifier: Modifier = Modifier, onPlanWeek: (() -> Unit)? = null,
+) {
     val board by core.weekBoard.collectAsState()
     if (board.weeks.isEmpty()) return
     val reduced = Meka.reducedMotion
@@ -238,7 +242,7 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
         }
 
         Column(Modifier.fillMaxSize()) {
-            WeekHeader(board, weekIndex, scroll, colPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)))
+            WeekHeader(board, weekIndex, scroll, colPx, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek)
             board.weeks.getOrNull(weekIndex)?.let { week ->
                 GoalsLane(
                     week = week, core = core, undo = undo, hovered = if (drag != null) hovered else null,
@@ -341,7 +345,7 @@ private const val GOAL_KEY = -10L
 
 /** "This week · 19–25 Oct" with ‹ › stepping a week; follows the board as it scrolls. */
 @Composable
-private fun WeekHeader(board: WeekBoard, week: Int, scroll: ScrollState, colPx: Float, modifier: Modifier) {
+private fun WeekHeader(board: WeekBoard, week: Int, scroll: ScrollState, colPx: Float, modifier: Modifier, onPlanWeek: (() -> Unit)?) {
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val reduced = Meka.reducedMotion
@@ -358,6 +362,15 @@ private fun WeekHeader(board: WeekBoard, week: Int, scroll: ScrollState, colPx: 
             Text(w.range, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         Spacer(Modifier.weight(1f))
+        // Item (6): Plan your week opens the guided flow (tick haptic; the pane springs up).
+        if (onPlanWeek != null) {
+            Text(
+                os.meka.core.domain.PlanWeekRules.OPEN, style = MekaType.itemMeta, color = Meka.colors.accent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.Button) { haptics.tick(); onPlanWeek() }
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xs),
+            )
+        }
         StepButton("‹", "Previous week", week > 0) { go(week - 1) }
         StepButton("›", "Next week", week < board.weeks.size - 1) { go(week + 1) }
     }

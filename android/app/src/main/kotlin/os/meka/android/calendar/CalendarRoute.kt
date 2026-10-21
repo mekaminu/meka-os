@@ -125,8 +125,13 @@ fun CalendarRoute(core: MekaCore) {
     val addHeader = AddHeader(editAccounts.isNotEmpty(), editLines) { day -> addingOn = day }
     // Week board, slice 2: Agenda · Board under the summary; the choice is kept while the app runs.
     var board by rememberSaveable { mutableStateOf(false) }
+    // Week board item (6): Plan your week, from the Board's header.
+    var planning by remember { mutableStateOf(false) }
     Box(Modifier.fillMaxSize()) {
-        Agenda(core, v, handlers, showAgain, addHeader, board, { board = it }, undo) { openEvent = it }
+        Agenda(core, v, handlers, showAgain, addHeader, board, { board = it }, undo, onPlanWeek = { planning = true }) { openEvent = it }
+        MekaPane(visible = planning) {
+            PlanWeekPane(core, onClose = { planning = false }, onAccepted = { line -> undo.show(line) { core.undoWeekPlan() } })
+        }
         MekaPane(visible = openEvent != null) {
             shown?.let { e -> EventDetailPane(core, e, onClose = { openEvent = null }, undo = undo) }
         }
@@ -186,7 +191,7 @@ private fun flatten(v: CalendarView, allDayOpen: Set<String>): List<Entry> = bui
 @Composable
 private fun Agenda(
     core: MekaCore, v: CalendarView, handlers: EventActionHandlers, showAgain: (CalendarEvent) -> Unit, add: AddHeader,
-    board: Boolean, onBoard: (Boolean) -> Unit, undo: EventUndo, onEvent: (CalendarEvent) -> Unit,
+    board: Boolean, onBoard: (Boolean) -> Unit, undo: EventUndo, onPlanWeek: () -> Unit, onEvent: (CalendarEvent) -> Unit,
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -235,7 +240,7 @@ private fun Agenda(
         }
         // The Board view: a column per day in place of the Agenda's strip and list.
         if (board) {
-            WeekBoardView(core, undo, onEvent, Modifier.weight(1f))
+            WeekBoardView(core, undo, onEvent, Modifier.weight(1f), onPlanWeek)
             return@Column
         }
         HorizontalPager(

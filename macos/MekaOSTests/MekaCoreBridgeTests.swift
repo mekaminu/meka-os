@@ -3284,6 +3284,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         let unknownGift = try await core.giftToDay(occasionId: "nothing", day: 0)
         XCTAssertEqual(unknownGift, BoardFeedRules.shared.DATE_UNKNOWN)
         XCTAssertTrue(core.dateFeedDays(date: 0).isEmpty)
+        // Item (6): Plan your week with nothing to place offers no Accept, and Accept moves nothing; its words reach Swift.
+        let plan = try await core.planWeek()
+        XCTAssertTrue(plan.rows.isEmpty)
+        XCTAssertFalse(plan.canAccept)
+        XCTAssertEqual(plan.leftLine, PlanWeekRules.shared.NOTHING_LEFT)
+        XCTAssertEqual(PlanWeekRules.shared.STEPS.count, 4)
+        let accepted = try await core.acceptWeekPlan(plan: plan.chooseDay(taskId: "nothing", day: -1))
+        XCTAssertNil(accepted)
+        let undidPlan = try await core.undoWeekPlan()
+        XCTAssertFalse(undidPlan.boolValue)
         // Slice 6b-2a: Reply, sent by the server only after Send.
         let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
         XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)

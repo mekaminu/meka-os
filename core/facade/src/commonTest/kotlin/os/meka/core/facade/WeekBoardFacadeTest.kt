@@ -439,4 +439,37 @@ class WeekBoardFacadeTest {
         assertEquals(R.DATE_UNKNOWN, fold.schoolDateToDay("nope", today + 1))
         assertFalse(mac.undoDateToDay())
     }
+
+    @Test
+    fun planYourWeekSpreadsWhatsLeftOnlyOnAcceptSyncsAndUndoes() = runTest {
+        val fold = core("android"); val mac = core("mac")
+        val mot = fold.addTask("Book MOT")
+        val gate = fold.addTask("Fix the gate")
+        fold.tick()
+        val board = fold.weekBoard.value
+        val today = board.todayEpochDay
+        val monday = board.weeks[0].startEpochDay
+        fold.parkOnBoard(mot, monday, 0)
+        fold.parkOnBoard(gate, monday, 1)
+
+        val plan = fold.planWeek()
+        assertEquals("Plan this week", plan.title)
+        assertEquals(setOf(mot, gate), plan.rows.map { it.taskId }.toSet())
+        assertTrue(plan.rows.all { it.chosen != null && it.chosen!! >= today })
+        // Nothing moves until he accepts.
+        assertEquals(2, fold.weekBoard.value.weeks[0].lane.size)
+
+        val chosen = plan.choose(gate, today + 1).choose(mot, null)
+        assertEquals("Week planned · 1 task on 1 day", fold.acceptWeekPlan(chosen))
+        assertEquals(listOf(gate), fold.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+        assertEquals(listOf(mot), fold.weekBoard.value.weeks[0].lane.map { it.id })
+        fold.syncNow(); mac.syncNow()
+        assertEquals(listOf(gate), mac.weekBoard.value.day(today + 1)!!.openCards.map { it.id })
+
+        assertTrue(fold.undoWeekPlan())
+        assertEquals(setOf(mot, gate), fold.weekBoard.value.weeks[0].lane.map { it.id }.toSet())
+        assertFalse(fold.undoWeekPlan())
+        assertNull(fold.acceptWeekPlan(chosen.choose(gate, null)))
+    }
+
 }

@@ -3378,6 +3378,20 @@ final class CoreModel {
         }
     }
 
+    /// Plan your week (Week board item (6)): this week (next week on a Sunday) as a guided flow; nothing moves yet.
+    func planWeek() async -> WeekPlan? {
+        guard let core else { return nil }
+        return try? await core.planWeek()
+    }
+
+    /// Accept plan: every row he left with a day goes there; the bar says "Week planned · …" with one Undo for all.
+    func acceptWeekPlan(_ plan: WeekPlan) async {
+        guard let core else { return }
+        guard let line = try? await core.acceptWeekPlan(plan: plan) else { return }
+        MekaHaptics.light()
+        offerEventUndo(line, .weekPlan)
+    }
+
     /// "+ Add" at the foot of a Board column: a task on that day, last in its order.
     func addOnBoard(_ text: String, day: Int64) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -3846,6 +3860,7 @@ final class CoreModel {
         case .goalTag: run { _ = try await $0.undoTagOnBoard() }
         case .boardGoal: run { _ = try await $0.undoBoardGoal() }
         case .lighten: run { _ = try await $0.undoLighten() }
+        case .weekPlan: run { _ = try await $0.undoWeekPlan() }
         case .resumeAlerts: run { _ = try await $0.resumeAlerts() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
@@ -6700,6 +6715,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case boardGoal
         /// Lighten tomorrow (Week board, item (11)): every task it moved goes back to tomorrow.
         case lighten
+        /// Accept plan (Week board, item (6)): every task the plan moved goes back where it was.
+        case weekPlan
         /// Hold alerts (Week board, item (11) part 2): the Stretched hold ends now.
         case resumeAlerts
         /// The ring on a Board card: ticked back open.
