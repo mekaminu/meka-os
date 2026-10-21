@@ -96,7 +96,7 @@ class SpeakUpFacadeTest {
     /** Slice 3: tomorrow stacking up is a heads-up at 19:30 the evening before, said once with his name. */
     @Test
     fun tomorrowStackingUpIsSaidOnceInTheEvening() = runTest {
-        now = 1_792_607_700_000L // Wed 21 Oct 2026, 19:35 in London
+        now = 1_792_605_600_000L // Wed 21 Oct 2026, 19:00 in London
         val c = core()
         try {
             c.setAboutYou(AboutField.SHOWN_NAME, "Alex Smith")
@@ -105,7 +105,11 @@ class SpeakUpFacadeTest {
             listOf("Call the garage" to 19, "Wrap the present" to 20, "Pack the kit" to 21).forEach { (title, hour) ->
                 c.addOnBoard(title, tomorrow)!!.also { c.setWhen(it, tomorrow, hour * 60) }
             }
-            val r = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+            // 19:00: the evening digest and the day's own heads-ups go first; nothing about tomorrow yet.
+            val seven = c.governNotifications(null, os.meka.core.domain.DeviceAlerts.ALL)
+            assertTrue(seven.post.none { it.source == NoticeSource.PRESSURE })
+            now += 35 * 60_000L // 19:35
+            val r = c.governNotifications(seven.stateEncoded, os.meka.core.domain.DeviceAlerts.ALL)
             val n = r.post.single { it.source == NoticeSource.PRESSURE }
             assertEquals("Tomorrow evening is stacking up", n.title)
             assertEquals(SpeakMoment.PRESSURE, n.speak)
