@@ -12,8 +12,10 @@ on:
 
   workflow_dispatch:
 
+# Per event, so a push to main never cancels the nightly dispatched run (its macos job can sit queued for a while
+# waiting for a macOS runner; the 2026-10-20 and 21 nightly jobs were lost that way or to capacity).
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:

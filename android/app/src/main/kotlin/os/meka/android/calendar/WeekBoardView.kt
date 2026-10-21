@@ -1021,28 +1021,8 @@ private fun BoardCardRow(
             .onGloballyPositioned { bounds = it.boundsInRoot(); onCardBounds(card.id, bounds) }
             .graphicsLayer { scaleX = land.value; scaleY = land.value }
             .then(
-                if (card.canMove) Modifier.pointerInput(card.id) {
-                    val slop = viewConfiguration.touchSlop
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val hold = awaitHold(down, slop)
-                        when (hold.kind) {
-                            HoldKind.TAP -> tap()
-                            HoldKind.SCROLL -> Unit
-                            HoldKind.LIFT -> {
-                                lift(hold.at)
-                                while (true) {
-                                    val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
-                                    if (c == null) { cancel(); break }
-                                    if (c.changedToUpIgnoreConsumed()) { c.consume(); drop(); break }
-                                    val delta = c.positionChangeIgnoreConsumed()
-                                    c.consume()
-                                    if (delta != Offset.Zero) move(delta)
-                                }
-                            }
-                        }
-                    }
-                } else Modifier,
+                if (card.canMove) Modifier.boardCardHold(card.id, onTap = { tap() }, onLift = { lift(it) }, onMove = { move(it) }, onDrop = { drop() }, onCancel = { cancel() })
+                else Modifier,
             )
             .clip(TILE)
             .border(1.5.dp, Meka.colors.accent.copy(alpha = glow.value), TILE)
@@ -1356,6 +1336,42 @@ private fun AddAtTop(
                                 .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * A Board card's one gesture (By hand, slice 1; tested in BoardCardHoldTest): a tap is [onTap]; held still for
+ * [BoardHandRules.HOLD_MS] it lifts ([onLift] with where the finger is), then every move is [onMove] until let go
+ * ([onDrop]) or taken away ([onCancel]); moving past the touch slop first is left to the scroll around it. Once lifted
+ * the card consumes the finger's moves, so the board's scroll never takes a held card.
+ */
+internal fun Modifier.boardCardHold(
+    key: Any,
+    onTap: () -> Unit,
+    onLift: (Offset) -> Unit,
+    onMove: (Offset) -> Unit,
+    onDrop: () -> Unit,
+    onCancel: () -> Unit,
+): Modifier = pointerInput(key) {
+    val slop = viewConfiguration.touchSlop
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false)
+        val hold = awaitHold(down, slop)
+        when (hold.kind) {
+            HoldKind.TAP -> onTap()
+            HoldKind.SCROLL -> Unit
+            HoldKind.LIFT -> {
+                onLift(hold.at)
+                while (true) {
+                    val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id }
+                    if (c == null) { onCancel(); break }
+                    if (c.changedToUpIgnoreConsumed()) { c.consume(); onDrop(); break }
+                    val delta = c.positionChangeIgnoreConsumed()
+                    c.consume()
+                    if (delta != Offset.Zero) onMove(delta)
                 }
             }
         }
