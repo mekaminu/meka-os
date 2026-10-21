@@ -1,7 +1,7 @@
 ---
 id: week-board
 title: Week board
-keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray
+keywords: week board, board, board view, plan the week, move a task to another day, drag tasks, reorder tasks, kanban, week view of tasks, time estimate, how long, planned, free time, capacity, over-planned, no day yet, this week, park a task, someday tray, block time, time block, add a task to my calendar, focus time
 fold: none
 fold_where: Calendar → Board
 mac: none
@@ -16,3 +16,4 @@ tip: Tap a card (right-click on the Mac) and pick How long? — 15m, 30m, 1h or 
 tip: Above the days, "No day yet" holds tasks you want to do this week but not on a set day: drag a card there (or pick No day this week from its menu) and it leaves Today until you drag it onto a day; ones left from an earlier week wait in this week's lane saying so.
 tip: The Someday tray beside it folds away your Someday tasks: drag a card onto it to keep it for later, or tap it open and drag one out onto a day.
 tip: Today follows the order you set on the Board's Today column: the tasks with no time you placed come first in your order (the top one is Up next when nothing is planned at a time), then the rest as before.
+tip: To block time for a task in your calendar, tap its card (right-click on the Mac) and pick a start under Block time: the free times that day for its estimate (30 minutes if it has none). The task is planned then and its block is added to your Google or Outlook calendar as busy time, only when you tap, with Undo on the bar; a task that already has a block moves it instead.

@@ -3274,6 +3274,23 @@ final class CoreModel {
         }
     }
 
+    /// Block time on a Board card (Week board, slice 6): its free starts and where the block would go, read as the
+    /// pointer reaches the card so the right-click menu has them.
+    func blockOffer(_ id: String) async -> BlockOffer? {
+        guard let core else { return nil }
+        return try? await core.blockOffer(taskId: id)
+    }
+
+    /// His click on a Block time start: the task is planned then and its block goes to his calendar, with Undo.
+    func blockOnBoard(_ id: String, start: Int64) {
+        guard let core else { return }
+        Task {
+            guard let line = try? await core.blockOnBoard(taskId: id, startMs: start) else { return }
+            MekaHaptics.light()
+            offerEventUndo(line, .block)
+        }
+    }
+
     /// The ring on a Board card: ticked off, with Undo.
     func completeOnBoard(_ id: String, title: String) {
         MekaHaptics.light()
@@ -3638,6 +3655,7 @@ final class CoreModel {
         case .carried(let id): run { _ = try await $0.undoCarried(taskId: id) }
         case .boardMove: run { _ = try await $0.undoBoardMove() }
         case .estimate: run { _ = try await $0.undoEstimate() }
+        case .block: run { _ = try await $0.undoBlock() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
@@ -6453,6 +6471,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case boardMove
         /// "How long?" on a Board card: the estimate it had comes back.
         case estimate
+        /// Block time on a Board card (slice 6): the block is taken back (or follows the task back) and the task's time returns.
+        case block
         /// The ring on a Board card: ticked back open.
         case reopen(String)
         /// Remove on a checklist item: it comes back with its tick and place.

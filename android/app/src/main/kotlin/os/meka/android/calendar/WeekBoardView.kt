@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -86,6 +87,8 @@ import os.meka.core.domain.BoardSource
 import os.meka.core.domain.BoardWeek
 import os.meka.core.domain.CalendarEvent
 import os.meka.core.domain.TaskEstimateRules
+import os.meka.core.domain.BlockOffer
+import os.meka.core.domain.BlockSlot
 import os.meka.core.domain.WeekBoard
 import os.meka.core.domain.WeekBoardRules
 import os.meka.core.facade.MekaCore
@@ -241,6 +244,13 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
                                 if (line != null) { haptics.tick(); undo.show(line) { core.undoEstimate() } }
                             }
                         },
+                        onBlockOffer = { card -> core.blockOffer(card.id) },
+                        onBlock = { card, slot ->
+                            scope.launch {
+                                val line = runCatching { core.blockOnBoard(card.id, slot.startMs) }.getOrNull()
+                                if (line != null) { haptics.light(); undo.show(line) { core.undoBlock() } }
+                            }
+                        },
                         board = board,
                         onEvent = onEvent,
                     )
@@ -325,6 +335,8 @@ private fun DayColumn(
     onDone: (BoardCard) -> Unit,
     onAdd: (String) -> Unit,
     onEstimate: (BoardCard, Int?) -> Unit,
+    onBlockOffer: suspend (BoardCard) -> BlockOffer?,
+    onBlock: (BoardCard, BlockSlot) -> Unit,
     board: WeekBoard,
     onEvent: (CalendarEvent) -> Unit,
 ) {
@@ -382,6 +394,7 @@ private fun DayColumn(
                 BoardCardRow(
                     card, BoardSource.DAY, day.epochDay, day.openCards, board, dragging == card.id, onCardBounds, onPick, onDrag, onDrop, onCancel,
                     onMove, onMoveTo, onPark, onSomeday, onDone, onEstimate,
+                    onBlockOffer = onBlockOffer, onBlock = onBlock,
                 )
             }
         }
@@ -414,8 +427,15 @@ private fun BoardCardRow(
     onDone: ((BoardCard) -> Unit)?,
     onEstimate: (BoardCard, Int?) -> Unit,
     modifier: Modifier = Modifier.fillMaxWidth(),
+    /** Slice 6: a day's card offers Block time (read as the menu opens); null in the lane and the tray. */
+    onBlockOffer: (suspend (BoardCard) -> BlockOffer?)? = null,
+    onBlock: ((BoardCard, BlockSlot) -> Unit)? = null,
 ) {
     var menu by remember { mutableStateOf(false) }
+    var offer by remember(card.id) { mutableStateOf<BlockOffer?>(null) }
+    if (onBlockOffer != null) {
+        LaunchedEffect(menu) { if (menu) offer = runCatching { onBlockOffer(card) }.getOrNull() }
+    }
     var bounds by remember { mutableStateOf(Rect.Zero) }
     val ghost by animateFloatAsState(if (beingDragged) 0.3f else 1f, MekaMotion.appear(Meka.reducedMotion), label = "board-ghost")
     Box(
@@ -469,6 +489,19 @@ private fun BoardCardRow(
                 )
                 card.estimateChoices.forEach { c -> entry(c.menuLabel) { if (!c.selected) onEstimate(card, c.minutes) } }
                 if (card.estimate != null) entry(TaskEstimateRules.CLEAR) { onEstimate(card, null) }
+                // Slice 6: Block time — a free start in the day; his tap adds the block to his calendar (Undo on the bar).
+                offer?.let { o ->
+                    Box(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).height(1.dp).background(Meka.colors.hairline))
+                    Text(
+                        o.heading, style = MekaType.micro, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+                    )
+                    if (o.canBlock) o.slots.forEach { slot -> entry(slot.label) { onBlock?.invoke(card, slot) } }
+                    Text(
+                        o.line, style = MekaType.micro, color = Meka.colors.textTertiary,
+                        modifier = Modifier.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs).widthIn(max = 220.dp),
+                    )
+                }
             }
         }
     }

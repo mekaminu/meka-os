@@ -136,4 +136,50 @@ class WeekBoardFacadeTest {
         assertTrue(mac.undoBoardMove())
         assertEquals(listOf(mot), mac.weekBoard.value.someday.map { it.id })
     }
+
+    private inner class EditingTransport(
+        private val list: List<ConnectedAccount>,
+        private val inner: FaultyTransport = FaultyTransport(service),
+    ) : os.meka.core.sync.SyncTransport by inner, AccountsApi {
+        override suspend fun startConnect(provider: String, editing: Boolean): ConnectStart = ConnectStart.NotSetUp
+        override suspend fun accounts(): List<ConnectedAccount> = list
+        override suspend fun stopEditing(provider: String, email: String): List<ConnectedAccount> = list
+    }
+
+    @Test
+    fun blockTimeAddsTheTasksBlockToGoogleOnHisTapAndUndoTakesItBack() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = MekaCore(
+            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = server,
+            secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val id = fold.addOnBoard("Book MOT", today + 2)!!
+
+        // No calendar allows editing yet: the starts are shown, nothing can be added.
+        val first = fold.blockOffer(id)!!
+        assertFalse(first.canBlock)
+        assertNull(fold.blockOnBoard(id, first.slots.first().startMs))
+
+        fold.refreshCalendarAccounts()
+        val offer = fold.blockOffer(id)!!
+        assertEquals("Block time · 30m", offer.heading)
+        assertEquals(listOf("09:00–09:30", "10:00–10:30", "11:00–11:30", "12:00–12:30"), offer.slots.map { it.label })
+        assertEquals("Adds it to Google as busy time when you tap a start", offer.line)
+        assertTrue(fold.calendarEditLines.value.isEmpty(), "nothing before his tap")
+
+        assertEquals("Blocked “Book MOT” · Sat 10 Oct 10:00–10:30 in Google", fold.blockOnBoard(id, offer.slots[1].startMs))
+        val card = fold.weekBoard.value.day(today + 2)!!.cards.single()
+        assertEquals("10:00 · 30m", card.meta)
+        assertEquals(listOf("Adding “Book MOT” to Google"), fold.calendarEditLines.value.map { it.text })
+        assertTrue(fold.weekBoard.value.day(today + 2)!!.chips.isEmpty(), "the task stands for its block")
+        assertTrue(fold.blockOffer(id)!!.moves)
+        assertEquals("Moves its block in Google", fold.blockOffer(id)!!.line)
+
+        assertTrue(fold.undoBlock())
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertEquals("", fold.weekBoard.value.day(today + 2)!!.cards.single().meta)
+        assertFalse(fold.undoBlock())
+    }
 }

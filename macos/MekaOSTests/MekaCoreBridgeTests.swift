@@ -1586,6 +1586,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")
         XCTAssertEqual(WeekBoardRules.shared.somedayLine(title: "book MOT"), "Moved “Book MOT” to Someday")
         XCTAssertEqual(WeekBoard(todayEpochDay: 0, weeks: [], someday: []).somedayTitle, "Someday")
+        // Slice 6: Block time.
+        XCTAssertEqual(BoardBlockRules.shared.MENU_TITLE, "Block time")
+        let none = BlockOffer(taskId: "t", title: "Book MOT", epochDay: 0, lengthMin: 30, slots: [], provider: nil, moves: false)
+        XCTAssertEqual(none.heading, "Block time · 30m")
+        XCTAssertFalse(none.canBlock)
+        XCTAssertEqual(none.line, BoardBlockRules.shared.NO_ACCOUNT)
     }
 
     /// Fold review 2026-10-09, item 5: "3 held for later" unfolds a preview; its words reach Swift.

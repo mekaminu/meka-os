@@ -2165,6 +2165,91 @@ class MekaCore(
     }
     private var estimateUndo: Pair<String, Int?>? = null
 
+    // ---- Week board, slice 6: Block time ----
+
+    /** The events and work hours the Board was last built with, so Block time offers the same free time it shows. */
+    private var boardEvents: List<os.meka.core.domain.CalendarEvent> = emptyList()
+    private var boardWork: os.meka.core.domain.WorkHours? = null
+
+    private class BlockUndo(
+        val taskId: String,
+        val before: os.meka.core.domain.TaskTiming,
+        val after: os.meka.core.domain.TaskTiming,
+        val addId: String?,
+        val estimateSet: Boolean,
+    )
+    private var blockUndo: BlockUndo? = null
+
+    /**
+     * Block time on a Board card ([os.meka.core.domain.BoardBlockRules]): the free starts in its day and where the block
+     * would go, or null when the card can't be blocked. Read the accounts first ([refreshCalendarAccounts]).
+     */
+    suspend fun blockOffer(taskId: String): os.meka.core.domain.BlockOffer? = onCore { blockOfferNow(taskId) }
+
+    private fun blockOfferNow(taskId: String): os.meka.core.domain.BlockOffer? {
+        val edits = calendarEdits.all()
+        val overlaid = os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs())
+        val block = os.meka.core.domain.PlanCalendarRules.blockOf(taskId, overlaid, edits)?.takeIf { !it.removed }
+        val provider = block?.provider ?: os.meka.core.domain.PlanCalendarRules.target(
+            _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(edits),
+        )?.provider
+        return os.meka.core.domain.BoardBlockRules.offer(
+            _board.value, taskId, nowMs(), boardEvents, ZoneCalendar(timeZone), boardWork, provider, block != null,
+        )
+    }
+
+    /**
+     * His tap on a Block time start ([startMs], one of the offer's): the task is planned then and its block is added to
+     * his calendar for the task (five seconds' Undo, then the server sends it), or its existing block moves. A task
+     * with no estimate takes the block's length as one. Returns the undo bar's line ("Blocked “Book MOT” · Thu 22 Oct
+     * 14:00–14:30 in Google"), or null when nothing was done; [undoBlock] takes it back.
+     */
+    suspend fun blockOnBoard(taskId: String, startMs: Long): String? = onCore {
+        val offer = blockOfferNow(taskId)?.takeIf { it.canBlock } ?: return@onCore null
+        val slot = offer.slots.firstOrNull { it.startMs == startMs } ?: return@onCore null
+        val task = tasks.get(taskId) ?: return@onCore null
+        val before = os.meka.core.domain.TaskTiming.of(task)
+        tasks.setWhen(taskId, offer.epochDay, slot.minute)
+        val estimateSet = task.estimateMinutes == null
+        if (estimateSet) tasks.setEstimate(taskId, offer.lengthMin)
+        val after = os.meka.core.domain.TaskTiming.of(tasks.get(taskId)!!)
+        var addId: String? = null
+        if (offer.moves) {
+            followBlocks(listOf(taskId))
+        } else {
+            val target = os.meka.core.domain.PlanCalendarRules.target(
+                _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()),
+            )
+            val r = target?.let {
+                calendarEdits.add(it.provider, it.email, os.meka.core.domain.BoardBlockRules.draft(task, slot.startMs, offer.lengthMin), forTask = taskId)
+            }
+            if (r !is os.meka.core.domain.EventEditResult.Made) {
+                tasks.undoBoard(os.meka.core.domain.BoardUndo(taskId, before, after, emptyMap()))
+                if (estimateSet) tasks.setEstimate(taskId, null)
+                return@onCore null
+            }
+            addId = r.id
+        }
+        blockUndo = BlockUndo(taskId, before, after, addId, estimateSet)
+        os.meka.core.domain.BoardBlockRules.line(
+            task.title, slot, offer.epochDay, ZoneCalendar(timeZone).epochDayOf(nowMs()), offer.provider!!, offer.moves,
+        )
+    }
+
+    /**
+     * Undo after [blockOnBoard]: inside its five seconds the block is taken back unsent; later the task's old timing
+     * comes back and the block follows it (moved back, or removed when it had no time). False when nothing to undo.
+     */
+    suspend fun undoBlock(): Boolean = onCore {
+        val u = blockUndo ?: return@onCore false
+        blockUndo = null
+        val tookBack = u.addId?.let { calendarEdits.undo(it) } ?: false
+        tasks.undoBoard(os.meka.core.domain.BoardUndo(u.taskId, u.before, u.after, emptyMap()))
+        if (u.estimateSet) tasks.setEstimate(u.taskId, null)
+        if (!tookBack) followBlocks(listOf(u.taskId))
+        true
+    }
+
     /** Quick add at the foot of a Board column: [text] becomes a task on local [day] (no time), last in that day. */
     suspend fun addOnBoard(text: String, day: Long): String? {
         val draft = QuickCapture.draft(text, null) ?: return null
@@ -10671,8 +10756,10 @@ class MekaCore(
             all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hidden = marks.hidden,
             work = hoursOf(workState, todayEpochDay()), children = marks.clubChildren,
         )
+        boardEvents = marks.forCalendarTab(allEvents)
+        boardWork = hoursOf(workState, todayEpochDay())
         _board.value = os.meka.core.domain.WeekBoardRules.build(
-            all, marks.forCalendarTab(allEvents), nowMs(), ZoneCalendar(timeZone), hoursOf(workState, todayEpochDay()),
+            all, boardEvents, nowMs(), ZoneCalendar(timeZone), boardWork,
             marks.hidden, _calendar.value::toneOf,
         )
         _calendarsOnToday.value = os.meka.core.domain.CalendarRules.choices(allEvents, marks.hiddenCalendars, marks.shownCalendars)

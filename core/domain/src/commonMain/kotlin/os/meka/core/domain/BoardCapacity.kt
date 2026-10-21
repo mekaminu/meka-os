@@ -133,9 +133,22 @@ object TaskEstimateRules {
         d: Long, today: Long, nowMs: Long, events: List<CalendarEvent>, calendar: LocalCalendar, work: WorkHours?,
         prefs: DayPlanner.Prefs = DayPlanner.Prefs(),
     ): Int {
+        val free = freeGaps(d, today, nowMs, events, calendar, work, prefs).sumOf { it.endMs - it.startMs }
+        val minutes = (free / 60_000L).toInt()
+        return minutes - minutes % 15
+    }
+
+    /**
+     * Day [d]'s free stretches (see the object's note): the planner's day, from now on today, less timed events, work
+     * hours and the commute. Also where Block time offers its starts ([BoardBlockRules], slice 6).
+     */
+    fun freeGaps(
+        d: Long, today: Long, nowMs: Long, events: List<CalendarEvent>, calendar: LocalCalendar, work: WorkHours?,
+        prefs: DayPlanner.Prefs = DayPlanner.Prefs(),
+    ): List<DayPlanner.Slot> {
         val start = calendar.toEpochMs(d, prefs.dayStartMin).let { if (d == today) maxOf(it, nowMs) else it }
         val end = calendar.toEpochMs(d, prefs.dayEndMin)
-        if (end <= start) return 0
+        if (end <= start) return emptyList()
         val day = CalendarAgenda.window(d, calendar)
         val busy = buildList {
             events.filter { !it.allDay && it.overlaps(day) }.forEach { add(DayPlanner.Slot(it.startAtMs, it.endAtMs)) }
@@ -144,9 +157,7 @@ object TaskEstimateRules {
                 CommuteRules.bands(w, d, calendar).forEach { add(DayPlanner.Slot(it.startMs, it.endMs)) }
             }
         }
-        val free = DayPlanner.subtract(DayPlanner.Slot(start, end), busy).sumOf { it.endMs - it.startMs }
-        val minutes = (free / 60_000L).toInt()
-        return minutes - minutes % 15
+        return DayPlanner.subtract(DayPlanner.Slot(start, end), busy)
     }
 
     /** His tasks that carry an estimate, with their title words, worked out once per board. */

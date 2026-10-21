@@ -233,6 +233,8 @@ private struct BoardCardView: View {
     let board: WeekBoard
     let palette: MekaPalette
     @State private var over = false
+    /// Slice 6: Block time for a day's card, read as the pointer reaches it (the menu can't wait for the core).
+    @State private var offer: BlockOffer?
 
     var body: some View {
         let selected = model.boardSelectedID == card.id
@@ -278,6 +280,11 @@ private struct BoardCardView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(card.accessibilityLabel)
         .modifier(BoardDrag(card: card, spot: spot, board: board, over: $over))
+        .onHover { inside in
+            guard inside, card.canMove, spot.dayEpoch != nil else { return }
+            let id = card.id
+            Task { offer = await model.blockOffer(id) }
+        }
         .contextMenu {
             if card.canMove {
                 let siblings = spot.siblings
@@ -309,6 +316,18 @@ private struct BoardCardView: View {
                     }
                     if card.estimate != nil {
                         Button(TaskEstimateRules.shared.CLEAR) { model.setEstimateOnBoard(card.id, minutes: nil) }
+                    }
+                }
+                // Slice 6: Block time — a free start in the day; his click adds the block to his calendar (Undo on the bar).
+                if let o = offer, spot.dayEpoch != nil {
+                    Divider()
+                    Section(o.heading) {
+                        if o.canBlock {
+                            ForEach(o.slots, id: \.startMs) { slot in
+                                Button(slot.label) { model.blockOnBoard(card.id, start: slot.startMs) }
+                            }
+                        }
+                        Text(o.line)
                     }
                 }
             }
