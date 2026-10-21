@@ -86,7 +86,7 @@ enum class MoreItem(
     PROTECTED("Protected time", "Evenings and weekends, kept free of tasks", null, MoreGroup.SETTINGS),
     NOTIFICATIONS("Notifications", "Quiet hours, digests and what reaches you", null, MoreGroup.SETTINGS),
     APPEARANCE("Appearance", "Dark, Light or Auto", null, MoreGroup.SETTINGS),
-    VOICE("Navilife's voice", "How Navilife sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
+    VOICE("Ada's voice", "How Ada sounds in Talk, the brief and calls", null, MoreGroup.SETTINGS),
     TALK("Talk", "The side button and your headphones", null, MoreGroup.SETTINGS),
     CALENDARS("Calendars", "Connected accounts and feeds", null, MoreGroup.SETTINGS),
     MAIL(os.meka.core.domain.MailAccountRules.TITLE, os.meka.core.domain.MailAccountRules.ROW_LINE, null, MoreGroup.SETTINGS),

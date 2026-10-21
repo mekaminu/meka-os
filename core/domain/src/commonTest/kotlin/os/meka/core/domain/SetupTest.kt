@@ -80,7 +80,7 @@ class SetupTest {
         assertEquals("Home not set, showing London · work not set · add them in About you", SetupRules.weatherLine(null, null))
         assertEquals("Connected", v.step("mac").line)
         assertEquals(
-            listOf("Calendars", "Call assistant", "Messages", "Navilife's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
+            listOf("Calendars", "Call assistant", "Messages", "Ada's voice", "Weather and travel", "Mail", "This phone", "Your devices"),
             v.sections.map { it.title },
         )
     }

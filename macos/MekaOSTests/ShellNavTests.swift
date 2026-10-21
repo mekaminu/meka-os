@@ -66,7 +66,7 @@ final class ShellNavTests: XCTestCase {
         XCTAssertTrue(ShellNav.lifeTiles().allSatisfy { $0.symbol != nil })
         XCTAssertEqual(ShellNav.daily().map(\.label), ["Morning brief", "Week ahead", "News", "Shut down the day", "Train queue", "Reading", "Voice notes", "Life admin hour", "Review"])
         XCTAssertEqual(ShellNav.settings(connected: true).map(\.label),
-                       ["About you", "Work mode", "Protected time", "Notifications", "Appearance", "Navilife's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What Navilife may do", "Navilife's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
+                       ["About you", "Work mode", "Protected time", "Notifications", "Appearance", "Ada's voice", "Talk", "Calendars", "Mail", "Family", "Watch", "Recovery key", "What Navilife may do", "Navilife's AI", "Activity", "Setup", "Health", "Vault", "Your data"])
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.watch))
         XCTAssertFalse(ShellNav.settings(connected: false).contains(.recovery))
         XCTAssertEqual(MoreItem.allCases.filter { !ShellNav.opens($0) }, [.ai])

@@ -212,8 +212,8 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
             Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 Text(CompanionRules.CALL_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
                 Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Navilife calls you by name") { callSir(false) }
-                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Navilife calls you sir") { callSir(true) }
+                    SettingChip(CompanionRules.CALL_BY_NAME, on = !on, spoken = "Ada calls you by name") { callSir(false) }
+                    SettingChip(CompanionRules.CALL_SIR_LABEL, on = on, spoken = "Ada calls you sir") { callSir(true) }
                 }
                 Crossfade(on, animationSpec = MekaMotion.appear(reduced), label = "call-line") { now ->
                     Text(CompanionRules.callLine(now), style = MekaType.caption, color = Meka.colors.textTertiary)

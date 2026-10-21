@@ -459,7 +459,7 @@ data class VoicePickerView(
 object VoicePickerRules {
     /** What ▶ Sample says: MEKA's own words, never anything of Meka's. */
     const val SAMPLE = "Good morning, Meka. You've got three things today and it's 14 degrees."
-    const val TITLE = "Navilife's voice"
+    const val TITLE = "Ada's voice"
 
     /** The longest sample sent (natural voice, slice 2): two short sentences, never a whole paragraph of the brief. */
     const val SAMPLE_MAX = 240

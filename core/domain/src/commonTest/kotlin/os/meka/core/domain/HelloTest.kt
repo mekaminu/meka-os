@@ -437,4 +437,15 @@ class HelloTest {
         assertTrue(HelloRules.warmLines(4 * 60 + 30, null, false).contains("Good morning."))
         assertTrue(lines.all { "need you" !in it || it.startsWith("Nothing") })
     }
+
+    @Test
+    fun adasSettingsAreNamedForHer() {
+        // The companion is called Ada, slice 2: Settings names her; Activity and the app stay Navilife.
+        assertEquals("Ada's voice", VoicePickerRules.TITLE)
+        assertEquals("What Ada remembers", CompanionMemoryRules.TITLE)
+        assertEquals("Ada calls you", CompanionRules.CALL_TITLE)
+        assertTrue(CompanionRules.callLine(true).startsWith("Ada calls you sir"))
+        assertTrue(CompanionRules.callLine(false).startsWith("Ada calls you by your name"))
+        assertEquals("Ada is Navilife's assistant", AdaRules.WHO)
+    }
 }

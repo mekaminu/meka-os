@@ -99,7 +99,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .protectedTime: "Protected time"
         case .notifications: "Notifications"
         case .appearance: "Appearance"
-        case .voice: "Navilife's voice"
+        case .voice: "Ada's voice"
         case .talk: "Talk"
         case .calendars: "Calendars"
         case .mail: MailAccountRules.shared.TITLE
@@ -151,7 +151,7 @@ enum MoreItem: Int, CaseIterable, Identifiable {
         case .protectedTime: "Evenings and weekends, kept free of tasks"
         case .notifications: "Quiet hours, digests and what reaches you"
         case .appearance: "Dark, Light or Auto"
-        case .voice: "How Navilife sounds in Talk, the brief and calls"
+        case .voice: "How Ada sounds in Talk, the brief and calls"
         case .talk: "⌥Space and the mic"
         case .calendars: "Connected accounts and feeds"
         case .mail: MailAccountRules.shared.ROW_LINE

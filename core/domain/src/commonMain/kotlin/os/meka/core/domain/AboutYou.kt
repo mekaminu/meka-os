@@ -165,7 +165,7 @@ data class AboutYou(
 
 /** The fields About you edits one line at a time, in the pane's order. */
 enum class AboutField(val key: String, val label: String, val hint: String, val emptyLine: String) {
-    SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Navilife calls you", "Navilife says “you” until you add it"),
+    SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Ada calls you", "Ada says “you” until you add it"),
     PARTNER_NAME(AboutYouFields.PARTNER_NAME, "Partner", "Their first name", "Add your partner to get their requests flagged"),
     PARTNER_PHONE(AboutYouFields.PARTNER_PHONE, "Partner's number", "Their mobile number", "Add their number so their calls always ring"),
     PARTNER_EMAIL(AboutYouFields.PARTNER_EMAIL, "Partner's email", "Their email address", "Add it so Inbox autopilot never tidies their emails away"),
