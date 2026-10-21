@@ -162,8 +162,6 @@ private struct BoardColumnView: View {
     let palette: MekaPalette
     let targeted: Bool
     let onTarget: (Bool) -> Void
-    @State private var adding = false
-    @State private var text = ""
 
     var body: some View {
         let glow = targeted && day.canDrop
@@ -188,6 +186,9 @@ private struct BoardColumnView: View {
             if let pressure = day.pressure {
                 PressureNote(pressure: pressure, palette: palette)
             }
+
+            // By hand, slice 1: "+ Add a task" at the top of every day from today, always there.
+            if day.canDrop { BoardAddRow(day: day, palette: palette) }
 
             if !day.chips.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -224,7 +225,6 @@ private struct BoardColumnView: View {
             if glow && day.openCards.isEmpty {
                 Text(WeekBoardRules.shared.DROP_HERE).font(MekaType.caption).foregroundStyle(palette.accent)
             }
-            if day.canDrop { addRow }
             Spacer(minLength: 0)
         }
         .padding(MekaSpace.xs)
@@ -248,25 +248,100 @@ private struct BoardColumnView: View {
             return true
         } isTargeted: { onTarget($0) }
     }
+}
 
-    @ViewBuilder
-    private var addRow: some View {
-        if adding {
-            TextField("New task", text: $text)
-                .textFieldStyle(.plain)
-                .font(MekaType.body)
-                .onSubmit {
-                    model.addOnBoard(text, day: day.epochDay)
-                    text = ""; adding = false
+/// "+ Add a task" at the top of a day (by hand, slice 1), always there as a dashed row. A click opens a field focused at
+/// once; Return adds the task last in the day and keeps the field focused for the next one; the chips under it (15m ·
+/// 30m · 1h · 2h) give the next one an estimate; Esc, or clicking away, closes it (adding what was typed). The field
+/// opens on the expand spring (Reduce Motion: it fades).
+private struct BoardAddRow: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let day: BoardDay
+    let palette: MekaPalette
+    @State private var open = false
+    @State private var text = ""
+    @State private var picked: Int?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Group {
+            if open {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    TextField(BoardHandRules.shared.ADD_HINT, text: $text)
+                        .textFieldStyle(.plain)
+                        .font(MekaType.body)
+                        .focused($focused)
+                        .onSubmit {
+                            if text.trimmingCharacters(in: .whitespaces).isEmpty { close(); return }
+                            add()
+                            focused = true
+                        }
+                        .onExitCommand { text = ""; close() }
+                        .accessibilityLabel(BoardHandRules.shared.addLabel(dayTitle: day.title))
+                    HStack(spacing: MekaSpace.xxs) {
+                        ForEach(BoardHandRules.shared.estimateChips(picked: picked.map { KotlinInt(int: Int32($0)) }), id: \.minutes) { chip in
+                            Button {
+                                MekaHaptics.tick()
+                                let next = BoardHandRules.shared.toggleEstimate(
+                                    picked: picked.map { KotlinInt(int: Int32($0)) }, tapped: chip.minutes
+                                )
+                                picked = next.map { Int($0.int32Value) }
+                                focused = true
+                            } label: {
+                                Text(chip.label).font(MekaType.micro)
+                                    .foregroundStyle(chip.picked ? palette.background : palette.textSecondary)
+                                    .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                                    .background(Capsule().fill(chip.picked ? palette.accent : palette.surface))
+                            }
+                            .buttonStyle(MekaPressStyle())
+                            .animation(MekaMotion.appear(reduced: reduceMotion), value: chip.picked)
+                        }
+                    }
                 }
-                .onExitCommand { text = ""; adding = false }
-        } else {
-            Button { adding = true } label: {
-                Text("+ Add").font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .padding(MekaSpace.xs)
+                .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+                .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent, lineWidth: 1))
+                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
+                .onAppear { focused = true }
+                .onChange(of: focused) { _, now in
+                    // Clicking away closes it; a chip's click hands focus straight back, so wait a beat first.
+                    guard !now, open else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .milliseconds(150))
+                        if !focused && open { add(); close() }
+                    }
+                }
+            } else {
+                Button {
+                    MekaHaptics.tick()
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open = true }
+                } label: {
+                    Text(BoardHandRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                        .padding(.horizontal, MekaSpace.s)
+                        .contentShape(Rectangle())
+                        .overlay(
+                            RoundedRectangle(cornerRadius: MekaRadius.m)
+                                .strokeBorder(palette.hairline, style: StrokeStyle(lineWidth: 1, dash: [6, 4]))
+                        )
+                }
+                .buttonStyle(MekaPressStyle())
+                .help("Add a task on this day")
+                .accessibilityLabel(BoardHandRules.shared.addLabel(dayTitle: day.title))
             }
-            .buttonStyle(MekaPressStyle())
-            .help("Add a task on this day")
         }
+    }
+
+    private func add() {
+        let words = text
+        let minutes = picked
+        text = ""; picked = nil
+        model.addOnBoard(words, day: day.epochDay, minutes: minutes)
+    }
+
+    private func close() {
+        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open = false }
     }
 }
 
@@ -337,20 +412,15 @@ private struct BoardCardView: View {
     var body: some View {
         let selected = model.boardSelectedID == card.id
         HStack(alignment: .top, spacing: MekaSpace.xs) {
-            Button { model.completeOnBoard(card.id, title: card.title) } label: {
-                Circle()
-                    .strokeBorder(card.done ? palette.accent : palette.textTertiary, lineWidth: 1.5)
-                    .background(Circle().fill(card.done ? palette.accent : Color.clear))
-                    .frame(width: 14, height: 14)
+            BoardTick(done: card.done, palette: palette) {
+                if card.done { model.reopenOnBoard(card.id, title: card.title) } else { model.completeOnBoard(card.id, title: card.title) }
             }
-            .buttonStyle(MekaPressStyle())
-            .disabled(card.done)
-            .accessibilityLabel(card.done ? "Done" : "Tick off \(card.title)")
-            .padding(.top, MekaSpace.xxs)
+            .accessibilityLabel(BoardHandRules.shared.tickLabel(title: card.title, done: card.done))
             VStack(alignment: .leading, spacing: 0) {
                 Text(card.title).font(MekaType.body)
                     .foregroundStyle(card.done ? palette.textTertiary : palette.textPrimary)
-                    .lineLimit(3)
+                    .strikethrough(card.done, color: palette.textTertiary)
+                    .lineLimit(2)
                 let meta = card.meta
                 if !meta.isEmpty {
                     Text(meta).font(MekaType.micro)
@@ -463,6 +533,44 @@ private struct BoardCardView: View {
         if d == board.todayEpochDay + 1 { return "Tomorrow" }
         guard let day = board.day(epochDay: d) else { return "" }
         return "\(day.weekday) \(day.number)"
+    }
+}
+
+/// The tick on a card (by hand, slice 1): a 20 pt circle in its own 28 pt target, separate from the card's click. A click
+/// fills it gold with a tick and a spark ring that grows and fades (0.6 s); clicked again it empties. Reduce Motion: the
+/// fill cross-fades, no spark.
+private struct BoardTick: View {
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let done: Bool
+    let palette: MekaPalette
+    let action: () -> Void
+    @State private var spark = false
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle().stroke(palette.accent, lineWidth: 2)
+                    .frame(width: 20, height: 20)
+                    .scaleEffect(spark ? 2.4 : 0.4)
+                    .opacity(spark ? 0 : (done && !reduceMotion ? 1 : 0))
+                Circle()
+                    .strokeBorder(done ? palette.accent : palette.textTertiary, lineWidth: 1.5)
+                    .background(Circle().fill(done ? palette.accent : Color.clear))
+                    .frame(width: 20, height: 20)
+                if done {
+                    Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(palette.background)
+                }
+            }
+            .frame(width: 28, height: 28)
+            .contentShape(Circle())
+        }
+        .buttonStyle(MekaPressStyle())
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: done)
+        .onChange(of: done) { _, now in
+            guard now, !reduceMotion else { spark = false; return }
+            spark = false
+            withAnimation(.easeOut(duration: 0.6)) { spark = true }
+        }
     }
 }
 

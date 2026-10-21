@@ -3458,10 +3458,22 @@ final class CoreModel {
     }
 
     /// "+ Add" at the foot of a Board column: a task on that day, last in its order.
-    func addOnBoard(_ text: String, day: Int64) {
+    func addOnBoard(_ text: String, day: Int64, minutes: Int? = nil) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        run { _ = try await $0.addOnBoard(text: trimmed, day: day) }
+        MekaHaptics.light()
+        // By hand, slice 1: the estimate chip picked under the add field (15m · 30m · 1h · 2h), or none.
+        run { core in
+            let value = minutes.map { KotlinInt(int: Int32(clamping: $0)) }
+            _ = try await core.addOnBoardSized(text: trimmed, day: day, minutes: value)
+        }
+    }
+
+    /// By hand, slice 1: a second click on a done card's tick un-ticks it, with Undo (ticked off again).
+    func reopenOnBoard(_ id: String, title: String) {
+        MekaHaptics.tick()
+        run { try await $0.reopen(taskId: id) }
+        offerEventUndo("Not done “\(title)”", .complete(id))
     }
 
     /// "How long?" on a Board card (Week board, slice 3): the estimate in minutes, or nil to clear it; the undo bar
@@ -3928,6 +3940,7 @@ final class CoreModel {
         case .weekPlan: run { _ = try await $0.undoWeekPlan() }
         case .resumeAlerts: run { _ = try await $0.resumeAlerts() }
         case .reopen(let id): run { try await $0.reopen(taskId: id) }
+        case .complete(let id): run { try await $0.complete(taskId: id) }
         case .restoreStep(let id): run { try await $0.restoreStep(stepId: id) }
         case .tickSteps(let ids): run { try await $0.tickSteps(stepIds: ids) }
         case .removeSteps(let ids): run { core in for id in ids { try await core.removeStep(stepId: id) } }
@@ -6790,6 +6803,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case resumeAlerts
         /// The ring on a Board card: ticked back open.
         case reopen(String)
+        /// Un-ticking a Board card (by hand, slice 1): ticked off again.
+        case complete(String)
         /// Remove on a checklist item: it comes back with its tick and place.
         case restoreStep(String)
         /// Untick all on a checklist: these are ticked again.

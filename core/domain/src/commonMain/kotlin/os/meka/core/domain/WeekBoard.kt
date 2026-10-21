@@ -320,7 +320,12 @@ object WeekBoardRules {
     /** The day [t] sits on, or null when it isn't on the board (Someday, waiting, dropped, parked in a week's lane, or done with no time). */
     fun columnOf(t: Task, today: Long, calendar: LocalCalendar): Long? = when (t.lifecycle) {
         Lifecycle.ACTIVE, Lifecycle.INBOX -> if (parked(t)) null else TaskWhenRules.dayOf(t, today, calendar)
-        Lifecycle.DONE -> t.completedAtMs?.let(calendar::epochDayOf)
+        // Done on the day he did it; one ticked off early stays in the later day it was planned for (by hand, slice 1:
+        // Sunsama-style, the card stays in its day).
+        Lifecycle.DONE -> t.completedAtMs?.let(calendar::epochDayOf)?.let { doneDay ->
+            val planned = t.scheduledAtMs?.let(calendar::epochDayOf) ?: t.showsFromDay
+            if (planned != null && planned > doneDay) planned else doneDay
+        }
         else -> null
     }
 

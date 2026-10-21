@@ -2720,12 +2720,19 @@ class MekaCore(
     }
 
     /** Quick add at the foot of a Board column: [text] becomes a task on local [day] (no time), last in that day. */
-    suspend fun addOnBoard(text: String, day: Long): String? {
+    suspend fun addOnBoard(text: String, day: Long): String? = addOnBoardSized(text, day, null)
+
+    /**
+     * The Week board's "+ Add a task" at the top of a day (by hand, slice 1): a task on that day, last among its open
+     * cards, with the estimate chip he picked under the field (15m · 30m · 1h · 2h), or none.
+     */
+    suspend fun addOnBoardSized(text: String, day: Long, minutes: Int?): String? {
         val draft = QuickCapture.draft(text, null) ?: return null
         return onCore {
             val id = tasks.create(NewTask(draft.title, notes = draft.notes))
             val today = ZoneCalendar(timeZone).epochDayOf(nowMs())
             if (day > today) tasks.setWhen(id, day, null)
+            if (minutes != null && minutes > 0) tasks.setEstimate(id, minutes)
             id
         }
     }
