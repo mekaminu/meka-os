@@ -184,6 +184,53 @@ class WeekBoardFacadeTest {
     }
 
     @Test
+    fun aCardDroppedOnAnotherDaysFreeTimeIsMovedAndBlockedThereWithUndo() = runTest {
+        val server = EditingTransport(listOf(ConnectedAccount("google", "meka@gmail.com", "ok", null, canEdit = true)))
+        val fold = MekaCore(
+            householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = server,
+            secureRandom = Random(2), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        fold.tick()
+        val today = fold.weekBoard.value.todayEpochDay
+        val sat = today + 2
+        val id = fold.addOnBoard("Book MOT", today + 1)!!
+        val free = fold.weekBoard.value.day(sat)!!.freeTimes.first()
+        assertEquals("09:00–21:00", free.label)
+
+        // No calendar allows editing yet: it says so and nothing moves.
+        val none = fold.dropOnFreeTime(id, sat, free.startMs, 0.5f)!!
+        assertFalse(none.done)
+        assertEquals(os.meka.core.domain.BoardBlockRules.NO_ACCOUNT, none.line)
+        assertEquals(listOf(id), fold.weekBoard.value.day(today + 1)!!.cards.map { it.id })
+
+        fold.refreshCalendarAccounts()
+        val drop = fold.dropOnFreeTime(id, sat, free.startMs, 0.5f)!!
+        assertTrue(drop.done)
+        assertEquals("Blocked “Book MOT” · Sat 10 Oct 14:45–15:15 in Google", drop.line)
+        assertTrue(fold.weekBoard.value.day(today + 1)!!.cards.isEmpty())
+        assertEquals("14:45 · 30m", fold.weekBoard.value.day(sat)!!.cards.single().meta)
+        assertEquals(listOf("Adding “Book MOT” to Google"), fold.calendarEditLines.value.map { it.text })
+
+        assertTrue(fold.undoBlock())
+        assertTrue(fold.calendarEditLines.value.isEmpty())
+        assertEquals(listOf(id), fold.weekBoard.value.day(today + 1)!!.cards.map { it.id })
+        assertTrue(fold.weekBoard.value.day(sat)!!.cards.isEmpty())
+
+        // From the week's lane: blocked on the day, and Undo parks it again.
+        val monday = fold.weekBoard.value.weeks[0].startEpochDay
+        fold.parkOnBoard(id, monday, 0)
+        assertTrue(fold.dropOnFreeTime(id, sat, free.startMs, 0f)!!.done)
+        assertEquals("09:00 · 30m", fold.weekBoard.value.day(sat)!!.cards.single().meta)
+        assertTrue(fold.weekBoard.value.weeks[0].lane.isEmpty())
+        assertTrue(fold.undoBlock())
+        assertEquals(listOf(id), fold.weekBoard.value.weeks[0].lane.map { it.id })
+
+        // Not a free time the day has, or a day gone by: nothing.
+        assertNull(fold.dropOnFreeTime(id, sat, free.startMs + 60_000L, 0f))
+        assertNull(fold.dropOnFreeTime(id, today - 1, free.startMs, 0f))
+    }
+
+    @Test
     fun goalsPickedOnTheBoardCountTheirTaggedTasksOnBothDevicesWithUndo() = runTest {
         val fold = core("android"); val mac = core("mac")
         val run = fold.addGoal("Run 5k", null, os.meka.core.domain.GoalHorizon.MONTH)

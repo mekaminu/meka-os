@@ -24,6 +24,11 @@ import SwiftUI
 /// the context menu's For a goal; a tagged card says "◎ Run 5k". Right-click a goal for Off this week; "+ Goal" offers
 /// open goals or New goal… to type one. Every change has Undo.
 ///
+/// Slice 9: under its events each day from today shows its timeline of free times ("10:00–12:00 · 2h free", taller for
+/// longer stretches). Drop a card on one to block it there, where you let go on the quarter hour, moved to that day if
+/// it was elsewhere, its block going to the calendar as busy time with Undo; a stretch too short says so. The targeted
+/// free time glows gold and says "Drop to block here".
+///
 /// Motion: weeks push across the way you moved; a targeted column lifts (scale 1.01) and its edge blends to gold on the
 /// approve spring; cards glide to their new places (replan). Reduce Motion: cross-fades, no lift.
 struct WeekBoardScreen: View {
@@ -192,6 +197,15 @@ private struct BoardColumnView: View {
                 }
             }
 
+            if !day.freeTimes.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(BoardBlockRules.shared.FREE_TITLE.uppercased()).font(MekaType.micro).foregroundStyle(palette.textTertiary)
+                    ForEach(day.freeTimes, id: \.startMs) { free in
+                        FreeTimeView(free: free, day: day, board: board, palette: palette)
+                    }
+                }
+            }
+
             ForEach(Array(day.cards.enumerated()), id: \.element.id) { i, card in
                 BoardCardView(card: card, spot: .day(day), board: board, palette: palette)
             }
@@ -242,6 +256,41 @@ private struct BoardColumnView: View {
             .buttonStyle(MekaPressStyle())
             .help("Add a task on this day")
         }
+    }
+}
+
+/// Slice 9: one free stretch in a day's timeline, taller for a longer stretch. A card dropped on it is blocked there
+/// (where it was let go, as a fraction of the height). Targeted: a gold edge and tint, "Drop to block here".
+private struct FreeTimeView: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let free: BoardFreeTime
+    let day: BoardDay
+    let board: WeekBoard
+    let palette: MekaPalette
+    @State private var targeted = false
+    @State private var height: CGFloat = 24
+
+    var body: some View {
+        Text(targeted ? "Drop to block here" : "\(free.label) · \(free.lengthLabel)")
+            .font(MekaType.micro)
+            .foregroundStyle(targeted ? palette.accent : palette.textTertiary)
+            .lineLimit(1)
+            .padding(.horizontal, MekaSpace.xs)
+            .padding(.vertical, MekaSpace.xxs)
+            .frame(maxWidth: .infinity, minHeight: 24 + 40 * CGFloat(free.weight), alignment: .topLeading)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(targeted ? palette.accent.opacity(0.14) : Color.clear))
+            .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(targeted ? palette.accent : palette.hairline, lineWidth: 1))
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height = $0 }
+            .animation(MekaMotion.appear(reduced: reduceMotion), value: targeted)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(free.spoken)
+            .dropDestination(for: String.self) { ids, location in
+                guard let id = ids.first, board.find(taskId: id) != nil else { return false }
+                let fraction = Float(max(0, min(1, location.y / max(height, 1))))
+                model.dropOnFreeTime(id, day: day.epochDay, start: free.startMs, fraction: fraction)
+                return true
+            } isTargeted: { targeted = $0 }
     }
 }
 

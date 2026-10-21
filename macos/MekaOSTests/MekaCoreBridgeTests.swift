@@ -1592,6 +1592,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(none.heading, "Block time · 30m")
         XCTAssertFalse(none.canBlock)
         XCTAssertEqual(none.line, BoardBlockRules.shared.NO_ACCOUNT)
+        // Slice 9: free times in a day's timeline.
+        let free = BoardFreeTime(startMs: 0, endMs: 7_200_000, startMinute: 600, endMinute: 720)
+        XCTAssertEqual(free.label, "10:00–12:00")
+        XCTAssertEqual(free.lengthLabel, "2h free")
+        XCTAssertEqual(BoardBlockRules.shared.FREE_TITLE, "Free")
+        XCTAssertEqual(FreeTimeDrop(line: "x", done: false).done, false)
         // Slice 7: the goals lane.
         XCTAssertEqual(BoardGoalRules.shared.MENU_TITLE, "For a goal")
         XCTAssertEqual(BoardGoalRules.shared.tag(goalTitle: "Run 5k"), "◎ Run 5k")

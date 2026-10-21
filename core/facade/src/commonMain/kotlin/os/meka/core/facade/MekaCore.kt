@@ -2193,8 +2193,8 @@ class MekaCore(
 
     private class BlockUndo(
         val taskId: String,
-        val before: os.meka.core.domain.TaskTiming,
-        val after: os.meka.core.domain.TaskTiming,
+        /** The timing before and after, and (a drop from elsewhere, slice 9) the Board move that brought it. */
+        val board: os.meka.core.domain.BoardUndo,
         val addId: String?,
         val estimateSet: Boolean,
     )
@@ -2227,32 +2227,81 @@ class MekaCore(
     suspend fun blockOnBoard(taskId: String, startMs: Long): String? = onCore {
         val offer = blockOfferNow(taskId)?.takeIf { it.canBlock } ?: return@onCore null
         val slot = offer.slots.firstOrNull { it.startMs == startMs } ?: return@onCore null
-        val task = tasks.get(taskId) ?: return@onCore null
-        val before = os.meka.core.domain.TaskTiming.of(task)
-        tasks.setWhen(taskId, offer.epochDay, slot.minute)
+        blockAt(taskId, offer.epochDay, slot, offer.lengthMin, offer.provider!!, offer.moves, null)
+    }
+
+    /**
+     * Week board slice 9 (item (3)): a card dropped on a free time in a day's timeline ([os.meka.core.domain.BoardDay.freeTimes],
+     * the one starting at [freeStartMs] on [day]), let go [fraction] of the way down it. The card goes to that day if
+     * it was elsewhere (another day, the week's lane, Someday) and is blocked there like Block time, his drop being the
+     * tap. Returns the bar's line with done = true ([undoBlock] takes it all back), a line saying why with done = false
+     * (the stretch is too short, no calendar allows editing) when nothing changed, or null when it can't go there at all.
+     */
+    suspend fun dropOnFreeTime(taskId: String, day: Long, freeStartMs: Long, fraction: Float): os.meka.core.domain.FreeTimeDrop? = onCore {
+        val board = _board.value
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val target = board.day(day)?.takeIf { it.canDrop } ?: return@onCore null
+        val free = target.freeTimes.firstOrNull { it.startMs == freeStartMs } ?: return@onCore null
+        val spot = board.find(taskId) ?: return@onCore null
+        val card = spot.card
+        if (card.done || card.task.isRepeating || !card.canMove) return@onCore null
+        val length = os.meka.core.domain.BoardBlockRules.lengthOf(card)
+        val slot = os.meka.core.domain.BoardBlockRules.dropSlot(free, length, fraction, day, cal)
+            ?: return@onCore os.meka.core.domain.FreeTimeDrop(os.meka.core.domain.BoardBlockRules.tooShort(card.task.title, length, free), false)
+        val edits = calendarEdits.all()
+        val overlaid = os.meka.core.domain.PendingEditRules.apply(events.all(), edits, nowMs())
+        val block = os.meka.core.domain.PlanCalendarRules.blockOf(taskId, overlaid, edits)?.takeIf { !it.removed }
+        val provider = block?.provider ?: os.meka.core.domain.PlanCalendarRules.target(
+            _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(edits),
+        )?.provider ?: return@onCore os.meka.core.domain.FreeTimeDrop(os.meka.core.domain.BoardBlockRules.NO_ACCOUNT, false)
+        // Onto the day first (off the lane or Someday, among the day's cards in time order), then the block.
+        val moved = if (spot.source != os.meka.core.domain.BoardSource.DAY || spot.key != day) {
+            val index = target.openCards.count { c -> c.task.scheduledAtMs?.let { it < slot.startMs } ?: false }
+            val move = os.meka.core.domain.WeekBoardRules.move(board, taskId, day, index, today, cal) ?: return@onCore null
+            tasks.placeOnBoard(move)
+        } else null
+        val line = blockAt(taskId, day, slot, length, provider, block != null, moved)
+            ?: return@onCore os.meka.core.domain.FreeTimeDrop(os.meka.core.domain.BoardBlockRules.NO_ACCOUNT, false)
+        os.meka.core.domain.FreeTimeDrop(line, true)
+    }
+
+    /**
+     * Plans [taskId] at [slot] on [day] and adds its block (or moves the one it has). [moved] is the Board move that
+     * brought it to [day] first, if any, so Undo puts it back where it was. Null (and everything put back) when the
+     * calendar add couldn't be made.
+     */
+    private fun blockAt(
+        taskId: String, day: Long, slot: os.meka.core.domain.BlockSlot, lengthMin: Int, provider: String, moves: Boolean,
+        moved: os.meka.core.domain.BoardUndo?,
+    ): String? {
+        val task = tasks.get(taskId) ?: return null
+        val before = moved?.before ?: os.meka.core.domain.TaskTiming.of(task)
+        tasks.setWhen(taskId, day, slot.minute)
         val estimateSet = task.estimateMinutes == null
-        if (estimateSet) tasks.setEstimate(taskId, offer.lengthMin)
+        if (estimateSet) tasks.setEstimate(taskId, lengthMin)
         val after = os.meka.core.domain.TaskTiming.of(tasks.get(taskId)!!)
+        val boardUndo = moved?.copy(before = before, after = after) ?: os.meka.core.domain.BoardUndo(taskId, before, after, emptyMap())
         var addId: String? = null
-        if (offer.moves) {
+        if (moves) {
             followBlocks(listOf(taskId))
         } else {
             val target = os.meka.core.domain.PlanCalendarRules.target(
                 _editAccounts.value, os.meka.core.domain.AddEventRules.lastUsedKey(calendarEdits.all()),
             )
             val r = target?.let {
-                calendarEdits.add(it.provider, it.email, os.meka.core.domain.BoardBlockRules.draft(task, slot.startMs, offer.lengthMin), forTask = taskId)
+                calendarEdits.add(it.provider, it.email, os.meka.core.domain.BoardBlockRules.draft(task, slot.startMs, lengthMin), forTask = taskId)
             }
             if (r !is os.meka.core.domain.EventEditResult.Made) {
-                tasks.undoBoard(os.meka.core.domain.BoardUndo(taskId, before, after, emptyMap()))
+                tasks.undoBoard(boardUndo)
                 if (estimateSet) tasks.setEstimate(taskId, null)
-                return@onCore null
+                return null
             }
             addId = r.id
         }
-        blockUndo = BlockUndo(taskId, before, after, addId, estimateSet)
-        os.meka.core.domain.BoardBlockRules.line(
-            task.title, slot, offer.epochDay, ZoneCalendar(timeZone).epochDayOf(nowMs()), offer.provider!!, offer.moves,
+        blockUndo = BlockUndo(taskId, boardUndo, addId, estimateSet)
+        return os.meka.core.domain.BoardBlockRules.line(
+            task.title, slot, day, ZoneCalendar(timeZone).epochDayOf(nowMs()), provider, moves,
         )
     }
 
@@ -2264,7 +2313,7 @@ class MekaCore(
         val u = blockUndo ?: return@onCore false
         blockUndo = null
         val tookBack = u.addId?.let { calendarEdits.undo(it) } ?: false
-        tasks.undoBoard(os.meka.core.domain.BoardUndo(u.taskId, u.before, u.after, emptyMap()))
+        tasks.undoBoard(u.board)
         if (u.estimateSet) tasks.setEstimate(u.taskId, null)
         if (!tookBack) followBlocks(listOf(u.taskId))
         true

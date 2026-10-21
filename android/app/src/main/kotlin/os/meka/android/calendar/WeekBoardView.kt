@@ -94,6 +94,8 @@ import os.meka.core.domain.PressureFix
 import os.meka.core.domain.TaskEstimateRules
 import os.meka.core.domain.BlockOffer
 import os.meka.core.domain.BlockSlot
+import os.meka.core.domain.BoardBlockRules
+import os.meka.core.domain.BoardFreeTime
 import os.meka.core.domain.WeekBoard
 import os.meka.core.domain.WeekBoardRules
 import os.meka.core.facade.MekaCore
@@ -124,6 +126,12 @@ import os.meka.core.facade.MekaCore
  * tagged to it. Drop a card on a goal to tag it, or use the card menu's FOR A GOAL; a tagged card says "◎ Run 5k". Tap
  * a goal for Off this week; "+ Goal" offers open goals or a new one typed. Every change has Undo.
  *
+ * Slice 9: unfolded, each day from today shows its timeline of free times under its events ("10:00–12:00 · 2h free",
+ * taller for longer stretches). Drop a card on one to block it there: it lands where you let go, on the quarter hour,
+ * moved to that day if it was elsewhere, and its block goes to the calendar as busy time ("Blocked “Book MOT” · Sat
+ * 10:00–10:30 in Google · Undo"); a stretch too short says so and nothing moves. While a card is held the free times
+ * light up and the one under it glows gold with "Drop to block here".
+ *
  * Reduced motion: no lift or scale, colours and moves cross-fade.
  */
 @Composable
@@ -140,6 +148,8 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
     // Where a card can land: a day's column (its epoch day), the week's lane (LANE) or the Someday tray (TRAY).
     val columns = remember { mutableStateMapOf<Long, Rect>() }
     val cards = remember { mutableStateMapOf<String, Rect>() }
+    // Slice 9: the free times in each day's timeline (unfolded), keyed by day and start.
+    val freeSlots = remember { mutableStateMapOf<Pair<Long, Long>, Rect>() }
     var origin by remember { mutableStateOf(Offset.Zero) }
     val hovered by remember {
         derivedStateOf {
@@ -149,7 +159,11 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
             }
         }
     }
+    val hoveredFree by remember {
+        derivedStateOf { drag?.let { d -> freeSlots.entries.firstOrNull { (_, r) -> r.contains(d.pointer) }?.key } }
+    }
     LaunchedEffect(hovered) { if (drag != null && hovered != null) haptics.tick() }
+    LaunchedEffect(hoveredFree) { if (drag != null && hoveredFree != null) haptics.tick() }
     fun showLine(line: String?) { if (line != null) { haptics.light(); undo.show(line) { core.undoBoardMove() } } }
     val onPark: (BoardCard, Long) -> Unit = { card, week -> scope.launch { showLine(runCatching { core.parkOnBoard(card.id, week, Int.MAX_VALUE) }.getOrNull()) } }
     val onSomeday: (BoardCard) -> Unit = { card -> scope.launch { showLine(runCatching { core.somedayOnBoard(card.id) }.getOrNull()) } }
@@ -194,9 +208,22 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
             val d = drag
             drag = null
             val at = hovered
+            val free = hoveredFree
             val week = board.weeks.getOrNull(weekIndex)
             if (d == null || at == null) return@drop
             when {
+                free != null && wide -> {
+                    val r = freeSlots[free]
+                    val fraction = r?.let { ((d.pointer.y - it.top) / it.height.coerceAtLeast(1f)).coerceIn(0f, 1f) } ?: 0f
+                    scope.launch {
+                        val result = runCatching { core.dropOnFreeTime(d.card.id, free.first, free.second, fraction) }.getOrNull()
+                        when {
+                            result == null -> Unit
+                            result.done -> { haptics.light(); undo.show(result.line) { core.undoBlock() } }
+                            else -> undo.show(result.line, null)
+                        }
+                    }
+                }
                 at <= GOAL_KEY && week != null -> week.goals.getOrNull((GOAL_KEY - at).toInt())?.takeIf { !it.finished }?.let { onTag(d.card, it.goalId) }
                 at == LANE && week != null -> {
                     val index = week.lane.filter { it.id != d.card.id }.count { c -> (cards[c.id]?.center?.x ?: 0f) < d.pointer.x }
@@ -238,6 +265,9 @@ fun WeekBoardView(core: MekaCore, undo: EventUndo, onEvent: (CalendarEvent) -> U
                         width = colWidth,
                         hovered = drag != null && hovered == day.epochDay && day.canDrop,
                         dragging = drag?.card?.id,
+                        showFree = wide,
+                        freeHovered = hoveredFree?.takeIf { drag != null && it.first == day.epochDay }?.second,
+                        onFreeBounds = { start, r -> freeSlots[day.epochDay to start] = r },
                         onBounds = { columns[day.epochDay] = it },
                         onCardBounds = { id, r -> cards[id] = r },
                         onPick = pick,
@@ -350,6 +380,9 @@ private fun DayColumn(
     width: androidx.compose.ui.unit.Dp,
     hovered: Boolean,
     dragging: String?,
+    showFree: Boolean,
+    freeHovered: Long?,
+    onFreeBounds: (Long, Rect) -> Unit,
     onBounds: (Rect) -> Unit,
     onCardBounds: (String, Rect) -> Unit,
     onPick: (BoardCard, Offset) -> Unit,
@@ -427,6 +460,7 @@ private fun DayColumn(
                 day.moreLabel?.let { Text(it, style = MekaType.micro, color = Meka.colors.textTertiary) }
             }
         }
+        if (showFree && day.freeTimes.isNotEmpty()) FreeTimeline(day.freeTimes, dragging != null, freeHovered, onFreeBounds)
         Spacer(Modifier.height(MekaSpace.xs))
         Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             day.cards.forEach { card ->
@@ -595,6 +629,50 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onDone: (() -> Unit)? = n
  * "3h planned · 4h free" under a column's date with a slim bar (slice 3): gold as it fills, amber when the day is
  * over-planned, breathing gently then (Reduced motion: steady). The bar's width glides as estimates change.
  */
+/**
+ * Slice 9: a day's free times, unfolded, each a slim slot taller for a longer stretch ("10:00–12:00 · 2h free"). While a
+ * card is held they light up; the one under it glows gold and says "Drop to block here". Reduced motion: colours only.
+ */
+@Composable
+private fun FreeTimeline(free: List<BoardFreeTime>, holding: Boolean, hovered: Long?, onBounds: (Long, Rect) -> Unit) {
+    val reduced = Meka.reducedMotion
+    Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Text(BoardBlockRules.FREE_TITLE.uppercase(), style = MekaType.micro, color = Meka.colors.textTertiary)
+        free.forEach { f ->
+            val lit = hovered == f.startMs
+            val edge by animateColorAsState(
+                when {
+                    lit -> Meka.colors.accent
+                    holding -> Meka.colors.accent.copy(alpha = 0.4f)
+                    else -> Meka.colors.hairline
+                },
+                MekaMotion.appear(reduced), label = "free-edge",
+            )
+            val tint by animateColorAsState(
+                if (lit) Meka.colors.accent.copy(alpha = 0.14f) else Meka.colors.background.copy(alpha = 0f),
+                MekaMotion.appear(reduced), label = "free-fill",
+            )
+            Box(
+                Modifier.fillMaxWidth().height(FREE_MIN_H + (FREE_MAX_H - FREE_MIN_H) * f.weight)
+                    .onGloballyPositioned { onBounds(f.startMs, it.boundsInRoot()) }
+                    .clip(RoundedCornerShape(MekaRadius.s)).background(tint)
+                    .border(1.dp, edge, RoundedCornerShape(MekaRadius.s))
+                    .clearAndSetSemantics { contentDescription = f.spoken }
+                    .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+            ) {
+                Text(
+                    if (lit) "Drop to block here" else "${f.label} · ${f.lengthLabel}",
+                    style = MekaType.micro, color = if (lit) Meka.colors.accent else Meka.colors.textTertiary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+private val FREE_MIN_H = 24.dp
+private val FREE_MAX_H = 64.dp
+
 @Composable
 private fun CapacityBar(c: BoardCapacity) {
     val reduced = Meka.reducedMotion

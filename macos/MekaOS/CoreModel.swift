@@ -3302,6 +3302,21 @@ final class CoreModel {
         }
     }
 
+    /// Slice 9: a card dropped on a free time in a day's timeline: moved to that day if elsewhere and blocked where he
+    /// let go ([fraction] down the stretch), with Undo; a stretch too short (or no calendar allowing editing) says so.
+    func dropOnFreeTime(_ id: String, day: Int64, start: Int64, fraction: Float) {
+        guard let core else { return }
+        Task {
+            guard let result = try? await core.dropOnFreeTime(taskId: id, day: day, freeStartMs: start, fraction: fraction) else { return }
+            if result.done {
+                MekaHaptics.light()
+                offerEventUndo(result.line, .block)
+            } else {
+                offerEventUndo(result.line, nil)
+            }
+        }
+    }
+
     // MARK: Week board, slice 7: the goals lane
 
     /// "For a goal" on a Board card, or a card dropped on a goal: tagged to that goal (nil: no goal), with Undo.

@@ -1,5 +1,30 @@
 package os.meka.core.domain
 
+/**
+ * One free stretch in a Board day's timeline (Week board slice 9, item (3)): [startMinute]–[endMinute] past local
+ * midnight, on the quarter hour, from the same free time the day's capacity counts. Unfolded on the Fold and on the
+ * Mac a card dropped on it is blocked there ([BoardBlockRules.dropSlot]).
+ */
+data class BoardFreeTime(val startMs: Long, val endMs: Long, val startMinute: Int, val endMinute: Int) {
+    val minutes: Int get() = endMinute - startMinute
+
+    /** "10:00–12:00" */
+    val label: String get() = "${LocalClock.formatMinute(startMinute)}–${LocalClock.formatMinute(endMinute)}"
+
+    /** "2h free" */
+    val lengthLabel: String get() = "${TaskEstimateRules.label(minutes)} free"
+
+    /** Screen readers: "Free from 10:00 to 12:00, drop a task here to block it". */
+    val spoken: String get() =
+        "Free from ${LocalClock.formatMinute(startMinute)} to ${LocalClock.formatMinute(endMinute)}, drop a task here to block it"
+
+    /** How tall its row draws in the timeline, 0–1 of the tallest (a stretch of [BoardBlockRules.TALL_MIN] or more). */
+    val weight: Float get() = (minutes.toFloat() / BoardBlockRules.TALL_MIN).coerceIn(0f, 1f)
+}
+
+/** What a card dropped on a free time did: [line] for the bar, [done] when it was blocked (Undo then applies). */
+data class FreeTimeDrop(val line: String, val done: Boolean)
+
 /** One start Block time offers on a Board card: [minute] past local midnight, "14:00–14:30". */
 data class BlockSlot(val startMs: Long, val minute: Int, val label: String, val spoken: String)
 
@@ -102,6 +127,51 @@ object BoardBlockRules {
             BlockSlot(calendar.toEpochMs(d, m), m, label, "${LocalClock.formatMinute(m)} to ${LocalClock.formatMinute(m + lengthMin)}")
         }
     }
+
+    /** A day's timeline shows at most this many free stretches (the earliest), each at least [MIN_FREE] long. */
+    const val MAX_FREE = 6
+    const val MIN_FREE = 15
+    /** A free stretch this long or longer draws at full height in the timeline. */
+    const val TALL_MIN = 180
+    const val FREE_TITLE = "Free"
+    const val DROP_HINT = "Drop a task on a free time to block it"
+
+    /**
+     * Day [d]'s free stretches for its timeline (slice 9): [TaskEstimateRules.freeGaps] with each start rounded up and
+     * each end down to the quarter hour, those of at least [MIN_FREE], the earliest [MAX_FREE]; none before today.
+     */
+    fun freeTimes(
+        d: Long, today: Long, nowMs: Long, events: List<CalendarEvent>, calendar: LocalCalendar, work: WorkHours?,
+        prefs: DayPlanner.Prefs = DayPlanner.Prefs(),
+    ): List<BoardFreeTime> {
+        if (d < today) return emptyList()
+        val dayEnd = calendar.toEpochMs(d + 1, 0)
+        return TaskEstimateRules.freeGaps(d, today, nowMs, events, calendar, work, prefs).mapNotNull { g ->
+            var s = calendar.minuteOfDay(g.startMs)
+            if (calendar.toEpochMs(d, s) < g.startMs) s += 1
+            s = (s + 14) / 15 * 15
+            val rawEnd = if (g.endMs >= dayEnd) 24 * 60 else calendar.minuteOfDay(g.endMs)
+            val e = rawEnd - rawEnd % 15
+            if (e - s < MIN_FREE) null else BoardFreeTime(calendar.toEpochMs(d, s), calendar.toEpochMs(d, e), s, e)
+        }.take(MAX_FREE)
+    }
+
+    /**
+     * Where a card of [lengthMin] dropped on [free] goes: at the point he let go ([fraction] down the stretch, 0 = its
+     * start), on the quarter hour, kept inside the stretch; null when the stretch is shorter than the card.
+     */
+    fun dropSlot(free: BoardFreeTime, lengthMin: Int, fraction: Float, d: Long, calendar: LocalCalendar): BlockSlot? {
+        if (lengthMin <= 0 || lengthMin > free.minutes) return null
+        val room = free.minutes - lengthMin
+        val off = (fraction.coerceIn(0f, 1f) * room / 15f).toInt() * 15
+        val m = free.startMinute + off.coerceIn(0, room)
+        val label = "${LocalClock.formatMinute(m)}–${LocalClock.formatMinute(m + lengthMin)}"
+        return BlockSlot(calendar.toEpochMs(d, m), m, label, "${LocalClock.formatMinute(m)} to ${LocalClock.formatMinute(m + lengthMin)}")
+    }
+
+    /** The bar when the stretch is too short: "“Book MOT” needs 1h · only 45m free there". */
+    fun tooShort(title: String, lengthMin: Int, free: BoardFreeTime): String =
+        "“${TaskTitleRules.display(title)}” needs ${TaskEstimateRules.label(lengthMin)} · only ${TaskEstimateRules.label(free.minutes)} free there"
 
     /** The block a tap adds: the task's title (so it keeps in step with the task), its length, Navilife's note. */
     fun draft(task: Task, startMs: Long, lengthMin: Int): EventDraft =

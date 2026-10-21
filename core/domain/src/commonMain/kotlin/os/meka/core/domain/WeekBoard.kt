@@ -76,6 +76,8 @@ data class BoardDay(
     val capacity: BoardCapacity? = null,
     /** Stacking up (item (10), [PressureRules]): the column glows amber with its line and fixes; null otherwise. */
     val pressure: DayPressure? = null,
+    /** Slice 9: the day's free stretches, its timeline's drop targets for blocking time (none before today). */
+    val freeTimes: List<BoardFreeTime> = emptyList(),
 ) {
     /** "Today" · "Mon 19" */
     val title: String get() = if (isToday) "Today" else "$weekday $number"
@@ -399,6 +401,7 @@ object WeekBoardRules {
             countLine = countLine,
             accessibilityLabel = spoken,
             capacity = capacity,
+            freeTimes = BoardBlockRules.freeTimes(d, today, nowMs, events, calendar, work),
         )
     }
 
