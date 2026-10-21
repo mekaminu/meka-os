@@ -32,7 +32,9 @@ struct DiscordCardsView: View {
                     if open {
                         VStack(alignment: .leading, spacing: MekaSpace.m) {
                             ForEach(block.cards, id: \.key) { card in
-                                DiscordChannelCardRow(card: card, palette: palette, keep: { model.keepDiscordIdea($0) }) { model.discordDone(card.key) }
+                                DiscordChannelCardRow(card: card, palette: palette, keep: { model.keepDiscordIdea($0) },
+                                                      toDay: { id, day in model.discordIdeaToDay(id, day: day) },
+                                                      toDays: { model.boardFeedDays() }) { model.discordDone(card.key) }
                             }
                         }
                         .padding(.top, MekaSpace.xs)
@@ -58,8 +60,12 @@ private struct DiscordChannelCardRow: View {
     let card: DiscordChannelCard
     let palette: MekaPalette
     let keep: (String) -> Void
+    /// Week board item (5) part 2: To a day… puts a post on one of `toDays` as a task.
+    let toDay: (String, Int64) -> Void
+    let toDays: () -> [FeedDay]
     let done: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var choosingDay: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -109,12 +115,37 @@ private struct DiscordChannelCardRow: View {
                         // Slice 4: a note in Lists → Someday → Trading ideas, never an order; cross-fades once kept.
                         Group {
                             if post.kept {
-                                Text("✓ " + DiscordRules.shared.KEPT_CHIP).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
-                                    .accessibilityLabel("Kept in Trading ideas")
+                                Text("✓ " + (post.onWeek ? DiscordRules.shared.ON_WEEK_CHIP : DiscordRules.shared.KEPT_CHIP))
+                                    .font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                                    .accessibilityLabel(post.onWeek ? "On a day of your week" : "Kept in Trading ideas")
                             } else {
-                                Button(DiscordRules.shared.KEEP_ACTION) { keep(post.id) }
-                                    .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
-                                    .accessibilityLabel("Keep as a trade idea in Lists. A note only, nothing is traded")
+                                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                    HStack(spacing: MekaSpace.l) {
+                                        Button(DiscordRules.shared.KEEP_ACTION) { keep(post.id) }
+                                            .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                                            .accessibilityLabel("Keep as a trade idea in Lists. A note only, nothing is traded")
+                                        // Week board item (5) part 2: the days unfold under it; a click on one sends it there.
+                                        Button(BoardFeedRules.shared.TO_DAY) {
+                                            MekaHaptics.tick()
+                                            choosingDay = choosingDay == post.id ? nil : post.id
+                                        }
+                                        .buttonStyle(MekaPressStyle()).foregroundStyle(palette.accent).font(MekaType.itemMeta)
+                                        .accessibilityLabel(BoardFeedRules.shared.ideaSpoken(author: post.author))
+                                    }
+                                    if choosingDay == post.id {
+                                        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                                            Text(BoardFeedRules.shared.PICK).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                                            HStack(spacing: MekaSpace.xs) {
+                                                ForEach(toDays(), id: \.day) { d in
+                                                    MailNeedsPill(label: d.label, palette: palette, spoken: "\(d.spoken): \(post.author)'s post",
+                                                                  action: { choosingDay = nil; toDay(post.id, d.day) })
+                                                }
+                                            }
+                                        }
+                                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                                    }
+                                }
+                                .animation(MekaMotion.expand(reduced: reduceMotion), value: choosingDay)
                             }
                         }
                         .transition(.opacity)

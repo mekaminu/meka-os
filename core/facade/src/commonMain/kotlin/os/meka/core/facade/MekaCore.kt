@@ -6905,7 +6905,10 @@ class MekaCore(
         _discordWatch.value = os.meka.core.domain.DiscordRules.view(
             discordStore.seen(), watched, nowMs(), cal, discordStore.people(), discordStore.words(), posts,
         )
-        _discord.value = os.meka.core.domain.DiscordRules.cards(posts, watched, nowMs(), cal, summaries = chatSummaryStore.all())
+        // Week board item (5) part 2: a post kept as a task on his week (To a day…) says "On your week", not Trading ideas.
+        val onWeek = posts.filter { p -> p.kept?.let { k -> liveTask(k) && tasks.get(k)?.lifecycle != os.meka.core.domain.Lifecycle.SOMEDAY } == true }
+            .map { it.id }.toSet()
+        _discord.value = os.meka.core.domain.DiscordRules.cards(posts, watched, nowMs(), cal, summaries = chatSummaryStore.all(), onWeek = onWeek)
     }
 
     /**
@@ -7022,6 +7025,34 @@ class MekaCore(
         discordStore.setKept(postId, id)
         discordChanged()
         os.meka.core.domain.DiscordRules.KEPT_LINE
+    }
+
+    /**
+     * Week board item (5) part 2: **To a day…** under a Discord post — the same note as [keepDiscordIdea] (the post's
+     * words, who said it, the channel and when, untrusted, ADR-006) as a task on local [day] of his week instead of in
+     * Trading ideas: a later day is its plan day with no time, Today's column holds it with no day, last in that day's
+     * order. A task to look at the idea only: nothing is traded, posted or acted on. Kept once per post; Undo is
+     * [undoKeepDiscordIdea]. Returns the line to show.
+     */
+    suspend fun discordIdeaToDay(postId: String, day: Long): String = onCore {
+        val p = discordStore.post(postId) ?: return@onCore os.meka.core.domain.DiscordRules.CANT_KEEP
+        if (liveTask(p.kept)) return@onCore os.meka.core.domain.DiscordRules.ALREADY_KEPT
+        if (p.text.isBlank()) return@onCore os.meka.core.domain.DiscordRules.CANT_KEEP
+        val cal = ZoneCalendar(timeZone)
+        val today = cal.epochDayOf(nowMs())
+        val onDay = os.meka.core.domain.BoardFeedRules.dayFor(day, today)
+        val id = tasks.create(os.meka.core.domain.NewTask(
+            os.meka.core.domain.DiscordRules.ideaTitle(p.author, p.channel.channel, p.text),
+            notes = os.meka.core.domain.DiscordRules.ideaNotes(p, cal),
+        ))
+        replica.commitLocal(os.meka.core.domain.EntityTypes.TASK, id, mapOf(
+            os.meka.core.domain.ActionableFields.PROVENANCE_SOURCE to "discord".fv(),
+            os.meka.core.domain.ActionableFields.PROVENANCE_TRUST to os.meka.core.domain.Trust.UNTRUSTED_EXTERNAL.name.fv(),
+        ))
+        if (onDay > today) tasks.setWhen(id, onDay, null)
+        discordStore.setKept(postId, id)
+        discordChanged()
+        os.meka.core.domain.BoardFeedRules.ideaLine(onDay, today)
     }
 
     /** Undo after Keep as idea: the note leaves Trading ideas and the post reads "Keep as idea" again. */

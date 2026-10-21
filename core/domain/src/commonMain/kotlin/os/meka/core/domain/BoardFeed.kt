@@ -49,4 +49,26 @@ object BoardFeedRules {
 
     /** What a screen reader says for the To a day… answer on an email. */
     fun spoken(subject: String): String = "Put $subject on a day of your week as a task, and archive the email"
+
+    // ---- Item (5) part 2: a Discord post to a day (a task to look at it, never an order) ----
+
+    /**
+     * "Idea on Fri 23 Oct · a task to look at it, nothing is traded" (for today / for tomorrow by name). The task's title
+     * is the post's idea title ([DiscordRules.ideaTitle]); its words stay Discord's (untrusted, ADR-006).
+     */
+    fun ideaLine(day: Long, today: Long): String {
+        val on = when (day) {
+            today -> "for today"
+            today + 1 -> "for tomorrow"
+            else -> "on ${CivilDate.shortLabel(day)}"
+        }
+        return "Idea $on · a task to look at it, nothing is traded"
+    }
+
+    /** Undo after To a day… on a post: the task leaves the Board and the post reads "Keep as idea" again. */
+    const val IDEA_UNDONE = "Taken off your week"
+
+    /** What a screen reader says for To a day… under a Discord post. */
+    fun ideaSpoken(author: String): String =
+        "Put $author's post on a day of your week as a task to look at. A note only, nothing is traded"
 }

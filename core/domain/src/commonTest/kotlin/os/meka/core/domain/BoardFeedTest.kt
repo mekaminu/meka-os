@@ -52,4 +52,22 @@ class BoardFeedTest {
         val note = assertNotNull(MailNeedsRules.read("mi2", MailNeedsRules.serverFields("Personal", "Me", "x@example.com", "Read this", "https://example.com/a", now - 60_000, 1, note = "example.com")))
         assertEquals(listOf(MailRowAction.TO_DAY, MailRowAction.SNOOZE), MailRowActionRules.actions(MailNeedsRules.card(listOf(note), now, cal)!!.rows.single(), toDay = true).more)
     }
+
+    @Test
+    fun aDiscordPostToADaySaysWhichDayAndThatNothingIsTraded() {
+        assertEquals("Idea on Fri 23 Oct · a task to look at it, nothing is traded", BoardFeedRules.ideaLine(wed + 2, wed))
+        assertEquals("Idea for tomorrow · a task to look at it, nothing is traded", BoardFeedRules.ideaLine(wed + 1, wed))
+        assertEquals("Idea for today · a task to look at it, nothing is traded", BoardFeedRules.ideaLine(wed, wed))
+        assertTrue(BoardFeedRules.ideaSpoken("Admin").endsWith("nothing is traded"))
+        // A post kept on his week reads "On your week"; one in Trading ideas doesn't.
+        val ch = DiscordChannel("s#ideas", "S", "ideas")
+        val now = wed * CivilDate.DAY_MS + 12 * 3_600_000L
+        val posts = listOf(
+            DiscordRules.Post("p1", ch, "Admin", "BTC long", now - 60_000, done = false, kept = "t1"),
+            DiscordRules.Post("p2", ch, "Admin", "ETH short", now - 30_000, done = false, kept = "t2"),
+        )
+        val rows = DiscordRules.cards(posts, setOf(ch.key), now, cal, onWeek = setOf("p1"))!!.cards.single().posts
+        assertEquals(listOf(true, false), rows.map { it.onWeek })
+        assertEquals(listOf(true, true), rows.map { it.kept })
+    }
 }

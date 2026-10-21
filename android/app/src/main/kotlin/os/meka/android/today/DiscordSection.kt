@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.wrapContentHeight
@@ -40,6 +42,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
+import os.meka.core.domain.BoardFeedRules
 import os.meka.core.domain.DiscordCards
 import os.meka.core.domain.DiscordChannelCard
 import os.meka.core.domain.DiscordRules
@@ -94,7 +97,15 @@ internal fun DiscordSection(
                                 if (said == DiscordRules.KEPT_LINE) undo(said) { runCatching { core.undoKeepDiscordIdea(postId) } }
                                 else undo(said, null)
                             }
-                        }) {
+                        }, onToDay = { postId, day ->
+                            // Week board item (5) part 2: the post as a task on that day of his week; Undo on the bar.
+                            haptics.medium()
+                            scope.launch {
+                                val said = runCatching { core.discordIdeaToDay(postId, day) }.getOrNull() ?: return@launch
+                                if (said != DiscordRules.ALREADY_KEPT && said != DiscordRules.CANT_KEEP) undo(said) { runCatching { core.undoKeepDiscordIdea(postId) } }
+                                else undo(said, null)
+                            }
+                        }, toDays = { core.boardFeedDays() }) {
                             haptics.medium()
                             // Slice 2: the channel's alert notification has done its job.
                             os.meka.android.work.DiscordAlerts.cancel(context, card.key)
@@ -111,7 +122,10 @@ internal fun DiscordSection(
 }
 
 @Composable
-private fun DiscordChannelCardView(card: DiscordChannelCard, onKeep: (String) -> Unit, onDone: () -> Unit) {
+private fun DiscordChannelCardView(
+    card: DiscordChannelCard, onKeep: (String) -> Unit, onToDay: (String, Long) -> Unit,
+    toDays: () -> List<os.meka.core.domain.FeedDay>, onDone: () -> Unit,
+) {
     Column(Modifier.fillMaxWidth().testTag("discord-${card.key}"), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = "${card.title}, ${card.server.orEmpty()}. ${card.line}" }) {
@@ -137,7 +151,7 @@ private fun DiscordChannelCardView(card: DiscordChannelCard, onKeep: (String) ->
                     Text("${post.author} · ${post.timeLine}", style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                     post.alert?.let { DiscordAlertChip(it) }
                     Text(post.text, style = MekaType.body, color = Meka.colors.textPrimary)
-                    DiscordKeep(post.kept) { onKeep(post.id) }
+                    DiscordKeep(post.kept, post.onWeek, post.author, toDays, onToDay = { day -> onToDay(post.id, day) }) { onKeep(post.id) }
                 }
             }
         }
@@ -158,23 +172,53 @@ private fun DiscordAlertChip(why: String) {
 /**
  * Slice 4: "Keep as idea" under a post — a note in Lists → Someday → Trading ideas (never an order; nothing is traded).
  * Once kept it reads "In Trading ideas" (cross-fade; reduced motion: instant). Undo is on the bar.
+ * Week board item (5) part 2: beside it **To a day…** unfolds "Which day?" and the day chips (expand spring; reduced
+ * motion: cross-fade); a tap makes the post a task on that day of his week, and the post then reads "On your week".
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun DiscordKeep(kept: Boolean, onKeep: () -> Unit) {
+private fun DiscordKeep(
+    kept: Boolean, onWeek: Boolean, author: String, toDays: () -> List<os.meka.core.domain.FeedDay>,
+    onToDay: (Long) -> Unit, onKeep: () -> Unit,
+) {
     val reduced = Meka.reducedMotion
+    val haptics = rememberMekaHaptics()
+    var choosingDay by rememberSaveable { mutableStateOf(false) }
     AnimatedContent(kept, transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut() }, label = "discord-keep") { k ->
         if (k) {
+            val chip = if (onWeek) DiscordRules.ON_WEEK_CHIP else DiscordRules.KEPT_CHIP
             Text(
-                "✓ " + DiscordRules.KEPT_CHIP, style = MekaType.itemMeta, color = Meka.colors.textTertiary,
-                modifier = Modifier.padding(vertical = MekaSpace.xs).semantics { contentDescription = "Kept in Trading ideas" },
+                "✓ $chip", style = MekaType.itemMeta, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(vertical = MekaSpace.xs).semantics { contentDescription = if (onWeek) "On a day of your week" else "Kept in Trading ideas" },
             )
         } else {
-            Text(
-                DiscordRules.KEEP_ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.defaultMinSize(minHeight = 48.dp).clickable(role = Role.Button, onClick = onKeep)
-                    .padding(vertical = MekaSpace.xs).wrapContentHeight(Alignment.CenterVertically)
-                    .semantics { contentDescription = "Keep as a trade idea in Lists. A note only, nothing is traded" },
-            )
+            Column {
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) {
+                    Text(
+                        DiscordRules.KEEP_ACTION, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp).clickable(role = Role.Button, onClick = onKeep)
+                            .padding(vertical = MekaSpace.xs).wrapContentHeight(Alignment.CenterVertically)
+                            .semantics { contentDescription = "Keep as a trade idea in Lists. A note only, nothing is traded" },
+                    )
+                    Text(
+                        BoardFeedRules.TO_DAY, style = MekaType.itemMeta, color = Meka.colors.accent,
+                        modifier = Modifier.defaultMinSize(minHeight = 48.dp)
+                            .clickable(role = Role.Button) { haptics.tick(); choosingDay = !choosingDay }
+                            .padding(vertical = MekaSpace.xs).wrapContentHeight(Alignment.CenterVertically)
+                            .semantics { contentDescription = BoardFeedRules.ideaSpoken(author) },
+                    )
+                }
+                AnimatedVisibility(choosingDay, enter = unfold(), exit = fold()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text(BoardFeedRules.PICK, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            toDays().forEach { d ->
+                                MailNeedsPill(d.label, spoken = "${d.spoken}: $author's post", onClick = { choosingDay = false; onToDay(d.day) })
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

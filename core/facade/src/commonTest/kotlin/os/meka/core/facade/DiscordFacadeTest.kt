@@ -132,4 +132,45 @@ class DiscordFacadeTest {
         assertEquals(false, fold.discord.value!!.cards.single().posts.single().kept)
         assertEquals("That post's words are gone · nothing to keep", fold.keepDiscordIdea("nope"))
     }
+
+    @Test
+    fun toADayPutsAPostOnThatDaysBoardColumnAsATaskAndUndoTakesItOff() = runTest(timeout = SLOW_RUNNER) {
+        val fold = core("android")
+        val mac = core("mac")
+        fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "first idea", now)))
+        fold.setDiscordWatched(ideas.key, true)
+        now += 60_000
+        fold.noteDiscord(listOf(DiscordCaptured(ideas, "Admin", "BTC long above 68k, stop 66.5k", now)))
+        fold.syncNow(); mac.syncNow()
+        val post = mac.discord.value!!.cards.single().posts.single()
+        // Mon 12 Oct: Thursday's chip.
+        val thu = mac.boardFeedDays().first { it.label == "Thu" }.day
+        assertEquals("Idea on Thu 15 Oct · a task to look at it, nothing is traded", mac.discordIdeaToDay(post.id, thu))
+        assertEquals(os.meka.core.domain.DiscordRules.ALREADY_KEPT, mac.discordIdeaToDay(post.id, thu))
+        assertEquals(os.meka.core.domain.DiscordRules.ALREADY_KEPT, mac.keepDiscordIdea(post.id))
+        val row = mac.discord.value!!.cards.single().posts.single()
+        assertTrue(row.kept); assertTrue(row.onWeek)
+        mac.tick()
+        val day = mac.weekBoard.value.days.single { d -> d.cards.any { it.title.startsWith("Admin in #trade-ideas") } }
+        assertEquals(thu, day.epochDay)
+        mac.syncNow(); fold.syncNow()
+        fold.tick()
+        assertEquals(true, fold.discord.value!!.cards.single().posts.single().onWeek)
+        val card = fold.weekBoard.value.days.flatMap { it.cards }.single { it.title.startsWith("Admin in #trade-ideas") }
+        assertEquals(thu, fold.weekBoard.value.dayOf(card.id)?.epochDay)
+        // Not in Trading ideas: it's a task on his week.
+        assertTrue(fold.listsView.value.someday.none { it.kind == os.meka.core.domain.SomedayKind.TRADING })
+
+        // Undo on the Fold: off the Board and the post can be kept again.
+        fold.undoKeepDiscordIdea(post.id)
+        fold.tick()
+        assertNull(fold.weekBoard.value.dayOf(card.id))
+        assertEquals(false, fold.discord.value!!.cards.single().posts.single().kept)
+        // Today's chip: on Today's column with no day of its own.
+        assertEquals("Idea for today · a task to look at it, nothing is traded", fold.discordIdeaToDay(post.id, fold.boardFeedDays()[0].day))
+        fold.tick()
+        val today = fold.weekBoard.value.days.flatMap { it.cards }.single { it.title.startsWith("Admin in #trade-ideas") }
+        assertEquals(fold.boardFeedDays()[0].day, fold.weekBoard.value.dayOf(today.id)?.epochDay)
+        assertEquals("That post's words are gone · nothing to keep", fold.discordIdeaToDay("nope", thu))
+    }
 }

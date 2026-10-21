@@ -3270,6 +3270,10 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(unknownToDay, MailNeedsRules.shared.UNKNOWN)
         XCTAssertEqual(core.boardFeedDays().first?.label, "Today")
         XCTAssertEqual(BoardFeedRules.shared.TO_DAY, "To a day…")
+        // Item (5) part 2: To a day… on an unknown Discord post says so; the chip's words reach Swift.
+        let unknownIdea = try await core.discordIdeaToDay(postId: "nothing", day: 0)
+        XCTAssertEqual(unknownIdea, DiscordRules.shared.CANT_KEEP)
+        XCTAssertEqual(DiscordRules.shared.ON_WEEK_CHIP, "On your week")
         // Slice 6b-2a: Reply, sent by the server only after Send.
         let unknownReply = try await core.replyToMailItem(id: "nothing", text: "Yes")
         XCTAssertEqual(unknownReply, MailNeedsRules.shared.UNKNOWN)

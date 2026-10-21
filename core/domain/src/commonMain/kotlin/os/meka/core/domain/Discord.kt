@@ -61,6 +61,8 @@ data class DiscordPostRow(
     val alert: String? = null,
     /** Slice 4: kept as a note in Lists → Someday → Trading ideas ("Kept" on the post instead of "Keep as idea"). */
     val kept: Boolean = false,
+    /** Week board item (5) part 2: kept as a task on a day of his week (To a day…), not in Trading ideas. */
+    val onWeek: Boolean = false,
 )
 
 /**
@@ -449,6 +451,8 @@ object DiscordRules {
     fun cards(
         posts: List<Post>, watched: Set<String>, nowMs: Long, cal: LocalCalendar, hidden: Set<String> = emptySet(),
         summaries: List<ChatSummary> = emptyList(),
+        /** Week board item (5) part 2: the posts whose kept task is on his week (To a day…), not in Trading ideas. */
+        onWeek: Set<String> = emptySet(),
     ): DiscordCards? {
         val summaryByKey = summaries.associateBy { it.chatKey }
         val open = posts.filter { !it.done && it.id !in hidden && it.channel.key in watched && nowMs - it.atMs < KEEP_MS && it.text.isNotBlank() }
@@ -466,7 +470,7 @@ object DiscordRules {
                 server = latest.channel.server,
                 line = "${sorted.size} post${if (sorted.size == 1) "" else "s"} since you last looked · latest " +
                     whenLine(latest.atMs, nowMs, cal) + " · " + authorsLine(authors),
-                posts = shown.map { DiscordPostRow(it.id, it.author, it.text, whenLine(it.atMs, nowMs, cal), it.alert, it.kept != null) },
+                posts = shown.map { DiscordPostRow(it.id, it.author, it.text, whenLine(it.atMs, nowMs, cal), it.alert, it.kept != null, it.kept != null && it.id in onWeek) },
                 moreLine = if (earlier > 0) "+ $earlier earlier post${if (earlier == 1) "" else "s"}" else null,
                 ids = sorted.map { it.id },
                 latestMs = latest.atMs,
@@ -495,6 +499,8 @@ object DiscordRules {
     const val IDEA_MAX = 160
     const val KEEP_ACTION = "Keep as idea"
     const val KEPT_CHIP = "In Trading ideas"
+    /** Week board item (5) part 2: the chip once a post went To a day… (a task on his week). */
+    const val ON_WEEK_CHIP = "On your week"
     const val KEPT_LINE = "Kept in Lists → Someday → Trading ideas · a note, nothing is traded"
     const val ALREADY_KEPT = "Already in Trading ideas"
     const val CANT_KEEP = "That post's words are gone · nothing to keep"

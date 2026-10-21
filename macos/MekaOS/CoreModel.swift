@@ -6045,6 +6045,20 @@ final class CoreModel {
         }
     }
 
+    /// Week board item (5) part 2: To a day… under a Discord post — a task on that day of his week to look at it (never an
+    /// order). Only the post's id (a String) and the day (an Int64) cross; Undo on the bar takes it off again.
+    func discordIdeaToDay(_ postId: String, day: Int64) {
+        guard let core else { return }
+        MekaHaptics.medium()
+        Task {
+            do {
+                let line = try await core.discordIdeaToDay(postId: postId, day: day)
+                let kept = line != DiscordRules.shared.ALREADY_KEPT && line != DiscordRules.shared.CANT_KEEP
+                offerEventUndo(line, kept ? .discordIdea(postId) : nil)
+            } catch { lastError = error.localizedDescription }
+        }
+    }
+
     /// Follow / Stop on Work → Discord: synced, so the Fold keeps (or drops) that channel's posts. Returns via the bar.
     func setDiscordWatched(_ key: String, on: Bool) {
         guard let core else { return }
