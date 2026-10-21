@@ -9671,10 +9671,16 @@ class MekaCore(
      * request while it is still on its way). Nothing when the device's voice is chosen, the server is resting, it is
      * already here or already asked for. Not counted in the speed log. True when the clip is here. Never throws.
      */
-    suspend fun speechPrefetch(text: String): Boolean {
+    suspend fun speechPrefetch(text: String): Boolean =
+        speechPrefetchPiece(os.meka.core.domain.SpeechRules.pieces(text).firstOrNull() ?: return false)
+
+    /**
+     * [speechPrefetch] for one piece exactly as the speaker will ask for it ([os.meka.core.domain.SpeechRules.pieces]
+     * of a whole line: a later piece may hold several sentences, which [speechPrefetch] would cut to its first).
+     */
+    private suspend fun speechPrefetchPiece(piece: String): Boolean {
         if (speechApi == null) return false
-        val words = os.meka.core.domain.SpeechRules.pieces(text).firstOrNull()
-            ?.takeIf { it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return false
+        val words = piece.takeIf { it.isNotBlank() && it.length <= os.meka.core.domain.SpeechRules.MAX_PIECE } ?: return false
         val voice = onCore { speechVoiceNow() } ?: return false
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)
         val mine = kotlinx.coroutines.CompletableDeferred<String?>()
@@ -9707,7 +9713,7 @@ class MekaCore(
             val minute = ZoneCalendar(timeZone).minuteOfDay(nowMs())
             // One name everywhere: the hello that asks his name is ready too while it would still ask.
             val ask = if (!os.meka.core.domain.CallNameRules.asks(name, nameAskedHere || aboutYou.nameAsked())) emptyList()
-            else listOf(os.meka.core.domain.CallNameRules.askGreeting(minute, welcome).spoken)
+            else os.meka.core.domain.SpeechRules.pieces(os.meka.core.domain.CallNameRules.askGreeting(minute, welcome).spoken)
             // The orb says hello like a person: the openers the next taps would say (now, in an hour, a quick second tap).
             val now = nowMs()
             val day = ZoneCalendar(timeZone).epochDayOf(now)
@@ -9715,9 +9721,10 @@ class MekaCore(
                 minute, day, now, helloOpenerMemory(), adaIntroducedToday(day), welcome, name, helloMoments(now, ZoneCalendar(timeZone)),
             )
         }
-        lines.forEach { if (!speechPrefetch(it)) return }
+        // Each piece as the speaker asks for it (a later piece may join two sentences: "Good day? What can I do for you?").
+        lines.forEach { if (!speechPrefetchPiece(it)) return }
         // The orb says hello like a person, slice 3: Ada's answers to "good thanks, you?" are ready too (no name in them).
-        os.meka.core.domain.HelloReplyRules.warmLines().forEach { if (!speechPrefetch(it)) return }
+        os.meka.core.domain.HelloReplyRules.warmLines().forEach { if (!speechPrefetchPiece(it)) return }
         // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.
         onCore { os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName) }
             .forEach { if (!speechPrefetch(it)) return }

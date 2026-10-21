@@ -59,7 +59,14 @@ class SpeechAheadFacadeTest {
         val c = core()
         c.warmHello()
         val line = os.meka.core.domain.HelloReplyRules.answer(os.meka.core.domain.HelloSmallTalk(os.meka.core.domain.HelloMood.GOOD, true), 0)
-        SpeechRules.pieces(line).forEach { assertTrue(it in server.said, it) }
+        SpeechRules.pieces(line).forEach { assertTrue(it in server.said, "$it in ${server.said}") }
+    }
+
+    @Test
+    fun everyPieceOfTheHelloIsMadeAheadAsTheSpeakerAsksForIt() = runTest {
+        val c = core()
+        c.warmHello()
+        SpeechRules.pieces(c.hello().spoken).forEach { assertTrue(it in server.said, "$it in ${server.said}") }
     }
 
     @Test
