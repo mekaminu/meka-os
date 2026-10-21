@@ -21,9 +21,12 @@ object StreamedSpeechRules {
     /**
      * The words of the `"answer"` field in [prefix], the start of a model's JSON answer (`{"answer":"…","actions":[…]}`)
      * as written so far: JSON escapes decoded, an escape cut off at the end left out. Null until the field's string has
-     * begun, or when the model isn't writing JSON (a plain-words answer is said once it is whole, as before).
+     * begun. Plain words (a spoken turn, slice 4 of the conversation item) are read as they are written ([plainWords]).
      */
     fun partialAnswer(prefix: String): Partial? {
+        // Talking to Ada like a conversation, slice 4: a spoken turn's answer is her words first, as plain text, then
+        // (only when there are any) her actions, sources and note in one short tagged block after them.
+        if (isPlain(prefix)) return plainWords(prefix)
         val key = Regex(""""answer"\s*:\s*"""").find(prefix) ?: return null
         // The field must be the object's own, near its start (not "answer" inside some other string).
         val brace = prefix.indexOf('{')
@@ -82,6 +85,32 @@ object StreamedSpeechRules {
         val e = squash(early)
         if (e.isNotEmpty() && s.startsWith(e)) return s.removePrefix(e).trim()
         return SpeechRules.pieces(s).drop(1).joinToString(" ").trim()
+    }
+
+    /**
+     * Talking to Ada like a conversation, slice 4: where a spoken turn's words end and what comes after them begins
+     * (`<after>{"actions":[…],"sources":[…],"note":"…"}</after>`). Never said; the same tag as [os.meka.core.wire.AskCodec].
+     */
+    const val AFTER_OPEN = "<after>"
+    const val AFTER_CLOSE = "</after>"
+
+    /** Whether [prefix] is plain words (a spoken turn's answer): it has begun, and not with JSON or a code fence. */
+    fun isPlain(prefix: String): Boolean {
+        val first = prefix.firstOrNull { !it.isWhitespace() } ?: return false
+        return first != '{' && first != '`'
+    }
+
+    /**
+     * The words of a plain answer so far: everything before the [AFTER_OPEN] block (closed once it has begun), or
+     * before a `{` or a code fence a model added anyway; a tag only partly written at the end is left out until it is
+     * whole or turns out to be words.
+     */
+    private fun plainWords(prefix: String): Partial {
+        val ends = listOf(prefix.indexOf(AFTER_OPEN), prefix.indexOf('{'), prefix.indexOf("```")).filter { it >= 0 }
+        ends.minOrNull()?.let { return Partial(prefix.substring(0, it).trim(), closed = true) }
+        val lt = prefix.lastIndexOf('<')
+        val text = if (lt >= 0 && AFTER_OPEN.startsWith(prefix.substring(lt))) prefix.substring(0, lt) else prefix
+        return Partial(text.trim(), closed = false)
     }
 
     private fun endsSentence(piece: String): Boolean {

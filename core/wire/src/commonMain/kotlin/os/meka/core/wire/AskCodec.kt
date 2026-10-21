@@ -336,6 +336,37 @@ object AskCodec {
     }
 
     /**
+     * Talking to Ada like a conversation, slice 4: a spoken turn's answer is her words first, as plain text, so the
+     * first sentence can be said the moment it is written, then (only when there are any) one tagged block after them:
+     * `<after>{"actions":[…],"sources":[…],"note":"…"}</after>`. Never said.
+     */
+    const val AFTER_OPEN = "<after>"
+    const val AFTER_CLOSE = "</after>"
+
+    /**
+     * A model's answer as the one JSON object the rest of the server reads ([parseModelAnswer], [modelNote], the
+     * sources): a spoken answer (plain words, then an [AFTER_OPEN] block) becomes `{"answer": words, …the block's
+     * actions, sources and note}`; the block's own "answer" is ignored, and a block that isn't a JSON object adds
+     * nothing (words only, no actions). Anything else (a JSON answer, or plain words with no block) is returned as it
+     * was. Every action is still checked exactly as before.
+     */
+    fun normaliseModelAnswer(text: String): String {
+        val first = text.firstOrNull { !it.isWhitespace() } ?: return text
+        if (first == '{' || first == '`') return text
+        val at = text.indexOf(AFTER_OPEN)
+        if (at < 0) return text
+        val words = text.substring(0, at).trim()
+        val rest = text.substring(at + AFTER_OPEN.length).substringBefore(AFTER_CLOSE)
+        val start = rest.indexOf('{')
+        val end = rest.lastIndexOf('}')
+        val block = if (start >= 0 && end > start) runCatching { json.parseToJsonElement(rest.substring(start, end + 1)).jsonObject }.getOrNull() else null
+        return buildJsonObject {
+            put("answer", words)
+            block?.forEach { (k, v) -> if (k != "answer") put(k, v) }
+        }.toString()
+    }
+
+    /**
      * The companion, slice 5: the `"note"` in a model's answer (one short line of what the conversation was about), or
      * null when there is none or it isn't a plain string within [MAX_NOTE].
      */
@@ -347,8 +378,11 @@ object AskCodec {
         return o.optStr("note")?.replace(Regex("""\s+"""), " ")?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_NOTE }
     }
 
-    /** An earlier answer as the model wrote it, for the conversation's turns: `{"answer":"…","actions":[]}`. */
-    fun encodeModelAnswer(answer: String): String = buildJsonObject {
+    /**
+     * An earlier answer as the model wrote it, for the conversation's turns: `{"answer":"…","actions":[]}`, or for a
+     * spoken conversation (slice 4) just its words, as a spoken answer with nothing after them is written.
+     */
+    fun encodeModelAnswer(answer: String, spoken: Boolean = false): String = if (spoken) answer else buildJsonObject {
         put("answer", answer)
         putJsonArray("actions") {}
     }.toString()

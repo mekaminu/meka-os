@@ -157,16 +157,19 @@ class AskService(
     private fun answerOf(r: AskCodec.Request, web: LiveFacts.Found?, outcome: ModelOutcome, firstAlready: String? = null): AskCodec.Response {
         return when (outcome) {
             is ModelOutcome.Answered -> {
-                val (words, actions) = AskCodec.parseModelAnswer(outcome.text)
+                // Talking to Ada like a conversation, slice 4: a spoken answer's words come first and its actions,
+                // sources and note after them; read as the one JSON answer, so every check below is unchanged.
+                val text = AskCodec.normaliseModelAnswer(outcome.text)
+                val (words, actions) = AskCodec.parseModelAnswer(text)
                 val refs = r.items.map { it.ref }.filter { it.isNotEmpty() }.toSet()
                 // A handle the device didn't send can't name a task; the device checks the rest again. An answer that
                 // read web results proposes nothing: other people's words never lead to an action (ADR-006).
                 val kept = if (web != null) emptyList() else actions.filter { it.kind in KINDS && (it.ref == null || it.ref in refs) }
-                val sources = if (web == null) emptyList() else cited(outcome.text, web.hits).map { AskCodec.Source(it.title.take(AskCodec.MAX_SOURCE_TITLE), it.url) }
+                val sources = if (web == null) emptyList() else cited(text, web.hits).map { AskCodec.Source(it.title.take(AskCodec.MAX_SOURCE_TITLE), it.url) }
                 // The companion, slice 5: an open turn's note of what was talked about, checked here and again on the
                 // device; never from an answer that read other people's words on the web.
                 val note = if (web != null || !isOpenTurn(r, null)) null
-                else AskCodec.modelNote(outcome.text)?.let { os.meka.core.domain.CompanionMemoryRules.clean(it) }
+                else AskCodec.modelNote(text)?.let { os.meka.core.domain.CompanionMemoryRules.clean(it) }
                 val answered = AskCodec.Response(AskCodec.Response.ANSWERED, words.ifBlank { "No answer" }, kept, sources = sources, note = note)
                 // Slice 9: the device already has the first piece when it went ahead and is still the answer's first.
                 if (firstAlready != null && os.meka.core.domain.TalkRules.firstPiece(answered.answer) == firstAlready) answered
@@ -202,6 +205,9 @@ class AskService(
         /** A spoken answer (Talk to MEKA) is metered on its own, so Activity can count Talk's day. */
         const val FEATURE_TALK = "ask.talk"
         const val MAX_TOKENS = 600
+        /** Slice 4 of the conversation item: the block after a spoken answer's words ([AskCodec.AFTER_OPEN]). */
+        private const val AFTER_OPEN = AskCodec.AFTER_OPEN
+        private const val AFTER_CLOSE = AskCodec.AFTER_CLOSE
 
         /**
          * Talking to Ada like a conversation, slice 3 (faster brains): which model answers. Every spoken turn and every
@@ -292,6 +298,7 @@ class AskService(
         val VOICE = """
             He is talking to you aloud and your answer will be spoken: one or two short sentences (three at most for an open question), like a person talking, no lists, symbols, emoji or markdown, times as HH:MM. Don't ask him to tap or confirm; Navilife offers each action aloud itself.
             Earlier turns are the conversation so far; use them to understand what "it" or "that" means. The <today> block in the latest turn is the current picture of the day.
+            Because your answer is spoken, this replaces the JSON reply above: write your words first, as plain text, with nothing before them, so they can be said while you write. Then, only if you propose an action, used a <web> block or are asked for a note, add one line after your words: $AFTER_OPEN{"actions":[…],"sources":[1,2],"note":"…"}$AFTER_CLOSE with only the fields you need; otherwise just end with your words. Nothing inside it is said, so never put words for him there, and never write JSON before your words.
         """.trimIndent()
 
         /**
@@ -304,7 +311,7 @@ class AskService(
             var since = emptyList<String>()
             r.history.forEach { t ->
                 out += ModelTurn(ModelTurn.Role.USER, sinceLine(since) + "Question: " + clean(t.question))
-                out += ModelTurn(ModelTurn.Role.ASSISTANT, AskCodec.encodeModelAnswer(clean(t.answer)))
+                out += ModelTurn(ModelTurn.Role.ASSISTANT, AskCodec.encodeModelAnswer(clean(t.answer), spoken = r.voice))
                 since = t.done
             }
             out += ModelTurn(ModelTurn.Role.USER, sinceLine(since) + userTurn(r, web))

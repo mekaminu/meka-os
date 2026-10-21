@@ -23,8 +23,27 @@ class StreamedSpeechTest {
         assertEquals(StreamedSpeechRules.Partial("Done.", true), StreamedSpeechRules.partialAnswer("""{"answer":"Done.","actions":["""))
         // In a code fence too; not plain words, and not "answer" inside another field's words.
         assertEquals("Hi", StreamedSpeechRules.partialAnswer("```json\n{\"answer\":\"Hi")?.text)
-        assertNull(StreamedSpeechRules.partialAnswer("The answer is 42"))
-        assertNull(StreamedSpeechRules.partialAnswer("""Sure: "answer":"x" {"""))
+        // Slice 4 of the conversation item: plain words are read as they are written, up to what comes after them.
+        assertEquals(StreamedSpeechRules.Partial("The answer is 42", false), StreamedSpeechRules.partialAnswer("The answer is 42"))
+        assertEquals(StreamedSpeechRules.Partial("Sure: \"answer\":\"x\"", true), StreamedSpeechRules.partialAnswer("""Sure: "answer":"x" {"""))
+    }
+
+    @Test
+    fun aSpokenAnswersPlainWordsAreSaidEarlyAndWhatComesAfterNever() {
+        assertNull(StreamedSpeechRules.partialAnswer("   "))
+        assertEquals(StreamedSpeechRules.Partial("Oh nice.", false), StreamedSpeechRules.partialAnswer("Oh nice. "))
+        // A tag only partly written is left out until it is whole; then the words have closed.
+        assertEquals(StreamedSpeechRules.Partial("Oh nice.", false), StreamedSpeechRules.partialAnswer("Oh nice. <aft"))
+        assertEquals(StreamedSpeechRules.Partial("Oh nice.", true), StreamedSpeechRules.partialAnswer("Oh nice.\n<after>{\"actions\":["))
+        assertEquals(StreamedSpeechRules.Partial("Under 3 < 4", false), StreamedSpeechRules.partialAnswer("Under 3 < 4"))
+        val full = "Ha, fair. The match is at 20:00 on TNT. Want a reminder?\n<after>{\"actions\":[{\"kind\":\"add_task\",\"title\":\"Watch\"}]}</after>"
+        assertNull(StreamedSpeechRules.earlyPiece("Ha, fair"))
+        assertNull(StreamedSpeechRules.earlyPiece("Ha, fair. "))
+        assertEquals("Ha, fair.", StreamedSpeechRules.earlyPiece(full.take(15)))
+        // A one-sentence answer goes once its words end at the block.
+        assertEquals("Shall I add it?", StreamedSpeechRules.earlyPiece("Shall I add it? <after>{"))
+        // Nothing after the words is ever part of them.
+        assertTrue("after" !in StreamedSpeechRules.partialAnswer(full)!!.text)
     }
 
     @Test

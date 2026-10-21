@@ -152,7 +152,8 @@ class AiAskTest {
             sent.turns.map { it.role },
         )
         assertEquals("Question: What's on today?", sent.turns[0].text)
-        assertEquals("""{"answer":"Just the dentist ‹to book›.","actions":[]}""", sent.turns[1].text)
+        // Slice 4 of the conversation item: a spoken conversation's earlier answers go as the words they were.
+        assertEquals("Just the dentist ‹to book›.", sent.turns[1].text)
         val last = sent.turns.last().text
         assertTrue(last.startsWith("Since then he did: Moved “Book dentist” to Tomorrow · 09:00\n<today"), last)
         assertTrue(last.endsWith("Question: and the CR to Friday"), last)
@@ -422,6 +423,38 @@ class AiAskTest {
     }
 
     @Test
+    fun aSpokenTurnIsAskedForItsWordsFirstAndWhatComesAfterIsCheckedAsBefore() {
+        // Talking to Ada like a conversation, slice 4: one tag on both ends.
+        assertEquals(os.meka.core.domain.StreamedSpeechRules.AFTER_OPEN, AskCodec.AFTER_OPEN)
+        assertEquals(os.meka.core.domain.StreamedSpeechRules.AFTER_CLOSE, AskCodec.AFTER_CLOSE)
+        val model = FakeModel(answered("Sure, I'll put it in. Anything else?\n<after>{\"actions\":[{\"kind\":\"move_task\",\"ref\":\"t1\",\"date\":\"2026-10-09\"},{\"kind\":\"send_email\",\"title\":\"x\"},{\"kind\":\"complete_task\",\"ref\":\"t9\"}],\"answer\":\"not this\"}</after>"))
+        val spoken = request.copy(voice = true)
+        val r = AskService(model).ask(spoken)
+        assertEquals("Sure, I'll put it in. Anything else?", r.answer)
+        // The same checks as a JSON answer: only his own kinds, only handles it was given.
+        assertEquals(listOf(AskCodec.Action("move_task", ref = "t1", date = "2026-10-09")), r.actions)
+        val system = model.asked.single().system
+        assertTrue("write your words first, as plain text" in system, system)
+        assertTrue("<after>{\"actions\"" in system, system)
+        // The fixed instructions stay the cached prefix; a typed question is still asked for JSON with no tag.
+        assertTrue(system.startsWith(AskService.SYSTEM))
+        AskService(model).ask(request)
+        assertFalse("<after>" in model.asked.last().system)
+        // A spoken answer with nothing after it is just its words; one that wrote JSON anyway still reads.
+        model.outcome = answered("Nothing else today. Enjoy the evening.")
+        assertEquals("Nothing else today. Enjoy the evening.", AskService(model).ask(spoken).answer)
+        model.outcome = answered("""{"answer":"Done.","actions":[]}""")
+        assertEquals("Done.", AskService(model).ask(spoken).answer)
+        // A searched spoken answer's sources come from after its words and it still proposes nothing.
+        model.outcome = answered("The BBC says it's off. <after>{\"sources\":[2],\"actions\":[{\"kind\":\"add_task\",\"title\":\"x\"}]}</after>")
+        val web = LiveFacts.Found("rail strike", listOf(os.meka.core.domain.WebHit("https://a.example/1", "One", "a"), os.meka.core.domain.WebHit("https://bbc.co.uk/2", "Strike off", "Off.")))
+        val searched = AskService(model, live = { web }).ask(spoken.copy(question = "What's the latest on the rail strike?"))
+        assertEquals("The BBC says it's off.", searched.answer)
+        assertEquals(listOf("https://bbc.co.uk/2"), searched.sources.map { it.url })
+        assertTrue(searched.actions.isEmpty())
+    }
+
+    @Test
     fun aOneSentenceAnswerOrAPlainOneStillSpeaksAndActionsComeOnlyWithTheWhole() {
         val model = StreamingModel(listOf("""{"answer":"Shall I add it?",""", """"actions":[{"kind":"add_task","title":"Call Sam"}]}"""))
         val firsts = mutableListOf<AskCodec.StreamLine.First>()
@@ -429,10 +462,14 @@ class AiAskTest {
         val r = AskService(model, { _, v -> AskService.FirstClip(byteArrayOf(9), v) }).askStream(spoken) { firsts += it }
         assertEquals(listOf("Shall I add it?"), firsts.map { it.text })
         assertEquals(listOf(AskCodec.Action("add_task", title = "Call Sam")), r.actions)
-        // Plain words (not JSON) can't be read early: the first piece comes with the answer, as before.
-        val plain = StreamingModel(listOf("It's sunny. ", "Enjoy it."))
-        val p = AskService(plain, { _, v -> AskService.FirstClip(byteArrayOf(9), v) }).askStream(spoken) { error("not early") }
-        assertEquals("It's sunny.", p.firstText)
+        // Slice 4 of the conversation item: plain words go early too, and the actions after them come with the whole.
+        val plain = StreamingModel(listOf("It's sunny. ", "Enjoy it.", "\n<after>{\"actions\":[{\"kind\":\"add_task\",\"title\":\"Sun cream\"}]}</after>"))
+        val early = mutableListOf<AskCodec.StreamLine.First>()
+        val p = AskService(plain, { _, v -> AskService.FirstClip(byteArrayOf(9), v) }).askStream(spoken) { early += it }
+        assertEquals(listOf("It's sunny."), early.map { it.text })
+        assertEquals("It's sunny. Enjoy it.", p.answer)
+        assertEquals(listOf(AskCodec.Action("add_task", title = "Sun cream")), p.actions)
+        assertEquals(null, p.firstAudio)
         // A clip slower than the wait is never sent after the answer.
         val slow = AskService(model, { _, _ -> Thread.sleep(400); AskService.FirstClip(byteArrayOf(1), null) }, firstClipWaitMs = 20)
         val late = mutableListOf<AskCodec.StreamLine.First>()

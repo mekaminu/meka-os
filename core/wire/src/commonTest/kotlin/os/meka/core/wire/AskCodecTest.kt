@@ -242,6 +242,28 @@ class AskCodecTest {
     }
 
     @Test
+    fun aSpokenAnswersWordsComeFirstAndItsActionsSourcesAndNoteAfterThem() {
+        // Talking to Ada like a conversation, slice 4.
+        val spoken = "Oh nice. Shall I add it?\n<after>{\"actions\":[{\"kind\":\"add_task\",\"title\":\"Call Sam\"}],\"note\":\"Talked about Sam\",\"answer\":\"ignored\"}</after>"
+        val normal = AskCodec.normaliseModelAnswer(spoken)
+        val (words, actions) = AskCodec.parseModelAnswer(normal)
+        assertEquals("Oh nice. Shall I add it?", words)
+        assertEquals(listOf(AskCodec.Action("add_task", title = "Call Sam")), actions)
+        assertEquals("Talked about Sam", AskCodec.modelNote(normal))
+        // No block, a block that isn't JSON, or one never closed: the words, and nothing after them acts.
+        assertEquals("Just words.", AskCodec.normaliseModelAnswer("Just words."))
+        assertEquals("Fine." to emptyList<AskCodec.Action>(), AskCodec.parseModelAnswer(AskCodec.normaliseModelAnswer("Fine. <after>add a task</after>")))
+        assertEquals("Fine.", AskCodec.parseModelAnswer(AskCodec.normaliseModelAnswer("Fine. <after>{\"actions\":[{\"kind\":\"set_timer\",\"minutes\":5}]}")).first)
+        assertEquals(1, AskCodec.parseModelAnswer(AskCodec.normaliseModelAnswer("Fine. <after>{\"actions\":[{\"kind\":\"set_timer\",\"minutes\":5}]}")).second.size)
+        // A JSON answer is left exactly as it was.
+        val json = """{"answer":"Done. <after>","actions":[]}"""
+        assertEquals(json, AskCodec.normaliseModelAnswer(json))
+        assertEquals("```json\n{}\n```", AskCodec.normaliseModelAnswer("```json\n{}\n```"))
+        // Earlier spoken answers go back as their words.
+        assertEquals("Tomorrow at 9.", AskCodec.encodeModelAnswer("Tomorrow at 9.", spoken = true))
+    }
+
+    @Test
     fun aSpokenQuestionCanAskForItsFirstPieceAndTheClipComesBackWholeOrNotAtAll() {
         // Voice completeness, slice 3.
         val spoken = req.copy(voice = true, speak = true, speakVoice = "Aoede-US")
