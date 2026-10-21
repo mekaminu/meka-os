@@ -49,6 +49,21 @@ final class TalkController {
     private(set) var problem: TalkProblem?
     /// "Talk over MEKA" is on for this conversation (read from the Mac's setting at each start; the orb's line).
     private(set) var talkOver = true
+    /// Conversation mode (slice 6, `ConversationModeRules`): listening in the window after Ada's line with nothing of
+    /// his heard yet; the orb says "Go on, I'm listening".
+    private(set) var followOn = false
+    /// When Ada's last line ended and the microphone opened on its own (ms since 1970).
+    @ObservationIgnored private var followOnAt: Int64?
+
+    private func openFollowOn() {
+        followOnAt = Int64(Date().timeIntervalSince1970 * 1000)
+        followOn = true
+    }
+
+    private func closeFollowOn() {
+        followOnAt = nil
+        if followOn { followOn = false }
+    }
 
     var active: Bool { phase != .ended }
 
@@ -270,6 +285,7 @@ final class TalkController {
         helloCards = [] // slice 8: the greeting's cards go with the conversation
         openAt = nil
         openLapsed = nil
+        closeFollowOn()
         guard active else { return }
         apply(TalkFlow.shared.stop(s: session))
     }
@@ -286,6 +302,7 @@ final class TalkController {
     private func apply(_ step: TalkStep) {
         session = step.session
         phase = session.phase
+        if phase != .listening { closeFollowOn() }
         MacListen.latch.sessionOpen = phase != .ended // a switch to the Mac's own speech lasts the conversation
         step.effects.forEach(run)
         if phase == .speaking { meterVoice() }
@@ -622,6 +639,13 @@ final class TalkController {
                 return
             }
         }
+        // Slice 6: Ada's line ended 8 s ago and he has said nothing: the conversation ends quietly.
+        if ConversationModeRules.shared.lapsed(openedAtMs: followOnAt.map { KotlinLong(value: $0) },
+                                               nowMs: Int64(now.timeIntervalSince1970 * 1000), heard: heardAnything) {
+            stopListening()
+            apply(TalkFlow.shared.silence(s: session))
+            return
+        }
         let lastSoundMs = ListenRules.shared.lastSound(
             lastWordsMs: Int64(lastWords.timeIntervalSince1970 * 1000),
             lastVoiceMs: lastVoice.map { KotlinLong(value: Int64($0.timeIntervalSince1970 * 1000)) }
@@ -669,6 +693,7 @@ final class TalkController {
             if text != heard { lastWords = Date() }
             heard = text
             heardAnything = true
+            closeFollowOn() // his turn: the orb says Listening… again
         }
         if final {
             if listeningOnline && heardAnything { MacListen.latch.worked(nowMs: MacListen.nowMs) }
@@ -679,7 +704,13 @@ final class TalkController {
             if !heardAnything && listeningOnline && recognizer?.supportsOnDeviceRecognition == true {
                 return listen(onDevice: true)
             }
-            // The recogniser gave up: what was heard is the question, nothing heard is silence.
+            // The recogniser gave up: what was heard is the question, nothing heard is silence, except inside
+            // conversation mode's window after Ada's line (slice 6), where it opens again.
+            if !heardAnything, ConversationModeRules.shared.listenAgain(
+                openedAtMs: followOnAt.map { KotlinLong(value: $0) },
+                nowMs: Int64(Date().timeIntervalSince1970 * 1000), heard: false) {
+                return listen()
+            }
             if heardAnything { finishListening() } else {
                 stopListening()
                 apply(TalkFlow.shared.silence(s: session))
@@ -820,7 +851,10 @@ final class TalkController {
             lastWords = listenStarted
             return apply(TalkFlow.shared.spokeListening(s: session))
         }
-        apply(TalkFlow.shared.spoke(s: session))
+        // Slice 6: the microphone opens on its own and stays open for 8 s, so he can just carry on talking.
+        let next = TalkFlow.shared.spoke(s: session)
+        if next.session.phase == .listening { openFollowOn() }
+        apply(next)
     }
 
     // MARK: Talking over MEKA (voice barge-in)

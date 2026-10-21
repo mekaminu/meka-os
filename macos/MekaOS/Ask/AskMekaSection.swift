@@ -462,7 +462,7 @@ private struct TalkPanel: View {
     let onOrb: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
-    private var line: String { talk.problem?.macLine ?? TalkOrb.shared.label(phase: talk.phase, mac: true, talkOver: talk.talkOver) }
+    private var line: String { talk.problem?.macLine ?? ConversationModeRules.shared.label(phase: talk.phase, mac: true, talkOver: talk.talkOver, followOn: talk.followOn) }
 
     var body: some View {
         VStack(spacing: MekaSpace.xs) {
@@ -473,7 +473,7 @@ private struct TalkPanel: View {
             .buttonStyle(MekaPressStyle())
             // Resting after "Too noisy — click to talk": a click starts listening as the mic does.
             .disabled(!talk.active && talk.problem != .tooNoisy)
-            .accessibilityLabel("Navilife, \(TalkOrb.shared.label(phase: talk.phase, mac: true, talkOver: talk.talkOver))")
+            .accessibilityLabel("Navilife, \(ConversationModeRules.shared.label(phase: talk.phase, mac: true, talkOver: talk.talkOver, followOn: talk.followOn))")
             Text(line)
                 .font(MekaType.caption)
                 .foregroundStyle(talk.problem != nil ? palette.accent : palette.textTertiary)

@@ -73,7 +73,11 @@ object TalkRules {
     const val NOT_HEARD_CARD = "That one couldn't be done any more."
 
     /** Words that carry no meaning on their own and are ignored around the rest. */
-    private val FILLERS = setOf("meka", "navilife", "hey", "um", "umm", "uh", "er", "erm", "oh", "well", "so", "right", "then", "just", "and")
+    private val FILLERS = setOf(
+        "meka", "navilife", "hey", "um", "umm", "uh", "er", "erm", "oh", "well", "so", "right", "then", "just", "and",
+        // Conversation mode (slice 6): "thanks, Ada" ends it; the name as the recogniser writes it ([HelloWakeRules]).
+        "ada", "adah", "ayda", "aida", "adda", "adar",
+    )
 
     private val ENDINGS = phrases(
         "that's all", "thats all", "that is all", "that's it", "thats it", "that is it", "that's everything",

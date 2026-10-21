@@ -71,6 +71,12 @@ class TalkController(
     /** "Talk over MEKA" is on for this conversation (read from the phone's setting at each start; the orb's line). */
     var talkOver by mutableStateOf(BargeInRules.DEFAULT_ON)
         private set
+    /**
+     * Conversation mode (slice 6, [os.meka.core.domain.ConversationModeRules]): listening in the window after Ada's line
+     * with nothing of his heard yet; the orb says "Go on, I'm listening".
+     */
+    var followOn by mutableStateOf(false)
+        private set
     /** Why MEKA couldn't listen, shown under the orb until the next start. */
     var problem by mutableStateOf<TalkProblem?>(null)
         private set
@@ -165,6 +171,20 @@ class TalkController(
     /** While set (elapsed ms), listening after the brief: the recogniser giving up on silence listens again. */
     private var afterBriefAt: Long? = null
 
+    /** Conversation mode (slice 6): when Ada's last line ended and the microphone opened on its own (elapsed ms). */
+    private var followOnAt: Long? = null
+
+    /** Opens conversation mode's window as Ada's line ends ([finishedSaying]); closed by his words or the end. */
+    private fun openFollowOn() {
+        followOnAt = android.os.SystemClock.elapsedRealtime()
+        followOn = true
+    }
+
+    private fun closeFollowOn() {
+        followOnAt = null
+        followOn = false
+    }
+
     /**
      * The brief's Listen ran to its end (slice 7, [BriefFollowOnRules]): the quiet chime, then listening as if Talk had
      * just read the brief, for up to [BriefFollowOnRules.WINDOW_MS] ("plan my day", "more news" or a question); nothing
@@ -244,6 +264,7 @@ class TalkController(
     fun stop() {
         generation++ // also drops a room check or chime still on its way ("Listen when I open MEKA")
         afterBriefAt = null
+        closeFollowOn()
         if (!active) return
         apply(TalkFlow.stop(session))
     }
@@ -275,6 +296,7 @@ class TalkController(
     private fun apply(step: TalkStep) {
         session = step.session
         phase = session.phase
+        if (phase != TalkPhase.LISTENING) closeFollowOn()
         PhoneListen.latch.sessionOpen = active // a switch to the phone's own speech lasts the whole conversation
         step.effects.forEach(::run)
         if (phase == TalkPhase.SPEAKING) meterVoice()
@@ -545,6 +567,12 @@ class TalkController(
                 if (micOverHello) continue // slice 7: the hello is still speaking; the silence timer starts when it ends
                 if (phase != TalkPhase.LISTENING) return@launch
                 val t = android.os.SystemClock.elapsedRealtime()
+                // Slice 6: Ada's line ended 8 s ago and he has said nothing: the conversation ends quietly.
+                if (os.meka.core.domain.ConversationModeRules.lapsed(followOnAt, t, heard.isNotBlank())) {
+                    runCatching { recognizer?.cancel() }
+                    apply(TalkFlow.silence(session))
+                    return@launch
+                }
                 val step = os.meka.core.domain.TalkEndpoint.step(
                     listenAt, heard.isNotBlank(), os.meka.core.domain.ListenRules.lastSound(lastWordsAt, lastVoiceAt), t,
                 )
@@ -560,7 +588,10 @@ class TalkController(
 
     private val listener = object : RecognitionListener {
         override fun onReadyForSpeech(params: Bundle?) {}
-        override fun onBeginningOfSpeech() { speechBegan = true }
+        override fun onBeginningOfSpeech() {
+            speechBegan = true
+            if (phase == TalkPhase.LISTENING) closeFollowOn() // his turn: the window is over, the orb says Listening…
+        }
         override fun onRmsChanged(rmsdB: Float) {
             if (phase != TalkPhase.LISTENING) return
             val l = TalkOrb.level(rmsdB)
@@ -589,6 +620,7 @@ class TalkController(
             if (text != heard) lastWordsAt = android.os.SystemClock.elapsedRealtime()
             heard = text
             speechBegan = true
+            closeFollowOn()
         }
 
         override fun onResults(results: Bundle?) {
@@ -614,6 +646,7 @@ class TalkController(
         /** What he said goes to the flow (the final result, or the words so far when the recogniser gave up after them). */
         private fun took(text: String) {
             echoOf = null
+            closeFollowOn()
             if (text.isNotBlank()) heard = text
             // Car and parking, slice 8: "where's the Golf?" is "where's the car?" for the car it names.
             val named = os.meka.core.domain.ParkingRules.talkCar(text, core.carsView.value)
@@ -650,7 +683,10 @@ class TalkController(
                 SpeechRecognizer.ERROR_NO_MATCH, SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> {
                     // After the brief the window is the whole 8 s: the recogniser's own earlier timeout listens again.
                     val at = afterBriefAt
-                    if (at != null && BriefFollowOnRules.listenAgain(at, android.os.SystemClock.elapsedRealtime(), speechBegan)) listen()
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    if (at != null && BriefFollowOnRules.listenAgain(at, now, speechBegan)) listen()
+                    // Slice 6: after Ada's line the window is the whole 8 s too (conversation mode).
+                    else if (os.meka.core.domain.ConversationModeRules.listenAgain(followOnAt, now, heard = false)) listen()
                     else apply(TalkFlow.silence(session))
                 }
                 SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> fail(TalkProblem.NO_PERMISSION)
@@ -776,7 +812,10 @@ class TalkController(
             lastWordsAt = now
             return apply(TalkFlow.spokeListening(session))
         }
-        apply(TalkFlow.spoke(session))
+        // Slice 6: the microphone opens on its own and stays open for 8 s, so he can just carry on talking.
+        val next = TalkFlow.spoke(session)
+        if (next.session.phase == TalkPhase.LISTENING) openFollowOn()
+        apply(next)
     }
 
     // ---- Talking over MEKA (voice barge-in) ----
