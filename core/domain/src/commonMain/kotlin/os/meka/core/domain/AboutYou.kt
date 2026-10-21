@@ -93,6 +93,11 @@ object AboutYouFields {
      * both apps ([CallNameRules.asks]). Not a typed line.
      */
     const val NAME_ASKED_AT = "nameAskedAtMs"
+    /**
+     * Text: the orb's last openers said on either app, newest first ("e3,m1,…", [HelloOpeners.encodeIds]), so the Fold
+     * and the Mac don't echo each other (hello slice 2, 2026-10-21). Not a typed line.
+     */
+    const val HELLO_RECENT = "helloRecent"
 }
 
 /** Which app this core runs in, for [AboutYouStore.markHeld]. */
@@ -722,6 +727,17 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
     fun markNameAsked(): Boolean {
         if (!exists() || nameAsked()) return false
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.NAME_ASKED_AT to FieldValue.Int64(nowMs())))
+        return true
+    }
+
+    /** The orb's last openers said on either app ([AboutYouFields.HELLO_RECENT]); empty when none. */
+    fun helloRecent(): List<String> = HelloOpeners.decodeIds(fields()?.get(AboutYouFields.HELLO_RECENT)?.textOrNull)
+
+    /** Keeps [ids] as the shared last openers; only into a profile that exists (never creates one), false when unchanged. */
+    fun setHelloRecent(ids: List<String>): Boolean {
+        val text = HelloOpeners.encodeIds(ids)
+        if (!exists() || HelloOpeners.encodeIds(helloRecent()) == text) return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.HELLO_RECENT to FieldValue.Text(text)))
         return true
     }
 

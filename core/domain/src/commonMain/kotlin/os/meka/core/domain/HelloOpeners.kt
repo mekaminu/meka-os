@@ -26,7 +26,18 @@ data class HelloMoment(
     val first: Boolean = false,
     val again: Boolean = false,
     val welcome: Boolean = false,
+    /** The moments around him ([HelloMoments]); none by default. */
+    val moments: HelloMoments = HelloMoments(),
 )
+
+/**
+ * The moment openers (hello slice 2): [home] an office day's evening once work is over ("Home from work?"), [football]
+ * a match (the boys' club fixture or Barça) finished in the last few hours, [rain] wet outside at home right now. Each
+ * is said at most once while it is among the last [HelloOpeners.RECENT] hellos, so it never becomes a routine.
+ */
+data class HelloMoments(val home: Boolean = false, val football: Boolean = false, val rain: Boolean = false) {
+    val any: Boolean get() = home || football || rain
+}
 
 /** What the device keeps of its hellos (its own store, [HelloOpeners.KEY]): the last openers' ids, newest first, and when. */
 data class HelloOpenerMemory(val recent: List<String> = emptyList(), val lastAtMs: Long? = null)
@@ -184,10 +195,47 @@ object HelloOpeners {
         "Hey $N, it's Ada. Late one?" to "How can I help?",
     )
 
+    /** Back from work on an office day ([HelloMoments.home]): asked, never assumed. */
+    val HOME = pool(
+        "h",
+        "Evening, $N. Home from work?" to "How did it go?",
+        "Hey $N, made it back?" to "How was work?",
+        "Hi $N. Done for the day?" to "Anything I can take off your plate?",
+        "There he is, $N. Back from the office?" to "Good day?",
+    )
+
+    /** After the football ([HelloMoments.football]): never a score or a name, just asked. */
+    val FOOTBALL = pool(
+        "fb",
+        "Hey $N, how did the football go?" to "Anything I can do for you?",
+        "Hi $N. Good match?" to "What can I do for you?",
+        "Hello $N. How was the game?" to "Anything you need?",
+    )
+
+    /** Wet outside at home ([HelloMoments.rain]). */
+    val RAIN = pool(
+        "r",
+        "Hey $N. Grim out there, isn't it?" to "What can I do for you?",
+        "Hi $N. Staying dry?" to "Anything I can help with?",
+        "Hello $N. Proper rain today." to "How can I help?",
+    )
+
     /** Every opener, for tests and checks. */
     val ALL: List<HelloOpener> =
         MORNING + AFTERNOON + EVENING + LATE + ANY + MONDAY + FRIDAY + WEEKEND + AGAIN + WELCOME +
-            FIRST_MORNING + FIRST_AFTERNOON + FIRST_EVENING + FIRST_LATE
+            FIRST_MORNING + FIRST_AFTERNOON + FIRST_EVENING + FIRST_LATE + HOME + FOOTBALL + RAIN
+
+    /**
+     * The moment's own openers when one is on and none of its openers is among [recent] (once per moment), in the order
+     * football, home, rain; null when none applies (then [candidates]). Not for the first hello, a quick second tap or
+     * the welcome back, which keep their own.
+     */
+    fun momentPool(m: HelloMoment, recent: List<String>): List<HelloOpener>? {
+        if (m.first || m.again || m.welcome || !m.moments.any) return null
+        val last = recent.take(RECENT).toSet()
+        return listOf(FOOTBALL to m.moments.football, HOME to m.moments.home, RAIN to m.moments.rain)
+            .firstOrNull { (pool, on) -> on && pool.none { it.id in last } }?.first
+    }
 
     /** Morning 05:00–11:59, afternoon 12:00–16:59, evening 17:00–22:59, late 23:00–04:59. */
     fun part(minuteOfDay: Int): HelloPart = when (minuteOfDay.mod(1440) / 60) {
@@ -231,6 +279,7 @@ object HelloOpeners {
      * [RECENT] said). If every one was said lately, the one said longest ago.
      */
     fun pick(m: HelloMoment, recent: List<String>, day: Long): HelloOpener {
+        momentPool(m, recent)?.let { return it.shuffled(Random(day * 31 + 11)).first() }
         val pool = candidates(m).shuffled(Random(day * 31 + m.part().ordinal * 7 + kindSeed(m)))
         val last = recent.take(RECENT)
         pool.firstOrNull { it.id !in last }?.let { return it }
@@ -248,12 +297,14 @@ object HelloOpeners {
     /** The moment of a hello at [nowMs] ([day], [minuteOfDay] his local ones) after [memory]; [introduced] Ada already did today. */
     fun moment(
         minuteOfDay: Int, day: Long, nowMs: Long, memory: HelloOpenerMemory, introduced: Boolean, welcome: Boolean,
+        moments: HelloMoments = HelloMoments(),
     ): HelloMoment = HelloMoment(
         minuteOfDay = minuteOfDay,
         isoDayOfWeek = CivilDate.isoDayOfWeek(day),
         first = !introduced,
         again = memory.lastAtMs?.let { nowMs - it in 0 until AGAIN_WITHIN_MS } ?: false,
         welcome = welcome,
+        moments = moments,
     )
 
     /** [memory] after [opener] was said at [nowMs]. */
@@ -280,13 +331,29 @@ object HelloOpeners {
     }
 
     /**
+     * The last openers said on either app (hello slice 2): [shared] is the list the other app (or this one) last wrote
+     * into the synced profile, [local] this device's own; together, newest of the shared first, at most [RECENT].
+     */
+    fun merged(local: List<String>, shared: List<String>): List<String> = (shared + local).distinct().take(RECENT)
+
+    /** The shared list as kept in the synced profile: "id,id,…". */
+    fun encodeIds(ids: List<String>): String = ids.take(RECENT).joinToString(",")
+
+    /** [encodeIds]'s text read back (it came through sync: anything odd is skipped). */
+    fun decodeIds(stored: String?): List<String> = stored.orEmpty().split(',').map { it.trim() }
+        .filter { it.isNotEmpty() && it.length <= 8 && it.all { c -> c in 'a'..'z' || c in '0'..'9' } }.distinct().take(RECENT)
+
+    /**
      * The pieces of the next hellos worth having in Ada's voice before a tap ([SpeechRules.pieces] of opener + question,
      * the clear-day form): the one a tap now would say, the one an hour on, and a quick second tap's.
      */
-    fun warm(minuteOfDay: Int, day: Long, nowMs: Long, memory: HelloOpenerMemory, introduced: Boolean, welcome: Boolean, name: String?): List<String> {
-        val now = moment(minuteOfDay, day, nowMs, memory, introduced, welcome)
+    fun warm(
+        minuteOfDay: Int, day: Long, nowMs: Long, memory: HelloOpenerMemory, introduced: Boolean, welcome: Boolean, name: String?,
+        moments: HelloMoments = HelloMoments(),
+    ): List<String> {
+        val now = moment(minuteOfDay, day, nowMs, memory, introduced, welcome, moments)
         val laterMin = minuteOfDay + HelloRules.WARM_AHEAD_MIN
-        val later = moment(laterMin.mod(1440), day + laterMin / 1440, nowMs, memory, introduced = true, welcome = welcome)
+        val later = moment(laterMin.mod(1440), day + laterMin / 1440, nowMs, memory, introduced = true, welcome = welcome, moments = moments)
             .copy(again = false)
         val nextPick = pick(now, memory.recent, day)
         val after = said(memory, nextPick, nowMs)
@@ -298,4 +365,40 @@ object HelloOpeners {
         val pieces = picks.map { o -> SpeechRules.pieces("${o.openFor(name)} ${o.ask}") }
         return (pieces.mapNotNull { it.firstOrNull() } + pieces.flatMap { it.drop(1) }).distinct()
     }
+}
+
+/**
+ * Which [HelloMoments] are on now (hello slice 2). Non-AI and pure, from what the apps already hold: today's office
+ * window, today's events and the home forecast. Nothing is fetched, sent or stored.
+ */
+object HelloMomentRules {
+    private const val MIN_MS = 60_000L
+    /** Home from work: from this long after the office day's end… */
+    const val HOME_FROM_MIN = 30
+    /** …until this long after it. */
+    const val HOME_UNTIL_MIN = 180
+    /** After the football: for this long after the match is over. */
+    const val FOOTBALL_FOR_MIN = 180
+    /** A Barça match is taken as over this long after kick-off (with its full-time score in). */
+    const val BARCA_LENGTH_MIN = 115
+
+    fun of(office: OfficeWindow?, events: List<CalendarEvent>, forecast: WeatherForecast, nowMs: Long, cal: LocalCalendar): HelloMoments =
+        HelloMoments(home = home(office, nowMs), football = football(events, nowMs, cal), rain = rain(forecast, nowMs))
+
+    /** An office day (not working from home) whose work is over: [HOME_FROM_MIN] to [HOME_UNTIL_MIN] after its end. */
+    fun home(office: OfficeWindow?, nowMs: Long): Boolean =
+        office != null && nowMs - office.endMs in HOME_FROM_MIN * MIN_MS until HOME_UNTIL_MIN * MIN_MS
+
+    /** A club fixture (not training) or a finished Barça match that ended in the last [FOOTBALL_FOR_MIN]. */
+    fun football(events: List<CalendarEvent>, nowMs: Long, cal: LocalCalendar): Boolean = events.any { e ->
+        val end = when {
+            !e.isProvisional && FootballRules.isClubFixture(e) && !FootballRules.isTraining(e) -> FootballRules.matchEndMs(e, cal)
+            BarcaMatchRules.isMatch(e) && BarcaMatchRules.score(e)?.live == false -> e.startAtMs + BARCA_LENGTH_MIN * MIN_MS
+            else -> return@any false
+        }
+        nowMs - end in 0 until FOOTBALL_FOR_MIN * MIN_MS
+    }
+
+    /** Wet at home this hour ([WeatherRules.isWet]). */
+    fun rain(forecast: WeatherForecast, nowMs: Long): Boolean = WeatherRules.hourAt(forecast, nowMs)?.let(WeatherRules::isWet) ?: false
 }

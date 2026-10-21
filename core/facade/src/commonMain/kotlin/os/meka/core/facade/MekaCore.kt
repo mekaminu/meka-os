@@ -5241,10 +5241,21 @@ class MekaCore(
         )
     }
 
-    /** This device's [os.meka.core.domain.HelloOpenerMemory]; empty when none or unreadable. Caller is on the core. */
-    private fun helloOpenerMemory(): os.meka.core.domain.HelloOpenerMemory = os.meka.core.domain.HelloOpeners.decode(
-        runCatching { localStore.transaction { localStore.localValue(os.meka.core.domain.HelloOpeners.KEY) } }.getOrNull(),
-    )
+    /**
+     * This device's [os.meka.core.domain.HelloOpenerMemory], its recent openers merged with the ones the other app said
+     * (hello slice 2, the synced profile's list); empty when none or unreadable. Caller is on the core.
+     */
+    private fun helloOpenerMemory(): os.meka.core.domain.HelloOpenerMemory {
+        val o = os.meka.core.domain.HelloOpeners
+        val local = o.decode(runCatching { localStore.transaction { localStore.localValue(o.KEY) } }.getOrNull())
+        val shared = runCatching { aboutYou.helloRecent() }.getOrDefault(emptyList())
+        return local.copy(recent = o.merged(local.recent, shared))
+    }
+
+    /** Hello slice 2: home from work, after the football, rain outside, from what the core holds now. Caller is on the core. */
+    private fun helloMoments(now: Long, cal: ZoneCalendar): os.meka.core.domain.HelloMoments = runCatching {
+        os.meka.core.domain.HelloMomentRules.of(officeToday(), _today.value.events, weather.forecast(), now, cal)
+    }.getOrDefault(os.meka.core.domain.HelloMoments())
 
     /** Whether Ada already introduced herself today on this device (the hello's or the companion's first). Caller is on the core. */
     private fun adaIntroducedToday(day: Long): Boolean = os.meka.core.domain.AdaRules.dayOf(
@@ -5260,14 +5271,17 @@ class MekaCore(
         val o = os.meka.core.domain.HelloOpeners
         val day = cal.epochDayOf(now)
         val memory = helloOpenerMemory()
-        val moment = o.moment(cal.minuteOfDay(now), day, now, memory, adaIntroducedToday(day), welcome)
+        val moment = o.moment(cal.minuteOfDay(now), day, now, memory, adaIntroducedToday(day), welcome, helloMoments(now, cal))
         val opener = o.pick(moment, memory.recent, day)
+        val after = o.said(memory, opener, now)
         runCatching {
             localStore.transaction {
-                localStore.setLocalValue(o.KEY, o.encode(o.said(memory, opener, now)))
+                localStore.setLocalValue(o.KEY, o.encode(after))
                 if (moment.first) localStore.setLocalValue(os.meka.core.domain.AdaRules.INTRO_KEY, day.toString())
             }
         }
+        // Hello slice 2: the last openers shared through the synced profile, so the other app doesn't echo this one.
+        runCatching { aboutYou.setHelloRecent(after.recent) }
         if (speechApi != null && warmedName != null) {
             val w = warmedWelcome
             scope.launch { runCatching { warmHello(w) } }
@@ -9697,7 +9711,9 @@ class MekaCore(
             // The orb says hello like a person: the openers the next taps would say (now, in an hour, a quick second tap).
             val now = nowMs()
             val day = ZoneCalendar(timeZone).epochDayOf(now)
-            ask + os.meka.core.domain.HelloOpeners.warm(minute, day, now, helloOpenerMemory(), adaIntroducedToday(day), welcome, name)
+            ask + os.meka.core.domain.HelloOpeners.warm(
+                minute, day, now, helloOpenerMemory(), adaIntroducedToday(day), welcome, name, helloMoments(now, ZoneCalendar(timeZone)),
+            )
         }
         lines.forEach { if (!speechPrefetch(it)) return }
         // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.

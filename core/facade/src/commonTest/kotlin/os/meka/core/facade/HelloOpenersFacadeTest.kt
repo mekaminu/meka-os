@@ -68,4 +68,30 @@ class HelloOpenersFacadeTest {
         now += HelloOpeners.AGAIN_WITHIN_MS + 60_000
         assertFalse("Ada" in c2.hello().opening)
     }
+
+    @Test
+    fun theFoldAndTheMacDontEchoEachOther() = runTest(timeout = SLOW_RUNNER) {
+        val ops = InMemoryServerOpStore()
+        fun dev(id: String) = MekaCore(
+            householdId = "hh", deviceId = id, store = InMemoryReplicaStore(),
+            transport = os.meka.core.testing.FaultyTransport(SyncService(ops)),
+            secureRandom = Random(id.hashCode()), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        )
+        val fold = dev("android")
+        val mac = dev("mac")
+        fold.setAboutYou(AboutField.SHOWN_NAME, "Alex")
+        fold.syncNow(); mac.syncNow()
+        // Ada introduces herself on each device; then the ordinary openers alternate between the two apps.
+        fold.hello(); fold.syncNow(); mac.syncNow(); mac.hello(); mac.syncNow(); fold.syncNow()
+        val said = mutableListOf<String>()
+        repeat(8) { i ->
+            now += HelloOpeners.AGAIN_WITHIN_MS + 60_000
+            val c = if (i % 2 == 0) fold else mac
+            val other = if (i % 2 == 0) mac else fold
+            val g = c.hello()
+            assertFalse(g.opening in said, "${g.opening} said already: $said")
+            said += g.opening
+            c.syncNow(); other.syncNow()
+        }
+    }
 }
