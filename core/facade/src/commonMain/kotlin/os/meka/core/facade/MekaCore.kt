@@ -8242,7 +8242,11 @@ class MekaCore(
                 dayEvents = askDayEvents, dayTasks = askDayTasks)
                 // The companion, slice 3: "sir" when he chose it in Settings → Voice.
                 // The companion, slice 5: the notes of earlier chats, only with an open question or one about an earlier chat.
-                .copy(callSir = mekaVoice.callsSir(), recall = companionRecall(q, history, cal))
+                // One name everywhere, slice 2: the companion calls him what Today and the orb do (About you → Your name).
+                .copy(
+                    callSir = mekaVoice.callsSir(), recall = companionRecall(q, history, cal),
+                    callName = os.meka.core.domain.CallNameRules.called(aboutYou.profile().shownName),
+                )
         }
         // Voice completeness, slice 3: a spoken question whose answer Navilife's voice will say asks for the first piece
         // with the answer (only Navilife's words are said; nothing of his question is spoken or kept).

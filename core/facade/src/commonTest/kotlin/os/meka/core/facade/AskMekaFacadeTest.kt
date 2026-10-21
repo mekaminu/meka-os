@@ -2,6 +2,7 @@ package os.meka.core.facade
 
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.TimeZone
+import os.meka.core.domain.AboutField
 import os.meka.core.domain.AskContext
 import os.meka.core.domain.AskItemKind
 import os.meka.core.domain.AskOutcome
@@ -64,6 +65,18 @@ class AskMekaFacadeTest {
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = transport,
         secureRandom = Random(1), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
+
+    @Test
+    fun theQuestionCarriesTheNameTodayAndTheOrbUse() = runTest {
+        // One name everywhere, slice 2: the companion on the server is told Your name's first word, or none.
+        val c = core()
+        c.askMeka("Why is the sky blue?")
+        assertNull(server.asked.last().second.callName)
+        c.setAboutYou(AboutField.SHOWN_NAME, "Alex Smith")
+        c.askMeka("Why is the sky blue?")
+        assertEquals("Alex", server.asked.last().second.callName)
+        assertEquals("Alex", c.aboutYouView.value.callName)
+    }
 
     @Test
     fun anOpenChatsNoteIsKeptSentBackWithTheNextOpenQuestionAndForgottenOnRequest() = runTest {

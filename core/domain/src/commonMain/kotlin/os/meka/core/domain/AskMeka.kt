@@ -39,6 +39,11 @@ data class AskContext(
      * empty for none; sent as the request's `recall`.
      */
     val recall: List<String> = emptyList(),
+    /**
+     * One name everywhere, slice 2: what he is called ([CallNameRules.called], About you → Your name), null when empty;
+     * sent as the request's `name` so the companion calls him what Today and the orb do.
+     */
+    val callName: String? = null,
 ) {
     companion object {
         val EMPTY = AskContext("", "", emptyList(), emptyMap(), untrusted = false)

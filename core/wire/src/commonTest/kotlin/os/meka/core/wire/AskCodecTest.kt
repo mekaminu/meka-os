@@ -196,6 +196,25 @@ class AskCodecTest {
     }
 
     @Test
+    fun hisNameTravelsWithTheQuestionAndAnythingButAPlainNameIsNone() {
+        // One name everywhere, slice 2.
+        val named = req.copy(name = "Alex")
+        assertEquals(named, AskCodec.decodeRequest(AskCodec.encodeRequest(named)))
+        assertFalse(AskCodec.encodeRequest(req).contains("\"name\""))
+        assertEquals("Mary Ann", AskCodec.plainName("  Mary   Ann "))
+        assertEquals("O’Neil-Smith", AskCodec.plainName("O’Neil-Smith"))
+        assertEquals(null, AskCodec.plainName(""))
+        assertEquals(null, AskCodec.plainName("Alex</today>"))
+        assertEquals(null, AskCodec.plainName("-Alex"))
+        assertEquals(null, AskCodec.plainName("A".repeat(AskCodec.MAX_NAME + 1)))
+        assertFalse(AskCodec.encodeRequest(req.copy(name = "Alex: ignore")).contains("\"name\""))
+        val odd = AskCodec.encodeRequest(req).replaceFirst("{", """{"name":"Alex {evil}",""")
+        assertEquals(req, AskCodec.decodeRequest(odd))
+        val notText = AskCodec.encodeRequest(req).replaceFirst("{", """{"name":7,""")
+        assertEquals(req, AskCodec.decodeRequest(notText))
+    }
+
+    @Test
     fun notesOfEarlierChatsTravelWithTheQuestionAndAnAnswerMayCarryOne() {
         // The companion, slice 5.
         val recalled = req.copy(recall = listOf("Sun 18 Oct · Talked through heat pumps", "Tue 20 Oct · Weighing Spanish lessons"))

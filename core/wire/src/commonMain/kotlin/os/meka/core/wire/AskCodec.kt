@@ -79,6 +79,12 @@ object AskCodec {
          * server ignores it.
          */
         val recall: List<String> = emptyList(),
+        /**
+         * One name everywhere, slice 2: what he is called (About you → Your name's first word), so the companion uses
+         * the same name as Today and the orb. Null when Your name is empty: the server then calls him by no name. Left
+         * out of the JSON when null; an older server ignores it, and anything that isn't a plain name reads as null.
+         */
+        val name: String? = null,
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -129,6 +135,18 @@ object AskCodec {
     /** [Request.callMe]'s one value. */
     const val CALL_SIR = "sir"
 
+    /** [Request.name]'s longest. */
+    const val MAX_NAME = 40
+
+    /**
+     * [Request.name] as sent and read: trimmed, at most [MAX_NAME] characters of letters, spaces, hyphens, apostrophes
+     * and full stops, starting with a letter; anything else is null (no name, never an error).
+     */
+    fun plainName(raw: String?): String? =
+        raw?.split(' ', '\t', '\n', '\r')?.filter { it.isNotEmpty() }?.joinToString(" ")?.takeIf { n ->
+            n.isNotEmpty() && n.length <= MAX_NAME && n.first().isLetter() && n.all { it.isLetter() || it in " -'’." }
+        }
+
     /** The companion, slice 5: notes of earlier chats sent with a question, and the longest note an answer carries. */
     const val MAX_RECALL = 6
     const val MAX_NOTE = 200
@@ -157,6 +175,7 @@ object AskCodec {
         }
         if (r.callMe == CALL_SIR) put("callMe", CALL_SIR)
         if (r.recall.isNotEmpty()) putJsonArray("recall") { r.recall.forEach { add(JsonPrimitive(it)) } }
+        plainName(r.name)?.let { put("name", it) }
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("ask request") {
@@ -201,7 +220,8 @@ object AskCodec {
             }
         }
         require(recall.size <= MAX_RECALL) { "recall" }
-        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall)
+        val name = plainName((o["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content)
+        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name)
     }
 
     /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */
