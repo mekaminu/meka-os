@@ -258,6 +258,9 @@ class MekaCore(
      * Calendar editing: the accounts where editing is allowed, as the server last listed them ([connectedAccounts]);
      * empty until read. The server checks again before it sends anything.
      */
+    // Week board (11) part 2: declared before anything the constructor's first refresh reads.
+    private val _alertHold = MutableStateFlow<Long?>(null)
+    private var alertHoldLoaded = false
     private val _editAccounts = MutableStateFlow<List<os.meka.core.domain.EditAccount>>(emptyList())
     private val calendarEdits = os.meka.core.domain.CalendarEdits(replica, nowMs, ids::next) { p, a ->
         _editAccounts.value.any { it.provider == p && it.email == a }
@@ -2192,9 +2195,6 @@ class MekaCore(
     private var lightenUndo: List<os.meka.core.domain.BoardUndo> = emptyList()
 
     // ---- Week board, item (11) part 2: "I'm shattered" to Ada, and Stretched holds the alerts that can wait ----
-
-    private val _alertHold = MutableStateFlow<Long?>(null)
-    private var alertHoldLoaded = false
 
     /** When the Stretched hold on this device ends (ms), or null; kept on this device only, never synced. */
     val alertHold: StateFlow<Long?> get() = _alertHold
