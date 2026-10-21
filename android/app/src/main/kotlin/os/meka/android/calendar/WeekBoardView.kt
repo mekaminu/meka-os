@@ -925,7 +925,7 @@ private fun AddAtTop(
                     .clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button) { onOpen() }
                     .semantics { contentDescription = BoardHandRules.addLabel(day.title) }
-                    .padding(horizontal = MekaSpace.s),
+                    .padding(horizontal = MekaSpace.m),
                 contentAlignment = Alignment.CenterStart,
             ) { Text(BoardHandRules.ADD, style = MekaType.caption, color = Meka.colors.textTertiary) }
         } else {

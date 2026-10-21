@@ -319,7 +319,7 @@ private struct BoardAddRow: View {
                 } label: {
                     Text(BoardHandRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
-                        .padding(.horizontal, MekaSpace.s)
+                        .padding(.horizontal, MekaSpace.m)
                         .contentShape(Rectangle())
                         .overlay(
                             RoundedRectangle(cornerRadius: MekaRadius.m)
@@ -558,7 +558,7 @@ private struct BoardTick: View {
                     .background(Circle().fill(done ? palette.accent : Color.clear))
                     .frame(width: 20, height: 20)
                 if done {
-                    Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(palette.background)
+                    Image(systemName: "checkmark").font(MekaType.metaStrong).foregroundStyle(palette.background)
                 }
             }
             .frame(width: 28, height: 28)
