@@ -7274,7 +7274,7 @@ class MekaCore(
             undoLinked()
         }
         mailNeedsChanged()
-        if (onDay != null) os.meka.core.domain.BoardFeedRules.mailLine(R.taskTitle(item), onDay, today, group.size)
+        return if (onDay != null) os.meka.core.domain.BoardFeedRules.mailLine(R.taskTitle(item), onDay, today, group.size)
         else os.meka.core.domain.MailLinkRules.taskLine(group.size)
     }
 
