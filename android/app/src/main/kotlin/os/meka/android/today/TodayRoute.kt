@@ -751,6 +751,9 @@ private fun TodayPane(
     val update by remember(updater) { updater?.state ?: MutableStateFlow<UpdateState>(UpdateState.None) }.collectAsState()
     // Weather for home (weather item, slice 1): a quiet line under the date.
     val weatherFlow = remember(core) { core?.weatherView ?: MutableStateFlow(WeatherView.EMPTY) }
+    // One name everywhere (2026-10-21): the greeting's name is About you's, as the orb's hello and the brief say it.
+    val aboutFlow = remember(core) { core?.aboutYouView ?: MutableStateFlow(os.meka.core.domain.AboutYouView.EMPTY) }
+    val callName = aboutFlow.collectAsState().value.callName
     val weather by weatherFlow.collectAsState()
     // Calendar sign-ins about to end or expired (Reliability first, item 2): one line with Reconnect.
     val signInFlow = remember(core) { core?.signInLine ?: MutableStateFlow(emptyList<os.meka.core.domain.SignInLine>()) }
@@ -826,7 +829,7 @@ private fun TodayPane(
                         onTick = habitTick,
                     ) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
-                    GreetingText(greeting(), if (now == null) ringPlay else DayRingPlay.STILL)
+                    GreetingText(greeting(callName), if (now == null) ringPlay else DayRingPlay.STILL)
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xxs))
@@ -1283,7 +1286,7 @@ private fun TodayPane(
         if (collapses && headerFace != null) {
             CollapsingHeader(
                 shown = collapse, face = headerFace, fullDp = WatchFaceRules.headerDp(cover = true),
-                greeting = greeting(),
+                greeting = greeting(callName),
                 line = HeaderCollapseRules.compactLine(today.timeline.dateLabel, weather.nowLine),
                 play = ringPlay, played = ringPlayed, onOpenFace = openDayRing,
                 night = shutdown.night, week = goalsNow.week,
@@ -1521,9 +1524,5 @@ private fun meta(t: Task): String? {
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
 
-private fun greeting(): String = when (LocalTime.now().hour) {
-    in 5..11 -> "Good morning, Meka"
-    in 12..17 -> "Good afternoon, Meka"
-    in 18..23 -> "Good evening, Meka"
-    else -> "Good night, Meka" // 00:00–04:59 (Meka, 2026-10-17 02:03: "Good evening" in the small hours)
-}
+/** "Good evening, Alex" with About you's name, "Good evening" without (00:00–04:59 is "Good night", Meka 2026-10-17). */
+private fun greeting(name: String?): String = os.meka.core.domain.CallNameRules.todayGreeting(LocalTime.now().hour, name)

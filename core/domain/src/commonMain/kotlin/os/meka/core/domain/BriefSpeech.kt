@@ -32,7 +32,7 @@ object BriefSpeech {
     /** The brief [v] as one block of sentences to be read aloud to [name]. */
     fun script(v: MorningBriefView, name: String = "Meka"): String {
         val out = mutableListOf<String>()
-        out += "${v.greeting}, $name."
+        out += CallNameRules.opening(v.greeting, name)
         if (v.dateLabel.isNotBlank()) out += "It's ${spokenDate(v.dateLabel)}."
         v.workLine?.let { out += sentence(it.replace(WORK_HOURS) { m -> "Work is from ${m.groupValues[1]} to ${m.groupValues[2]}" }) }
         v.weatherLine?.let { out += sentence("Today, " + it) }

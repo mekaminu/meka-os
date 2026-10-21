@@ -305,6 +305,8 @@ object TalkRules {
         is AskProposal.AddChecklist -> (if (past) "added " else "add ") + clean(AskRules.shoppingNames(p.items)) + " to the " + clean(p.title) + " checklist"
         // "add the goal Run 5k, done by Thursday 31 December" / "added the goal Run 5k for this month".
         is AskProposal.ReadingUpdate -> clean(ReadingAskRules.phrase(p, past))
+        // "call you Alex from now on" / "saved your name as Alex".
+        is AskProposal.SetName -> CallNameRules.phrase(clean(p.name), past)
         is AskProposal.AddGoal -> (if (past) "added " else "add ") + "the goal " + clean(p.title) +
             (p.dueDay?.let { ", done by " + spokenWhen(it, null, today) } ?: " for " + GoalRules.horizonLabel(p.horizon).lowercase())
     }

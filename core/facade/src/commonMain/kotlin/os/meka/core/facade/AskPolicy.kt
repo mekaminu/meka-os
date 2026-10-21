@@ -111,5 +111,7 @@ object AskPolicy {
         is AskProposal.AddGoal -> ActionType.CREATE_TASK to PolicyDomain.TASKS
         // Changes Meka's own reading list, like its buttons (nothing is fetched, bought or sent).
         is AskProposal.ReadingUpdate -> ActionType.CREATE_TASK to PolicyDomain.TASKS
+        // His own name in his own About you, like typing it there (nothing is sent to anyone).
+        is AskProposal.SetName -> ActionType.CREATE_TASK to PolicyDomain.TASKS
     }
 }

@@ -88,6 +88,11 @@ object AboutYouFields {
     const val HELD_FOLD = "heldFoldAtMs"
     /** Int64: the same for the Mac. */
     const val HELD_MAC = "heldMacAtMs"
+    /**
+     * Int64: when the orb's hello asked what to call him (one name everywhere, 2026-10-21), so it asks once across
+     * both apps ([CallNameRules.asks]). Not a typed line.
+     */
+    const val NAME_ASKED_AT = "nameAskedAtMs"
 }
 
 /** Which app this core runs in, for [AboutYouStore.markHeld]. */
@@ -200,6 +205,8 @@ data class AboutYouView(
     val partnerWatch: Boolean,
     val watchLine: String?,
     val isEmpty: Boolean,
+    /** One name everywhere: what Today, the orb and the brief call him ([CallNameRules.called]); null when empty. */
+    val callName: String? = null,
 ) {
     companion object {
         val EMPTY: AboutYouView = AboutYouRules.view(AboutYou.EMPTY, LocalCalendar.UTC, 0L)
@@ -607,6 +614,7 @@ object AboutYouRules {
             partnerWatch = a.partnerWatch,
             watchLine = a.partnerName?.let { if (a.partnerWatch) WATCH_ON else WATCH_OFF },
             isEmpty = a.isEmpty,
+            callName = CallNameRules.called(a.shownName),
         )
     }
 
@@ -702,6 +710,19 @@ class AboutYouStore(private val replica: Replica, private val nowMs: () -> Long)
         replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID,
             mapOf(f.key to (if (clean.isEmpty()) FieldValue.Null else FieldValue.Text(clean))))
         return if (clean.isEmpty()) AboutSaved("Cleared · Undo puts it back", undo = before) else AboutSaved(AboutYouRules.SAVED)
+    }
+
+    /** One name everywhere: whether the hello has already asked what to call him (on either app). */
+    fun nameAsked(): Boolean = fields()?.get(AboutYouFields.NAME_ASKED_AT)?.longOrNull != null
+
+    /**
+     * Notes that the hello asked, once. Only into a profile that exists, so this never creates one (release 1's copy
+     * checks for none); false when nothing was written.
+     */
+    fun markNameAsked(): Boolean {
+        if (!exists() || nameAsked()) return false
+        replica.commitLocal(EntityTypes.HOUSEHOLD_PROFILE, AboutYouRules.ENTITY_ID, mapOf(AboutYouFields.NAME_ASKED_AT to FieldValue.Int64(nowMs())))
+        return true
     }
 
     /** MEKA watches the partner's messages for requests, or not. */

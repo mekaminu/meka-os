@@ -2373,3 +2373,10 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Mac: passes `updateHidden: false` to Health (no phone updates on the Mac).
 - Help tip in docs/help/health.md; motion row (App update) in docs/motion-catalogue.md.
 - Tests: AppUpdatesTest.aBuildHiddenWithLaterIsStillOfferedInHealthAndUndoBringsTheCardBack, HealthTest (hidden row).
+
+## One name everywhere, Ada asks when it's missing — slice 1 (2026-10-21)
+- Why: the orb's hello read About you → Your name (empty on his phone) and said "Good evening." while Today's greeting had the name written into the app.
+- Core: `CallNameRules` (called, todayGreeting, opening, asks, askGreeting, pending, heard, declined, card, answer, doneLine, phrase). `AboutYouFields.NAME_ASKED_AT` + `AboutYouStore.nameAsked/markNameAsked` (written only into an existing profile, so it never creates one). `AboutYouView.callName`. `AskProposal.SetName` (a card, Save, never earned trust, policy: his own data) and `AskUndo.PutBackName`. The brief's opening leaves the name out when there is none (`BriefScriptRules`, `BriefSpeech`).
+- Facade: `hello()` asks "Before anything else, what should I call you?" once (synced flag, plus this run) when Your name is empty; `ask()` reads the reply for two minutes (a bare name, "it's …", "I'm …") and "call me …" / "my name is …" any time, answering with the name card; "no thanks" is answered kindly. Save writes Your name through About you's own checks; Undo puts it back while it still reads the same. `warmHello` makes the asking hello ahead while it would ask, and the openers are made again at once when the name changes (`rewarmHelloIfRenamed`, from any change: the card, About you, the other app). `briefScript`/`briefScriptNow` read About you's name when none is passed.
+- Fold: Today's greeting and collapsing header, and the brief pane's title, read `aboutYouView.callName` through `CallNameRules`. Mac: TodayView's greeting, BriefSheet's title and CoreModel's brief read the same.
+- Tests: CallNameTest (5, domain), CallNameFacadeTest (2), AskPolicyTest (24 kinds). No server change, no wire change, no migration.

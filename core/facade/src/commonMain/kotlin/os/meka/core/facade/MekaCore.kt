@@ -5201,6 +5201,13 @@ class MekaCore(
         val now = nowMs()
         val minute = cal.minuteOfDay(now)
         val profile = aboutYou.profile()
+        // One name everywhere: no name in About you, and not asked before on either app → ask once, out loud.
+        if (os.meka.core.domain.CallNameRules.asks(profile.shownName, nameAskedHere || aboutYou.nameAsked())) {
+            nameAskedHere = true
+            nameAskedAt = now
+            aboutYou.markNameAsked()
+            return@onCore os.meka.core.domain.CallNameRules.askGreeting(minute, welcome)
+        }
         val cards = _needsYouStack.value.cards
         val event = _today.value.upcomingEvents(now).firstOrNull()?.let { e ->
             os.meka.core.domain.HelloEvent(
@@ -5229,6 +5236,40 @@ class MekaCore(
                 welcome = welcome,
             ),
         )
+    }
+
+    /**
+     * One name everywhere: when this device's hello asked what to call him (null: it hasn't). Kept here too, so a
+     * profile that doesn't exist yet (nothing written) still asks only once per run; the reply is read for
+     * [os.meka.core.domain.CallNameRules.PENDING_MS] after it.
+     */
+    private var nameAskedAt: Long? = null
+    private var nameAskedHere = false
+
+    /**
+     * One name everywhere: his answer to the hello's "what should I call you?" (or "call me Alex" any time) comes back
+     * as the name card, Save on his tap; "no thanks" just after the ask is answered kindly and nothing is asked again.
+     * Null: not about his name (the question goes on as usual). No AI, nothing sent.
+     */
+    private suspend fun nameAsk(q: String): os.meka.core.domain.AskOutcome? = onCore {
+        val rules = os.meka.core.domain.CallNameRules
+        val pending = rules.pending(nameAskedAt, nowMs())
+        val name = rules.heard(q, pending)
+        when {
+            name != null -> {
+                nameAskedAt = null
+                os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.answer(name), listOf(rules.card(name))))
+            }
+            pending && rules.declined(q) -> {
+                nameAskedAt = null
+                os.meka.core.domain.AskOutcome.Answered(os.meka.core.domain.AskAnswer(rules.DECLINED, emptyList()))
+            }
+            else -> {
+                // Something else entirely (a question): the ask is over and the question goes on as usual.
+                if (pending) nameAskedAt = null
+                null
+            }
+        }
     }
 
     /**
@@ -7917,7 +7958,9 @@ class MekaCore(
      * No AI, offline, no answer within [os.meka.core.domain.BriefAiRules.WAIT_MS] or too little surviving the check: the
      * deterministic brief ([os.meka.core.domain.BriefScriptRules.script]). Never throws.
      */
-    suspend fun briefScript(name: String = "Meka"): String {
+    suspend fun briefScript(name: String? = null): String {
+        // One name everywhere: About you's (none: the greeting leaves it out).
+        @Suppress("NAME_SHADOWING") val name = name ?: (_aboutYou.value.callName ?: "")
         val script = os.meka.core.domain.BriefScriptRules
         var v = _brief.value
         if (v.dateLabel.isBlank()) return script.script(v, name)
@@ -7971,7 +8014,8 @@ class MekaCore(
      * The brief as [briefScript] last had it for today's facts, without asking (Talk's "read my brief" on the Mac's main
      * actor): the AI's when it was kept for these facts, else the deterministic brief. Pure and cheap.
      */
-    fun briefScriptNow(name: String = "Meka"): String {
+    fun briefScriptNow(name: String? = null): String {
+        @Suppress("NAME_SHADOWING") val name = name ?: (_aboutYou.value.callName ?: "")
         val v = _brief.value
         val fallback = os.meka.core.domain.BriefScriptRules.script(v, name)
         val (k, kept) = briefAi ?: return fallback
@@ -8048,6 +8092,8 @@ class MekaCore(
         if (onEarly != null) talkEarly = null
         val q = os.meka.core.domain.AskRules.question(question)
             ?: return os.meka.core.domain.AskOutcome.Unavailable("Ask something first")
+        // One name everywhere: the answer to "what should I call you?", or "call me Alex", becomes the name card.
+        if (!beyondHelp) nameAsk(q)?.let { return it }
         // Reading and learning, slice 2: "what am I reading?" is answered from his list, and "I'm on page 200",
         // "I've finished Dune", "add Dune to my reading list" are done now, before the plain adds below take them.
         // "What Navilife may do" completeness: "pause Navilife", "resume Navilife", "is Navilife paused?" are done and
@@ -8434,6 +8480,14 @@ class MekaCore(
                     ?: throw os.meka.core.domain.ValidationException(said?.line ?: os.meka.core.domain.ReadingRules.GONE)
                 os.meka.core.domain.AskUndo.PutBackReading(token)
             }
+            // One name everywhere: About you's own save (its checks), so everything calls him by it from now on.
+            is os.meka.core.domain.AskProposal.SetName -> {
+                val before = aboutYou.profile().shownName
+                val saved = aboutYou.set(os.meka.core.domain.AboutField.SHOWN_NAME, p.name)
+                if (saved.refused) throw os.meka.core.domain.ValidationException(saved.line)
+                refreshAboutYouStep()
+                os.meka.core.domain.AskUndo.PutBackName(before, p.name)
+            }
         }
         return os.meka.core.domain.AskDone(os.meka.core.domain.AskRules.doneLine(card.proposal, today), undo)
     }
@@ -8506,6 +8560,11 @@ class MekaCore(
             }
             // Reading's own Undo: only while it is still the list's last change.
             is os.meka.core.domain.AskUndo.PutBackReading -> reading.undo(undo.token)
+            // Your name goes back only while it still reads what the card saved.
+            is os.meka.core.domain.AskUndo.PutBackName ->
+                if (aboutYou.profile().shownName == undo.after) {
+                    !aboutYou.set(os.meka.core.domain.AboutField.SHOWN_NAME, undo.before ?: "").refused
+                } else false
         }
     }
 
@@ -9571,12 +9630,36 @@ class MekaCore(
     suspend fun warmHello(welcome: Boolean = false) {
         if (speechApi == null) return
         val lines = onCore {
-            os.meka.core.domain.HelloRules.warmLines(ZoneCalendar(timeZone).minuteOfDay(nowMs()), aboutYou.profile().shownName, welcome)
+            val name = aboutYou.profile().shownName
+            warmedName = os.meka.core.domain.CallNameRules.called(name) ?: ""
+            warmedWelcome = welcome
+            val minute = ZoneCalendar(timeZone).minuteOfDay(nowMs())
+            // One name everywhere: the hello that asks his name is ready too while it would still ask.
+            val ask = if (!os.meka.core.domain.CallNameRules.asks(name, nameAskedHere || aboutYou.nameAsked())) emptyList()
+            else listOf(os.meka.core.domain.CallNameRules.askGreeting(minute, welcome).spoken)
+            ask + os.meka.core.domain.HelloRules.warmLines(minute, name, welcome)
         }
         lines.forEach { if (!speechPrefetch(it)) return }
         // The orb speed pass, slice 4: the holding lines too, so a slow answer is bridged from memory.
         onCore { os.meka.core.domain.AnswerWaitRules.holdLines(aboutYou.profile().shownName) }
             .forEach { if (!speechPrefetch(it)) return }
+    }
+
+    /**
+     * One name everywhere: the name [warmHello] last made the openers with ("" for none; null before it first ran) and
+     * whether with the welcome back. When Your name changes (a card, About you, the other app) the openers are made
+     * again at once ([rewarmHelloIfRenamed]).
+     */
+    private var warmedName: String? = null
+    private var warmedWelcome = false
+
+    /** Caller is on the core: the name changed since the openers were made, so they're made again now. */
+    private fun rewarmHelloIfRenamed(callName: String?) {
+        val was = warmedName ?: return
+        if (was == (callName ?: "")) return
+        warmedName = callName ?: ""
+        val welcome = warmedWelcome
+        scope.launch { runCatching { warmHello(welcome) } }
     }
 
     /** When this device last asked the server to get ready ([warmTalk]); null: not yet. */
@@ -10185,6 +10268,7 @@ class MekaCore(
         _meals.value = mealPlan.view(listsNow.shopping.toBuy.map { os.meka.core.domain.ShoppingRules.key(it.title) }.toSet())
         _emergency.value = emergency.view()
         _aboutYou.value = aboutYou.view(cal)
+        rewarmHelloIfRenamed(_aboutYou.value.callName)
         val kidsChildren = aboutYou.profile().children
         val kidRecords = kids.records()
         // Kids' admin, slice 5: each child's chores and pocket money this week.

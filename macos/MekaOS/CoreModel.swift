@@ -2649,10 +2649,10 @@ final class CoreModel {
     /// The brief as MEKA reads it ("A morning brief worth listening to", slice 2): written by MEKA's AI from the brief's
     /// facts when it answers within 6 s, else MEKA's own. Nothing but the String crosses back; never fails.
     func briefScript() async -> String {
-        let fallback = brief.map { BriefScriptRules.shared.script(v: $0, name: "Meka") } ?? ""
+        let fallback = brief.map { BriefScriptRules.shared.script(v: $0, name: aboutYou?.callName ?? "") } ?? ""
         guard let core else { return fallback }
         do {
-            return try await core.briefScript(name: "Meka")
+            return try await core.briefScript(name: nil)
         } catch {
             return fallback
         }

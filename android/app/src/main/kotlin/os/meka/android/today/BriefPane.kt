@@ -97,6 +97,8 @@ private const val GOT_IT_HOLD_MS = 600L
 @Composable
 fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, onTalkAfter: (() -> Unit)? = null) {
     val v by core.briefView.collectAsState()
+    // One name everywhere: About you's name (none: the greeting leaves it out).
+    val about by core.aboutYouView.collectAsState()
     val scope = rememberCoroutineScope()
     val haptics = rememberMekaHaptics()
     val context = LocalContext.current
@@ -150,7 +152,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
         item(key = "title") {
             Column(Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(0))) {
                 // The title arrives from the brief card in Today (Four tabs, slice 3).
-                Text("${v.greeting}, Meka", style = MekaType.greeting, color = Meka.colors.textPrimary,
+                Text(os.meka.core.domain.CallNameRules.opening(v.greeting, about.callName).removeSuffix("."), style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.BRIEF)))
                 Text(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), style = MekaType.itemMeta,
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))

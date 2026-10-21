@@ -24,7 +24,7 @@ struct BriefSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let v = model.brief {
-                Text("\(v.greeting), Meka").font(MekaType.upNextTitle).staggeredAppear(0)
+                Text(String(CallNameRules.shared.opening(greeting: v.greeting, name: model.aboutYou?.callName).dropLast())).font(MekaType.upNextTitle).staggeredAppear(0)
                 Text([v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · "))
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)

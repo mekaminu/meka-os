@@ -678,13 +678,9 @@ struct TodayView: View {
         }
     }
 
+    /// One name everywhere (2026-10-21): About you's name, as the orb's hello and the brief say it; none, no name.
     private var greeting: String {
-        switch Calendar.current.component(.hour, from: .now) {
-        case 5..<12: "Good morning, Meka"
-        case 12..<18: "Good afternoon, Meka"
-        case 18..<24: "Good evening, Meka"
-        default: "Good night, Meka" // 00:00–04:59
-        }
+        CallNameRules.shared.todayGreeting(hour: Int32(Calendar.current.component(.hour, from: .now)), shownName: model.aboutYou?.callName)
     }
 }
 

@@ -118,6 +118,8 @@ sealed interface AskProposal {
      * field takes it (the add's line, or "page 200"); [line] is what it comes to ("Dune · Page 200 of 412 · 48%").
      */
     data class ReadingUpdate(val change: ReadingChange, val itemId: String?, val title: String, val text: String, val line: String) : AskProposal
+    /** One name everywhere: saves [name] as About you → Your name ("Call you “Alex”", [CallNameRules]). */
+    data class SetName(val name: String) : AskProposal
 }
 
 /** A proposal as Ask shows it: "Add “Call the dentist” · Tomorrow · 09:00" with its button ("Add"). */
@@ -203,6 +205,8 @@ sealed interface AskUndo {
     data class PutBackReading(val token: String) : AskUndo
     /** The move-event card: its calendar edit ([editId]) is taken back while it still waits (the five-second Undo). */
     data class TakeBackEventEdit(val editId: String) : AskUndo
+    /** The name card: Your name goes back to [before] (null: empty) while it still reads [after]. */
+    data class PutBackName(val before: String?, val after: String) : AskUndo
 }
 
 /**
@@ -624,6 +628,7 @@ object AskRules {
         is AskProposal.AddChecklist -> ChecklistAskRules.doneLine(p)
         is AskProposal.AddGoal -> GoalAskRules.doneLine(p)
         is AskProposal.ReadingUpdate -> p.line
+        is AskProposal.SetName -> CallNameRules.doneLine(p.name)
     }
 
     /** The card's words for [p]. */
@@ -653,6 +658,7 @@ object AskRules {
         is AskProposal.AddChecklist -> AskCard(p, ChecklistAskRules.cardLine(p), "Add")
         is AskProposal.AddGoal -> AskCard(p, GoalAskRules.cardLine(p, today), "Add")
         is AskProposal.ReadingUpdate -> AskCard(p, ReadingAskRules.cardLine(p), ReadingAskRules.button(p))
+        is AskProposal.SetName -> CallNameRules.card(p.name)
     }
 
     /** "milk", "milk and eggs", "milk, eggs and bread", as typed. */

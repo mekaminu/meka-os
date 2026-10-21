@@ -75,6 +75,8 @@ object TrustRules {
         is AskProposal.AddGoal -> null
         // Reading changes (slice 2) run at once under Add what you ask for, not earned trust.
         is AskProposal.ReadingUpdate -> null
+        // His name is what everything calls him: he always sees it before it's saved.
+        is AskProposal.SetName -> null
         // Skipping the life admin hour (slice 3) frees an hour Meka chose to keep, so he always sees it first.
         is AskProposal.SkipLifeAdmin -> null
         // A gift idea (Gift planner slice 2) is Meka's own note about someone, so he always sees it before it's kept.

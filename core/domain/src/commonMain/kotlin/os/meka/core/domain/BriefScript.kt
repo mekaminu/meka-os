@@ -192,7 +192,7 @@ object BriefScriptRules {
         val s = v.story
         val len = s.length
         val out = mutableListOf<String>()
-        out += "${v.greeting}, $name."
+        out += CallNameRules.opening(v.greeting, name)
         dayKind(v)?.let { out += it }
         s.protectedTime?.let { out += it }
 
