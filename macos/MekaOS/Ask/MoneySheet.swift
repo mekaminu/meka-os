@@ -45,6 +45,7 @@ struct MoneySheet: View {
     @State private var balance = ""
     @State private var editingCard: String?
     @State private var cardTexts: [String: String] = [:]
+    @State private var showOtherCards = false
     @State private var worthText = ""
     @State private var sharedText = ""
     @State private var funText = ""
@@ -138,7 +139,7 @@ struct MoneySheet: View {
                 Text(MoneyWatch.shared.FOOT).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             if let p = v.payday { payday(p).transition(.opacity) }
-            if let c = v.cards, !(c.rows.isEmpty && c.offers.isEmpty) { cards(c).transition(.opacity) }
+            if let c = v.cards, c.shown { cards(c).transition(.opacity) }
             if let tv = v.travel { travel(tv).transition(.opacity) }
             if let yv = v.year { year(yv).transition(.opacity) }
             if let r = v.refunds {
@@ -238,7 +239,8 @@ struct MoneySheet: View {
             if let l = cv.offerLine {
                 Text(l).font(MekaType.caption).foregroundStyle(palette.textSecondary).fixedSize(horizontal: false, vertical: true)
             }
-            ForEach(cv.offers.prefix(4), id: \.id) { o in
+            // Quality gate slice 13: a current or savings account waits behind "Show 1 more account".
+            ForEach(Array(cv.offers.prefix(4)) + (showOtherCards ? cv.others : []), id: \.id) { o in
                 HStack {
                     Text(o.name).font(MekaType.body).foregroundStyle(palette.textPrimary)
                     Spacer()
@@ -249,6 +251,10 @@ struct MoneySheet: View {
                     .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.accent)
                     .accessibilityLabel("\(o.name) is a card")
                 }
+            }
+            if let l = cv.othersLabel, !showOtherCards {
+                Button(l) { withAnimation(MekaMotion.appear(reduced: reduceMotion)) { showOtherCards = true } }
+                    .buttonStyle(MekaPressStyle()).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
             if !cv.rows.isEmpty {
                 Text(cv.foot).font(MekaType.caption).foregroundStyle(palette.textTertiary).fixedSize(horizontal: false, vertical: true)
@@ -491,8 +497,9 @@ struct MoneySheet: View {
                 withAnimation(MekaMotion.expand(reduced: reduceMotion)) { yearOpen[y] = !open }
             } label: {
                 HStack {
-                    Text(open ? yv.title : yv.folded).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        .contentTransition(.opacity).fixedSize(horizontal: false, vertical: true)
+                    // Quality gate slice 13: the head above already names the year, so the line is the title alone.
+                    Text(yv.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     Text(open ? "Fold" : "Open").font(MekaType.body).foregroundStyle(palette.accent)
                 }

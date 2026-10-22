@@ -65,10 +65,18 @@ data class MoneyCardRow(
 /** An account he could mark as a card. */
 data class MoneyCardOffer(val id: String, val name: String)
 
-/** The CARDS block: [head], each card, the accounts he could mark as one ([offers] under [offerLine]) and [foot]. */
+/**
+ * The CARDS block: [head], each card, the accounts he could mark as one ([offers] under [offerLine]) and [foot].
+ * Quality gate slice 13 (2026-10-22): an account whose name says it isn't a card ("Current account", "Savings") is kept
+ * in [others], not offered, behind [othersLabel] ("Show 1 more account") in case one is a card after all.
+ */
 data class MoneyCardsView(
     val head: String, val rows: List<MoneyCardRow>, val offerLine: String?, val offers: List<MoneyCardOffer>, val foot: String,
-)
+    val others: List<MoneyCardOffer> = emptyList(), val othersLabel: String? = null,
+) {
+    /** Whether the block shows at all: a card, or an account that could be one by its name. */
+    val shown: Boolean get() = rows.isNotEmpty() || offers.isNotEmpty()
+}
 
 /** A card's statement line, for its fees: its day, signed pence and words. */
 data class MoneyCardLine(val account: String, val day: Long, val pence: Long, val text: String)
@@ -110,6 +118,13 @@ object MoneyCards {
     /** Whether [name] reads like a card ("Credit card", "Amex", "Visa"), so it's offered first. */
     fun looksLikeCard(name: String): Boolean =
         Regex("""\b(card|credit|amex|american express|visa|mastercard|barclaycard|charge)\b""", RegexOption.IGNORE_CASE).containsMatchIn(name)
+
+    /** Whether [name] says it isn't a card ("Current account", "Savings", "Cash ISA", "Joint"), unless it also reads like one. */
+    fun looksNotCard(name: String): Boolean = !looksLikeCard(name) &&
+        Regex("""\b(current|savings?|saver|isa|joint|pots?|pension|everyday|checking|deposit|instant access|bills account)\b""", RegexOption.IGNORE_CASE).containsMatchIn(name)
+
+    /** "Show 1 more account" / "Show 2 more accounts": the accounts kept back by [looksNotCard]. */
+    fun othersLabel(n: Int): String = "Show $n more account" + if (n == 1) "" else "s"
 
     /** An amount typed for a card ("£640", "640.20"; minus signs dropped): pence, or null. Blank → 0 means cleared. */
     fun parseAmount(text: String): Long? {
@@ -233,15 +248,19 @@ object MoneyCards {
         )
     }
 
-    /** The CARDS block: each card (soonest due first), then the other accounts he could mark (card-like names first). */
+    /**
+     * The CARDS block: each card (soonest due first), then the other accounts he could mark (card-like names first);
+     * accounts named as current or savings accounts wait behind [MoneyCardsView.othersLabel].
+     */
     fun view(cards: List<MoneyCard>, accounts: List<MoneyAccount>, lines: List<MoneyCardLine>, today: Long): MoneyCardsView {
         val ids = cards.map { it.id }.toSet()
         val rows = cards.sortedWith(compareBy({ nextDue(it, today) ?: Long.MAX_VALUE }, { it.name.lowercase() })).map { row(it, today, lines) }
-        val offers = accounts.filter { it.id !in ids }
+        val (others, offers) = accounts.filter { it.id !in ids }
             .sortedWith(compareBy({ !looksLikeCard(it.name) }, { it.name.lowercase() }))
             .map { MoneyCardOffer(it.id, it.name) }
+            .partition { looksNotCard(it.name) }
         val offerLine = if (offers.isEmpty()) null else if (rows.isEmpty()) OFFER_FIRST else OFFER_MORE
-        return MoneyCardsView(HEAD, rows, offerLine, offers, FOOT)
+        return MoneyCardsView(HEAD, rows, offerLine, offers, FOOT, others, others.takeIf { it.isNotEmpty() }?.let { othersLabel(it.size) })
     }
 
     fun markedSaid(name: String): String = "$name is a card · type what its statement says"

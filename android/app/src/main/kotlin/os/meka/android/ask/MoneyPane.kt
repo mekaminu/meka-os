@@ -372,7 +372,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 }
             }
             // Slice 7: his cards — due, statement, limit used, 0% ending, fees (this month only).
-            v.cards?.takeIf { it.rows.isNotEmpty() || it.offers.isNotEmpty() }?.let { cv ->
+            v.cards?.takeIf { it.shown }?.let { cv ->
                 item(key = "cards-head") {
                     Text(cv.head, style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().padding(top = MekaSpace.m))
@@ -1299,15 +1299,16 @@ private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier,
     val reduced = Meka.reducedMotion
     var open by rememberSaveable(yv.year, yv.unfolded) { mutableStateOf(yv.unfolded) }
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-        Row(Modifier.fillMaxWidth().minTouch().clip(RoundedCornerShape(MekaRadius.m))
+        // Quality gate slice 13: the head above already says "2026 SO FAR", so the line is the title alone, and the row
+        // isn't clipped to a rounded shape (a two-line title on the cover screen lost its first letters to the corners).
+        Row(Modifier.fillMaxWidth().minTouch()
             .clickable(role = Role.Button) { open = !open; onToggle() }
             .semantics(mergeDescendants = true) { contentDescription = if (open) "${yv.spoken}. Fold" else "${yv.folded}. Open" },
             verticalAlignment = Alignment.CenterVertically) {
-            Crossfade(if (open) yv.title else yv.folded, animationSpec = MekaMotion.appear(reduced), label = "money-year-title",
-                modifier = Modifier.weight(1f)) { l ->
-                Text(l, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(yv.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f).padding(end = MekaSpace.s))
+            Crossfade(if (open) "Fold" else "Open", animationSpec = MekaMotion.appear(reduced), label = "money-year-toggle") { l ->
+                Text(l, style = MekaType.body, color = Meka.colors.accent)
             }
-            Text(if (open) "Fold" else "Open", style = MekaType.body, color = Meka.colors.accent)
         }
         androidx.compose.animation.AnimatedVisibility(
             visible = open,
@@ -1572,13 +1573,20 @@ private fun CardCard(
 private fun CardOffers(cv: MoneyCardsView, modifier: Modifier, onMark: (String) -> Unit) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         cv.offerLine?.let { l -> Text(l, style = MekaType.caption, color = Meka.colors.textSecondary) }
-        cv.offers.take(4).forEach { o ->
+        // Quality gate slice 13: a current or savings account waits behind "Show 1 more account".
+        var showOthers by rememberSaveable { mutableStateOf(false) }
+        (cv.offers.take(4) + if (showOthers) cv.others else emptyList()).forEach { o ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(o.name, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                 Text(MoneyCards.MARK, style = MekaType.caption, color = Meka.colors.accent,
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { onMark(o.id) }
                         .semantics { contentDescription = "${o.name} is a card" }.minTouch().padding(MekaSpace.xs))
             }
+        }
+        cv.othersLabel?.takeIf { !showOthers }?.let { l ->
+            Text(l, style = MekaType.caption, color = Meka.colors.textSecondary,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { showOthers = true }
+                    .minTouch().padding(vertical = MekaSpace.xs))
         }
         if (cv.rows.isNotEmpty()) Text(cv.foot, style = MekaType.caption, color = Meka.colors.textTertiary)
     }

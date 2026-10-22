@@ -126,9 +126,30 @@ class MoneyCardsTest {
         )
         val v = MoneyCards.view(listOf(credit), accounts, emptyList(), today)
         assertEquals(listOf("Credit card"), v.rows.map { it.name })
-        assertEquals(listOf("Amex", "Current account"), v.offers.map { it.name })
+        assertEquals(listOf("Amex"), v.offers.map { it.name })
+        assertEquals(listOf("Current account"), v.others.map { it.name })
+        assertEquals("Show 1 more account", v.othersLabel)
         assertEquals(MoneyCards.OFFER_MORE, v.offerLine)
         assertEquals(MoneyCards.OFFER_FIRST, MoneyCards.view(emptyList(), accounts, emptyList(), today).offerLine)
+    }
+
+    @Test
+    fun aCurrentOrSavingsAccountIsNotOfferedAsACard() {
+        assertTrue(MoneyCards.looksNotCard("Current account"))
+        assertTrue(MoneyCards.looksNotCard("Easy Saver"))
+        assertTrue(MoneyCards.looksNotCard("Cash ISA"))
+        assertTrue(MoneyCards.looksNotCard("Joint"))
+        assertFalse(MoneyCards.looksNotCard("Credit card"))
+        assertFalse(MoneyCards.looksNotCard("Joint credit card"))
+        assertFalse(MoneyCards.looksNotCard("Monzo Flex"))
+        val only = MoneyCards.view(emptyList(), listOf(MoneyAccount("a", "Current account", "csv", null), MoneyAccount("b", "Savings", "csv", null)), emptyList(), today)
+        assertFalse(only.shown)
+        assertTrue(only.offers.isEmpty())
+        assertNull(only.offerLine)
+        assertEquals("Show 2 more accounts", only.othersLabel)
+        val none = MoneyCards.view(emptyList(), listOf(MoneyAccount("c", "Amex", "csv", null)), emptyList(), today)
+        assertTrue(none.shown)
+        assertNull(none.othersLabel)
     }
 
     @Test

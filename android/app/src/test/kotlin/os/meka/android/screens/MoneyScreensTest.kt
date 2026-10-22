@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
@@ -140,6 +141,12 @@ class MoneyScreensTest {
                 ScreenShots.assertShows(compose, name, m.spentLine)
                 // Slice 12: an average is named by the months it covers (two months of statements here, never "6-month").
                 m.vsLine?.let { if ("6-month" in it) fail("$name: \"$it\" from ${v.accounts.size} account(s) of at most two months") }
+                // Slice 13: a current account is never offered as a card (it waits behind "Show 1 more account"),
+                // and the year's line doesn't repeat its head ("2026 SO FAR" over "Your year so far · …").
+                if (compose.onAllNodesWithContentDescription("Current account is a card", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                    fail("$name: the Current account is offered as a card")
+                if (compose.onAllNodesWithText("Your year so far", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                    fail("$name: the year's line repeats its head")
                 // Slice 12: with no Hyperliquid address the set-up block waits below the month (and Import).
                 val t = v.trading
                 if (t != null && !v.tradingFirst) {
