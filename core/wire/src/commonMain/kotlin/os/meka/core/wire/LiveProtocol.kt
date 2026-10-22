@@ -42,7 +42,11 @@ object LiveProtocol {
         /** Slice 4: more of Ada's words as she says them (the output transcription, in pieces). */
         data class Said(val text: String) : Event
         /** Slice 4: Ada calls one of Navilife's tools ([name]) with its [query] argument; [id] goes back with the answer. */
-        data class ToolCall(val id: String, val name: String, val query: String) : Event
+        data class ToolCall(
+            val id: String, val name: String, val query: String,
+            /** Slice 5: every plain argument as text (numbers as written), for Navilife's own tools. */
+            val args: Map<String, String> = emptyMap(),
+        ) : Event
     }
 
     /** [url] with the session's [token] as Google's `access_token` query parameter. */
@@ -114,7 +118,10 @@ object LiveProtocol {
             val call = c as? JsonObject ?: return@forEach
             val name = str(call, "name") ?: return@forEach
             val args = call["args"] as? JsonObject
-            out += Event.ToolCall(str(call, "id").orEmpty(), name, args?.let { str(it, "query") }.orEmpty())
+            val plain = args.orEmpty().entries.mapNotNull { (k, v) ->
+                (v as? JsonPrimitive)?.takeIf { it !is kotlinx.serialization.json.JsonNull }?.content?.let { k to it.take(MAX_ARG) }
+            }.take(MAX_ARGS).toMap()
+            out += Event.ToolCall(str(call, "id").orEmpty(), name, args?.let { str(it, "query") }.orEmpty(), plain)
         }
         (o["goAway"] as? JsonObject)?.let { g -> out += Event.GoAway(duration(str(g, "timeLeft"))) }
         (o["sessionResumptionUpdate"] as? JsonObject)?.let { r ->
@@ -147,6 +154,28 @@ object LiveProtocol {
                                 }
                             }
                         }
+                    }
+                })
+            }
+        }
+    }.toString()
+
+    /** Slice 5: a tool call's arguments kept at most, each at most [MAX_ARG] characters. */
+    const val MAX_ARGS = 12
+    const val MAX_ARG = 500
+
+    /**
+     * Slice 5: the answer to one of Navilife's own tools: its [result] lines (his own data, looked up on the device) or
+     * [error] for the model to act on.
+     */
+    fun toolAnswer(id: String, name: String, result: String?, error: String? = null): String = buildJsonObject {
+        putJsonObject("toolResponse") {
+            putJsonArray("functionResponses") {
+                add(buildJsonObject {
+                    if (id.isNotEmpty()) put("id", id)
+                    put("name", name)
+                    putJsonObject("response") {
+                        if (error != null) put("error", error) else put("result", result.orEmpty())
                     }
                 })
             }

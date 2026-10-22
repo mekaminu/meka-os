@@ -132,7 +132,8 @@ class LiveFacadeTest {
         val day = server.days.single()!!
         assertEquals("2026-10-22", day.date)
         assertEquals(true, day.now.startsWith("Thursday 22 October 2026"))
-        assertEquals(true, day.items.all { it.ref.isEmpty() && it.kind in os.meka.core.wire.AskCodec.KINDS })
+        assertEquals(true, day.items.all { it.kind in os.meka.core.wire.AskCodec.KINDS })
+        assertEquals(true, day.tools) // slice 5: this device answers Navilife's own tools
         assertEquals(true, day.items.size <= LiveCodec.MAX_DAY_ITEMS)
         assertEquals(true, day.introduce) // the day's first conversation
         assertNull(day.callMe)
@@ -156,5 +157,34 @@ class LiveFacadeTest {
         assertEquals(listOf(LiveCodec.SearchRequest("ls_1", "rail strike")), server.searches)
         server.down = true
         assertEquals(LiveCodec.SearchResult.FAILED, c.liveSearch("ls_1", "rail strike").state)
+    }
+
+    @Test
+    fun slice5AdaLooksUpAnotherDayAndOffersCardsThroughTheGate() = runTest {
+        val c = core()
+        c.liveSession("Kore")
+        val id = c.addTask("Book the MOT")
+        c.setWhen(id, 20_749, 600) // tomorrow at 10:00
+        val lines = c.liveLookUp("tomorrow")
+        val taskLine = lines.lines().single { it.startsWith("task ") }
+        kotlin.test.assertTrue(taskLine.startsWith("task t1: Book the MOT"), lines)
+        kotlin.test.assertTrue(lines.lines().any { it.startsWith("days: ") }, lines)
+        assertEquals(os.meka.core.domain.LiveToolRules.NO_DAYS, c.liveLookUp("whenever"))
+        // A handle from the look-up can be named back, and stays the same task when looked up again.
+        assertEquals(taskLine, c.liveLookUp("tomorrow").lines().single { it.startsWith("task ") })
+        val move = c.livePropose(mapOf("kind" to "move_task", "ref" to "t1", "date" to "2026-10-24", "time" to "09:30"))
+        val card = move.card!!
+        kotlin.test.assertTrue(card.proposal is os.meka.core.domain.AskProposal.MoveTask)
+        kotlin.test.assertTrue(move.reply.startsWith("Shown on his screen"), move.reply)
+        val add = c.livePropose(mapOf("kind" to "add_task", "title" to "Ring the garage", "date" to "2026-10-23"))
+        assertEquals(os.meka.core.domain.AskProposal.AddTask("Ring the garage", 20_749, null), add.card?.proposal)
+        // Nothing runs by itself: the task is still where it was until he taps the card.
+        assertEquals(1, c.liveLookUp("tomorrow").lines().count { it.startsWith("task ") })
+        // Not a kind Navilife offers, or a handle it never sent: no card.
+        assertNull(c.livePropose(mapOf("kind" to "send_email", "title" to "hi")).card)
+        assertEquals(os.meka.core.domain.LiveToolRules.PROPOSE_UNUSABLE, c.livePropose(mapOf("kind" to "complete_task", "ref" to "t9")).reply)
+        // Tapped, it does what Ask's card does.
+        c.doAsk(card)
+        assertEquals(0, c.liveLookUp("tomorrow").lines().count { it.startsWith("task ") })
     }
 }

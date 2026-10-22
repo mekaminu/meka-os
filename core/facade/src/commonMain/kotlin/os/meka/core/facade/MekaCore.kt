@@ -10558,8 +10558,9 @@ class MekaCore(
      * Ada's Live mode, slice 4: the compact day a Live session starts with, built here as Ask builds its <today> block
      * ([os.meka.core.domain.AskRules.context]) but only its always-on part: Needs you, today's tasks and calendar, the
      * weather (home, work on an office day, the route's train line), the commute and the shopping; what he is called,
-     * the notes of earlier chats (when he keeps them) and whether Ada may introduce herself. No handles: Live proposes
-     * nothing yet. Caller is on the core.
+     * the notes of earlier chats (when he keeps them) and whether Ada may introduce herself. Slice 5: tasks and movable
+     * events carry their handles (t1, e1), kept here in [liveAsk] for her tools, and the day says the device answers
+     * them ([os.meka.core.wire.LiveCodec.Day.tools]). Caller is on the core.
      */
     private fun liveDay(): os.meka.core.wire.LiveCodec.Day {
         val cal = ZoneCalendar(timeZone)
@@ -10573,20 +10574,78 @@ class MekaCore(
                 .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - routeLines.size) + workLines + routeLines,
             shopping.view(),
             commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, today), cal, now, currentWake()),
+            // Slice 5: events Navilife may move get a handle, as in Ask, so "move the dentist to four" can be offered.
+            movable = { e -> os.meka.core.domain.EventAskRules.movable(e, now, cal, ::accountEditable) },
         )
+        val sent = context.items.take(os.meka.core.wire.LiveCodec.MAX_DAY_ITEMS)
+        val sentRefs = sent.map { it.ref }.filter { it.isNotEmpty() }.toSet()
+        // Slice 5: the handles stay here for the session's tools; only the ones sent can be named back.
+        liveAsk = context.copy(items = sent, taskIds = context.taskIds.filterKeys { it in sentRefs }, eventRefs = context.eventRefs.filterKeys { it in sentRefs })
         val notes = companionMemory.notes(today)
         return os.meka.core.wire.LiveCodec.Day(
             date = context.dateIso,
             now = context.nowLine,
-            items = context.items.take(os.meka.core.wire.LiveCodec.MAX_DAY_ITEMS)
-                .map { os.meka.core.wire.AskCodec.Item("", it.kind.wire, it.line.take(os.meka.core.wire.AskCodec.MAX_LINE)) },
+            items = sent.map { os.meka.core.wire.AskCodec.Item(it.ref, it.kind.wire, it.line.take(os.meka.core.wire.AskCodec.MAX_LINE)) },
             name = os.meka.core.wire.AskCodec.plainName(os.meka.core.domain.CallNameRules.called(aboutYou.profile().shownName)),
             callMe = if (mekaVoice.callsSir()) os.meka.core.wire.AskCodec.CALL_SIR else null,
             recall = (if (companionMemory.remembers()) os.meka.core.domain.CompanionMemoryRules.recall(notes, today) else emptyList())
                 .filter { it.isNotBlank() }.map { it.take(os.meka.core.wire.AskCodec.MAX_LINE) }.takeLast(os.meka.core.wire.AskCodec.MAX_RECALL),
             introduce = adaIntroduces(emptyList(), cal),
+            tools = true,
         )
     }
+
+    /** Slice 5: the Live session's own picture of his data (today's lines, then what it looked up) with its handles. Core only. */
+    private var liveAsk: os.meka.core.domain.AskContext = os.meka.core.domain.AskContext.EMPTY
+
+    /**
+     * Ada's Live mode, slice 5: Ada's read-only look-up ([os.meka.core.domain.LiveToolRules.LOOK_UP_TOOL]) — the day
+     * or days [whenText] names, from his own calendar and tasks on this device, with the trains on an office day, as
+     * the lines her tool answer gives the model. Their tasks and movable events keep handles for the session, so a
+     * proposal can name them. Never throws: a failure reads as [os.meka.core.domain.LiveToolRules.LOOK_UP_FAILED].
+     */
+    suspend fun liveLookUp(whenText: String): String = try {
+        onCore {
+            val cal = ZoneCalendar(timeZone)
+            val now = nowMs()
+            val today = cal.epochDayOf(now)
+            val r = os.meka.core.domain.LiveToolRules.range(whenText, today) ?: return@onCore os.meka.core.domain.LiveToolRules.NO_DAYS
+            val events = os.meka.core.domain.DayAskRules.events(r, currentEvents(), today, cal)
+            val dayTasks = os.meka.core.domain.DayAskRules.tasks(r, tasks.all(), today, cal)
+            val lines = os.meka.core.domain.DayAskRules.askLines(r, events, dayTasks, today, cal) +
+                os.meka.core.domain.TrainDayAskRules.askLines(r, lineStatus.snapshot(), hoursOf(_workMode.value, today), now, cal)
+            // Only the looked-up days' lines: today's are in the session already.
+            val bare = _today.value.copy(needsYou = emptyList(), upNext = null, yourDay = emptyList(), doneToday = emptyList(), events = emptyList())
+            val extra = os.meka.core.domain.AskRules.context(
+                bare, now, cal, days = r, dayLines = lines, dayEvents = events, dayTasks = dayTasks,
+                movable = { e -> os.meka.core.domain.EventAskRules.movable(e, now, cal, ::accountEditable) },
+            )
+            val merged = os.meka.core.domain.LiveToolRules.merge(liveAsk, extra)
+            liveAsk = merged.context
+            os.meka.core.domain.LiveToolRules.lookUpAnswer(merged.lines)
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveToolRules.LOOK_UP_FAILED }
+
+    /**
+     * Ada's Live mode, slice 5: one action Ada offers in Live ([os.meka.core.domain.LiveToolRules.PROPOSE_TOOL], its
+     * arguments as the tool call gave them). It becomes Ask's usual card ([os.meka.core.domain.AskRules.card], against
+     * the session's own handles) only when the policy gate allows it ([AskPolicy.allowed]); it never runs by itself,
+     * not even under earned trust: he taps it ([doAsk]). [os.meka.core.domain.LiveOffer.reply] is what the model is told.
+     */
+    suspend fun livePropose(args: Map<String, String>): os.meka.core.domain.LiveOffer = try {
+        onCore {
+            val unusable = os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_UNUSABLE)
+            val raw = os.meka.core.domain.LiveToolRules.raw(args) ?: return@onCore unusable
+            val cal = ZoneCalendar(timeZone)
+            val context = liveAsk
+            val titles = context.taskIds.values.mapNotNull { tasks.get(it) }.associate { it.id to it.title }
+            val card = os.meka.core.domain.AskRules.card(raw, context, titles, nowMs(), cal, mealPlan.meals(), dateNight.setting(), renewals.items(), wins.all(), trainQueue.items(),
+                os.meka.core.domain.LeaveAskData(leave.items(), leaveWork(), leave.settings()), lifeFacts.all(), errands.items(), tasks.all(), goals.goals(tasks.all()).first, _lifeAdmin.value, gifts.items(),
+                _people.value, lists.promisedItems(), trips.items()) ?: return@onCore unusable
+            if (!askAllowed(card.proposal, context.untrusted)) os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_REFUSED)
+            else os.meka.core.domain.LiveOffer(card, os.meka.core.domain.LiveToolRules.offered(card.line))
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_UNUSABLE) }
 
     /**
      * Ada's Live mode, slice 4: a web search Ada asked for in Live session [sessionId]. Checked here first

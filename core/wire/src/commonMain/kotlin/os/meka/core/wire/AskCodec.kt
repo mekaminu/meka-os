@@ -33,6 +33,9 @@ object AskCodec {
 
     /** A task's handle ("t1"…"t999") or, since Edit your calendars completeness slice 4, an event's ("e1"…"e99"). */
     private val REF = Regex("t[1-9][0-9]{0,2}|e[1-9][0-9]?")
+
+    /** A task or event handle as Ask sends them ("t1"…"t999", "e1"…"e99"). */
+    fun validRef(ref: String): Boolean = REF.matches(ref)
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
     private val json = Json { ignoreUnknownKeys = true }
 

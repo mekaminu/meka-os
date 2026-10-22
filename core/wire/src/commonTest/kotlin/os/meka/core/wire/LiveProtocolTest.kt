@@ -55,7 +55,7 @@ class LiveProtocolTest {
             LiveProtocol.decode("""{"serverContent":{"inputTranscription":{"text":"what's the latest"},"outputTranscription":{"text":"The strike"}}}"""),
         )
         assertEquals(
-            listOf(LiveProtocol.Event.ToolCall("c1", "search_the_web", "rail strike"), LiveProtocol.Event.ToolCall("", "other", "")),
+            listOf(LiveProtocol.Event.ToolCall("c1", "search_the_web", "rail strike", mapOf("query" to "rail strike")), LiveProtocol.Event.ToolCall("", "other", "")),
             LiveProtocol.decode("""{"toolCall":{"functionCalls":[{"id":"c1","name":"search_the_web","args":{"query":"rail strike"}},{"name":"other"},{"id":"x"}]}}"""),
         )
         val r = Json.parseToJsonElement(LiveProtocol.toolResponse("c1", "search_the_web", listOf(LiveProtocol.Hit("bbc.co.uk", "Strike off", "Talks went well")))).jsonObject
@@ -67,5 +67,19 @@ class LiveProtocolTest {
         val refused = Json.parseToJsonElement(LiveProtocol.toolResponse("c2", "search_the_web", emptyList(), error = "no")).jsonObject
         assertEquals("no", refused["toolResponse"]!!.jsonObject["functionResponses"]!!.jsonArray.single().jsonObject["response"]!!.jsonObject["error"]!!.jsonPrimitive.content)
         assertEquals(emptyList(), LiveProtocol.decode("""{"serverContent":{"outputTranscription":{"text":""}}}"""))
+    }
+
+    @Test
+    fun slice5NavilifesOwnToolsCarryTheirArgumentsAndTheirAnswersGoBack() {
+        assertEquals(
+            listOf(LiveProtocol.Event.ToolCall("c3", "propose_action", "", mapOf("kind" to "set_timer", "minutes" to "20", "title" to "Pasta"))),
+            LiveProtocol.decode("""{"toolCall":{"functionCalls":[{"id":"c3","name":"propose_action","args":{"kind":"set_timer","minutes":20,"title":"Pasta","ref":null,"nested":{"x":1}}}]}}"""),
+        )
+        val ok = Json.parseToJsonElement(LiveProtocol.toolAnswer("c4", "look_up_my_days", "task t1: Book the MOT")).jsonObject
+        val fr = ok["toolResponse"]!!.jsonObject["functionResponses"]!!.jsonArray.single().jsonObject
+        assertEquals("c4", fr["id"]!!.jsonPrimitive.content)
+        assertEquals("task t1: Book the MOT", fr["response"]!!.jsonObject["result"]!!.jsonPrimitive.content)
+        val no = Json.parseToJsonElement(LiveProtocol.toolAnswer("c5", "propose_action", null, error = "no")).jsonObject
+        assertEquals("no", no["toolResponse"]!!.jsonObject["functionResponses"]!!.jsonArray.single().jsonObject["response"]!!.jsonObject["error"]!!.jsonPrimitive.content)
     }
 }

@@ -49,8 +49,7 @@ object LiveCodec {
     /**
      * Slice 4 (additive; an older device leaves it out and Ada starts with no picture of his day): the compact day a
      * Live session starts with, as Ask sends it — the [date] and [now] line, today's lines ([items]: Needs you, the
-     * tasks, the calendar, the weather, the train, the commute, the shopping; no handles, since Live proposes nothing
-     * yet), what he is called ([name], [callMe]), short [recall] notes of earlier chats and whether Ada may
+     * tasks, the calendar, the weather, the train, the commute, the shopping; Ask's handles only with [tools]), what he is called ([name], [callMe]), short [recall] notes of earlier chats and whether Ada may
      * [introduce] herself. The server puts it in the session's system instruction, locked into Google's token.
      */
     data class Day(
@@ -61,6 +60,12 @@ object LiveCodec {
         val callMe: String? = null,
         val recall: List<String> = emptyList(),
         val introduce: Boolean = false,
+        /**
+         * Slice 5 (additive): the device answers Navilife's own Live tools (Ada looks up a day and offers Ask's cards,
+         * [os.meka.core.domain.LiveToolRules]), so the server adds them to the session; the [items] then carry Ask's
+         * handles (t1, e1). An older device leaves it out and its session has the web search alone.
+         */
+        val tools: Boolean = false,
     )
 
     data class SessionRequest(val voice: String? = null, val day: Day? = null)
@@ -171,11 +176,12 @@ object LiveCodec {
             putJsonObject("day") {
                 put("date", d.date)
                 put("now", d.now)
-                putJsonArray("items") { d.items.forEach { i -> addJsonObject { put("kind", i.kind); put("line", i.line) } } }
+                putJsonArray("items") { d.items.forEach { i -> addJsonObject { if (i.ref.isNotEmpty()) put("ref", i.ref); put("kind", i.kind); put("line", i.line) } } }
                 AskCodec.plainName(d.name)?.let { put("name", it) }
                 if (d.callMe == AskCodec.CALL_SIR) put("callMe", AskCodec.CALL_SIR)
                 if (d.recall.isNotEmpty()) putJsonArray("recall") { d.recall.forEach { add(it) } }
                 if (d.introduce) put("introduce", true)
+                if (d.tools) put("tools", true)
             }
         }
     }.toString()
@@ -194,7 +200,8 @@ object LiveCodec {
         require(now.length <= 80) { "now" }
         val items = (o["items"] as? JsonArray ?: JsonArray(emptyList())).map { e ->
             val i = e as? JsonObject ?: throw IllegalArgumentException("item")
-            AskCodec.Item("", str(i, "kind").orEmpty(), str(i, "line").orEmpty()).also {
+            AskCodec.Item(str(i, "ref").orEmpty(), str(i, "kind").orEmpty(), str(i, "line").orEmpty()).also {
+                require(it.ref.isEmpty() || AskCodec.validRef(it.ref)) { "ref" }
                 require(it.kind in AskCodec.KINDS) { "kind" }
                 require(it.line.length <= AskCodec.MAX_LINE) { "line" }
             }
@@ -208,7 +215,9 @@ object LiveCodec {
         require(recall.size <= AskCodec.MAX_RECALL) { "recall" }
         val callMe = str(o, "callMe")?.takeIf { it == AskCodec.CALL_SIR }
         val introduce = (o["introduce"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
-        return Day(date, now, items, AskCodec.plainName(str(o, "name")), callMe, recall, introduce)
+        val tools = (o["tools"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        // Handles mean something only to a device that answers the tools.
+        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools)
     }
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

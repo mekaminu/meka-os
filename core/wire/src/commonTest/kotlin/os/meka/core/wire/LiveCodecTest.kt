@@ -99,4 +99,21 @@ class LiveCodecTest {
         assertEquals(LiveCodec.SearchResult.FAILED, LiveCodec.decodeSearchResult("""{"w":${WireCodec.VERSION},"state":"dancing"}""").state)
         assertEquals(emptyList(), LiveCodec.decodeSearchResult(LiveCodec.encodeSearchResult(LiveCodec.SearchResult(LiveCodec.SearchResult.REFUSED, found.hits))).hits)
     }
+
+    @Test
+    fun slice5HandlesRideOnlyWithTheToolsAndAreAsksOwn() {
+        val day = LiveCodec.Day(
+            "2026-10-22", "x",
+            listOf(AskCodec.Item("t1", "task", "Book the MOT"), AskCodec.Item("e2", "event", "09:30 Dentist"), AskCodec.Item("", "weather", "Rain")),
+            tools = true,
+        )
+        val r = LiveCodec.SessionRequest("Kore", day)
+        assertEquals(r, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r)))
+        // Without the tools the handles mean nothing to the session, so they go.
+        val old = LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r.copy(day = day.copy(tools = false)))).day!!
+        assertEquals(listOf("", "", ""), old.items.map { it.ref })
+        assertFailsWith<WireFormatException> {
+            LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","tools":true,"items":[{"ref":"task-uuid-1","kind":"task","line":"x"}]}}""")
+        }
+    }
 }

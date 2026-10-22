@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
 import os.meka.core.domain.BargeInOutput
 import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.LiveTalkRules
+import os.meka.core.domain.LiveToolRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.wire.LiveCodec
 import os.meka.core.wire.LiveProtocol
@@ -90,6 +91,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private val heardNow = StringBuilder()
     private val saidNow = StringBuilder()
     private val pagesNow = mutableListOf<Pair<String, String>>()
+    /** Slice 5: the cards Ada offered this turn (Ask's own, through the policy gate), shown with her words. */
+    private val cardsNow = mutableListOf<os.meka.core.domain.AskCard>()
 
     /** Starts a Live conversation (the microphone is already allowed). */
     fun start() {
@@ -219,7 +222,21 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
      */
     private suspend fun answerTool(gen: Int, call: LiveProtocol.Event.ToolCall) {
         val id = session?.sessionId
-        val reply = if (call.name != LiveTalkRules.SEARCH_TOOL || id == null) {
+        val reply = if (call.name == LiveToolRules.LOOK_UP_TOOL) {
+            // Slice 5: another day, read here from his own calendar and tasks (nothing of it goes to Navilife's server).
+            val lines = withContext(Dispatchers.IO) { core.liveLookUp(call.args[LiveToolRules.WHEN_ARG].orEmpty()) }
+            LiveProtocol.toolAnswer(call.id, call.name, lines)
+        } else if (call.name == LiveToolRules.PROPOSE_TOOL) {
+            // Slice 5: one of Ask's actions, as Ask's card through the policy gate; it waits for his tap.
+            if (cardsNow.size >= LiveToolRules.MAX_CARDS) LiveProtocol.toolAnswer(call.id, call.name, null, error = LiveToolRules.PROPOSE_FULL)
+            else {
+                val offer = withContext(Dispatchers.IO) { core.livePropose(call.args) }
+                val card = offer.card
+                if (card != null && gen == generation) cardsNow += card
+                if (card != null) LiveProtocol.toolAnswer(call.id, call.name, offer.reply)
+                else LiveProtocol.toolAnswer(call.id, call.name, null, error = offer.reply)
+            }
+        } else if (call.name != LiveTalkRules.SEARCH_TOOL || id == null) {
             LiveProtocol.toolResponse(call.id, call.name, emptyList(), error = "Navilife has no such tool.")
         } else {
             val r = withContext(Dispatchers.IO) { core.liveSearch(id, call.query) }
@@ -240,10 +257,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     /** Slice 4: the turn as Ask shows it (her words and sources), then a clean slate for the next. Main thread. */
     private fun finishTurn() {
         val sources = os.meka.core.domain.LiveFactsRules.sources(pagesNow)
-        LiveTalkRules.turnAnswer(saidNow.toString(), sources)?.let { listener.onTurn(LiveTalkRules.turnQuestion(heardNow.toString()), it) }
+        LiveToolRules.turnAnswer(saidNow.toString(), sources, cardsNow.toList())?.let { listener.onTurn(LiveTalkRules.turnQuestion(heardNow.toString()), it) }
         heardNow.clear()
         saidNow.clear()
         pagesNow.clear()
+        cardsNow.clear()
     }
 
     @SuppressLint("MissingPermission") // a conversation only runs once the microphone is allowed

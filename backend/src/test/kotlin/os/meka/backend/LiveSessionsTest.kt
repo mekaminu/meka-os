@@ -28,7 +28,9 @@ class LiveSessionsTest {
         val minted = mutableListOf<Pair<String, String>>()
         val instructions = mutableListOf<String>()
         override fun configured() = key != null
-        override fun mint(model: String, voice: String, instruction: String, nowMs: Long): String? {
+        val tooled = mutableListOf<Boolean>()
+        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean): String? {
+            tooled += tools
             minted += model to voice
             instructions += instruction
             return answer
@@ -227,5 +229,39 @@ class LiveSessionsTest {
         val bare = service(Tokens(key))
         val id2 = bare.session("hh", LiveCodec.SessionRequest("Kore")).sessionId!!
         assertEquals(LiveCodec.SearchResult.FAILED, bare.search("hh", LiveCodec.SearchRequest(id2, "rail strike")).state)
+    }
+
+    @Test
+    fun slice5WithToolsTheSessionCanLookUpAndOfferAsksCardsAndNothingMore() {
+        val tokens = Tokens(key)
+        val day = LiveCodec.Day(
+            "2026-10-22", "Thursday 22 October 2026 · 07:10",
+            listOf(os.meka.core.wire.AskCodec.Item("t1", "task", "Book the MOT"), os.meka.core.wire.AskCodec.Item("", "weather", "Rain")),
+            tools = true,
+        )
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day))
+        assertEquals(listOf(true), tokens.tooled)
+        val sent = tokens.instructions.single()
+        assertTrue("task t1: Book the MOT" in sent, sent)
+        assertTrue("look_up_my_days" in sent && "propose_action" in sent)
+        assertEquals(os.meka.core.domain.AskRules.KINDS.size, LivePrompt.actions.size)
+        assertTrue(LivePrompt.actions.all { a -> os.meka.core.domain.AskRules.KINDS.any { "\"kind\":\"$it\"" in a } })
+        assertTrue("you can't do anything yourself in this live conversation" !in sent.lowercase())
+        // A full day still fits whole.
+        val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
+        assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
+        // The token's tools: Navilife's two and the search; the proposal's kinds are Ask's alone.
+        val req = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, sent, tools = true)).jsonObject
+        val decls = req["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray
+        assertEquals(listOf("look_up_my_days", "propose_action", "search_the_web"), decls.map { it.jsonObject["name"]!!.jsonPrimitive.content })
+        val kinds = decls[1].jsonObject["parameters"]!!.jsonObject["properties"]!!.jsonObject["kind"]!!.jsonObject["enum"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertEquals(os.meka.core.domain.AskRules.KINDS, kinds)
+        assertTrue(kinds.none { "send" in it || "pay" in it || "trade" in it })
+        // An older device: no handles, no tools, and Ada says she can't change anything live.
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day.copy(tools = false)))
+        assertEquals(listOf(true, false), tokens.tooled)
+        assertTrue("You can't do anything yourself in this live conversation" in tokens.instructions.last())
+        val plain = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x")).jsonObject
+        assertEquals(1, plain["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
     }
 }
