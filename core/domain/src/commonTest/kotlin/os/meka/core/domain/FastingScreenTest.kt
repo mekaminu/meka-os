@@ -203,4 +203,42 @@ class FastingScreenTest {
         hours(1)
         assertNull(screen().undoEndId)
     }
+
+    @Test
+    fun todaysCardReadsLikeTheDesignWhileAFastRuns() {
+        assertNull(screen().todayCard)
+        f.start() // Monday 20:00, goal Tuesday 12:00
+        hours(13); mins(30)
+        val c = assertNotNull(screen().todayCard)
+        assertEquals("Fasting", c.label)
+        assertEquals("13:30", c.time)
+        assertEquals("Switching to fat", c.stage)
+        assertEquals("Ends in 2:30 · 12:00", c.line)
+        assertEquals("End", c.endLabel)
+        near(13.5f / 16f, c.fraction)
+        assertEquals("Fasting, 13 hours 30 minutes in, switching to fat. Ends in 2:30 · 12:00. Tap for the Fasting screen.", c.spoken)
+        // Past the goal: the label and line say so, the ring full.
+        hours(3)
+        val past = assertNotNull(screen().todayCard)
+        assertEquals("Goal reached", past.label)
+        assertEquals("+0:30 past your goal", past.line)
+        assertEquals("Ketones rising", past.stage)
+        near(1f, past.fraction)
+        // Ended: no card.
+        f.end()
+        assertNull(screen().todayCard)
+    }
+
+    @Test
+    fun todaysStripDropsItsFastTileOnlyWhileTheCardShows() {
+        val tiles = listOf(
+            DayTile(DayTileKind.NEXT_EVENT, 25, label = "until Standup"),
+            DayTile(DayTileKind.FAST, 810, label = "Fasting · goal 16 h"),
+        )
+        assertEquals(tiles, FastingScreenRules.stripTiles(tiles, null))
+        f.start(); hours(2)
+        assertEquals(listOf(DayTileKind.NEXT_EVENT), FastingScreenRules.stripTiles(tiles, screen().todayCard).map { it.kind })
+        assertEquals("1 minute", FastingScreenRules.spokenLength(60_000L))
+        assertEquals("2 hours", FastingScreenRules.spokenLength(2 * hourMs))
+    }
 }

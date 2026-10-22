@@ -94,11 +94,40 @@ data class FastingScreen(
     val undoEndId: String? = null,
     /** Goals and habits' small Fasting tile: "Fasting · 13:30" · "Goal reached · 16:40" · "Not fasting". */
     val tileTitle: String = "",
+    /** Today's live card while a fast runs (docs/design/fasting/today-card.dc.html); null when not fasting. */
+    val todayCard: FastingTodayCard? = null,
 ) {
     val isFasting: Boolean get() = startedTile != null
 }
 
+/**
+ * Today's live Fasting card (docs/design/fasting/today-card.dc.html): a small ring with the time in, "FASTING" over the
+ * stage it's in ("Switching to fat"), "Ends in 2:30 · 12:00" in gold and an End pill. Shown only while a fast runs; a
+ * tap on the card opens the Fasting screen.
+ */
+data class FastingTodayCard(
+    val fastId: String,
+    /** "Fasting" · "Goal reached" (drawn upper case). */
+    val label: String,
+    /** In the ring: "13:30". */
+    val time: String,
+    /** "Switching to fat". */
+    val stage: String,
+    /** "Ends in 2:30 · 12:00" · "+0:30 past your goal" · "Ends in 3 d 18 h · Sat 20:00". */
+    val line: String,
+    /** The ring's fill, 0 to 1. */
+    val fraction: Float,
+    /** One line for TalkBack and VoiceOver. */
+    val spoken: String,
+) {
+    val endLabel: String get() = FastingScreenRules.TODAY_END
+}
+
 object FastingScreenRules {
+    /** The Today card's one button. */
+    const val TODAY_END = "End"
+    /** After End on Today, on the undo bar. */
+    const val TODAY_ENDED = "Fast ended"
     const val MORE_OPTIONS_PROMPT = "Longer fast or started earlier?"
     const val MORE_OPTIONS = "More options"
     const val STAGES_TITLE = "Stages · tap for more"
@@ -221,8 +250,31 @@ object FastingScreenRules {
             weekShown = cur != null || v.week.any { it.hours > 0 },
             undoEndId = v.last?.takeIf { cur == null && it.canResume }?.id,
             tileTitle = if (cur == null) top else "$top · ${hm(elapsed)}",
+            todayCard = cur?.let { f ->
+                val stage = stageAt(hours).name
+                FastingTodayCard(
+                    fastId = f.id, label = top, time = hm(elapsed), stage = stage, line = sub,
+                    fraction = f.progress(nowMs),
+                    spoken = "$top, ${spokenLength(elapsed)} in, ${stage.lowercase()}. $sub. Tap for the Fasting screen.",
+                )
+            },
         )
     }
+
+    /** "13 hours 30 minutes" for screen readers (never "13:30", which reads as a time of day). */
+    fun spokenLength(ms: Long): String {
+        val min = ms.coerceAtLeast(0) / 60_000L
+        val h = min / 60; val m = min % 60
+        val hs = if (h == 1L) "1 hour" else "$h hours"
+        val ms2 = if (m == 1L) "1 minute" else "$m minutes"
+        return when { h == 0L -> ms2; m == 0L -> hs; else -> "$hs $ms2" }
+    }
+
+    /**
+     * Today's strip of live tiles drops its fast tile while the Fasting card shows the same fast (one place for it).
+     */
+    fun stripTiles(tiles: List<DayTile>, card: FastingTodayCard?): List<DayTile> =
+        if (card == null) tiles else tiles.filter { it.kind != DayTileKind.FAST }
 
     /** "4 of 6 on goal · 3-day streak": days with a fast this week, how many on goal, and the run of on-goal days to today. */
     fun weekLine(v: FastingView): String? {

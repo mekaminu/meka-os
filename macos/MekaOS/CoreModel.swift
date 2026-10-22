@@ -1945,6 +1945,11 @@ final class CoreModel {
     func startFastUntil(_ untilMs: Int64) { MekaHaptics.light(); run { _ = try await $0.startFastUntil(untilMs: untilMs, startedMinutesAgo: 0) } }
     func endFast() { MekaHaptics.light(); run { try await $0.endFast() } }
     func resumeFast(_ id: String) { run { try await $0.resumeFast(id: id) } }
+    /// End on Today's live Fasting card: "Fast ended" with Undo on the bar (the same fast comes back).
+    func endFastFromToday(_ id: String) {
+        endFast()
+        offerEventUndo(FastingScreenRules.shared.TODAY_ENDED, .resumeFast(id))
+    }
     func setFastTarget(_ hours: Int32) { run { try await $0.setFastTarget(hours: hours) } }
     func moveFastStart(_ minutes: Int32) { run { try await $0.moveFastStart(deltaMinutes: minutes) } }
     func discardFast() { run { try await $0.discardFast() } }
@@ -4019,6 +4024,7 @@ final class CoreModel {
         case .removeDocument(let id): run { _ = try await $0.removeDocument(id: id) }
         case .reading(let token): run { _ = try await $0.undoReading(token: token) }
         case .unqueue(let id): run { _ = try await $0.removeFromQueue(id: id) }
+        case .resumeFast(let id): run { _ = try await $0.resumeFast(id: id) }
         case .unsetAside(let id): needsYouSetAside.removeAll { $0 == id }
         case .unapproveBacklog(let id): run { _ = try await $0.unapproveMailBacklog(id: id) }
         case .junkKeep(let cardId, let key, let keep):
@@ -6892,6 +6898,8 @@ struct EventUndoOffer: Identifiable, Equatable {
         case reading(String)
         /// Undo on "Saved for the train: …" from Services (train-time queue completeness): the new link comes off.
         case unqueue(String)
+        /// End on Today's Fasting card (Fasting rebuild slice 4): the same fast carries on.
+        case resumeFast(String)
     }
 
     let id = UUID()

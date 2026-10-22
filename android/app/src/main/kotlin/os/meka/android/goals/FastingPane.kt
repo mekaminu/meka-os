@@ -93,7 +93,7 @@ import kotlin.math.sin
  * ticking every second while a fast runs and every half minute otherwise.
  */
 @Composable
-private fun rememberFastClock(core: MekaCore, running: Boolean): Long {
+internal fun rememberFastClock(core: MekaCore, running: Boolean): Long {
     val shift = remember(core) { core.clockShiftMs() }
     var now by remember { mutableLongStateOf(System.currentTimeMillis() + shift) }
     LaunchedEffect(running) {
@@ -159,7 +159,7 @@ internal fun FastingTile(core: MekaCore, modifier: Modifier = Modifier, open: ()
  * sweep, breath or burst; unfolds cross-fade.
  */
 @Composable
-internal fun FastingPane(core: MekaCore, onClose: () -> Unit) {
+internal fun FastingPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Goals and habits") {
     val v by core.fastingView.collectAsState()
     val now = rememberFastClock(core, v.current != null)
     val s = remember(v, now) { core.fastingScreen(now) }
@@ -198,7 +198,7 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit) {
         item(key = "top") { Column {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "‹ Goals and habits", style = MekaType.itemMeta, color = Meka.colors.accent,
+                    backLabel, style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.weight(1f).clickable(role = Role.Button) { haptics.tick(); onClose() }.minTouch(),
                 )
                 PlanChip(s.planChip, planOpen) { haptics.tick(); planOpen = !planOpen }

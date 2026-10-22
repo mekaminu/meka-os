@@ -227,6 +227,8 @@ private fun TodayRouteContent(
     var showSearch by rememberSaveable { mutableStateOf(false) }
     /** The train queue over Today, from the "For the train" line on the commute (train-time queue, slice 1). */
     var showQueue by rememberSaveable { mutableStateOf(false) }
+    /** The Fasting screen over Today, from the live Fasting card (Fasting rebuild slice 4). */
+    var showFasting by rememberSaveable { mutableStateOf(false) }
     var showWeekAhead by rememberSaveable { mutableStateOf(false) }
     /** Activity over Today, from the evening's "MEKA handled 12 things today" (daily receipt). */
     var showActivity by rememberSaveable { mutableStateOf(false) }
@@ -400,6 +402,7 @@ private fun TodayRouteContent(
                         ringPlay = ringPlay, ringPlayed = { ringPlay = DayRingPlay.STILL },
                         openDayRing = { showDayRing = true },
                         openQueue = { showQueue = true },
+                        openFasting = { showFasting = true },
                         openWeekAhead = { showWeekAhead = true },
                         openActivity = { showActivity = true },
                         listsNeedsYou = CommandCentreRules.todayListsNeedsYou(layout),
@@ -475,6 +478,8 @@ private fun TodayRouteContent(
                     key(start) { NewsPane(core, onClose = { newsOpen = null }, backLabel = "‹ Today", startStoryId = start.ifEmpty { null }) }
                 }
             }
+            BackHandler(enabled = showFasting) { showFasting = false }
+            MekaPane(visible = showFasting) { os.meka.android.goals.FastingPane(core, onClose = { showFasting = false }, backLabel = "‹ Today") }
             MekaPane(visible = showQueue) { TrainQueuePane(core, onClose = { showQueue = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showWeekAhead) { WeekAheadPane(core, onClose = { showWeekAhead = false }, closeLabel = "‹ Today") }
             MekaPane(visible = showActivity) { ActivityPane(core, onClose = { showActivity = false }, closeLabel = "‹ Today") }
@@ -750,6 +755,8 @@ private fun TodayPane(
     openDayRing: () -> Unit = {},
     /** Tapping "For the train" opens the train queue. */
     openQueue: () -> Unit = {},
+    /** Tapping the live Fasting card opens the Fasting screen. */
+    openFasting: () -> Unit = {},
     /** Tapping "Your week ahead · …" (Sunday from 18:00) opens the week ahead. */
     openWeekAhead: () -> Unit = {},
     openActivity: () -> Unit = {},
@@ -804,7 +811,12 @@ private fun TodayPane(
     val faceShown = today.timeline.dateLabel.isNotEmpty()
     val habitDots = remember(habitChips, faceShown) { if (faceShown) HabitDotRules.dots(habitChips) else emptyList() }
     val chipsShown = HabitDotRules.chipsShown(faceShown, habitChips)
-    val stripTiles = remember(today.dayTiles) { HabitChipRules.stripTiles(today.dayTiles) }
+    // Fasting rebuild slice 4: a running fast has its own card on Today, so the strip drops its fast tile meanwhile.
+    val fastCard = core?.let { os.meka.android.goals.rememberFastingTodayCard(it) }
+    val endFast = core?.let { os.meka.android.goals.rememberFastingTodayEnd(it, undo) }
+    val stripTiles = remember(today.dayTiles, fastCard == null) {
+        os.meka.core.domain.FastingScreenRules.stripTiles(HabitChipRules.stripTiles(today.dayTiles), fastCard)
+    }
     val chipHaptics = rememberMekaHaptics()
     val chipScope = rememberCoroutineScope()
     // Session cards and quick alarms take a list item only while there is something to show.
@@ -1125,6 +1137,19 @@ private fun TodayPane(
                     // The ring's live tiles, a slim row under the ticker (they left the dial with the move).
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         DayTilesStrip(stripTiles, ringPlay, today.watchFace.arcs.size, Modifier.padding(top = MekaSpace.xs))
+                    }
+                    // Fasting rebuild slice 4: while a fast runs, its live card (the approved today-card design) under the
+                    // header, on the cover screen and unfolded; it rises in and leaves with a fade.
+                    AnimatedVisibility(
+                        fastCard != null && endFast != null,
+                        enter = fadeIn(MekaMotion.expand(Meka.reducedMotion)),
+                        exit = fadeOut(MekaMotion.expand(Meka.reducedMotion)),
+                    ) {
+                        var shownCard by remember { mutableStateOf(fastCard) }
+                        if (fastCard != null) shownCard = fastCard
+                        shownCard?.let { c ->
+                            os.meka.android.goals.FastingTodayCardView(c, openFasting, { endFast?.invoke(it) }, Modifier.padding(top = MekaSpace.m))
+                        }
                     }
                 }
             }

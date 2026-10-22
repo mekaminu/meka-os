@@ -419,12 +419,18 @@ struct TodayView: View {
                     // The ring's live tiles, a slim row under the header (they left the dial with the move); the
                     // habits tile is left to the chips.
                     if let today = model.today, !today.timeline.dateLabel.isEmpty {
-                        let stripTiles = HabitChipRules.shared.stripTiles(tiles: today.dayTiles)
+                        // Fasting rebuild slice 4: while a fast runs it has its own card below, so the strip drops its tile.
+                        let fastCard = model.fasting?.current == nil ? nil
+                            : model.fastingScreen(atMs: Int64(Date().timeIntervalSince1970 * 1000))?.todayCard
+                        let stripTiles = FastingScreenRules.shared.stripTiles(
+                            tiles: HabitChipRules.shared.stripTiles(tiles: today.dayTiles), card: fastCard)
                         if !stripTiles.isEmpty {
                             DayTilesStrip(tiles: stripTiles, play: ringPlay ?? .still, arcs: today.watchFace.arcs.count, palette: palette)
                                 .padding(.top, MekaSpace.xs)
                         }
                     }
+                    // Fasting rebuild slice 4: the live Fasting card while a fast runs (the approved today-card design).
+                    FastingTodayCardView(palette: palette)
                     Spacer().frame(height: MekaSpace.l)
 
                     if let today = model.today {
