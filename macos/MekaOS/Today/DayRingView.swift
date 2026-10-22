@@ -409,7 +409,7 @@ struct GreetingText: View {
                 let f = MotionMath.greetingLetter(elapsed: elapsed, index: item.offset, play: play)
                 return line + Text(String(item.element)).foregroundStyle(palette.textPrimary.opacity(f))
             }
-            .font(MekaType.greeting(scale: scale)).tracking(MekaType.greetingTracking * scale)
+            .font(Font.system(size: MekaTextScale.size(26) * scale, weight: .semibold)).tracking(MekaType.greetingTracking * scale) // type: ok, MekaType.greeting (26, semibold) shrunk to fit one line
             .offset(y: (1 - lead) * MotionMath.greetingLetterRise)
         }
     }

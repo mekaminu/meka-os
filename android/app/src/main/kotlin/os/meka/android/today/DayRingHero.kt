@@ -441,7 +441,10 @@ fun GreetingText(text: String, play: DayRingPlay, modifier: Modifier = Modifier)
         }
         val available = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
         val scale = os.meka.core.domain.GreetingFitRules.scale(oneLine, available)
-        val style = if (scale == 1f) base else base.copy(fontSize = base.fontSize * scale, lineHeight = base.lineHeight * scale)
+        // MekaType.greeting, shrunk to fit one line.
+        val style = if (scale == 1f) base else base.copy(
+            fontSize = base.fontSize * scale, lineHeight = base.lineHeight * scale, // type: ok, the greeting shrunk to fit
+        )
         GreetingLetters(text, play, style, wraps = os.meka.core.domain.GreetingFitRules.wraps(oneLine, available))
     }
 }

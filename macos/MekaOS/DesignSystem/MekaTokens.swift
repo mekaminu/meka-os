@@ -90,8 +90,6 @@ extension MekaPalette {
 
 enum MekaType {
     static var greeting: Font { Font.system(size: MekaTextScale.size(26), weight: .semibold) }
-    /// The greeting a step smaller where one line wouldn't fit (core GreetingFitRules).
-    static func greeting(scale: CGFloat) -> Font { Font.system(size: MekaTextScale.size(26) * scale, weight: .semibold) }
     static var greetingTracking: CGFloat { -0.52 * MekaTextScale.shared.factor }
     static var sectionLabel: Font { Font.system(size: MekaTextScale.size(11), weight: .semibold) }
     static var sectionLabelTracking: CGFloat { 0.88 * MekaTextScale.shared.factor }
