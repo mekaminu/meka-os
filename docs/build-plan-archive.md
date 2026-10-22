@@ -2834,4 +2834,4 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Up next's chips on the cover:** the cover card's inner width is ~264 dp; Done · Tomorrow · Open with 24 dp sides needed ~280 dp, so Open wrapped alone. NowChip's sides are 16 dp (touch height still 48 dp, maxLines 1); the chips carry `NOW_CHIP_TAG` and `ScreenShots.assertOneRow` fails a shot whose chips don't share a top.
 - **Greeting by the core's clock:** `MekaCore.todayGreeting(shownName)` (CallNameRules.todayGreeting at the core's zone and now); the Fold's TodayPane and CollapsingHeader and the Mac's TodayView (CoreModel.todayGreeting) use it, the device clock only without a core. `ScreenShots.assertShows(…, "Good afternoon")` in every Today shot (17:15 by the core); CallNameFacadeTest.todaysGreetingReadsTheCoresClockNotTheDevices.
 - No server change, no migration. Mac checked nightly.
-
+- Landed 05f60c7, CI run 1041 (39749429557) green first try, screens 386977f. Re-shot review: chips on one row, the greeting says "Good afternoon"; new: "Good afternoon" wraps to two lines on the cover, and the header's watch face reads the phone's clock — filed on the board.
