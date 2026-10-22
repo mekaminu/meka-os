@@ -33,6 +33,7 @@ struct BinsSheet: View {
                 .staggeredAppear(1)
             TextField(BinRules.shared.ADD_HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(BinRules.shared.ADD_DESCRIPTION)
                 .onSubmit {
                     let typed = text
                     text = ""

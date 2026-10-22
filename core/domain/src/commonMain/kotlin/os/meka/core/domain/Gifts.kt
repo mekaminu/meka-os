@@ -103,7 +103,9 @@ object GiftRules {
     const val AHEAD_DAYS = 14
     const val NOTICE_MIN = 9 * 60
 
-    const val ADD_HINT = "Add… (Mum's birthday 3 Nov, Wedding anniversary 20 Aug 2015)"
+    /** One example, on one line on the cover screen (quality gate slice 20); TalkBack reads [ADD_DESCRIPTION]. */
+    const val ADD_HINT = "Mum's birthday 3 Nov"
+    const val ADD_DESCRIPTION = "Add a birthday or anniversary, for example Mum's birthday 3 Nov, or Wedding anniversary 20 Aug 2015"
     const val IDEA_HINT = "Add a gift idea…"
     const val EMPTY_LINE = "Nothing entered yet. Type each birthday or anniversary once; Navilife reminds you two weeks ahead and on the day to order."
     const val NOT_READ = "Navilife couldn't read that. Try \"Mum's birthday 3 Nov\" or \"Wedding anniversary 20 Aug 2015\"."

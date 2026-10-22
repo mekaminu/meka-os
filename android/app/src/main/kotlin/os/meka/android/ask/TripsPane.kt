@@ -156,7 +156,7 @@ fun TripsPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "field") {
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(TripRules.ADD_HINT) { text ->
+                Field(TripRules.addHint(hasTrips = !v.isEmpty), description = TripRules.ADD_DESCRIPTION) { text ->
                     scope.launch {
                         val r = runCatching { core.addTrip(text) }.getOrNull()
                         if (r?.refused == false) haptics.light() else haptics.tick()

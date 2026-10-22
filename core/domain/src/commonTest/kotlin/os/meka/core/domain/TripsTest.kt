@@ -36,6 +36,18 @@ class TripsTest {
     }
 
     @Test
+    fun theAddHintsAreExamplesThatRead() {
+        // Quality gate slice 20: one short example per hint (a trip, then a booking once there is a trip), each one read.
+        assertEquals(TripRules.ADD_HINT, TripRules.addHint(hasTrips = false))
+        assertEquals(TripRules.BOOKING_HINT, TripRules.addHint(hasTrips = true))
+        assertTrue(TripRules.read(TripRules.ADD_HINT, mon, 600, emptyList()) is TripRules.Read.Trip)
+        assertTrue(TripRules.read(TripRules.BOOKING_HINT, mon, 600, listOf(bcn)) is TripRules.Read.Booking)
+        assertTrue(TripRules.ADD_HINT.length <= 26 && TripRules.BOOKING_HINT.length <= 26)
+        assertTrue(GiftRules.read(GiftRules.ADD_HINT, 2026) != null && GiftRules.ADD_HINT.length <= 26)
+        assertTrue(BinRules.read(BinRules.ADD_HINT, mon) != null && BinRules.ADD_HINT.length <= 26)
+    }
+
+    @Test
     fun aBookingJoinsTheTripItFallsOnWithItsTimeAndReference() {
         val trips = listOf(bcn)
         assertEquals(

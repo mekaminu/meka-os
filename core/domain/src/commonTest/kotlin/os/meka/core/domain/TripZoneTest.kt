@@ -49,7 +49,9 @@ class TripZoneTest {
         assertEquals("1 h ahead of UK time", TripZoneRules.tripLine(t, clocks))
 
         val view = TripRules.view(listOf(t), sat - 3, clocks = clocks).rows.single()
-        assertEquals("Sat 14 – Wed 18 Nov · 5 days · 5 bookings · 1 h ahead of UK time", view.line)
+        assertEquals("Sat 14 – Wed 18 Nov · 5 days · 5 bookings · 1 h ahead of UK time", DateGlue.plain(view.line))
+        // Quality gate slice 20: the clocks phrase is kept whole, so "· 1 h" never ends a line on the cover screen.
+        assertTrue(view.line.endsWith(" · 1\u00A0h\u00A0ahead\u00A0of\u00A0UK\u00A0time"), view.line)
         val lines = view.timeline.flatMap { it.lines }
         assertEquals("Flight BA478", lines.first { it.bookingId == "o" }.text)
         assertEquals("Flight BA479 · 17:20 UK time", lines.first { it.bookingId == "r" }.text)

@@ -33,6 +33,7 @@ struct GiftsSheet: View {
                 .staggeredAppear(1)
             TextField(GiftRules.shared.ADD_HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(GiftRules.shared.ADD_DESCRIPTION)
                 .onSubmit {
                     let typed = text
                     text = ""

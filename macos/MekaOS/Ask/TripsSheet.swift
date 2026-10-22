@@ -43,8 +43,9 @@ struct TripsSheet: View {
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.summary)
                 .staggeredAppear(1)
-            TextField(TripRules.shared.ADD_HINT, text: $text)
+            TextField(TripRules.shared.addHint(hasTrips: !(v?.isEmpty ?? true)), text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(TripRules.shared.ADD_DESCRIPTION)
                 .onSubmit {
                     let typed = text
                     text = ""

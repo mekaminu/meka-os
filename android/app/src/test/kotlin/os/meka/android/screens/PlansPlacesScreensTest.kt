@@ -139,6 +139,9 @@ class PlansPlacesScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
         ScreenShots.assertShows(compose, name, place.title)
+        // Slice 20: each add field's hint is one example on one line, and a trip's time difference stays whole.
+        ScreenShots.assertEachOneLine(compose, name, listOf(TripRules.ADD_HINT, TripRules.BOOKING_HINT, GiftRules.ADD_HINT, BinRules.ADD_HINT))
+        ScreenShots.assertClocksWhole(compose, name)
         when (place) {
             Place.TRIPS -> {
                 val v = core.tripsView.value
@@ -146,6 +149,7 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != TripRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with no trips")
                 if (fill == Fill.MANY && v.rows.size != 2) fail("$name: ${v.rows.size} rows for two trips")
+                ScreenShots.assertShows(compose, name, TripRules.addHint(hasTrips = !v.isEmpty))
             }
             Place.GIFTS -> {
                 val v = core.giftsView.value

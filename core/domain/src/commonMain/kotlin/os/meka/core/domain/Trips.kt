@@ -142,7 +142,15 @@ object TripRules {
     /** A booking may fall this many days either side of its trip (a night flight, a hotel the night before). */
     const val SLACK_DAYS = 1
 
-    const val ADD_HINT = "Add… (Barcelona 14–18 Nov, Flight BA478 Sat 14 Nov 07:40 ref ABC123)"
+    /**
+     * The add field's hint: one example that fits the pill on one line on the cover screen (quality gate slice 20; the
+     * longer "Add… (…, …)" took three lines). With no trip yet it shows a trip; once there is one, a booking.
+     * TalkBack reads [ADD_DESCRIPTION]; the empty line and [NOT_READ] carry the fuller examples.
+     */
+    const val ADD_HINT = "Barcelona 14–18 Nov"
+    const val BOOKING_HINT = "Flight BA478 14 Nov 07:40"
+    const val ADD_DESCRIPTION = "Add a trip with its dates or a booking with its day and time, for example Barcelona 14–18 Nov, or Flight BA478 14 Nov 07:40"
+    fun addHint(hasTrips: Boolean): String = if (hasTrips) BOOKING_HINT else ADD_HINT
     const val EMPTY_LINE = "No trips yet. Type a trip with its dates, then each booking with its day, time and reference."
     const val NOT_READ = "Navilife couldn't read that. Try \"Barcelona 14–18 Nov\" or \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
     const val NO_DAY = "Navilife couldn't read a day in that booking. Try \"Flight BA478 Sat 14 Nov 07:40 ref ABC123\"."
@@ -328,12 +336,15 @@ object TripRules {
 
     private fun plural(n: Int, word: String) = if (n == 1) "1 $word" else "$n ${word}s"
 
-    /** "Sat 14 – Wed 18 Nov · 5 days · 3 bookings", then "1 h ahead of UK time" when the destination's clock differs. */
+    /**
+     * "Sat 14 – Wed 18 Nov · 5 days · 3 bookings", then "1 h ahead of UK time" when the destination's clock differs,
+     * kept whole with no-break spaces so "· 1 h" never ends a line on the cover screen (quality gate slice 20).
+     */
     fun rowLine(t: TripItem, clocks: TripClocks? = null): String = listOfNotNull(
         CalendarAgenda.spanLabel(t.startDay, t.endDay),
         plural(t.days, "day"),
         t.bookings.size.takeIf { it > 0 }?.let { plural(it, "booking") },
-        TripZoneRules.tripLine(t, clocks),
+        TripZoneRules.tripLine(t, clocks)?.replace(' ', LifeTileRules.GLUE[0]),
     ).joinToString(" · ")
 
     /** Each booking's lines by day: its own day, and a stay's check-out (a hire car's drop-off) on its last day. */

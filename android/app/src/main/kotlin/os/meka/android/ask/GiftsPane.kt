@@ -100,7 +100,7 @@ fun GiftsPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "field") {
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(GiftRules.ADD_HINT) { text ->
+                Field(GiftRules.ADD_HINT, description = GiftRules.ADD_DESCRIPTION) { text ->
                     scope.launch {
                         val r = runCatching { core.addOccasion(text) }.getOrNull()
                         if (r?.refused == false) haptics.light() else haptics.tick()

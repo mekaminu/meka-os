@@ -202,7 +202,16 @@ object ScreenShots {
      * The quality gate's "a date stays whole" (Appointments' shots, 2026-10-22: on the cover screen a row read "last
      * went 1 / Mar 2025"): fails, naming each one, when a line break falls inside a date phrase ([DateGlue.ranges]).
      */
-    fun assertDatesWhole(compose: ComposeContentTestRule, name: String) {
+    fun assertDatesWhole(compose: ComposeContentTestRule, name: String) =
+        assertPhrasesWhole(compose, name, "a date") { DateGlue.ranges(it) }
+
+    /** Trips' clocks phrase ("1 h ahead of UK time"), on one line wherever it wraps (quality gate slice 20). */
+    private val CLOCKS = Regex("\\d+ (?:h|min)(?: \\d+)? (?:ahead of|behind) UK time")
+
+    fun assertClocksWhole(compose: ComposeContentTestRule, name: String) =
+        assertPhrasesWhole(compose, name, "a time difference") { t -> CLOCKS.findAll(DateGlue.plain(t)).map { it.range }.toList() }
+
+    private fun assertPhrasesWhole(compose: ComposeContentTestRule, name: String, what: String, ranges: (String) -> List<IntRange>) {
         val split = mutableListOf<String>()
         fun walk(n: SemanticsNode) {
             val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
@@ -211,14 +220,14 @@ object ScreenShots {
                 val results = mutableListOf<TextLayoutResult>()
                 action(results)
                 results.firstOrNull()?.takeIf { it.lineCount > 1 }?.let { r ->
-                    DateGlue.ranges(text).filter { r.getLineForOffset(it.first) != r.getLineForOffset(it.last) }
+                    ranges(text).filter { r.getLineForOffset(it.first) != r.getLineForOffset(it.last) }
                         .forEach { split += "\"${text.substring(it.first, it.last + 1)}\" in \"$text\"" }
                 }
             }
             n.children.forEach { walk(it) }
         }
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
-        if (split.isNotEmpty()) fail("$name splits a date across lines:\n" + split.joinToString("\n") { "- $it" })
+        if (split.isNotEmpty()) fail("$name splits $what across lines:\n" + split.joinToString("\n") { "- $it" })
     }
 
     /** Fails when one of [texts] (matched whole, e.g. a field's hint) takes more than a line; ones not on screen are skipped. */

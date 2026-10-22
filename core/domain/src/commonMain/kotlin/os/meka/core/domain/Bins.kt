@@ -115,7 +115,9 @@ object BinRules {
     /** The watch's label while bins go out tonight. */
     const val OUT_LABEL = "OUT TONIGHT"
 
-    const val ADD_HINT = "Add… (Black bin Tue fortnightly from 13 Oct, Food caddy every Tue)"
+    /** One example, on one line on the cover screen (quality gate slice 20); TalkBack reads [ADD_DESCRIPTION]. */
+    const val ADD_HINT = "Food caddy every Tuesday"
+    const val ADD_DESCRIPTION = "Add a bin with its day, for example Food caddy every Tuesday, or Black bin Tue fortnightly from 13 Oct"
     const val EMPTY_LINE = "Nothing entered yet. Type each bin once with its day, and for every-other-week bins the date of one collection."
     const val NOT_READ = "Navilife couldn't read that. Try \"Black bin Tue fortnightly from 13 Oct\" or \"Food caddy every Tuesday\"."
     const val SHIFT_NOTE = "a day later for the bank holiday"

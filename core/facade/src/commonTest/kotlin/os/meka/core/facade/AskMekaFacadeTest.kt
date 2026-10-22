@@ -635,12 +635,12 @@ class AskMekaFacadeTest {
 
         val done = c.doAsk(out.answer.cards.single())
         assertEquals("Added to Barcelona · Flight BA478 · Wed 14 Oct 07:40 · ref ABC123", done.line)
-        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking · 1 h ahead of UK time", c.tripsView.value.rows.single().line)
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 booking · 1 h ahead of UK time", os.meka.core.domain.DateGlue.plain(c.tripsView.value.rows.single().line))
         assertFailsWith<ValidationException> { c.doAsk(out.answer.cards.single()) }
 
         // Undo takes the booking off, once.
         assertTrue(c.undoAsk(assertIs<AskUndo.RemoveBooking>(done.undo)))
-        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 h ahead of UK time", c.tripsView.value.rows.single().line)
+        assertEquals("Wed 14 – Fri 16 Oct · 3 days · 1 h ahead of UK time", os.meka.core.domain.DateGlue.plain(c.tripsView.value.rows.single().line))
         assertFalse(c.undoAsk(done.undo!!))
     }
 
