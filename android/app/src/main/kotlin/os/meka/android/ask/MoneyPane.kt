@@ -1305,7 +1305,7 @@ private fun YearBlock(yv: os.meka.core.domain.MoneyYearView, modifier: Modifier,
             .clickable(role = Role.Button) { open = !open; onToggle() }
             .semantics(mergeDescendants = true) { contentDescription = if (open) "${yv.spoken}. Fold" else "${yv.folded}. Open" },
             verticalAlignment = Alignment.CenterVertically) {
-            Text(yv.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f).padding(end = MekaSpace.s))
+            Text(yv.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f).padding(end = MekaSpace.xs))
             Crossfade(if (open) "Fold" else "Open", animationSpec = MekaMotion.appear(reduced), label = "money-year-toggle") { l ->
                 Text(l, style = MekaType.body, color = Meka.colors.accent)
             }
