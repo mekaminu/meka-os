@@ -2922,6 +2922,7 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **The add hint fits:** `MealRules.ADD_HINT` is "Chilli: mince, beans, rice" (like Errands' "Tesco: milk, batteries"), one line in its pill on the cover screen.
 - Tests: ErrandsTest +1 (shown), MealPlanTest +1 and a paneSummary line; LifePlacesScreensTest now fails on an errand starting lower case, tonight's dinner repeated inside another line, or the add hint on more than one line.
 - Design check: no design file for Errands or Dinners. No server change, no wire change, no migration, Mac checked nightly.
+- Landed b7e502c + CI fixes d19e32d, 8da9f26; CI run 1075 (39829072564) green (second attempt).
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
