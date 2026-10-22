@@ -24,6 +24,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.AppointmentRules
+import os.meka.core.domain.KidSize
 import os.meka.core.domain.KidsRules
 import os.meka.core.domain.SchoolRules
 import os.meka.core.facade.MekaCore
@@ -137,6 +138,8 @@ class AdminPlacesScreensTest {
                 val v = core.appointmentsView.value
                 // Each row's name and how often / last went read whole (on two lines if they must), never "Every 6 mo…".
                 ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.title, it.line) }, mustShow = false)
+                // Slice 16's findings: "last went 1 / Mar 2025" and "was due Mon / 12 Oct" never split.
+                ScreenShots.assertDatesWhole(compose, name)
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != AppointmentRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.rows.size != 5) fail("$name: ${v.rows.size} rows for five")
@@ -151,6 +154,8 @@ class AdminPlacesScreensTest {
                     ScreenShots.assertShows(compose, name, "About you")
                 }
                 if (fill == Fill.MANY && v.kids.size != 2) fail("$name: ${v.kids.size} cards for two children")
+                // Slice 16's findings: each size field's hint fits its pill on one line ("Boot size… (12)" wrapped).
+                ScreenShots.assertEachOneLine(compose, name, KidSize.entries.map { it.hint }.toSet())
             }
             Place.SCHOOL -> {
                 val v = core.schoolView.value
@@ -158,6 +163,11 @@ class AdminPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != SchoolRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing entered")
                 if (fill != Fill.EMPTY && v.isEmpty) fail("$name: nothing kept from what was typed")
+                // Slice 16's findings: with no council to offer, the council card ends just under its words.
+                v.terms?.takeIf { it.choices.isEmpty() && it.refresh == null && it.filled == null }?.let { t ->
+                    if ("Pick" in t.line) fail("$name: \"${t.line}\" asks him to pick a council with none to pick")
+                    ScreenShots.assertHugs(compose, name, "school-terms", t.line.takeLast(14), maxGapDp = 24f)
+                }
             }
         }
     }

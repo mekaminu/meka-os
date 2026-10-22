@@ -462,7 +462,10 @@ object AppointmentRules {
     fun row(item: AppointmentItem, today: Long): AppointmentRow {
         val s = state(item, today)
         val lit = s == AppointmentState.UNKNOWN || nudging(item, today)
-        return AppointmentRow(item.id, item.title, line(item, today), status(item, today), s, lit, dueDay(item, today))
+        // Quality gate slice 16's findings: a date never splits across the row's lines ("last went 1 / Mar 2025").
+        return AppointmentRow(
+            item.id, item.title, DateGlue.kept(line(item, today)), DateGlue.kept(status(item, today)), s, lit, dueDay(item, today),
+        )
     }
 
     fun view(items: List<AppointmentItem>, today: Long): AppointmentView {
@@ -840,6 +843,8 @@ object AppointmentAskRules {
         if (view.rows.isEmpty()) return emptyList()
         val more = if (view.rows.size > ASK_ITEMS) " · the first $ASK_ITEMS below" else ""
         return listOf("Appointments · ${view.summary}$more") +
-            view.rows.take(ASK_ITEMS).map { r -> "${tidy(r.title)} · ${r.line.replaceFirstChar { it.lowercase() }} · ${r.status}" }
+            view.rows.take(ASK_ITEMS).map { r ->
+                DateGlue.plain("${tidy(r.title)} · ${r.line.replaceFirstChar { it.lowercase() }} · ${r.status}")
+            }
     }
 }

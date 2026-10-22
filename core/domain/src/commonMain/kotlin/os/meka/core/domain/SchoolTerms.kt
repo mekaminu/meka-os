@@ -81,6 +81,12 @@ object SchoolTerms {
     const val CARD_TITLE = "Holidays from the council"
     const val OFFER_LINE = "Most schools follow their council's holidays. Pick the boys' school's council to fill them in; " +
         "the school's own INSET days aren't in them. Not listed? Type the dates below."
+    /**
+     * The card's line with no council to offer (none kept in his data): nothing to pick, so it says to type the dates
+     * (quality gate slice 16's findings, 2026-10-22: "Pick the boys' school's council" with nothing under it to pick).
+     */
+    const val NO_COUNCIL_LINE = "Most schools follow their council's holidays; the school's own INSET days aren't in them. " +
+        "Type the dates below, one line each."
     const val NOT_LISTED = "Not listed? Type the dates below, one line each."
     const val NOT_FILLED = "Nothing new to add: those holidays are in already."
 
@@ -120,7 +126,8 @@ object SchoolTerms {
         val filled = items.mapNotNull { councilOf(it.source) }.firstOrNull()
         if (filled == null) {
             val choices = councils().filter { ahead(it, today).isNotEmpty() }.map { choice(it, today) }
-            return SchoolTermCard(CARD_TITLE, OFFER_LINE, choices, null, refresh(null, items, known, today, choices.isNotEmpty()))
+            val offer = if (choices.isEmpty()) NO_COUNCIL_LINE else OFFER_LINE
+            return SchoolTermCard(CARD_TITLE, offer, choices, null, refresh(null, items, known, today, choices.isNotEmpty()))
         }
         val n = items.count { councilOf(it.source)?.id == filled.id && it.endDay >= today }
         val line = "${filled.name} · $n ${if (n == 1) "holiday" else "holidays"} to come · ${filled.years} · " +

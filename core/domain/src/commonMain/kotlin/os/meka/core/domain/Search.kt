@@ -343,7 +343,7 @@ object Search {
         }
         // Appointments: in the pane's order (overdue and due first, then booked and the rest by when they're due).
         AppointmentRules.view(sources.appointments, today).rows.forEachIndexed { i, r ->
-            add(r.id, SearchKind.APPOINTMENT, r.title, r.status, SearchTarget.APPOINTMENTS, null, i.toLong(),
+            add(r.id, SearchKind.APPOINTMENT, r.title, DateGlue.plain(r.status), SearchTarget.APPOINTMENTS, null, i.toLong(),
                 listOf(SearchRules.Field(r.title, 3)))
         }
         sources.goals.forEach { g ->

@@ -29,14 +29,18 @@ object KidFields {
     const val PAID_PENCE = "paidPence"
 }
 
-/** The sizes Kids keeps per child, in the pane's order; [key] is the entity's field. */
+/**
+ * The sizes Kids keeps per child, in the pane's order; [key] is the entity's field. [hint] is just an example size: the
+ * label sits beside the field, so on the cover screen the hint fits its pill on one line (quality gate slice 16's
+ * findings, 2026-10-22: "Boot size… (12)" wrapped to two lines).
+ */
 enum class KidSize(val key: String, val label: String, val hint: String) {
-    SHOES("shoes", "Shoes", "Shoe size… (13 or 1½)"),
-    BOOTS("boots", "Football boots", "Boot size… (12)"),
-    TOPS("tops", "Tops", "Tops… (7–8 years)"),
-    TROUSERS("trousers", "Trousers", "Trousers… (7–8 years)"),
-    COAT("coat", "Coat", "Coat… (8–9 years)"),
-    JUMPER("jumper", "School jumper", "Jumper… (26\" or 7–8)"),
+    SHOES("shoes", "Shoes", "13 or 1½"),
+    BOOTS("boots", "Football boots", "12"),
+    TOPS("tops", "Tops", "7–8 years"),
+    TROUSERS("trousers", "Trousers", "7–8 years"),
+    COAT("coat", "Coat", "8–9 years"),
+    JUMPER("jumper", "School jumper", "26\" or 7–8"),
     ;
 
     companion object {

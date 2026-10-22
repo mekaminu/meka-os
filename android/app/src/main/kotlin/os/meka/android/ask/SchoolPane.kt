@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -118,7 +119,7 @@ fun SchoolPane(core: MekaCore, onClose: () -> Unit) {
             item(key = "terms") {
                 TermsCard(
                     card, termsSaid, undo = terms != null || added != null,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2)),
+                    modifier = Modifier.animateItem().padding(top = MekaSpace.xs).appear(rememberAppearance(2)).testTag("school-terms"),
                     onFill = { id ->
                         haptics.light()
                         scope.launch {
@@ -281,16 +282,20 @@ private fun TermsCard(
     Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.m),
-        verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
+        // Quality gate slice 16's findings: no spacedBy here, so a part with nothing to show (no new dates, nothing said)
+        // leaves no gap; each part that shows brings its own gap above it, and the card ends just under its words.
         Text(card.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Crossfade(card.line, animationSpec = MekaMotion.appear(reduced), label = "school-terms-line") { line ->
-            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
         }
         // Slice 2: new dates from the council, or next school year's holidays not in yet.
         Crossfade(card.refresh, animationSpec = MekaMotion.appear(reduced), label = "school-terms-refresh") { r ->
             r?.let {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
                     Text(it.line, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
                     val act = it.action
                     if (act != null) {
@@ -308,7 +313,7 @@ private fun TermsCard(
             }
         }
         card.choices.forEach { c ->
-            Row(Modifier.fillMaxWidth().minTouch(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs).minTouch(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = "${c.name}. ${c.line}" }) {
                     Text(c.name, style = MekaType.body, color = Meka.colors.textPrimary)
                     Text(c.line, style = MekaType.caption, color = Meka.colors.textSecondary)
@@ -325,18 +330,24 @@ private fun TermsCard(
         card.filled?.let { f ->
             Text(
                 "Remove all", style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                modifier = Modifier.padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m))
                     .clickable(role = Role.Button) { onRemove(f.id) }
                     .semantics { contentDescription = "Remove all of ${f.name}'s holidays" }
                     .minTouch().padding(MekaSpace.xs),
             )
         }
         if (card.filled == null && card.choices.isNotEmpty()) {
-            Text(SchoolTerms.NOT_LISTED, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(
+                SchoolTerms.NOT_LISTED, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.padding(top = MekaSpace.xs),
+            )
         }
         Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "school-terms-said") { line ->
             line?.let {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Row(
+                    Modifier.padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
                     Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f, fill = false))
                     if (undo) {
                         Text(

@@ -160,6 +160,7 @@ struct KidsSheet: View {
                 .frame(width: 130, alignment: .leading)
             TextField(row.hint, text: Binding(get: { texts[key] ?? row.value ?? "" }, set: { texts[key] = $0 }))
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("\(kid)'s \(row.label.lowercased()) size, for example \(row.hint)")
                 .onSubmit {
                     let typed = texts[key] ?? row.value ?? ""
                     let size = row.size

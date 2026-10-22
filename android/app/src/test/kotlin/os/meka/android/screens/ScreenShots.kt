@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import os.meka.core.domain.BoardFitRules
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.ScreenSenseRules
 import kotlin.test.fail
 
@@ -195,5 +196,40 @@ object ScreenShots {
         if (middle < t.top - 1f || middle > firstLineBottom + 1f) {
             fail("$name: the icon beside \"$text\" sits at $middle px, outside its first line (${t.top}–$firstLineBottom px)")
         }
+    }
+
+    /**
+     * The quality gate's "a date stays whole" (Appointments' shots, 2026-10-22: on the cover screen a row read "last
+     * went 1 / Mar 2025"): fails, naming each one, when a line break falls inside a date phrase ([DateGlue.ranges]).
+     */
+    fun assertDatesWhole(compose: ComposeContentTestRule, name: String) {
+        val split = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.takeIf { it.lineCount > 1 }?.let { r ->
+                    DateGlue.ranges(text).filter { r.getLineForOffset(it.first) != r.getLineForOffset(it.last) }
+                        .forEach { split += "\"${text.substring(it.first, it.last + 1)}\" in \"$text\"" }
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (split.isNotEmpty()) fail("$name splits a date across lines:\n" + split.joinToString("\n") { "- $it" })
+    }
+
+    /** Fails when one of [texts] (matched whole, e.g. a field's hint) takes more than a line; ones not on screen are skipped. */
+    fun assertEachOneLine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val wrapped = texts.filter { t ->
+            compose.onAllNodes(hasText(t), useUnmergedTree = true).fetchSemanticsNodes().any { n ->
+                val results = mutableListOf<TextLayoutResult>()
+                n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                (results.firstOrNull()?.lineCount ?: 1) > 1
+            }
+        }
+        if (wrapped.isNotEmpty()) fail("$name wraps what should be one line:\n" + wrapped.joinToString("\n") { "- \"$it\"" })
     }
 }

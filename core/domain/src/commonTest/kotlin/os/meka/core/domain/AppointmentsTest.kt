@@ -214,4 +214,23 @@ class AppointmentsTest {
         assertEquals("Dentist · Booked · Tue 20 Oct 09:30 · adding to Google", r.bookedLine("Dentist · Booked · Tue 20 Oct 09:30", "Google", false))
         assertEquals("Dentist · Booked · Wed 21 Oct · moving it in Outlook", r.bookedLine("Dentist · Booked · Wed 21 Oct", "Outlook", true))
     }
+
+    /** Quality gate slice 16's findings: a row's dates are held together so they never split across lines. */
+    @Test
+    fun aRowsDatesNeverSplit() {
+        val g = LifeTileRules.GLUE
+        assertEquals("Every 2 years · last went 1${g}Mar${g}2025", DateGlue.kept("Every 2 years · last went 1 Mar 2025"))
+        assertEquals("Overdue · was due Mon${g}12${g}Oct", DateGlue.kept("Overdue · was due Mon 12 Oct"))
+        assertEquals("Booked · Tue${g}3${g}Nov${g}09:30", DateGlue.kept("Booked · Tue 3 Nov 09:30"))
+        assertEquals("Next due Mar${g}2027", DateGlue.kept("Next due Mar 2027"))
+        assertEquals("Every 6 months", DateGlue.kept("Every 6 months"))
+        assertEquals("Due tomorrow · 12 boxes", DateGlue.kept("Due tomorrow · 12 boxes"))
+        assertEquals(listOf(18..27), DateGlue.ranges("Overdue · was due Mon${g}12${g}Oct"))
+        val optician = AppointmentItem("o", "Optician", 0, 24, CivilDate.toEpochDay(2025, 3, 1), null, null, null, 0)
+        val row = AppointmentRules.row(optician, today)
+        assertEquals("Every 2 years · last went 1${g}Mar${g}2025", row.line)
+        assertEquals("Next due Mar${g}2027", row.status)
+        // What Ask and the spoken nudge read keeps plain spaces.
+        assertEquals("Every 2 years · last went 1 Mar 2025", AppointmentRules.line(optician, today))
+    }
 }

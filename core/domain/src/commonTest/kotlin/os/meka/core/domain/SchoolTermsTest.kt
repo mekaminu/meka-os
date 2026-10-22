@@ -7,6 +7,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -224,6 +225,9 @@ class SchoolTermsTest {
         val card = assertNotNull(school(fold).view(work).terms)
         assertTrue(card.choices.isEmpty())
         assertNull(card.filled)
+        // Nothing to pick, so the line doesn't ask him to pick one (quality gate slice 16's findings).
+        assertEquals(SchoolTerms.NO_COUNCIL_LINE, card.line)
+        assertFalse(card.line.contains("Pick"))
         assertNull(terms(fold).fill(council))
         assertTrue(SchoolTerms.councils().isEmpty())
     }
