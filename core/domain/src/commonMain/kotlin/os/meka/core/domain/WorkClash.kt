@@ -133,6 +133,12 @@ object WorkClashRules {
         )
     }
 
+    /**
+     * The row's mark for [clash], or none once its event is over (the quality gate's Calendar re-shot, 2026-10-22: the
+     * morning's Dentist, dimmed as past, still said "Clashes with work until 17:30" at 17:15). Today and the Agenda.
+     */
+    fun markWhileAhead(clash: WorkClash?, endMs: Long, nowMs: Long): String? = clash?.mark?.takeIf { endMs > nowMs }
+
     /** Every clash among [events] with [blocks], in start order. */
     fun clashes(
         events: List<CalendarEvent>, blocks: List<WorkBlock>, calendar: LocalCalendar, children: Map<String, String> = emptyMap(),

@@ -180,6 +180,22 @@ object LifeTileRules {
      */
     fun more(n: Int): String = "$GLUE·$GLUE+$n"
 
+    /**
+     * Errands' "1 errand at Post office" with the place held together by no-break spaces (the quality gate's Calendar
+     * re-shot, 2026-10-22: on the cover screen the tile read "1 errand at Post / office"): a line that must wrap moves the
+     * whole place down. A place longer than [PLACE_KEPT] characters may still break, so it never runs off the tile.
+     */
+    fun placeKept(summary: String): String {
+        val at = summary.lastIndexOf(" at ")
+        if (at < 0) return summary
+        val place = summary.substring(at + 4)
+        if (place.length > PLACE_KEPT || place.firstOrNull()?.isDigit() == true) return summary
+        return summary.substring(0, at + 4) + place.replace(' ', GLUE[0])
+    }
+
+    /** The longest place [placeKept] holds on one line. */
+    const val PLACE_KEPT = 20
+
     /** A no-break space: Compose and SwiftUI never break a line there. */
     const val GLUE = "\u00A0"
 
@@ -278,7 +294,7 @@ object LifeTileRules {
         tripToday = today.trip?.text,
         tripLit = today.trip?.lit == true,
         tripsSummary = trips.summary.takeIf { !trips.isEmpty },
-        errandsSummary = errands.summary.takeIf { it != ErrandRules.EMPTY_SUMMARY },
+        errandsSummary = errands.summary.takeIf { it != ErrandRules.EMPTY_SUMMARY }?.let(::placeKept),
         emergencySummary = emergency.summary.takeIf { emergency.count > 0 },
         factsSummary = facts.summary.takeIf { facts.count > 0 },
         peopleSummary = people.summary.takeIf { !people.isEmpty },

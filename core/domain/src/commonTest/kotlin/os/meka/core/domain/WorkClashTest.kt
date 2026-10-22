@@ -108,4 +108,16 @@ class WorkClashTest {
         val lines = BriefScriptRules.calendar(MorningBriefView.EMPTY.copy(story = story), story)
         assertEquals(said, lines.last())
     }
+
+    @Test
+    fun anEventThatIsOverLosesItsMark() {
+        // The quality gate's Calendar re-shot: the morning's dentist still said "Clashes with work" at 17:15.
+        val dentist = ev("d", "Dentist", at(wed, 9, 30), at(wed, 10, 0))
+        val c = WorkClashRules.clash(dentist, blocks, cal)!!
+        assertEquals("Clashes with work until 17:30", WorkClashRules.markWhileAhead(c, dentist.endAtMs, at(wed, 9, 45)))
+        assertNull(WorkClashRules.markWhileAhead(c, dentist.endAtMs, at(wed, 10, 0)))
+        assertNull(WorkClashRules.markWhileAhead(null, dentist.endAtMs, at(wed, 8)))
+        val v = CalendarAgenda.build(emptyList(), listOf(dentist), at(wed, 17, 15), cal, work = hours)
+        assertNull(v.sections.first().let { s -> (s.rows + s.ended).first { it.id == "e-d" } }.clash)
+    }
 }

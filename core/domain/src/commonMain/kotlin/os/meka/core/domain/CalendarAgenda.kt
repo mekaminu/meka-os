@@ -231,7 +231,7 @@ object CalendarAgenda {
                     }
                     val start = maxOf(e.startAtMs, w.startMs)
                     val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
-                    add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, eventDetail(e, ClubChildRules.line(e, children, calendar)), null, e, running, start, clash = clashes[e.id]?.mark), start, e.endAtMs, true))
+                    add(Item(TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, eventDetail(e, ClubChildRules.line(e, children, calendar)), null, e, running, start, clash = WorkClashRules.markWhileAhead(clashes[e.id], e.endAtMs, nowMs)), start, e.endAtMs, true))
                 }
                 planned.filter { it.scheduledAtMs!! in w }.forEach { t ->
                     val start = t.scheduledAtMs!!

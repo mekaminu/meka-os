@@ -222,7 +222,7 @@ object TimelineRules {
                 val time = if (e.startAtMs < today.startMs) "Until ${hhmm(e.endAtMs)}" else "${hhmm(e.startAtMs)}–${hhmm(e.endAtMs)}"
                 val detail = listOfNotNull(ClubChildRules.line(e, children, calendar), eventDetail(e)).joinToString(" · ").ifEmpty { null }
                 val running = e.startAtMs <= nowMs && e.endAtMs > nowMs
-                val row = TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, detail, null, e, running, start, clash = clashes[e.id]?.mark)
+                val row = TimelineRow("e-" + e.id, TimelineKind.EVENT, time, e.title, detail, null, e, running, start, clash = WorkClashRules.markWhileAhead(clashes[e.id], e.endAtMs, nowMs))
                 add(Item(row, start, e.endAtMs, true))
             }
             planned.filter { it.scheduledAtMs != null && it.scheduledAtMs in today }.forEach { t ->

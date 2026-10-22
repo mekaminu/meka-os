@@ -164,4 +164,16 @@ class LifeTilesTest {
         assertEquals(3, LifeTileRules.columns(700f))
         assertEquals(listOf(4, 4, 4, 5, 5, 5), (0..5).map { LifeTileRules.step(4, it, 3) })
     }
+
+    @Test
+    fun anErrandsPlaceStaysTogether() {
+        // The quality gate's re-shot: "1 errand at Post / office" on the cover screen.
+        val g = LifeTileRules.GLUE
+        assertEquals("1 errand at Post${g}office", LifeTileRules.placeKept("1 errand at Post office"))
+        assertEquals("3 errands at 2 places", LifeTileRules.placeKept("3 errands at 2 places"))
+        assertEquals("2 errands at Tesco", LifeTileRules.placeKept("2 errands at Tesco"))
+        val long = "1 errand at The big garden centre by the ring road"
+        assertEquals(long, LifeTileRules.placeKept(long))
+        assertEquals("No errands", LifeTileRules.placeKept("No errands"))
+    }
 }
