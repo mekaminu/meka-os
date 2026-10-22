@@ -24,7 +24,6 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.GoalsRoute
-import os.meka.core.domain.FastingRules
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
@@ -36,8 +35,8 @@ import kotlin.random.Random
  * screen on the Fold's cover and inner screens, with nothing set up, with one habit and with a full set (three habits,
  * one ticked today and one linked to a goal, two goals with a long title, a fast that has ended), Dark and Light. Saved
  * under `goals/` (the `fold-screens` artifact, then the `screens` branch's docs/screens/fold/goals/) and read for
- * nonsense on screen (a "0 m" average, a ring with "—"), cut lines and words broken in two. No fast is left running:
- * the card's timer reads the device clock, not the core's, so a running fast would show the test's own clock gap.
+ * nonsense on screen (a "0 m" average, a ring with "—"), cut lines and words broken in two. No fast is left running
+ * (the Fasting screen's own shots, FastingScreensTest, cover a running one).
  * Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -108,14 +107,14 @@ class GoalsScreensTest {
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Goals")
-        // No fast runs in any fill: the card says so, and its ring shows the plan's goal, never a lone dash.
+        // No fast runs in any fill: the small Fasting tile (Fasting rebuild slice 2) says so and when the next begins.
         ScreenShots.assertShows(compose, name, "Not fasting")
-        ScreenShots.assertShows(compose, name, FastingRules.IDLE_RING_CAPTION)
+        ScreenShots.assertShows(compose, name, "Next fast from")
         when (fill) {
             // Nothing set up: the pace line says what a habit does, never a bare heading.
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Add a habit")
-            // With habits the pace line under the title counts them (the habits themselves sit under the Fasting card,
-            // below the fold on the inner screen, so they are scrolled to and read below).
+            // With habits the pace line under the title counts them (the habits sit under the Fasting tile and may
+            // be below the fold, so they are scrolled to and read below).
             else -> core.goalsView.value.paceLine?.let { ScreenShots.assertShows(compose, name, it) }
         }
         if (fill == Fill.EMPTY) return

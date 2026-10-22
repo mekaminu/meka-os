@@ -1,5 +1,6 @@
 package os.meka.android.goals
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
@@ -67,6 +68,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.TickRing
+import os.meka.android.designsystem.MekaPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
@@ -97,7 +99,7 @@ import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
 
 /**
- * GOALS (build plan M1): fasting ([FastingCard]), habits with this week's pace and streaks, and goals with progress. A habit's circle pops with
+ * GOALS (build plan M1): fasting (a small [FastingTile] opening the Fasting screen, [FastingPane]), habits with this week's pace and streaks, and goals with progress. A habit's circle pops with
  * a spring when ticked and its streak number rolls (light haptic); goal progress bars fill on appear. Tapping a row
  * unfolds its settings in place. Nothing is ticked for you. Reduced motion: colour changes and cross-fades only.
  */
@@ -119,6 +121,10 @@ fun GoalsRoute(core: MekaCore) {
         app.openItem.value = null
     }
 
+    // Fasting rebuild slice 2: Goals' tile opens the Fasting screen as a pane; back drops it.
+    var fastingOpen by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = fastingOpen) { fastingOpen = false }
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
         Modifier.fillMaxSize().background(Meka.colors.background),
         contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
@@ -138,7 +144,9 @@ fun GoalsRoute(core: MekaCore) {
             )
         }
         item(key = "fasting-label") { SectionLabel("Fasting", Modifier.appear(rememberAppearance(2))) }
-        item(key = "fasting") { FastingCard(core, Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(2))) }
+        item(key = "fasting") {
+            FastingTile(core, Modifier.padding(bottom = MekaSpace.l).appear(rememberAppearance(2))) { haptics.light(); fastingOpen = true }
+        }
         item(key = "habits-label") { SectionLabel("Habits", Modifier.appear(rememberAppearance(2))) }
         items(view.habits, key = { "h-${it.id}" }) { h ->
             HabitRow(
@@ -275,6 +283,8 @@ fun GoalsRoute(core: MekaCore) {
             )
         }
         item(key = "add-goal") { AddGoal { title, target, hz -> act { core.addGoal(title, target, hz) } } }
+    }
+    MekaPane(visible = fastingOpen) { FastingPane(core, onClose = { fastingOpen = false }) }
     }
 }
 

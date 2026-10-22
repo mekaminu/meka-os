@@ -173,6 +173,34 @@ class FastingScreenTest {
         assertEquals("45m", FastingScreenRules.length(45 * 60_000L))
         assertEquals("4d 18h", FastingScreenRules.length(114 * hourMs))
         assertEquals("on goal", FastingScreenRules.goalWord(16 * hourMs, 17 * hourMs))
+        // Countdowns round up: ten seconds short of 2:30 left still reads 2:30, and the in-time plus the left make the goal.
+        assertEquals("2:30", FastingScreenRules.left(150 * 60_000L - 10_000L))
+        assertEquals("2:30", FastingScreenRules.left(150 * 60_000L))
+        assertEquals("0:01", FastingScreenRules.left(1_000L))
+        assertEquals("0:00", FastingScreenRules.left(0L))
         assertEquals("40m short", FastingScreenRules.goalWord(16 * hourMs, 15 * hourMs + 20 * 60_000L))
+    }
+
+    @Test
+    fun theWeekShowsOnlyWithAFastInItAndUndoEndFollowsTheEnd() {
+        // Nothing this week: no seven empty rings, a line instead; the Goals tile says so.
+        val idle = screen()
+        assertFalse(idle.weekShown)
+        assertNull(idle.undoEndId)
+        assertEquals("Not fasting", idle.tileTitle)
+        // A running fast fills today's ring, so the week shows; the tile carries the time.
+        val id = f.start(); hours(2)
+        val running = screen()
+        assertTrue(running.weekShown)
+        assertEquals("Fasting · 2:00", running.tileTitle)
+        hours(15)
+        assertEquals("Goal reached · 17:00", screen().tileTitle)
+        // Just ended: Undo end brings it back for a few minutes, then goes.
+        f.end()
+        val ended = screen()
+        assertEquals(id, ended.undoEndId)
+        assertTrue(ended.weekShown)
+        hours(1)
+        assertNull(screen().undoEndId)
     }
 }

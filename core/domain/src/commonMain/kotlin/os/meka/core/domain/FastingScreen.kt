@@ -85,6 +85,15 @@ data class FastingScreen(
     val weekLine: String?,
     val week: List<FastingWeekRing>,
     val history: List<FastingHistoryRow>,
+    /**
+     * This week's rings are drawn only once there's something in them (a fast this week, or one running): seven empty
+     * rings read as broken (the quality gate's re-shot of Goals); otherwise [FastingScreenRules.WEEK_EMPTY].
+     */
+    val weekShown: Boolean = true,
+    /** The fast just ended, while "Undo end" can still bring it back; null otherwise. */
+    val undoEndId: String? = null,
+    /** Goals and habits' small Fasting tile: "Fasting · 13:30" · "Goal reached · 16:40" · "Not fasting". */
+    val tileTitle: String = "",
 ) {
     val isFasting: Boolean get() = startedTile != null
 }
@@ -99,6 +108,11 @@ object FastingScreenRules {
     /** Shown before a fast over [GP_NOTE_OVER_HOURS] can be started (More options). */
     const val GP_NOTE = "Fasts over 72 hours: check with your GP first, especially if you take medication or have a health condition."
     const val GP_NOTE_OVER_HOURS = 72
+    /** Where this week's rings go before there's a fast in them. */
+    const val WEEK_EMPTY = "Each day you fast this week fills a ring here."
+    /** History with nothing in it yet (never a heading over an empty space). */
+    const val HISTORY_EMPTY = "Every fast you finish is kept here."
+    const val UNDO_END = "Undo end"
     /** The ring's markers for a daily fast. */
     val DAILY_MARKS = listOf(4, 8, 12)
     private const val AUTOPHAGY = "auto"
@@ -126,6 +140,12 @@ object FastingScreenRules {
         return "${min / 60}:${(min % 60).toString().padStart(2, '0')}"
     }
 
+    /**
+     * A countdown, "2:30": rounded up to the minute, so with 2 h 29 m 50 s to go it still says 2:30 (the time in plus
+     * the time left always make the goal; it reads 0:00 only once the goal is reached).
+     */
+    fun left(ms: Long): String = hm((ms.coerceAtLeast(0) + 59_999L) / 60_000L * 60_000L)
+
     /** "16h 40m", "45m", "16h" (no "16 h 00 m"); two days up "4d 18h". */
     fun length(ms: Long): String {
         val min = ms.coerceAtLeast(0) / 60_000L
@@ -150,7 +170,7 @@ object FastingScreenRules {
     fun nextLine(elapsedMs: Long): String? {
         val hours = elapsedMs / HOUR_MS.toDouble()
         val next = STAGES.firstOrNull { it.id != AUTOPHAGY && it.fromHours > hours } ?: return null
-        return "Next: ${next.name.lowercase()} in ${hm(next.fromHours * HOUR_MS - elapsedMs)}"
+        return "Next: ${next.name.lowercase()} in ${left(next.fromHours * HOUR_MS - elapsedMs)}"
     }
 
     /** The ring's markers: 4h, 8h, 12h under a daily goal; each whole day under an extended one. */
@@ -178,7 +198,7 @@ object FastingScreenRules {
             cur == null -> "Not fasting" to "Next fast from ${FastingRules.hm(v.plan.eatingEndMin)}"
             nowMs >= cur.goalAtMs -> "Goal reached" to "+${hm(nowMs - cur.goalAtMs)} past your goal"
             cur.extended -> "Fasting" to "Ends in ${FastingRules.longDuration(cur.goalAtMs - nowMs)} · ${cur.goalWhen}"
-            else -> "Fasting" to "Ends in ${hm(cur.goalAtMs - nowMs)} · ${cur.goalWhen}"
+            else -> "Fasting" to "Ends in ${left(cur.goalAtMs - nowMs)} · ${cur.goalWhen}"
         }
         return FastingScreen(
             planChip = plan,
@@ -198,6 +218,9 @@ object FastingScreenRules {
             history = v.history.fasts.map { f ->
                 FastingHistoryRow(f.id, f.span, length(f.actualMs), goalWord(f.plannedMs, f.actualMs), f.reachedGoal)
             },
+            weekShown = cur != null || v.week.any { it.hours > 0 },
+            undoEndId = v.last?.takeIf { cur == null && it.canResume }?.id,
+            tileTitle = if (cur == null) top else "$top · ${hm(elapsed)}",
         )
     }
 
