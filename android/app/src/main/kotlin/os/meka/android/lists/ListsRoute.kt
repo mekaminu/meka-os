@@ -61,6 +61,11 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.semantics.SemanticsPropertyKey
+import androidx.compose.ui.platform.testTag
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.runtime.remember
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -86,6 +91,10 @@ import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
 import os.meka.android.designsystem.sharedPlace
+
+/** Test tag of each Lists tab, and whether its label is cut at the slot's edges (read by ListsScreensTest). */
+const val LIST_TAB_TAG = "list-tab"
+val TabLabelCut = SemanticsPropertyKey<Boolean>("TabLabelCut")
 
 /** The lists, in the order of the tabs; [short] is the label when five don't fit (the closed Fold). */
 enum class ListTab(val label: String, val short: String = label) {
@@ -284,18 +293,27 @@ private fun Tabs(current: ListTab, view: ListsView, modifier: Modifier, choose: 
                 val color by animateColorAsState(
                     if (t == current) Meka.colors.textPrimary else Meka.colors.textTertiary, MekaMotion.appear(Meka.reducedMotion), label = "tab",
                 )
+                var cut by remember(t) { mutableStateOf(false) }
                 Box(
                     Modifier.weight(1f).height(40.dp).clip(RoundedCornerShape(MekaRadius.pill))
                         .clickable(role = Role.Tab) { choose(t) }
+                        .testTag(LIST_TAB_TAG)
                         .clearAndSetSemantics {
                             contentDescription = t.label + (if (due > 0) ", $due due" else "") + ", $count"
                             selected = t == current
+                            this[TabLabelCut] = cut
                         },
                     contentAlignment = Alignment.Center,
                 ) {
+                    // Lists' shots (quality gate slice 10, 2026-10-22): on the cover screen a slot is about 61 dp, too
+                    // narrow for "Decisions" at the caption size, so the label shrinks a step at a time (never below
+                    // 10 sp) rather than being cut at the slot's edges.
                     BasicText(
                         (if (shortLabels) t.short else t.label).let { if (count > 0 && roomForCounts) "$it $count" else it }, maxLines = 1, softWrap = false,
                         style = MekaType.caption.copy(color = if (due > 0) Meka.colors.accent else color),
+                        modifier = Modifier.padding(horizontal = MekaSpace.xxs),
+                        onTextLayout = { cut = it.hasVisualOverflow },
+                        autoSize = TextAutoSize.StepBased(minFontSize = 10.sp, maxFontSize = MekaType.caption.fontSize, stepSize = 0.5.sp), // type: ok (shrinks to fit, never below 10)
                     )
                 }
             }
