@@ -94,9 +94,9 @@ import os.meka.wear.designsystem.MekaType
 /** A watch is always dark (true black saves its screen). */
 private val C = MekaDarkColors
 
-/** The fast's ring on the wrist. */
-private val RING = 64.dp
-private val RING_STROKE = 4.dp
+/** The fast's ring on the wrist (the Fasting design's ring, sized for a round watch). */
+private val RING = 96.dp
+private val RING_STROKE = 7.dp
 
 @Composable
 fun WatchRoot(app: WatchApplication, core: MekaCore?, reduced: Boolean, listen: Int = 0, onListen: () -> Unit = {}) {
@@ -316,6 +316,13 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
             }
         }
 
+        // Fasting rebuild, the watch: a running fast's ring comes up under the now card (as Today's live card does on
+        // the phone); resting, Start stays at the foot.
+        if (home.fast.running) {
+            Spacer(Modifier.height(MekaSpace.s))
+            FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
+        }
+
         // Week board, the watch: the day's next three open tasks in his order, each ticked off with one tap.
         TopThreeRows(core, home.top, reduced)
 
@@ -340,8 +347,10 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
 
         EveningRow(core, home.evening, reduced)
 
-        Spacer(Modifier.height(MekaSpace.m))
-        FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
+        if (!home.fast.running) {
+            Spacer(Modifier.height(MekaSpace.m))
+            FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
+        }
 
         // Galaxy Watch completeness slice 1: what waits to sync, cross-fading as it changes.
         // Galaxy Watch completeness slice 2: quiet hours join the foot line ("Quiet hours · until 07:00").
@@ -1044,7 +1053,12 @@ private fun ParkingRows(rows: List<os.meka.core.domain.WatchParking>, reduced: B
     }
 }
 
-/** The fast: a brass ring filling towards the goal with the time in it (the ring sweeps in when it appears). */
+/**
+ * The fast, in the Fasting design (docs/design/fasting/today-card.dc.html): running, a gold ring sweeping over a dark
+ * track towards the goal with its 4h/8h/12h marks (passed ones dark in the gold), a glowing tip that breathes (2.4 s,
+ * still under reduced motion) and the time in the middle; under it "FASTING" over the stage it's in, "Ends in … · …"
+ * in gold and End. Resting: "Not fasting", the eating window's line and Start. The ring sweeps in when it appears.
+ */
 @Composable
 private fun FastRow(f: os.meka.core.domain.WatchFast, reduced: Boolean, onButton: () -> Unit) {
     val progress by animateFloatAsState(
@@ -1053,23 +1067,57 @@ private fun FastRow(f: os.meka.core.domain.WatchFast, reduced: Boolean, onButton
         label = "fastRing",
     )
     if (f.running) {
-        Box(Modifier.size(RING), contentAlignment = Alignment.Center) {
+        val breath = if (reduced || !f.tip) 0.8f else {
+            val t = rememberInfiniteTransition(label = "fastTip")
+            val a by t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1_200), RepeatMode.Reverse), label = "fastTipA")
+            a
+        }
+        val gold = if (f.reached) C.success else C.accent
+        val light = androidx.compose.ui.graphics.lerp(gold, androidx.compose.ui.graphics.Color.White, 0.4f)
+        Box(Modifier.size(RING).semantics { contentDescription = f.spoken }, contentAlignment = Alignment.Center) {
             Canvas(Modifier.fillMaxSize()) {
                 val w = RING_STROKE.toPx()
-                val inset = w / 2
-                val arc = androidx.compose.ui.geometry.Size(size.width - w, size.height - w)
-                val topLeft = androidx.compose.ui.geometry.Offset(inset, inset)
-                drawArc(C.hairline, 0f, 360f, useCenter = false, topLeft = topLeft, size = arc, style = Stroke(w))
-                drawArc(
-                    if (f.reached) C.success else C.accent, -90f, 360f * progress, useCenter = false,
-                    topLeft = topLeft, size = arc, style = Stroke(w, cap = StrokeCap.Round),
-                )
+                val r = size.minDimension / 2 - w / 2 - 3.dp.toPx()
+                val tl = androidx.compose.ui.geometry.Offset(center.x - r, center.y - r)
+                val arc = androidx.compose.ui.geometry.Size(r * 2, r * 2)
+                drawArc(C.surfaceRaised, 0f, 360f, useCenter = false, topLeft = tl, size = arc, style = Stroke(w))
+                if (progress > 0f) {
+                    drawArc(
+                        androidx.compose.ui.graphics.Brush.linearGradient(
+                            listOf(light, gold), start = tl, end = androidx.compose.ui.geometry.Offset(tl.x + arc.width, tl.y + arc.height),
+                        ),
+                        -90f, 360f * progress, useCenter = false, topLeft = tl, size = arc, style = Stroke(w, cap = StrokeCap.Round),
+                    )
+                }
+                fun at(fraction: Float): androidx.compose.ui.geometry.Offset {
+                    val a = fraction * 2 * Math.PI - Math.PI / 2
+                    return androidx.compose.ui.geometry.Offset(center.x + kotlin.math.cos(a).toFloat() * r, center.y + kotlin.math.sin(a).toFloat() * r)
+                }
+                f.marks.forEach { m ->
+                    val p = at(m.fraction)
+                    drawCircle(if (m.passed) C.onAccent else C.background, 2.5.dp.toPx(), p)
+                    drawCircle(if (m.passed) C.onAccent else C.textTertiary.copy(alpha = 0.6f), 1.5.dp.toPx(), p)
+                }
+                if (f.tip && progress > 0f) {
+                    val p = at(progress.coerceAtMost(1f))
+                    drawCircle(
+                        androidx.compose.ui.graphics.Brush.radialGradient(
+                            listOf(light.copy(alpha = 0.55f * breath), androidx.compose.ui.graphics.Color.Transparent), p, 10.dp.toPx(),
+                        ),
+                        10.dp.toPx(), p,
+                    )
+                    drawCircle(androidx.compose.ui.graphics.lerp(light, androidx.compose.ui.graphics.Color.White, 0.5f), 4.5.dp.toPx(), p)
+                }
             }
-            BasicText(f.clock, style = MekaType.metaStrong.copy(color = C.textPrimary, fontFeatureSettings = "tnum"), maxLines = 1)
+            BasicText(f.clock, style = MekaType.itemTitle.copy(color = C.textPrimary, fontFeatureSettings = "tnum"), maxLines = 1)
         }
+        Line(f.title.uppercase(), MekaType.captionStrong.copy(color = C.textSecondary), maxLines = 1)
+        if (f.stage.isNotBlank()) Line(f.stage, MekaType.metaStrong.copy(color = C.textPrimary), maxLines = 1)
+        if (f.line.isNotBlank()) Line(f.line, MekaType.caption.copy(color = gold), maxLines = 1)
+    } else {
+        Line(f.title, MekaType.captionStrong.copy(color = C.textPrimary), maxLines = 1)
+        if (f.line.isNotBlank()) Line(f.line, MekaType.caption.copy(color = C.textSecondary))
     }
-    Line(f.title, MekaType.captionStrong.copy(color = C.textPrimary), maxLines = 1)
-    if (f.line.isNotBlank()) Line(f.line, MekaType.caption.copy(color = C.textSecondary))
     Spacer(Modifier.height(MekaSpace.xxs))
     WatchButton(
         f.button, primary = !f.running, reduced = reduced,

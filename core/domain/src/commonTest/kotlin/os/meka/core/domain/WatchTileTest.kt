@@ -78,9 +78,9 @@ class WatchTileTest {
         val fasting = home(emptyList(), emptyList(), at(16), fastAt(at(16), 14))
         assertEquals(min, WatchTileRules.refreshAfterMs(fasting, at(16)))
         val t = WatchTileRules.tile(fasting)
-        assertEquals("Fasting · goal 16 h · 14:05", t.fastLine)
+        assertEquals("Fasting · 14:05", t.fastLine)
         assertFalse(t.fastReached)
-        assertTrue(t.spoken.contains("Fasting · goal 16 h, 14 hours 5 minutes"))
+        assertTrue(t.spoken.contains("Fasting, 14 hours 5 minutes"))
     }
 
     @Test

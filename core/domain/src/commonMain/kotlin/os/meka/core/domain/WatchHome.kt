@@ -92,8 +92,10 @@ data class WatchInbox(
 data class WatchButton(val action: NowAction, val label: String, val primary: Boolean, val targetId: String)
 
 /**
- * The fast row: running ("Fasting · goal 16 h", the clock "14:05", "Goal 16 h · at 12:05", the ring's share) with End,
- * or resting (the eating window's line) with Start.
+ * The fast row: running, in the Fasting design (docs/design/fasting/today-card.dc.html, the watch's ring): "Fasting"
+ * (or "Goal reached", or an extended fast's own title) over the stage it's in ("Switching to fat"), the time in the ring
+ * "14:05", "Ends in 1:55 · 17:54" in gold, the ring's share with its 4h/8h/12h marks and glowing tip, and End; or
+ * resting (the eating window's line) with Start.
  */
 data class WatchFast(
     val running: Boolean,
@@ -108,6 +110,14 @@ data class WatchFast(
     val button: String,
     /** The fast [button] ends; null while resting (Start begins the plan's daily fast). */
     val fastId: String?,
+    /** The stage it's in, "Switching to fat"; blank while resting. */
+    val stage: String = "",
+    /** The ring's markers (4h, 8h, 12h under a daily goal; each day under an extended one), passed ones lit. */
+    val marks: List<FastingMark> = emptyList(),
+    /** The glowing tip at the ring's end (once the fast has begun). */
+    val tip: Boolean = false,
+    /** One line for TalkBack: "Fasting, 14 hours 5 minutes in, switching to fat. Ends in 1:55 · 17:54." */
+    val spoken: String = "",
 )
 
 object WatchHomeRules {
@@ -145,15 +155,24 @@ object WatchHomeRules {
             running = false, title = NOT_FASTING, clock = "", line = v.windowLine.ifBlank { v.plan.line },
             progress = 0f, reached = false, button = START_FAST, fastId = null,
         )
+        val screen = FastingScreenRules.screen(v, nowMs)
+        val card = screen.todayCard ?: return fast(v.copy(current = null), nowMs)
+        val reached = f.reachedGoal || nowMs >= f.goalAtMs
+        // An extended fast keeps its own name ("5-day fast") until its goal is reached.
+        val title = if (f.extended && !reached) f.title else card.label
         return WatchFast(
             running = true,
-            title = f.title,
+            title = title,
             clock = clock(nowMs - f.startedAtMs),
-            line = f.dayLine ?: f.goalLine,
+            line = card.line,
             progress = f.progress(nowMs),
-            reached = f.reachedGoal || nowMs >= f.goalAtMs,
+            reached = reached,
             button = END_FAST,
             fastId = f.id,
+            stage = card.stage,
+            marks = screen.marks,
+            tip = screen.showTip,
+            spoken = "$title, ${FastingScreenRules.spokenLength(nowMs - f.startedAtMs)} in, ${card.stage.lowercase()}. ${card.line}.",
         )
     }
 

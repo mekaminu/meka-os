@@ -68,12 +68,17 @@ class WatchHomeTest {
     @Test
     fun aRunningFastShowsHoursAndMinutesItsGoalAndEnd() {
         val started = at(16) - 14 * hour - 5 * min - 9_000
-        val fast = FastNow("f", started, 16, started + 16 * hour, false, "Started 01:54", "Goal 16 h · at 17:54")
+        val fast = FastNow("f", started, 16, started + 16 * hour, false, "Started 01:54", "Goal 16 h · at 17:54", goalWhen = "17:54")
         val v = home(emptyList(), emptyList(), at(16), FastingView.EMPTY.copy(current = fast))
         assertTrue(v.fast.running)
-        assertEquals("Fasting · goal 16 h", v.fast.title)
+        assertEquals("Fasting", v.fast.title)
         assertEquals("14:05", v.fast.clock)
-        assertEquals("Goal 16 h · at 17:54", v.fast.line)
+        assertEquals("Ends in 1:55 · 17:54", v.fast.line)
+        assertEquals("Switching to fat", v.fast.stage)
+        assertEquals(listOf("4h", "8h", "12h"), v.fast.marks.map { it.label })
+        assertTrue(v.fast.marks.all { it.passed })
+        assertTrue(v.fast.tip)
+        assertEquals("Fasting, 14 hours 5 minutes in, switching to fat. Ends in 1:55 · 17:54.", v.fast.spoken)
         assertEquals(WatchHomeRules.END_FAST, v.fast.button)
         assertEquals("f", v.fast.fastId)
         assertFalse(v.fast.reached)
@@ -82,6 +87,8 @@ class WatchHomeTest {
         val past = WatchHomeRules.fast(FastingView.EMPTY.copy(current = fast), started + 17 * hour)
         assertTrue(past.reached)
         assertEquals(1f, past.progress)
+        assertEquals("Goal reached", past.title)
+        assertTrue(past.line.endsWith("past your goal"), past.line)
     }
 
     @Test
@@ -90,8 +97,11 @@ class WatchHomeTest {
         val fast = FastNow("x", started, 120, started + 120 * hour, false, "", "Goal 5 days · Mon 18:00", extended = true, title = "5-day fast", dayLine = "Day 3 of 5 · 62 h")
         val f = WatchHomeRules.fast(FastingView.EMPTY.copy(current = fast), at(16))
         assertEquals("62:00", f.clock)
-        assertEquals("Day 3 of 5 · 62 h", f.line)
+        assertTrue(f.line.startsWith("Ends in "), f.line)
         assertEquals("5-day fast", f.title)
+        assertEquals("Deep ketosis", f.stage)
+        assertEquals(listOf("24h", "48h", "72h", "96h"), f.marks.map { it.label })
+        assertEquals(listOf(true, true, false, false), f.marks.map { it.passed })
     }
 
     @Test
