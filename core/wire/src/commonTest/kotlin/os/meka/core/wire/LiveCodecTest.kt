@@ -50,4 +50,19 @@ class LiveCodecTest {
         assertEquals(u, LiveCodec.decodeUsage(LiveCodec.encodeUsage(u)))
         assertTrue(LiveCodec.decodeUsage(LiveCodec.encodeUsage(u)).counted)
     }
+
+    @Test
+    fun theMonthsTalksAndMinutesRideTheMeterAndAnOlderServerReadsAsNone() {
+        // Slice 2b: additive fields for Activity's Live line.
+        val m = meter.copy(month = "2026-10", sessions = 3, seconds = 754)
+        assertEquals(m, LiveCodec.decodeMeter(LiveCodec.encodeMeter(m)))
+        val older = LiveCodec.decodeMeter("""{"w":${WireCodec.VERSION},"configured":true,"level":"ok","spentPence":40,"capPence":1500}""")
+        assertNull(older.month)
+        assertEquals(0, older.sessions)
+        assertEquals(0, older.seconds)
+        val odd = LiveCodec.decodeMeter("""{"w":${WireCodec.VERSION},"month":"October","sessions":-2,"seconds":-1}""")
+        assertNull(odd.month)
+        assertEquals(0, odd.sessions)
+        assertEquals(0, odd.seconds)
+    }
 }

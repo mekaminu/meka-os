@@ -246,6 +246,25 @@ class MekaSpeaker(
         }
     }
 
+    /**
+     * Ada's Live mode, slice 2b: ▶ Sample on a Live voice — Google's studio voice of that name ([MekaCore.liveVoiceSample]).
+     * Never the phone's voice or Polly standing in: [onDone] gets false when the clip couldn't be had or played, so the
+     * row can say so. Stops anything already being said.
+     */
+    fun sampleLive(voice: String, onDone: (Boolean) -> Unit = {}) {
+        stop()
+        val id = ++line
+        speaking = true
+        job = scope.launch {
+            val clip = core.liveVoiceSample(voice)
+            val ok = clip != null && play(clip)
+            if (id == line) {
+                speaking = false
+                onDone(ok)
+            }
+        }
+    }
+
     /** The phone's voices as the picker lists them (empty when its engine can't speak). */
     suspend fun deviceVoices(): List<DeviceVoice> {
         val engine = ensureTts().await() ?: return emptyList()

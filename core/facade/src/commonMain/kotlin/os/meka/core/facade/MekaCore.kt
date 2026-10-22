@@ -10558,6 +10558,41 @@ class MekaCore(
         return try { api.liveUsage(sessionId, inSeconds, outSeconds) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
     }
 
+    /**
+     * Ada's Live mode, slice 2b: Activity's line about Live this month ("Ada's Live · 3 talks · 13 min · £0.42 of £15
+     * in October", [os.meka.core.domain.LiveTalkRules.activityLine]); null when there's nothing to say, not connected or
+     * the server didn't answer. Never throws.
+     */
+    suspend fun liveActivityLine(): String? {
+        val m = liveStatus() ?: return null
+        return os.meka.core.domain.LiveTalkRules.activityLine(m.configured, m.month, m.sessions, m.seconds, m.level, m.spentPence, m.capPence)
+    }
+
+    /**
+     * Slice 2b: ▶ Sample on a Live voice row — the brief's opening words ([speechSampleWords]) in Google's studio voice
+     * of the same name, as base64 MP3. Null (the row says [os.meka.core.domain.LiveTalkRules.SAMPLE_FAILED]) when [name]
+     * isn't a Live voice the picker offers, the server can't be asked, is slow, or answers in any other voice (Google's
+     * voices off, so Polly stood in): a sample never plays a voice that isn't the one he'd hear. Kept in memory. Never throws.
+     */
+    suspend fun liveVoiceSample(name: String): String? {
+        val api = speechApi ?: return null
+        val voice = os.meka.core.domain.LiveTalkRules.VOICES.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }?.name ?: return null
+        val key = "live:$voice"
+        val words = speechSampleWords()
+        onCore { sampleClips[key]?.takeIf { it.first == words }?.second }?.let { return it }
+        val r = withTimeoutOrNull(os.meka.core.domain.SpeechRules.NEXT_AUDIO_MS) {
+            try { api.speak(words, voice) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        } ?: return null
+        val audio = r.audio
+        if (r.state != os.meka.core.wire.SpeechCodec.Response.SPOKEN || audio.isNullOrEmpty() || !voice.equals(r.voice, ignoreCase = true)) return null
+        return onCore {
+            sampleClips.remove(key)
+            sampleClips[key] = words to audio
+            while (sampleClips.size > 48) sampleClips.remove(sampleClips.keys.first())
+            audio
+        }
+    }
+
     /** Ada's Live mode, slice 2: whether Live is on (synced; off unless he turns it on). */
     suspend fun liveOn(): Boolean = onCore { mekaVoice.liveOn() }
 

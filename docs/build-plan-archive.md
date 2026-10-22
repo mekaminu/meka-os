@@ -2733,3 +2733,10 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Help tips (voice), motion row (MEKA's voice). No server change, no migration, no Mac change yet.
 - Tests: LiveTalkTest (4), LiveProtocolTest (2), LiveFacadeTest (+1).
 
+
+### Slice 2b, 2026-10-22: hear each Live voice, and Live in Activity (core, wire, server, facade, Fold, Mac)
+- **▶ Sample on each Live voice (Fold)**: the Live voices are now rows like the voice picker's (dot, name, Google's one-word character, ▶ Sample), with a note that the sample is Google's studio voice of the same name (Chirp 3 HD, which Live's voices are built on). `MekaCore.liveVoiceSample(name)` asks Navilife's voice on the server for the brief's opening words in that voice and keeps the clip in memory; it plays nothing (and the rows say "Couldn't play that voice just now") when the server answers in any other voice (Google's voices off, Polly standing in), is slow or can't be reached: never the phone's voice or another voice in its place. `MekaSpeaker.sampleLive`.
+- **Activity's Live line (Fold and Mac)**: "Ada's Live · 3 talks · 13 min · £0.42 of £15 in October" (no talks yet: "… no talks yet in October · up to £15"; at the cap "… · off until 1 Nov"); nothing until Live's key is in and nothing was used. `LiveTalkRules.activityLine`, `MekaCore.liveActivityLine`.
+- **Wire**: `LiveCodec.Meter` gains `month`, `sessions`, `seconds` (additive; an older server reads as none).
+- **Server**: `LiveSessionStore.monthUse` — the month's sessions and the seconds the reported ones ran (the longer of heard and spoken), from the existing `live_session` columns (no migration).
+- Help tips (voice, activity), motion row. Tests: LiveTalkTest (+1), LiveCodecTest (+1), LiveFacadeTest (+1), LiveSessionsTest (asserts), PostgresLiveSessionStoreTest (1).

@@ -50,6 +50,11 @@ struct ActivitySheet: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }
+            if let line = model.liveActivityLine {
+                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
             if let view = model.activity, !view.isEmpty {
                 Text("What Navilife did and why. \(view.weekLine).")
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
@@ -129,6 +134,7 @@ struct ActivitySheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voiceUsageLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.voiceTimingLine)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.aiTodayLine)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.liveActivityLine)
         .task { await model.refreshVoiceUsage() }
         .task(id: undoRecording) {
             guard undoRecording != nil else { return }

@@ -34,7 +34,19 @@ interface LiveTokens {
 }
 
 /** One minted session as the meter keeps it: the reserve until [reported], then what it used. */
-data class LiveSessionRow(val id: String, val householdId: String, val month: String, val mintedAtMs: Long, val microUsd: Long, val reported: Boolean)
+data class LiveSessionRow(
+    val id: String,
+    val householdId: String,
+    val month: String,
+    val mintedAtMs: Long,
+    val microUsd: Long,
+    val reported: Boolean,
+    /** Slice 2b: the longer of the seconds it heard and spoke, once reported. */
+    val seconds: Long = 0,
+)
+
+/** Slice 2b: the month's sessions and the seconds the reported ones ran (Activity's Live line). */
+data class LiveUse(val sessions: Long, val seconds: Long)
 
 interface LiveSessionStore {
     fun add(row: LiveSessionRow)
@@ -42,6 +54,8 @@ interface LiveSessionStore {
     /** Sets a not yet reported session's count; false when it was unknown or already reported. */
     fun report(id: String, householdId: String, inSeconds: Long, outSeconds: Long, microUsd: Long): Boolean
     fun monthMicroUsd(month: String): Long
+    /** Slice 2b: how many sessions were opened in [month] and how long the reported ones ran. */
+    fun monthUse(month: String): LiveUse
 }
 
 class LiveSessions(
@@ -61,8 +75,10 @@ class LiveSessions(
 
     fun meter(): LiveCodec.Meter {
         val configured = runCatching { tokens.configured() }.getOrDefault(false)
-        val spent = LiveModeRules.pence(store.monthMicroUsd(month()), rate())
-        return LiveCodec.Meter(configured, LiveModeRules.level(spent, capPence).wire, spent, capPence)
+        val month = month()
+        val spent = LiveModeRules.pence(store.monthMicroUsd(month), rate())
+        val use = runCatching { store.monthUse(month) }.getOrDefault(LiveUse(0, 0))
+        return LiveCodec.Meter(configured, LiveModeRules.level(spent, capPence).wire, spent, capPence, month, use.sessions, use.seconds)
     }
 
     /** A token for one session in [voice] (his pick, else the default), or why not. */
@@ -161,8 +177,11 @@ class InMemoryLiveSessionStore : LiveSessionStore {
     @Synchronized override fun get(id: String) = rows[id]
     @Synchronized override fun report(id: String, householdId: String, inSeconds: Long, outSeconds: Long, microUsd: Long): Boolean {
         val r = rows[id]?.takeIf { it.householdId == householdId && !it.reported } ?: return false
-        rows[id] = r.copy(microUsd = microUsd, reported = true)
+        rows[id] = r.copy(microUsd = microUsd, reported = true, seconds = maxOf(inSeconds, outSeconds).coerceAtLeast(0))
         return true
+    }
+    @Synchronized override fun monthUse(month: String) = rows.values.filter { it.month == month }.let { m ->
+        LiveUse(m.size.toLong(), m.filter { it.reported }.sumOf { it.seconds })
     }
     @Synchronized override fun monthMicroUsd(month: String) = rows.values.filter { it.month == month }.sumOf { it.microUsd }
 }
@@ -198,6 +217,15 @@ class PostgresLiveSessionStore(private val ds: DataSource) : LiveSessionStore {
         c.prepareStatement("SELECT COALESCE(SUM(micro_usd), 0) FROM live_session WHERE month = ?").use { st ->
             st.setString(1, month)
             st.executeQuery().use { rs -> rs.next(); rs.getLong(1) }
+        }
+    }
+
+    override fun monthUse(month: String): LiveUse = ds.connection.use { c ->
+        c.prepareStatement(
+            "SELECT COUNT(*), COALESCE(SUM(CASE WHEN reported THEN GREATEST(in_seconds, out_seconds) ELSE 0 END), 0) FROM live_session WHERE month = ?",
+        ).use { st ->
+            st.setString(1, month)
+            st.executeQuery().use { rs -> rs.next(); LiveUse(rs.getLong(1), rs.getLong(2)) }
         }
     }
 }

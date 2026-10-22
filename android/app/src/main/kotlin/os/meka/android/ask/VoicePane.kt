@@ -197,6 +197,25 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         scope.launch { runCatching { core.setLiveVoice(name) } }
     }
 
+    // Slice 2b: a Live voice's sample that couldn't play says so under the rows (never another voice standing in).
+    var liveSampleFailed by remember { mutableStateOf(false) }
+    fun sampleLive(name: String) {
+        val key = "live:$name"
+        if (playing == key && speaker.speaking) {
+            haptics.tick()
+            speaker.stop()
+            playing = null
+            return
+        }
+        haptics.light()
+        playing = key
+        liveSampleFailed = false
+        speaker.sampleLive(name) { ok ->
+            if (playing == key) playing = null
+            liveSampleFailed = !ok
+        }
+    }
+
     fun saveDevice(next: DeviceVoiceSettings) {
         if (next == deviceSettings) return
         deviceSettings = next
@@ -293,12 +312,19 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                         Text(os.meka.core.domain.LiveTalkRules.VOICE_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xs))
-                        lv.voices.chunked(2).forEach { pair ->
-                            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                                pair.forEach { voice ->
-                                    SettingChip("${voice.name} · ${voice.detail}", on = voice.selected, spoken = "Ada's Live voice ${voice.name}, ${voice.detail}") { liveVoice(voice.name) }
-                                }
-                            }
+                        // Slice 2b: a row per voice like the picker below, each with ▶ Sample in Google's studio voice of that name.
+                        Text(os.meka.core.domain.LiveTalkRules.SAMPLE_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        lv.voices.forEachIndexed { i, voice ->
+                            VoiceRow(
+                                VoiceChoice("live:${voice.name}", voice.name, voice.detail, voice.selected),
+                                playing = playing == "live:${voice.name}",
+                                modifier = Modifier.appear(rememberAppearance(i)),
+                                choose = { liveVoice(voice.name) },
+                                sample = { sampleLive(voice.name) },
+                            )
+                        }
+                        Crossfade(liveSampleFailed, animationSpec = MekaMotion.appear(reduced), label = "live-sample-failed") { failed ->
+                            if (failed) Text(os.meka.core.domain.LiveTalkRules.SAMPLE_FAILED, style = MekaType.caption, color = Meka.colors.textSecondary)
                         }
                     }
                 }

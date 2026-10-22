@@ -2429,6 +2429,10 @@ final class CoreModel {
     /// asked today or the server can't say. Only a String crosses back.
     private(set) var aiTodayLine: String?
 
+    /// Ada's Live mode, slice 2b: Live this month ("Ada's Live · 3 talks · 13 min · £0.42 of £15 in October"); nil
+    /// when there is nothing to say or the server can't say. Only a String crosses back.
+    private(set) var liveActivityLine: String?
+
     /// How quickly what he said was added lately ("Speech to Added · 0.6 s · 0.9 s"; the mic fix, step 3); nil before
     /// the first. Kept in memory only.
     private(set) var heardTimingLine: String?
@@ -2491,11 +2495,12 @@ final class CoreModel {
     }
 
     func refreshVoiceUsage() async {
-        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; heardTimingLine = nil; aiTodayLine = nil; return }
+        guard let core, !signedOut else { voiceUsageLine = nil; voiceTimingLine = nil; heardTimingLine = nil; aiTodayLine = nil; liveActivityLine = nil; return }
         voiceTimingLine = (try? await core.voiceTimingLine()) ?? nil
         heardTimingLine = (try? await core.heardTimingLine()) ?? nil
         voiceUsageLine = (try? await core.voiceUsageLine()) ?? nil
         aiTodayLine = (try? await core.aiTodayLine()) ?? nil
+        liveActivityLine = (try? await core.liveActivityLine()) ?? nil
     }
 
     /// The voice picker (MEKA's voices, then the Mac's own), nil until the server answers. Only the view crosses back.

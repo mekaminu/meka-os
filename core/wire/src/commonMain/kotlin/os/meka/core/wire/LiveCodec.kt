@@ -24,8 +24,20 @@ object LiveCodec {
     const val SESSION_PATH = "/v1/ai/live/session"
     const val USAGE_PATH = "/v1/ai/live/usage"
 
-    /** The month's meter: [level] is ok · heads_up · over; [configured] false until the Gemini key is in. */
-    data class Meter(val configured: Boolean, val level: String, val spentPence: Long, val capPence: Long)
+    /**
+     * The month's meter: [level] is ok · heads_up · over; [configured] false until the Gemini key is in. Slice 2b
+     * (additive; an older server leaves them out): [month] "2026-10" (UTC), the [sessions] opened this month and the
+     * [seconds] they ran (the longer of heard and spoken, reported sessions only), for Activity's Live line.
+     */
+    data class Meter(
+        val configured: Boolean,
+        val level: String,
+        val spentPence: Long,
+        val capPence: Long,
+        val month: String? = null,
+        val sessions: Long = 0,
+        val seconds: Long = 0,
+    )
 
     data class SessionRequest(val voice: String? = null)
 
@@ -151,6 +163,9 @@ object LiveCodec {
         put("level", m.level)
         put("spentPence", m.spentPence)
         put("capPence", m.capPence)
+        m.month?.let { put("month", it) }
+        put("sessions", m.sessions)
+        put("seconds", m.seconds)
     }
 
     private fun meter(o: JsonObject) = Meter(
@@ -158,7 +173,12 @@ object LiveCodec {
         level = str(o, "level")?.takeIf { it in LEVELS } ?: "ok",
         spentPence = (long(o, "spentPence") ?: 0).coerceAtLeast(0),
         capPence = (long(o, "capPence") ?: 0).coerceAtLeast(0),
+        month = str(o, "month")?.takeIf { MONTH.matches(it) },
+        sessions = (long(o, "sessions") ?: 0).coerceAtLeast(0),
+        seconds = (long(o, "seconds") ?: 0).coerceAtLeast(0),
     )
+
+    private val MONTH = Regex("\\d{4}-\\d{2}")
 
     private val LEVELS = setOf("ok", "heads_up", "over")
 

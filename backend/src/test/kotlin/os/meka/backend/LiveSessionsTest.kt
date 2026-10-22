@@ -78,11 +78,17 @@ class LiveSessionsTest {
         assertEquals(now + LiveModeRules.TOKEN_MS, s.expiresAtMs)
         assertEquals(LiveModeRules.reserveMicroUsd(), store.monthMicroUsd("2026-10"))
         assertEquals(LiveModeRules.pence(LiveModeRules.reserveMicroUsd(), 800_000), s.meter.spentPence)
+        // Slice 2b: the month's talks and minutes for Activity (minutes once it reports).
+        assertEquals("2026-10", s.meter.month)
+        assertEquals(1, s.meter.sessions)
+        assertEquals(0, s.meter.seconds)
 
         // Three minutes heard, one spoken: the count drops to that, once, and only for his household.
         assertFalse(live.usage("other", LiveCodec.UsageRequest(s.sessionId!!, 180, 60)).counted)
         val u = live.usage("hh", LiveCodec.UsageRequest(s.sessionId!!, 180, 60))
         assertTrue(u.counted)
+        assertEquals(180, u.meter.seconds)
+        assertEquals(1, u.meter.sessions)
         assertEquals(LiveModeRules.costMicroUsd(180, 60), store.monthMicroUsd("2026-10"))
         assertFalse(live.usage("hh", LiveCodec.UsageRequest(s.sessionId!!, 1, 1)).counted)
         assertFalse(live.usage("hh", LiveCodec.UsageRequest("ls_unknown", 1, 1)).counted)
@@ -134,7 +140,7 @@ class LiveSessionsTest {
         val status = LiveCodec.encodeStatusRequest()
         val st = client.post(LiveCodec.STATUS_PATH) { with(foldKey) { signed(foldSecret, LiveCodec.STATUS_PATH, status) } }
         assertEquals(HttpStatusCode.OK, st.status)
-        assertEquals(LiveCodec.Meter(true, "ok", 0, 1_500), LiveCodec.decodeMeter(st.bodyAsText()))
+        assertEquals(LiveCodec.Meter(true, "ok", 0, 1_500, "2026-10"), LiveCodec.decodeMeter(st.bodyAsText()))
 
         val body = LiveCodec.encodeSessionRequest(LiveCodec.SessionRequest("Kore"))
         val ok = client.post(LiveCodec.SESSION_PATH) { with(foldKey) { signed(foldSecret, LiveCodec.SESSION_PATH, body) } }

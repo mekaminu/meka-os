@@ -85,4 +85,19 @@ class LiveTalkTest {
         assertEquals("Live is off until the 1st · this month's £15 is used up",
             LiveTalkRules.view(true, null, true, true, "over", 1_500, 1_500).line)
     }
+
+    @Test
+    fun activitysLiveLineSaysTheMonthsTalksMinutesAndCost() {
+        // Slice 2b.
+        val r = LiveTalkRules
+        assertNull(r.activityLine(false, "2026-10", 0, 0, "ok", 0, 1_500)) // no key, nothing used: nothing to say
+        assertEquals("Ada's Live · no talks yet in October · up to £15", r.activityLine(true, "2026-10", 0, 0, "ok", 0, 1_500))
+        assertEquals("Ada's Live · 3 talks · 13 min · £0.42 of £15 in October", r.activityLine(true, "2026-10", 3, 754, "ok", 42, 1_500))
+        assertEquals("Ada's Live · 1 talk · £0.19 of £15 this month", r.activityLine(true, null, 1, 0, "ok", 19, 1_500)) // not reported yet
+        assertEquals(
+            "Ada's Live · 40 talks · 300 min · £15 of £15 in December · off until 1 Jan",
+            r.activityLine(true, "2026-12", 40, 18_000, "over", 1_500, 1_500),
+        )
+        assertEquals("Ada's Live · 2 talks · 1 min · £0.05 of £15 this month · off until the 1st", r.activityLine(false, "bad", 2, 1, "over", 5, 1_500))
+    }
 }

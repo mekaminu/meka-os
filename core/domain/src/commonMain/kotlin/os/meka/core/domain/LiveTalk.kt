@@ -94,6 +94,45 @@ object LiveTalkRules {
     const val NO_KEY = "Live needs its Google key on Navilife's server first · Ada answers as usual until then"
     const val FELL_BACK = "Live didn't open in time · Ada answered as usual"
 
+    /** Slice 2b: ▶ Sample on a Live voice row. */
+    const val SAMPLE_LABEL = "▶  Sample"
+    const val STOP_LABEL = "■  Stop"
+    /**
+     * What ▶ Sample plays: Google's studio voice of the same name (Chirp 3 HD, through Navilife's voice on the server),
+     * which Live's voice is built on; never a different voice standing in.
+     */
+    const val SAMPLE_NOTE = "▶ Sample plays Google's studio voice of the same name; Live sounds very like it"
+    const val SAMPLE_FAILED = "Couldn't play that voice just now · Google's voices may not be reachable"
+
+    /** The prefix of Activity's Live line. */
+    const val ACTIVITY_LABEL = "Ada's Live"
+
+    /**
+     * Slice 2b: Activity's line about Live this month, from the server's meter: "Ada's Live · 3 talks · 12 min · £0.42
+     * of £15 in October", "Ada's Live · no talks yet in October · up to £15", or with the cap used "… · off until
+     * 1 Nov". Null when Live has no key yet and nothing was used (nothing to say), or the meter couldn't be read.
+     * Minutes count the sessions that reported (the longer of heard and spoken), rounded up.
+     */
+    fun activityLine(configured: Boolean, month: String?, sessions: Long, seconds: Long, level: String, spentPence: Long, capPence: Long): String? {
+        if (!configured && sessions <= 0) return null
+        val m = month?.let(MONTH::matchEntire)?.groupValues?.get(2)?.toIntOrNull()?.takeIf { it in 1..12 }
+        val inMonth = m?.let { "in ${MONTHS[it - 1]}" } ?: "this month"
+        val cap = LiveModeRules.money(capPence)
+        if (sessions <= 0) return "$ACTIVITY_LABEL · no talks yet $inMonth · up to $cap"
+        val parts = mutableListOf(ACTIVITY_LABEL, if (sessions == 1L) "1 talk" else "$sessions talks")
+        if (seconds > 0) parts += "${(seconds + 59) / 60} min"
+        parts += "${LiveModeRules.money(spentPence)} of $cap $inMonth"
+        if (LiveModeRules.Level.of(level) == LiveModeRules.Level.OVER) {
+            parts += m?.let { "off until 1 ${MONTHS[it % 12].take(3)}" } ?: "off until the 1st"
+        }
+        return parts.joinToString(" · ")
+    }
+
+    private val MONTH = Regex("(\\d{4})-(\\d{2})")
+    private val MONTHS = listOf(
+        "January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December",
+    )
+
     /**
      * The Live block in Ada's voice settings. [meterKnown] false when the server couldn't be asked (offline, older
      * server); [configured] false until the Gemini key is in.

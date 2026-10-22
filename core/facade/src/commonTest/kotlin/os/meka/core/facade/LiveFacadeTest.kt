@@ -83,4 +83,37 @@ class LiveFacadeTest {
         server.down = true
         assertEquals(os.meka.core.domain.LiveTalkRules.UNREACHABLE, c.liveSettings().line)
     }
+
+    /** Slice 2b: a server with Navilife's voice too, answering in [answerVoice] (Polly standing in when Google is off). */
+    private class Voiced(service: SyncService, meter: LiveCodec.Meter, var answerVoice: String?) : SyncTransport, LiveApi, SpeechApi {
+        private val live = Server(service, meter)
+        var spoken = 0
+        override suspend fun push(request: PushRequest) = live.push(request)
+        override suspend fun pull(request: PullRequest) = live.pull(request)
+        override suspend fun liveStatus() = live.liveStatus()
+        override suspend fun liveSession(voice: String?) = live.liveSession(voice)
+        override suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long) = live.liveUsage(sessionId, inSeconds, outSeconds)
+        override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
+            spoken++
+            return os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.SPOKEN, "QUJD", "mp3", answerVoice ?: voice, "chirp3hd")
+        }
+        override suspend fun speechVoices() = os.meka.core.wire.SpeechCodec.Voices(os.meka.core.wire.SpeechCodec.Voices.FAILED)
+    }
+
+    @Test
+    fun aLiveVoicesSampleIsThatVoiceOrNothingAndActivitySaysTheMonth() = runTest {
+        val m = meter.copy(month = "2026-10", sessions = 2, seconds = 300)
+        val voiced = Voiced(SyncService(InMemoryServerOpStore()), m, answerVoice = null)
+        val c = core(voiced)
+        assertEquals("QUJD", c.liveVoiceSample("leda"))
+        assertEquals("QUJD", c.liveVoiceSample("Leda")) // kept: no second clip
+        assertEquals(1, voiced.spoken)
+        assertNull(c.liveVoiceSample("Brian")) // not a Live voice
+        voiced.answerVoice = "Amy" // Google's voices off: Polly would stand in, so no sample
+        assertNull(c.liveVoiceSample("Kore"))
+        assertNull(core(server).liveVoiceSample("Kore")) // no voice on this server
+        assertEquals("Ada's Live · 2 talks · 5 min · £0.40 of £15 in October", c.liveActivityLine())
+        server.down = true
+        assertNull(core(server).liveActivityLine())
+    }
 }
