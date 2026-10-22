@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -127,11 +128,27 @@ class MoneyScreensTest {
         if (v.locked) fail("$name: Money is still locked after opening")
         when (fill) {
             // Nothing in: the line says how to start, never a month of "£0".
-            Fill.EMPTY -> ScreenShots.assertShows(compose, name, MoneyRules.EMPTY.substringBefore(" ·"))
+            Fill.EMPTY -> {
+                ScreenShots.assertShows(compose, name, MoneyRules.EMPTY.substringBefore(" ·"))
+                // Slice 12: the how-to is said once (under Import a statement), never under the title as well.
+                val said = compose.onAllNodesWithText(MoneyRules.EMPTY).fetchSemanticsNodes().size
+                if (said > 1) fail("$name: the empty line is said $said times")
+            }
             else -> {
                 val m = v.month ?: fail("$name: no month shown with a statement in")
                 ScreenShots.assertShows(compose, name, m.label)
                 ScreenShots.assertShows(compose, name, m.spentLine)
+                // Slice 12: an average is named by the months it covers (two months of statements here, never "6-month").
+                m.vsLine?.let { if ("6-month" in it) fail("$name: \"$it\" from ${v.accounts.size} account(s) of at most two months") }
+                // Slice 12: with no Hyperliquid address the set-up block waits below the month (and Import).
+                val t = v.trading
+                if (t != null && !v.tradingFirst) {
+                    val monthTop = compose.onAllNodesWithText(m.label).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+                        ?: fail("$name: the month's label isn't on screen")
+                    compose.onAllNodesWithText(t.head).fetchSemanticsNodes().forEach { n ->
+                        if (n.boundsInRoot.top < monthTop) fail("$name: ${t.head} sits above the month")
+                    }
+                }
             }
         }
     }

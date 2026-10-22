@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -235,6 +236,21 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
         }
     }
 
+    val tradingItems: LazyListScope.(TradingView) -> Unit = { t ->
+        item(key = "trading-head") {
+            Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
+                modifier = Modifier.animateItem().padding(top = MekaSpace.m))
+        }
+        item(key = "trading") {
+            TradingBlock(t, Modifier.animateItem().appear(rememberAppearance(2)),
+                onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
+                onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } },
+                onAlert = { kind, key ->
+                    scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
+                }, exporting = exporting, onExport = export)
+        }
+    }
+
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(MekaSpace.gutter),
@@ -279,21 +295,9 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                     })
             }
         }
-        // Trading tracker: TRADING · HYPERLIQUID (whatever month is shown), from his public addresses only.
-        v.trading?.let { t ->
-            item(key = "trading-head") {
-                Text(t.head, style = MekaType.caption, color = Meka.colors.textTertiary,
-                    modifier = Modifier.animateItem().padding(top = MekaSpace.m))
-            }
-            item(key = "trading") {
-                TradingBlock(t, Modifier.animateItem().appear(rememberAppearance(2)),
-                    onAdd = { text -> scope.launch { runCatching { core.tradingWalletAdd(text) }.getOrNull()?.let(say) } },
-                    onRemove = { id -> scope.launch { runCatching { core.tradingWalletRemove(id) }.getOrNull()?.let(say) } },
-                    onAlert = { kind, key ->
-                        scope.launch { runCatching { core.setTradingAlert(kind, key) }.getOrNull()?.let { say(MoneySaved(it)) } }
-                    }, exporting = exporting, onExport = export)
-            }
-        }
+        // Trading tracker: TRADING · HYPERLIQUID (whatever month is shown), from his public addresses only; it leads once
+        // an address is in, else its set-up block waits below Import (quality gate, MoneyView.tradingFirst).
+        v.trading?.takeIf { v.tradingFirst }?.let { tradingItems(it) }
         v.month?.let { m ->
             item(key = "month") {
                 Row(Modifier.animateItem().padding(top = MekaSpace.m).appear(rememberAppearance(2)), verticalAlignment = Alignment.CenterVertically) {
@@ -631,6 +635,7 @@ fun MoneyPane(core: MekaCore, onClose: () -> Unit) {
                 if (v.bank == null) Text(MoneyRules.CONNECT_LATER, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
+        v.trading?.takeIf { !v.tradingFirst }?.let { tradingItems(it) }
         if (v.accounts.isNotEmpty()) {
             item(key = "accounts-head") {
                 Text("ACCOUNTS", style = MekaType.caption, color = Meka.colors.textTertiary,

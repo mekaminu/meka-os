@@ -109,7 +109,7 @@ object MoneyTips {
 
     /** The categories well over their 6-month average in [month] (so far, when it's this month). */
     private fun overIn(lines: List<MoneyLine>, month: Int, firstMonth: Int): List<Pair<MoneyCategory, Pair<Long, Long>>> {
-        val prior = (1..6).map { month - it }.filter { it >= firstMonth }
+        val prior = priorOf(month, firstMonth)
         if (prior.size < 2) return emptyList()
         val sums = prior.map { spend(lines, it) }
         val cur = spend(lines, month)
@@ -120,6 +120,9 @@ object MoneyTips {
         }.sortedByDescending { (_, v) -> v.first - v.second }
     }
 
+    /** The (up to 6) whole months before [month] that have statements. */
+    private fun priorOf(month: Int, firstMonth: Int): List<Int> = (1..6).map { month - it }.filter { it >= firstMonth }
+
     fun over(lines: List<MoneyLine>, today: Long): List<MoneyTip> {
         val firstMonth = MoneyRules.monthOf(lines.minOf { it.day })
         val thisMonth = MoneyRules.monthOf(today)
@@ -128,7 +131,7 @@ object MoneyTips {
         val monthName = CivilDate.MONTH_LONG[thisMonth % 12]
         val now = overIn(lines, thisMonth, firstMonth).map { (c, v) ->
             val (p, avg) = v
-            val title = "${c.label} ${fmt(p - avg)} over your 6-month average"
+            val title = "${c.label} ${fmt(p - avg)} over ${MoneyRules.averageName(priorOf(thisMonth, firstMonth))}"
             val line = "${fmt(p)} so far in $monthName · " + when (left) { 0 -> "last day of the month"; 1 -> "1 day to go"; else -> "$left days to go" }
             MoneyTip("over-${c.key}", MoneyTipKind.OVER.key, title, line, lit = true, spoken = "$title. $line")
         }
@@ -136,7 +139,7 @@ object MoneyTips {
             .filter { (c, _) -> now.none { it.id == "over-${c.key}" } }
             .map { (c, v) ->
                 val (p, avg) = v
-                val title = "${c.label} was ${fmt(p - avg)} over your 6-month average in ${CivilDate.MONTH_LONG[(thisMonth - 1) % 12]}"
+                val title = "${c.label} was ${fmt(p - avg)} over ${MoneyRules.averageName(priorOf(thisMonth - 1, firstMonth))} in ${CivilDate.MONTH_LONG[(thisMonth - 1) % 12]}"
                 val line = "${fmt(p)} against about ${fmt(avg)} a month"
                 MoneyTip("overlast-${c.key}", MoneyTipKind.OVER.key, title, line, lit = false, spoken = "$title. $line")
             }

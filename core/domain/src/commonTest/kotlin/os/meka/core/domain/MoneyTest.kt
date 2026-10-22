@@ -77,6 +77,40 @@ class MoneyTest {
         MoneyTxn(id, "a-current", CivilDate.toEpochDay(y, m, d), pence, text)
 
     @Test
+    fun theAverageIsNamedByTheMonthsItCovers() {
+        // Quality gate (Money's shots): two months of statements never claim a 6-month average.
+        val acct = listOf(MoneyAccount("a-current", "Current account", "csv", null))
+        val all = listOf(
+            txn("s1", 2026, 9, 4, -6_000, "TESCO STORES"), txn("s2", 2026, 9, 25, -320, "COSTA"),
+            txn("o1", 2026, 10, 2, -4_000, "TESCO STORES"), txn("o2", 2026, 10, 9, -3_000, "TESCO STORES"),
+        )
+        val now = MoneyRules.view(acct, all, emptyMap(), oct16, LocalCalendar.UTC, 0).month!!
+        assertEquals("September came to £63.20", now.vsLine)
+        // September itself has nothing before it to set against.
+        assertNull(MoneyRules.view(acct, all, emptyMap(), oct16, LocalCalendar.UTC, 1).month!!.vsLine)
+        assertEquals("September", MoneyRules.averageName(listOf(MoneyRules.monthOf(CivilDate.toEpochDay(2026, 9, 1)))))
+        assertEquals("your 3-month average", MoneyRules.averageName(listOf(1, 2, 3)))
+        // A finished month against one month: "more than September", "none in September".
+        val nov = all + listOf(txn("o3", 2026, 10, 20, -4_000, "UBER EATS"))
+        val oct = MoneyRules.view(acct, nov, emptyMap(), CivilDate.toEpochDay(2026, 11, 3), LocalCalendar.UTC, 1).month!!
+        assertEquals("£46.80 more than September", oct.vsLine)
+        assertTrue(oct.categories.any { it.line.endsWith("none in September") })
+        assertFalse(oct.categories.any { "6-month" in it.line })
+    }
+
+    @Test
+    fun nothingInSaysHowOnceAndTradingWaitsUntilAnAddress() {
+        val acct = listOf(MoneyAccount("a-current", "Current account", "csv", null))
+        val v = MoneyRules.view(acct, emptyList(), emptyMap(), oct16, LocalCalendar.UTC, 0)
+        // The how-to is said once, under Import a statement; the title's line just says nothing's in.
+        assertEquals(MoneyRules.EMPTY, v.empty)
+        assertEquals(MoneyRules.EMPTY_SUMMARY, v.summary)
+        assertTrue(v.summary != v.empty)
+        assertTrue(v.summary.startsWith(MoneyRules.EMPTY.substringBefore(" ·")))
+        assertFalse(v.tradingFirst)
+    }
+
+    @Test
     fun theMonthAgainstTheSixBefore() {
         val acct = listOf(MoneyAccount("a-current", "Current account", "csv", null))
         // April to September: £100 a month on groceries. September: £200, and coffee.
@@ -95,17 +129,17 @@ class MoneyTest {
         assertEquals("Your 6-month average is £117.20 a month", m.vsLine)
         assertTrue(now.earlier)
         assertFalse(now.later)
-        // September: £203.20 against an average over April–August of £100.
+        // September: £203.20 against an average over April–August of £100 (five months with statements, and said so).
         val sep = MoneyRules.view(acct, all, emptyMap(), oct16, LocalCalendar.UTC, 1).month!!
         assertEquals("September 2026", sep.label)
         assertEquals("Spent £203.20 · in £2,500", sep.spentLine)
-        assertEquals("£103.20 more than your 6-month average", sep.vsLine)
+        assertEquals("£103.20 more than your 5-month average", sep.vsLine)
         assertTrue(sep.vsLit)
         val groceries = sep.categories.first()
         assertEquals("£200", groceries.amount)
         assertTrue(groceries.over)
-        assertEquals("2 payments · £100 over your 6-month average", groceries.line)
-        assertEquals("none in the 6 months before", sep.categories[1].line.substringAfter(" · "))
+        assertEquals("2 payments · £100 over your 5-month average", groceries.line)
+        assertEquals("none in the 5 months before", sep.categories[1].line.substringAfter(" · "))
         assertEquals(listOf("−£3.20", "−£100", "−£100").sorted(), sep.txns.filter { !it.moneyIn }.map { it.amount }.sorted())
         // His correction: Costa is Eating out, for every Costa payment.
         val taught = MoneyRules.view(acct, all, mapOf("COSTA" to MoneyCategory.EATING_OUT), oct16, LocalCalendar.UTC, 1).month!!

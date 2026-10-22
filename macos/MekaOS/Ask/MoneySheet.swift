@@ -72,7 +72,8 @@ struct MoneySheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.m) {
                         if let b = v.bank { bank(b).staggeredAppear(2) }
-                        if let t = v.trading { trading(t).staggeredAppear(2) }
+                        // TRADING · HYPERLIQUID leads once an address is in; its set-up block waits below Import (MoneyView.tradingFirst).
+                        if let t = v.trading, v.tradingFirst { trading(t).staggeredAppear(2) }
                         if let m = v.month { month(m, v).staggeredAppear(2) }
                         if let ch = v.challenges { challenges(ch).staggeredAppear(3) }
                         if let g = v.goals { moneyGoals(g).staggeredAppear(3) }
@@ -81,6 +82,7 @@ struct MoneySheet: View {
                         if let w = v.worth { worth(w).staggeredAppear(3) }
                         if let s = said { saidLine(s) }
                         importer(v).staggeredAppear(3)
+                        if let t = v.trading, !v.tradingFirst { trading(t).staggeredAppear(3) }
                         if !v.accounts.isEmpty { accounts(v).staggeredAppear(4) }
                         foot(v)
                     }

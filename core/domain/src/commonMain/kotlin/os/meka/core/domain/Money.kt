@@ -453,6 +453,12 @@ data class MoneyView(
     /** Money manager (6): MONEY GOALS — his £ goals and the account each follows ([MoneyGoals]); shown with this month. */
     val goals: MoneyGoalsView? = null,
 ) {
+    /**
+     * Quality gate (Money's shots): TRADING · HYPERLIQUID leads the screen only once an address is in; until then its
+     * set-up block waits below the month (and below Import with nothing imported), so the month starts near the top.
+     */
+    val tradingFirst: Boolean get() = trading?.wallets?.isNotEmpty() == true
+
     companion object {
         val LOCKED = MoneyView(true, MoneyRules.LOCKED, null, null, emptyList(), earlier = false, later = false)
     }
@@ -472,6 +478,8 @@ object MoneyRules {
     const val UNLOCK = "Open Money"
     const val UNLOCK_REASON = "Open Money"
     const val EMPTY = "Nothing imported yet · download a statement from your bank or card as CSV (a spreadsheet file) and import it here."
+    /** Quality gate: the line under the title with nothing in; how to import is said once, under Import a statement. */
+    const val EMPTY_SUMMARY = "Nothing imported yet · your month shows here once a statement is in"
     const val CONNECT_LATER = "Your banks fill this in by themselves (read-only, through Lunch Flow) once Navilife's server has its key; a statement file works for any bank meanwhile."
     const val ACCOUNT_HINT = "Which account? (Current account, Credit card…)"
     const val NO_ACCOUNT = "Name the account first (e.g. Current account), then pick the file."
@@ -539,6 +547,13 @@ object MoneyRules {
         return parts.joinToString(" · ")
     }
 
+    /**
+     * What a month is set against, named by the months it really covers: one month by its name ("September"), else
+     * "your 2-month average" … "your 6-month average". [prior] is the month indexes counted (never empty).
+     */
+    fun averageName(prior: List<Int>): String =
+        if (prior.size == 1) CivilDate.MONTH_LONG[prior.single() % 12] else "your ${prior.size}-month average"
+
     /** "1 Mar 2026". */
     fun dayMonth(day: Long): String = CivilDate.fromEpochDay(day).let { "${it.day} ${Recurrence.MONTH_SHORT[it.month - 1]} ${it.year}" }
 
@@ -598,7 +613,7 @@ object MoneyRules {
         fun sharedLine(t: MoneyTxn) = MoneySharedLine(t.id, t.day, t.pence, keyOf(t), cat(t))
         val shared = MoneyShared.view(accounts.isNotEmpty(), mine.map { sharedLine(it) }, sharedTxns, sharedMerchants, sharedEntries, sharedSetting, partner, today)
         fun isShared(t: MoneyTxn) = MoneyShared.counts(sharedLine(t), sharedTxns, sharedMerchants)
-        if (mine.isEmpty()) return MoneyView(false, EMPTY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared)
+        if (mine.isEmpty()) return MoneyView(false, EMPTY_SUMMARY, EMPTY, null, accountRows, earlier = false, later = false, worth = worth, bank = bank, business = business, shared = shared)
         val thisMonth = monthOf(today)
         val firstMonth = monthOf(mine.minOf { it.day })
         val shown = (thisMonth - offset.coerceAtLeast(0)).coerceAtLeast(firstMonth)
@@ -616,6 +631,8 @@ object MoneyRules {
             MoneyCategory.entries.filter { it.spend }.associateWith { c -> sums.sumOf { it[c] ?: 0L } / prior.size }
         }
         val avgTotal = if (prior.isEmpty()) null else prior.sumOf { m -> spendOf(byMonth[m].orEmpty()).values.filter { it > 0 }.sum() } / prior.size
+        // Quality gate: the average is named by the months it really covers ("your 2-month average", or "September").
+        val avgName = averageName(prior)
         val partial = shown == thisMonth
         val label = if (partial) "${CivilDate.MONTH_LONG[shown % 12]} so far" else monthLabel(shown)
         val catRows = spend.filter { it.value > 0 }.entries.sortedByDescending { it.value }.map { (c, p) ->
@@ -624,10 +641,10 @@ object MoneyRules {
             val over = !partial && a != null && p - a >= OVER_MIN_PENCE && p > a * (1 + OVER_SHARE)
             val vs = when {
                 a == null || partial -> null
-                a == 0L -> "none in the 6 months before"
-                over -> "${fmt(p - a)} over your 6-month average"
-                a - p >= OVER_MIN_PENCE -> "${fmt(a - p)} under your 6-month average"
-                else -> "about your 6-month average"
+                a == 0L -> if (prior.size == 1) "none in $avgName" else "none in the ${prior.size} months before"
+                over -> "${fmt(p - a)} over $avgName"
+                a - p >= OVER_MIN_PENCE -> "${fmt(a - p)} under $avgName"
+                else -> if (prior.size == 1) "about the same as $avgName" else "about $avgName"
             }
             val line = listOfNotNull("$n payment${if (n == 1) "" else "s"}", vs).joinToString(" · ")
             MoneyCategoryRow(c.key, c.label, fmt(p), if (spent > 0) (p.toFloat() / spent).coerceIn(0f, 1f) else 0f, line, over,
@@ -635,10 +652,10 @@ object MoneyRules {
         }
         val vsLine = when {
             avgTotal == null -> null
-            partial -> "Your 6-month average is ${fmt(avgTotal)} a month"
-            spent - avgTotal >= OVER_MIN_PENCE -> "${fmt(spent - avgTotal)} more than your 6-month average"
-            avgTotal - spent >= OVER_MIN_PENCE -> "${fmt(avgTotal - spent)} less than your 6-month average"
-            else -> "About your 6-month average"
+            partial -> if (prior.size == 1) "$avgName came to ${fmt(avgTotal)}" else "Your ${prior.size}-month average is ${fmt(avgTotal)} a month"
+            spent - avgTotal >= OVER_MIN_PENCE -> "${fmt(spent - avgTotal)} more than $avgName"
+            avgTotal - spent >= OVER_MIN_PENCE -> "${fmt(avgTotal - spent)} less than $avgName"
+            else -> if (prior.size == 1) "About the same as $avgName" else "About $avgName"
         }
         val sorted = cur.sortedWith(compareByDescending<MoneyTxn> { it.day }.thenBy { it.id })
         // Money at a glance: receipts matched over every line, so one near a month's edge goes to the right payment.
