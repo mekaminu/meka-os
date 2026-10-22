@@ -101,6 +101,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private val pagesNow = mutableListOf<Pair<String, String>>()
     /** Slice 5: the cards Ada offered this turn (Ask's own, through the policy gate), shown with her words. */
     private val cardsNow = mutableListOf<os.meka.core.domain.AskCard>()
+    /** Slice 5b: Money was locked when Ada looked this turn, so Ask shows its Unlock under her words. */
+    private var unlockNow = false
 
     // Slice 2c: the connection to Google now (bumped by each fresh window, so the old one's close ends nothing), the
     // conversation's resumption handle, the fresh windows used, when he last spoke, and the window's end.
@@ -342,7 +344,16 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
      */
     private suspend fun answerTool(gen: Int, call: LiveProtocol.Event.ToolCall) {
         val id = session?.sessionId
-        val reply = if (call.name == LiveToolRules.LOOK_UP_TOOL) {
+        val reply = if (call.name == LiveToolRules.MAIL_TOOL) {
+            // Slice 5b: his mail, read here as Ask reads it (the emails that need him, or from whoever he named).
+            val lines = withContext(Dispatchers.IO) { core.liveMail(call.args[LiveToolRules.ABOUT_ARG].orEmpty()) }
+            LiveProtocol.toolAnswer(call.id, call.name, lines)
+        } else if (call.name == LiveToolRules.MONEY_TOOL) {
+            // Slice 5b: the phone's own answer from Money, only while it's unlocked; locked, the turn shows Unlock.
+            val money = withContext(Dispatchers.IO) { core.liveMoney(call.args[LiveToolRules.QUESTION_ARG].orEmpty()) }
+            if (money.unlockMoney && gen == generation) unlockNow = true
+            LiveProtocol.toolAnswer(call.id, call.name, money.reply)
+        } else if (call.name == LiveToolRules.LOOK_UP_TOOL) {
             // Slice 5: another day, read here from his own calendar and tasks (nothing of it goes to Navilife's server).
             val lines = withContext(Dispatchers.IO) { core.liveLookUp(call.args[LiveToolRules.WHEN_ARG].orEmpty()) }
             LiveProtocol.toolAnswer(call.id, call.name, lines)
@@ -377,11 +388,12 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     /** Slice 4: the turn as Ask shows it (her words and sources), then a clean slate for the next. Main thread. */
     private fun finishTurn() {
         val sources = os.meka.core.domain.LiveFactsRules.sources(pagesNow)
-        LiveToolRules.turnAnswer(saidNow.toString(), sources, cardsNow.toList())?.let { listener.onTurn(LiveTalkRules.turnQuestion(heardNow.toString()), it) }
+        LiveToolRules.turnAnswer(saidNow.toString(), sources, cardsNow.toList(), unlockNow)?.let { listener.onTurn(LiveTalkRules.turnQuestion(heardNow.toString()), it) }
         heardNow.clear()
         saidNow.clear()
         pagesNow.clear()
         cardsNow.clear()
+        unlockNow = false
     }
 
     @SuppressLint("MissingPermission") // a conversation only runs once the microphone is allowed

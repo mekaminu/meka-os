@@ -100,7 +100,7 @@ object LiveModeRules {
     }
 
     /** What goes to Google while Live is on, as the settings say it. */
-    const val SHARING = "Your voice and today's Navilife context (Needs you, tasks, calendar, weather, commute, shopping) go to Google while Live is on, with any other day you ask her about, and Ada may search the web for things about the world, never your life"
+    const val SHARING = "Your voice and today's Navilife context (Needs you, tasks, calendar, weather, commute, shopping) go to Google while Live is on, with any other day, email or money answer you ask her about (money only while it is unlocked), and Ada may search the web for things about the world, never your life"
 
     /** "£3.40", or "£15" for whole pounds. */
     fun money(pence: Long): String {

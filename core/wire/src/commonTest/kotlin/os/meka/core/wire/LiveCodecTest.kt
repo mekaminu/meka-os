@@ -131,4 +131,15 @@ class LiveCodecTest {
             LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","greeted":"${"x".repeat(LiveCodec.MAX_GREETED + 1)}"}}""")
         }
     }
+
+    @Test
+    fun slice5bMailAndMoneyRideOnlyWithTheTools() {
+        val day = LiveCodec.Day("2026-10-22", "x", listOf(AskCodec.Item("t1", "task", "Book the MOT")), tools = true, mailMoney = true)
+        val r = LiveCodec.SessionRequest("Kore", day)
+        assertEquals(r, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r)))
+        // A slice-5 device leaves it out; without the tools it means nothing and goes.
+        assertEquals(false, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r.copy(day = day.copy(mailMoney = false)))).day!!.mailMoney)
+        assertEquals(false, LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[],"mailMoney":true}}""").day!!.mailMoney)
+        assertEquals(false, LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[],"tools":true,"mailMoney":"true"}}""").day!!.mailMoney)
+    }
 }

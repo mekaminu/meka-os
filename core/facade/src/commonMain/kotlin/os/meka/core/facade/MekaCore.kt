@@ -10606,6 +10606,7 @@ class MekaCore(
                 .filter { it.isNotBlank() }.map { it.take(os.meka.core.wire.AskCodec.MAX_LINE) }.takeLast(os.meka.core.wire.AskCodec.MAX_RECALL),
             introduce = adaIntroduces(emptyList(), cal),
             tools = true,
+            mailMoney = true, // slice 5b: this device answers the mail and money look-ups too
         )
     }
 
@@ -10660,6 +10661,44 @@ class MekaCore(
             else os.meka.core.domain.LiveOffer(card, os.meka.core.domain.LiveToolRules.offered(card.line))
         }
     } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveOffer(null, os.meka.core.domain.LiveToolRules.PROPOSE_UNUSABLE) }
+
+    /**
+     * Ada's Live mode, slice 5b: Ada's mail look-up ([os.meka.core.domain.LiveToolRules.MAIL_TOOL]) — the emails sorted
+     * as needing him and, when [about] names a sender or subject, the recent ones from them with what the autopilot
+     * tidied from them: the same lines Ask sends with a mail question ([os.meka.core.domain.MailAskRules.askLines]),
+     * read here on the device. Emails are other people's words, so the session's picture turns untrusted: a card she
+     * offers afterwards passes the gate as one from mail would. Never throws: a failure reads as
+     * [os.meka.core.domain.LiveToolRules.MAIL_FAILED].
+     */
+    suspend fun liveMail(about: String): String = try {
+        onCore {
+            val rules = os.meka.core.domain.LiveToolRules
+            val q = rules.mailQuestion(about)
+            val now = nowMs()
+            val cal = ZoneCalendar(timeZone)
+            val lines = os.meka.core.domain.MailAskRules.askLines(activity.mailItems(), q, now, cal) +
+                os.meka.core.domain.MailAskRules.tidiedLines(os.meka.core.domain.MailAskRules.tidiedHits(activity.mailTidyBatches(), q, now), now, cal)
+            liveAsk = liveAsk.copy(untrusted = true)
+            rules.mailAnswer(lines)
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveToolRules.MAIL_FAILED }
+
+    /**
+     * Ada's Live mode, slice 5b: Ada's money look-up ([os.meka.core.domain.LiveToolRules.MONEY_TOOL]) — the device's own
+     * answer to his money [question] ([os.meka.core.domain.MoneyAskRules.answer], the sentence Ask shows), only while
+     * Money is open or unlocked from Ask; never his transactions. Locked: no figures, and the turn shows Ask's Unlock.
+     * Never throws.
+     */
+    suspend fun liveMoney(question: String): os.meka.core.domain.LiveMoney = try {
+        onCore {
+            val rules = os.meka.core.domain.LiveToolRules
+            when {
+                money.accounts().isEmpty() && moneyBills().isEmpty() -> os.meka.core.domain.LiveMoney(rules.MONEY_EMPTY)
+                !os.meka.core.domain.MoneyAskRules.unlocked(moneyOpen, moneyAskUntilMs, nowMs()) -> os.meka.core.domain.LiveMoney(rules.MONEY_LOCKED, unlockMoney = true)
+                else -> os.meka.core.domain.LiveMoney(rules.moneyAnswer(os.meka.core.domain.MoneyAskRules.answer(rules.moneyQuestion(question), moneyAskData())))
+            }
+        }
+    } catch (e: CancellationException) { throw e } catch (e: Exception) { os.meka.core.domain.LiveMoney(os.meka.core.domain.LiveToolRules.MONEY_FAILED) }
 
     /**
      * Ada's Live mode, slice 4: a web search Ada asked for in Live session [sessionId]. Checked here first

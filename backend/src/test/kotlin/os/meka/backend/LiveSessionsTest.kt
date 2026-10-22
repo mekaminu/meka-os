@@ -30,7 +30,9 @@ class LiveSessionsTest {
         override fun configured() = key != null
         val tooled = mutableListOf<Boolean>()
         val resumed = mutableListOf<String?>()
-        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?): String? {
+        val mailMoneys = mutableListOf<Boolean>()
+        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?, mailMoney: Boolean): String? {
+            mailMoneys += mailMoney
             resumed += resume
             tooled += tools
             minted += model to voice
@@ -295,5 +297,27 @@ class LiveSessionsTest {
         // The meter at the cap refuses a fresh window too, so a long talk never passes it.
         val full = service(Tokens(key), store, cap = 1)
         assertEquals(LiveCodec.Session.OVER, full.session("hh", LiveCodec.SessionRequest("Kore", resume = "h3")).state)
+    }
+
+    @Test
+    fun slice5bMailAndMoneyLookUpsJoinOnlyForADeviceThatAnswersThem() {
+        val tokens = Tokens(key)
+        val day = LiveCodec.Day("2026-10-22", "Thursday 22 October 2026 · 07:10", listOf(os.meka.core.wire.AskCodec.Item("t1", "task", "Book the MOT")), tools = true, mailMoney = true)
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day))
+        service(tokens).session("hh", LiveCodec.SessionRequest("Kore", day.copy(mailMoney = false)))
+        assertEquals(listOf(true, false), tokens.mailMoneys)
+        assertTrue("look_up_my_mail" in tokens.instructions[0] && "look_up_my_money" in tokens.instructions[0])
+        assertTrue("look_up_my_mail" !in tokens.instructions[1])
+        // The token's tools: the three look-ups, the cards, then the search.
+        fun names(mailMoney: Boolean) = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = true, mailMoney = mailMoney)).jsonObject["liveConnectConstraints"]!!
+            .jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.map { it.jsonObject["name"]!!.jsonPrimitive.content }
+        assertEquals(listOf("look_up_my_days", "propose_action", "look_up_my_mail", "look_up_my_money", "search_the_web"), names(true))
+        assertEquals(listOf("look_up_my_days", "propose_action", "search_the_web"), names(false))
+        // Without the tools a stray flag adds nothing.
+        val plain = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = false, mailMoney = true)).jsonObject
+        assertEquals(1, plain["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
+        // A full day with the mail and money lines still fits whole.
+        val full = LivePrompt.instruction(day.copy(items = List(40) { os.meka.core.wire.AskCodec.Item("t${it + 1}", "task", "x".repeat(160)) }))
+        assertTrue(full.length <= LivePrompt.MAX_CHARS && full.trim().endsWith("</today>"), full.length.toString())
     }
 }

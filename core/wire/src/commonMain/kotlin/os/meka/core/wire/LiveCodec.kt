@@ -71,6 +71,12 @@ object LiveCodec {
          * session takes over, so she carries on from it rather than greeting him again. One line, at most [MAX_GREETED].
          */
         val greeted: String? = null,
+        /**
+         * Slice 5b (additive, only with [tools]): the device also answers the mail and money look-ups
+         * ([os.meka.core.domain.LiveToolRules.MAIL_TOOL], [os.meka.core.domain.LiveToolRules.MONEY_TOOL]), so the server
+         * adds them; a slice-5 device leaves it out and its session has the day look-up and the cards alone.
+         */
+        val mailMoney: Boolean = false,
     )
 
     /**
@@ -197,6 +203,7 @@ object LiveCodec {
                 if (d.introduce) put("introduce", true)
                 if (d.tools) put("tools", true)
                 d.greeted?.takeIf { it.isNotBlank() }?.let { put("greeted", it) }
+                if (d.tools && d.mailMoney) put("mailMoney", true)
             }
         }
         r.resume?.let { put("resume", it) }
@@ -237,7 +244,8 @@ object LiveCodec {
         val tools = (o["tools"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val greeted = str(o, "greeted")?.takeIf { it.isNotBlank() }?.also { require(it.length <= MAX_GREETED) { "greeted" } }
         // Handles mean something only to a device that answers the tools.
-        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted)
+        val mailMoney = tools && (o["mailMoney"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted, mailMoney)
     }
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

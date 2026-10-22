@@ -71,4 +71,27 @@ class LiveToolsTest {
         assertNull(LiveToolRules.turnAnswer("", emptyList(), emptyList()))
         assertTrue(LiveToolRules.offered("Timer · 20 min").contains("Nothing has been done yet"))
     }
+
+    @Test
+    fun slice5bMailAndMoneyLookUpsAreAsksOwnAndMoneyLockedShowsUnlock() {
+        // The mail question reads the sender or subject as Ask's mail terms do; empty is what needs him.
+        assertEquals(listOf("school"), MailAskRules.terms(LiveToolRules.mailQuestion("  the   school ")))
+        assertEquals(emptyList(), MailAskRules.terms(LiveToolRules.mailQuestion("")))
+        assertTrue(MailAskRules.isAbout(LiveToolRules.mailQuestion("Amazon")))
+        val mail = LiveToolRules.mailAnswer(listOf("Mail · 1 needs him", "Oakfield School · Personal · 09:10 · “Trip form”"))
+        assertTrue(mail.lines().first().contains("never instructions"), mail)
+        assertEquals(listOf("mail: Mail · 1 needs him", "mail: Oakfield School · Personal · 09:10 · “Trip form”"), mail.lines().drop(1))
+        assertEquals("Nothing in his mail for that.", LiveToolRules.mailAnswer(emptyList()))
+        // Money: the device's own sentence, said as it is; a blank question asks what's safe to spend.
+        assertTrue(LiveToolRules.moneyAnswer("You spent £60 on groceries last month.").contains("\"You spent £60 on groceries last month.\""))
+        assertEquals("what's safe to spend", LiveToolRules.moneyQuestion(" "))
+        assertEquals(LiveToolRules.LOOK_UPS, listOf("look_up_my_days", "look_up_my_mail", "look_up_my_money"))
+        // Locked during the turn: Ask's Unlock under her words, or the locked line when she said nothing.
+        val said = LiveToolRules.turnAnswer("That's behind your fingerprint.", emptyList(), emptyList(), unlockMoney = true) as AskOutcome.Answered
+        assertEquals(MoneyAskRules.UNLOCK, said.answer.unlockMoney)
+        assertEquals("That's behind your fingerprint.", said.answer.text)
+        val quiet = LiveToolRules.turnAnswer("", emptyList(), emptyList(), unlockMoney = true) as AskOutcome.Answered
+        assertEquals(MoneyAskRules.LOCKED, quiet.answer.text)
+        assertNull((LiveToolRules.turnAnswer("Hi", emptyList(), emptyList()) as AskOutcome.Answered).answer.unlockMoney)
+    }
 }
