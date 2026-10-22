@@ -21,6 +21,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.goals.GoalsRoute
+import os.meka.core.domain.FastingRules
 import os.meka.core.domain.GoalHorizon
 import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
@@ -99,7 +100,9 @@ class GoalsScreensTest {
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Goals")
-        ScreenShots.assertShows(compose, name, "Fasting")
+        // No fast runs in any fill: the card says so, and its ring shows the plan's goal, never a lone dash.
+        ScreenShots.assertShows(compose, name, "Not fasting")
+        ScreenShots.assertShows(compose, name, FastingRules.IDLE_RING_CAPTION)
         when (fill) {
             // Nothing set up: the pace line says what a habit does, never a bare heading.
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Add a habit")
