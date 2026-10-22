@@ -319,7 +319,7 @@ private fun DayScreen(app: WatchApplication, core: MekaCore, reduced: Boolean, l
         // Fasting rebuild, the watch: a running fast's ring comes up under the now card (as Today's live card does on
         // the phone); resting, Start stays at the foot.
         if (home.fast.running) {
-            Spacer(Modifier.height(MekaSpace.s))
+            Spacer(Modifier.height(MekaSpace.xs))
             FastRow(home.fast, reduced) { scope.launch { runCatching { core.watchFastButton() } } }
         }
 
