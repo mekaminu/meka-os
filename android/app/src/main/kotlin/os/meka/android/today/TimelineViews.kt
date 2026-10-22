@@ -43,6 +43,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import os.meka.android.calendar.EventActionHandlers
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -160,11 +163,16 @@ internal fun CommuteTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(MekaSpace.xs))
         Box(Modifier.width(2.dp).height(10.dp).clip(RoundedCornerShape(1.dp)).background(if (r.running) Meka.colors.accent else Meka.colors.hairline))
         Spacer(Modifier.width(MekaSpace.xs))
-        Text(r.title, style = MekaType.caption, color = Meka.colors.textTertiary)
-        r.detail?.let {
-            Text(" · $it", style = MekaType.caption, color = if (r.running) Meka.colors.accent else Meka.colors.textTertiary,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        // One text, so "Commute home · Home about 18:50" wraps onto a second line on the cover screen instead of its
+        // second half being cut to " · Home about…" (the quality gate's Today shots, 2026-10-22).
+        val detailColor = if (r.running) Meka.colors.accent else Meka.colors.textTertiary
+        Text(
+            buildAnnotatedString {
+                append(r.title)
+                r.detail?.let { withStyle(SpanStyle(color = detailColor)) { append(" · $it") } }
+            },
+            style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f),
+        )
     }
 }
 
@@ -197,9 +205,11 @@ internal fun NowLine(r: TimelineRow, modifier: Modifier = Modifier) {
         Text(r.time, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.width(TIME_COLUMN))
         Box(Modifier.size(8.dp).alpha(dotAlpha).clip(CircleShape).background(Meka.colors.accent))
         r.detail?.let { free ->
-            Crossfade(free, Modifier.weight(1f, fill = false), animationSpec = MekaMotion.appear(reduced), label = "now-free") { line ->
+            // The words come first and the hairline takes what is left (the quality gate's Today shots, 2026-10-22: sharing
+            // the width by weight cut "5 anytime tasks" to half the row on the cover screen); a long line wraps to two.
+            Crossfade(free, animationSpec = MekaMotion.appear(reduced), label = "now-free") { line ->
                 Text(
-                    line, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    line, style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(horizontal = MekaSpace.xs),
                 )
             }

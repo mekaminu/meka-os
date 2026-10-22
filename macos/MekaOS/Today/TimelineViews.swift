@@ -288,19 +288,25 @@ struct CommuteTimelineRow: View {
     let row: TimelineRow
     let palette: MekaPalette
 
+    /** The title, then " · Home about 18:50" in the accent while on the way. */
+    private var line: AttributedString {
+        var title = AttributedString(row.title)
+        title.foregroundColor = palette.textTertiary
+        guard let detail = row.detail else { return title }
+        var rest = AttributedString(" · \(detail)")
+        rest.foregroundColor = row.running ? palette.accent : palette.textTertiary
+        return title + rest
+    }
+
     var body: some View {
         HStack(spacing: 0) {
             Text(row.time).font(MekaType.itemMeta).monospacedDigit().foregroundStyle(palette.textTertiary)
                 .frame(width: TimelineMetrics.timeColumn, alignment: .leading)
             HStack(spacing: MekaSpace.xs) {
                 RoundedRectangle(cornerRadius: 1).fill(row.running ? palette.accent : palette.hairline).frame(width: 2, height: 10)
-                HStack(spacing: 0) {
-                    Text(row.title).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    if let detail = row.detail {
-                        Text(" · \(detail)").font(MekaType.caption)
-                            .foregroundStyle(row.running ? palette.accent : palette.textTertiary).lineLimit(1)
-                    }
-                }
+                // One text, so "Commute home · Home about 18:50" wraps in a narrow window instead of cutting its second
+                // half (the quality gate's Today shots on the Fold, 2026-10-22).
+                Text(line).font(MekaType.caption).fixedSize(horizontal: false, vertical: true)
             }
             .padding(.horizontal, MekaSpace.xs)
             Spacer(minLength: 0)
@@ -352,7 +358,7 @@ struct NowLine: View {
             Circle().fill(palette.accent).frame(width: 8, height: 8)
                 .opacity(reduceMotion ? 1 : (dim ? 0.45 : 1))
             if let free = row.detail {
-                Text(free).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(1).truncationMode(.tail)
+                Text(free).font(MekaType.caption).foregroundStyle(palette.accent).lineLimit(2).truncationMode(.tail).layoutPriority(1)
                     .padding(.horizontal, MekaSpace.xs)
                     .id(free)
                     .transition(.opacity)

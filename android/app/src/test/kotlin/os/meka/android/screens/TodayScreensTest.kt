@@ -96,7 +96,7 @@ class TodayScreensTest {
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
-        ScreenShots.assertReadable(compose, name, titles(fill))
+        ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

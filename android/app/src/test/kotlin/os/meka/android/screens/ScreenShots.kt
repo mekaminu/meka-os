@@ -72,14 +72,15 @@ object ScreenShots {
     /**
      * The quality gate's "cut to a word or two" (2026-10-22, the Week board's first shots): fails, naming each one, when
      * one of [titles] is cut before it can be read ([BoardFitRules.titleReadable]) or any short line (a header, a
-     * capacity or free-time line, up to [BoardFitRules.WHOLE_TITLE] characters) ends in "…".
+     * capacity or free-time line, up to [BoardFitRules.WHOLE_TITLE] characters) ends in "…". [mustShow] false for a
+     * scrolling list (Today), where a title below the fold isn't drawn yet: only the titles on screen are checked.
      */
-    fun assertReadable(compose: ComposeContentTestRule, name: String, titles: List<String>) {
+    fun assertReadable(compose: ComposeContentTestRule, name: String, titles: List<String>, mustShow: Boolean = true) {
         val laid = laidOut(compose)
         val problems = buildList {
             titles.forEach { t ->
                 val shown = laid.filter { it.text == t }
-                if (shown.isEmpty()) add("\"$t\" isn't on screen")
+                if (shown.isEmpty() && mustShow) add("\"$t\" isn't on screen")
                 shown.filterNot { BoardFitRules.titleReadable(t, it.cut, it.wholeLines) }
                     .forEach { add("\"$t\" is cut after ${it.wholeLines} characters") }
             }
