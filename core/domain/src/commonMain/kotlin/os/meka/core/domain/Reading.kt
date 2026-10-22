@@ -126,7 +126,7 @@ data class ReadingView(
     val putDown: List<ReadingRow>,
     /** "2 on the go · 3 up next · finished 4 this year", or how to start. */
     val summary: String,
-    /** "October · finished 1 · 2 moved on · next up: Atomic Habits"; null when nothing moved this month. */
+    /** "October · finished 1 · 2 still going · next up: Atomic Habits"; null when nothing moved this month. */
     val month: String?,
     /** Slice 4: his goal for the year and how it's going ([ReadingGoalRules.view]); null with none set. */
     val goal: ReadingGoalView? = null,
@@ -151,6 +151,8 @@ data class ReadingParsed(val title: String, val by: String, val kind: ReadingKin
 
 object ReadingRules {
     const val TITLE = "Reading"
+    /** The month line's word for what moved on but is still being read ("2 still going"). */
+    const val STILL_GOING = "still going"
     const val ROW_LINE = "Books, podcasts and courses you want to get to"
     const val HINT = "Add a book, podcast or course…"
     const val PROGRESS_HINT = "How far? 120 · 45% · episode 4"
@@ -356,8 +358,9 @@ object ReadingRules {
     }
 
     /**
-     * The month line: "October · finished 1 · 2 moved on · next up: Atomic Habits". What finished this month, what
-     * else moved on (started or progress typed), then the first up next; null when nothing moved this month.
+     * The month line: "October · finished 1 · 2 still going · next up: Atomic Habits". What finished this month, what
+     * else moved on (started or progress typed: [STILL_GOING], never "moved on", which reads as put down), then the
+     * first up next (the first added); null when nothing moved this month.
      */
     fun month(items: List<ReadingItem>, nowMs: Long, cal: LocalCalendar): String? {
         val ymd = CivilDate.fromEpochDay(cal.epochDayOf(nowMs))
@@ -372,7 +375,7 @@ object ReadingRules {
         return listOfNotNull(
             CivilDate.MONTH_LONG[mo - 1],
             finished.takeIf { it > 0 }?.let { "finished $it" },
-            moved.takeIf { it > 0 }?.let { "$it moved on" },
+            moved.takeIf { it > 0 }?.let { "$it $STILL_GOING" },
             next?.let { "next up: $it" },
         ).joinToString(" · ")
     }
@@ -648,12 +651,14 @@ class Reading(private val replica: Replica, private val newId: () -> String, pri
             return ReadingSaid("Already on your list: ${it.title}", false)
         }
         val id = newId()
+        // Up next keeps the order things were added in, even two added within the same millisecond.
+        val addedAt = maxOf(now, (items().maxOfOrNull { it.addedAtMs } ?: 0L) + 1)
         val token = write(id, mapOf(
             ReadingFields.TITLE to p.title.fv(), ReadingFields.BY to p.by.fv(), ReadingFields.KIND to p.kind.key.fv(),
             ReadingFields.URL to p.url.fv(), ReadingFields.UNIT to p.unit.key.fv(), ReadingFields.AT to 0L.fv(),
             ReadingFields.TOTAL to p.total.fv(),
             ReadingFields.STATE to (if (p.started) ReadingState.READING else ReadingState.WANT).key.fv(),
-            ReadingFields.ADDED_AT to now.fv(), ReadingFields.STARTED_AT to (if (p.started) now else 0L).fv(),
+            ReadingFields.ADDED_AT to addedAt.fv(), ReadingFields.STARTED_AT to (if (p.started) now else 0L).fv(),
             ReadingFields.MOVED_AT to (if (p.started) now else 0L).fv(), ReadingFields.ENDED_AT to 0L.fv(),
             ReadingFields.REMOVED to false.fv(),
         ))

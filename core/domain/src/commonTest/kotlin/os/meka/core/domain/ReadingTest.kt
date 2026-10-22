@@ -96,7 +96,7 @@ class ReadingTest {
         assertEquals("Page 120 of 320 · 37%", v.onTheGo[0].progress)
         assertEquals(0.375f, v.onTheGo[0].fraction)
         assertEquals("1 on the go · 1 up next", v.summary)
-        assertTrue(v.month!!.contains("1 moved on · next up: The Rest Is History"))
+        assertTrue(v.month!!.contains("1 still going · next up: The Rest Is History"))
         assertEquals(DailyLine("Atomic Habits · 37%", false), ReadingRules.dailyLine(rFold.items()))
         assertTrue(rFold.progress(id, "huge").refused)
 
@@ -142,5 +142,19 @@ class ReadingTest {
         assertTrue(rFold.view(cal).isEmpty)
         sync()
         assertTrue(rMac.view(cal).isEmpty)
+    }
+
+    @Test
+    fun upNextKeepsTheOrderAddedInTheSameMillisecond() {
+        val ids = ArrayDeque(listOf("z", "y", "x"))
+        val r = Reading(fold.replica, { ids.removeFirst() }, { world.clock.nowMs })
+        r.add("Dune by Frank Herbert")
+        r.add("Atomic Habits")
+        r.add("podcast The Rest Is History")
+        val v = r.view(cal)
+        assertEquals(listOf("Dune", "Atomic Habits", "The Rest Is History"), v.upNext.map { it.title })
+        r.progress(r.items().first { it.title == "The Rest Is History" }.id, "episode 2")
+        assertEquals("next up: Dune", r.view(cal).month!!.substringAfterLast(" · "))
+        assertTrue(r.view(cal).month!!.contains("1 still going"))
     }
 }

@@ -192,4 +192,17 @@ class GiftsTest {
         assertTrue(gFold.removeIdea(id))
         assertNull(gFold.addIdeaFromAsk("gone", "anything"))
     }
+
+    @Test
+    fun whoItIsComesBeforeTheKindWord() {
+        assertEquals(
+            OccasionEntry("Grandma Rose", OccasionKind.BIRTHDAY, 11, 6, 1946, null),
+            GiftRules.read("Grandma Rose's eightieth birthday party at the community hall 6 Nov 1946", 2026),
+        )
+        assertEquals(OccasionEntry("Sam", OccasionKind.BIRTHDAY, 3, 4, 0, null), GiftRules.read("Sam's 21st birthday 4 March", 2026))
+        assertEquals(OccasionEntry("Sam", OccasionKind.BIRTHDAY, 3, 4, 0, null), GiftRules.read("Sam's twenty-first birthday 4 March", 2026))
+        assertEquals(OccasionEntry("Mum and Dad", OccasionKind.ANNIVERSARY, 5, 12, 0, null), GiftRules.read("Mum and Dad's wedding anniversary dinner 12 May", 2026))
+        // No one before the kind word: the words after it name them.
+        assertEquals(OccasionEntry("Dad", OccasionKind.BIRTHDAY, 11, 3, 0, null), GiftRules.read("Birthday: Dad 3 Nov", 2026))
+    }
 }

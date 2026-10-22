@@ -152,6 +152,21 @@ object GiftRules {
         return digits.toInt().takeIf { it in 1..31 }
     }
 
+    private val ORDINAL_WORDS = setOf(
+        "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth", "eleventh",
+        "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth", "eighteenth", "nineteenth",
+        "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth", "seventieth", "eightieth", "ninetieth", "hundredth",
+    )
+
+    private val TENS = setOf("twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety")
+
+    /** "eightieth", "21st", "80th": an age or a count, never a name ("twenty-first" via [TENS] before it). */
+    private fun isOrdinal(l: String): Boolean {
+        if (l in ORDINAL_WORDS) return true
+        val digits = l.takeWhile { it.isDigit() }
+        return digits.isNotEmpty() && l.substring(digits.length) in ORDINALS
+    }
+
     private fun yearNumber(w: String, thisYear: Int): Int? =
         w.takeIf { it.length == 4 && it.all(Char::isDigit) }?.toInt()?.takeIf { it in 1900..thisYear }
 
@@ -226,11 +241,17 @@ object GiftRules {
             lower.any { it in ANNIVERSARY_WORDS } -> OccasionKind.ANNIVERSARY
             else -> OccasionKind.BIRTHDAY
         }
-        val nameWords = w.filterIndexed { i, _ ->
+        fun nameWord(i: Int): Boolean {
             val l = lower[i]
-            !used[i] && l !in FILLER && l !in BIRTHDAY_WORDS && l !in ANNIVERSARY_WORDS && dayNumber(l) == null &&
-                !(l.all(Char::isDigit))
-        }.map(::stripPossessive).filter { it.isNotEmpty() }
+            return !used[i] && l !in FILLER && l !in BIRTHDAY_WORDS && l !in ANNIVERSARY_WORDS && dayNumber(l) == null &&
+                !(l.all(Char::isDigit)) && !isOrdinal(l) &&
+                !(l in TENS && i + 1 < lower.size && isOrdinal(lower[i + 1]))
+        }
+        // Who it is comes before the kind word ("Grandma Rose's eightieth birthday party at the hall 6 Nov" is
+        // Grandma Rose's): what follows it is about the day, not the person. With nothing before it, every word counts.
+        val kindAt = lower.indexOfFirst { it in BIRTHDAY_WORDS || it in ANNIVERSARY_WORDS }
+        val before = if (kindAt > 0) (0 until kindAt).filter(::nameWord) else emptyList()
+        val nameWords = before.ifEmpty { w.indices.filter(::nameWord) }.map { stripPossessive(w[it]) }.filter { it.isNotEmpty() }
         val person = tidyPerson(nameWords.joinToString(" "))
         if (person.isEmpty() && kind == OccasionKind.BIRTHDAY) return null
         return OccasionEntry(person, kind, month, day, year, delivery)

@@ -153,6 +153,8 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != GiftRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with nothing entered")
                 if (fill == Fill.MANY && v.rows.size != 4) fail("$name: ${v.rows.size} rows for four occasions")
+                // Slice 19: who it is comes before "birthday", never the party's words jumbled into a name.
+                if (fill == Fill.MANY && v.rows.none { it.title == "Grandma Rose's birthday" }) fail("$name: Grandma Rose's row reads ${v.rows.map { it.title }}")
             }
             Place.BINS -> {
                 val v = core.binsView.value
@@ -160,6 +162,10 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != BinRules.EMPTY_LINE) fail("$name: \"${v.summary}\" with no bins")
                 if (fill == Fill.MANY && v.rows.size != 4) fail("$name: ${v.rows.size} rows for four bins")
+                // Slice 19: a start date just gone is this year's, so a Tuesday bin stays a Tuesday bin.
+                v.rows.filter { it.name == "Black bin" || it.name == "Recycling" }.forEach { r ->
+                    if ("Tuesday" !in r.line) fail("$name: ${r.name} reads \"${r.line}\", typed as a Tuesday")
+                }
             }
             Place.READING -> {
                 val v = core.readingView.value
@@ -168,6 +174,12 @@ class PlansPlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != ReadingRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && rows.size != 4) fail("$name: ${rows.size} rows for four things")
+                // Slice 19: nothing put down reads as "moved on", and next up is the first added.
+                if (fill == Fill.MANY) {
+                    val month = v.month ?: fail("$name: no month line after reading this month")
+                    if ("moved on" in month || "next up: Dune" !in month) fail("$name: the month line reads \"$month\"")
+                    if (v.upNext.firstOrNull()?.title != "Dune") fail("$name: up next starts ${v.upNext.map { it.title }}")
+                }
             }
         }
     }

@@ -43,7 +43,7 @@ class ReadingFacadeTest {
         mac.syncNow(); fold.syncNow()
         val v = fold.readingView.value
         assertEquals("Page 160 of 320 · 50%", v.onTheGo.single().progress)
-        assertEquals("October · 1 moved on", v.month)
+        assertEquals("October · 1 still going", v.month)
         assertEquals("Atomic Habits · 50%", fold.dailyLines.value.of(DailyRow.READING)?.text)
 
         val finished = fold.finishReading(id)

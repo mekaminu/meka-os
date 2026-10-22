@@ -122,6 +122,8 @@ object BinRules {
     const val COUNCIL = "Typed by you. Christmas weeks: type a one-off, \"Black bin Sat 2 Jan instead of 29 Dec\" or \"No black bin 29 Dec\". Your council's own collection days can fill this later."
     /** A one-off moves a collection at most this many days either way. */
     const val MOVE_MAX_DAYS = 14
+    /** A bin's start date with no year is the nearest: up to half a year back counts as already started. */
+    const val ANCHOR_BACK_DAYS = 182L
     private val SKIP_WORDS = setOf("no", "skip", "skipped", "cancelled", "canceled", "none", "not")
 
     private val DAY_WORDS = mapOf(
@@ -181,7 +183,9 @@ object BinRules {
         var s = SchoolRules.tidy(text)
         if (s.isEmpty()) return null
         var anchor: Long? = null
-        when (val found = SchoolRules.findSpan(s, today)) {
+        // A start date with no year is the nearest one, a few weeks back included ("from 13 Oct" typed on the 21st is
+        // this October's, not next year's), so it is read as if today were [ANCHOR_BACK_DAYS] ago.
+        when (val found = SchoolRules.findSpan(s, today - ANCHOR_BACK_DAYS)) {
             SpanFound.Bad -> return null
             is SpanFound.Days -> { if (found.startDay != found.endDay) return null; anchor = found.startDay; s = found.rest }
             SpanFound.None -> Unit
@@ -190,6 +194,8 @@ object BinRules {
         val lower = w.map { it.lowercase() }
         val every = everyWeeks(lower)
         val typedDay = lower.firstNotNullOfOrNull { DAY_WORDS[it] }
+        // A typed weekday wins over a date that falls on another day: "Tue from 14 Oct" starts the Tuesday after.
+        if (anchor != null && typedDay != null) anchor += (typedDay - CivilDate.isoDayOfWeek(anchor)).mod(7)
         val weekday = anchor?.let { CivilDate.isoDayOfWeek(it) } ?: typedDay ?: return null
         val nameWords = w.filterIndexed { i, _ -> lower[i] !in FILLER && lower[i] !in DAY_WORDS }
         val name = tidyName(nameWords.joinToString(" "))

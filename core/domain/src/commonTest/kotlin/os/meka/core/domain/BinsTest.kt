@@ -186,4 +186,19 @@ class BinsTest {
         // Past one-offs leave the list.
         assertTrue(BinRules.oneOffRows(bMac.items(), d(1, 1, 2027)).isEmpty())
     }
+
+    @Test
+    fun aStartDateJustGoneIsThisYearsAndATypedWeekdayWins() {
+        val wed = d(10, 21)
+        // Typed on Wed 21 Oct: "from 13 Oct" is the Tuesday a week ago, not 13 Oct 2027 (a Wednesday).
+        assertEquals(BinEntry("Black bin", 2, 2, d(10, 13)), BinRules.read("Black bin Tue fortnightly from 13 Oct", wed))
+        assertEquals(BinEntry("Recycling", 2, 2, d(10, 20)), BinRules.read("Recycling fortnightly from 20 Oct", wed))
+        val black = bin("Black bin", 2, 2, d(10, 13))
+        assertEquals(d(10, 27), BinRules.next(black, wed, HolidayCalendar(emptyMap())))
+        // A date more than half a year back is next year's; a typed year stands.
+        assertEquals(d(3, 2, 2027), BinRules.read("Garden waste fortnightly from 2 Mar", wed)!!.anchorDay)
+        assertEquals(d(9, 1), BinRules.read("Garden waste every Tue from 1/9/2026", wed)!!.anchorDay)
+        // A weekday that disagrees with the date: the first such weekday from that date.
+        assertEquals(BinEntry("Food caddy", 2, 1, d(10, 20)), BinRules.read("Food caddy Tue from 14 Oct", wed))
+    }
 }
