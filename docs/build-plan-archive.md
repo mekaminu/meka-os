@@ -2844,3 +2844,10 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Quality gate:** `ScreenShots.assertOneLine(…, "Good afternoon")` in every Today shot.
 - No server change, no migration. Mac checked nightly.
 - Landed 174addc; run 1042 failed only tokens-and-infra (a hand edit to the generated MekaTokens.swift, and the type check wants "type: ok" on a shrink-to-fit size): fixed in 5877db6, CI run 1043 (39752986848) green, screens 32b0b3d.
+
+### Quality gate — slice 6 (2026-10-22): Needs you's shots, and "about" kept with its time
+- **Needs you on both Fold sizes:** `NeedsYouScreensTest` (android unit test, Robolectric native graphics, Roborazzi, `ShotApplication`) draws the whole `NeedsYouRoute` at the cover and inner sizes, empty · one overdue task · a full stack (two overdue tasks, one due today at 19:15 with no time planned, a renewal due today so "From your lists" joins, a reminder for tomorrow under Coming up), Dark, plus Light for the full stack: 8 shots under `needs-you/` (artifact `fold-screens`, then the `screens` branch's docs/screens/fold/needs-you/). Each shot is read by `assertSensible`, `assertReadable` on the task cards' titles (a stack: only those drawn), and `assertShows` for the title, the empty line "Nothing needs you" when empty, and the top card's title and "Overdue" otherwise. Clock driven by hand (3 s).
+- **Facade `setDue(taskId, atMs)`** (null clears; synced like any task edit): what puts overdue and due-today cards in the stack. `DueFacadeTest` (1): set on the Fold, the Mac's stack shows OVERDUE and DUE_TODAY; cleared on the Mac, the card goes.
+- **The Today re-shot's small finding:** the commute row broke inside "about 18:50". Core `CommuteRules.shown(line)` keeps "about" with its time (a no-break space, U+00A0) in the words drawn only (TalkBack and speech keep the plain line); used by the Fold's `CommuteTimelineRow` and the Mac's `CommuteTimelineRow`. `CommuteTest.aShownLineKeepsAboutWithItsTime`.
+- Design check: no design file for Needs you; nothing about its look changed.
+- No server change, no migration. Mac checked nightly.

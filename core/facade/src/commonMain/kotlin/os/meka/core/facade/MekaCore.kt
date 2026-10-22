@@ -1746,6 +1746,14 @@ class MekaCore(
         followBlocks(listOf(taskId))
         Unit
     }
+    /**
+     * Sets or clears when a task is due (the quality gate's Needs you shots, 2026-10-22: an overdue task and one due today
+     * with no time planned are what put cards in the stack). Null clears it.
+     */
+    suspend fun setDue(taskId: String, atMs: Long?) = onCore {
+        tasks.edit(taskId, if (atMs == null) TaskEdit(clearDueAt = true) else TaskEdit(dueAtMs = atMs))
+        Unit
+    }
     suspend fun delete(taskId: String) = onCore { tasks.delete(taskId); followBlocks(listOf(taskId)); Unit }
 
     /**

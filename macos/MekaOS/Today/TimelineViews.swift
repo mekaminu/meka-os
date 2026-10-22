@@ -293,7 +293,8 @@ struct CommuteTimelineRow: View {
         var title = AttributedString(row.title)
         title.foregroundColor = palette.textTertiary
         guard let detail = row.detail else { return title }
-        var rest = AttributedString(" · \(detail)")
+        // "about" kept with its time, so a wrap never leaves it alone at a line's end (re-shot, 2026-10-22).
+        var rest = AttributedString(" · \(CommuteRules.shared.shown(line: detail))")
         rest.foregroundColor = row.running ? palette.accent : palette.textTertiary
         return title + rest
     }

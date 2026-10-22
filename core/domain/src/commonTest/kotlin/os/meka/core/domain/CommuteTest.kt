@@ -407,4 +407,13 @@ class CommuteTest {
             CommuteAskRules.dayLine(hours, fri, cal),
         )
     }
+
+    @Test
+    fun aShownLineKeepsAboutWithItsTime() {
+        assertEquals("Home about\u00A018:50", CommuteRules.shown(CommuteRules.homeLine(18 * 60 + 50)))
+        assertEquals("Now · home about\u00A018:50", CommuteRules.shown("Now · home about 18:50"))
+        assertEquals("Commute 07:40–09:00", CommuteRules.shown("Commute 07:40–09:00"))
+        // Only the one space after "about" is held: "Home" and "about" may still part.
+        assertEquals(1, CommuteRules.shown("Home about 18:50").count { it == '\u00A0' })
+    }
 }

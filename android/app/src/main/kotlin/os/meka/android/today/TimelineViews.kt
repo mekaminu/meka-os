@@ -1,5 +1,6 @@
 package os.meka.android.today
 
+import os.meka.core.domain.CommuteRules
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -169,7 +170,8 @@ internal fun CommuteTimelineRow(r: TimelineRow, modifier: Modifier = Modifier) {
         Text(
             buildAnnotatedString {
                 append(r.title)
-                r.detail?.let { withStyle(SpanStyle(color = detailColor)) { append(" · $it") } }
+                // "about" kept with its time, so a wrap never leaves it alone at a line's end (re-shot, 2026-10-22).
+                r.detail?.let { withStyle(SpanStyle(color = detailColor)) { append(" · ${CommuteRules.shown(it)}") } }
             },
             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f),
         )

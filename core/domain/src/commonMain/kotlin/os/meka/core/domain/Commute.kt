@@ -223,6 +223,16 @@ object CommuteRules {
     fun homeLine(minute: Int): String = "Home about ${LocalClock.formatMinute(minute)}"
 
     /**
+     * A commute line as drawn on a narrow screen: "about" is kept with its time (a no-break space), so "Commute home ·
+     * Home about 18:50" wraps before "about" rather than leaving "about" alone at a line's end (the quality gate's Today
+     * re-shot, 2026-10-22). For the words shown only; what is spoken or read by TalkBack keeps the plain line.
+     */
+    fun shown(line: String): String = line.replace("about ", "about$NO_BREAK")
+
+    /** U+00A0: a space a line never breaks at. */
+    const val NO_BREAK = " "
+
+    /**
      * A band's line on Today's timeline: the commute home says "Home about 18:50"; while either is on, "Now · at work
      * about 09:00" / "Now · home about 18:50" (lit); the morning one says nothing more until then (its time says it).
      */
