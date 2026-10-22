@@ -79,6 +79,8 @@ class TodayScreensTest {
         if (fill == Fill.FASTING) {
             // The live card reads like the design: the stage, when it ends, End; and the strip has no second fast tile.
             ScreenShots.assertShows(compose, name, "Switching to fat")
+            // The first shots (c3582a9): on the cover screen the stage wrapped "Switching to / fat"; it reads on one line.
+            ScreenShots.assertOneLine(compose, name, "Switching to fat")
             ScreenShots.assertShows(compose, name, "Ends in 2:30 · 19:45")
             ScreenShots.assertOneLine(compose, name, "Ends in 2:30")
             ScreenShots.assertShows(compose, name, "FASTING")

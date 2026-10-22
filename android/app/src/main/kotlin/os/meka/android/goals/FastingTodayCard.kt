@@ -97,7 +97,7 @@ fun FastingTodayCardView(
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(card.label.uppercase(), style = MekaType.sectionLabel, color = colors.textSecondary, maxLines = 1)
-            Text(card.stage, style = MekaType.itemTitle, color = colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(card.stage, style = MekaType.metaStrong, color = colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(card.line, style = MekaType.caption.copy(fontFeatureSettings = "tnum"), color = colors.accent)
         }
         Text(
