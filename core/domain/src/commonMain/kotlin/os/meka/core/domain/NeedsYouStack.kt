@@ -208,6 +208,19 @@ object NeedsYouStackRules {
         DecisionEffect.OPEN_PLAN_WEEK -> card.title
     }
 
+    /** The three buttons under the top card, in order: "← Tomorrow" · "↑ Open" · "Done →". */
+    fun buttonLabels(card: DecisionCard): List<String> = listOf("← ${card.laterLabel}", "↑ ${card.openLabel}", "${card.yesLabel} →")
+
+    /**
+     * How the buttons share the card's width: by their words (each label's length plus [BUTTON_PAD] for its sides), so
+     * "← Tomorrow" gets more than "↑ Open" (the quality gate's Needs you shots, 2026-10-22: in equal thirds on the
+     * cover screen "← Tomorrow" was cut to "← Tomorr…").
+     */
+    fun buttonWeights(labels: List<String>): List<Float> = labels.map { it.length + BUTTON_PAD }
+
+    /** A button's sides (8 dp each, about a character each at the label's size), counted in characters. */
+    const val BUTTON_PAD = 2f
+
     /** The hint under the top card: "→ Done · ← Tomorrow · ↑ Open". */
     fun hint(card: DecisionCard): String = "→ ${card.yesLabel} · ← ${card.laterLabel} · ↑ ${card.openLabel}"
 }

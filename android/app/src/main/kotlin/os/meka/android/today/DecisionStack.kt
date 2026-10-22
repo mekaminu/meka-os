@@ -240,9 +240,12 @@ private fun TopCard(
                 },
         )
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.m), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            StackButton("← ${card.laterLabel}", primary = false, Modifier.weight(1f)) { perform(DecisionMove.LATER) }
-            StackButton("↑ ${card.openLabel}", primary = false, Modifier.weight(1f)) { perform(DecisionMove.OPEN) }
-            StackButton("${card.yesLabel} →", primary = true, Modifier.weight(1f)) { perform(DecisionMove.YES) }
+            // Shared by their words, so "← Tomorrow" isn't cut on the cover screen (the gate's Needs you shots).
+            val labels = NeedsYouStackRules.buttonLabels(card)
+            val weights = NeedsYouStackRules.buttonWeights(labels)
+            StackButton(labels[0], primary = false, Modifier.weight(weights[0])) { perform(DecisionMove.LATER) }
+            StackButton(labels[1], primary = false, Modifier.weight(weights[1])) { perform(DecisionMove.OPEN) }
+            StackButton(labels[2], primary = true, Modifier.weight(weights[2])) { perform(DecisionMove.YES) }
         }
         if (BoardFeedRules.canSendToDay(card)) CardToDay(card, toDays) { day ->
             // The card fades as it leaves for that day (reduced motion: at once); the next one rises.

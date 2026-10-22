@@ -158,4 +158,18 @@ class NeedsYouStackTest {
         assertEquals("Approvals, replies and decisions land here.", NeedsYouStackRules.EMPTY_CAPTION)
         assertFalse(NeedsYouStackRules.EMPTY_LINE.endsWith("."))
     }
+
+    @Test
+    fun theButtonsShareTheWidthByTheirWords() {
+        val card = DecisionCard(
+            "t1", DecisionKind.OVERDUE, "Renew the permit", "Overdue", "t1",
+            "Done", "Tomorrow", "Open", DecisionEffect.COMPLETE_TASK, DecisionEffect.SNOOZE_TASK, DecisionEffect.OPEN_TASK, urgent = true,
+        )
+        val labels = NeedsYouStackRules.buttonLabels(card)
+        assertEquals(listOf("← Tomorrow", "↑ Open", "Done →"), labels)
+        val w = NeedsYouStackRules.buttonWeights(labels)
+        assertTrue(w[0] > w[1] && w[1] == w[2])
+        // "← Tomorrow" gets over a third of the row, never less.
+        assertTrue(w[0] / w.sum() > 1f / 3)
+    }
 }
