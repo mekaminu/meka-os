@@ -5065,6 +5065,12 @@ class MekaCore(
     suspend fun discardFast() = onCore { fasting.discard() }
     /** Picks a plan from [os.meka.core.domain.FastingRules.PLAN_CHOICES] (goal and eating window). */
     suspend fun chooseFastingPlan(index: Int) = onCore { fasting.choosePlan(index) }
+    /**
+     * The Fasting screen rebuilt to the approved design (ring, Started and Goal tiles, what's happening now, the seven
+     * stages, this week's rings, History), read from [fastingView] at [atMs] (the apps pass their ticking clock). Pure.
+     */
+    fun fastingScreen(atMs: Long = nowMs()): os.meka.core.domain.FastingScreen =
+        os.meka.core.domain.FastingScreenRules.screen(_fasting.value, atMs)
 
     // ---- Evening shutdown ----
 

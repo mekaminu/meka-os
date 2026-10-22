@@ -56,6 +56,10 @@ data class FastNow(
      * burst) once per fast when this first appears.
      */
     val doneLine: String? = null,
+    /** The Fasting screen's Started tile: "Tue 20:00". */
+    val startedTile: String = "",
+    /** The Fasting screen's Goal tile: "Wed 12:00 · 16h"; extended "Sat 20:00 · 5 days". */
+    val goalTile: String = "",
 ) {
     /** Share of the goal done, 0 to 1. */
     fun progress(nowMs: Long): Float = FastingRules.progressTo(startedAtMs, goalAtMs, nowMs)
@@ -95,6 +99,8 @@ data class FastRecord(
     val whenLine: String,
     /** "4 d 18 h of 5 days · ended early" · "16 h 20 m · goal reached". */
     val resultLine: String,
+    /** The Fasting screen's history row: "Tue 20 → Wed 21", or "Wed 21" when it began and ended that day. */
+    val span: String = "",
 )
 
 /** One day of the heat strip. */
@@ -136,6 +142,8 @@ data class FastingDay(
     val hours: Double,
     val reachedGoal: Boolean,
     val isToday: Boolean,
+    /** The goal of the fast [hours] counts, in hours (0 when none): this week's small rings fill against it. */
+    val goalHours: Double = 0.0,
 )
 
 data class FastingView(
@@ -220,6 +228,12 @@ object FastingRules {
     const val HEAT_WEEKS = 12
     /** A start can be set at most this far back. */
     const val MAX_BACKDATE_MIN = 48 * 60
+    /**
+     * A fast ended sooner than this after it began was started by mistake (a double tap on Start, then End, or the
+     * watch's button twice): it is kept in the data but never counted (history, last fast, averages, the week, the heat
+     * strip, the weekly review). The quality gate's "Last fast 0 m · average 0 m · longest 0 m" came from these.
+     */
+    const val MIN_COUNTED_MS = 10 * 60_000L
     /** "End fast" can be undone for this long. */
     const val RESUME_WINDOW_MS = 10 * 60_000L
     /** The meal block the planner keeps free. */
@@ -531,6 +545,8 @@ class Fasting(
                 dayLine = if (f.extended) FastingRules.dayLine(f.start, goal, now) else null,
                 goalWhen = if (f.extended) dayTime(goal) else FastingRules.hm(calendar.minuteOfDay(goal)),
                 doneLine = if (f.extended && reached) FastingRules.doneLine(f.start, goal) else null,
+                startedTile = dayTime(f.start),
+                goalTile = "${dayTime(goal)} · " + if (f.extended) FastingRules.daysLabel(((goal - f.start + HOUR - 1) / HOUR).toInt()) else "${f.target}h",
             )
         }
         val history = merged()
@@ -556,6 +572,7 @@ class Fasting(
                 hours = best?.let { (it.end!! - it.start) / 3_600_000.0 } ?: 0.0,
                 reachedGoal = ended.any { it.end!! >= it.goal },
                 isToday = day == today,
+                goalHours = best?.let { (it.goal - it.start) / 3_600_000.0 } ?: 0.0,
             )
         }
         val inWeek = history.filter { calendar.epochDayOf(it.end!!) in (today - 6)..today }
@@ -605,6 +622,7 @@ class Fasting(
                 whenLine = "${dateTime(f.start)} – ${if (calendar.epochDayOf(f.start) == calendar.epochDayOf(f.end)) FastingRules.hm(calendar.minuteOfDay(f.end)) else dateTime(f.end)}",
                 resultLine = if (reached) "${FastingRules.longDuration(actual)} · goal reached"
                 else "${FastingRules.longDuration(actual)} of $plannedText · ended early",
+                span = span(f.start, f.end),
             )
         }
         val streak = newest.takeWhile { it.end!! >= it.goal }.size
@@ -687,7 +705,10 @@ class Fasting(
     /** The fast that counts: the earliest-started open one. */
     private fun current(): Fast? = open().minWithOrNull(compareBy<Fast> { it.start }.thenBy { it.id })
 
-    /** Finished fasts with overlapping ones merged (the earlier start's goal kept). */
+    /**
+     * Finished fasts with overlapping ones merged (the earlier start's goal kept), leaving out any that lasted under
+     * [FastingRules.MIN_COUNTED_MS] (started by mistake).
+     */
     private fun merged(): List<Fast> {
         val out = mutableListOf<Fast>()
         for (f in finished().sortedWith(compareBy<Fast> { it.start }.thenBy { it.id })) {
@@ -695,7 +716,14 @@ class Fasting(
             if (prev != null && f.start < prev.end!!) out[out.size - 1] = prev.copy(end = maxOf(prev.end, f.end!!))
             else out += f
         }
-        return out
+        return out.filter { it.end!! - it.start >= FastingRules.MIN_COUNTED_MS }
+    }
+
+    /** "Tue 20 → Wed 21", or "Wed 21" for a fast that began and ended on the same day. */
+    private fun span(start: Long, end: Long): String {
+        val a = calendar.epochDayOf(start); val b = calendar.epochDayOf(end)
+        fun d(day: Long) = CivilDate.shortLabel(day).substringBeforeLast(' ')
+        return if (a == b) d(b) else "${d(a)} → ${d(b)}"
     }
 
     /** "5-day fast", "Fast until Fri 18:00". */
