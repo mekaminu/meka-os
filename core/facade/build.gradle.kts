@@ -57,6 +57,8 @@ kotlin {
 // what it wrote (MekaCore's background errors with their stacks) and full failures.
 tasks.withType<org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeTest>().configureEach {
     testLogging {
+        // Each test as it starts, so a hang is named in the watched step's annotation (nightly run 1087).
+        events("started", "failed")
         showStandardStreams = true
         exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     }

@@ -109,14 +109,24 @@ jobs:
     runs-on: macos-26
     # The Kotlin/Native tests alone took 35 min on 2026-10-12 (the whole job 44) and 65 min on 2026-10-16, when run 747
     # was cancelled at 75 min while building the Swift app (about 10 more for it and the UI checks): leave room.
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: "21" }
       - uses: gradle/actions/setup-gradle@v4
-      - name: Kotlin/Native tests + XCFramework
-        run: tools/ci-run.sh ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test :core:facade:macosArm64Test :core:facade:assembleMekaKitReleaseXCFramework
+      # One step per module (nightly run 1087, 2026-10-22: the single step ran past the job's 120 min and was cancelled
+      # with nothing readable). Each step is watched: past its minutes, tools/ci-run.sh annotates the log's last lines
+      # (the native tests log each test as it starts, so the one that hangs is named) and stops it.
+      - name: Kotlin/Native tests (sync, domain)
+        env: { CI_RUN_WATCH_MIN: "45" }
+        run: tools/ci-run.sh ./gradlew :core:sync:macosArm64Test :core:domain:macosArm64Test
+      - name: Kotlin/Native tests (facade)
+        env: { CI_RUN_WATCH_MIN: "50" }
+        run: tools/ci-run.sh ./gradlew :core:facade:macosArm64Test
+      - name: XCFramework
+        env: { CI_RUN_WATCH_MIN: "30" }
+        run: tools/ci-run.sh ./gradlew :core:facade:assembleMekaKitReleaseXCFramework
       # When the facade's native test process dies without a word ("Test running process exited unexpectedly", ci run
       # 871), run its first test straight from the binary so the log shows the crash itself and the exit status.
       - name: Native facade test crash (only when the step above failed)
