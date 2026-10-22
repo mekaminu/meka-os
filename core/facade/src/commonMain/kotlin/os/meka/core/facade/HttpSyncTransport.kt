@@ -145,6 +145,11 @@ interface AiApi {
         history: List<os.meka.core.domain.TalkTurn>,
         speakVoice: String?,
         onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
+        /**
+         * Talking to Ada like a conversation, slice 7: each later piece the server said ahead (its words, its clip as
+         * base64 MP3, the voice), before the answer returns. Asking for them is what tells the server this device reads them.
+         */
+        onNext: (suspend (text: String, audio: String, voice: String?) -> Unit)? = null,
     ): AskReply = askSpoken(question, context, history, speakVoice)
     /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
     suspend fun aiStatus(): AiStatusReply? = null
@@ -767,9 +772,10 @@ class HttpSyncTransport(
         history: List<os.meka.core.domain.TalkTurn>,
         speakVoice: String?,
         onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
+        onNext: (suspend (text: String, audio: String, voice: String?) -> Unit)?,
     ): AskReply {
         if (streamMissing) return askSpoken(question, context, history, speakVoice)
-        val body = askBody(question, context, history, voice = true, speak = true, speakVoice = speakVoice)
+        val body = askBody(question, context, history, voice = true, speak = true, speakVoice = speakVoice, speakNext = onNext != null)
         prepare() // the ask routes require the device's signing key on the server
         val path = AskCodec.STREAM_PATH
         val reply: AskReply? = sendStreaming(path, body) { resp ->
@@ -785,6 +791,7 @@ class HttpSyncTransport(
                 val line = channel.readUTF8Line() ?: break
                 when (val l = AskCodec.decodeStreamLine(line)) {
                     is AskCodec.StreamLine.First -> onFirst(l.text, l.audio, l.voice)
+                    is AskCodec.StreamLine.Next -> onNext?.invoke(l.text, l.audio, l.voice)
                     is AskCodec.StreamLine.Final -> whole = l.response
                     null -> Unit
                 }
@@ -801,6 +808,7 @@ class HttpSyncTransport(
         voice: Boolean,
         speak: Boolean,
         speakVoice: String?,
+        speakNext: Boolean = false,
     ): String = AskCodec.encodeRequest(
         AskCodec.Request(
             question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) },
@@ -812,6 +820,7 @@ class HttpSyncTransport(
             recall = context.recall.filter { it.isNotBlank() }.map { it.take(AskCodec.MAX_LINE) }.takeLast(AskCodec.MAX_RECALL),
             name = AskCodec.plainName(context.callName),
             introduce = context.introduce,
+            speakNext = speakNext,
         ),
     )
 

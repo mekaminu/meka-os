@@ -61,10 +61,31 @@ class PollySpeech : SpeechEngine {
         return true
     }
 
-    override fun synthesize(text: String, voice: String, engine: String): ByteArray =
+    /** Engines that refused SSML once (slice 7): they are sent the plain words from then on, until the server restarts. */
+    private val plainOnly = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    override fun synthesize(text: String, voice: String, engine: String): ByteArray = sayMarkedUp(text, engine, plainOnly) { words, type ->
         polly.synthesizeSpeechAsBytes(
-            SynthesizeSpeechRequest.builder().text(text).textType("text").voiceId(voice).engine(engine).outputFormat("mp3").build(),
+            SynthesizeSpeechRequest.builder().text(words).textType(type).voiceId(voice).engine(engine).outputFormat("mp3").build(),
         ).asByteArray()
+    }
+
+    companion object {
+        /**
+         * Talking to Ada like a conversation, slice 7 (speech that sounds alive): [text] said as SSML
+         * ([os.meka.core.domain.SpokenSsmlRules]: a small pause after an opening reaction, a touch quicker) through
+         * [call] (words, "ssml" or "text"). If the engine refuses the SSML the same words are said plainly at once, and
+         * that engine is kept in [plainOnly] so it isn't asked with SSML again; a plain failure is thrown as before.
+         */
+        fun sayMarkedUp(text: String, engine: String, plainOnly: MutableSet<String>, call: (String, String) -> ByteArray): ByteArray {
+            if (engine in plainOnly) return call(text, "text")
+            val marked = runCatching { call(os.meka.core.domain.SpokenSsmlRules.ssml(text), "ssml") }
+            marked.getOrNull()?.let { return it }
+            val plain = call(text, "text")
+            plainOnly += engine
+            return plain
+        }
+    }
 }
 
 /**

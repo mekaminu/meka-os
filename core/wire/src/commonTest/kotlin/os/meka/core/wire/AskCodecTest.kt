@@ -314,4 +314,20 @@ class AskCodecTest {
         assertFailsWith<WireFormatException> { AskCodec.decodeStreamLine("""{"w":1,"answer":"no state"}""") }
         assertFailsWith<WireFormatException> { AskCodec.decodeStreamLine("not json") }
     }
+
+    @Test
+    fun laterPiecesGoAheadOnlyToADeviceThatAskedForThem() {
+        // Talking to Ada like a conversation, slice 7.
+        val next = AskCodec.StreamLine.Next("Heat pumps suit a well-insulated house.", "AQID", "Amy")
+        assertEquals(next, AskCodec.decodeStreamLine(AskCodec.encodeStreamNext(next)))
+        assertEquals(null, AskCodec.decodeStreamLine(AskCodec.encodeStreamNext(next.copy(audio = ""))))
+        assertEquals(null, AskCodec.decodeStreamLine("""{"w":1,"next":"x"}"""))
+        val spoken = AskCodec.Request("why", "2026-10-22", "Thursday", emptyList(), voice = true, speak = true, speakNext = true)
+        val body = AskCodec.encodeRequest(spoken)
+        assertTrue("speakNext" in body)
+        assertEquals(true, AskCodec.decodeRequest(body).speakNext)
+        // Not without speak, and left out when false, so an older server reads the request as before.
+        assertEquals(false, AskCodec.decodeRequest(AskCodec.encodeRequest(spoken.copy(speak = false))).speakNext)
+        assertFalse("speakNext" in AskCodec.encodeRequest(spoken.copy(speakNext = false)))
+    }
 }

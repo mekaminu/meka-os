@@ -700,7 +700,7 @@ fun Application.mekaSync(
                     kotlinx.coroutines.coroutineScope {
                         launch(Dispatchers.IO) {
                             val answer = try {
-                                askService.askStream(request, timed = { t -> talkSpeed?.record(who.householdId, t) }) { first -> lines.trySend(AskCodec.encodeStreamFirst(first)) }
+                                askService.askStream(request, timed = { t -> talkSpeed?.record(who.householdId, t) }, next = { n -> lines.trySend(AskCodec.encodeStreamNext(n)) }) { first -> lines.trySend(AskCodec.encodeStreamFirst(first)) }
                             } catch (e: Exception) {
                                 AskCodec.Response(AskCodec.Response.FAILED, reason = "Navilife's AI couldn't answer")
                             }

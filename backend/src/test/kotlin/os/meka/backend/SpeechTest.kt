@@ -15,6 +15,7 @@ import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -495,5 +496,30 @@ class SpeechTest {
         // A key Google won't answer for: no voices listed.
         val down = FakePolly(chirp).apply { fail = true }
         assertTrue(SpeechService(FakePolly(gb), InMemorySpeechUsageStore(), nowMs = { now }, google = down).report().startsWith("Google voice: key read but no voices listed"))
+    }
+
+    @Test
+    fun pollyIsSentSsmlAndAnEngineThatRefusesItGetsThePlainWordsFromThenOn() {
+        // Talking to Ada like a conversation, slice 7: a small pause after a reaction, a touch quicker.
+        val calls = mutableListOf<Pair<String, String>>()
+        val plainOnly = mutableSetOf<String>()
+        val ok = PollySpeech.sayMarkedUp("Oh nice. What sort?", "generative", plainOnly) { w, t -> calls += w to t; byteArrayOf(1) }
+        assertEquals(1, ok.size)
+        assertEquals("ssml", calls.single().second)
+        assertTrue("<break time=\"250ms\"/>" in calls.single().first, calls.single().first)
+        assertTrue("rate=\"106%\"" in calls.single().first)
+        // Refused as SSML: said plainly at once, and that engine is asked plainly after.
+        calls.clear()
+        val refusing: (String, String) -> ByteArray = { w, t -> calls += w to t; if (t == "ssml") error("InvalidSsml") else byteArrayOf(2) }
+        assertEquals(2, PollySpeech.sayMarkedUp("Ha, fair. Good call.", "neural", plainOnly, refusing)[0].toInt())
+        assertEquals(listOf("ssml", "text"), calls.map { it.second })
+        assertEquals("Ha, fair. Good call.", calls.last().first)
+        assertEquals(setOf("neural"), plainOnly)
+        calls.clear()
+        PollySpeech.sayMarkedUp("Right.", "neural", plainOnly, refusing)
+        assertEquals(listOf("text"), calls.map { it.second })
+        // A plain failure is still a failure, and doesn't mark the engine.
+        assertFailsWith<IllegalStateException> { PollySpeech.sayMarkedUp("Hi.", "standard", plainOnly) { _, _ -> error("down") } }
+        assertFalse("standard" in plainOnly)
     }
 }

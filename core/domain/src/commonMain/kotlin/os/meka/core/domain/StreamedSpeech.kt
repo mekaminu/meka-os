@@ -88,6 +88,35 @@ object StreamedSpeechRules {
     }
 
     /**
+     * Talking to Ada like a conversation, slice 7 (the rest said sentence by sentence as it is written): the pieces the
+     * device will say after [early] ([rest], then [SpeechRules.pieces]) that can no longer change in [prefix], the
+     * model's answer so far: once the words have closed, every one; before that, each but the last, and only when it
+     * ends a sentence (the last may still grow, and a later piece joins sentences). At most [MAX_NEXT], within
+     * [SpokenTurnRules.MAX_WORDS] words counting [early] (what the server's tidy keeps), and none while the words read
+     * like a list ([SpokenTurnRules.isListy]: the tidy would change them) or don't start with [early]. Pure.
+     */
+    fun nextPieces(prefix: String, early: String): List<String> {
+        val partial = partialAnswer(prefix) ?: return emptyList()
+        if (early.isBlank() || SpokenTurnRules.isListy(partial.text)) return emptyList()
+        val words = squash(TalkRules.speakable(partial.text))
+        val e = squash(early)
+        if (!words.startsWith(e)) return emptyList()
+        val pieces = SpeechRules.pieces(words.removePrefix(e).trim())
+        val settled = if (partial.closed) pieces else pieces.dropLast(1).filter(::endsSentence)
+        var count = SpokenTurnRules.wordCount(e)
+        val out = mutableListOf<String>()
+        for (p in settled) {
+            count += SpokenTurnRules.wordCount(p)
+            if (count > SpokenTurnRules.MAX_WORDS || out.size >= MAX_NEXT || p.length > SpeechRules.MAX_PIECE) break
+            out += p
+        }
+        return out
+    }
+
+    /** Pieces after the first said ahead of the answer at most (slice 7): the device says at most three sentences. */
+    const val MAX_NEXT = 2
+
+    /**
      * Talking to Ada like a conversation, slice 4: where a spoken turn's words end and what comes after them begins
      * (`<after>{"actions":[…],"sources":[…],"note":"…"}</after>`). Never said; the same tag as [os.meka.core.wire.AskCodec].
      */

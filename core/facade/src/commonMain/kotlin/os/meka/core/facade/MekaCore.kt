@@ -9227,16 +9227,23 @@ class MekaCore(
         if (voice) onCore { openTurn()?.sent(nowMs()) }
         val reply = try {
             // The companion, slice 9: the first sentence comes ahead, said, while the model writes the rest.
-            if (speakVoice != null && onEarly != null) api.askStreamed(q, context, history.map(::sendable), speakVoice.name) { text, audio, _ ->
-                if (text.isNotBlank() && audio.isNotEmpty() && talkEarly == null) {
-                    onCore {
-                        openTurn()?.firstPiece(nowMs())
-                        speechWithAnswer(speakVoice.name, text, audio)
+            if (speakVoice != null && onEarly != null) api.askStreamed(
+                q, context, history.map(::sendable), speakVoice.name,
+                onFirst = { text, audio, _ ->
+                    if (text.isNotBlank() && audio.isNotEmpty() && talkEarly == null) {
+                        onCore {
+                            openTurn()?.firstPiece(nowMs())
+                            speechWithAnswer(speakVoice.name, text, audio)
+                        }
+                        talkEarly = text
+                        onEarly(text)
                     }
-                    talkEarly = text
-                    onEarly(text)
-                }
-            }
+                },
+                // Talking to Ada like a conversation, slice 7: the rest's pieces, said ahead, wait in memory for the speaker.
+                onNext = { text, audio, _ ->
+                    if (text.isNotBlank() && audio.isNotEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio) }
+                },
+            )
             else if (speakVoice != null) api.askSpoken(q, context, history.map(::sendable), speakVoice.name)
             else api.ask(q, context, history.map(::sendable), voice)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {

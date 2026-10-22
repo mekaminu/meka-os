@@ -458,6 +458,32 @@ class AiAskTest {
     }
 
     @Test
+    fun theRestOfASpokenAnswerIsSaidAheadPieceByPieceForADeviceThatAsked() {
+        // Talking to Ada like a conversation, slice 7: the rest said sentence by sentence as it is written.
+        val model = StreamingModel(listOf("Oh nice. ", "Heat pumps suit a well", "-insulated house. Is ", "yours?", "\n<after>{\"actions\":[]}</after>"))
+        val said = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val service = AskService(model, { text, voice -> said += text; AskService.FirstClip(byteArrayOf(7), voice ?: "Amy") })
+        val spoken = request.copy(question = "I'm thinking of a heat pump", voice = true, speak = true, speakVoice = "Amy", speakNext = true)
+        val events = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val r = service.askStream(spoken, next = { n -> events += "next:" + n.text }) { f -> events += "first:" + f.text }
+        assertEquals(listOf("first:Oh nice.", "next:Heat pumps suit a well-insulated house.", "next:Is yours?"), events.toList())
+        assertEquals("Oh nice. Heat pumps suit a well-insulated house. Is yours?", r.answer)
+        // Each piece said once, exactly as the device will ask for it.
+        assertEquals(3, said.size)
+        assertEquals(setOf("Oh nice.", "Heat pumps suit a well-insulated house.", "Is yours?"), said.toSet())
+        // A device that didn't ask: only the first goes ahead and nothing more is said.
+        said.clear(); events.clear()
+        service.askStream(spoken.copy(speakNext = false), next = { n -> events += "next:" + n.text }) { f -> events += "first:" + f.text }
+        assertEquals(listOf("first:Oh nice."), events.toList())
+        assertEquals(listOf("Oh nice."), said.toList())
+        // A clip slower than the wait is left for the device to ask for; the answer still comes.
+        val slow = AskService(model, { text, v -> if (text != "Oh nice.") Thread.sleep(400); AskService.FirstClip(byteArrayOf(1), v) }, nextClipWaitMs = 20)
+        events.clear()
+        assertEquals(AskCodec.Response.ANSWERED, slow.askStream(spoken, next = { n -> events += "next:" + n.text }) { f -> events += "first:" + f.text }.state)
+        assertEquals(listOf("first:Oh nice."), events.toList())
+    }
+
+    @Test
     fun aSpokenTurnIsAskedForItsWordsFirstAndWhatComesAfterIsCheckedAsBefore() {
         // Talking to Ada like a conversation, slice 4: one tag on both ends.
         assertEquals(os.meka.core.domain.StreamedSpeechRules.AFTER_OPEN, AskCodec.AFTER_OPEN)

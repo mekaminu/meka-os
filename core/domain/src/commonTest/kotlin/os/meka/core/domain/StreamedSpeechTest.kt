@@ -76,6 +76,30 @@ class StreamedSpeechTest {
     }
 
     @Test
+    fun theRestsPiecesGoAheadOnlyOnceTheyCanNoLongerChange() {
+        // Talking to Ada like a conversation, slice 7: the rest said sentence by sentence as it is written.
+        val full = "Oh nice. Heat pumps work best in a well-insulated house. Is yours?\n<after>{\"actions\":[]}</after>"
+        val early = StreamedSpeechRules.earlyPiece(full.take(12))!!
+        assertEquals("Oh nice.", early)
+        // The second sentence is still being written, or has ended with nothing after it yet: nothing.
+        assertEquals(emptyList(), StreamedSpeechRules.nextPieces(full.take(30), early))
+        assertEquals(emptyList(), StreamedSpeechRules.nextPieces(full.substringBefore(" Is"), early))
+        // The next has begun: the second sentence, exactly as the device will ask for it.
+        assertEquals(listOf("Heat pumps work best in a well-insulated house."), StreamedSpeechRules.nextPieces(full.substringBefore("yours"), early))
+        // The words have closed: the last piece too, and the pieces are the device's own.
+        val all = StreamedSpeechRules.nextPieces(full, early)
+        assertEquals(listOf("Heat pumps work best in a well-insulated house.", "Is yours?"), all)
+        assertEquals(SpeechRules.pieces(StreamedSpeechRules.rest(TalkRules.speakable(StreamedSpeechRules.partialAnswer(full)!!.text), early)), all)
+        // A list (the tidy would change it), words that don't start with what was said, or past forty words: not ahead.
+        assertEquals(emptyList(), StreamedSpeechRules.nextPieces("Oh nice. Two options:\n- One.\n- Two.\n<after>", early))
+        assertEquals(emptyList(), StreamedSpeechRules.nextPieces("Something else. Then this. <after>", early))
+        val thirty = (1..29).joinToString(" ") { "w" } + " end."
+        val long = "Right. Here $thirty Then $thirty <after>"
+        assertEquals(listOf("Here $thirty"), StreamedSpeechRules.nextPieces(long, "Right."))
+        assertEquals(emptyList(), StreamedSpeechRules.nextPieces(full, ""))
+    }
+
+    @Test
     fun talkSpeaksTheEarlyPieceThenOnlyTheRestThenListens() {
         var step = TalkFlow.heard(TalkFlow.start().session, "why is the sky blue")
         val ask = assertIs<TalkEffect.Ask>(step.effects.single())

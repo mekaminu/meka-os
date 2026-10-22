@@ -90,6 +90,12 @@ object AskCodec {
          * introduce herself once ("Ada here"). Left out of the JSON when false; an older server ignores it.
          */
         val introduce: Boolean = false,
+        /**
+         * Talking to Ada like a conversation, slice 7: a device that reads [StreamLine.Next] lines on the stream asks for
+         * the rest of a spoken answer's pieces to be said ahead too. Only with [speak]; left out of the JSON when false,
+         * so an older device is never sent a line it can't read, and an older server ignores it.
+         */
+        val speakNext: Boolean = false,
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -177,6 +183,7 @@ object AskCodec {
         if (r.speak) {
             put("speak", true)
             r.speakVoice?.let { put("speakVoice", it) }
+            if (r.speakNext) put("speakNext", true)
         }
         if (r.callMe == CALL_SIR) put("callMe", CALL_SIR)
         if (r.recall.isNotEmpty()) putJsonArray("recall") { r.recall.forEach { add(JsonPrimitive(it)) } }
@@ -228,7 +235,8 @@ object AskCodec {
         require(recall.size <= MAX_RECALL) { "recall" }
         val name = plainName((o["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content)
         val introduce = (o["introduce"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
-        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name, introduce)
+        val speakNext = speak && (o["speakNext"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name, introduce, speakNext)
     }
 
     /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */
@@ -291,7 +299,22 @@ object AskCodec {
         /** The first piece of Navilife's own words, and its clip (base64 MP3) in [voice]. */
         data class First(val text: String, val audio: String, val voice: String?) : StreamLine
         data class Final(val response: Response) : StreamLine
+        /**
+         * Talking to Ada like a conversation, slice 7: a later piece of Navilife's own words (one the device will say
+         * after the first), said ahead while the model was still writing, and its clip. Sent only to a device that asked
+         * ([Request.speakNext]), always before the [Final] line.
+         */
+        data class Next(val text: String, val audio: String, val voice: String?) : StreamLine
     }
+
+    fun encodeStreamNext(n: StreamLine.Next): String = buildJsonObject {
+        put("w", WireCodec.VERSION)
+        put("next", buildJsonObject {
+            put("text", n.text)
+            put("audio", n.audio)
+            n.voice?.let { put("voice", it) }
+        })
+    }.toString()
 
     fun encodeStreamFirst(f: StreamLine.First): String = buildJsonObject {
         put("w", WireCodec.VERSION)
@@ -317,6 +340,15 @@ object AskCodec {
             val audio = (fo["audio"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 } ?: return null
             val voice = (fo["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.take(40)
             return StreamLine.First(text, audio, voice)
+        }
+        val n = o["next"]
+        if (n != null) {
+            val no = n as? JsonObject ?: return null
+            if ((o["w"] as? JsonPrimitive)?.intOrNull != WireCodec.VERSION) return null
+            val text = (no["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT } ?: return null
+            val audio = (no["audio"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 } ?: return null
+            val voice = (no["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.take(40)
+            return StreamLine.Next(text, audio, voice)
         }
         return StreamLine.Final(decodeResponse(line))
     }

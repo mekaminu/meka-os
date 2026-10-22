@@ -35,6 +35,8 @@ class AskService(
     /** Talking to Ada like a conversation, slice 2: the clock the server's timings are measured on (ms, monotonic). */
     private val clockMs: () -> Long = { System.nanoTime() / 1_000_000 },
     private val wallMs: () -> Long = System::currentTimeMillis,
+    /** Talking to Ada like a conversation, slice 7: the longest the whole answer waits for its later pieces' clips. */
+    private val nextClipWaitMs: Long = NEXT_CLIP_WAIT_MS,
 ) {
     /**
      * The model call for [r]. The companion, slice 1: an open turn ([CompanionRules.isOpen]: advice, ideas, an
@@ -103,10 +105,17 @@ class AskService(
      * Navilife's own words) while the model carries on, and handed to [emit] as soon as its clip is ready, so the device
      * can start speaking. The whole answer is then checked exactly as [ask] checks it; the first piece isn't sent twice.
      * [emit] may be called from another thread; it is never called after this returns.
+     *
+     * Talking to Ada like a conversation, slice 7: for a device that asked ([AskCodec.Request.speakNext]) the later
+     * pieces are said ahead too, each as soon as it can no longer change
+     * ([os.meka.core.domain.StreamedSpeechRules.nextPieces]), and handed to [next] on this thread before the answer
+     * returns: only the pieces the device will really ask for after the first (worked out from the whole, checked
+     * answer), each within [nextClipWaitMs] of the end; anything slower is left for the device to ask for as before.
      */
     fun askStream(
         r: AskCodec.Request,
         timed: ((ServerTurnTiming) -> Unit)? = null,
+        next: ((AskCodec.StreamLine.Next) -> Unit)? = null,
         emit: (AskCodec.StreamLine.First) -> Unit,
     ): AskCodec.Response {
         val p = provider ?: return AskCodec.Response(AskCodec.Response.OFF, reason = "Navilife's AI isn't set up")
@@ -122,6 +131,17 @@ class AskService(
         var early: String? = null
         var saying: java.util.concurrent.CompletableFuture<AskCodec.StreamLine.First?>? = null
         var sentenced = false
+        val sayNext = say?.takeIf { r.speakNext && next != null }
+        val ahead = LinkedHashMap<String, java.util.concurrent.CompletableFuture<AskCodec.StreamLine.Next?>>()
+        fun sayAhead(piece: String) {
+            val speak = sayNext ?: return
+            if (piece in ahead || ahead.size >= os.meka.core.domain.StreamedSpeechRules.MAX_NEXT || piece.length > SpeechCodec.MAX_TEXT) return
+            ahead[piece] = java.util.concurrent.CompletableFuture.supplyAsync {
+                val clip = runCatching { speak(piece, r.speakVoice) }.getOrNull()
+                if (clip == null || clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) null
+                else AskCodec.StreamLine.Next(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice)
+            }
+        }
         val outcome = p.stream(request(r, web)) { delta ->
             if (delta.isNotEmpty()) watch.firstToken(clockMs())
             written.append(delta)
@@ -143,17 +163,49 @@ class AskService(
                     }
                 }
             }
+            // Slice 7: the rest's pieces said as they settle, while the model is still writing.
+            early?.let { e -> if (sayNext != null) os.meka.core.domain.StreamedSpeechRules.nextPieces(written.toString(), e).forEach(::sayAhead) }
         }
         // The early piece's clip, if one is on its way: waited for (within the usual wait), so it always goes first.
         val sent = saying?.let { f -> runCatching { f.get(firstClipWaitMs, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull() }
         synchronized(gate) { closed = true } // a clip later than the wait is never sent after the answer
         if (sent == null) saying?.cancel(false)
         val answer = answerOf(r, web, outcome, firstAlready = sent?.text?.takeIf { it == early })
+        sendAhead(answer, sent?.text?.takeIf { it == early && answer.firstAudio == null }, ahead, ::sayAhead, next)
         // A clip made after the whole answer (no early piece) is ready when the answer goes.
         if (answer.firstAudio != null) synchronized(watch) { watch.clip(clockMs()) }
         if (outcome is ModelOutcome.Answered && !sentenced) watch.firstSentence(clockMs())
         synchronized(watch) { report(timed, watch, outcome) }
         return answer
+    }
+
+    /**
+     * Slice 7: the later pieces of [answer] the device will ask for after [first] (the piece it already has), as the
+     * device works them out ([os.meka.core.domain.StreamedSpeechRules.rest] of what it will say, in
+     * [os.meka.core.domain.SpeechRules.pieces]); any not yet on its way is said now ([say]), and each ready within
+     * [nextClipWaitMs] goes to [next], in order. A piece said ahead that the checked answer no longer has is dropped.
+     */
+    private fun sendAhead(
+        answer: AskCodec.Response,
+        first: String?,
+        ahead: MutableMap<String, java.util.concurrent.CompletableFuture<AskCodec.StreamLine.Next?>>,
+        say: (String) -> Unit,
+        next: ((AskCodec.StreamLine.Next) -> Unit)?,
+    ) {
+        if (next == null || ahead.isEmpty() && first == null) return ahead.values.forEach { it.cancel(false) }
+        val wanted = if (first == null || answer.state != AskCodec.Response.ANSWERED) emptyList()
+        else os.meka.core.domain.SpeechRules.pieces(
+            os.meka.core.domain.StreamedSpeechRules.rest(os.meka.core.domain.TalkRules.speakable(answer.answer), first),
+        ).take(os.meka.core.domain.StreamedSpeechRules.MAX_NEXT)
+        ahead.keys.filter { it !in wanted }.forEach { ahead.remove(it)?.cancel(false) }
+        wanted.forEach(say)
+        val until = clockMs() + nextClipWaitMs
+        for (piece in wanted) {
+            val f = ahead[piece] ?: continue
+            val line = runCatching { f.get((until - clockMs()).coerceAtLeast(0), java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrNull()
+            if (line == null) { f.cancel(false); continue }
+            runCatching { next(line) }
+        }
     }
 
     private fun answerOf(r: AskCodec.Request, web: LiveFacts.Found?, outcome: ModelOutcome, firstAlready: String? = null): AskCodec.Response {
@@ -207,6 +259,8 @@ class AskService(
         const val FEATURE = "ask"
         /** How long a spoken answer waits for its first piece's clip (Polly and Chirp usually take well under a second). */
         const val FIRST_CLIP_WAIT_MS = 2_500L
+        /** Slice 7: how long the whole answer waits, at most, for the later pieces' clips said ahead. */
+        const val NEXT_CLIP_WAIT_MS = 1_200L
         /** A spoken answer (Talk to MEKA) is metered on its own, so Activity can count Talk's day. */
         const val FEATURE_TALK = "ask.talk"
         const val MAX_TOKENS = 600

@@ -35,6 +35,8 @@ class StreamedTalkFacadeTest {
         var core: MekaCore? = null
         /** Runs while the model writes (the speed trace's test moves the clock here). */
         var onThink: () -> Unit = {}
+        /** Whether the core asked for the later pieces said ahead (slice 7). */
+        var askedNext = false
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun speak(text: String, voice: String?): SpeechCodec.Response {
@@ -49,11 +51,14 @@ class StreamedTalkFacadeTest {
         override suspend fun askStreamed(
             question: String, context: AskContext, history: List<TalkTurn>, speakVoice: String?,
             onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
+            onNext: (suspend (text: String, audio: String, voice: String?) -> Unit)?,
         ): AskReply {
             asked += "streamed:$speakVoice"
+            askedNext = onNext != null
             onThink()
             onFirst(FIRST, "Zmlyc3Q=", speakVoice)
             onFirst("Again.", "QWdhaW4=", speakVoice) // a second one is never taken
+            onNext?.invoke(NEXT, "bmV4dA==", speakVoice)
             heardBeforeEnd = core?.talkEarlyPiece()
             return AskReply.Answered(ANSWER, emptyList())
         }
@@ -124,7 +129,21 @@ class StreamedTalkFacadeTest {
         assertTrue(c.turnSpeed().rows.isEmpty())
     }
 
+    @Test
+    fun theRestsPiecesSaidAheadPlayFromMemoryToo() = runTest {
+        // Talking to Ada like a conversation, slice 7: the rest said sentence by sentence as it is written.
+        val c = core()
+        c.talkStreamed("why is the sky blue", emptyList()) {}
+        assertTrue(server.askedNext)
+        // The rest as the device says it: its piece is already here, so the voice is asked for nothing.
+        assertEquals(NEXT, os.meka.core.domain.StreamedSpeechRules.rest(ANSWER, FIRST))
+        assertEquals("bmV4dA==", c.speechClip(NEXT, first = false))
+        assertTrue(c.speechPrefetch(NEXT))
+        assertTrue(server.said.isEmpty())
+    }
+
     private companion object {
+        const val NEXT = "Blue light bounces about more."
         const val FIRST = "The sky looks blue because of Rayleigh scattering."
         const val ANSWER = "The sky looks blue because of Rayleigh scattering. Blue light bounces about more."
     }
