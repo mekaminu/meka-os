@@ -167,9 +167,15 @@ final class TalkController {
             Task { await model?.warmTalk() }
             // The orb speed pass, slice 2: this hello is timed from the click to Navilife's voice (Voice → Speed).
             await model?.turnHelloBegan()
+            let liveOn = await model?.liveIsOn() == true
             guard gen == generation, let hello = await model?.hello() else { return }
             guard gen == generation, !active else { return }
             let words = hello.words
+            // Ada's Live mode, slice 3b (the Fold's 2c): with Live on, the hello is still said at once from memory and
+            // the Live session is asked for while it plays, so when it ends (or he talks over it, or clicks the orb)
+            // Ada carries on live, told what she just said so she doesn't greet him twice.
+            liveAfterHello = liveOn
+            if liveOn, let model { live.prepare(model, greeted: words) }
             helloCards = hello.cards
             helloSpokeAt = nil
             Task { await model?.warmVoice() }
@@ -294,6 +300,7 @@ final class TalkController {
         openAt = nil
         openLapsed = nil
         closeFollowOn()
+        if liveAfterHello { liveAfterHello = false; live.discardPrepared() } // slice 3b: the hello ended by hand
         if liveRunning {
             // Slice 3: the sound stops now; the core ends the session (a turn cut short still shows in Ask).
             live.stop()
@@ -311,6 +318,23 @@ final class TalkController {
     @ObservationIgnored private let live = MacLiveTalk()
     /// A Live conversation is running (from asking for its session until the core says it ended).
     @ObservationIgnored private var liveRunning = false
+    /// Slice 3b: the hello now playing hands on to Live when it ends (Live is on).
+    @ObservationIgnored private var liveAfterHello = false
+
+    /// Slice 3b: the hello ended (or he talked over it, or clicked the orb): instead of normal listening, the Live
+    /// conversation opens with the session asked for during the hello, the orb going straight from the hello to
+    /// Live's thinking. Run as its own main-actor step, after the effect that asked for listening.
+    private func handOnToLive() {
+        liveAfterHello = false
+        closeFollowOn()
+        let gen = generation
+        Task {
+            guard gen == generation, !liveRunning else { return }
+            apply(TalkFlow.shared.stop(s: session))
+            generation += 1 // a late callback of the hello changes nothing
+            startLive()
+        }
+    }
 
     private func attachLive() {
         live.onReady = { [weak self] in
@@ -401,7 +425,7 @@ final class TalkController {
 
     private func run(_ effect: any TalkEffect) {
         if effect is TalkEffectListen {
-            listen()
+            if liveAfterHello { handOnToLive() } else { listen() }
         } else if let ask = effect as? TalkEffectAsk {
             let question = ask.question
             heard = question
@@ -489,6 +513,7 @@ final class TalkController {
         } else if effect is TalkEffectStopSpeaking {
             stopSaying()
         } else if effect is TalkEffectEnd {
+            if liveAfterHello { liveAfterHello = false; live.discardPrepared() } // slice 3b: no Live after all
             micOverHello = false
             echoOf = nil
             helloLine = nil
@@ -824,7 +849,8 @@ final class TalkController {
         helloSaying = hello != nil
         speaker.say(text) { [weak self] in self?.finishedSaying(id) }
         // Slice 7: with headphones the recogniser opens with the hello, so he can just start talking.
-        if let hello, talkOver, MacAudioOut.headphones { listenOverHello(hello) } else { listenOver() }
+        // Slice 3b: not when Live takes over after the hello (Live listens itself, and hears him over Ada).
+        if let hello, talkOver, !liveAfterHello, MacAudioOut.headphones { listenOverHello(hello) } else { listenOver() }
     }
 
     /// The orb speed pass, slice 7: the recogniser opens while the hello is still speaking (headphones only: on the

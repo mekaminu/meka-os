@@ -37,10 +37,13 @@ class LiveConversationTest {
     private class FakeCore(var ready: Boolean = true) : LiveConversation.Core {
         val usage = mutableListOf<Triple<String, Long, Long>>()
         val searches = mutableListOf<String>()
+        val asked = mutableListOf<String?>()
         override suspend fun voice(): String? = "Kore"
-        override suspend fun session(voice: String?, greeted: String?, resume: String?): LiveCodec.Session? =
-            if (!ready) LiveCodec.Session(LiveCodec.Session.OVER, LiveCodec.Meter(true, "over", 1_500, 1_500))
+        override suspend fun session(voice: String?, greeted: String?, resume: String?): LiveCodec.Session? {
+            asked += greeted
+            return if (!ready) LiveCodec.Session(LiveCodec.Session.OVER, LiveCodec.Meter(true, "over", 1_500, 1_500))
             else LiveCodec.Session(LiveCodec.Session.READY, LiveCodec.Meter(true, "ok", 0, 1_500), "ls_1", "tok", "gemini-live", "wss://g", voice, expiresAtMs = 600_000)
+        }
         override suspend fun usage(sessionId: String, inSeconds: Long, outSeconds: Long) { usage += Triple(sessionId, inSeconds, outSeconds) }
         override suspend fun search(sessionId: String, query: String): LiveCodec.SearchResult {
             searches += query
@@ -94,6 +97,33 @@ class LiveConversationTest {
         runCurrent()
         assertEquals(LiveEvent.Ended(false), events.last())
         assertEquals(Triple("ls_1", 1L, 1L), core.usage.single())
+    }
+
+    @Test
+    fun aSessionAskedForDuringTheHelloIsTheOneThatOpens() = runTest {
+        // Slice 3b (the Mac's hello into Live): one session, asked for with the hello's words, opens when it ends.
+        val core = FakeCore()
+        val socket = FakeSocket()
+        val (c, _) = conversation(core, socket)
+        c.prepare("Morning, Alex. Two things need you.")
+        runCurrent()
+        advanceTimeBy(3_000) // the hello plays
+        c.start()
+        runCurrent()
+        assertEquals(listOf<String?>("Morning, Alex. Two things need you."), core.asked)
+        assertEquals("wss://g?access_token=tok", socket.url)
+    }
+
+    @Test
+    fun aHelloEndedByHandReportsItsSessionAsNothing() = runTest {
+        val core = FakeCore()
+        val (c, events) = conversation(core, FakeSocket())
+        c.prepare("Evening, Alex.")
+        runCurrent()
+        c.discardPrepared()
+        runCurrent()
+        assertEquals(Triple("ls_1", 0L, 0L), core.usage.single())
+        assertTrue(events.isEmpty(), "no conversation started")
     }
 
     @Test

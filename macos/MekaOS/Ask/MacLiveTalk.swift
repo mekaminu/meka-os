@@ -43,17 +43,34 @@ final class MacLiveTalk {
     /// open yet: normal Ada answers.
     func start(_ model: CoreModel) -> Bool {
         guard !running else { return true }
-        if conversation == nil {
-            guard let c = model.newLiveConversation() else { return false }
-            conversation = c
-            events = Task { [weak self] in
-                for await e in c.events { self?.handle(e) }
-            }
-        }
+        guard ensure(model) != nil else { return false }
         running = true
         herVoice = false
         conversation?.start()
         return true
+    }
+
+    /// Slice 3b: the hello is playing (`greeted` is what it says): the session is asked for now, so `start` opens at
+    /// once when the hello ends and Ada doesn't greet him twice. Only a String crosses into the core.
+    func prepare(_ model: CoreModel, greeted: String) {
+        guard !running, let c = ensure(model) else { return }
+        c.prepare(greeted: greeted)
+    }
+
+    /// Slice 3b: the hello was ended by hand, so the session asked for during it won't be used (reported as 0 s).
+    func discardPrepared() {
+        conversation?.discardPrepared()
+    }
+
+    /// The core's conversation, made once (nil while the core isn't open yet) with its events followed here.
+    private func ensure(_ model: CoreModel) -> LiveConversation? {
+        if let conversation { return conversation }
+        guard let c = model.newLiveConversation() else { return nil }
+        conversation = c
+        events = Task { [weak self] in
+            for await e in c.events { self?.handle(e) }
+        }
+        return c
     }
 
     /// Ends the conversation at once (the orb clicked, Ask left): the sound stops now, the core reports the seconds.
