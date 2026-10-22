@@ -116,4 +116,19 @@ class LiveCodecTest {
             LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","tools":true,"items":[{"ref":"task-uuid-1","kind":"task","line":"x"}]}}""")
         }
     }
+
+    @Test
+    fun slice2cTheHelloAndAResumptionHandleRideTheRequestAndAnOlderOneHasNeither() {
+        val day = LiveCodec.Day("2026-10-22", "x", emptyList(), tools = true, greeted = "Morning. Dentist at half nine.")
+        val r = LiveCodec.SessionRequest("Kore", day, resume = "CjQKMgo-handle_1")
+        assertEquals(r, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r)))
+        val older = LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"voice":"Kore","day":{"date":"2026-10-22","now":"x"}}""")
+        assertNull(older.resume)
+        assertNull(older.day!!.greeted)
+        assertFailsWith<WireFormatException> { LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"resume":"two words"}""") }
+        assertFailsWith<WireFormatException> { LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"resume":"${"x".repeat(LiveCodec.MAX_RESUME + 1)}"}""") }
+        assertFailsWith<WireFormatException> {
+            LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","greeted":"${"x".repeat(LiveCodec.MAX_GREETED + 1)}"}}""")
+        }
+    }
 }

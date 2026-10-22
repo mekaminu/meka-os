@@ -163,6 +163,25 @@ class TalkController(
     })
     private var liveRunning = false
 
+    /** Slice 2c: the hello now playing hands on to Live when it ends (Live is on). */
+    private var liveAfterHello = false
+
+    /**
+     * Slice 2c: the hello ended (or he talked over it, or tapped the orb): instead of normal listening, the Live
+     * conversation opens with the session asked for during the hello. One step on the main thread, so the orb goes
+     * straight from the hello to Live's thinking without a stop in between.
+     */
+    private fun handOnToLive() {
+        liveAfterHello = false
+        closeFollowOn()
+        val gen = generation
+        scope.launch {
+            if (gen != generation || liveRunning) return@launch
+            apply(TalkFlow.stop(session))
+            startLive()
+        }
+    }
+
     private fun startLive() {
         generation++
         problem = null
@@ -186,8 +205,13 @@ class TalkController(
         scope.launch {
             // The orb speed pass, slice 2: this hello is timed from the tap to Navilife's voice (Settings → Speed).
             core.turnHelloBegan()
+            val live = runCatching { core.liveOn() }.getOrDefault(false)
             val greeting = runCatching { core.hello() }.getOrNull() ?: return@launch
             if (gen != generation || active) return@launch
+            // Ada's Live mode, slice 2c: with Live on, the hello is still said at once from memory, and the Live session
+            // is asked for while it plays, so when it ends (or he talks over it) Ada carries on live.
+            liveAfterHello = live
+            if (live) liveTalk.prepare(greeting.spoken)
             // Slice 8: the stage raises the greeting's cards round its orb as each sentence starts.
             (context.applicationContext as? os.meka.android.MekaApplication)?.helloGreeting?.value = greeting
             helloLine = greeting.spoken // slice 7: the line said next is the hello (the mic may open with it)
@@ -320,6 +344,7 @@ class TalkController(
         generation++ // also drops a room check or chime still on its way ("Listen when I open MEKA")
         afterBriefAt = null
         closeFollowOn()
+        if (liveAfterHello) { liveAfterHello = false; liveTalk.discardPrepared() } // slice 2c: the hello ended by hand
         if (liveRunning) { liveTalk.stop(); return }
         if (!active) return
         apply(TalkFlow.stop(session))
@@ -379,7 +404,7 @@ class TalkController(
 
     private fun run(effect: TalkEffect) {
         when (effect) {
-            TalkEffect.Listen -> listen()
+            TalkEffect.Listen -> if (liveAfterHello) handOnToLive() else listen()
             is TalkEffect.Ask -> {
                 heard = effect.question
                 level = 0f
@@ -490,6 +515,7 @@ class TalkController(
                 (context.applicationContext as? os.meka.android.MekaApplication)?.speakUp?.stop()
             }
             TalkEffect.End -> {
+                if (liveAfterHello) { liveAfterHello = false; liveTalk.discardPrepared() } // slice 2c: no Live after all
                 micOverHello = false
                 echoOf = null
                 helloLine = null
@@ -770,7 +796,8 @@ class TalkController(
         helloSaying = hello != null
         speaker.say(text) { finishedSaying(id) }
         // Slice 7: with headphones the recogniser opens with the hello, so he can just start talking.
-        if (hello != null && os.meka.core.domain.HelloListenRules.opensMic(talkOver, TalkBargeIn.output(context))) listenOverHello(hello)
+        // Slice 2c: not when Live takes over after the hello (Live listens itself, and hears him over Ada).
+        if (hello != null && !liveAfterHello && os.meka.core.domain.HelloListenRules.opensMic(talkOver, TalkBargeIn.output(context))) listenOverHello(hello)
         else listenOver()
     }
 

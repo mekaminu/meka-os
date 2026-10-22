@@ -59,6 +59,10 @@ object LivePrompt {
         appendLine(AskService.nameLine(day?.name))
         if (day?.callMe == os.meka.core.wire.AskCodec.CALL_SIR) appendLine(AskService.CALL_SIR)
         appendLine(AskService.introLine(day?.introduce == true))
+        day?.greeted?.let { g ->
+            // Slice 2c: the hello was already said in Navilife's own voice; Live carries on from it.
+            appendLine("You have just greeted him out loud with these words (they were said in Navilife's own voice a moment ago): \"${clean(g)}\". Don't greet him again or repeat them; wait for him to speak, then carry on from there.")
+        }
         if (day == null) {
             append("No <today> block came with this conversation: you know nothing of his day, so say so if he asks about it.")
             return@buildString

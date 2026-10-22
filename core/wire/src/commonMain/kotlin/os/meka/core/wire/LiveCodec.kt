@@ -66,9 +66,23 @@ object LiveCodec {
          * handles (t1, e1). An older device leaves it out and its session has the web search alone.
          */
         val tools: Boolean = false,
+        /**
+         * Slice 2c (additive): what Ada has just said out loud in Navilife's own voice (the hello) before the Live
+         * session takes over, so she carries on from it rather than greeting him again. One line, at most [MAX_GREETED].
+         */
+        val greeted: String? = null,
     )
 
-    data class SessionRequest(val voice: String? = null, val day: Day? = null)
+    /**
+     * Slice 2c (additive): [resume] is Google's resumption handle for a conversation already running, so the fresh
+     * token carries it on where it was (an older server ignores it and the device starts afresh).
+     */
+    data class SessionRequest(val voice: String? = null, val day: Day? = null, val resume: String? = null)
+
+    /** The longest [Day.greeted] accepted. */
+    const val MAX_GREETED = 400
+    /** The longest [SessionRequest.resume] handle accepted. */
+    const val MAX_RESUME = 2_000
 
     /** The most lines a Live day carries (fewer than Ask's: it is the compact day, said once at the start). */
     const val MAX_DAY_ITEMS = 40
@@ -182,14 +196,19 @@ object LiveCodec {
                 if (d.recall.isNotEmpty()) putJsonArray("recall") { d.recall.forEach { add(it) } }
                 if (d.introduce) put("introduce", true)
                 if (d.tools) put("tools", true)
+                d.greeted?.takeIf { it.isNotBlank() }?.let { put("greeted", it) }
             }
         }
+        r.resume?.let { put("resume", it) }
     }.toString()
 
     fun decodeSessionRequest(body: String): SessionRequest = wrap("live session request") {
         val o = json.parseToJsonElement(body).jsonObject
         checkVersion(o)
-        SessionRequest(str(o, "voice")?.take(40), (o["day"] as? JsonObject)?.let(::day))
+        val resume = str(o, "resume")?.also { h ->
+            require(h.length <= MAX_RESUME && h.isNotEmpty() && h.all { it.code in 0x21..0x7e }) { "resume" }
+        }
+        SessionRequest(str(o, "voice")?.take(40), (o["day"] as? JsonObject)?.let(::day), resume)
     }
 
     /** A day as sent, refused (not trimmed) when outside Ask's own limits. */
@@ -216,8 +235,9 @@ object LiveCodec {
         val callMe = str(o, "callMe")?.takeIf { it == AskCodec.CALL_SIR }
         val introduce = (o["introduce"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val tools = (o["tools"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        val greeted = str(o, "greeted")?.takeIf { it.isNotBlank() }?.also { require(it.length <= MAX_GREETED) { "greeted" } }
         // Handles mean something only to a device that answers the tools.
-        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools)
+        return Day(date, now, if (tools) items else items.map { it.copy(ref = "") }, AskCodec.plainName(str(o, "name")), callMe, recall, introduce, tools, greeted)
     }
 
     private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")

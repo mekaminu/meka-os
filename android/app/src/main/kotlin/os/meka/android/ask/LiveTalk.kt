@@ -20,14 +20,17 @@ import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import os.meka.core.domain.BargeInOutput
 import os.meka.core.domain.BargeInRules
+import os.meka.core.domain.LiveHandOnRules
 import os.meka.core.domain.LiveTalkRules
 import os.meka.core.domain.LiveToolRules
 import os.meka.core.facade.MekaCore
@@ -48,6 +51,11 @@ import java.util.concurrent.TimeUnit
  *
  * If the session isn't set up within [LiveTalkRules.FALLBACK_MS] (no key, the month's cap, Google refusing, no
  * signal), [Listener.onEnded] says fell back and Talk carries on as normal Ada. Callbacks arrive on the main thread.
+ *
+ * Slice 2c: a session can be asked for ahead ([prepare], while the hello plays) so Live opens at once when it ends; one
+ * never used is reported as 0 seconds ([discardPrepared]). As a session's window closes (or Google says it is going
+ * away) and he is still talking, a fresh token carrying Google's resumption handle carries the same conversation on
+ * ([LiveHandOnRules]): the microphone and her voice stay open, only the connection to Google is swapped.
  */
 class LiveTalk(private val context: Context, private val core: MekaCore, private val scope: CoroutineScope, private val listener: Listener) {
     interface Listener {
@@ -94,6 +102,43 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     /** Slice 5: the cards Ada offered this turn (Ask's own, through the policy gate), shown with her words. */
     private val cardsNow = mutableListOf<os.meka.core.domain.AskCard>()
 
+    // Slice 2c: the connection to Google now (bumped by each fresh window, so the old one's close ends nothing), the
+    // conversation's resumption handle, the fresh windows used, when he last spoke, and the window's end.
+    @Volatile private var link = 0
+    @Volatile private var heldHandle: String? = null
+    private var resumes = 0
+    @Volatile private var lastHeardAt: Long? = null
+    @Volatile private var endAt = Long.MAX_VALUE
+    @Volatile private var resuming = false
+    private var resumingFrom = 0
+    private var connectJob: Job? = null
+
+    /** Slice 2c: a session asked for ahead (during the hello), and when (elapsed ms). */
+    private class Prepared(val session: Deferred<LiveCodec.Session?>, val at: Long)
+    private var prepared: Prepared? = null
+
+    /**
+     * Slice 2c: asks for a session now (the hello is playing; [greeted] is what it says), so [start] opens at once
+     * when the hello ends. Main thread.
+     */
+    fun prepare(greeted: String?) {
+        if (running || prepared != null) return
+        prepared = Prepared(scope.async {
+            val voice = runCatching { core.liveVoice() }.getOrNull()
+            core.liveSession(voice, greeted = greeted)
+        }, SystemClock.elapsedRealtime())
+    }
+
+    /** Slice 2c: a session asked for ahead won't be used (he ended the hello): reported as 0 seconds, so it costs nothing. */
+    fun discardPrepared() {
+        val p = prepared ?: return
+        prepared = null
+        scope.launch {
+            val s = runCatching { p.session.await() }.getOrNull() ?: return@launch
+            s.sessionId?.let { id -> withContext(Dispatchers.IO) { core.liveUsage(id, 0, 0) } }
+        }
+    }
+
     /** Starts a Live conversation (the microphone is already allowed). */
     fun start() {
         if (running) return
@@ -104,30 +149,41 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         outBytes = 0
         playUntil = 0
         speakingNow = false
+        heldHandle = null
+        resumes = 0
+        lastHeardAt = null
+        endAt = Long.MAX_VALUE
+        resuming = false
         output = TalkBargeIn.output(context)
         val askedAt = SystemClock.elapsedRealtime()
+        // Slice 2c: the session asked for during the hello, while its token can still open one.
+        val ahead = prepared?.takeIf { LiveHandOnRules.preparedUsable(it.at, askedAt) }
+        if (ahead == null) discardPrepared()
+        prepared = null
         jobs += scope.launch {
             delay(LiveTalkRules.FALLBACK_MS)
             if (gen == generation && LiveTalkRules.fallBack(askedAt, SystemClock.elapsedRealtime(), setUp)) end(gen, fellBack = true)
         }
         jobs += scope.launch {
-            val voice = runCatching { core.liveVoice() }.getOrNull()
-            val s = core.liveSession(voice)
-            if (gen != generation) return@launch
-            if (s == null || s.state != LiveCodec.Session.READY || s.token == null || s.url == null || s.model == null) {
+            val s = if (ahead != null) runCatching { ahead.session.await() }.getOrNull() else {
+                val voice = runCatching { core.liveVoice() }.getOrNull()
+                core.liveSession(voice)
+            }
+            if (gen != generation) {
+                s?.sessionId?.let { id -> withContext(Dispatchers.IO) { core.liveUsage(id, 0, 0) } }
+                return@launch
+            }
+            if (!ready(s)) {
                 end(gen, fellBack = true)
                 return@launch
             }
-            session = s
-            val out = Channel<String>(Channel.BUFFERED)
-            outgoing = out
-            val endAt = LiveTalkRules.endAtElapsed(SystemClock.elapsedRealtime(), System.currentTimeMillis(), s.expiresAtMs ?: 0L)
-            jobs += scope.launch(Dispatchers.IO) { connect(gen, s, out) }
+            open(gen, s!!, null)
             jobs += scope.launch {
-                // The token's window: end a little before it closes, never mid-word. Meanwhile, Ada's speaking state.
+                // The token's window: a little before it closes, carry on into a fresh one or end, never mid-word.
+                // Meanwhile, Ada's speaking state.
                 while (gen == generation) {
                     val now = SystemClock.elapsedRealtime()
-                    if (setUp && now >= endAt) { end(gen, fellBack = false); return@launch }
+                    if (setUp && !resuming && now >= endAt) carryOn(gen)
                     val speaking = LiveTalkRules.speaking(playUntil, now)
                     if (speaking != speakingNow) {
                         speakingNow = speaking
@@ -139,6 +195,59 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         }
     }
 
+    private fun ready(s: LiveCodec.Session?): Boolean =
+        s != null && s.state == LiveCodec.Session.READY && s.token != null && s.url != null && s.model != null
+
+    /** Connects to Google with [s] (a fresh window carries the conversation on with [resumeHandle]). Main thread. */
+    private fun open(gen: Int, s: LiveCodec.Session, resumeHandle: String?) {
+        session = s
+        val out = Channel<String>(Channel.BUFFERED)
+        outgoing = out
+        val l = ++link
+        endAt = LiveTalkRules.endAtElapsed(SystemClock.elapsedRealtime(), System.currentTimeMillis(), s.expiresAtMs ?: 0L)
+        connectJob = scope.launch(Dispatchers.IO) { connect(gen, l, s, out, resumeHandle) }.also { jobs += it }
+    }
+
+    /**
+     * Slice 2c: the window is closing or Google is going away. While he is still talking (and under the hour), a fresh
+     * token with Google's handle carries the conversation on ([LiveHandOnRules.resume]); otherwise it ends as before.
+     * The finished window's seconds are reported; the fresh one is metered and capped like any session. Main thread.
+     */
+    private fun carryOn(gen: Int) {
+        if (gen != generation || resuming) return
+        val h = heldHandle
+        if (!LiveHandOnRules.resume(h, resumes, lastHeardAt, SystemClock.elapsedRealtime())) {
+            end(gen, fellBack = false)
+            return
+        }
+        resuming = true
+        resumingFrom = link
+        resumes++
+        jobs += scope.launch {
+            val voice = runCatching { core.liveVoice() }.getOrNull()
+            val s = core.liveSession(voice, resume = h)
+            if (gen != generation) {
+                s?.sessionId?.let { id -> withContext(Dispatchers.IO) { core.liveUsage(id, 0, 0) } }
+                return@launch
+            }
+            if (!ready(s)) { end(gen, fellBack = false); return@launch } // the month's cap, offline: ends as before
+            reportUsage()
+            val old = connectJob
+            open(gen, s!!, h)
+            old?.cancel()
+        }
+    }
+
+    /** The current session's seconds heard and spoken (nothing of what was said), then a fresh count. */
+    private fun reportUsage() {
+        val id = session?.sessionId ?: return
+        val heard = LiveTalkRules.seconds(inBytes, LiveTalkRules.IN_RATE)
+        val spoke = LiveTalkRules.seconds(outBytes, LiveTalkRules.OUT_RATE)
+        inBytes = 0
+        outBytes = 0
+        scope.launch { withContext(Dispatchers.IO) { core.liveUsage(id, heard, spoke) } }
+    }
+
     /** Ends the conversation at once (the orb tapped, the screen left). */
     fun stop() {
         if (running) end(generation, fellBack = false)
@@ -147,39 +256,46 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     /** Frees everything for good. */
     fun release() {
         stop()
+        discardPrepared()
         runCatching { client.close() }
     }
 
-    private suspend fun connect(gen: Int, s: LiveCodec.Session, out: Channel<String>) {
+    private suspend fun connect(gen: Int, l: Int, s: LiveCodec.Session, out: Channel<String>, resumeHandle: String?) {
         runCatching {
             client.webSocket(LiveProtocol.connectUrl(s.url!!, s.token!!)) {
-                send(Frame.Text(LiveProtocol.setup(s.model!!, s.voice ?: LiveTalkRules.voice(null))))
+                send(Frame.Text(LiveProtocol.setup(s.model!!, s.voice ?: LiveTalkRules.voice(null), resumeHandle = resumeHandle)))
                 val sender = launch {
                     for (msg in out) send(Frame.Text(msg))
                 }
                 try {
                     for (frame in incoming) {
-                        if (gen != generation) break
+                        if (gen != generation || l != link) break
                         val text = when (frame) {
                             is Frame.Text -> frame.readText()
                             is Frame.Binary -> frame.data.decodeToString()
                             else -> continue
                         }
-                        LiveProtocol.decode(text).forEach { handle(gen, it) }
+                        LiveProtocol.decode(text).forEach { handle(gen, l, it) }
                     }
                 } finally {
                     sender.cancel()
                 }
             }
         }
-        // The socket closed: Google ended the session, the signal went, or it never opened.
-        main.post { if (gen == generation) end(gen, fellBack = !setUp) }
+        // The socket closed: Google ended the session, the signal went, or it never opened. Slice 2c: an earlier
+        // window's connection closing while a fresh one opens ends nothing.
+        main.post {
+            if (gen == generation && l == link && !(resuming && l == resumingFrom)) end(gen, fellBack = !setUp)
+        }
     }
 
-    private fun handle(gen: Int, e: LiveProtocol.Event) {
+    private fun handle(gen: Int, l: Int, e: LiveProtocol.Event) {
         when (e) {
             LiveProtocol.Event.SetupComplete -> main.post {
-                if (gen != generation || setUp) return@post
+                if (gen != generation) return@post
+                // Slice 2c: a fresh window is set up: the conversation carries on, nothing to open.
+                if (l == link && resuming) resuming = false
+                if (setUp) return@post
                 setUp = true
                 openPlayer(gen)
                 openMic(gen)
@@ -202,6 +318,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             is LiveProtocol.Event.Heard -> main.post {
                 if (gen != generation) return@post
                 heardNow.append(e.text)
+                if (e.text.isNotBlank()) lastHeardAt = SystemClock.elapsedRealtime()
                 listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
             }
             is LiveProtocol.Event.Said -> main.post {
@@ -210,8 +327,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
             }
             is LiveProtocol.Event.ToolCall -> scope.launch { answerTool(gen, e) }
-            is LiveProtocol.Event.GoAway -> main.post { if (gen == generation) end(gen, fellBack = false) }
-            is LiveProtocol.Event.Resumable -> Unit // a longer conversation resumes with it in a later slice
+            // Slice 2c: Google is closing this connection: carry the conversation on, or end as before.
+            is LiveProtocol.Event.GoAway -> main.post { if (gen == generation && l == link) carryOn(gen) }
+            is LiveProtocol.Event.Resumable -> main.post {
+                if (gen == generation && l == link) LiveHandOnRules.handle(e.handle)?.let { heldHandle = it }
+            }
         }
     }
 
@@ -288,7 +408,6 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
             return
         }
         record = rec
-        val out = outgoing
         reader = Thread({
             val buf = ShortArray(chunk)
             val bytes = ByteArray(chunk * 2)
@@ -308,7 +427,7 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 }
                 val data = Base64.encodeToString(if (send) bytes else silence, 0, len, Base64.NO_WRAP)
                 inBytes += len
-                out?.trySend(LiveProtocol.audio(data))
+                outgoing?.trySend(LiveProtocol.audio(data)) // slice 2c: the connection of the window now
                 if (!speaking) main.post { if (gen == generation) listener.onLevel(LiveTalkRules.level(db)) }
             }
         }, "navilife-live-mic").also { it.start() }
@@ -374,12 +493,11 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         // Slice 4: a turn cut short by the end still shows what Ada said.
         finishTurn()
         // The seconds heard and spoken (nothing of what was said), so the month's count drops from the reserve.
-        session?.sessionId?.let { id ->
-            val heard = LiveTalkRules.seconds(inBytes, LiveTalkRules.IN_RATE)
-            val spoke = LiveTalkRules.seconds(outBytes, LiveTalkRules.OUT_RATE)
-            scope.launch { withContext(Dispatchers.IO) { core.liveUsage(id, heard, spoke) } }
-        }
+        reportUsage()
         session = null
+        connectJob = null
+        resuming = false
+        heldHandle = null
         listener.onEnded(fellBack)
     }
 

@@ -33,9 +33,11 @@ class LiveFacadeTest {
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun liveStatus(): LiveCodec.Meter? { if (down) throw TransportException("offline"); return meter }
-        override suspend fun liveSession(voice: String?, day: LiveCodec.Day?): LiveCodec.Session? {
+        val resumes = mutableListOf<String?>()
+        override suspend fun liveSession(voice: String?, day: LiveCodec.Day?, resume: String?): LiveCodec.Session? {
             if (down) throw TransportException("offline")
             days += day
+            resumes += resume
             return LiveCodec.Session(LiveCodec.Session.READY, meter, "ls_1", "auth_tokens/t", "gemini-3.8-live", "wss://x", voice ?: "Kore", 1, 2)
         }
         override suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): LiveCodec.Usage? {
@@ -99,7 +101,7 @@ class LiveFacadeTest {
         override suspend fun push(request: PushRequest) = live.push(request)
         override suspend fun pull(request: PullRequest) = live.pull(request)
         override suspend fun liveStatus() = live.liveStatus()
-        override suspend fun liveSession(voice: String?, day: LiveCodec.Day?) = live.liveSession(voice, day)
+        override suspend fun liveSession(voice: String?, day: LiveCodec.Day?, resume: String?) = live.liveSession(voice, day, resume)
         override suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long) = live.liveUsage(sessionId, inSeconds, outSeconds)
         override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
             spoken++
@@ -186,5 +188,28 @@ class LiveFacadeTest {
         // Tapped, it does what Ask's card does.
         c.doAsk(card)
         assertEquals(0, c.liveLookUp("tomorrow").lines().count { it.startsWith("task ") })
+    }
+
+    @Test
+    fun slice2cLiveAfterTheHelloKnowsTheGreetingAndAFreshWindowSendsTheSameDay() = runTest {
+        val c = core()
+        c.addTask("Book the MOT")
+        c.liveSession("Kore", greeted = "Morning.\n  The MOT is on today.")
+        val first = server.days.last()!!
+        assertEquals("Morning. The MOT is on today.", first.greeted)
+        assertEquals(true, first.introduce)
+        assertNull(server.resumes.last())
+        // A handle the session gave: the same day again (same handles), no greeting, no introduction.
+        c.addTask("Ring the garage")
+        c.liveSession("Kore", resume = "CjQKMgo-handle_1")
+        val again = server.days.last()!!
+        assertEquals("CjQKMgo-handle_1", server.resumes.last())
+        assertEquals(first.items, again.items)
+        assertNull(again.greeted)
+        assertEquals(false, again.introduce)
+        // Not a handle: a new conversation, built afresh.
+        c.liveSession("Kore", greeted = "Hi.", resume = "bad handle")
+        assertNull(server.resumes.last())
+        assertEquals("Hi.", server.days.last()!!.greeted)
     }
 }

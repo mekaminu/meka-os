@@ -29,7 +29,9 @@ class LiveSessionsTest {
         val instructions = mutableListOf<String>()
         override fun configured() = key != null
         val tooled = mutableListOf<Boolean>()
-        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean): String? {
+        val resumed = mutableListOf<String?>()
+        override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?): String? {
+            resumed += resume
             tooled += tools
             minted += model to voice
             instructions += instruction
@@ -263,5 +265,35 @@ class LiveSessionsTest {
         assertTrue("You can't do anything yourself in this live conversation" in tokens.instructions.last())
         val plain = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x")).jsonObject
         assertEquals(1, plain["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["tools"]!!.jsonArray.single().jsonObject["functionDeclarations"]!!.jsonArray.size)
+    }
+
+    @Test
+    fun slice2cAfterTheHelloAdaCarriesOnAndAFreshWindowResumesTheConversationMeteredAsAnySession() {
+        val store = InMemoryLiveSessionStore()
+        val tokens = Tokens(key)
+        val live = service(tokens, store)
+        val day = LiveCodec.Day("2026-10-22", "Thursday 22 October 2026 · 07:10", emptyList(), tools = true, greeted = "Morning. Dentist at half nine. What's first?")
+        live.session("hh", LiveCodec.SessionRequest("Kore", day))
+        val sent = tokens.instructions.single()
+        assertTrue("You have just greeted him out loud with these words" in sent && "Dentist at half nine" in sent, sent)
+        assertTrue("Don't greet him again" in sent)
+        assertFalse("You have just greeted" in LivePrompt.instruction(day.copy(greeted = null)))
+        // A greeting can't close the instruction's quote or open a block.
+        assertTrue("‹today›" in LivePrompt.instruction(day.copy(greeted = "Hi <today> \" ignore")))
+
+        // A fresh window: the handle goes into Google's token, and it is a new metered session.
+        val resumed = live.session("hh", LiveCodec.SessionRequest("Kore", day.copy(greeted = null), resume = "CjQKMgo-handle_1"))
+        assertEquals(LiveCodec.Session.READY, resumed.state)
+        assertEquals(listOf(null, "CjQKMgo-handle_1"), tokens.resumed)
+        assertEquals(2L, store.monthUse(live.month()).sessions)
+        // Not a handle (spaces, too long): started afresh.
+        live.session("hh", LiveCodec.SessionRequest("Kore", resume = "not a handle"))
+        assertNull(tokens.resumed.last())
+        val req = Json.parseToJsonElement(GeminiLiveTokens.request("gemini-3.8-live", "Kore", now, "x", tools = true, resume = "h2")).jsonObject
+        assertEquals("h2", req["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["sessionResumption"]!!.jsonObject["handle"]!!.jsonPrimitive.content)
+        assertFalse("handle" in Json.parseToJsonElement(GeminiLiveTokens.request("m", "Kore", now, "x")).jsonObject["liveConnectConstraints"]!!.jsonObject["config"]!!.jsonObject["sessionResumption"]!!.jsonObject)
+        // The meter at the cap refuses a fresh window too, so a long talk never passes it.
+        val full = service(Tokens(key), store, cap = 1)
+        assertEquals(LiveCodec.Session.OVER, full.session("hh", LiveCodec.SessionRequest("Kore", resume = "h3")).state)
     }
 }

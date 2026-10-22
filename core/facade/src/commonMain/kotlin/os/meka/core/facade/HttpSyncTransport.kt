@@ -413,8 +413,11 @@ interface ServerSpeedApi {
  */
 interface LiveApi {
     suspend fun liveStatus(): os.meka.core.wire.LiveCodec.Meter?
-    /** Slice 4: [day] is the compact day the session starts with (null: none, as an older device). */
-    suspend fun liveSession(voice: String?, day: os.meka.core.wire.LiveCodec.Day? = null): os.meka.core.wire.LiveCodec.Session?
+    /**
+     * Slice 4: [day] is the compact day the session starts with (null: none, as an older device). Slice 2c: [resume] is
+     * Google's handle for a conversation carrying on into a fresh window.
+     */
+    suspend fun liveSession(voice: String?, day: os.meka.core.wire.LiveCodec.Day? = null, resume: String? = null): os.meka.core.wire.LiveCodec.Session?
     suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): os.meka.core.wire.LiveCodec.Usage?
     /** Slice 4: a web search Ada asked for in a Live session. Null from a server without the route. */
     suspend fun liveSearch(request: os.meka.core.wire.LiveCodec.SearchRequest): os.meka.core.wire.LiveCodec.SearchResult? = null
@@ -1096,8 +1099,8 @@ class HttpSyncTransport(
     override suspend fun liveStatus(): os.meka.core.wire.LiveCodec.Meter? =
         livePost(os.meka.core.wire.LiveCodec.STATUS_PATH, os.meka.core.wire.LiveCodec.encodeStatusRequest())?.let(os.meka.core.wire.LiveCodec::decodeMeter)
 
-    override suspend fun liveSession(voice: String?, day: os.meka.core.wire.LiveCodec.Day?): os.meka.core.wire.LiveCodec.Session? =
-        livePost(os.meka.core.wire.LiveCodec.SESSION_PATH, os.meka.core.wire.LiveCodec.encodeSessionRequest(os.meka.core.wire.LiveCodec.SessionRequest(voice, day)))
+    override suspend fun liveSession(voice: String?, day: os.meka.core.wire.LiveCodec.Day?, resume: String?): os.meka.core.wire.LiveCodec.Session? =
+        livePost(os.meka.core.wire.LiveCodec.SESSION_PATH, os.meka.core.wire.LiveCodec.encodeSessionRequest(os.meka.core.wire.LiveCodec.SessionRequest(voice, day, resume)))
             ?.let(os.meka.core.wire.LiveCodec::decodeSession)
 
     override suspend fun liveSearch(request: os.meka.core.wire.LiveCodec.SearchRequest): os.meka.core.wire.LiveCodec.SearchResult? =

@@ -10545,14 +10545,28 @@ class MekaCore(
     /**
      * A token for one Gemini Live session in [voice] (null: the default). Anything but a ready session (no key, the
      * month's cap, Google refusing, offline, an older server) is null or not [os.meka.core.wire.LiveCodec.Session.READY],
-     * and normal Ada answers. Never throws.
+     * and normal Ada answers. Slice 2c: [greeted] is the hello just said before Live takes over; [resume] Google's
+     * handle when the same conversation carries on into a fresh window ([os.meka.core.domain.LiveHandOnRules]). Never throws.
      */
-    suspend fun liveSession(voice: String?): os.meka.core.wire.LiveCodec.Session? {
+    suspend fun liveSession(voice: String?, greeted: String? = null, resume: String? = null): os.meka.core.wire.LiveCodec.Session? {
         val api = liveApi ?: return null
+        val handle = os.meka.core.domain.LiveHandOnRules.handle(resume)
         // Slice 4: the compact day goes with the request, so the server can start the session as Ada with his day.
-        val day = try { onCore { liveDay() } } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
-        return try { api.liveSession(voice, day) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        // Slice 2c: a fresh window for the same conversation sends the same day again (its handles keep meaning the same
+        // tasks and events, and she doesn't introduce herself or greet again); a new one is built afresh, with the hello
+        // Navilife has just said ([greeted]) when Live takes over from it.
+        val day = try {
+            onCore {
+                val kept = liveDaySent
+                if (handle != null && kept != null) kept.copy(introduce = false, greeted = null)
+                else liveDay().copy(greeted = os.meka.core.domain.LiveHandOnRules.greeted(greeted)).also { liveDaySent = it }
+            }
+        } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return try { api.liveSession(voice, day, handle) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
     }
+
+    /** Slice 2c: the day the current Live conversation started with, sent again for each fresh window. Core only. */
+    private var liveDaySent: os.meka.core.wire.LiveCodec.Day? = null
 
     /**
      * Ada's Live mode, slice 4: the compact day a Live session starts with, built here as Ask builds its <today> block

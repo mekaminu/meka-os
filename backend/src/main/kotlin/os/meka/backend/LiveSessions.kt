@@ -32,9 +32,10 @@ interface LiveTokens {
     /**
      * Google's token for one session, or null when Google refused or couldn't be reached. Never the key. Slice 4:
      * [instruction] (Ada and his compact day, [LivePrompt]) and the search tool are locked into it. Slice 5: with
-     * [tools] (the device answers them), Navilife's own look-up and proposing tools too.
+     * [tools] (the device answers them), Navilife's own look-up and proposing tools too. Slice 2c: with [resume]
+     * (Google's handle for a conversation already running), the token carries that conversation on.
      */
-    fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean = false): String?
+    fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean = false, resume: String? = null): String?
 }
 
 /** One minted session as the meter keeps it: the reserve until [reported], then what it used. */
@@ -96,7 +97,10 @@ class LiveSessions(
         }
         val voice = LiveModeRules.voice(request.voice) ?: LiveModeRules.DEFAULT_VOICE
         val now = nowMs()
-        val token = runCatching { tokens.mint(model, voice, LivePrompt.instruction(request.day), now, request.day?.tools == true) }.getOrNull()
+        // Slice 2c: a conversation carrying on into a fresh window passes Google's resumption handle; it is a new
+        // session here (metered and capped like any other), and the handle is passed through, never kept.
+        val resume = os.meka.core.domain.LiveHandOnRules.handle(request.resume)
+        val token = runCatching { tokens.mint(model, voice, LivePrompt.instruction(request.day), now, request.day?.tools == true, resume) }.getOrNull()
             ?: return LiveCodec.Session(LiveCodec.Session.FAILED, before, reason = "Google didn't open a Live session just now")
         val id = "ls_" + ByteArray(12).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         store.add(LiveSessionRow(id, householdId, month(), now, LiveModeRules.reserveMicroUsd(), reported = false))
@@ -158,9 +162,9 @@ class LiveSessions(
 class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExchange = HttpExchange.jdk(java.time.Duration.ofSeconds(10))) : LiveTokens {
     override fun configured(): Boolean = key() != null
 
-    override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean): String? {
+    override fun mint(model: String, voice: String, instruction: String, nowMs: Long, tools: Boolean, resume: String?): String? {
         val k = key() ?: return null
-        val (code, body) = http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction, tools))
+        val (code, body) = http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction, tools, resume))
         if (code !in 200..299) {
             System.err.println("live: Google refused a token (HTTP $code)")
             return null
@@ -176,14 +180,15 @@ class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExc
          * of the locked config, and both sides of the conversation are transcribed (his words and hers, for Ask's
          * answer and its sources); Navilife keeps none of it.
          */
-        fun request(model: String, voice: String, nowMs: Long, instruction: String = "", tools: Boolean = false): String = buildJsonObject {
+        fun request(model: String, voice: String, nowMs: Long, instruction: String = "", tools: Boolean = false, resume: String? = null): String = buildJsonObject {
             put("uses", 1)
             put("expireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.TOKEN_MS).toString())
             put("newSessionExpireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.START_MS).toString())
             putJsonObject("liveConnectConstraints") {
                 put("model", "models/$model")
                 putJsonObject("config") {
-                    putJsonObject("sessionResumption") {}
+                    // Slice 2c: a fresh window for a conversation already running carries on from Google's handle.
+                    putJsonObject("sessionResumption") { resume?.let { put("handle", it) } }
                     putJsonArray("responseModalities") { add("AUDIO") }
                     putJsonObject("speechConfig") {
                         putJsonObject("voiceConfig") { putJsonObject("prebuiltVoiceConfig") { put("voiceName", voice) } }
