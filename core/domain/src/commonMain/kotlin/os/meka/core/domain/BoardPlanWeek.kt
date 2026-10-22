@@ -169,12 +169,12 @@ object PlanWeekRules {
         todayCol?.openCards?.filter { it.carried && !it.task.isRepeating }?.forEach { candidates[it.id] = it to (it.line ?: "Carried over") }
         val monday = today - (CivilDate.isoDayOfWeek(today) - 1)
         val lanes = listOfNotNull(board.week(monday), week.takeIf { start != monday })
-        lanes.flatMap { it.lane }.forEach { candidates.putIfAbsent(it.id, it to (it.line ?: "No day yet")) }
+        lanes.flatMap { it.lane }.forEach { candidates.getOrPut(it.id) { it to (it.line ?: "No day yet") } }
         board.days.flatMap { it.openCards }.filter { c ->
             val t = c.task
             val due = dueOn(t)
             !t.isRepeating && t.scheduledAtMs == null && t.showsFromDay == null && due != null && due in first..last
-        }.forEach { c -> candidates.putIfAbsent(c.id, c to "Due ${PressureRules.shortDay(dueOn(c.task)!!, today)}") }
+        }.forEach { c -> candidates.getOrPut(c.id) { c to "Due ${PressureRules.shortDay(dueOn(c.task)!!, today)}" } }
 
         val ordered = candidates.values.filter { it.first.canMove }.sortedWith(
             compareBy<Pair<BoardCard, String>>(
