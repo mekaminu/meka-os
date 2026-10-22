@@ -65,6 +65,12 @@ object AboutYouFields {
     const val COUNCIL_DATES = "councilDates"
     const val VOICEMAIL_NUMBER = "voicemailNumber"
     /**
+     * The scam call fix, slice 4 (2026-10-22): official switchboards scammers copy, as he typed them ("police 01632
+     * 960000, bank 0306 999 0000", [SpoofHintRules.cleanTyped]). A stranger's call from the same exchange gets "Could
+     * be spoofed" on the in-call warning. His local force and bank stay in his data, never in the code (rule 13).
+     */
+    const val OFFICIAL_NUMBERS = "officialNumbers"
+    /**
      * The commute's train route (release 2 slice 6, 2026-10-15): "South Rail to Oakfield Junction, then Metro; or North
      * Rail to Riverside" ([RouteRules.parse]). Today's train line, the heads-ups, Leaving now's allowance, Ask and the
      * server's TfL questions read it; the Fold copies the route the code knew into it once.
@@ -148,6 +154,8 @@ data class AboutYou(
     /** His own mobile, for putting urgent callers through ([AboutYouFields.MOBILE]). */
     val mobile: String? = null,
     val voicemailNumber: String? = null,
+    /** Official switchboards scammers copy, as kept ([AboutYouFields.OFFICIAL_NUMBERS]). */
+    val officialNumbers: String? = null,
     /** The train route as kept ([RouteRules.parse] reads it). */
     val route: String? = null,
     /** Live trains: the home station as typed ("Oakfield"). */
@@ -160,7 +168,7 @@ data class AboutYou(
 ) {
     /** Nothing at all filled in (Setup's step and the pane's welcome line). */
     val isEmpty: Boolean
-        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, mobile, assistantNumber, voicemailNumber, route, homeStation, stationWalk).all { it == null } &&
+        get() = listOf(shownName, partnerName, partnerPhone, partnerEmail, home, work, schoolWebsite, schoolMail, clubs, mobile, assistantNumber, voicemailNumber, officialNumbers, route, homeStation, stationWalk).all { it == null } &&
             children.isEmpty()
 
     companion object {
@@ -189,6 +197,8 @@ enum class AboutField(val key: String, val label: String, val hint: String, val 
     MOBILE(AboutYouFields.MOBILE, "Your mobile", "Your own mobile number", "Add it so the call assistant can put a genuine urgent caller through to you"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
     VOICEMAIL_NUMBER(AboutYouFields.VOICEMAIL_NUMBER, "Voicemail number", "Your network's voicemail", "Not added · only needed for call forwarding"),
+    OFFICIAL_NUMBERS(AboutYouFields.OFFICIAL_NUMBERS, "Official numbers", "Your police force's and bank's switchboards: police 01632 960000, bank 0306 999 0000",
+        "Add them so a call faking one gets “Could be spoofed” on its warning"),
 }
 
 /** One row of the pane: the label, what's held (null when empty) and the line under it. */
@@ -249,6 +259,7 @@ object AboutYouRules {
     const val NOT_ROUTE = "Type the line from home, where you change and the next line: “South Rail to Oakfield Junction, then Metro”, and after a semicolon the line you take instead: “; or North Rail to Riverside”."
     const val NOT_WALK = "Type the minutes it takes you to reach the train from home, then from work, each up to 90: “10, 15” or “10”."
     const val MAX_WALK = 90
+    const val NOT_OFFICIAL = "Type each number with a word for whose it is, up to 8, with commas: “police 01632 960000, bank 0306 999 0000”."
     const val NOT_STATION = "Type the station's name as the station sign has it, up to 40 letters: “Oakfield”."
     const val MAX_CLUBS = 6
     const val MAX_CLUB_SHORT = 10
@@ -334,6 +345,7 @@ object AboutYouRules {
             assistantNumber = text(AboutYouFields.ASSISTANT_NUMBER),
             mobile = text(AboutYouFields.MOBILE),
             voicemailNumber = text(AboutYouFields.VOICEMAIL_NUMBER),
+            officialNumbers = text(AboutYouFields.OFFICIAL_NUMBERS)?.let(SpoofHintRules::cleanTyped),
             route = text(AboutYouFields.ROUTE)?.let { RouteRules.parse(it)?.text },
             homeStation = text(AboutYouFields.HOME_STATION)?.let(RouteRules::stationName),
             stationWalk = text(AboutYouFields.STATION_WALK)?.let(::walkText),
@@ -355,6 +367,7 @@ object AboutYouRules {
         AboutField.ASSISTANT_NUMBER -> a.assistantNumber
         AboutField.MOBILE -> a.mobile
         AboutField.VOICEMAIL_NUMBER -> a.voicemailNumber
+        AboutField.OFFICIAL_NUMBERS -> a.officialNumbers
         AboutField.ROUTE -> a.route
         AboutField.HOME_STATION -> a.homeStation
         AboutField.STATION_WALK -> a.stationWalk
@@ -378,6 +391,7 @@ object AboutYouRules {
             AboutField.ROUTE -> RouteRules.parse(t)?.text
             AboutField.HOME_STATION -> RouteRules.stationName(t)
             AboutField.STATION_WALK -> walkText(t)
+            AboutField.OFFICIAL_NUMBERS -> SpoofHintRules.cleanTyped(t)
         }
     }
 
@@ -392,6 +406,7 @@ object AboutYouRules {
         AboutField.ROUTE -> NOT_ROUTE
         AboutField.HOME_STATION -> NOT_STATION
         AboutField.STATION_WALK -> NOT_WALK
+        AboutField.OFFICIAL_NUMBERS -> NOT_OFFICIAL
     }
 
     // ---- Live trains, slice 3: the time to the train ----

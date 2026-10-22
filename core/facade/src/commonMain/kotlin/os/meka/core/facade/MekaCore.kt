@@ -5926,13 +5926,19 @@ class MekaCore(
             screenUnknownAlways = state.screenUnknownAlways,
         )
         // Spam calls still ring, slice 1: a number the network couldn't verify goes on the block list (Undo in Activity).
-        val decision = if (decided.reason == os.meka.core.domain.CallReason.AUTO_BLOCKED && number != null) {
+        val decision = (if (decided.reason == os.meka.core.domain.CallReason.AUTO_BLOCKED && number != null) {
             decided.copy(autoBlockId = autoBlock(number, os.meka.core.domain.AutoBlockTrigger.NETWORK_CHECK, now))
         } else if (decided.reason == os.meka.core.domain.CallReason.REPORTED_SCAM && number != null) {
             // Spam-call lookup: reported online as a scam, surely; blocked before it rang (Undo in Activity).
             decided.copy(autoBlockId = autoBlock(number, os.meka.core.domain.AutoBlockTrigger.REPORTED, now,
                 reported = os.meka.core.domain.NumberLookupRules.line(signals.reputation)))
-        } else decided
+        } else decided).let { d ->
+            // Scam call fix, slice 4: a number that looks like an official switchboard (national, or one he listed in
+            // About you → Official numbers) gets "Could be spoofed" on the in-call warning.
+            if (d.verdict != os.meka.core.domain.CallVerdict.RING) d
+            else d.copy(spoof = os.meka.core.domain.SpoofHintRules.lookalike(
+                number, os.meka.core.domain.SpoofHintRules.typedLines(profile.officialNumbers)))
+        }
         os.meka.core.domain.CallScreeningRules.activityLine(decision, number)?.let { (summary, why) ->
             activity.recordScreened(decision.callerKey, now, summary, why)
             activityChanged()

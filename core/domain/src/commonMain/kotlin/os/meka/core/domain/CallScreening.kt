@@ -104,6 +104,8 @@ data class CallDecision(
     val listedName: String? = null,
     /** Set by the facade when this call put the number on the block list ([CallReason.AUTO_BLOCKED]): Activity's entry, for Undo. */
     val autoBlockId: String? = null,
+    /** Scam call fix, slice 4: set by the facade when the number looks like an official switchboard ([SpoofHintRules]). */
+    val spoof: SpoofLookalike? = null,
 ) {
     val rings: Boolean get() = verdict == CallVerdict.RING
 }

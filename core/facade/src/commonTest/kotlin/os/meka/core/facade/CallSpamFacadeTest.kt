@@ -51,6 +51,22 @@ class CallSpamFacadeTest {
     }
 
     @Test
+    fun aNumberLikeAnOfficialSwitchboardComesWithCouldBeSpoofed() = runTest {
+        val c = core()
+        // Nothing typed: the national switchboards still count.
+        assertEquals("the Met Police's switchboard", c.screenIncomingCall("020 7230 1999", lists, emptyList(), CallSignals.NONE).spoof?.line?.whose)
+        assertEquals(null, c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE).spoof)
+        // His own force's number, typed in About you, is watched from then on.
+        assertEquals(false, c.setAboutYouField(os.meka.core.domain.AboutYouFields.OFFICIAL_NUMBERS, "police 01632 960000")?.refused)
+        val d = c.screenIncomingCall("01632 960691", lists, emptyList(), CallSignals.NONE)
+        assertEquals("your police force's number", d.spoof?.line?.whose)
+        assertTrue(os.meka.core.domain.InCallWarningRules.shouldWarn(d, CallSignals.NONE))
+        // A blocked number never rings, so it needs no hint.
+        assertTrue(c.blockCaller("01632 960692", "Scam"))
+        assertEquals(null, c.screenIncomingCall("01632 960692", lists, emptyList(), CallSignals.NONE).spoof)
+    }
+
+    @Test
     fun withTheAssistantOnSpamAndWithheldCallsInQuietHoursGoToTheAssistant() = runTest {
         val c = core()
         c.setCallAssistant(true)

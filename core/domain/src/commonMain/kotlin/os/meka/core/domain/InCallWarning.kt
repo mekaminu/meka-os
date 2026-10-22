@@ -21,9 +21,11 @@ data class InCallWarning(
     /** Ada's one line in his earbuds. */
     val spoken: String,
     val claim: OfficialClaim?,
+    /** Slice 4: the number looks like an official switchboard's ([SpoofHintRules]); null otherwise. */
+    val spoof: SpoofLookalike? = null,
 ) {
-    /** The notification's expanded text: the advice, then how to check a claimed body. */
-    val big: String get() = if (check == null) line else "$line\n$check"
+    /** The notification's expanded text: the spoof hint, the advice, then how to check a claimed body. */
+    val big: String get() = listOfNotNull(spoof?.hint, line, check).joinToString("\n")
 }
 
 object InCallWarningRules {
@@ -38,7 +40,8 @@ object InCallWarningRules {
 
     /** The line in Work mode → Spam protection (both apps) saying the warning exists. */
     const val SETTINGS_LINE = "When a number you don't know rings through, a scam warning shows over the call screen " +
-        "and on the lock screen, and Ada says it in your earbuds if they're in."
+        "and on the lock screen, and Ada says it in your earbuds if they're in. A number that looks like a police, bank " +
+        "or HMRC switchboard says “Could be spoofed”; add your own force's and bank's in About you → Official numbers."
 
     /** The reasons a call rang that leave the caller unvetted: off work, the assistant off or paused, a redial. */
     private val UNVETTED = setOf(
@@ -52,22 +55,37 @@ object InCallWarningRules {
     fun shouldWarn(decision: CallDecision?, signals: CallSignals, ownNumber: Boolean = false): Boolean {
         if (decision == null || decision.verdict != CallVerdict.RING || ownNumber) return false
         if (decision.reason == CallReason.OFFICIAL_CLAIM) return true
+        // Slice 4: a number that looks like an official switchboard is warned even when it's a saved contact or one
+        // he called lately (a spoofed bank number shows the bank's contact name); never family, his always-notify
+        // list, the household, his call assistant or an emergency number.
+        if (decision.spoof != null && decision.reason !in NEVER_SPOOF_WARNED && decision.listedName == null && !signals.household && !signals.fromAssistant) return true
         if (decision.reason !in UNVETTED) return false
         if (decision.listedName != null) return false
         return !(signals.knownContact || signals.calledRecently || signals.household || signals.fromAssistant)
     }
 
-    /** The warning for a caller [shouldWarn] picked; [withheld] when the number was withheld. */
-    fun warning(signals: CallSignals, withheld: Boolean): InCallWarning {
+    private val NEVER_SPOOF_WARNED = setOf(CallReason.FAMILY, CallReason.ALWAYS_RING, CallReason.EMERGENCY, CallReason.ASSISTANT)
+
+    /**
+     * The warning for a caller [shouldWarn] picked; [withheld] when the number was withheld; [spoof] when it looks like
+     * an official switchboard (slice 4: the title says "Could be spoofed" unless a claimed body already heads it).
+     */
+    fun warning(signals: CallSignals, withheld: Boolean, spoof: SpoofLookalike? = null): InCallWarning {
         val claim = OfficialCallerRules.claim(signals.networkName)
         val plain = if (withheld) "Withheld number" else "Unknown number"
-        val title = if (claim != null) "Says it's ${claim.who} · ${plain.lowercase()}" else plain
-        val spoken = if (claim != null) {
+        val title = when {
+            claim != null -> "Says it's ${claim.who} · ${plain.lowercase()}"
+            spoof != null -> spoof.title
+            else -> plain
+        }
+        val spoken = if (spoof != null) {
+            spoof.spoken
+        } else if (claim != null) {
             "Careful: this caller says they're ${claim.who}. Never give card details or move money. Hang up and call back on a number you know."
         } else {
             "Unknown caller. If they say they're the police or your bank, never give card details or move money."
         }
-        return InCallWarning(title, ADVICE, claim?.let { OfficialCallerRules.headsUp(it) }, spoken, claim)
+        return InCallWarning(title, ADVICE, claim?.let { OfficialCallerRules.headsUp(it) }, spoken, claim, spoof)
     }
 
     /** Ada says it only into his ears: headphones or earbuds connected, never the speaker (the ringtone is there). */

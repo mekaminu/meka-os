@@ -92,7 +92,7 @@ class MekaCallScreeningService : CallScreeningService() {
                     val own = key != null && CallerLookup.ownNumbers(this@MekaCallScreeningService).any { People.key(it) == key }
                     if (InCallWarningRules.shouldWarn(s.decision, s.signals, own)) {
                         val withheld = s.decision.callerKey == CallScreeningRules.WITHHELD
-                        InCallWarningNotice.show(this@MekaCallScreeningService, s.number, InCallWarningRules.warning(s.signals, withheld))
+                        InCallWarningNotice.show(this@MekaCallScreeningService, s.number, InCallWarningRules.warning(s.signals, withheld, s.decision.spoof))
                     }
                 }
             }
