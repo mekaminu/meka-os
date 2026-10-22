@@ -88,4 +88,14 @@ class CallNameFacadeTest {
         now += CallNameRules.PENDING_MS + 1
         assertIs<AskOutcome.Unavailable>(d.askMeka("Alex"))
     }
+
+    @Test
+    fun todaysGreetingReadsTheCoresClockNotTheDevices() {
+        now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
+        val fold = core("android")
+        assertEquals("Good afternoon, Alex", fold.todayGreeting("Alex"))
+        assertEquals("Good afternoon", fold.todayGreeting(null))
+        now = 1_792_620_000_000L // Wed 21 Oct 2026, 23:00 in London (22:00 UTC)
+        assertEquals("Good evening", fold.todayGreeting(""))
+    }
 }

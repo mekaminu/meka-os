@@ -1915,6 +1915,12 @@ final class CoreModel {
     /// Today as a local epoch day (the core's day numbering, for due dates).
     var todayEpochDay: Int64 { core?.todayEpochDay() ?? Self.epochDay(of: Date()) }
 
+    /// Today's greeting by the core's clock and zone (quality gate, 2026-10-22), the device clock only before the core is up.
+    func todayGreeting(callName: String?) -> String {
+        core?.todayGreeting(shownName: callName)
+            ?? CallNameRules.shared.todayGreeting(hour: Int32(Calendar.current.component(.hour, from: .now)), shownName: callName)
+    }
+
     /// A local calendar date as an epoch day, and back (for the date picker).
     nonisolated static func epochDay(of date: Date) -> Int64 {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: date)

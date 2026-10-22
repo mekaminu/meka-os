@@ -184,7 +184,6 @@ import os.meka.core.domain.DayArc
 import os.meka.core.domain.DayRing
 import os.meka.core.domain.DayRingHeader
 import java.time.LocalDate
-import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
@@ -852,7 +851,7 @@ private fun TodayPane(
                         onTick = habitTick,
                     ) {
                     // The opening moment, part 2: on the first open of the day the greeting's letters fade in.
-                    GreetingText(greeting(callName), if (now == null) ringPlay else DayRingPlay.STILL)
+                    GreetingText(greeting(core, callName), if (now == null) ringPlay else DayRingPlay.STILL)
                     if (today.timeline.dateLabel.isNotEmpty()) {
                         Text(today.timeline.dateLabel, style = MekaType.itemMeta, color = Meka.colors.textSecondary,
                             modifier = Modifier.padding(top = MekaSpace.xxs))
@@ -1361,7 +1360,7 @@ private fun TodayPane(
         if (collapses && headerFace != null) {
             CollapsingHeader(
                 shown = collapse, face = headerFace, fullDp = WatchFaceRules.headerDp(cover = true),
-                greeting = greeting(callName),
+                greeting = greeting(core, callName),
                 line = HeaderCollapseRules.compactLine(today.timeline.dateLabel, weather.nowLine),
                 play = ringPlay, played = ringPlayed, onOpenFace = openDayRing,
                 night = shutdown.night, week = goalsNow.week,
@@ -1649,5 +1648,9 @@ private fun meta(t: Task): String? {
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 }
 
-/** "Good evening, Alex" with About you's name, "Good evening" without (00:00–04:59 is "Good night", Meka 2026-10-17). */
-private fun greeting(name: String?): String = os.meka.core.domain.CallNameRules.todayGreeting(LocalTime.now().hour, name)
+/**
+ * "Good evening, Alex" with About you's name, "Good evening" without (00:00–04:59 is "Good night", Meka 2026-10-17), by
+ * the core's clock (quality gate, 2026-10-22); the phone's clock only where no core is given.
+ */
+private fun greeting(core: MekaCore?, name: String?): String =
+    core?.todayGreeting(name) ?: os.meka.core.domain.CallNameRules.todayGreeting(java.time.LocalTime.now().hour, name)

@@ -1,5 +1,6 @@
 package os.meka.android.fold
 
+import androidx.compose.ui.platform.testTag
 import os.meka.android.designsystem.minTouch
 import android.net.Uri
 import androidx.compose.animation.AnimatedContent
@@ -170,7 +171,9 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
     Text(
         label, style = MekaType.caption,
         color = if (primary) Meka.colors.onAccent else Meka.colors.textPrimary,
-        modifier = Modifier.scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
+        maxLines = 1,
+        // testTag: the quality gate's Today shots check the chips share one row on the cover screen.
+        modifier = Modifier.testTag(NOW_CHIP_TAG).scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
             .background(if (primary) Meka.colors.accent else Meka.colors.background)
             .clickable(interactionSource = source, indication = null, role = Role.Button) {
                 if (a == NowAction.DIDNT_GO) haptics.tick() else haptics.light()
@@ -187,6 +190,11 @@ private fun NowChip(a: NowAction, v: NowView, handlers: NowHandlers) {
                     NowAction.BREAK_DOWN -> v.task?.let { handlers.breakDown(it.id) }
                 }
             }
-            .minTouch().padding(horizontal = MekaSpace.l),
+            // 16 dp sides (was 24): Done · Tomorrow · Open fit one row on the cover screen's ~264 dp card (quality gate,
+            // 2026-10-22: Open wrapped alone onto a second row); still a 48 dp touch height, every label wider than 48 dp.
+            .minTouch().padding(horizontal = MekaSpace.m),
     )
 }
+
+/** The now card's action chips, for the quality gate's one-row check. */
+internal const val NOW_CHIP_TAG = "now-chip"

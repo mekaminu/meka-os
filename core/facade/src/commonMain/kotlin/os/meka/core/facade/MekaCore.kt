@@ -2833,6 +2833,13 @@ class MekaCore(
     /** The local day today as an epoch day, for [os.meka.core.domain.Task.repeatMeta]. */
     fun todayEpochDay(): Long = ZoneCalendar(timeZone).epochDayOf(nowMs())
 
+    /**
+     * Today's greeting by the core's own clock and zone ("Good evening, Alex"; the quality gate's Today shots,
+     * 2026-10-22: it read the device clock, so a shot at 17:15 said "Good morning"). Same on the Fold and the Mac.
+     */
+    fun todayGreeting(shownName: String?): String =
+        os.meka.core.domain.CallNameRules.todayGreeting(ZoneCalendar(timeZone).minuteOfDay(nowMs()) / 60, shownName)
+
     /** Event detail (calendar redesign, slice 3): when, how soon, which calendar, place, notes and a Join link. Pure. */
     fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
         os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone), _eventMarks.value).copy(

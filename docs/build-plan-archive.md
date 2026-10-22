@@ -2828,3 +2828,10 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **The gate itself:** unit tests log failures in full (the cut lines are named in the CI log), and each shot is saved before it is checked so a failing screen is in the `fold-screens` artifact. `assertReadable(mustShow = false)` for a scrolling list, where a title below the fold isn't drawn.
 - Landed d17b4c4 (the shots), ddb698b (full failure logging, shot before check), 8da9b35 (the fixes); CI run 1040 (39746934096) green, screens 482ac09. Re-shot review: "SET UP Navilife" label casing; Up next's three buttons wrap to two rows on the cover; the greeting reads the phone's clock — filed on the board.
 - No server change, no migration. Mac checked nightly.
+
+### Quality gate — slice 4 (2026-10-22): the re-shot's findings fixed
+- **Setup card label:** "SET UP Navilife" (the rename put a mixed-case name into an upper-case label) → `"Set up Navilife".uppercase()` (SetupPane.kt). The Mac's line was already sentence case.
+- **Up next's chips on the cover:** the cover card's inner width is ~264 dp; Done · Tomorrow · Open with 24 dp sides needed ~280 dp, so Open wrapped alone. NowChip's sides are 16 dp (touch height still 48 dp, maxLines 1); the chips carry `NOW_CHIP_TAG` and `ScreenShots.assertOneRow` fails a shot whose chips don't share a top.
+- **Greeting by the core's clock:** `MekaCore.todayGreeting(shownName)` (CallNameRules.todayGreeting at the core's zone and now); the Fold's TodayPane and CollapsingHeader and the Mac's TodayView (CoreModel.todayGreeting) use it, the device clock only without a core. `ScreenShots.assertShows(…, "Good afternoon")` in every Today shot (17:15 by the core); CallNameFacadeTest.todaysGreetingReadsTheCoresClockNotTheDevices.
+- No server change, no migration. Mac checked nightly.
+

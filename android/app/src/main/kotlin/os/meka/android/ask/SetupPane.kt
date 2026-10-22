@@ -248,7 +248,7 @@ private fun SetupStepView(step: SetupStep, modifier: Modifier, onFix: () -> Unit
 }
 
 /**
- * Today's setup card (Setup checklist): while something is left, "SET UP MEKA · 3 steps left · Outlook calendar,
+ * Today's setup card (Setup checklist): while something is left, "SET UP NAVILIFE · 3 steps left · Outlook calendar,
  * Calendar editing, Pick a voice" with Open Setup (light haptic; slides to Ask with the Setup pane springing up) and
  * Not today (tick haptic; folds away until tomorrow). Checked on open, the server asked at most every quarter hour.
  * Motion: rises with Today's stagger; the line cross-fades; folds away on the expand spring. Reduced motion: fades.
@@ -275,7 +275,7 @@ fun SetupTodayCard(core: MekaCore, modifier: Modifier = Modifier) {
                 .padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
-            Text("SET UP Navilife", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
+            Text("Set up Navilife".uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
             Crossfade(view?.todayLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "setup-card") { t ->
                 Text(t, style = MekaType.body, color = Meka.colors.textPrimary)
             }

@@ -20,6 +20,7 @@ import org.robolectric.annotation.GraphicsMode
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.fold.NOW_CHIP_TAG
 import os.meka.android.today.TodayRoute
 import os.meka.core.domain.HabitTiming
 import os.meka.core.facade.MekaCore
@@ -97,6 +98,9 @@ class TodayScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
+        // The re-shot's findings (2026-10-22): Up next's chips on one row, and the greeting by the core's clock (17:15).
+        ScreenShots.assertOneRow(compose, name, NOW_CHIP_TAG)
+        ScreenShots.assertShows(compose, name, "Good afternoon")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

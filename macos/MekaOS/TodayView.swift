@@ -716,7 +716,7 @@ struct TodayView: View {
 
     /// One name everywhere (2026-10-21): About you's name, as the orb's hello and the brief say it; none, no name.
     private var greeting: String {
-        CallNameRules.shared.todayGreeting(hour: Int32(Calendar.current.component(.hour, from: .now)), shownName: model.aboutYou?.callName)
+        model.todayGreeting(callName: model.aboutYou?.callName)
     }
 }
 

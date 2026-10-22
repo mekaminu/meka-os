@@ -5,6 +5,8 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
@@ -103,5 +105,23 @@ object ScreenShots {
         val highest = tops.values.min()
         val off = tops.filterValues { it - highest > 1f }
         if (off.isNotEmpty()) fail("$name: the lanes' first cards don't line up:\n" + tops.entries.joinToString("\n") { "- \"${it.key}\" at ${it.value} px" })
+    }
+
+    /**
+     * The quality gate's "one row" (Today's re-shot, 2026-10-22: on the cover screen Up next's Open wrapped alone under
+     * Done and Tomorrow): fails when the nodes tagged [tag] don't all start at the same height.
+     */
+    fun assertOneRow(compose: ComposeContentTestRule, name: String, tag: String) {
+        val tops = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot.top }
+        if (tops.isEmpty()) return
+        val highest = tops.min()
+        if (tops.any { it - highest > 1f }) fail("$name: the $tag row wraps (tops ${tops.joinToString()} px)")
+    }
+
+    /** Fails unless [text] is on screen (as words or as what TalkBack reads), e.g. the greeting for the core's time. */
+    fun assertShows(compose: ComposeContentTestRule, name: String, text: String) {
+        val found = compose.onAllNodes(hasText(text, substring = true) or hasContentDescription(text, substring = true), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        if (found.isEmpty()) fail("$name: \"$text\" isn't on screen")
     }
 }
