@@ -151,6 +151,15 @@ class TalkController(
             // Live didn't open in time: normal Ada listens instead, so he is never left with a dead orb.
             if (fellBack) begin(TalkFlow.start())
         }
+        // Slice 4: his words and Ada's under the orb as Google transcribes them, and each turn shown in Ask with its sources.
+        override fun onWords(heard: String, said: String) {
+            if (!liveRunning) return
+            this@TalkController.heard = heard
+            this@TalkController.said = said
+        }
+        override fun onTurn(question: String, answer: AskOutcome) {
+            if (liveRunning) onAnswer(question, answer)
+        }
     })
     private var liveRunning = false
 

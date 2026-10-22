@@ -129,13 +129,30 @@ object LiveFactsRules {
         val q = question.lowercase().replace('’', '\'')
         val words = q.replace(Regex("[^a-z0-9'ç ]"), " ").split(' ').filter { it.isNotEmpty() }
         if (words.isEmpty()) return null
-        if (words.any { it in PERSONAL }) return null
-        if ('@' in q || Regex("""\d{5,}""").containsMatchIn(q.replace(" ", "")) || POSTCODE.containsMatchIn(q)) return null
+        if (personal(q, words)) return null
         val flat = " " + words.joinToString(" ") + " "
         if (LIVE.none { " $it " in flat } && !elsewhereWeather(flat)) return null
         val cleaned = question.replace(Regex("""^\s*(?:(?:hey|ok|okay|hi)\b[\s,]*)?""", RegexOption.IGNORE_CASE), "").replace(Regex("""\s+"""), " ").trim()
         return cleaned.take(MAX_QUERY).trim().takeIf { it.length >= 3 }
     }
+
+    /**
+     * Ada's Live mode, slice 4: a search the Live model asked for, as sent to the web, or null when it mustn't go: it
+     * is about his own life (the same words [query] refuses), carries a number of five or more digits, an email
+     * address or a postcode, or [personalNames] (his family's and his own names, from About you) — the same filter as
+     * Ask's, without the "is it about something current" test, since the model already chose to search.
+     */
+    fun searchable(query: String, personalNames: Collection<String> = emptyList()): String? {
+        val q = query.lowercase().replace('’', '\'')
+        val words = q.replace(Regex("[^a-z0-9'ç ]"), " ").split(' ').filter { it.isNotEmpty() }
+        if (words.isEmpty() || personal(q, words)) return null
+        val names = personalNames.mapNotNull { n -> n.trim().lowercase().takeIf { it.length >= 2 } }.toSet()
+        if (words.any { it in names }) return null
+        return query.replace(Regex("""\s+"""), " ").trim().take(MAX_QUERY).trim().takeIf { it.length >= 3 }
+    }
+
+    private fun personal(q: String, words: List<String>): Boolean =
+        words.any { it in PERSONAL } || '@' in q || Regex("""\d{5,}""").containsMatchIn(q.replace(" ", "")) || POSTCODE.containsMatchIn(q)
 
     /** "weather in Madrid", "forecast for Paris": somewhere named, not home's "forecast for tomorrow". */
     private fun elsewhereWeather(flat: String): Boolean =

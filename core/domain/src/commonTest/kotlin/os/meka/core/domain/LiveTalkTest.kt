@@ -100,4 +100,28 @@ class LiveTalkTest {
         )
         assertEquals("Ada's Live · 2 talks · 1 min · £0.05 of £15 this month · off until the 1st", r.activityLine(false, "bad", 2, 1, "over", 5, 1_500))
     }
+
+    @Test
+    fun slice4ALiveSearchNeverCarriesHisLifeAndATurnReadsAsAnAnswerWithSources() {
+        assertEquals("rail strike latest", LiveFactsRules.searchable("  rail   strike latest "))
+        assertEquals("Barcelona weather Saturday", LiveFactsRules.searchable("Barcelona weather Saturday"))
+        assertNull(LiveFactsRules.searchable("my dentist opening hours"))
+        assertNull(LiveFactsRules.searchable("Oakfield School inset days AB1 2CD"))
+        assertNull(LiveFactsRules.searchable("call 0123456789"))
+        assertNull(LiveFactsRules.searchable("alex@example.com"))
+        assertNull(LiveFactsRules.searchable("Alex football results", listOf("Alex", "Sam")))
+        assertEquals("Alexandria weather", LiveFactsRules.searchable("Alexandria weather", listOf("Alex")))
+        assertNull(LiveFactsRules.searchable("ok"))
+        // Ask's own filter is unchanged.
+        assertNull(LiveFactsRules.query("history of the railways"))
+        assertEquals("latest on the rail strike", LiveFactsRules.query("latest on the rail strike"))
+
+        val cards = LiveFactsRules.sources(listOf("Strike off" to "https://www.bbc.co.uk/news/1", "x" to "http://plain"))
+        val a = LiveTalkRules.turnAnswer("  The strike's  off,\n says the BBC. ", cards) as AskOutcome.Answered
+        assertEquals("The strike's off, says the BBC.", a.answer.text)
+        assertEquals("bbc.co.uk", a.answer.sources.single().site)
+        assertNull(LiveTalkRules.turnAnswer(" ", cards))
+        assertEquals(LiveTalkRules.HEARD_NONE, LiveTalkRules.turnQuestion(""))
+        assertEquals("is the strike on", LiveTalkRules.turnQuestion(" is the strike on "))
+    }
 }

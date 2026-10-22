@@ -58,6 +58,10 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         fun onLevel(level: Float)
         /** The conversation ended; [fellBack] when Live never opened and normal Ada should answer instead. */
         fun onEnded(fellBack: Boolean)
+        /** Slice 4: this turn's words so far, his ([heard]) and Ada's ([said]), from Google's transcripts. */
+        fun onWords(heard: String, said: String) {}
+        /** Slice 4: a turn finished: his words and Ada's answer with the pages she looked up, for Ask to show. */
+        fun onTurn(question: String, answer: os.meka.core.domain.AskOutcome) {}
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -82,6 +86,10 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
     private var track: AudioTrack? = null
     private var player: Thread? = null
     private val queue = LinkedBlockingQueue<ByteArray>()
+    // Slice 4: the turn's transcripts and the pages its searches found (main thread only).
+    private val heardNow = StringBuilder()
+    private val saidNow = StringBuilder()
+    private val pagesNow = mutableListOf<Pair<String, String>>()
 
     /** Starts a Live conversation (the microphone is already allowed). */
     fun start() {
@@ -187,10 +195,55 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
                 playUntil = 0
                 track?.let { t -> runCatching { t.pause(); t.flush(); t.play() } }
             }
-            LiveProtocol.Event.TurnComplete -> Unit
+            LiveProtocol.Event.TurnComplete -> main.post { if (gen == generation) finishTurn() }
+            is LiveProtocol.Event.Heard -> main.post {
+                if (gen != generation) return@post
+                heardNow.append(e.text)
+                listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
+            }
+            is LiveProtocol.Event.Said -> main.post {
+                if (gen != generation) return@post
+                saidNow.append(e.text)
+                listener.onWords(heardNow.toString().trim(), saidNow.toString().trim())
+            }
+            is LiveProtocol.Event.ToolCall -> scope.launch { answerTool(gen, e) }
             is LiveProtocol.Event.GoAway -> main.post { if (gen == generation) end(gen, fellBack = false) }
             is LiveProtocol.Event.Resumable -> Unit // a longer conversation resumes with it in a later slice
         }
+    }
+
+    /**
+     * Slice 4: Ada asked Navilife to search the web. The core checks the query (never his own life: refused on the
+     * phone) and Navilife's server searches it; the results go back to Google as data, and their pages become the
+     * turn's sources in Ask. Anything else is answered with a refusal the model can act on.
+     */
+    private suspend fun answerTool(gen: Int, call: LiveProtocol.Event.ToolCall) {
+        val id = session?.sessionId
+        val reply = if (call.name != LiveTalkRules.SEARCH_TOOL || id == null) {
+            LiveProtocol.toolResponse(call.id, call.name, emptyList(), error = "Navilife has no such tool.")
+        } else {
+            val r = withContext(Dispatchers.IO) { core.liveSearch(id, call.query) }
+            when (r.state) {
+                LiveCodec.SearchResult.FOUND -> {
+                    if (gen == generation) pagesNow += r.hits.map { it.title to it.url }
+                    LiveProtocol.toolResponse(call.id, call.name, r.hits.map { h ->
+                        LiveProtocol.Hit(os.meka.core.domain.LiveFactsRules.site(h.url).orEmpty(), h.title, h.text)
+                    })
+                }
+                LiveCodec.SearchResult.REFUSED -> LiveProtocol.toolResponse(call.id, call.name, emptyList(), error = LiveTalkRules.SEARCH_REFUSED)
+                else -> LiveProtocol.toolResponse(call.id, call.name, emptyList(), error = LiveTalkRules.SEARCH_FAILED)
+            }
+        }
+        if (gen == generation) outgoing?.trySend(reply)
+    }
+
+    /** Slice 4: the turn as Ask shows it (her words and sources), then a clean slate for the next. Main thread. */
+    private fun finishTurn() {
+        val sources = os.meka.core.domain.LiveFactsRules.sources(pagesNow)
+        LiveTalkRules.turnAnswer(saidNow.toString(), sources)?.let { listener.onTurn(LiveTalkRules.turnQuestion(heardNow.toString()), it) }
+        heardNow.clear()
+        saidNow.clear()
+        pagesNow.clear()
     }
 
     @SuppressLint("MissingPermission") // a conversation only runs once the microphone is allowed
@@ -300,6 +353,8 @@ class LiveTalk(private val context: Context, private val core: MekaCore, private
         track = null
         playUntil = 0
         speakingNow = false
+        // Slice 4: a turn cut short by the end still shows what Ada said.
+        finishTurn()
         // The seconds heard and spoken (nothing of what was said), so the month's count drops from the reserve.
         session?.sessionId?.let { id ->
             val heard = LiveTalkRules.seconds(inBytes, LiveTalkRules.IN_RATE)

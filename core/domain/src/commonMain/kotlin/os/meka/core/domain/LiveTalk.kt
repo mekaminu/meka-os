@@ -80,6 +80,34 @@ object LiveTalkRules {
         Voice("Puck", "Upbeat"),
     )
 
+    /**
+     * Slice 4: the one tool a Live session has so far: Ada asks Navilife to search the web for something about the
+     * world. The device checks the query ([LiveFactsRules.searchable]: never his own life) before Navilife's server
+     * searches it with its own search key, the same way Ask's live answers are found.
+     */
+    const val SEARCH_TOOL = "search_the_web"
+
+    /** What the model is told when a search was refused because it touched his own life. */
+    const val SEARCH_REFUSED = "Navilife never searches the web for anything about his own life, family or plans. Answer from the <today> block, or say plainly you don't know."
+    /** ... when the search couldn't run (no search key, the day's searches used, slow or failed). */
+    const val SEARCH_FAILED = "The web search didn't work just now. Say you can't check that live at the moment, and give what you know, saying it may be out of date."
+
+    /**
+     * Slice 4: one Live turn as Ask shows it: what Ada said (the transcript of her voice, one line, at most
+     * [AskRules.MAX_ANSWER]) with its sources. Null when nothing of hers was heard (no transcript yet).
+     */
+    fun turnAnswer(said: String, sources: List<AskSource>): AskOutcome? {
+        val text = said.replace(Regex("""\s+"""), " ").trim().take(AskRules.MAX_ANSWER)
+        if (text.isEmpty()) return null
+        return AskOutcome.Answered(AskAnswer(text, emptyList(), sources = sources))
+    }
+
+    /** His words for a Live turn as Ask titles it ("You asked"), one line; [HEARD_NONE] when none were transcribed. */
+    fun turnQuestion(heard: String): String =
+        heard.replace(Regex("""\s+"""), " ").trim().take(AskRules.MAX_QUESTION).ifEmpty { HEARD_NONE }
+
+    const val HEARD_NONE = "In Live"
+
     /** A stored Live voice as one the picker offers, else the default. */
     fun voice(stored: String?): String =
         VOICES.firstOrNull { it.name.equals(stored?.trim(), ignoreCase = true) }?.name ?: LiveModeRules.DEFAULT_VOICE

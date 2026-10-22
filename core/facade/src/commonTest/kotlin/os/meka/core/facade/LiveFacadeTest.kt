@@ -23,11 +23,19 @@ class LiveFacadeTest {
         private val sync = os.meka.core.testing.FaultyTransport(service)
         var down = false
         val reports = mutableListOf<Triple<String, Long, Long>>()
+        val days = mutableListOf<LiveCodec.Day?>()
+        val searches = mutableListOf<LiveCodec.SearchRequest>()
+        override suspend fun liveSearch(request: LiveCodec.SearchRequest): LiveCodec.SearchResult? {
+            if (down) throw TransportException("offline")
+            searches += request
+            return LiveCodec.SearchResult(LiveCodec.SearchResult.FOUND, listOf(LiveCodec.SearchHit("Strike off", "https://bbc.co.uk/1", "Talks")))
+        }
         override suspend fun push(request: PushRequest) = sync.push(request)
         override suspend fun pull(request: PullRequest) = sync.pull(request)
         override suspend fun liveStatus(): LiveCodec.Meter? { if (down) throw TransportException("offline"); return meter }
-        override suspend fun liveSession(voice: String?): LiveCodec.Session? {
+        override suspend fun liveSession(voice: String?, day: LiveCodec.Day?): LiveCodec.Session? {
             if (down) throw TransportException("offline")
+            days += day
             return LiveCodec.Session(LiveCodec.Session.READY, meter, "ls_1", "auth_tokens/t", "gemini-3.8-live", "wss://x", voice ?: "Kore", 1, 2)
         }
         override suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): LiveCodec.Usage? {
@@ -91,7 +99,7 @@ class LiveFacadeTest {
         override suspend fun push(request: PushRequest) = live.push(request)
         override suspend fun pull(request: PullRequest) = live.pull(request)
         override suspend fun liveStatus() = live.liveStatus()
-        override suspend fun liveSession(voice: String?) = live.liveSession(voice)
+        override suspend fun liveSession(voice: String?, day: LiveCodec.Day?) = live.liveSession(voice, day)
         override suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long) = live.liveUsage(sessionId, inSeconds, outSeconds)
         override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
             spoken++
@@ -115,5 +123,38 @@ class LiveFacadeTest {
         assertEquals("Ada's Live · 2 talks · 5 min · £0.40 of £15 in October", c.liveActivityLine())
         server.down = true
         assertNull(core(server).liveActivityLine())
+    }
+
+    @Test
+    fun slice4TheSessionAsksWithTheCompactDayAndAdaMayIntroduceHerselfOnce() = runTest {
+        val c = core()
+        c.liveSession("Kore")
+        val day = server.days.single()!!
+        assertEquals("2026-10-22", day.date)
+        assertEquals(true, day.now.startsWith("Thursday 22 October 2026"))
+        assertEquals(true, day.items.all { it.ref.isEmpty() && it.kind in os.meka.core.wire.AskCodec.KINDS })
+        assertEquals(true, day.items.size <= LiveCodec.MAX_DAY_ITEMS)
+        assertEquals(true, day.introduce) // the day's first conversation
+        assertNull(day.callMe)
+        // The encoded request is one the server accepts.
+        assertEquals(day, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(LiveCodec.SessionRequest("Kore", day))).day)
+        c.setCompanionCallsSir(true)
+        c.liveSession("Kore")
+        assertEquals(false, server.days.last()!!.introduce) // once a day
+        assertEquals(os.meka.core.wire.AskCodec.CALL_SIR, server.days.last()!!.callMe)
+    }
+
+    @Test
+    fun slice4ALiveSearchAboutHisLifeNeverLeavesThePhone() = runTest {
+        val c = core()
+        c.setAboutYou(os.meka.core.domain.AboutField.SHOWN_NAME, "Jordan")
+        c.addAboutYouChild("Alex, U7, Oakfield School")
+        assertEquals(LiveCodec.SearchResult.FOUND, c.liveSearch("ls_1", "rail strike").state)
+        assertEquals(LiveCodec.SearchResult.REFUSED, c.liveSearch("ls_1", "Oakfield term dates").state)
+        assertEquals(LiveCodec.SearchResult.REFUSED, c.liveSearch("ls_1", "alex football").state)
+        assertEquals(LiveCodec.SearchResult.REFUSED, c.liveSearch("ls_1", "my train").state)
+        assertEquals(listOf(LiveCodec.SearchRequest("ls_1", "rail strike")), server.searches)
+        server.down = true
+        assertEquals(LiveCodec.SearchResult.FAILED, c.liveSearch("ls_1", "rail strike").state)
     }
 }

@@ -65,4 +65,38 @@ class LiveCodecTest {
         assertEquals(0, odd.sessions)
         assertEquals(0, odd.seconds)
     }
+
+    @Test
+    fun slice4TheCompactDayRidesTheSessionRequestWithinAsksLimits() {
+        val day = LiveCodec.Day(
+            "2026-10-22", "Thursday 22 October 2026 · 07:10",
+            listOf(AskCodec.Item("", "event", "09:30 Dentist"), AskCodec.Item("", "weather", "Rain from 15:00")),
+            name = "Alex", callMe = AskCodec.CALL_SIR, recall = listOf("Talked about heat pumps"), introduce = true,
+        )
+        val r = LiveCodec.SessionRequest("Kore", day)
+        assertEquals(r, LiveCodec.decodeSessionRequest(LiveCodec.encodeSessionRequest(r)))
+        // An older device sends no day; an older server ignores it.
+        assertNull(LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"voice":"Kore"}""").day)
+        // Refused, not trimmed: an unknown kind, a long line, a bad date.
+        assertFailsWith<WireFormatException> {
+            LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[{"kind":"secrets","line":"x"}]}}""")
+        }
+        assertFailsWith<WireFormatException> {
+            LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"2026-10-22","now":"x","items":[{"kind":"task","line":"${"x".repeat(AskCodec.MAX_LINE + 1)}"}]}}""")
+        }
+        assertFailsWith<WireFormatException> { LiveCodec.decodeSessionRequest("""{"w":${WireCodec.VERSION},"day":{"date":"22/10","now":"x"}}""") }
+    }
+
+    @Test
+    fun slice4ASearchCarriesItsQueryOnlyAndItsResultsNeverMoreThanSent() {
+        val r = LiveCodec.SearchRequest("ls_1", "rail strike")
+        assertEquals(r, LiveCodec.decodeSearchRequest(LiveCodec.encodeSearchRequest(r)))
+        assertFailsWith<WireFormatException> { LiveCodec.decodeSearchRequest("""{"w":${WireCodec.VERSION},"sessionId":"ls_1","query":"${"x".repeat(121)}"}""") }
+        val found = LiveCodec.SearchResult(LiveCodec.SearchResult.FOUND, listOf(LiveCodec.SearchHit("Strike off", "https://bbc.co.uk/1", "Talks went well")))
+        assertEquals(found, LiveCodec.decodeSearchResult(LiveCodec.encodeSearchResult(found)))
+        val odd = LiveCodec.decodeSearchResult("""{"w":${WireCodec.VERSION},"state":"found","hits":[{"title":"t","url":"http://x"},{"title":"a","url":"https://a.org"}]}""")
+        assertEquals(listOf("https://a.org"), odd.hits.map { it.url })
+        assertEquals(LiveCodec.SearchResult.FAILED, LiveCodec.decodeSearchResult("""{"w":${WireCodec.VERSION},"state":"dancing"}""").state)
+        assertEquals(emptyList(), LiveCodec.decodeSearchResult(LiveCodec.encodeSearchResult(LiveCodec.SearchResult(LiveCodec.SearchResult.REFUSED, found.hits))).hits)
+    }
 }

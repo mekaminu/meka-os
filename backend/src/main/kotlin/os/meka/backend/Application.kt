@@ -864,6 +864,14 @@ fun Application.mekaSync(
                 val session = withContext(Dispatchers.IO) { live.session(caller.householdId, request) }
                 call.respondText(LiveCodec.encodeSession(session), ContentType.Application.Json)
             }
+            // Slice 4: a web search Ada asked for in a Live session (its query only; nothing kept or logged).
+            post(LiveCodec.SEARCH_PATH) {
+                val body = call.boundedBody()
+                val caller = call.device(devices, verifier, body, requireKey = true)
+                val request = LiveCodec.decodeSearchRequest(body)
+                val result = withContext(Dispatchers.IO) { live.search(caller.householdId, request) }
+                call.respondText(LiveCodec.encodeSearchResult(result), ContentType.Application.Json)
+            }
             post(LiveCodec.USAGE_PATH) {
                 val body = call.boundedBody()
                 val caller = call.device(devices, verifier, body, requireKey = true)
@@ -1334,7 +1342,7 @@ fun main(args: Array<String>) {
                 onWritten = { hh -> push?.serverChanged(hh) },
             )
             // Ada's Live mode, slice 1: Gemini Live tokens and their £15 meter; "off" until the Gemini key is in.
-            val live = liveFromEnv(ds)
+            val live = liveFromEnv(ds, liveFacts)
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,

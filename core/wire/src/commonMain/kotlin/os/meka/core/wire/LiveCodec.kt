@@ -1,6 +1,7 @@
 package os.meka.core.wire
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -9,6 +10,10 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import kotlinx.serialization.json.add
 
 /**
  * Ada's Live mode, slice 1: the device ↔ Navilife server exchange for a Gemini Live session.
@@ -23,6 +28,8 @@ object LiveCodec {
     const val STATUS_PATH = "/v1/ai/live/status"
     const val SESSION_PATH = "/v1/ai/live/session"
     const val USAGE_PATH = "/v1/ai/live/usage"
+    /** Slice 4: a web search Ada asked for in a Live session (its query only, checked on the device and here). */
+    const val SEARCH_PATH = "/v1/ai/live/search"
 
     /**
      * The month's meter: [level] is ok · heads_up · over; [configured] false until the Gemini key is in. Slice 2b
@@ -39,7 +46,27 @@ object LiveCodec {
         val seconds: Long = 0,
     )
 
-    data class SessionRequest(val voice: String? = null)
+    /**
+     * Slice 4 (additive; an older device leaves it out and Ada starts with no picture of his day): the compact day a
+     * Live session starts with, as Ask sends it — the [date] and [now] line, today's lines ([items]: Needs you, the
+     * tasks, the calendar, the weather, the train, the commute, the shopping; no handles, since Live proposes nothing
+     * yet), what he is called ([name], [callMe]), short [recall] notes of earlier chats and whether Ada may
+     * [introduce] herself. The server puts it in the session's system instruction, locked into Google's token.
+     */
+    data class Day(
+        val date: String,
+        val now: String,
+        val items: List<AskCodec.Item>,
+        val name: String? = null,
+        val callMe: String? = null,
+        val recall: List<String> = emptyList(),
+        val introduce: Boolean = false,
+    )
+
+    data class SessionRequest(val voice: String? = null, val day: Day? = null)
+
+    /** The most lines a Live day carries (fewer than Ask's: it is the compact day, said once at the start). */
+    const val MAX_DAY_ITEMS = 40
 
     /**
      * [state]: [READY] (the rest is set) · [OFF] (no key on the server) · [OVER] (the month's cap) · [FAILED] (Google
@@ -66,6 +93,57 @@ object LiveCodec {
         }
     }
 
+    /** Slice 4: a search for [sessionId]'s conversation; [query] at most [MAX_QUERY]. */
+    data class SearchRequest(val sessionId: String, val query: String)
+
+    /** One result: the page's [title], its https [url] and a short [text] from it. */
+    data class SearchHit(val title: String, val url: String, val text: String)
+
+    /** [state]: [FOUND] (with [hits], maybe none) · [REFUSED] (about his life) · [FAILED] (no key, the day's cap, slow, an unknown session). */
+    data class SearchResult(val state: String, val hits: List<SearchHit> = emptyList()) {
+        companion object {
+            const val FOUND = "found"
+            const val REFUSED = "refused"
+            const val FAILED = "failed"
+        }
+    }
+
+    const val MAX_QUERY = 120
+    const val MAX_HITS = 4
+
+    fun encodeSearchRequest(r: SearchRequest): String = buildJsonObject {
+        put("w", WireCodec.VERSION)
+        put("sessionId", r.sessionId)
+        put("query", r.query)
+    }.toString()
+
+    fun decodeSearchRequest(body: String): SearchRequest = wrap("live search request") {
+        val o = json.parseToJsonElement(body).jsonObject
+        checkVersion(o)
+        val id = str(o, "sessionId")?.takeIf { it.length in 1..MAX_ID } ?: throw IllegalArgumentException("sessionId")
+        val q = str(o, "query")?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_QUERY } ?: throw IllegalArgumentException("query")
+        SearchRequest(id, q)
+    }
+
+    fun encodeSearchResult(r: SearchResult): String = buildJsonObject {
+        put("w", WireCodec.VERSION)
+        put("state", r.state)
+        putJsonArray("hits") { r.hits.forEach { h -> addJsonObject { put("title", h.title); put("url", h.url); put("text", h.text) } } }
+    }.toString()
+
+    /** Anything unreadable, an unknown state or a link that isn't https reads as less: never more than was sent. */
+    fun decodeSearchResult(body: String): SearchResult = wrap("live search result") {
+        val o = json.parseToJsonElement(body).jsonObject
+        checkVersion(o)
+        val state = str(o, "state")?.takeIf { it in setOf(SearchResult.FOUND, SearchResult.REFUSED, SearchResult.FAILED) } ?: SearchResult.FAILED
+        val hits = (o["hits"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val h = e as? JsonObject ?: return@mapNotNull null
+            val url = str(h, "url")?.takeIf { it.startsWith("https://") && it.length <= 2_000 } ?: return@mapNotNull null
+            SearchHit(str(h, "title").orEmpty().take(200), url, str(h, "text").orEmpty().take(400))
+        }.take(MAX_HITS)
+        SearchResult(state, if (state == SearchResult.FOUND) hits else emptyList())
+    }
+
     data class UsageRequest(val sessionId: String, val inSeconds: Long, val outSeconds: Long)
 
     /** [counted]: false when the server didn't know the session or had already counted it. */
@@ -89,13 +167,51 @@ object LiveCodec {
     fun encodeSessionRequest(r: SessionRequest): String = buildJsonObject {
         put("w", WireCodec.VERSION)
         r.voice?.let { put("voice", it) }
+        r.day?.let { d ->
+            putJsonObject("day") {
+                put("date", d.date)
+                put("now", d.now)
+                putJsonArray("items") { d.items.forEach { i -> addJsonObject { put("kind", i.kind); put("line", i.line) } } }
+                AskCodec.plainName(d.name)?.let { put("name", it) }
+                if (d.callMe == AskCodec.CALL_SIR) put("callMe", AskCodec.CALL_SIR)
+                if (d.recall.isNotEmpty()) putJsonArray("recall") { d.recall.forEach { add(it) } }
+                if (d.introduce) put("introduce", true)
+            }
+        }
     }.toString()
 
     fun decodeSessionRequest(body: String): SessionRequest = wrap("live session request") {
         val o = json.parseToJsonElement(body).jsonObject
         checkVersion(o)
-        SessionRequest(str(o, "voice")?.take(40))
+        SessionRequest(str(o, "voice")?.take(40), (o["day"] as? JsonObject)?.let(::day))
     }
+
+    /** A day as sent, refused (not trimmed) when outside Ask's own limits. */
+    private fun day(o: JsonObject): Day {
+        val date = str(o, "date") ?: throw IllegalArgumentException("date")
+        require(DATE.matches(date)) { "date" }
+        val now = str(o, "now").orEmpty()
+        require(now.length <= 80) { "now" }
+        val items = (o["items"] as? JsonArray ?: JsonArray(emptyList())).map { e ->
+            val i = e as? JsonObject ?: throw IllegalArgumentException("item")
+            AskCodec.Item("", str(i, "kind").orEmpty(), str(i, "line").orEmpty()).also {
+                require(it.kind in AskCodec.KINDS) { "kind" }
+                require(it.line.length <= AskCodec.MAX_LINE) { "line" }
+            }
+        }
+        require(items.size <= MAX_DAY_ITEMS) { "items" }
+        val recall = (o["recall"] as? JsonArray ?: JsonArray(emptyList())).map { e ->
+            ((e as? JsonPrimitive)?.takeIf { it.isString }?.content ?: throw IllegalArgumentException("recall")).also {
+                require(it.isNotBlank() && it.length <= AskCodec.MAX_LINE) { "recall" }
+            }
+        }
+        require(recall.size <= AskCodec.MAX_RECALL) { "recall" }
+        val callMe = str(o, "callMe")?.takeIf { it == AskCodec.CALL_SIR }
+        val introduce = (o["introduce"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        return Day(date, now, items, AskCodec.plainName(str(o, "name")), callMe, recall, introduce)
+    }
+
+    private val DATE = Regex("""\d{4}-\d{2}-\d{2}""")
 
     fun encodeSession(s: Session): String = buildJsonObject {
         put("w", WireCodec.VERSION)

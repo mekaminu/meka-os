@@ -10549,7 +10549,68 @@ class MekaCore(
      */
     suspend fun liveSession(voice: String?): os.meka.core.wire.LiveCodec.Session? {
         val api = liveApi ?: return null
-        return try { api.liveSession(voice) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        // Slice 4: the compact day goes with the request, so the server can start the session as Ada with his day.
+        val day = try { onCore { liveDay() } } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+        return try { api.liveSession(voice, day) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+    }
+
+    /**
+     * Ada's Live mode, slice 4: the compact day a Live session starts with, built here as Ask builds its <today> block
+     * ([os.meka.core.domain.AskRules.context]) but only its always-on part: Needs you, today's tasks and calendar, the
+     * weather (home, work on an office day, the route's train line), the commute and the shopping; what he is called,
+     * the notes of earlier chats (when he keeps them) and whether Ada may introduce herself. No handles: Live proposes
+     * nothing yet. Caller is on the core.
+     */
+    private fun liveDay(): os.meka.core.wire.LiveCodec.Day {
+        val cal = ZoneCalendar(timeZone)
+        val now = nowMs()
+        val today = cal.epochDayOf(now)
+        val workLines = os.meka.core.domain.PlacesRules.workAskLines(workWeather.forecast(), now, cal)
+        val routeLines = os.meka.core.domain.RouteRules.askLines(lineStatus.snapshot(), now, cal, officeToday())
+        val context = os.meka.core.domain.AskRules.context(
+            _today.value, now, cal,
+            os.meka.core.domain.WeatherRules.askLines(weather.forecast(), now, cal)
+                .take(os.meka.core.domain.WeatherRules.MAX_ASK_LINES - workLines.size - routeLines.size) + workLines + routeLines,
+            shopping.view(),
+            commute = os.meka.core.domain.CommuteAskRules.askLines(hoursOf(_workMode.value, today), cal, now, currentWake()),
+        )
+        val notes = companionMemory.notes(today)
+        return os.meka.core.wire.LiveCodec.Day(
+            date = context.dateIso,
+            now = context.nowLine,
+            items = context.items.take(os.meka.core.wire.LiveCodec.MAX_DAY_ITEMS)
+                .map { os.meka.core.wire.AskCodec.Item("", it.kind.wire, it.line.take(os.meka.core.wire.AskCodec.MAX_LINE)) },
+            name = os.meka.core.wire.AskCodec.plainName(os.meka.core.domain.CallNameRules.called(aboutYou.profile().shownName)),
+            callMe = if (mekaVoice.callsSir()) os.meka.core.wire.AskCodec.CALL_SIR else null,
+            recall = (if (companionMemory.remembers()) os.meka.core.domain.CompanionMemoryRules.recall(notes, today) else emptyList())
+                .filter { it.isNotBlank() }.map { it.take(os.meka.core.wire.AskCodec.MAX_LINE) }.takeLast(os.meka.core.wire.AskCodec.MAX_RECALL),
+            introduce = adaIntroduces(emptyList(), cal),
+        )
+    }
+
+    /**
+     * Ada's Live mode, slice 4: a web search Ada asked for in Live session [sessionId]. Checked here first
+     * ([os.meka.core.domain.LiveFactsRules.searchable] with his family's names and the boys' school from About you): a
+     * query about his own life never leaves the phone and reads as refused. Otherwise Navilife's server searches it
+     * (and checks it again). Failed when offline, an older server, or anything else. Never throws.
+     */
+    suspend fun liveSearch(sessionId: String, query: String): os.meka.core.wire.LiveCodec.SearchResult {
+        val failed = os.meka.core.wire.LiveCodec.SearchResult(os.meka.core.wire.LiveCodec.SearchResult.FAILED)
+        val names = try { onCore { liveSearchNames() } } catch (e: CancellationException) { throw e } catch (e: Exception) { return failed }
+        val q = os.meka.core.domain.LiveFactsRules.searchable(query, names)
+            ?: return os.meka.core.wire.LiveCodec.SearchResult(os.meka.core.wire.LiveCodec.SearchResult.REFUSED)
+        val api = liveApi ?: return failed
+        return try { api.liveSearch(os.meka.core.wire.LiveCodec.SearchRequest(sessionId, q)) ?: failed } catch (e: CancellationException) { throw e } catch (e: Exception) { failed }
+    }
+
+    /** The words that make a Live search about his own life: his, his partner's and the children's names, the school's. Caller is on the core. */
+    private fun liveSearchNames(): List<String> {
+        val p = aboutYou.profile()
+        val generic = setOf("school", "primary", "academy", "junior", "infant", "infants", "the", "of", "c", "e", "st")
+        return (listOfNotNull(p.shownName, p.partnerName) + p.children.map { it.name } + p.children.mapNotNull { it.school })
+            .flatMap { it.lowercase().split(Regex("[^a-z0-9'ç]+")) }
+            .filter { it.length >= 2 && it !in generic }
+            .distinct()
     }
 
     /** How many seconds a Live session heard and spoke (nothing of what was said), so the month's count is true. Never throws. */

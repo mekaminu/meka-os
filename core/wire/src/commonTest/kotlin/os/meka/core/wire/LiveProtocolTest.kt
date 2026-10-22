@@ -47,4 +47,25 @@ class LiveProtocolTest {
         assertEquals(emptyList(), LiveProtocol.decode("not json"))
         assertEquals(emptyList(), LiveProtocol.decode("""{"usageMetadata":{"totalTokenCount":3}}"""))
     }
+
+    @Test
+    fun slice4TranscriptsAndToolCallsReadAsEventsAndTheSearchAnswerGoesBack() {
+        assertEquals(
+            listOf(LiveProtocol.Event.Heard("what's the latest"), LiveProtocol.Event.Said("The strike")),
+            LiveProtocol.decode("""{"serverContent":{"inputTranscription":{"text":"what's the latest"},"outputTranscription":{"text":"The strike"}}}"""),
+        )
+        assertEquals(
+            listOf(LiveProtocol.Event.ToolCall("c1", "search_the_web", "rail strike"), LiveProtocol.Event.ToolCall("", "other", "")),
+            LiveProtocol.decode("""{"toolCall":{"functionCalls":[{"id":"c1","name":"search_the_web","args":{"query":"rail strike"}},{"name":"other"},{"id":"x"}]}}"""),
+        )
+        val r = Json.parseToJsonElement(LiveProtocol.toolResponse("c1", "search_the_web", listOf(LiveProtocol.Hit("bbc.co.uk", "Strike off", "Talks went well")))).jsonObject
+        val fr = r["toolResponse"]!!.jsonObject["functionResponses"]!!.jsonArray.single().jsonObject
+        assertEquals("c1", fr["id"]!!.jsonPrimitive.content)
+        val hit = fr["response"]!!.jsonObject["results"]!!.jsonArray.single().jsonObject
+        assertEquals("1", hit["n"]!!.jsonPrimitive.content)
+        assertEquals("bbc.co.uk", hit["site"]!!.jsonPrimitive.content)
+        val refused = Json.parseToJsonElement(LiveProtocol.toolResponse("c2", "search_the_web", emptyList(), error = "no")).jsonObject
+        assertEquals("no", refused["toolResponse"]!!.jsonObject["functionResponses"]!!.jsonArray.single().jsonObject["response"]!!.jsonObject["error"]!!.jsonPrimitive.content)
+        assertEquals(emptyList(), LiveProtocol.decode("""{"serverContent":{"outputTranscription":{"text":""}}}"""))
+    }
 }

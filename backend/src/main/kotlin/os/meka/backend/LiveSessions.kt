@@ -29,8 +29,11 @@ interface LiveTokens {
     /** Whether the key is in. */
     fun configured(): Boolean
 
-    /** Google's token for one session, or null when Google refused or couldn't be reached. Never the key. */
-    fun mint(model: String, voice: String, nowMs: Long): String?
+    /**
+     * Google's token for one session, or null when Google refused or couldn't be reached. Never the key. Slice 4:
+     * [instruction] (Ada and his compact day, [LivePrompt]) and the search tool are locked into it.
+     */
+    fun mint(model: String, voice: String, instruction: String, nowMs: Long): String?
 }
 
 /** One minted session as the meter keeps it: the reserve until [reported], then what it used. */
@@ -68,6 +71,8 @@ class LiveSessions(
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val random: SecureRandom = SecureRandom(),
     private val onLevel: (LiveModeRules.Level, String) -> Unit = { _, _ -> },
+    /** Slice 4: the web search Ada's search tool uses (Ask's live answers' [LiveFacts.lookQuery]); null: none. */
+    private val webSearch: ((String) -> LiveFacts.Found?)? = null,
 ) {
     private val told = mutableSetOf<Pair<String, LiveModeRules.Level>>()
 
@@ -90,7 +95,7 @@ class LiveSessions(
         }
         val voice = LiveModeRules.voice(request.voice) ?: LiveModeRules.DEFAULT_VOICE
         val now = nowMs()
-        val token = runCatching { tokens.mint(model, voice, now) }.getOrNull()
+        val token = runCatching { tokens.mint(model, voice, LivePrompt.instruction(request.day), now) }.getOrNull()
             ?: return LiveCodec.Session(LiveCodec.Session.FAILED, before, reason = "Google didn't open a Live session just now")
         val id = "ls_" + ByteArray(12).also(random::nextBytes).joinToString("") { "%02x".format(it) }
         store.add(LiveSessionRow(id, householdId, month(), now, LiveModeRules.reserveMicroUsd(), reported = false))
@@ -107,6 +112,24 @@ class LiveSessions(
         return LiveCodec.Usage(counted, meter().also(::tell))
     }
 
+    /**
+     * Slice 4: one search Ada asked for in a session this household opened and whose token's window hasn't closed;
+     * refused when the query touches his own life ([os.meka.core.domain.LiveFactsRules.searchable], checked on the
+     * device too), failed when there's no search, the day's searches are used, it was slow or the session is unknown.
+     * Nothing is kept or logged.
+     */
+    fun search(householdId: String, r: LiveCodec.SearchRequest): LiveCodec.SearchResult {
+        val failed = LiveCodec.SearchResult(LiveCodec.SearchResult.FAILED)
+        val row = runCatching { store.get(r.sessionId) }.getOrNull() ?: return failed
+        if (row.householdId != householdId || nowMs() - row.mintedAtMs > LiveModeRules.TOKEN_MS + SEARCH_GRACE_MS) return failed
+        if (os.meka.core.domain.LiveFactsRules.searchable(r.query) == null) return LiveCodec.SearchResult(LiveCodec.SearchResult.REFUSED)
+        val found = webSearch?.let { s -> runCatching { s(r.query) }.getOrNull() } ?: return failed
+        return LiveCodec.SearchResult(
+            LiveCodec.SearchResult.FOUND,
+            found.hits.take(LiveCodec.MAX_HITS).map { LiveCodec.SearchHit(it.title.take(200), it.url, it.text.take(os.meka.core.domain.LiveFactsRules.MAX_SNIPPET)) },
+        )
+    }
+
     private fun rate(): Long = runCatching { gbpPerUsd() }.getOrNull()?.takeIf { it > 0 } ?: LiveModeRules.FALLBACK_GBP_PER_USD_MICROS
 
     private fun tell(m: LiveCodec.Meter) {
@@ -117,6 +140,9 @@ class LiveSessions(
     }
 
     companion object {
+        /** A search may come a little after the token's window (the turn that asked is still finishing). */
+        const val SEARCH_GRACE_MS = 60_000L
+
         /** The Live API's WebSocket for ephemeral tokens (v1beta; the token goes in `access_token`). */
         const val WS_URL = "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained"
     }
@@ -131,9 +157,9 @@ class LiveSessions(
 class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExchange = HttpExchange.jdk(java.time.Duration.ofSeconds(10))) : LiveTokens {
     override fun configured(): Boolean = key() != null
 
-    override fun mint(model: String, voice: String, nowMs: Long): String? {
+    override fun mint(model: String, voice: String, instruction: String, nowMs: Long): String? {
         val k = key() ?: return null
-        val (code, body) = http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs))
+        val (code, body) = http.send("POST", TOKENS_URL, mapOf("x-goog-api-key" to k, "content-type" to "application/json"), request(model, voice, nowMs, instruction))
         if (code !in 200..299) {
             System.err.println("live: Google refused a token (HTTP $code)")
             return null
@@ -144,7 +170,12 @@ class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExc
     companion object {
         const val TOKENS_URL = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
 
-        fun request(model: String, voice: String, nowMs: Long): String = buildJsonObject {
+        /**
+         * Slice 4: with an [instruction], the session's system instruction (Ada and his day) and the search tool are part
+         * of the locked config, and both sides of the conversation are transcribed (his words and hers, for Ask's
+         * answer and its sources); Navilife keeps none of it.
+         */
+        fun request(model: String, voice: String, nowMs: Long, instruction: String = ""): String = buildJsonObject {
             put("uses", 1)
             put("expireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.TOKEN_MS).toString())
             put("newSessionExpireTime", Instant.ofEpochMilli(nowMs + LiveModeRules.START_MS).toString())
@@ -156,9 +187,41 @@ class GeminiLiveTokens(private val key: () -> String?, private val http: HttpExc
                     putJsonObject("speechConfig") {
                         putJsonObject("voiceConfig") { putJsonObject("prebuiltVoiceConfig") { put("voiceName", voice) } }
                     }
+                    if (instruction.isNotBlank()) {
+                        putJsonObject("systemInstruction") {
+                            putJsonArray("parts") { add(buildJsonObject { put("text", instruction) }) }
+                        }
+                        putJsonArray("tools") { add(searchTool()) }
+                        putJsonObject("inputAudioTranscription") {}
+                        putJsonObject("outputAudioTranscription") {}
+                    }
                 }
             }
         }.toString()
+
+        /**
+         * Slice 4: the one tool a Live session has: Ada asks Navilife to search the web (the device checks the query and
+         * Navilife's server searches it, as Ask's live answers are found), never Google's own search, so the
+         * never-his-life filter applies to every query.
+         */
+        fun searchTool() = buildJsonObject {
+            putJsonArray("functionDeclarations") {
+                add(buildJsonObject {
+                    put("name", os.meka.core.domain.LiveTalkRules.SEARCH_TOOL)
+                    put("description", "Search the web for something current about the world (news, sport, prices, opening times, travel disruption, the weather somewhere other than home). Never for anything about his own life, family, plans or the <today> block. Returns a few numbered results.")
+                    putJsonObject("parameters") {
+                        put("type", "OBJECT")
+                        putJsonObject("properties") {
+                            putJsonObject("query") {
+                                put("type", "STRING")
+                                put("description", "A short web search query about the world, under 120 characters, with no names of his family or friends and nothing from the <today> block.")
+                            }
+                        }
+                        putJsonArray("required") { add("query") }
+                    }
+                })
+            }
+        }
 
         /** The token's name from Google's answer, or null. */
         fun parse(body: String): String? = runCatching {
@@ -231,11 +294,12 @@ class PostgresLiveSessionStore(private val ds: DataSource) : LiveSessionStore {
 }
 
 /** Null unless the deployment names the Gemini secret; the key itself may still be unset (Live then says "off"). */
-fun liveFromEnv(ds: DataSource): LiveSessions? {
+fun liveFromEnv(ds: DataSource, liveFacts: LiveFacts? = null): LiveSessions? {
     val secret = System.getenv("MEKA_GEMINI_SECRET")?.takeIf { it.isNotBlank() } ?: return null
     val rate = os.meka.backend.integrations.EcbDollarRate.network()
     return LiveSessions(
         GeminiLiveTokens.fromSecret(secret), PostgresLiveSessionStore(ds), gbpPerUsd = { rate.read()?.gbpPerUsdMicros },
+        webSearch = liveFacts?.let { lf -> { q: String -> lf.lookQuery(q) } },
         onLevel = { level, month ->
             System.err.println("live: ${if (level == LiveModeRules.Level.OVER) "this month's cap is used up, Live off until the 1st" else "80 % of this month's cap used"} ($month)")
         },
