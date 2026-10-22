@@ -101,6 +101,8 @@ class TodayScreensTest {
         // The re-shot's findings (2026-10-22): Up next's chips on one row, and the greeting by the core's clock (17:15).
         ScreenShots.assertOneRow(compose, name, NOW_CHIP_TAG)
         ScreenShots.assertShows(compose, name, "Good afternoon")
+        // The re-shot after that (2026-10-22): the greeting on one line beside the watch face, on both screens.
+        ScreenShots.assertOneLine(compose, name, "Good afternoon")
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

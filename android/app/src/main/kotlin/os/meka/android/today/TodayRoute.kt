@@ -200,6 +200,19 @@ fun TodayRoute(
     core: MekaCore, connect: ConnectHook? = null, openReview: () -> Unit = {}, openItem: (OpenItem) -> Unit = {},
     openLists: () -> Unit = {}, openCalendar: () -> Unit = {},
 ) {
+    // The header's watch face reads the core's clock and zone, like the greeting (quality gate, 2026-10-22: a shot at
+    // the core's 17:15 showed the phone's time on the face). On a real phone the shift is nothing.
+    val faceClock = remember(core) { FaceClock(core.clockShiftMs()) { core.zoneOffsetMs(it) } }
+    androidx.compose.runtime.CompositionLocalProvider(LocalFaceClock provides faceClock) {
+        TodayRouteContent(core, connect, openReview, openItem, openLists, openCalendar)
+    }
+}
+
+@Composable
+private fun TodayRouteContent(
+    core: MekaCore, connect: ConnectHook?, openReview: () -> Unit, openItem: (OpenItem) -> Unit,
+    openLists: () -> Unit, openCalendar: () -> Unit,
+) {
     val today by core.today.collectAsState()
     val sync by core.syncStatus.collectAsState()
     val conflicts by core.conflicts.collectAsState()

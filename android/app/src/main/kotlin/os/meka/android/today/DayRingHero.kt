@@ -431,6 +431,24 @@ private fun DayTilesRow(tiles: List<DayTile>, count: Float, modifier: Modifier =
  */
 @Composable
 fun GreetingText(text: String, play: DayRingPlay, modifier: Modifier = Modifier) {
+    // One line where it can (quality gate, 2026-10-22: "Good afternoon" wrapped beside the cover screen's watch face):
+    // the greeting's own size, else a step or two smaller (GreetingFitRules); only a long name still wraps.
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier) {
+        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val base = MekaType.greeting
+        val oneLine = remember(text, base, measurer) {
+            measurer.measure(text, base, maxLines = 1, softWrap = false).size.width.toFloat()
+        }
+        val available = if (constraints.hasBoundedWidth) constraints.maxWidth.toFloat() else 0f
+        val scale = os.meka.core.domain.GreetingFitRules.scale(oneLine, available)
+        val style = if (scale == 1f) base else base.copy(fontSize = base.fontSize * scale, lineHeight = base.lineHeight * scale)
+        GreetingLetters(text, play, style, wraps = os.meka.core.domain.GreetingFitRules.wraps(oneLine, available))
+    }
+}
+
+@Composable
+private fun GreetingLetters(text: String, play: DayRingPlay, style: androidx.compose.ui.text.TextStyle, wraps: Boolean) {
+    val lines = if (wraps) Int.MAX_VALUE else 1
     val colors = Meka.colors
     val total = remember(play, text) { MotionMath.greetingTotalMs(text.length, play) }
     var elapsed by remember(play, text) { mutableLongStateOf(if (total == 0L) total else 0L) }
@@ -441,7 +459,7 @@ fun GreetingText(text: String, play: DayRingPlay, modifier: Modifier = Modifier)
         }
     }
     if (total == 0L || elapsed >= total) {
-        Text(text, style = MekaType.greeting, color = colors.textPrimary, modifier = modifier)
+        Text(text, style = style, color = colors.textPrimary, maxLines = lines, softWrap = wraps)
         return
     }
     val styled = buildAnnotatedString {
@@ -454,8 +472,8 @@ fun GreetingText(text: String, play: DayRingPlay, modifier: Modifier = Modifier)
     val lead = MotionMath.greetingLetter(elapsed, 0, play)
     val rise = with(LocalDensity.current) { MotionMath.GREETING_LETTER_RISE_DP.dp.toPx() }
     Text(
-        styled, style = MekaType.greeting,
-        modifier = modifier.graphicsLayer { translationY = (1f - lead) * rise }.semantics { contentDescription = text },
+        styled, style = style, maxLines = lines, softWrap = wraps,
+        modifier = Modifier.graphicsLayer { translationY = (1f - lead) * rise }.semantics { contentDescription = text },
     )
 }
 

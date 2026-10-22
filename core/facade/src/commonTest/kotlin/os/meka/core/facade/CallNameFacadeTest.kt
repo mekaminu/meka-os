@@ -98,4 +98,19 @@ class CallNameFacadeTest {
         now = 1_792_620_000_000L // Wed 21 Oct 2026, 23:00 in London (22:00 UTC)
         assertEquals("Good evening", fold.todayGreeting(""))
     }
+
+    @Test
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    fun theWatchFaceReadsTheSameClockAsTheGreeting() {
+        now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London (BST)
+        val fold = core("android")
+        // The face ticks on the device clock shifted onto the core's: the hands say 17:15 (a quarter past five).
+        val device = kotlin.time.Clock.System.now().toEpochMilliseconds()
+        val at = device + fold.clockShiftMs()
+        assertTrue(kotlin.math.abs(at - now) < 5_000L, "shifted clock $at vs core $now")
+        assertEquals(3_600_000L, fold.zoneOffsetMs(at))
+        val hands = os.meka.core.domain.WatchFaceRules.handsAt(now, fold.zoneOffsetMs(now))
+        assertEquals(5 * 30f + 15 * 0.5f, hands.hourDegrees, 0.01f)
+        assertEquals(90f, hands.minuteDegrees, 0.01f)
+    }
 }

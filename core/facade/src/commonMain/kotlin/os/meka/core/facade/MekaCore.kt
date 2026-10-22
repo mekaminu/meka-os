@@ -2840,6 +2840,16 @@ class MekaCore(
     fun todayGreeting(shownName: String?): String =
         os.meka.core.domain.CallNameRules.todayGreeting(ZoneCalendar(timeZone).minuteOfDay(nowMs()) / 60, shownName)
 
+    /**
+     * How far the core's clock is from the device's (0 on a real device; a test's fixed time otherwise), so Today's
+     * watch face shows the same time as the greeting (quality gate, 2026-10-22) while still ticking on the device clock.
+     */
+    fun clockShiftMs(): Long = nowMs() - Clock.System.now().toEpochMilliseconds()
+
+    /** The core's time zone's offset from UTC at [atMs], in ms (the watch face's hands, with [clockShiftMs]). */
+    fun zoneOffsetMs(atMs: Long): Long =
+        timeZone().offsetAt(Instant.fromEpochMilliseconds(atMs)).totalSeconds * 1000L
+
     /** Event detail (calendar redesign, slice 3): when, how soon, which calendar, place, notes and a Join link. Pure. */
     fun eventDetail(event: os.meka.core.domain.CalendarEvent): os.meka.core.domain.EventDetailView =
         os.meka.core.domain.EventDetails.build(event, nowMs(), ZoneCalendar(timeZone), _eventMarks.value).copy(

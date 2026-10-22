@@ -124,4 +124,19 @@ object ScreenShots {
             .fetchSemanticsNodes()
         if (found.isEmpty()) fail("$name: \"$text\" isn't on screen")
     }
+
+    /**
+     * Fails unless the text containing [text] is laid out on one line (Today's re-shot, 2026-10-22: "Good afternoon"
+     * wrapped to two lines beside the cover screen's watch face).
+     */
+    fun assertOneLine(compose: ComposeContentTestRule, name: String, text: String) {
+        val nodes = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+        if (nodes.isEmpty()) fail("$name: \"$text\" isn't on screen")
+        nodes.forEach { n ->
+            val results = mutableListOf<TextLayoutResult>()
+            n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+            val lines = results.firstOrNull()?.lineCount ?: return@forEach
+            if (lines != 1) fail("$name: \"$text\" takes $lines lines")
+        }
+    }
 }

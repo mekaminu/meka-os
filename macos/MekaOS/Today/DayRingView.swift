@@ -383,22 +383,35 @@ struct GreetingText: View {
     @State private var began = Date()
 
     var body: some View {
+        // One line where it can (quality gate, 2026-10-22, as on the Fold): the greeting's own size, else a step or two
+        // smaller (core GreetingFitRules); only when even the smallest step is too wide does it wrap.
+        let fit = GreetingFitRules.shared
+        ViewThatFits(in: .horizontal) {
+            line(scale: CGFloat(fit.scaleAt(step: 0))).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            line(scale: CGFloat(fit.scaleAt(step: 1))).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            line(scale: CGFloat(fit.scaleAt(step: 2))).lineLimit(1).fixedSize(horizontal: true, vertical: false)
+            line(scale: CGFloat(fit.scaleAt(step: fit.STEPS - 1))).fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(text)
+        .onAppear { began = Date() }
+        .onChange(of: play) { began = Date() }
+    }
+
+    /// The greeting's letters at [scale] of its size, fading in one after another on the first open of the day.
+    private func line(scale: CGFloat) -> some View {
         let letters = Array(text)
         let total = MotionMath.greetingTotal(letters: letters.count, play: play)
-        TimelineView(.animation(minimumInterval: 1.0 / 60, paused: total == 0)) { context in
+        return TimelineView(.animation(minimumInterval: 1.0 / 60, paused: total == 0)) { context in
             let elapsed = total == 0 ? total : context.date.timeIntervalSince(began)
             let lead = MotionMath.greetingLetter(elapsed: elapsed, index: 0, play: play)
             letters.enumerated().reduce(Text("")) { line, item in
                 let f = MotionMath.greetingLetter(elapsed: elapsed, index: item.offset, play: play)
                 return line + Text(String(item.element)).foregroundStyle(palette.textPrimary.opacity(f))
             }
-            .font(MekaType.greeting).tracking(MekaType.greetingTracking)
+            .font(MekaType.greeting(scale: scale)).tracking(MekaType.greetingTracking * scale)
             .offset(y: (1 - lead) * MotionMath.greetingLetterRise)
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(text)
-        .onAppear { began = Date() }
-        .onChange(of: play) { began = Date() }
     }
 }
 

@@ -292,6 +292,7 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
     val mode = WatchFaceRules.liveMode(reduced, powerSave, bedside, quiet, night)
     val resumed by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val front = resumed.isAtLeast(Lifecycle.State.RESUMED)
+    val faceClock = LocalFaceClock.current
     val clock = remember { mutableLongStateOf(System.currentTimeMillis()) }
     var landedAt by remember { mutableLongStateOf(Long.MAX_VALUE) }
     LaunchedEffect(mode, landed, front) {
@@ -313,6 +314,7 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
     val sizeDp = size.value.toInt()
     Canvas(Modifier.size(size)) {
         val now = clock.longValue // read only here: a new frame redraws this layer, nothing recomposes
+        val wall = now + faceClock.shiftMs // the time the hands show: the core's clock on Today (LocalFaceClock)
         val radius = WatchFaceRules.rimRadiusDp(sizeDp).dp.toPx()
         val sweeping = landed && mode == DayRingLiveMode.SWEEP
         val fadeIn = if (sweeping) DayRingLive.handFade(now - landedAt) else 1f
@@ -340,7 +342,7 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
             }
             if (sweeping) {
                 // The hour's shimmer: a band of light running once round the rim.
-                DayRingLive.shimmer(now, TimeZone.getDefault().getOffset(now).toLong())?.let { s ->
+                DayRingLive.shimmer(wall, faceClock.offsetMs(wall))?.let { s ->
                     val head = 360f * s
                     val fade = ((1f - s) * 4f).coerceIn(0f, 1f)
                     val (tl, sz) = box(edge)
@@ -355,7 +357,7 @@ private fun WatchFaceLiveLayer(face: WatchFace, landed: Boolean, needle: Float, 
             }
         }
         // The hour and minute hands: gold, tapered, sweeping round from 12 to the time as the face draws in.
-        val hands = WatchFaceRules.handsAt(now, TimeZone.getDefault().getOffset(now).toLong())
+        val hands = WatchFaceRules.handsAt(wall, faceClock.offsetMs(wall))
         val scale = (sizeDp / 150f).coerceIn(0.7f, 2f)
         drawHand(colors.accent, hands.minuteDegrees * needle, radius * WatchFaceRules.MINUTE_HAND_LENGTH,
             WatchFaceRules.MINUTE_HAND_BASE_DP.dp.toPx() * scale, WatchFaceRules.MINUTE_HAND_TIP_DP.dp.toPx() * scale, radius)
@@ -449,4 +451,16 @@ fun DayRingSheet(
             DayRingHero(ring, play, played = {}, size = dial, tiles = tiles, onOpenArc = onOpenArc)
         }
     }
+}
+
+/**
+ * The clock a watch face's hands read: the device's clock moved by [shiftMs], in a zone [offsetMs] from UTC at a given
+ * time. Today provides the core's ([os.meka.core.facade.MekaCore.clockShiftMs], so the face and the greeting agree, in
+ * the quality gate's shots too); everywhere else it is the device's own clock and zone.
+ */
+class FaceClock(val shiftMs: Long, val offsetMs: (Long) -> Long)
+
+/** The watch face's clock; the device's unless a screen provides another (Today: the core's). */
+val LocalFaceClock = androidx.compose.runtime.staticCompositionLocalOf {
+    FaceClock(0L) { TimeZone.getDefault().getOffset(it).toLong() }
 }
