@@ -2924,6 +2924,12 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Design check: no design file for Errands or Dinners. No server change, no wire change, no migration, Mac checked nightly.
 - Landed b7e502c + CI fixes d19e32d, 8da9f26; CI run 1075 (39829072564) green (second attempt).
 
+### Quality gate — slice 16 (2026-10-22): Appointments', Kids' and School's shots
+- **AdminPlacesScreensTest** (android test, Roborazzi on Robolectric like slice 14): Ask → Life's family-admin places, Appointments, Kids and School, each on the Fold's cover (w344dp) and inner (w829dp) sizes, nothing in, one thing and a full set, Dark and the full set in Light (18 shots) under docs/screens/fold/{appointments,kids,school}/. Invented data: Alex and Sam at Oakfield School; five appointments (one booked, one with a long name); sizes, two club fees, pocket money and a chore; an INSET day, half term, a weekly PE day, a trip with a long name and a payment date.
+- Each is read for nonsense, cut short lines and words broken in two; each pane's summary is the core's (Appointments' and School's empty lines, Kids' "No children added" with About you ›); a full set keeps every row (5 appointments, 2 children).
+- **Found before the shots and fixed:** an appointment's row cut its name and its "Every 6 months · last went Sat 12 Apr" to one line ending in "…" beside Went and Remove on the cover screen; both now take up to two lines (Fold AppointmentsPane, Mac AppointmentsSheet), and the test fails if either is cut.
+- Design check: no design file for Appointments, Kids or School. No core change, no server change, no migration, Mac checked nightly.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

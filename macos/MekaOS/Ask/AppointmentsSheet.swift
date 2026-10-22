@@ -111,8 +111,8 @@ private struct AppointmentRowView: View {
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
-                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                Text(row.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(2)
+                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
                 Text(row.status).font(MekaType.caption)
                     .foregroundStyle(row.lit ? palette.accent : palette.textSecondary)
                     .lineLimit(2)

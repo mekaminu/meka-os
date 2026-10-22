@@ -62,6 +62,9 @@ import os.meka.core.facade.MekaCore
  * cross-fade (the line blends to the accent when refused, with a tick haptic; an add gives a light haptic); rows and
  * chips stagger in 40 ms apart and move with the list's item motion (a row moves up the list as it comes due); each
  * row's status cross-fades and blends to the accent. Reduced motion: cross-fades.
+ *
+ * Quality gate slice 16: a row's name and its "Every 6 months · last went Sat 12 Apr" take up to two lines each, so on
+ * the cover screen (beside Went and Remove) they read whole instead of ending in "…".
  */
 @Composable
 fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
@@ -168,8 +171,8 @@ private fun AppointmentRowView(row: AppointmentRow, modifier: Modifier, onWent: 
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(row.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(row.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Crossfade(row.status, animationSpec = MekaMotion.appear(reduced), label = "appt-status-line") { s ->
                 Text(s, style = MekaType.caption, color = statusColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
