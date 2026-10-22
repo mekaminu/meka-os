@@ -96,12 +96,13 @@ class BoardScreensTest {
         }
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
+        // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", name))
         ScreenShots.assertSensible(compose, name)
         // Slice 8 of the Week board (the gate's first findings): no title cut to a word or two, no header line clipped.
         ScreenShots.assertReadable(compose, name, titles(fill))
         // Slice 9 (the re-shot of slice 8): every lane's first card starts level, tag or no tag, today or not.
         if (level) ScreenShots.assertLevel(compose, name, firstCards)
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", name))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

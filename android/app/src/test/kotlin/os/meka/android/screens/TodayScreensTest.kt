@@ -93,9 +93,10 @@ class TodayScreensTest {
         }
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
+        // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertReadable(compose, name, titles(fill))
-        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("today", name))
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
