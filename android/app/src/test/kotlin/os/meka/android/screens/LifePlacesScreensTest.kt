@@ -140,11 +140,23 @@ class LifePlacesScreensTest {
                 ScreenShots.assertShows(compose, name, v.summary)
                 if (fill == Fill.EMPTY && v.summary != ErrandRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.places.size != 3) fail("$name: ${v.places.size} places for three")
+                // Slice 15: every row reads as a sentence ("Buy first-class stamps", not lower case).
+                v.places.flatMap { it.rows }.forEach { r ->
+                    ScreenShots.assertShows(compose, name, r.shown)
+                    if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case")
+                }
             }
             Place.DINNERS -> {
                 val v = core.mealsView.value
-                ScreenShots.assertShows(compose, name, v.summary)
+                ScreenShots.assertShows(compose, name, v.paneSummary)
                 if (fill == Fill.EMPTY) ScreenShots.assertShows(compose, name, MealRules.NO_FAVOURITES)
+                // Slice 15: tonight's dinner is said once (its row), and the add field's hint sits on one line.
+                v.week.firstOrNull()?.title?.let { t ->
+                    // Its own row (and its favourite's) say it alone; nothing else on screen repeats it inside a line.
+                    ScreenShots.texts(compose).firstOrNull { it != t && it.contains(t) }
+                        ?.let { fail("$name: tonight's \"$t\" is said again in \"$it\"") }
+                }
+                ScreenShots.assertOneLine(compose, name, MealRules.ADD_HINT)
                 if (fill == Fill.MANY && v.week.count { it.mealId != null } != 3) fail("$name: the week doesn't hold its three dinners")
             }
         }

@@ -77,6 +77,13 @@ data class MealPlanView(
 ) {
     val plannedCount: Int get() = week.count { it.mealId != null }
 
+    /**
+     * The summary under Dinners' own title: without "· tonight: …", which the Tonight row says right below it (the
+     * quality gate's Dinners shots, 2026-10-22: a long dinner's name read twice, over two lines). [summary] keeps it
+     * for the places that show no week (the family page, Ask).
+     */
+    val paneSummary: String get() = if (week.firstOrNull()?.title != null) summary.substringBefore(MealRules.TONIGHT_SEP) else summary
+
     companion object {
         val EMPTY = MealPlanView(emptyList(), emptyList(), MealRules.NO_FAVOURITES, emptyList(), null, MealRules.SHOPPING_HINT)
     }
@@ -92,7 +99,9 @@ object MealRules {
     const val TONIGHT_FROM_MIN = 15 * 60
     const val TONIGHT_UNTIL_MIN = 21 * 60
 
-    const val ADD_HINT = "Add a dinner… (Chilli: mince, beans, rice)"
+    /** On one line in its pill even on the cover screen (the quality gate's Dinners shots, 2026-10-22), like Errands' "Tesco: milk, batteries". */
+    const val ADD_HINT = "Chilli: mince, beans, rice"
+    const val TONIGHT_SEP = " · tonight: "
     const val NOT_READ = "Type the dinner's name, then a colon and its ingredients: “Chilli: mince, beans, rice”."
     const val NO_FAVOURITES = "No favourite dinners yet. Add one below: “Chilli: mince, beans, rice”."
     const val NOTHING_PLANNED = "Nothing planned this week · tap a day to pick a dinner"
@@ -244,7 +253,7 @@ object MealRules {
         val summary = when {
             meals.isEmpty() -> NO_FAVOURITES
             planned == 0 -> NOTHING_PLANNED
-            tonight != null -> "$planned of $WEEK_DAYS dinners planned · tonight: $tonight"
+            tonight != null -> "$planned of $WEEK_DAYS dinners planned$TONIGHT_SEP$tonight"
             else -> "$planned of $WEEK_DAYS dinners planned"
         }
         val label = when (toAdd.size) {

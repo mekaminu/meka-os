@@ -69,6 +69,8 @@ class MealPlanTest {
         assertEquals(MealRules.NOT_PLANNED, v.week[1].line)
         assertEquals("Tomorrow: not planned", v.week[1].spoken)
         assertEquals("2 of 7 dinners planned · tonight: Chilli", v.summary)
+        // Dinners' own title line leaves tonight to the Tonight row right under it.
+        assertEquals("2 of 7 dinners planned", v.paneSummary)
         assertEquals(listOf("Chilli", "Roast chicken"), v.favourites.map { it.title })
         assertEquals("mince, kidney beans, rice", v.favourites[0].line)
 
@@ -202,5 +204,15 @@ class MealPlanTest {
         // Her view of the week names nobody on her own favourites, and Meka's never.
         val view = MealRules.view(listOf(fajitas), emptyMap(), 0L, emptySet(), viewer = "jordan")
         assertEquals("wraps, peppers", view.favourites.single().line)
+    }
+
+    @Test
+    fun paneSummaryKeepsItsWordsWhenTonightIsNotPlanned() {
+        val chilli = Meal("m1", "Chilli", listOf("mince"), "", 0L)
+        val v = MealRules.view(listOf(chilli), mapOf(sat + 1 to "m1"), sat, emptySet())
+        assertEquals("1 of 7 dinners planned", v.summary)
+        assertEquals(v.summary, v.paneSummary)
+        assertEquals(MealRules.NO_FAVOURITES, MealRules.view(emptyList(), emptyMap(), sat, emptySet()).paneSummary)
+        assertFalse(MealRules.ADD_HINT.length > 28, "the add field's hint fits one line on the cover screen")
     }
 }

@@ -95,7 +95,7 @@ fun MealsPane(core: MekaCore, onClose: () -> Unit) {
                 modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.DINNERS)).appear(rememberAppearance(0)))
         }
         item(key = "summary") {
-            Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "meals-summary") { s ->
+            Crossfade(v.paneSummary, animationSpec = MekaMotion.appear(reduced), label = "meals-summary") { s ->
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }

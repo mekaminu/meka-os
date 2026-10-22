@@ -284,21 +284,21 @@ private fun ErrandRowView(row: ErrandRow, modifier: Modifier, primary: String, o
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            Text(row.title, style = MekaType.itemTitle, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(row.shown, style = MekaType.body, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
             row.meta?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
         Text(
             primary, style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onPrimary)
-                .semantics { contentDescription = "$primary: ${row.title}" }
+                .semantics { contentDescription = "$primary: ${row.shown}" }
                 .padding(MekaSpace.xs),
         )
         Text(
             "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
                 .clickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = "Remove ${row.title}" }
+                .semantics { contentDescription = "Remove ${row.shown}" }
                 .padding(MekaSpace.xs),
         )
     }

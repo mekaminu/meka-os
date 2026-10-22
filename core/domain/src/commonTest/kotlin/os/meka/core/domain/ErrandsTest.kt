@@ -80,4 +80,15 @@ class ErrandsTest {
         assertEquals("3 errands at Tesco", eMac.view().summary)
         assertTrue(eMac.view().done.isEmpty())
     }
+
+    @Test
+    fun aRowReadsAsASentence() {
+        assertEquals("Buy first-class stamps", ErrandRules.shown("buy first-class stamps"))
+        assertEquals("Milk", ErrandRules.shown("milk"))
+        assertEquals("iPhone charger", ErrandRules.shown("iPhone charger"))
+        assertEquals("Return the parcel", ErrandRules.shown("Return the parcel"))
+        assertEquals("2 pints of milk", ErrandRules.shown("2 pints of milk"))
+        assertEquals("", ErrandRules.shown(""))
+        assertEquals("Buy stamps", ErrandRow("e1", "buy stamps", null, false).shown)
+    }
 }

@@ -28,7 +28,10 @@ data class ErrandItem(val id: String, val place: String, val title: String, val 
 }
 
 /** One errand as the list shows it. [meta] is null for a waiting one; "Tesco · done today" once done. */
-data class ErrandRow(val id: String, val title: String, val meta: String?, val done: Boolean)
+data class ErrandRow(val id: String, val title: String, val meta: String?, val done: Boolean) {
+    /** The title as the list shows it, a sentence: "Buy first-class stamps" ([ErrandRules.shown]); [title] stays as typed. */
+    val shown: String get() = ErrandRules.shown(title)
+}
 
 /** The errands waiting at one place, oldest first: "Tesco" · "milk, batteries". */
 data class ErrandGroup(val place: String, val key: String, val rows: List<ErrandRow>) {
@@ -234,6 +237,20 @@ object ErrandRules {
         }
         val line = if (fresh.isEmpty()) "Already waiting at ${p.place}: ${joined(p.things)}" else "At ${p.place}: ${joined(fresh)}"
         return ErrandAdded(ids, p.place, line, refused = false, created = created, revived = revived) to writes
+    }
+
+    /**
+     * An errand as its row shows it (the quality gate's People/Errands/Dinners shots, 2026-10-22: "buy first-class
+     * stamps" read lower case beside Done and Remove): the first letter made a capital, unless the first word already
+     * has one of its own ("iPhone charger" stays). The reminder near a place still reads "milk, batteries".
+     */
+    fun shown(title: String): String {
+        val t = title.trimStart()
+        val first = t.firstOrNull() ?: return title
+        if (!first.isLowerCase()) return t
+        val word = t.takeWhile { !it.isWhitespace() }
+        if (word.drop(1).any { it.isUpperCase() }) return t
+        return first.uppercaseChar() + t.drop(1)
     }
 }
 

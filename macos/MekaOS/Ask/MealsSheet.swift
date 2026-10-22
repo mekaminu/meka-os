@@ -24,10 +24,10 @@ struct MealsSheet: View {
         let favourites = v?.favourites ?? []
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Dinners").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v?.summary ?? MealRules.shared.NO_FAVOURITES).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(v?.paneSummary ?? MealRules.shared.NO_FAVOURITES).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.summary)
+                .animation(MekaMotion.appear(reduced: reduceMotion), value: v?.paneSummary)
                 .staggeredAppear(1)
             ScrollView {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {

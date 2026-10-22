@@ -99,7 +99,7 @@ private struct ErrandRowView: View {
     var body: some View {
         HStack(spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.itemTitle)
+                Text(row.shown).font(MekaType.body)
                     .foregroundStyle(row.done ? palette.textSecondary : palette.textPrimary)
                     .lineLimit(2)
                 if let meta = row.meta {
@@ -111,12 +111,12 @@ private struct ErrandRowView: View {
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .foregroundStyle(palette.accent)
-                .accessibilityLabel("\(primary): \(row.title)")
+                .accessibilityLabel("\(primary): \(row.shown)")
             Button("Remove", action: onRemove)
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textTertiary)
-                .accessibilityLabel("Remove \(row.title)")
+                .accessibilityLabel("Remove \(row.shown)")
         }
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
