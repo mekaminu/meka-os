@@ -227,12 +227,14 @@ private struct BoardColumnView: View {
                         Text(tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
                     }
                 }
-                if tagBelow, let tag = BoardLookRules.shared.tag(day: day) {
-                    Text(tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                // Slice 9: a compact lane keeps the tag's line (blank on a day without one) and every lane the
+                // underline's slot (lit on today only), so the lanes' first cards start level.
+                if let tag = BoardFitRules.shared.tagLine(day: day, compact: compact) {
+                    Text(tag.isEmpty ? " " : tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                        .accessibilityHidden(tag.isEmpty)
                 }
-                if day.isToday {
-                    Capsule().fill(palette.accent).frame(width: MekaSpace.l, height: 2)
-                }
+                Capsule().fill(BoardFitRules.shared.underlineLit(day: day) ? palette.accent : Color.clear)
+                    .frame(width: MekaSpace.l, height: 2)
                 if day.isPast {
                     Text(BoardLookRules.shared.pastLine(day: day)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
                 } else if let progress = BoardLookRules.shared.progress(day: day) {

@@ -68,4 +68,23 @@ class BoardFitTest {
         assertEquals(2, BoardFitRules.freeLines(true))
         assertEquals(1, BoardFitRules.freeLines(false))
     }
+
+    private fun day(today: Boolean = false, place: String? = null) = BoardDay(
+        epochDay = 20_000, weekday = "Sat", number = "24", isToday = today, isPast = false, place = null, placeLabel = place,
+        chips = emptyList(), moreChips = 0, cards = emptyList(), countLine = "", accessibilityLabel = "",
+    )
+
+    @Test
+    fun aCompactLaneKeepsTheTagLineSoEveryLanesFirstCardStartsLevel() {
+        // Slice 9, the re-shot: Sat (no tag) started its cards higher than Thu ("Office").
+        assertEquals("Office", BoardFitRules.tagLine(day(place = "Office"), compact = true))
+        assertEquals("Today · Office", BoardFitRules.tagLine(day(today = true, place = "Office"), compact = true))
+        assertEquals("", BoardFitRules.tagLine(day(), compact = true))
+        // A roomy lane's tag sits beside the number: no line of its own.
+        assertNull(BoardFitRules.tagLine(day(place = "Office"), compact = false))
+        assertNull(BoardFitRules.tagLine(day(), compact = false))
+        // The underline's slot is on every lane; only today's is lit.
+        assertTrue(BoardFitRules.underlineLit(day(today = true)))
+        assertFalse(BoardFitRules.underlineLit(day()))
+    }
 }

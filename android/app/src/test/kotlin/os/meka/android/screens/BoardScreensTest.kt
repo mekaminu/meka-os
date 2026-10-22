@@ -60,7 +60,10 @@ class BoardScreensTest {
         )
     }
 
-    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
+    /** Each open lane's first card in the full week (unfolded, all lanes are side by side). */
+    private val firstCards = listOf("Fix the gate latch", "Order new bins", "Plan Saturday's football run with Alex", "Renew the car insurance", "Batch cook for the week")
+
+    private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, level: Boolean = false) {
         ThemeChoice.save(ApplicationProvider.getApplicationContext(), theme)
         val core = core()
         runBlocking {
@@ -96,6 +99,8 @@ class BoardScreensTest {
         ScreenShots.assertSensible(compose, name)
         // Slice 8 of the Week board (the gate's first findings): no title cut to a word or two, no header line clipped.
         ScreenShots.assertReadable(compose, name, titles(fill))
+        // Slice 9 (the re-shot of slice 8): every lane's first card starts level, tag or no tag, today or not.
+        if (level) ScreenShots.assertLevel(compose, name, firstCards)
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", name))
     }
 
@@ -118,8 +123,8 @@ class BoardScreensTest {
     fun innerOne() = shoot("inner-dark-one", Fill.ONE)
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerMany() = shoot("inner-dark-many", Fill.MANY)
+    fun innerMany() = shoot("inner-dark-many", Fill.MANY, level = true)
 
     @Test @Config(qualifiers = ScreenShots.INNER)
-    fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT)
+    fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT, level = true)
 }

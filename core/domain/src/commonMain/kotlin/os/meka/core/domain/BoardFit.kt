@@ -54,6 +54,18 @@ object BoardFitRules {
     /** The tag beside the number on a roomy lane, under it on a compact one. */
     fun tagBelow(compact: Boolean): Boolean = compact
 
+    /**
+     * Slice 9 (the re-shot of slice 8, 2026-10-22: Sat and Sun, with no "Office", started their cards a line higher
+     * than Thu and Fri, and today's a few dp lower again for its underline): the tag's line under the number, or null
+     * when the lane has none. A compact lane keeps the line even on a day without a tag ("", drawn blank and silent),
+     * so every lane's first card starts level; a roomy lane's tag sits beside the number and takes no line.
+     */
+    fun tagLine(day: BoardDay, compact: Boolean): String? =
+        if (!tagBelow(compact)) null else BoardLookRules.tag(day) ?: ""
+
+    /** Today's gold underline keeps its slot on every open lane, drawn only on today ([underlineLit]), for the same reason. */
+    fun underlineLit(day: BoardDay): Boolean = day.isToday
+
     /** How many lines the free-time line may take: 2 on a compact lane ("+1 more" wraps), 1 otherwise. */
     fun freeLines(compact: Boolean): Int = if (compact) 2 else 1
 

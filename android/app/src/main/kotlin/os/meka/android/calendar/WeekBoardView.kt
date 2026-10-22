@@ -31,6 +31,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -870,14 +871,18 @@ private fun DayColumn(
                     }
                 }
             }
-            if (BoardFitRules.tagBelow(compact)) {
-                BoardLookRules.tag(day)?.let {
-                    Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+            // Slice 9: a compact lane keeps the tag's line (blank on a day without one) and every lane the underline's
+            // slot (lit on today only), so the lanes' first cards start level.
+            BoardFitRules.tagLine(day, compact)?.let {
+                Text(
+                    it.ifEmpty { " " }, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = if (it.isEmpty()) Modifier.clearAndSetSemantics {} else Modifier,
+                )
             }
-            if (day.isToday) {
-                Box(Modifier.padding(top = MekaSpace.xxs).width(MekaSpace.l).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
-            }
+            Box(
+                Modifier.padding(top = MekaSpace.xxs).width(MekaSpace.l).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(if (BoardFitRules.underlineLit(day)) Meka.colors.accent else Color.Transparent),
+            )
             if (day.isPast) {
                 Text(BoardLookRules.pastLine(day), style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
             } else {

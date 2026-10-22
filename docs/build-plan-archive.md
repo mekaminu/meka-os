@@ -2654,6 +2654,13 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Quality gate: `ScreenShots.laidOut` / `assertReadable` read every Text's laid-out lines; `BoardScreensTest` now fails when a card title is cut before it can be read or any short line (≤ 24 characters) ends in "…", on all 8 shots.
 - Tests: BoardFitTest (5), BoardScreensTest (8, now with the readability check). No server change, no migration, no wire change. Mac checked nightly.
 
+### Slice 9 (2026-10-22): the lanes' first cards start level (the re-shot of slice 8)
+- **Found by the quality gate's re-shot** (screens 1a09e63, `inner-dark-many`): Sat and Sun, with no "Office" tag, started their cards a line higher than Thu and Fri, and today's lane a few dp lower again for its gold underline.
+- **Core BoardFitRules:** `tagLine(day, compact)` — on a compact lane the tag's own line under the number, "" on a day without a tag (drawn blank and silent) so the line is kept; null on a roomy lane (the tag sits beside the number). `underlineLit(day)` — the underline's slot is on every open lane, lit on today only.
+- **Fold** (WeekBoardView `BoardLane`): the tag line from `tagLine` (a blank " " with cleared semantics when empty); the underline box always, transparent off today. **Mac** (WeekBoardScreen `BoardDayColumn`): the same, the blank line hidden from VoiceOver, `Color.clear` off today.
+- **Quality gate:** `ScreenShots.assertLevel` fails when the tops of the given texts differ by more than a pixel; BoardScreensTest's inner full-week shots (Dark and Light) check each lane's first card. Tests: BoardFitTest `aCompactLaneKeepsTheTagLineSoEveryLanesFirstCardStartsLevel`.
+- No server change, no migration. Mac checked nightly.
+
 ## Talking to Ada like a conversation (Take first, Meka 2026-10-21 20:32)
 
 ### Slice 1 (2026-10-21): no holding lines, only the orb and one late soft tone
