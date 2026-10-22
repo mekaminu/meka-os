@@ -106,6 +106,8 @@ final class CoreModel {
     private(set) var reading: ReadingView?
     /// Ask → Daily → Reading.
     var showReading = false
+    /// Goals → the Fasting tile (Fasting rebuild slice 3): the Fasting sheet in the approved design.
+    var showFasting = false
     /// Voice notes into actions, slice 3: the voice note sheet (recording one) and Ask → Daily → Voice notes.
     var showVoiceNote = false
     var showVoiceNotes = false
@@ -1947,6 +1949,9 @@ final class CoreModel {
     func moveFastStart(_ minutes: Int32) { run { try await $0.moveFastStart(deltaMinutes: minutes) } }
     func discardFast() { run { try await $0.discardFast() } }
     func chooseFastingPlan(_ index: Int) { run { try await $0.chooseFastingPlan(index: Int32(index)) } }
+    /// What every part of the Fasting screen says at `atMs` (core FastingScreenRules, pure; the views tick the clock).
+    /// Nil until the core is running.
+    func fastingScreen(atMs: Int64) -> FastingScreen? { core?.fastingScreen(atMs: atMs) }
 
     // MARK: Evening shutdown
 

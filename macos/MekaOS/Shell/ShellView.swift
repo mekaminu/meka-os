@@ -333,6 +333,8 @@ private struct ShellSheetsC: ViewModifier {
             .sheet(isPresented: Binding(get: { model.showTrainQueue }, set: { model.showTrainQueue = $0 })) { TrainQueueSheet(palette: palette) }
             // Reading (Ask → Daily, reading and learning slice 1): books, podcasts and courses with how far through.
             .sheet(isPresented: Binding(get: { model.showReading }, set: { model.showReading = $0 })) { ReadingSheet(palette: palette) }
+            // Fasting (Goals' Fasting tile, Fasting rebuild slice 3): the ring, Start/End, the stages, this week, History.
+            .sheet(isPresented: Binding(get: { model.showFasting }, set: { model.showFasting = $0 })) { FastingSheet(palette: palette) }
             // Voice notes (Ask → Daily, slice 3): the notes this Mac keeps; and the sheet that records one.
             .sheet(isPresented: Binding(get: { model.showVoiceNotes }, set: { model.showVoiceNotes = $0 })) { VoiceNotesSheet(palette: palette) }
             .sheet(isPresented: Binding(get: { model.showVoiceNote }, set: { model.showVoiceNote = $0 })) { VoiceNoteSheet(palette: palette) }
