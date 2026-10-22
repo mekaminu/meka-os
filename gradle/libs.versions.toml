@@ -30,6 +30,8 @@ wear-protolayout = "1.3.0"             # unverified; the layout library tiles 1.
 wear-watchface = "1.2.1"               # unverified; complications data source
 androidx-concurrent = "1.2.0"          # unverified; ListenableFuture for the tile service
 health-connect = "1.1.0"               # unverified here (Google Maven unreachable from the build container); CI resolves it
+roborazzi = "1.46.1"                   # unverified here (Maven unreachable from the build container); CI resolves it. Quality gate screenshots
+robolectric = "4.16"                   # unverified here; runs the screenshot tests on the JVM (native graphics)
 awssdk = "2.29.0"                      # KMS, Secrets Manager, Polly (MEKA's voice), S3 (callers' recordings) and Transcribe (their words), URL-connection HTTP client
 
 android-compileSdk = "37"   # required by Compose 1.12 / OkHttp 5.5 / SQLCipher 4.19 AARs; targetSdk stays 36
@@ -78,6 +80,10 @@ compose-animation = { module = "androidx.compose.animation:animation" }
 compose-material3 = { module = "androidx.compose.material3:material3" }
 compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
 compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core", version = "1.6.1" }
 material3-adaptive = { module = "androidx.compose.material3.adaptive:adaptive", version.ref = "material3-adaptive" }
 material3-adaptive-layout = { module = "androidx.compose.material3.adaptive:adaptive-layout", version.ref = "material3-adaptive" }
 androidx-window = { module = "androidx.window:window", version.ref = "androidx-window" }

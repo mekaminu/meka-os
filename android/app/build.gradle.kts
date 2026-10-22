@@ -62,6 +62,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_21
     }
 
+    // The quality gate's screenshots (Roborazzi on Robolectric, native graphics): the tests need the app's resources and
+    // write the images (record mode) under build/outputs/roborazzi, which CI uploads as `fold-screens`.
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all { it.systemProperty("roborazzi.test.record", "true") }
+        }
+    }
+
     lint {
         // Store-readiness guardrail (ADR-010): fail on USE_EXACT_ALARM or other policy-restricted permissions.
         error += listOf("ProtectedPermissions")
@@ -98,6 +107,14 @@ dependencies {
     debugImplementation(libs.compose.ui.tooling)
 
     testImplementation(kotlin("test-junit")) // JUnit4 binding for kotlin.test under AGP unit tests
+    // Quality gate: screenshots of each screen on the Fold's two sizes, and the "no nonsense on screen" read.
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.datetime)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     debugImplementation(libs.compose.ui.test.manifest)

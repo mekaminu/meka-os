@@ -62,6 +62,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - name: Build, unit test, lint
         run: tools/ci-run.sh ./gradlew :android:app:assembleDebug :android:app:testDebugUnitTest :android:app:compileDebugAndroidTestKotlin :android:app:lintDebug :wear:app:assembleDebug :wear:app:lintDebug
+      # Quality gate: the screens drawn on the Fold's cover and inner sizes (BoardScreensTest and friends), kept for review.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: fold-screens, path: android/app/build/outputs/roborazzi, retention-days: 14, if-no-files-found: ignore }
 
   tokens-and-infra:
     runs-on: ubuntu-latest
