@@ -278,6 +278,7 @@ class MekaCore(
     private var speechApi: SpeechApi? = transport as? SpeechApi
     private var talkWarmApi: TalkWarmApi? = transport as? TalkWarmApi
     private var serverSpeedApi: ServerSpeedApi? = transport as? ServerSpeedApi
+    private var liveApi: LiveApi? = transport as? LiveApi
     private var hereApi: HereApi? = transport as? HereApi
     private var fuelApi: FuelApi? = transport as? FuelApi
     private var numberLookupApi: NumberLookupApi? = transport as? NumberLookupApi
@@ -6540,7 +6541,7 @@ class MekaCore(
         syncMutex.withLock { 
             syncClient = SyncClient(replica, transport); accountsApi = transport as? AccountsApi; releasesApi = transport as? ReleasesApi
             pushApi = transport as? PushApi; newsImagesApi = transport as? NewsImagesApi; aiApi = transport as? AiApi
-            talkWarmApi = transport as? TalkWarmApi; serverSpeedApi = transport as? ServerSpeedApi
+            talkWarmApi = transport as? TalkWarmApi; serverSpeedApi = transport as? ServerSpeedApi; liveApi = transport as? LiveApi
             speechApi = transport as? SpeechApi; hereApi = transport as? HereApi; fuelApi = transport as? FuelApi; healthApi = transport as? HealthApi
             numberLookupApi = transport as? NumberLookupApi; tradingExportApi = transport as? TradingExportApi
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
@@ -10530,6 +10531,31 @@ class MekaCore(
             turns.map { os.meka.core.domain.ServerTurnTiming(it.atMs, it.open, it.spoken, it.model, it.webMs, it.firstTokenMs, it.firstSentenceMs, it.clipMs, it.doneMs, it.answered) },
             now,
         )
+    }
+
+    /**
+     * Ada's Live mode, slice 1: the month's Live meter as Settings shows it under the switch ("£3.40 of £15 this
+     * month"). Null when not connected, the server is older or didn't answer. Never throws.
+     */
+    suspend fun liveStatus(): os.meka.core.wire.LiveCodec.Meter? {
+        val api = liveApi ?: return null
+        return try { api.liveStatus() } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+    }
+
+    /**
+     * A token for one Gemini Live session in [voice] (null: the default). Anything but a ready session (no key, the
+     * month's cap, Google refusing, offline, an older server) is null or not [os.meka.core.wire.LiveCodec.Session.READY],
+     * and normal Ada answers. Never throws.
+     */
+    suspend fun liveSession(voice: String?): os.meka.core.wire.LiveCodec.Session? {
+        val api = liveApi ?: return null
+        return try { api.liveSession(voice) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
+    }
+
+    /** How many seconds a Live session heard and spoke (nothing of what was said), so the month's count is true. Never throws. */
+    suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): os.meka.core.wire.LiveCodec.Usage? {
+        val api = liveApi ?: return null
+        return try { api.liveUsage(sessionId, inSeconds, outSeconds) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
     }
 
     suspend fun clearTurnSpeed(): Unit = onCore {

@@ -283,6 +283,10 @@ export class MekaStack extends cdk.Stack {
     // Spam-call lookup (Needs Meka #32, 2026-10-17): Meka made this secret himself ({"api_key": "…"}, his Brave Search
     // API key, $0 spend cap); referred to by name, read at use time.
     const searchBrave = secretsmanager.Secret.fromSecretNameV2(this, 'SearchBrave', `${prefix}/search/brave`);
+    // Ada's Live mode (Meka approved 2026-10-21 20:56): Meka makes this secret himself ({"api_key": "…"}, a Gemini API
+    // key from Google AI Studio); referred to by name, read at use time. Absent = Live off. The key never leaves the server:
+    // devices get one-session tokens only.
+    const aiGemini = secretsmanager.Secret.fromSecretNameV2(this, 'AiGemini', `${prefix}/ai/gemini`);
 
     const cluster = new ecs.Cluster(this, 'Cluster', { vpc, clusterName: prefix, containerInsightsV2: ecs.ContainerInsights.DISABLED });
     const task = new ecs.FargateTaskDefinition(this, 'Task', {
@@ -317,6 +321,9 @@ export class MekaStack extends cdk.Stack {
         MEKA_MONEY_LUNCHFLOW_SECRET: `${prefix}/money/lunchflow`,
         MEKA_RAIL_DARWIN_SECRET: `${prefix}/rail/darwin`,
         MEKA_SEARCH_BRAVE_SECRET: `${prefix}/search/brave`,
+        MEKA_GEMINI_SECRET: `${prefix}/ai/gemini`,
+        // Ada's Live mode: Meka's monthly cap in pounds (2026-10-21 20:56); at the cap Live is off until the 1st.
+        MEKA_LIVE_BUDGET_GBP: '15',
         // MEKA's voice (build plan V1, Weather and a voice: Amazon Polly in MEKA's own account, approved 2026-10-08).
         MEKA_SPEECH_ENGINE: 'polly',
         // Callers' messages transcribed by Amazon Transcribe in MEKA's own account (call assistant polish 8d i).
@@ -357,6 +364,7 @@ export class MekaStack extends cdk.Stack {
     railDarwin.grantRead(task.taskRole); // read-only departure boards; nothing about him is sent but station codes
     moneyLunchFlow.grantRead(task.taskRole); // read-only bank data through Lunch Flow; nothing can move money
     searchBrave.grantRead(task.taskRole); // web searches for unknown callers' numbers only
+    aiGemini.grantRead(task.taskRole); // mints one-session Live tokens; the key itself never reaches a device
     // MEKA's voice: turn MEKA's own reply text into speech and list the voices, nothing else (no lexicons, no S3
     // speech tasks). Polly's synthesis actions have no resource-level scoping, so the resource is '*'.
     task.taskRole.addToPrincipalPolicy(new cdk.aws_iam.PolicyStatement({

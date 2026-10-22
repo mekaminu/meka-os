@@ -76,6 +76,7 @@ import os.meka.core.wire.GroupDigestCodec
 import os.meka.core.wire.HealthCodec
 import os.meka.core.wire.HereCodec
 import os.meka.core.wire.FuelCodec
+import os.meka.core.wire.LiveCodec
 import os.meka.core.wire.NumberLookupCodec
 import os.meka.core.wire.TradingExportCodec
 import os.meka.core.wire.MessageTriageCodec
@@ -154,6 +155,8 @@ fun Application.mekaSync(
     recovery: Recovery? = null,
     /** The Vault's encrypted copies (Vault slice 2b): sealed bytes only; null leaves the routes out. */
     vaultFiles: VaultFiles? = null,
+    /** Ada's Live mode (slice 1): Gemini Live session tokens and their meter; null leaves the routes out. */
+    live: LiveSessions? = null,
 ) {
     val sync = SyncService(opStore)
 
@@ -844,6 +847,32 @@ fun Application.mekaSync(
             }
         }
 
+        if (live != null) {
+            // Ada's Live mode, slice 1: the month's Live meter; a token for one Gemini Live session (Google's, never the
+            // key); and how many seconds a session heard and spoke. Keyed devices only. Nothing said passes through here.
+            post(LiveCodec.STATUS_PATH) {
+                val body = call.boundedBody()
+                call.device(devices, verifier, body, requireKey = true)
+                LiveCodec.decodeStatusRequest(body)
+                val meter = withContext(Dispatchers.IO) { live.meter() }
+                call.respondText(LiveCodec.encodeMeter(meter), ContentType.Application.Json)
+            }
+            post(LiveCodec.SESSION_PATH) {
+                val body = call.boundedBody()
+                val caller = call.device(devices, verifier, body, requireKey = true)
+                val request = LiveCodec.decodeSessionRequest(body)
+                val session = withContext(Dispatchers.IO) { live.session(caller.householdId, request) }
+                call.respondText(LiveCodec.encodeSession(session), ContentType.Application.Json)
+            }
+            post(LiveCodec.USAGE_PATH) {
+                val body = call.boundedBody()
+                val caller = call.device(devices, verifier, body, requireKey = true)
+                val request = LiveCodec.decodeUsageRequest(body)
+                val usage = withContext(Dispatchers.IO) { live.usage(caller.householdId, request) }
+                call.respondText(LiveCodec.encodeUsage(usage), ContentType.Application.Json)
+            }
+        }
+
         if (talkSpeed != null) {
             // Talking to Ada like a conversation, slice 2: the household's last day of answer timings (times only), for
             // Speed on the devices and the deploy report (the publisher may read it too).
@@ -1304,6 +1333,8 @@ fun main(args: Array<String>) {
                 PostgresFamilyInviteStore(ds), opStore, { hh, type -> opStore.latestFieldOps(hh, type) }, verifier,
                 onWritten = { hh -> push?.serverChanged(hh) },
             )
+            // Ada's Live mode, slice 1: Gemini Live tokens and their £15 meter; "off" until the Gemini key is in.
+            val live = liveFromEnv(ds)
             embeddedServer(Netty, port = port) {
                 mekaSync(
                     opStore, PostgresDeviceRegistry(ds), enrolToken, integrations = integrations,
@@ -1328,6 +1359,7 @@ fun main(args: Array<String>) {
                         fuel = { fuelFinder?.report() ?: "off · the server has no Fuel Finder secret set" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
+                    live = live,
                     fuel = fuelFinder,
                     numberLookup = numberLookup,
                     liveFacts = liveFacts,
@@ -1518,6 +1550,7 @@ object Migrations {
         26 to "/db/V26__speech_usage_google.sql",
         27 to "/db/V27__number_lookup.sql",
         28 to "/db/V28__talk_timing.sql",
+        29 to "/db/V29__live_session.sql",
     )
 
     fun apply(ds: DataSource) = ds.connection.use { c ->

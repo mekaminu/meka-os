@@ -408,6 +408,16 @@ interface ServerSpeedApi {
 }
 
 /**
+ * Ada's Live mode, slice 1: the month's Live meter, a one-session Gemini Live token (Google's, never the key) and the
+ * seconds a session heard and spoke. Null from an older server without the routes. Network failures throw.
+ */
+interface LiveApi {
+    suspend fun liveStatus(): os.meka.core.wire.LiveCodec.Meter?
+    suspend fun liveSession(voice: String?): os.meka.core.wire.LiveCodec.Session?
+    suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): os.meka.core.wire.LiveCodec.Usage?
+}
+
+/**
  * "Where I am now" (Places item 3): the forecast at an approximate point. The point must already be rounded
  * ([os.meka.core.domain.HereRules.round]); the server refuses anything finer. Available once the device is connected.
  */
@@ -576,7 +586,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi, LiveApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -1067,6 +1077,29 @@ class HttpSyncTransport(
         }
         return os.meka.core.wire.ServerSpeedCodec.decodeResponse(resp.bodyAsText())
     }
+
+    /** Posts [body] to a Live route; null when an older server lacks it or the device key isn't registered yet. */
+    private suspend fun livePost(path: String, body: String): String? {
+        prepare() // the routes require the device's signing key on the server
+        val resp = send(path, body)
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from $path")
+            resp.status.value == 404 || resp.status.value == 403 -> return null
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from $path")
+        }
+        return resp.bodyAsText()
+    }
+
+    override suspend fun liveStatus(): os.meka.core.wire.LiveCodec.Meter? =
+        livePost(os.meka.core.wire.LiveCodec.STATUS_PATH, os.meka.core.wire.LiveCodec.encodeStatusRequest())?.let(os.meka.core.wire.LiveCodec::decodeMeter)
+
+    override suspend fun liveSession(voice: String?): os.meka.core.wire.LiveCodec.Session? =
+        livePost(os.meka.core.wire.LiveCodec.SESSION_PATH, os.meka.core.wire.LiveCodec.encodeSessionRequest(os.meka.core.wire.LiveCodec.SessionRequest(voice)))
+            ?.let(os.meka.core.wire.LiveCodec::decodeSession)
+
+    override suspend fun liveUsage(sessionId: String, inSeconds: Long, outSeconds: Long): os.meka.core.wire.LiveCodec.Usage? =
+        livePost(os.meka.core.wire.LiveCodec.USAGE_PATH, os.meka.core.wire.LiveCodec.encodeUsageRequest(os.meka.core.wire.LiveCodec.UsageRequest(sessionId, inSeconds, outSeconds)))
+            ?.let(os.meka.core.wire.LiveCodec::decodeUsage)
 
     override suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices {
         prepare()
