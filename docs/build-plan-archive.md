@@ -2646,6 +2646,14 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - `BoardCardHoldTest` (androidTest, 4; CI compiles it, runs on the Fold or an emulator): a card inside a sideways-scrolling row, held still then dragged sideways, lifts once, follows the finger, drops, and the row's scroll stays at 0; held then dragged down and up, the moves add up (up and down within a day); a quick swipe scrolls the row and lifts nothing; a short press is a tap, not a lift.
 - Not in this slice: the board's screenshot test, which comes with the quality gate's Roborazzi set-up. No server change, no migration, no Mac change.
 
+### Slice 8 (2026-10-22): a narrow lane fits its words (the quality gate's first findings)
+- Found by the quality gate's first shots (`screens` branch, docs/screens/fold/board/inner-dark-many.png): unfolded, a lane is ~134 dp (two past strips and five days sharing 797 dp), so the 48 dp tick column left a title ~50 dp and cut it to "Fix the gate l…" / "Plan / Satur…"; "Today …", "15m planned · 4h …" and "19:00–21:00 · 2h f…" were clipped.
+- Core `BoardFitRules` (BoardFit.kt): a lane under `COMPACT_LANE_DP` 180 is compact: the tick in a 28 dp column (48 tall; the circle stays 20 dp, Compose widens a small clickable's touch area to 48 dp past its edges), the title in the design's card size (caption 13 sp on the Fold, its 13.5 px; item meta on the Mac) on up to 3 lines (`titleLines`), the tag on its own line under the number (`tagBelow`), the capacity line short (`BoardCapacity.shortLine`: "1h 30m of 2h", "5h · 1h over", "7h free"), free time only when ("19:00–21:00 free · +1 more", 2 lines allowed). `compactCard` keeps the lifted card's look under the finger. `titleReadable` (`WHOLE_TITLE` 24, `MIN_BEFORE_CUT` 12) is the gate's test of "cut to a word or two".
+- Fold: `DayColumn` provides `LocalBoardCompact`; the lane's inner side padding drops to xxs and the card's end padding to xxs when compact; `CardFace`, `TickTarget(column)`, `CapacityBar` read it; the lifted card gets it from its width. Folded (one full-width day) and the trays are unchanged.
+- Mac: `BoardColumnView` measures its width (`onGeometryChange`) and passes `compact` to the header, `CapacityBar`, `FreeTimeView` and the day's `BoardCardView`.
+- Quality gate: `ScreenShots.laidOut` / `assertReadable` read every Text's laid-out lines; `BoardScreensTest` now fails when a card title is cut before it can be read or any short line (≤ 24 characters) ends in "…", on all 8 shots.
+- Tests: BoardFitTest (5), BoardScreensTest (8, now with the readability check). No server change, no migration, no wire change. Mac checked nightly.
+
 ## Talking to Ada like a conversation (Take first, Meka 2026-10-21 20:32)
 
 ### Slice 1 (2026-10-21): no holding lines, only the orb and one late soft tone

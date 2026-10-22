@@ -49,6 +49,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.semantics.selected
 import os.meka.core.domain.BoardLookRules
+import os.meka.core.domain.BoardFitRules
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import os.meka.core.domain.CardChip
 import os.meka.core.domain.CardChipKind
 import os.meka.core.domain.DayProgress
@@ -588,14 +591,17 @@ fun WeekBoardView(
         // The card being dragged follows the finger, lifted (Reduced motion: no lift).
         drag?.let { d ->
             val at = d.pointer - d.grab - origin
+            val liftedWidth = cards[d.card.id]?.let { with(density) { it.width.toDp() } } ?: (colWidth - MekaSpace.xs)
+            CompositionLocalProvider(LocalBoardCompact provides BoardFitRules.compactCard(liftedWidth.value)) {
             Box(
-                Modifier.zIndex(3f).width(cards[d.card.id]?.let { with(density) { it.width.toDp() } } ?: (colWidth - MekaSpace.xs))
+                Modifier.zIndex(3f).width(liftedWidth)
                     .graphicsLayer {
                         translationX = at.x; translationY = at.y
                         if (!reduced) { scaleX = LIFT; scaleY = LIFT; shadowElevation = 12.dp.toPx() }
                         shape = TILE; clip = true
                     },
             ) { CardFace(d.card, lifted = true) }
+            }
         }
     }
 }
@@ -831,6 +837,9 @@ private fun DayColumn(
         CollapsedPastDay(day, width, onBounds, onOpen = { onFold?.invoke() })
         return
     }
+    // By hand, slice 8 (the quality gate's findings): a narrow lane fits its words (BoardFitRules).
+    val compact = BoardFitRules.compact(width.value)
+    CompositionLocalProvider(LocalBoardCompact provides compact) {
     Column(
         Modifier.width(width).fillMaxHeight().padding(horizontal = MekaSpace.xxs)
             .onGloballyPositioned { onBounds(it.boundsInRoot()) }
@@ -838,7 +847,7 @@ private fun DayColumn(
             .border(1.dp, glow, RoundedCornerShape(MekaRadius.m))
             .alpha(if (day.isPast) 0.6f else 1f)
             .verticalScroll(vScroll, enabled = dragging == null)
-            .padding(MekaSpace.xs),
+            .padding(horizontal = if (compact) MekaSpace.xxs else MekaSpace.xs, vertical = MekaSpace.xs),
     ) {
         // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold, then
         // "2 of 5 done" over a thin gold bar (a past day only what was done) and the day's capacity.
@@ -854,7 +863,14 @@ private fun DayColumn(
                 Text(day.number, style = MekaType.nowTitle, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
                 Spacer(Modifier.width(MekaSpace.xs))
                 Text(day.weekday, style = MekaType.metaStrong, color = if (day.isToday) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
-                Spacer(Modifier.weight(1f))
+                if (!BoardFitRules.tagBelow(compact)) {
+                    Spacer(Modifier.weight(1f))
+                    BoardLookRules.tag(day)?.let {
+                        Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+            if (BoardFitRules.tagBelow(compact)) {
                 BoardLookRules.tag(day)?.let {
                     Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
@@ -893,10 +909,11 @@ private fun DayColumn(
             }
         }
         // Free time: one quiet line; only while a card is held (unfolded) do the stretches open as drop targets.
-        BoardLookRules.freeLine(day.freeTimes)?.let { free ->
+        BoardFitRules.freeLine(day.freeTimes, compact)?.let { free ->
             if (!(showFree && dragging != null)) {
                 Text(
-                    free.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    free.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = BoardFitRules.freeLines(compact),
+                    overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(top = MekaSpace.xs).clearAndSetSemantics { contentDescription = free.spoken },
                 )
             }
@@ -931,7 +948,11 @@ private fun DayColumn(
             }
         }
     }
+    }
 }
+
+/** By hand, slice 8: the lane being drawn is compact (BoardFitRules); trays and the folded page are roomy. */
+internal val LocalBoardCompact = staticCompositionLocalOf { false }
 
 /**
  * By hand, slice 4: a past day folded narrow, unfolded: its big number over the weekday and "3 done" (or "Nothing
@@ -1109,17 +1130,19 @@ private fun BoardCardRow(
 @Composable
 private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = null) {
     val chips = BoardLookRules.chips(card)
+    val compact = LocalBoardCompact.current
     Row(
         Modifier.fillMaxWidth()
             .background(if (card.done && !lifted) Meka.colors.surface else Meka.colors.surfaceRaised)
             .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, TILE) else Modifier)
-            .padding(end = MekaSpace.xs),
+            .padding(end = if (compact) MekaSpace.xxs else MekaSpace.xs),
         verticalAlignment = Alignment.Top,
     ) {
-        TickTarget(card.done, card.title, onTick)
+        TickTarget(card.done, card.title, onTick, column = BoardFitRules.tickColumn(compact).dp)
         Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs)) {
             Text(
-                card.title, style = MekaType.body, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                card.title, style = if (compact) MekaType.caption else MekaType.body, maxLines = BoardFitRules.titleLines(compact),
+                overflow = TextOverflow.Ellipsis,
                 color = if (card.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
                 textDecoration = if (card.done) TextDecoration.LineThrough else null,
             )
@@ -1186,7 +1209,7 @@ private fun DayProgressBar(p: DayProgress) {
  * that grows and fades (600 ms); tapped again it empties. Reduced motion: the fill cross-fades, no spark.
  */
 @Composable
-private fun TickTarget(done: Boolean, title: String, onTick: (() -> Unit)?) {
+private fun TickTarget(done: Boolean, title: String, onTick: (() -> Unit)?, column: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp) {
     val reduced = Meka.reducedMotion
     val gold = Meka.colors.accent
     val ink = Meka.colors.background
@@ -1199,7 +1222,9 @@ private fun TickTarget(done: Boolean, title: String, onTick: (() -> Unit)?) {
         was = done
     }
     Box(
-        Modifier.size(BoardHandRules.CHECK_TARGET.dp)
+        // Slice 8: on a compact lane the column is 28 dp wide (48 tall); Compose widens a small clickable's touch area to
+        // the 48 dp minimum past its edges, so the tick stays as easy to hit while the title gets the width.
+        Modifier.width(column).height(BoardHandRules.CHECK_TARGET.dp)
             .then(if (onTick != null) Modifier.clip(CircleShape).clickable(role = Role.Checkbox) { onTick() } else Modifier)
             .semantics { contentDescription = BoardHandRules.tickLabel(title, done) },
         contentAlignment = Alignment.Center,
@@ -1458,7 +1483,10 @@ private fun CapacityBar(c: BoardCapacity) {
         val t = rememberInfiniteTransition(label = "capacity-breath")
         t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "capacity-alpha").value
     } else 1f
-    Text(c.line, style = MekaType.micro, color = if (c.over) amber else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Text(
+        BoardFitRules.capacityLine(c, LocalBoardCompact.current), style = MekaType.micro,
+        color = if (c.over) amber else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+    )
     Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
         Box(Modifier.fillMaxWidth(fill).height(3.dp).alpha(breath).clip(RoundedCornerShape(MekaRadius.pill)).background(tone))
     }

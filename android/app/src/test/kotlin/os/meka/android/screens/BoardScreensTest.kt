@@ -51,6 +51,15 @@ class BoardScreensTest {
 
     private enum class Fill { EMPTY, ONE, MANY }
 
+    private fun titles(fill: Fill): List<String> = when (fill) {
+        Fill.EMPTY -> emptyList()
+        Fill.ONE -> listOf("Book the MOT")
+        Fill.MANY -> listOf(
+            "Book the MOT", "Reply to Oakfield School", "Fix the gate latch", "Order new bins", "Pay the window cleaner",
+            "Plan Saturday's football run with Alex", "Renew the car insurance", "Batch cook for the week",
+        )
+    }
+
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
         ThemeChoice.save(ApplicationProvider.getApplicationContext(), theme)
         val core = core()
@@ -85,6 +94,8 @@ class BoardScreensTest {
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
         ScreenShots.assertSensible(compose, name)
+        // Slice 8 of the Week board (the gate's first findings): no title cut to a word or two, no header line clipped.
+        ScreenShots.assertReadable(compose, name, titles(fill))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", name))
     }
 

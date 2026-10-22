@@ -1,10 +1,13 @@
 package os.meka.android.screens
 
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.text.TextLayoutResult
+import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.ScreenSenseRules
 import kotlin.test.fail
 
@@ -40,5 +43,48 @@ object ScreenShots {
     fun assertSensible(compose: ComposeContentTestRule, name: String) {
         val problems = ScreenSenseRules.problems(texts(compose))
         if (problems.isNotEmpty()) fail("$name shows nonsense:\n" + ScreenSenseRules.report(problems))
+    }
+
+    /** One piece of text as laid out: [cut] when it ends in "…", [wholeLines] the characters on its lines before that. */
+    data class Laid(val text: String, val cut: Boolean, val wholeLines: Int)
+
+    /** Every piece of text on screen as laid out (unmerged, each Text once). */
+    fun laidOut(compose: ComposeContentTestRule): List<Laid> {
+        val out = mutableListOf<Laid>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.let { r ->
+                    val cutLine = (0 until r.lineCount).firstOrNull { r.isLineEllipsized(it) }
+                    out += Laid(text, cutLine != null, if (cutLine == null) text.length else r.getLineStart(cutLine))
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        return out
+    }
+
+    /**
+     * The quality gate's "cut to a word or two" (2026-10-22, the Week board's first shots): fails, naming each one, when
+     * one of [titles] is cut before it can be read ([BoardFitRules.titleReadable]) or any short line (a header, a
+     * capacity or free-time line, up to [BoardFitRules.WHOLE_TITLE] characters) ends in "…".
+     */
+    fun assertReadable(compose: ComposeContentTestRule, name: String, titles: List<String>) {
+        val laid = laidOut(compose)
+        val problems = buildList {
+            titles.forEach { t ->
+                val shown = laid.filter { it.text == t }
+                if (shown.isEmpty()) add("\"$t\" isn't on screen")
+                shown.filterNot { BoardFitRules.titleReadable(t, it.cut, it.wholeLines) }
+                    .forEach { add("\"$t\" is cut after ${it.wholeLines} characters") }
+            }
+            laid.filter { it.cut && it.text !in titles && it.text.length <= BoardFitRules.WHOLE_TITLE }
+                .forEach { add("\"${it.text}\" is cut short") }
+        }
+        if (problems.isNotEmpty()) fail("$name has words cut off:\n" + problems.joinToString("\n") { "- $it" })
     }
 }

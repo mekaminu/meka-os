@@ -32,6 +32,16 @@ data class BoardCapacity(val plannedMin: Int, val freeMin: Int, val unsized: Int
         else -> "${TaskEstimateRules.label(plannedMin)} planned · ${TaskEstimateRules.label(freeMin)} free"
     }
 
+    /**
+     * The same on a compact lane ([BoardFitRules]): "3h of 4h" (planned of free), "5h · 1h over", "7h free". The thin bar under it
+     * says the rest.
+     */
+    val shortLine: String get() = when {
+        plannedMin <= 0 -> "${TaskEstimateRules.label(freeMin)} free"
+        over -> "${TaskEstimateRules.label(plannedMin)} · ${TaskEstimateRules.label(plannedMin - freeMin)} over"
+        else -> "${TaskEstimateRules.label(plannedMin)} of ${TaskEstimateRules.label(freeMin)}"
+    }
+
     /** Screen readers: "3 hours planned, 4 hours free, 2 tasks without a time". */
     val spoken: String get() = buildList {
         add(line.replace(" · ", ", ").replace(Regex("(\\d+)h")) { "${it.groupValues[1]} hour${if (it.groupValues[1] == "1") "" else "s"}" }

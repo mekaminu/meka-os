@@ -206,9 +206,13 @@ private struct BoardColumnView: View {
     /// By hand, slice 4: an opened past day folds narrow again with a click on its header.
     var onFold: (() -> Void)? = nil
     let onTarget: (Bool) -> Void
+    /// By hand, slice 8 (the quality gate's findings): how wide the lane is drawn, so a narrow one fits its words.
+    @State private var laneWidth: CGFloat = CGFloat(BoardTidyRules.shared.MAX_LANE_DP)
 
     var body: some View {
         let glow = targeted && day.canDrop
+        let compact = BoardFitRules.shared.compact(laneDp: Float(laneWidth))
+        let tagBelow = BoardFitRules.shared.tagBelow(compact: compact)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold,
             // "2 of 5 done" over a thin gold bar (a past day only what was done), then the day's capacity.
@@ -219,9 +223,12 @@ private struct BoardColumnView: View {
                     Text(day.weekday).font(MekaType.metaStrong)
                         .foregroundStyle(day.isToday ? palette.accent : palette.textSecondary)
                     Spacer(minLength: 0)
-                    if let tag = BoardLookRules.shared.tag(day: day) {
+                    if !tagBelow, let tag = BoardLookRules.shared.tag(day: day) {
                         Text(tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
                     }
+                }
+                if tagBelow, let tag = BoardLookRules.shared.tag(day: day) {
+                    Text(tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
                 if day.isToday {
                     Capsule().fill(palette.accent).frame(width: MekaSpace.l, height: 2)
@@ -232,7 +239,7 @@ private struct BoardColumnView: View {
                     DayProgressBar(progress: progress, palette: palette)
                 }
                 if let capacity = day.capacity {
-                    CapacityBar(capacity: capacity, palette: palette)
+                    CapacityBar(capacity: capacity, palette: palette, compact: compact)
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -275,13 +282,13 @@ private struct BoardColumnView: View {
             if !day.freeTimes.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(day.freeTimes, id: \.startMs) { free in
-                        FreeTimeView(free: free, day: day, board: board, palette: palette)
+                        FreeTimeView(free: free, day: day, board: board, palette: palette, compact: compact)
                     }
                 }
             }
 
             ForEach(Array(day.cards.enumerated()), id: \.element.id) { i, card in
-                BoardCardView(card: card, spot: .day(day), board: board, palette: palette)
+                BoardCardView(card: card, spot: .day(day), board: board, palette: palette, compact: compact)
             }
 
             if glow && day.openCards.isEmpty {
@@ -291,6 +298,7 @@ private struct BoardColumnView: View {
         }
         .padding(MekaSpace.xs)
         .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { laneWidth = $0 }
         .background(
             RoundedRectangle(cornerRadius: MekaRadius.m)
                 .fill(glow ? palette.surfaceRaised : (day.isToday ? palette.surface : Color.clear))
@@ -416,11 +424,13 @@ private struct FreeTimeView: View {
     let day: BoardDay
     let board: WeekBoard
     let palette: MekaPalette
+    /// Slice 8: a narrow lane says only when ("19:00–21:00 free"); the length is on the capacity line.
+    var compact: Bool = false
     @State private var targeted = false
     @State private var height: CGFloat = 24
 
     var body: some View {
-        Text(targeted ? "Drop to block here" : "\(free.label) · \(free.lengthLabel)")
+        Text(targeted ? "Drop to block here" : (compact ? "\(free.label) free" : "\(free.label) · \(free.lengthLabel)"))
             .font(MekaType.micro)
             .foregroundStyle(targeted ? palette.accent : palette.textTertiary)
             .lineLimit(1)
@@ -467,6 +477,8 @@ private struct BoardCardView: View {
     let spot: CardSpot
     let board: WeekBoard
     let palette: MekaPalette
+    /// Slice 8: on a narrow lane the title takes the design's card size (item meta, 12 pt) and up to three lines rather than be cut.
+    var compact: Bool = false
     @State private var over = false
     /// Slice 6: Block time for a day's card, read as the pointer reaches it (the menu can't wait for the core).
     @State private var offer: BlockOffer?
@@ -479,10 +491,10 @@ private struct BoardCardView: View {
             }
             .accessibilityLabel(BoardHandRules.shared.tickLabel(title: card.title, done: card.done))
             VStack(alignment: .leading, spacing: 0) {
-                Text(card.title).font(MekaType.body)
+                Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body)
                     .foregroundStyle(card.done ? palette.textTertiary : palette.textPrimary)
                     .strikethrough(card.done, color: palette.textTertiary)
-                    .lineLimit(2)
+                    .lineLimit(Int(BoardFitRules.shared.titleLines(compact: compact)))
                 // Slice 2: small chips under the title (time, estimate, carried in amber, repeat, goal in gold).
                 let chips = BoardLookRules.shared.chips(card: card)
                 if !chips.isEmpty {
@@ -694,12 +706,14 @@ private struct CapacityBar: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let capacity: BoardCapacity
     let palette: MekaPalette
+    /// Slice 8: "1h 30m of 2h" (planned of free) on a narrow lane.
+    var compact: Bool = false
     @State private var breathe = false
 
     var body: some View {
         let tone = capacity.over ? palette.calendar3 : palette.accent
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(capacity.line).font(MekaType.micro)
+            Text(BoardFitRules.shared.capacityLine(c: capacity, compact: compact)).font(MekaType.micro)
                 .foregroundStyle(capacity.over ? palette.calendar3 : palette.textTertiary)
                 .lineLimit(1)
             GeometryReader { geo in
