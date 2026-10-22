@@ -2889,6 +2889,11 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Fold only: the Mac's Lists has the window's width. No server change, no migration.
 - Landed 0e355f2 + CI fix 2803cff (the first run failed only on "You promised": section labels draw upper case); CI run 1067 (39811375952) green, screens 9b54859. Re-shot review: the cover's tabs whole, the long waiting title wraps whole on two lines, the due line lit; Renewals inner reads the repeating costs, Needs doing and Coming up as expected. Nothing new filed.
 
+### Quality gate — slice 11 (2026-10-22): Money's shots
+- **Money on both Fold sizes:** `MoneyScreensTest` draws the whole `MoneyPane` at the cover and inner sizes, opened as after the fingerprint's yes (`openMoney`; the locked state isn't shot because the pane asks for the fingerprint itself): nothing imported · one account with three payments · a full month (a current account across September and October with groceries, coffee, council tax, a subscription, travel, fuel, salary; a credit card; a pension counted in net worth), Dark, plus Light for the full one: 8 shots under `money/`. Each is read by `assertSensible`, `assertReadable`, `assertNoBrokenWords` and `assertShows` ("Money", the empty line in words, the month's label and spent line).
+- Design check: no design file for Money.
+- Test only: no app change, no server change, no migration.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.
