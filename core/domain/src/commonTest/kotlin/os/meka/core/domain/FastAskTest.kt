@@ -41,24 +41,54 @@ class FastAskTest {
         assertEquals(FastAsk.STATUS, FastAskRules.request("How long left?", fasting = true))
         assertNull(FastAskRules.request("How long left?", fasting = false))
         listOf(
-            "end my fast at 6pm", "end my fast tomorrow", "end my 16 hour fast", "start a 16 hour fast", "start my fast",
+            "end my fast at 6pm", "end my fast tomorrow", "end my 16 hour fast", "start a 72 hour fast", "start my fast at 8pm",
+            "I started fasting at 8", "start a 5 day fast", "start the timer",
             "what's for breakfast", "breakfast", "stop the timer", "end the meeting", "remind me to end my fast", "fast",
             "how long left on the timer", "",
         ).forEach { assertNull(FastAskRules.request(it, fasting = true), it) }
     }
 
     @Test
+    fun hearsStartWithThePlanOrADailyGoal() {
+        listOf(
+            "Start my fast", "start fasting", "Begin my fast.", "I'm starting my fast", "I'm starting to fast", "start fast",
+            "Navilife, start my fast please", "start fasting now", "start a 16 hour fast", "Start a 16-hour fast", "start an 18h fast",
+            "start my 20 hour fast", "begin a 14 hr fast",
+        ).forEach { assertEquals(FastAsk.START, FastAskRules.request(it, fasting = false), it) }
+        assertEquals(16, FastAskRules.startHours("Start a 16-hour fast"))
+        assertEquals(18, FastAskRules.startHours("start an 18h fast"))
+        assertEquals(24, FastAskRules.startHours("start a 24 hour fast"))
+        assertNull(FastAskRules.startHours("start my fast"))
+        assertNull(FastAskRules.startHours("start a 36 hour fast"))
+        assertNull(FastAskRules.startHours("start a 10 hour fast"))
+        assertEquals(FastAsk.RESUME, FastAskRules.request("start my fast again", fasting = false))
+    }
+
+    @Test
+    fun startedSaysTheGoalTheStageAndHowToTakeItBack() {
+        val (v, now) = running(0.0)
+        assertEquals(
+            "Started your 16-hour fast · ends at 12:05 · digesting first. Started by mistake? Say “end my fast”.",
+            FastAskRules.started(v),
+        )
+        val (r, later) = running(13.5)
+        assertEquals("You're already fasting · 13 h 30 m in · switching to fat · 2 h 30 m to go to your 16 h goal, at 12:05.", FastAskRules.alreadyFasting(r, later))
+        assertEquals("Started your fast.", FastAskRules.started(idle))
+        assertEquals(now, start)
+    }
+
+    @Test
     fun saysHowLongInAndToGo() {
         val (v, now) = running(14.5)
-        assertEquals("Yes · 14 h 30 m in · 1 h 30 m to go to your 16 h goal, at 12:05.", FastAskRules.status(v, now))
+        assertEquals("Yes · 14 h 30 m in · switching to fat · 1 h 30 m to go to your 16 h goal, at 12:05.", FastAskRules.status(v, now))
         val (r, later) = running(17.0)
-        assertEquals("Yes · 17 h 00 m in · you reached your 16 h goal at 12:05. Say “end my fast” when you eat.", FastAskRules.status(r, later))
+        assertEquals("Yes · 17 h 00 m in · ketones rising · you reached your 16 h goal at 12:05. Say “end my fast” when you eat.", FastAskRules.status(r, later))
     }
 
     @Test
     fun anExtendedFastCountsDays() {
         val (v, now) = running(62.0, target = 120, extended = true)
-        assertEquals("Yes · 5-day fast · Day 3 of 5 · 2 d 14 h in · 2 d 10 h to go, until Sat 20:00.", FastAskRules.status(v, now))
+        assertEquals("Yes · 5-day fast · Day 3 of 5 · 2 d 14 h in · deep ketosis · 2 d 10 h to go, until Sat 20:00.", FastAskRules.status(v, now))
     }
 
     @Test
@@ -76,7 +106,7 @@ class FastAskTest {
         )
         val (v, now) = running(16.5)
         assertEquals("Your fast is running again · 16 h 30 m in, from 20:05 yesterday.", FastAskRules.resumed(v, now))
-        assertEquals("You're still fasting · 16 h 30 m in · you reached your 16 h goal at 12:05. Say “end my fast” when you eat.", FastAskRules.cantResume(v, now))
+        assertEquals("You're still fasting · 16 h 30 m in · ketones rising · you reached your 16 h goal at 12:05. Say “end my fast” when you eat.", FastAskRules.cantResume(v, now))
         assertEquals(
             "Your last fast ended more than 10 minutes ago, so it can't be resumed · start a new one in Goals and habits, or say “start a 16-hour fast”.",
             FastAskRules.cantResume(idle.copy(last = idle.last!!.copy(canResume = false)), start),

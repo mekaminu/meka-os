@@ -8174,6 +8174,14 @@ class MekaCore(
         val now = nowMs()
         val text = when (want) {
             os.meka.core.domain.FastAsk.STATUS -> os.meka.core.domain.FastAskRules.status(before, now)
+            // Fasting rebuild slice 6: "start my fast" / "start a 16-hour fast", the same as Start fast on its screen.
+            os.meka.core.domain.FastAsk.START ->
+                if (before.current != null) os.meka.core.domain.FastAskRules.alreadyFasting(before, now)
+                else {
+                    fasting.start(0, os.meka.core.domain.FastAskRules.startHours(q))
+                    refresh()
+                    os.meka.core.domain.FastAskRules.started(fasting.view())
+                }
             os.meka.core.domain.FastAsk.END ->
                 if (before.current == null) os.meka.core.domain.FastAskRules.nothingToEnd(before)
                 else {
@@ -9094,7 +9102,8 @@ class MekaCore(
         // "What Navilife may do" completeness: "pause Navilife", "resume Navilife", "is Navilife paused?" are done and
         // answered here, no AI and no card, with Open What Navilife may do under the answer.
         if (!beyondHelp) autonomyAsk(q)?.let { return it }
-        // AI layer completeness: "end my fast", "resume my fast", "how long left on my fast?" are done and answered here.
+        // AI layer completeness: "end my fast", "resume my fast", "how long left on my fast?" are done and answered here;
+        // Fasting rebuild slice 6: "start my fast" too.
         if (!beyondHelp) fastAsk(q)?.let { return it }
         // Week board (11) part 2: "I'm shattered", "I've got too much on" are kept as today's feeling and answered with
         // the offer to lighten tomorrow (and, stretched, to hold the alerts that can wait), the taps in Shut down the day.

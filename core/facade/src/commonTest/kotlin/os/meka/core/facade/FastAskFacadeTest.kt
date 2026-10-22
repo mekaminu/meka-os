@@ -57,7 +57,7 @@ class FastAskFacadeTest {
 
         fold.startFast(0)
         now += 14 * 3_600_000L + 30 * 60_000L // 07:45 on Friday
-        assertEquals("Yes · 14 h 30 m in · 1 h 30 m to go to your 16 h goal, at 09:15.", fold.say("How long left?"))
+        assertEquals("Yes · 14 h 30 m in · switching to fat · 1 h 30 m to go to your 16 h goal, at 09:15.", fold.say("How long left?"))
         assertEquals(fold.say("how long left on my fast?"), fold.say("am I fasting?"))
 
         assertTrue(fold.say("I've broken my fast").startsWith("Ended your fast · 14 h 30 m · goal 16 h. Ended by mistake?"))
@@ -76,6 +76,33 @@ class FastAskFacadeTest {
         now += 11 * 60_000L
         assertTrue(fold.say("resume my fast").startsWith("Your last fast ended more than 10 minutes ago"))
         assertFalse(fold.fastingView.value.isFasting)
+        assertEquals(0, server.asked)
+    }
+
+    @Test
+    fun startsTheFastByVoiceOnBothDevicesWithoutTheAi() = runTest {
+        val fold = core()
+        val mac = core("mac")
+        now += 3 * 3_600_000L // 20:15, the window has closed
+        assertEquals(
+            "Started your 16-hour fast · ends at 12:15 · digesting first. Started by mistake? Say “end my fast”.",
+            fold.say("start my fast"),
+        )
+        assertTrue(fold.fastingView.value.isFasting)
+        fold.syncNow(); mac.syncNow()
+        assertTrue(mac.fastingView.value.isFasting)
+
+        // Asked again while it runs: where it stands, nothing new started.
+        now += 13 * 3_600_000L
+        assertEquals("You're already fasting · 13 h 00 m in · switching to fat · 3 h 00 m to go to your 16 h goal, at 12:15.", fold.say("start my fast"))
+        assertEquals("Yes · 13 h 00 m in · switching to fat · 3 h 00 m to go to your 16 h goal, at 12:15.", mac.say("how long have I been fasting?"))
+        fold.say("end my fast")
+        fold.syncNow(); mac.syncNow()
+
+        // A daily goal in the words is the fast's goal; the Mac starts it the same way.
+        now += 4 * 3_600_000L
+        assertTrue(mac.say("Start an 18-hour fast").startsWith("Started your 18-hour fast · ends at "))
+        assertEquals(18, mac.fastingView.value.current?.targetHours)
         assertEquals(0, server.asked)
     }
 }
