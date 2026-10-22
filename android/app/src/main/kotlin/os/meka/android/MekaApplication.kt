@@ -40,9 +40,14 @@ import java.security.SecureRandom
 import java.util.concurrent.TimeUnit
 import kotlin.random.asKotlinRandom
 
-class MekaApplication : Application() {
+// Open only so the quality gate's screenshot tests can stand in an Application that skips the device's keystore and
+// database (android/app/src/test/.../screens/ShotApplication.kt); nothing in the app subclasses it.
+open class MekaApplication : Application() {
     lateinit var core: MekaCore
         private set
+
+    /** The quality gate's screenshot tests only: the screens read this core (invented data) instead of the device's. */
+    internal fun useCoreForScreens(core: MekaCore) { this.core = core }
     lateinit var identity: DeviceIdentityStore
         private set
     /**
