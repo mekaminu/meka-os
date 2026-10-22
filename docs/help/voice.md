@@ -10,6 +10,7 @@ mac_where: Ask → Settings → Ada's voice
 what: how Ada, Navilife's assistant, sounds in Talk, the morning brief and the call assistant.
 how: Pick a voice there and play a sample.
 tip: On a slow connection the first words can take a moment; offline it says "Using the phone's voice while offline" once and carries on in the phone's own voice.
+tip: Ada talks a touch quicker than before, with a small natural pause after a quick reaction ("Oh nice."), and each sentence of her answer is made ready as she writes it, so there are no gaps between them (Amazon voices; Google's voices keep their own pace).
 tip: Ask → More → Activity shows how quickly the voice answered; clips heard over Bluetooth or car audio are marked "+ Bluetooth", about 0.2 s more.
 tip: In Talk the first words of an answer come with the answer itself, so Navilife starts speaking without a second wait; Activity marks those "with the answer".
 tip: At the top, Ada calls you lets you choose whether it calls you by your name or "sir" in Ask, Talk and Hello; the choice follows you to every device.

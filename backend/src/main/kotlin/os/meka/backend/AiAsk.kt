@@ -195,7 +195,7 @@ class AskService(
         if (next == null || ahead.isEmpty() && first == null) return ahead.values.forEach { it.cancel(false) }
         val wanted = if (first == null || answer.state != AskCodec.Response.ANSWERED) emptyList()
         else os.meka.core.domain.SpeechRules.pieces(
-            os.meka.core.domain.StreamedSpeechRules.rest(os.meka.core.domain.TalkRules.speakable(answer.answer), first),
+            os.meka.core.domain.StreamedSpeechRules.rest(os.meka.core.domain.TalkRules.speakable(answer.answer.orEmpty()), first),
         ).take(os.meka.core.domain.StreamedSpeechRules.MAX_NEXT)
         ahead.keys.filter { it !in wanted }.forEach { ahead.remove(it)?.cancel(false) }
         wanted.forEach(say)
