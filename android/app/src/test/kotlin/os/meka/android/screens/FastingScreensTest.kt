@@ -193,6 +193,21 @@ class FastingScreensTest {
         settle()
     }
 
+    /**
+     * A button's command runs on the core's own thread (MekaCore's confined dispatcher), off the paused test clock:
+     * wait for it in real time (up to 3 s), then let the screen settle.
+     */
+    private fun awaitCore(what: String, done: () -> Boolean) {
+        var waited = 0
+        while (!done() && waited < 3_000) {
+            Thread.sleep(20)
+            waited += 20
+            compose.mainClock.advanceTimeBy(16)
+        }
+        if (!done()) fail("$what: the core never did it")
+        settle()
+    }
+
     @Test @Config(qualifiers = ScreenShots.COVER)
     fun goalsTileOpensTheScreenAndBackLeavesIt() {
         val core = prepared(Fill.EMPTY)
@@ -227,10 +242,9 @@ class FastingScreensTest {
         tap("16:8")
         // Start fast: the button becomes End fast and the Started and Goal tiles appear.
         compose.onNodeWithTag("fasting-main").performClick()
-        settle()
+        awaitCore("Start fast") { core.fastingView.value.current != null }
         ScreenShots.assertShows(compose, "start", "End fast")
         ScreenShots.assertShows(compose, "start", "Goal")
-        if (core.fastingView.value.current == null) fail("Start fast started nothing")
         // The Started tile opens its choices.
         compose.onAllNodes(hasText("Started", substring = false), useUnmergedTree = true).fetchSemanticsNodes()
             .ifEmpty { fail("no Started tile") }
@@ -239,9 +253,8 @@ class FastingScreensTest {
         // Two hours on, End fast ends it and offers Undo end.
         clock += 2 * hourMs
         compose.onNodeWithTag("fasting-main").performClick()
-        settle()
+        awaitCore("End fast") { core.fastingView.value.current == null }
         ScreenShots.assertShows(compose, "end", "Start fast")
-        if (core.fastingView.value.current != null) fail("End fast ended nothing")
         ScreenShots.assertShows(compose, "end", FastingScreenRules.UNDO_END)
         // Down to the stages: one opens its words and evidence.
         var swipes = 0
