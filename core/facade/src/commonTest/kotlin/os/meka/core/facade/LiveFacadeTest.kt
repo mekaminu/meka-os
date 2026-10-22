@@ -65,4 +65,22 @@ class LiveFacadeTest {
         val plain = object : SyncTransport by os.meka.core.testing.FaultyTransport(SyncService(InMemoryServerOpStore())) {}
         assertNull(core(plain).liveSession(null))
     }
+
+    @Test
+    fun theLiveSwitchAndVoiceAreKeptAndTheSettingsReadTheMeter() = runTest {
+        // Slice 2.
+        val c = core()
+        assertEquals(false, c.liveOn())
+        assertEquals(os.meka.core.domain.LiveTalkRules.OFF_LINE, c.liveSettings().line)
+        assertEquals("£0.40 of £15 this month", c.liveSettings().meterLine)
+        c.setLiveOn(true)
+        assertEquals(true, c.setLiveVoice("Aoede"))
+        assertEquals(false, c.setLiveVoice("Nobody"))
+        val on = c.liveSettings()
+        assertEquals(true, on.on)
+        assertEquals("£0.40 of £15 this month", on.line)
+        assertEquals("Aoede", on.voices.single { it.selected }.name)
+        server.down = true
+        assertEquals(os.meka.core.domain.LiveTalkRules.UNREACHABLE, c.liveSettings().line)
+    }
 }

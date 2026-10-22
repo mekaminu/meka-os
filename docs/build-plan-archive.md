@@ -2723,3 +2723,13 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Facade**: `LiveApi` on `HttpSyncTransport`; `MekaCore.liveStatus/liveSession/liveUsage` (null, never throwing, when offline or on an older server).
 - ADR-006 addendum. No app view change yet.
 - Tests: LiveModeTest (3), LiveCodecTest (3), LiveSessionsTest (6: the key never reaches the device, the reserve and the one report, the cap's heads-up and off, no key and Google refusing, keyed devices only, routes left out), LiveFacadeTest (2), infra (1).
+
+### Slice 2, 2026-10-22: Live on the Fold (core, wire, facade, Fold)
+
+- **Core `LiveTalkRules`** (domain/LiveTalk.kt): the 2 s fallback, 16 kHz up / 24 kHz down, 40 ms chunks, the speaker guard (`sendWhileSpeaking`: on the phone's speaker, while Ada speaks only a chunk at or over -28 dBFS goes up, else silence), when her queued audio has played (`playUntil`, `speaking` with a 300 ms tail), the session ending 15 s before its token's window (`endAtElapsed`), the seconds counted (`seconds`), the orb's level from dBFS, the eight Live voices (Kore first) and the settings view (`view`: Off line, the month's meter, no key, unreachable, the sharing line, voices while on). `MekaVoiceStore.liveOn/setLive/liveVoice/chooseLiveVoice` (fields `live`, `live_voice` on the synced voice entity, LWW, no migration).
+- **Wire `LiveProtocol`**: the token as `access_token` in the WebSocket URL, the setup (model as `models/…`, AUDIO answers, the prebuilt voice, session resumption, an optional system instruction for slice 4), mic chunks (`realtimeInput.audio`, `audio/pcm;rate=16000`), `audioStreamEnd`, and Google's messages read as events in order (set up, audio chunks, interrupted, turn complete, go away with its time left, a resumable handle; junk reads as nothing).
+- **Facade**: `liveOn/setLiveOn/liveVoice/setLiveVoice/liveSettings`.
+- **Fold**: `LiveTalk` (Ktor WebSocket over OkHttp, AudioRecord on the voice-call path with echo canceller and noise suppressor, AudioTrack for her voice, flush on interrupted, usage report on end, fallback); `TalkController.start` opens Live when it's on (normal Ada when it falls back; listening on open and the hello stay with normal Ada), a tap on the orb ends Live; `VoicePane`'s Live block (Off · On, the line, the sharing line, the voice pills unfolding while on).
+- Help tips (voice), motion row (MEKA's voice). No server change, no migration, no Mac change yet.
+- Tests: LiveTalkTest (4), LiveProtocolTest (2), LiveFacadeTest (+1).
+

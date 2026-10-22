@@ -1,0 +1,145 @@
+package os.meka.core.domain
+
+/**
+ * Ada's Live mode, slice 2 (non-AI, pure): how a Live conversation runs on a device and how its settings read.
+ *
+ * Live is a synced switch ([MekaVoiceFields.LIVE], off until Meka turns it on) with its own voice
+ * ([MekaVoiceFields.LIVE_VOICE], one of Google's prebuilt Live voices, [LiveModeRules.DEFAULT_VOICE] until he picks
+ * one). With it on, starting Talk opens a Gemini Live session through Navilife's server; anything that keeps the
+ * session from being ready within [FALLBACK_MS] (no key, the month's cap, Google refusing, no signal, a slow open)
+ * hands over to normal Ada at once, so he is never left waiting on a dead orb.
+ */
+object LiveTalkRules {
+    /** From asking for a session to Google saying it is set up: past this, normal Ada answers instead. */
+    const val FALLBACK_MS = 2_000L
+
+    /** Microphone audio Google expects: 16 kHz, 16-bit, mono. */
+    const val IN_RATE = 16_000
+    /** What Google speaks back: 24 kHz, 16-bit, mono. */
+    const val OUT_RATE = 24_000
+
+    /** One microphone chunk sent up: 40 ms (small, so a barge-in is heard at once). */
+    const val CHUNK_MS = 40
+    val CHUNK_SAMPLES: Int get() = IN_RATE * CHUNK_MS / 1_000
+
+    /** How long after the last audio arrived Ada counts as having finished speaking (the orb goes back to listening). */
+    const val SPEAKING_TAIL_MS = 300L
+
+    /** A session ends this long before its token's window closes, so it never cuts off mid-word. */
+    const val END_BEFORE_MS = 15_000L
+
+    /**
+     * On the phone's own speaker the microphone hears Ada too: while she speaks, only a chunk clearly louder than
+     * [SPEAKER_OVER_DBFS] (him talking over her) goes up, the rest goes as silence so Google doesn't hear her as him.
+     * With headphones everything goes up.
+     */
+    const val SPEAKER_OVER_DBFS = -28f
+
+    fun sendWhileSpeaking(output: BargeInOutput, dbfs: Float): Boolean =
+        output == BargeInOutput.HEADPHONES || dbfs >= SPEAKER_OVER_DBFS
+
+    /** When the queued audio will have played (elapsed ms), after a chunk of [bytes] at [OUT_RATE] lands at [nowMs]. */
+    fun playUntil(previousUntilMs: Long, nowMs: Long, bytes: Int): Long =
+        maxOf(previousUntilMs, nowMs) + bytes.coerceAtLeast(0) * 1_000L / (OUT_RATE * 2)
+
+    /** Ada is still speaking at [nowMs] (her queued audio, plus a short tail). */
+    fun speaking(playUntilMs: Long, nowMs: Long): Boolean = nowMs < playUntilMs + SPEAKING_TAIL_MS
+
+    /** Whole seconds of 16-bit mono audio in [bytes] at [rate], rounded up (what the usage report counts). */
+    fun seconds(bytes: Long, rate: Int): Long {
+        if (bytes <= 0 || rate <= 0) return 0
+        val perSecond = rate * 2L
+        return (bytes + perSecond - 1) / perSecond
+    }
+
+    /** The orb's level, 0 … 1, from a chunk's loudness in dBFS ([BargeInRules.dbfs]): -50 dB and below is still. */
+    fun level(dbfs: Float): Float = ((dbfs + 50f) / 40f).coerceIn(0f, 1f)
+
+    /** When the session should end by itself (elapsed ms on the device), from its token's [expiresAtMs] in wall time. */
+    fun endAtElapsed(nowElapsedMs: Long, nowWallMs: Long, expiresAtMs: Long): Long =
+        nowElapsedMs + (expiresAtMs - nowWallMs - END_BEFORE_MS).coerceIn(0, LiveModeRules.TOKEN_MS)
+
+    /** Whether Google's set-up came too late (or never) and normal Ada takes over. */
+    fun fallBack(askedAtMs: Long, nowMs: Long, setUp: Boolean): Boolean = !setUp && nowMs - askedAtMs >= FALLBACK_MS
+
+    /** One of Google's Live voices as the picker shows it. */
+    data class Voice(val name: String, val detail: String)
+
+    /**
+     * The voices the picker offers (Google's prebuilt Live voices with Google's own one-word character), the default
+     * first: a short list, chosen for a warm, clear British-friendly sound.
+     */
+    val VOICES: List<Voice> = listOf(
+        Voice("Kore", "Firm · the nearest to Amy"),
+        Voice("Aoede", "Breezy"),
+        Voice("Leda", "Youthful"),
+        Voice("Sulafat", "Warm"),
+        Voice("Achernar", "Soft"),
+        Voice("Vindemiatrix", "Gentle"),
+        Voice("Charon", "Informative"),
+        Voice("Puck", "Upbeat"),
+    )
+
+    /** A stored Live voice as one the picker offers, else the default. */
+    fun voice(stored: String?): String =
+        VOICES.firstOrNull { it.name.equals(stored?.trim(), ignoreCase = true) }?.name ?: LiveModeRules.DEFAULT_VOICE
+
+    const val TITLE = "Live"
+    const val ON_LABEL = "On"
+    const val OFF_LABEL = "Off"
+    const val INTRO = "Talk with Ada in real time: no waiting for her turn, talk over her any time."
+    const val OFF_LINE = "Off · Ada answers as she does now"
+    const val VOICE_TITLE = "Ada's Live voice"
+    const val UNREACHABLE = "Live can't be reached right now · Ada answers as usual"
+    const val NO_KEY = "Live needs its Google key on Navilife's server first · Ada answers as usual until then"
+    const val FELL_BACK = "Live didn't open in time · Ada answered as usual"
+
+    /**
+     * The Live block in Ada's voice settings. [meterKnown] false when the server couldn't be asked (offline, older
+     * server); [configured] false until the Gemini key is in.
+     */
+    fun view(
+        on: Boolean,
+        voice: String?,
+        meterKnown: Boolean,
+        configured: Boolean,
+        level: String,
+        spentPence: Long,
+        capPence: Long,
+    ): LiveSettingsView {
+        val chosen = voice(voice)
+        val meter = when {
+            !meterKnown -> UNREACHABLE
+            !configured -> NO_KEY
+            else -> LiveModeRules.line(LiveModeRules.Level.of(level), spentPence, capPence)
+        }
+        return LiveSettingsView(
+            on = on,
+            line = if (on) meter else OFF_LINE,
+            meterLine = if (on) null else meter.takeIf { meterKnown && configured },
+            sharing = LiveModeRules.SHARING,
+            voices = VOICES.map { LiveVoiceRow(it.name, it.detail, it.name == chosen) },
+            showVoices = on,
+        )
+    }
+}
+
+/** One row of the Live voice picker. */
+data class LiveVoiceRow(val name: String, val detail: String, val selected: Boolean)
+
+/**
+ * The Live block in Ada's voice settings: the switch, the line under it (the month's meter when on, or why Live can't
+ * run), what goes to Google, and the voice picker while on.
+ */
+data class LiveSettingsView(
+    val on: Boolean,
+    val line: String,
+    /** While off: the month so far, when there is a meter to show. */
+    val meterLine: String?,
+    val sharing: String,
+    val voices: List<LiveVoiceRow>,
+    val showVoices: Boolean,
+) {
+    val title: String get() = LiveTalkRules.TITLE
+    val intro: String get() = LiveTalkRules.INTRO
+}

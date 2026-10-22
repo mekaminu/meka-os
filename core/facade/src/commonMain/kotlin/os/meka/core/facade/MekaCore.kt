@@ -10558,6 +10558,28 @@ class MekaCore(
         return try { api.liveUsage(sessionId, inSeconds, outSeconds) } catch (e: CancellationException) { throw e } catch (e: Exception) { null }
     }
 
+    /** Ada's Live mode, slice 2: whether Live is on (synced; off unless he turns it on). */
+    suspend fun liveOn(): Boolean = onCore { mekaVoice.liveOn() }
+
+    /** Turns Live on or off on every device. */
+    suspend fun setLiveOn(on: Boolean) { onCore { mekaVoice.setLive(on) } }
+
+    /** The Live voice he picked (one of [os.meka.core.domain.LiveTalkRules.VOICES]). */
+    suspend fun liveVoice(): String = onCore { mekaVoice.liveVoice() }
+
+    /** Picks the Live voice on every device; false for a name the picker doesn't offer. */
+    suspend fun setLiveVoice(name: String): Boolean = onCore { mekaVoice.chooseLiveVoice(name) }
+
+    /** The Live block in Ada's voice settings: the switch, the month's meter or why Live can't run, the voices. */
+    suspend fun liveSettings(): os.meka.core.domain.LiveSettingsView {
+        val (on, voice) = onCore { mekaVoice.liveOn() to mekaVoice.liveVoice() }
+        val m = liveStatus()
+        return os.meka.core.domain.LiveTalkRules.view(
+            on, voice, meterKnown = m != null, configured = m?.configured == true,
+            level = m?.level ?: "ok", spentPence = m?.spentPence ?: 0, capPence = m?.capPence ?: 0,
+        )
+    }
+
     suspend fun clearTurnSpeed(): Unit = onCore {
         turnTraces = emptyList()
         runCatching { localStore.transaction { localStore.setLocalValue(os.meka.core.domain.TurnSpeedRules.KEY, "") } }

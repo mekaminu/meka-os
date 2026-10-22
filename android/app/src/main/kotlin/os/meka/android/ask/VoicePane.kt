@@ -119,6 +119,9 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         remembers = runCatching { core.companionRemembers() }.getOrDefault(true)
         memoryRows = runCatching { core.companionMemoryRows() }.getOrDefault(emptyList())
     }
+    // Ada's Live mode, slice 2: the Live switch, its month's meter, what goes to Google and the Live voice (synced).
+    var live by remember { mutableStateOf<os.meka.core.domain.LiveSettingsView?>(null) }
+    LaunchedEffect(Unit) { live = runCatching { core.liveSettings() }.getOrNull() }
     LaunchedEffect(Unit) {
         speaker.prepare()
         view = runCatching { core.voicePicker(mac = false) }.getOrNull()
@@ -173,6 +176,25 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         haptics.light()
         playing = c.id
         speaker.sample(c.id) { playing = null }
+    }
+
+    fun setLive(on: Boolean) {
+        val now = live ?: return
+        if (now.on == on) return
+        haptics.tick()
+        live = now.copy(on = on, showVoices = on) // lit at once; the line follows from the server's meter
+        scope.launch {
+            runCatching { core.setLiveOn(on) }
+            live = runCatching { core.liveSettings() }.getOrNull() ?: live
+        }
+    }
+
+    fun liveVoice(name: String) {
+        val now = live ?: return
+        if (now.voices.any { it.selected && it.name == name }) return
+        haptics.tick()
+        live = now.copy(voices = now.voices.map { it.copy(selected = it.name == name) })
+        scope.launch { runCatching { core.setLiveVoice(name) } }
     }
 
     fun saveDevice(next: DeviceVoiceSettings) {
@@ -242,6 +264,41 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                         if (rows.isNotEmpty()) {
                             Text(CompanionMemoryRules.FORGET_ALL, style = MekaType.itemMeta, color = Meka.colors.accent,
                                 modifier = Modifier.clickable(role = Role.Button) { forgetAll() }.minTouch())
+                        }
+                    }
+                }
+            }
+        }
+        live?.let { lv ->
+            // Ada's Live mode, slice 2: real-time conversation on Gemini Live, off until he turns it on.
+            Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Text(lv.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
+                Text(lv.intro, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    SettingChip(os.meka.core.domain.LiveTalkRules.OFF_LABEL, on = !lv.on, spoken = "Live off") { setLive(false) }
+                    SettingChip(os.meka.core.domain.LiveTalkRules.ON_LABEL, on = lv.on, spoken = "Live on") { setLive(true) }
+                }
+                Crossfade(lv.line to lv.meterLine, animationSpec = MekaMotion.appear(reduced), label = "live-line") { (line, meter) ->
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+                        Text(line, style = MekaType.caption, color = if (lv.on) Meka.colors.accent else Meka.colors.textTertiary)
+                        meter?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                    }
+                }
+                Text(lv.sharing, style = MekaType.caption, color = Meka.colors.textTertiary)
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = lv.showVoices,
+                    enter = fadeIn(MekaMotion.appear(reduced)) + androidx.compose.animation.expandVertically(),
+                    exit = fadeOut(MekaMotion.appear(reduced)) + androidx.compose.animation.shrinkVertically(),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Text(os.meka.core.domain.LiveTalkRules.VOICE_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary,
+                            modifier = Modifier.padding(top = MekaSpace.xs))
+                        lv.voices.chunked(2).forEach { pair ->
+                            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                                pair.forEach { voice ->
+                                    SettingChip("${voice.name} · ${voice.detail}", on = voice.selected, spoken = "Ada's Live voice ${voice.name}, ${voice.detail}") { liveVoice(voice.name) }
+                                }
+                            }
                         }
                     }
                 }

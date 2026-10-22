@@ -356,6 +356,10 @@ object MekaVoiceFields {
      * name. Synced, so Ask, Talk and Hello say the same on every device.
      */
     const val CALL_ME = "call_me"
+    /** Ada's Live mode, slice 2: "on" while Live is on; Null (or absent) for off, the default. Synced. */
+    const val LIVE = "live"
+    /** Ada's Live mode, slice 2: the Live voice he picked (one of [LiveTalkRules.VOICES]); Null for the default. */
+    const val LIVE_VOICE = "live_voice"
 }
 
 object MekaVoiceRules {
@@ -406,8 +410,35 @@ class MekaVoiceStore(private val replica: Replica) {
         )
     }
 
+    /** Ada's Live mode, slice 2: whether Live is on (off unless he turns it on). */
+    fun liveOn(): Boolean = replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(MekaVoiceFields.LIVE)?.textOrNull == LIVE_ON
+
+    /** Turns Live on or off on every device; nothing written when it's already so. */
+    fun setLive(on: Boolean) {
+        if (on == liveOn()) return
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(MekaVoiceFields.LIVE to (if (on) FieldValue.Text(LIVE_ON) else FieldValue.Null)),
+        )
+    }
+
+    /** The Live voice he picked, or [LiveModeRules.DEFAULT_VOICE]. */
+    fun liveVoice(): String = LiveTalkRules.voice(replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(MekaVoiceFields.LIVE_VOICE)?.textOrNull)
+
+    /** Picks [name] as the Live voice; false, and nothing written, for a name the picker doesn't offer. */
+    fun chooseLiveVoice(name: String): Boolean {
+        val wanted = LiveTalkRules.VOICES.firstOrNull { it.name.equals(name.trim(), ignoreCase = true) }?.name ?: return false
+        if (wanted == liveVoice()) return true
+        replica.commitLocal(
+            EntityTypes.CONTEXT_MODE, ENTITY_ID,
+            mapOf(MekaVoiceFields.LIVE_VOICE to (if (wanted == LiveModeRules.DEFAULT_VOICE) FieldValue.Null else FieldValue.Text(wanted))),
+        )
+        return true
+    }
+
     companion object {
         const val ENTITY_ID = "voice"
+        const val LIVE_ON = "on"
     }
 }
 

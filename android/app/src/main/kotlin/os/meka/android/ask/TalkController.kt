@@ -117,8 +117,53 @@ class TalkController(
 
     val active: Boolean get() = phase != TalkPhase.ENDED
 
-    /** Starts a conversation (the mic permission is already granted). */
-    fun start() = begin(TalkFlow.start())
+    /**
+     * Starts a conversation (the mic permission is already granted). Ada's Live mode, slice 2: with Live on, a Gemini
+     * Live conversation ([LiveTalk]); if it isn't open within 2 s, normal Ada starts listening instead.
+     */
+    fun start() {
+        if (active) return
+        val gen = generation
+        scope.launch {
+            val live = runCatching { core.liveOn() }.getOrDefault(false)
+            if (gen != generation || active) return@launch
+            if (live) startLive() else begin(TalkFlow.start())
+        }
+    }
+
+    // Ada's Live mode, slice 2: the Live conversation, while one runs.
+    private val liveTalk = LiveTalk(context, core, scope, object : LiveTalk.Listener {
+        override fun onReady() {
+            if (liveRunning) phase = TalkPhase.LISTENING
+        }
+        override fun onSpeaking(speaking: Boolean) {
+            if (liveRunning) phase = if (speaking) TalkPhase.SPEAKING else TalkPhase.LISTENING
+        }
+        override fun onLevel(level: Float) {
+            if (liveRunning) this@TalkController.level = os.meka.core.domain.VoiceOut.follow(this@TalkController.level, level)
+        }
+        override fun onEnded(fellBack: Boolean) {
+            if (!liveRunning) return
+            liveRunning = false
+            phase = TalkPhase.ENDED
+            this@TalkController.level = 0f
+            PhoneListen.latch.sessionOpen = false
+            // Live didn't open in time: normal Ada listens instead, so he is never left with a dead orb.
+            if (fellBack) begin(TalkFlow.start())
+        }
+    })
+    private var liveRunning = false
+
+    private fun startLive() {
+        generation++
+        problem = null
+        heard = ""
+        said = ""
+        liveRunning = true
+        phase = TalkPhase.THINKING // the orb thinks while the session opens
+        scope.launch { core.warmTalk() } // normal Ada's server is ready too, should Live fall back
+        liveTalk.start()
+    }
 
     /**
      * "Hello, Navilife": the orb tapped at rest. The greeting is built by the core's rules on the device
@@ -238,7 +283,7 @@ class TalkController(
             TalkAutoListen.chime()
             delay(CHIME_GAP_MS) // so the recogniser doesn't hear the chime
             if (gen != generation || active) return@launch
-            start()
+            begin(TalkFlow.start()) // listening on open stays with normal Ada (its window below)
             val started = generation
             val at = System.currentTimeMillis()
             delay(TalkOnOpenRules.WINDOW_MS)
@@ -253,6 +298,7 @@ class TalkController(
 
     /** The orb tapped: while MEKA speaks, stop and listen; otherwise end. */
     fun tapOrb() {
+        if (liveRunning) { liveTalk.stop(); return } // Live: he talks over her by voice; a tap ends it
         when (phase) {
             TalkPhase.SPEAKING -> apply(TalkFlow.bargeIn(session))
             TalkPhase.ENDED -> start()
@@ -265,6 +311,7 @@ class TalkController(
         generation++ // also drops a room check or chime still on its way ("Listen when I open MEKA")
         afterBriefAt = null
         closeFollowOn()
+        if (liveRunning) { liveTalk.stop(); return }
         if (!active) return
         apply(TalkFlow.stop(session))
     }
@@ -285,6 +332,7 @@ class TalkController(
         recognizer = null
         engine = null
         bargeIn.stop()
+        liveTalk.release()
         speaker.release()
     }
 
