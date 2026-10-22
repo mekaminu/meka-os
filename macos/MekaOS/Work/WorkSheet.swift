@@ -30,6 +30,7 @@ struct WorkSheet: View {
 
     private var atWork: Bool { model.work?.atWork ?? false }
     private var callAssistant: Bool { model.work?.callAssistant ?? false }
+    private var screenUnknownAlways: Bool { model.work?.screenUnknownAlways ?? false }
     private var recordingDays: Int { Int(model.work?.recordingDays ?? Int32(VoiceRecordingRules.shared.DEFAULT_KEEP_DAYS)) }
     private static let keepChoices = [7, 0]
 
@@ -82,7 +83,7 @@ struct WorkSheet: View {
             Toggle(isOn: Binding(get: { callAssistant }, set: { model.setCallAssistant($0) })) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("Screen calls at work on the Fold").font(MekaType.itemMeta)
-                    Text(CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil, paused: model.work?.callAssistantPaused ?? false))
+                    Text(CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil, paused: model.work?.callAssistantPaused ?? false, screenUnknownAlways: screenUnknownAlways))
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)
                 }
@@ -97,6 +98,7 @@ struct WorkSheet: View {
             Text(CallScreeningRules.shared.testLine(number: CallScreeningRules.shared.assistantNumber))
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(3)
+            screenUnknown.staggeredAppear(3)
             keepRecordings.staggeredAppear(3)
             spam.staggeredAppear(3)
 
@@ -119,6 +121,7 @@ struct WorkSheet: View {
         .animation(MekaMotion.replan(reduced: reduceMotion), value: model.work?.line)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.switchedManually)
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.callAssistant)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: model.work?.screenUnknownAlways)
         .onAppear(perform: load)
     }
 
@@ -348,6 +351,27 @@ struct WorkSheet: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.rows.map(\.key) ?? [])
         .animation(MekaMotion.expand(reduced: reduceMotion), value: view?.suspects.map(\.key) ?? [])
         .animation(MekaMotion.appear(reduced: reduceMotion), value: blockRefused)
+    }
+
+    /// "Screen unknown callers all the time" (Meka 2026-10-22): synced with the Fold, where the screening happens.
+    /// The line under it cross-fades; it needs the call assistant on to do anything.
+    private var screenUnknown: some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            Toggle(isOn: Binding(get: { screenUnknownAlways }, set: { model.setScreenUnknownAlways($0) })) {
+                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+                    Text(ScreenUnknownRules.shared.TITLE).font(MekaType.itemMeta)
+                    Text(ScreenUnknownRules.shared.line(on: screenUnknownAlways, assistantOn: callAssistant))
+                        .font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                }
+            }
+            .toggleStyle(.switch)
+            Text(ScreenUnknownRules.shared.TRADE_OFF)
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, MekaSpace.xs)
     }
 
     /// Spam calls still ring, slice 1: Advanced holds the only switch for spam protection, behind a question.

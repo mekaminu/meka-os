@@ -5695,6 +5695,9 @@ class MekaCore(
      */
     suspend fun setSpamProtection(on: Boolean): Boolean = onCore { work.setSpamProtection(on).also { refresh() } }
 
+    /** "Screen unknown callers all the time" ([os.meka.core.domain.ScreenUnknownRules]), synced; false when nothing changed. */
+    suspend fun setScreenUnknownAlways(on: Boolean): Boolean = onCore { work.setScreenUnknownAlways(on).also { refresh() } }
+
     /**
      * Spam calls still ring, slice 1: the Fold, after a call from an unknown number it watched (not a contact, not
      * called lately, not household, not claiming to be an official body), says how many incoming calls the number made
@@ -5907,6 +5910,7 @@ class MekaCore(
             signals.copy(quietHours = quiet, household = signals.household || household, fromAssistant = signals.fromAssistant || fromAssistant), list.suspectedKeys,
             paused = callCredit.current()?.paused == true,
             spamProtection = state.spamProtection,
+            screenUnknownAlways = state.screenUnknownAlways,
         )
         // Spam calls still ring, slice 1: a number the network couldn't verify goes on the block list (Undo in Activity).
         val decision = if (decided.reason == os.meka.core.domain.CallReason.AUTO_BLOCKED && number != null) {

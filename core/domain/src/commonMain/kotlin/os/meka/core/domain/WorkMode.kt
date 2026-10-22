@@ -26,6 +26,12 @@ object WorkFields {
      */
     const val SPAM_PROTECTION = "spamProtection"
     /**
+     * "Screen unknown callers all the time" (Meka 2026-10-22, after a scam caller claiming to be the police rang through
+     * outside work hours): Bool, last writer wins; **absent = off**. On, with the call assistant on, numbers nobody knows
+     * go to the assistant in the evening and at weekends too ([CallScreeningRules], [ScreenUnknownRules]). Added 2026-10-22.
+     */
+    const val SCREEN_UNKNOWN_ALWAYS = "screenUnknownAlways"
+    /**
      * Work-from-home days (V1, requests slice 4: Add on a "Work from home · Thu 15 Oct" card): local epoch days,
      * comma-separated, ascending, past days dropped on each write. Text, last writer wins. Added 2026-10-09.
      */
@@ -281,6 +287,8 @@ data class WorkModeState(
     val callAssistant: Boolean = false,
     /** Spam protection ([SpamProtectionRules]): on unless turned off in Advanced; independent of the call assistant. */
     val spamProtection: Boolean = true,
+    /** "Screen unknown callers all the time" ([ScreenUnknownRules]): off until Meka turns it on. */
+    val screenUnknownAlways: Boolean = false,
     /** How long callers' recordings are kept ([VoiceRecordingRules.keepDays]): 7 or 0 (don't keep). */
     val recordingDays: Int = VoiceRecordingRules.DEFAULT_KEEP_DAYS,
     /** The assistant is paused for want of credit ([CallCreditRules]): calls ring as usual, the Work screen says why. */
@@ -529,7 +537,7 @@ class WorkMode(
     /** [epochDay] is today's local date; with it, bank holidays are days off. */
     fun state(clock: LocalClock, epochDay: Long? = null): WorkModeState {
         val base = WorkModeRules.state(schedule(), currentSwitch(), clock, nowMs(), epochDay, workHolidays())
-            .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), recordingDays = recordingDays(), commute = commute())
+            .copy(callAssistant = callAssistant(), spamProtection = spamProtection(), screenUnknownAlways = screenUnknownAlways(), recordingDays = recordingDays(), commute = commute())
         if (epochDay == null) return base
         val hours = WorkHours.of(base, holidays(), epochDay, homeDays(epochDay), leaveDays(), away())
         return base.copy(commuteDays = CommuteRules.dayRows(hours, epochDay))
@@ -573,6 +581,17 @@ class WorkMode(
     fun setSpamProtection(on: Boolean): Boolean {
         if (spamProtection() == on) return false
         replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.SPAM_PROTECTION to on.fv()))
+        return true
+    }
+
+    /** "Screen unknown callers all the time" (synced); absent reads as off. */
+    fun screenUnknownAlways(): Boolean =
+        replica.entity(EntityTypes.CONTEXT_MODE, ENTITY_ID)?.get(WorkFields.SCREEN_UNKNOWN_ALWAYS)?.boolOrNull == true
+
+    /** Turns "Screen unknown callers all the time" on or off, synced; false when nothing changed. */
+    fun setScreenUnknownAlways(on: Boolean): Boolean {
+        if (screenUnknownAlways() == on) return false
+        replica.commitLocal(EntityTypes.CONTEXT_MODE, ENTITY_ID, mapOf(WorkFields.SCREEN_UNKNOWN_ALWAYS to on.fv()))
         return true
     }
 

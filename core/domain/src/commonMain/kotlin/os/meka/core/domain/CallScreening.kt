@@ -56,6 +56,11 @@ enum class CallReason(val label: String) {
      * ([PutThroughRules]), so it always rings, at work too. Added 2026-10-17.
      */
     ASSISTANT("Your call assistant putting a caller through"),
+    /**
+     * "Screen unknown callers all the time" ([ScreenUnknownRules], 2026-10-22): a number nobody knows, outside work,
+     * went to the assistant instead of ringing.
+     */
+    UNKNOWN_ALWAYS("Unknown number · screened all the time"),
 }
 
 /**
@@ -183,8 +188,14 @@ object CallScreeningRules {
          * slice 1 (to the assistant with the switch on, else it rings).
          */
         spamProtection: Boolean = true,
+        /**
+         * "Screen unknown callers all the time" ([ScreenUnknownRules]): with the assistant on, outside work a number
+         * that isn't family, always-notify, a contact, someone Meka called lately or the household goes to the
+         * assistant as at work; a second call within 3 minutes still rings and emergency numbers are never screened.
+         */
+        screenUnknownAlways: Boolean = false,
     ): CallDecision {
-        val d = decideUnpaused(switchedOn, atWork, number, lists, recent, nowMs, blocked, signals, suspected, spamProtection)
+        val d = decideUnpaused(switchedOn, atWork, number, lists, recent, nowMs, blocked, signals, suspected, spamProtection, screenUnknownAlways)
         return if (paused && d.verdict == CallVerdict.DECLINE) CallDecision(CallVerdict.RING, CallReason.PAUSED, d.callerKey, d.listedName) else d
     }
 
@@ -199,6 +210,7 @@ object CallScreeningRules {
         signals: CallSignals,
         suspected: Set<String>,
         spamProtection: Boolean,
+        screenUnknownAlways: Boolean,
     ): CallDecision {
         val key = callerKey(number)
         val listed = number?.let { lists.nameForNumber(it) }
@@ -220,6 +232,7 @@ object CallScreeningRules {
                 CallDecision(CallVerdict.DECLINE, CallReason.REPORTED_NUISANCE, key)
             !trusted && key != WITHHELD && key in suspected -> CallDecision(CallVerdict.DECLINE, CallReason.SUSPECTED_SPAM, key)
             !trusted && key == WITHHELD && signals.quietHours && !repeat -> CallDecision(CallVerdict.DECLINE, CallReason.WITHHELD_QUIET, key)
+            !atWork && screenUnknownAlways && !trusted && !repeat -> CallDecision(CallVerdict.DECLINE, CallReason.UNKNOWN_ALWAYS, key)
             !atWork -> CallDecision(CallVerdict.RING, CallReason.OFF_WORK, key, listed)
             listed != null && lists.family.contains(listed) -> CallDecision(CallVerdict.RING, CallReason.FAMILY, key, listed)
             listed != null -> CallDecision(CallVerdict.RING, CallReason.ALWAYS_RING, key, listed)
@@ -249,11 +262,22 @@ object CallScreeningRules {
      * The Work screen's line for the assistant. [screeningAllowed] is whether Android lets MEKA screen calls (the
      * Fold's call-screening role; the Mac passes null and only shows the switch).
      */
-    fun statusLine(switchedOn: Boolean, atWork: Boolean, screeningAllowed: Boolean?, paused: Boolean = false): String = when {
+    fun statusLine(switchedOn: Boolean, atWork: Boolean, screeningAllowed: Boolean?, paused: Boolean = false): String =
+        statusLine(switchedOn, atWork, screeningAllowed, paused, screenUnknownAlways = false)
+
+    /** As above, with "Screen unknown callers all the time" ([ScreenUnknownRules]) said off work when it's on. */
+    fun statusLine(
+        switchedOn: Boolean,
+        atWork: Boolean,
+        screeningAllowed: Boolean?,
+        paused: Boolean,
+        screenUnknownAlways: Boolean,
+    ): String = when {
         !switchedOn -> "Off · calls ring as usual"
         screeningAllowed == false -> "On · allow Navilife to screen calls on the Fold"
         paused -> "Paused · Twilio credit · calls ring as usual until it's topped up"
         atWork -> "Screening calls · family, always-notify and repeat callers ring"
+        screenUnknownAlways -> "Screening unknown numbers · people you know ring as usual"
         else -> "On at work · calls ring as usual now · spam goes to the assistant"
     }
 
@@ -270,8 +294,36 @@ object CallScreeningRules {
             CallReason.REPORTED_NUISANCE -> "Sent a call from $who to the assistant" to "People online report the number for nuisance or sales calls"
             CallReason.LIKELY_SPAM -> "Sent a likely spam call from $who to the assistant" to "The network couldn't verify the caller's number"
             CallReason.SUSPECTED_SPAM -> "Sent a call from $who to the assistant" to "It is on Suspected spam: Navilife's AI thought their last message sounded like a scam"
+            CallReason.UNKNOWN_ALWAYS ->
+                (if (decision.callerKey == WITHHELD) "Sent a withheld call to the assistant" else "Sent a call from $who to the assistant") to
+                    ScreenUnknownRules.ACTIVITY_WHY
             CallReason.WITHHELD_QUIET -> "Sent a withheld call to the assistant" to "Withheld numbers don't ring in quiet hours (a second call within 3 minutes does)"
             else -> null
         }
     }
+}
+
+/**
+ * "Screen unknown callers all the time" (Meka 2026-10-22 19:49: a scam caller pretending to be the police rang through
+ * outside work hours, when unknown numbers ring). Off until Meka turns it on in Work mode → Call assistant. The
+ * decision itself is in [CallScreeningRules.decide]; this is the copy both apps show.
+ */
+object ScreenUnknownRules {
+    const val TITLE = "Screen unknown callers all the time"
+
+    /** The line under the switch: what it does now, or why it can't yet. */
+    fun line(on: Boolean, assistantOn: Boolean): String = when {
+        !assistantOn -> "Turn the call assistant on first · then unknown numbers can go to it evenings and weekends too"
+        on -> "On · numbers you don't know go to the assistant evenings and weekends too"
+        else -> "Off · outside work every call rings"
+    }
+
+    /** The trade-off, said once under the switch. */
+    const val TRADE_OFF =
+        "Family, your always-notify list, your contacts and anyone you called lately still ring, and so does anyone who " +
+            "calls again within 3 minutes. Emergency numbers are never screened. The trade-off: a real call from a number " +
+            "you don't know (a delivery driver, a new surgery, a tradesperson) goes to the assistant, which takes a message."
+
+    /** Activity's "why" for a call it sent to the assistant. */
+    const val ACTIVITY_WHY = "You don't know the number, and Screen unknown callers all the time is on"
 }

@@ -1570,6 +1570,8 @@ final class CoreModel {
     func setCallAssistant(_ on: Bool) { MekaHaptics.tick(); run { try await $0.setCallAssistant(on: on) } }
     /// Spam protection's switch (spam calls still ring, slice 1): always on unless turned off in Advanced. Synced.
     func setSpamProtection(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setSpamProtection(on: on) } }
+    /// "Screen unknown callers all the time", synced with the Fold (which does the screening).
+    func setScreenUnknownAlways(_ on: Bool) { MekaHaptics.tick(); run { _ = try await $0.setScreenUnknownAlways(on: on) } }
     /// "Keep callers' recordings" (call assistant polish 8c): 7 or 30 days, or 0 for don't keep. Synced; the server
     /// deletes older recordings at once. Only an Int32 crosses to the core.
     func setRecordingDays(_ days: Int) {

@@ -342,4 +342,22 @@ class CallSpamFacadeTest {
         c.blockCaller("07700 900888", null)
         assertTrue(c.blockedCallers.value.stopped.isEmpty())
     }
+
+    @Test
+    fun screenUnknownCallersAllTheTimeSendsAWeekendStrangerToTheAssistant() = runTest {
+        val c = core() // Saturday morning: off work
+        c.setCallAssistant(true)
+        assertEquals(CallReason.OFF_WORK, c.screenIncomingCall("01632 960321", lists, emptyList(), CallSignals.NONE).reason)
+        assertFalse(c.workMode.value.screenUnknownAlways)
+        assertTrue(c.setScreenUnknownAlways(true))
+        assertTrue(c.workMode.value.screenUnknownAlways)
+        val d = c.screenIncomingCall("01632 960321", lists, emptyList(), CallSignals.NONE)
+        assertEquals(CallVerdict.DECLINE, d.verdict)
+        assertEquals(CallReason.UNKNOWN_ALWAYS, d.reason)
+        // Family still rings.
+        assertTrue(c.screenIncomingCall("+447700900111", lists, emptyList(), CallSignals.NONE).rings)
+        val row = c.activityView.value.days.flatMap { it.rows }.single { it.kind == ActivityKind.SCREENED }
+        assertEquals("Sent a call from 01632 960321 to the assistant", row.summary)
+        assertFalse(c.setScreenUnknownAlways(true))
+    }
 }

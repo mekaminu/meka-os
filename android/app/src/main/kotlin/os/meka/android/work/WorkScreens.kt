@@ -79,6 +79,7 @@ import os.meka.core.domain.AfterWorkSummary
 import os.meka.core.domain.BlockedCallerRules
 import os.meka.core.domain.BlockedCallersView
 import os.meka.core.domain.CallScreeningRules
+import os.meka.core.domain.ScreenUnknownRules
 import os.meka.core.domain.ContactNumbers
 import os.meka.core.domain.HeldPreview
 import os.meka.core.domain.HeldPreviewRow
@@ -237,7 +238,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.m))
         Label("Call assistant", 4)
         Crossfade(
-            CallScreeningRules.statusLine(work.callAssistant, work.atWork, screening, work.callAssistantPaused),
+            CallScreeningRules.statusLine(work.callAssistant, work.atWork, screening, work.callAssistantPaused, work.screenUnknownAlways),
             animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "call-line",
         ) { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))
@@ -262,6 +263,9 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         )
         // The number is About you's (rule 13); without it the line says where to add it.
         Text(CallScreeningRules.testLine(), style = MekaType.caption, color = Meka.colors.textSecondary)
+        ScreenUnknownRow(work.screenUnknownAlways, work.callAssistant, Modifier.appear(rememberAppearance(4))) {
+            haptics.tick(); scope.launch { core.setScreenUnknownAlways(!work.screenUnknownAlways) }
+        }
         Spacer(Modifier.height(MekaSpace.m))
         RecordingKeepSection(work.recordingDays, Modifier.appear(rememberAppearance(4))) { d -> scope.launch { core.setRecordingDays(d) } }
         Spacer(Modifier.height(MekaSpace.m))
@@ -700,4 +704,33 @@ internal fun reportScamCall(context: Context, number: String) {
     val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + BlockedCallerRules.REPORT_TO))
         .putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     runCatching { context.startActivity(intent) }
+}
+
+/**
+ * "Screen unknown callers all the time" (Meka 2026-10-22): a switch row under the call assistant; the On/Off pill
+ * fills gold on the appear spring and the line under it cross-fades. Needs the call assistant on to do anything.
+ */
+@Composable
+internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modifier = Modifier, onToggle: () -> Unit) {
+    val reduced = Meka.reducedMotion
+    val fill by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "screen-unknown")
+    Column(modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+        Row(
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
+                .semantics { contentDescription = ScreenUnknownRules.TITLE; selected = on }
+                .minTouch().padding(vertical = MekaSpace.xs),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(ScreenUnknownRules.TITLE, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            Text(
+                if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
+                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+            )
+        }
+        Crossfade(ScreenUnknownRules.line(on, assistantOn), animationSpec = MekaMotion.appear(reduced), label = "screen-unknown-line") { line ->
+            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        }
+        Text(ScreenUnknownRules.TRADE_OFF, style = MekaType.caption, color = Meka.colors.textTertiary)
+    }
 }
