@@ -152,7 +152,7 @@ fun AppointmentsPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         item(key = "note") {
-            Text(AppointmentRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(AppointmentRules.NOTE_SHOWN, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }

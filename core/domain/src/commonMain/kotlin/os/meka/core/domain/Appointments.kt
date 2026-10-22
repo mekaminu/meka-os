@@ -165,6 +165,8 @@ object AppointmentRules {
     const val HINT = "Dentist every 6 months, last 12 Apr"
     const val EMPTY_SUMMARY = "No appointments yet · add the ones you keep up with"
     const val NOTE = "Type what it is, how often, and when you last went: “Haircut every 6 weeks, last 26 Sep”. When you've booked one: “Dentist booked Tue 20 Oct 9:30”. Navilife nudges you when one comes due; it never books or calls anyone."
+    /** [NOTE] as the pane draws it: its example dates never split across lines (quality gate slice 17). */
+    val NOTE_SHOWN = DateGlue.kept(NOTE)
     const val NO_TITLE = "Start with what it is: “Dentist every 6 months, last 12 Apr”"
     const val NO_INTERVAL = "How often? “Physio every 3 months”"
     const val BAD_LAST = "Couldn't read when you last went · try “last 12 Apr” or “last March”"

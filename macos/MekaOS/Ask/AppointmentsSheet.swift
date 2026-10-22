@@ -80,7 +80,7 @@ struct AppointmentsSheet: View {
             }
             .frame(maxHeight: 420)
             .staggeredAppear(3)
-            Text(AppointmentRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(AppointmentRules.shared.NOTE_SHOWN).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()

@@ -230,6 +230,7 @@ class AppointmentsTest {
         val row = AppointmentRules.row(optician, today)
         assertEquals("Every 2 years · last went 1${g}Mar${g}2025", row.line)
         assertEquals("Next due Mar${g}2027", row.status)
+        assertTrue("Tue${g}20${g}Oct${g}9:30" in AppointmentRules.NOTE_SHOWN)
         // What Ask and the spoken nudge read keeps plain spaces.
         assertEquals("Every 2 years · last went 1 Mar 2025", AppointmentRules.line(optician, today))
     }
