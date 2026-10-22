@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
@@ -495,6 +496,9 @@ internal fun MoreRow(
     }
 }
 
+/** The box round a Life tile's icon, so the quality gate's shots can check it sits on the name's first line. */
+internal const val TILE_ICON_TAG = "life-tile-icon"
+
 /**
  * A Life tile (Fold review 2026-10-12, item 7): its icon, its name and its live line ("Black bin out tonight", lit in
  * the accent when it's about today). Half the width; the name travels into the pane it opens. The line cross-fades as
@@ -521,8 +525,13 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
         val d = item.destination
         val move = if (d != null) Modifier.sharedPlace(SharedMotion.placeKey(d, PlaceVia.MORE))
         else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-            item.tile?.let { LifeIcon(it, Meka.colors.accent, size = 18.dp) }
+        // The quality gate's Ask re-shot (2026-10-22): a name on two lines ("Goals and / habits") keeps its icon on the
+        // first line, not centred between the two; the icon sits in a box one line of the name tall.
+        Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            item.tile?.let {
+                val lineDp = with(androidx.compose.ui.platform.LocalDensity.current) { MekaType.itemMeta.lineHeight.toDp() }
+                Box(Modifier.height(lineDp).testTag(TILE_ICON_TAG), contentAlignment = Alignment.Center) { LifeIcon(it, Meka.colors.accent, size = 18.dp) }
+            }
             Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = os.meka.core.domain.LifeTileRules.NAME_LINES,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = move)
         }

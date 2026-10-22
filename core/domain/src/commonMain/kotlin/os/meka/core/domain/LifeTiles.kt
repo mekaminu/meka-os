@@ -173,6 +173,16 @@ object LifeTileRules {
      */
     const val NAME_LINES = 2
 
+    /**
+     * The "and [n] more" tail of a tile's line, " · +2", held to the word before it with no-break spaces (the quality
+     * gate's Ask re-shot, 2026-10-22: on the cover screen People read "Alex · waiting for 1 ·" with "+1" alone on the
+     * next line). A line that must wrap now breaks earlier and keeps "1 · +1" together.
+     */
+    fun more(n: Int): String = "$GLUE·$GLUE+$n"
+
+    /** A no-break space: Compose and SwiftUI never break a line there. */
+    const val GLUE = "\u00A0"
+
     fun lines(i: LifeTileInputs): LifeLines {
         val m = linkedMapOf<LifeTile, LifeTileLine>()
         fun put(t: LifeTile, text: String?, lit: Boolean = false) {
@@ -189,7 +199,7 @@ object LifeTileRules {
             else "${i.habitsDone} of ${i.habits} habit${if (i.habits == 1) "" else "s"} done today",
         )
         if (i.personName != null) {
-            val more = if (i.peopleCount > 1) " · +${i.peopleCount - 1}" else ""
+            val more = if (i.peopleCount > 1) more(i.peopleCount - 1) else ""
             put(LifeTile.PEOPLE, firstName(i.personName) + (i.personLine?.let { " · " + lowerFirst(it) } ?: "") + more, lit = i.personLit)
         }
         put(LifeTile.PEOPLE, i.peopleSummary)
@@ -208,7 +218,7 @@ object LifeTileRules {
         else put(LifeTile.SCHOOL, i.schoolSummary)
         i.kidsLine?.let { put(LifeTile.KIDS, it.text, lit = it.lit) }
         if (i.appointmentDueTitle != null) {
-            val more = if (i.appointmentsDue > 1) " · +${i.appointmentsDue - 1}" else ""
+            val more = if (i.appointmentsDue > 1) more(i.appointmentsDue - 1) else ""
             put(LifeTile.APPOINTMENTS, "${i.appointmentDueTitle} due$more", lit = true)
         }
         put(LifeTile.APPOINTMENTS, i.appointmentsSummary, lit = i.appointmentsDue > 0)

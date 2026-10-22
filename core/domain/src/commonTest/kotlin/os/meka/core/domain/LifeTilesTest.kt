@@ -75,7 +75,7 @@ class LifeTilesTest {
         )
         assertEquals(LifeTileLine("11 days left", false), l.of(LifeTile.LEAVE))
         assertEquals(LifeTileLine("Half term in 14 days", false), l.of(LifeTile.SCHOOL))
-        assertEquals(LifeTileLine("Dentist due · +1", true), l.of(LifeTile.APPOINTMENTS))
+        assertEquals(LifeTileLine("Dentist due\u00A0·\u00A0+1", true), l.of(LifeTile.APPOINTMENTS))
         assertEquals("Alex's birthday · In 24 days", l.of(LifeTile.GIFTS)?.text)
         assertEquals("Alex · last message Tue 13:02 · WhatsApp", l.of(LifeTile.PEOPLE)?.text)
         assertEquals("Half term tomorrow", LifeTileRules.schoolLine("Half term", 1))
@@ -83,8 +83,18 @@ class LifeTilesTest {
         // Over the allowance keeps the whole line.
         assertEquals("27 days booked · 2 over your 25", LifeTileRules.lines(LifeTileInputs(leaveSummary = "27 days booked · 2 over your 25")).of(LifeTile.LEAVE)?.text)
         // Two people: the first one named, the rest counted; an acronym keeps its capitals.
-        assertEquals("Alex · you promised 2 · +2",
+        assertEquals("Alex · you promised 2\u00A0·\u00A0+2",
             LifeTileRules.lines(LifeTileInputs(personName = "Alex", personLine = "You promised 2", peopleCount = 3)).of(LifeTile.PEOPLE)?.text)
+    }
+
+    @Test
+    fun theMoreTailNeverWrapsAloneOntoItsOwnLine() {
+        // The quality gate's Ask re-shot (2026-10-22): "Alex · waiting for 1 ·" then "+1" alone on the cover screen.
+        val line = LifeTileRules.lines(LifeTileInputs(personName = "Alex", personLine = "Waiting for 1", peopleCount = 2)).of(LifeTile.PEOPLE)!!.text
+        assertEquals("Alex · waiting for 1\u00A0·\u00A0+1", line)
+        // No ordinary space is left between the last word and "+1", so a line break can't fall there.
+        assertEquals(false, line.substringAfter("waiting for 1").contains(' '))
+        assertEquals("\u00A0·\u00A0+3", LifeTileRules.more(3))
     }
 
     @Test

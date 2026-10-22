@@ -175,4 +175,25 @@ object ScreenShots {
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         if (broken.isNotEmpty()) fail("$name breaks a word across lines:\n" + broken.joinToString("\n") { "- \"$it\"" })
     }
+
+    /**
+     * The quality gate's "an icon on its name's first line" (Ask's re-shot, 2026-10-22: the Goals tile's icon sat centred
+     * beside its two-line name "Goals and / habits"): fails unless the icon tagged [tag] just left of [text] has its
+     * middle within the text's first line.
+     */
+    fun assertIconOnFirstLine(compose: ComposeContentTestRule, name: String, tag: String, text: String) {
+        val node = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
+            ?: fail("$name: \"$text\" isn't on screen")
+        val t = node.boundsInRoot
+        val results = mutableListOf<TextLayoutResult>()
+        node.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+        val firstLineBottom = t.top + (results.firstOrNull()?.getLineBottom(0) ?: t.height)
+        val icon = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+            .filter { it.right <= t.left + 1f && it.bottom >= t.top && it.top <= t.bottom }
+            .maxByOrNull { it.right } ?: fail("$name: no $tag beside \"$text\"")
+        val middle = (icon.top + icon.bottom) / 2
+        if (middle < t.top - 1f || middle > firstLineBottom + 1f) {
+            fail("$name: the icon beside \"$text\" sits at $middle px, outside its first line (${t.top}–$firstLineBottom px)")
+        }
+    }
 }

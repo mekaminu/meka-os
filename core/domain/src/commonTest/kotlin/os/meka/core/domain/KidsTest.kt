@@ -80,7 +80,7 @@ class KidsTest {
             "c-alex" to KidRecord("c-alex", mapOf(KidSize.JUMPER to "26\""), ms(today)),
             "c-sam" to KidRecord("c-sam", mapOf(KidSize.SHOES to "2"), ms(today)),
         ), today, cal)
-        assertEquals("Alex · school jumper 26\" · +1", v.tile?.text)
+        assertEquals("Alex · school jumper 26\"\u00A0·\u00A0+1", v.tile?.text)
         assertEquals("Sizes for Alex and Sam · checked every 3 months", v.summary)
         assertEquals("Alex's sizes", LifeTileRules.lines(LifeTileInputs(kidsLine = LifeTileLine("Alex's sizes", false))).of(LifeTile.KIDS)?.text)
         assertTrue(LifeTileRules.lines(LifeTileInputs()).needsSetUp(LifeTile.KIDS))

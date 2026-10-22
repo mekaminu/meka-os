@@ -234,13 +234,13 @@ object KidsRules {
             val more = cards.sumOf { c -> c.fees.count { it.due } } - 1
             return LifeTileLine("$name's ${f.title} · " + f.line.substringAfterLast(" · ").let { w ->
                 f.line.split(" · ").firstOrNull { it.startsWith("£") }?.let { "$it $w" } ?: w
-            } + if (more > 0) " · +$more" else "", true)
+            } + if (more > 0) LifeTileRules.more(more) else "", true)
         }
         if (dueNames.isNotEmpty()) return LifeTileLine("Check ${possessive(dueNames)} sizes", true)
         // Slice 5: on Sunday, pocket money still to pay: "Alex's pocket money · £8 to pay".
         cards.filter { it.money.lit }.let { owed ->
             if (owed.isNotEmpty()) return LifeTileLine(
-                "${owed[0].name}'s pocket money · ${KidChoreRules.fmt(owed[0].money.toPayPence)} to pay" + if (owed.size > 1) " · +${owed.size - 1}" else "", true,
+                "${owed[0].name}'s pocket money · ${KidChoreRules.fmt(owed[0].money.toPayPence)} to pay" + if (owed.size > 1) LifeTileRules.more(owed.size - 1) else "", true,
             )
         }
         val first = cards.firstOrNull { it.sizesLine != null } ?: return cards.flatMap { c -> c.fees.map { c.name to it } }
@@ -248,7 +248,7 @@ object KidsRules {
         val shoes = first.sizes.firstOrNull { it.size == KidSize.SHOES.key }?.value
         val size = if (shoes != null) "shoes $shoes" else first.sizes.first { it.value != null }.let { "${it.label.lowercase()} ${it.value}" }
         val more = cards.count { it.sizesLine != null } - 1
-        return LifeTileLine("${first.name} · $size" + if (more > 0) " · +$more" else "", false)
+        return LifeTileLine("${first.name} · $size" + if (more > 0) LifeTileRules.more(more) else "", false)
     }
 
     // ---- Slice 2: club fees ----

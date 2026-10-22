@@ -360,8 +360,9 @@ private struct LifeTileView: View {
     var body: some View {
         Button(action: { MekaHaptics.tick(); action() }) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                // Ask polish, slice 1: compact — the symbol beside the name, about 30% shorter.
-                HStack(spacing: MekaSpace.xs) {
+                // Ask polish, slice 1: compact — the symbol beside the name, about 30% shorter. The quality gate's
+                // Ask re-shot (2026-10-22): a name on two lines keeps its symbol on the first line, not centred.
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                     if let symbol = item.symbol {
                         Image(systemName: symbol).font(MekaType.caption).foregroundStyle(palette.accent)
                             .accessibilityHidden(true)

@@ -68,7 +68,7 @@ class AskScreensTest {
                 core.addShopping("Washing-up liquid")
                 core.addHabit("Read 20 pages", 5, HabitTiming.EVENING, 20, null)
                 core.addMeal("Fish pie")
-                core.addErrand("Return the parcel to the post office")
+                core.addErrand("Post office: return the parcel")
                 core.addOccasion("Sam's birthday 3 Nov")
                 core.addTrip("Lisbon 12 Nov to 15 Nov")
                 core.addRenewal("Home insurance", ObligationKind.INSURANCE, core.todayEpochDay() + 60, RenewalRepeat.YEARLY, null, null)
@@ -96,7 +96,12 @@ class AskScreensTest {
             // Nothing set up: one line says so over the open set-up group, never an empty grid.
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, LifeTileRules.WELCOME)
             Fill.ONE -> ScreenShots.assertShows(compose, name, "1 to buy")
-            Fill.MANY -> ScreenShots.assertShows(compose, name, "3 to buy")
+            Fill.MANY -> {
+                ScreenShots.assertShows(compose, name, "3 to buy")
+                // Slice 8 (the Ask re-shot's findings): the errand counts, and a two-line name keeps its icon on top.
+                ScreenShots.assertShows(compose, name, "1 errand at")
+                ScreenShots.assertIconOnFirstLine(compose, name, os.meka.android.ask.TILE_ICON_TAG, "Goals and habits")
+            }
         }
     }
 
