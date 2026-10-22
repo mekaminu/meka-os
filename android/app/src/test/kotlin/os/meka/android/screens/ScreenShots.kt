@@ -155,4 +155,24 @@ object ScreenShots {
         val gapDp = (box.bottom - bottom) / compose.density.density
         if (gapDp > maxGapDp) fail("$name: $tag has ${gapDp.toInt()} dp of empty space under \"$lastText\" (at most ${maxGapDp.toInt()} dp)")
     }
+
+    /**
+     * The quality gate's "no word broken in two" (Ask's shots, 2026-10-22: a tile's name may wrap to two lines, which
+     * must never split one word such as "Appointments" across them): fails when a one-word text takes more than a line.
+     */
+    fun assertNoBrokenWords(compose: ComposeContentTestRule, name: String) {
+        val broken = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null && text.isNotBlank() && text.trim().none { it.isWhitespace() }) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                if ((results.firstOrNull()?.lineCount ?: 1) > 1) broken += text
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (broken.isNotEmpty()) fail("$name breaks a word across lines:\n" + broken.joinToString("\n") { "- \"$it\"" })
+    }
 }

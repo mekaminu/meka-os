@@ -366,7 +366,8 @@ private struct LifeTileView: View {
                         Image(systemName: symbol).font(MekaType.caption).foregroundStyle(palette.accent)
                             .accessibilityHidden(true)
                     }
-                    Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                        .lineLimit(Int(LifeTileRules.shared.NAME_LINES))
                 }
                 Text(text)
                     .font(MekaType.caption)

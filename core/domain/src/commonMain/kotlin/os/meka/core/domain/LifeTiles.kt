@@ -167,6 +167,12 @@ object LifeTileRules {
     /** Lines clamp to this many on both apps, so every tile is the same height. */
     const val MAX_LINES = 2
 
+    /**
+     * A tile's name wraps to at most this many lines (the quality gate's Ask shots, 2026-10-22: on the cover screen's
+     * two columns "Goals and habits" was cut to "Goals and…" on one line); a row's tiles share the tallest's height.
+     */
+    const val NAME_LINES = 2
+
     fun lines(i: LifeTileInputs): LifeLines {
         val m = linkedMapOf<LifeTile, LifeTileLine>()
         fun put(t: LifeTile, text: String?, lit: Boolean = false) {

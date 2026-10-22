@@ -90,6 +90,7 @@ class AskScreensTest {
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("ask", name))
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertShows(compose, name, "Ask")
         when (fill) {
             // Nothing set up: one line says so over the open set-up group, never an empty grid.

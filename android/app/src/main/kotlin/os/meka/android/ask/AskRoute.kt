@@ -523,7 +523,7 @@ private fun LifeTileCard(item: MoreItem, line: os.meka.core.domain.LifeTileLine,
         else Modifier.sharedTitle(SharedMotion.paneKey(item), visible = !paneOpen)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             item.tile?.let { LifeIcon(it, Meka.colors.accent, size = 18.dp) }
-            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
+            Text(item.label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = os.meka.core.domain.LifeTileRules.NAME_LINES,
                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = move)
         }
         AnimatedContent(
