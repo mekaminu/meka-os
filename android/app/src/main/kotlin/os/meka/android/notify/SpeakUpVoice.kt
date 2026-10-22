@@ -67,6 +67,25 @@ class SpeakUpVoice(private val context: Context, private val app: MekaApplicatio
         }
     }
 
+    /**
+     * Scam call fix, slice 2: an unknown caller is ringing through. Ada says [line] once, only into headphones or
+     * earbuds ([os.meka.core.domain.InCallWarningRules.speak]), never out of the speaker and never over a Talk
+     * conversation; no chime (the ringtone is already playing).
+     */
+    fun sayCallWarning(line: String) {
+        val headphones = TalkBargeIn.output(context) == os.meka.core.domain.BargeInOutput.HEADPHONES
+        if (!os.meka.core.domain.InCallWarningRules.speak(headphones)) return
+        if (app.talkPhase.value != TalkPhase.ENDED) return
+        main.launch {
+            _speaking.value = true
+            val id = duckOthers()
+            speaker.say(line) {
+                _speaking.value = false
+                if (id == focusLine) giveBackFocus()
+            }
+        }
+    }
+
     private fun place(): SpeakPlace {
         val minute = java.util.Calendar.getInstance().let { it.get(java.util.Calendar.HOUR_OF_DAY) * 60 + it.get(java.util.Calendar.MINUTE) }
         return SpeakUpRules.place(TalkBargeIn.output(context), bedsideShowing && app.isOnScreen, minute, inCar = inCar(context))

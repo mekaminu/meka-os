@@ -231,6 +231,9 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
         if (!toAssistant && entry == null && UnknownCallNotice.permissionToRead(ctx) && runAttemptCount + 1 < UnknownCallRules.MAX_CHECKS) {
             return Result.retry()
         }
+        // The call is over (its log entry is there): the in-call scam warning goes (scam call fix, slice 2). Without
+        // the call-log permission it can't be told, so the warning's own timeout takes it away.
+        if (entry != null) InCallWarningNotice.clear(ctx, number)
         val app = ctx as MekaApplication
         val outcome = UnknownCallRules.outcomeOf(entry?.first, entry?.second ?: 0L, toAssistant)
         val networkName = inputData.getString(UnknownCallNotice.KEY_NAME)

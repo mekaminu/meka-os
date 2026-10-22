@@ -19,6 +19,7 @@ import os.meka.android.MekaApplication
 import os.meka.core.domain.CallDecision
 import os.meka.core.domain.CallScreeningRules
 import os.meka.core.domain.CallerNames
+import os.meka.core.domain.InCallWarningRules
 import os.meka.core.domain.CallSignals
 import os.meka.core.domain.CallVerdict
 import os.meka.core.domain.NumberLookupRules
@@ -82,6 +83,18 @@ class MekaCallScreeningService : CallScreeningService() {
                 CallVerdict.DECLINE -> decline(details)
                 CallVerdict.BLOCK -> block(details)
                 else -> allow(details)
+            }
+            // Scam call fix, slice 2: an unknown caller ringing through (or one claiming to be the police, a bank…)
+            // gets the warning over the call screen and on the lock screen, and Ada's line in his earbuds.
+            decision?.let { s ->
+                runCatching {
+                    val key = s.number?.let { People.key(it) }
+                    val own = key != null && CallerLookup.ownNumbers(this@MekaCallScreeningService).any { People.key(it) == key }
+                    if (InCallWarningRules.shouldWarn(s.decision, s.signals, own)) {
+                        val withheld = s.decision.callerKey == CallScreeningRules.WITHHELD
+                        InCallWarningNotice.show(this@MekaCallScreeningService, s.number, InCallWarningRules.warning(s.signals, withheld))
+                    }
+                }
             }
             // Spam calls still ring, slice 2: every screened call goes in the diagnosis log (a salted tag, never the
             // number), so a build run can see why a call rang; then the report is sent when due.

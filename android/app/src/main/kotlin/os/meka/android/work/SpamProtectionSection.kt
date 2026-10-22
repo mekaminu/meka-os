@@ -104,6 +104,8 @@ fun SpamProtectionSection(core: MekaCore, index: Int) {
         }
         Text(SpamProtectionRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
         Text(os.meka.core.domain.NumberLookupRules.HINT, style = MekaType.caption, color = Meka.colors.textTertiary)
+        // Scam call fix, slice 2: the warning over the call screen when a stranger rings through.
+        Text(os.meka.core.domain.InCallWarningRules.SETTINGS_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
         Text(SpamProtectionRules.SYSTEM_LIST_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
         // Suspected spam (8b c): numbers MEKA's AI flagged from their message, waiting for Block or Not spam.
         AnimatedVisibility(blocked.suspects.isNotEmpty(), enter = enter, exit = exit) {

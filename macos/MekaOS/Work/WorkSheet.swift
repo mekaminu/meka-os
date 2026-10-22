@@ -284,6 +284,10 @@ struct WorkSheet: View {
             Text(SpamProtectionRules.shared.HINT)
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
+            // Scam call fix, slice 2: the Fold warns over the call screen when a stranger rings through.
+            Text(InCallWarningRules.shared.SETTINGS_LINE)
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
             // Spam-call lookup (2026-10-17): the Fold asks the server about unknown callers; the Mac says how.
             Text(NumberLookupRules.shared.HINT)
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
