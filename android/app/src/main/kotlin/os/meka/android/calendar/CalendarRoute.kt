@@ -440,7 +440,14 @@ private fun SectionHeader(s: AgendaSection, modifier: Modifier) {
             )
             s.subtitle?.let {
                 Spacer(Modifier.width(MekaSpace.xs))
-                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // The quality gate's Agenda shots (2026-10-22): on the cover screen "Thursday 22 October" beside the
+                // Work label was cut; a date that doesn't fit is said short ("Thu 22 Oct", core subtitleShort).
+                var short by remember(s.id, it) { mutableStateOf(false) }
+                Text(
+                    if (short) s.subtitleShort ?: it else it, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    onTextLayout = { r -> if (r.hasVisualOverflow && !short && s.subtitleShort != it) short = true },
+                )
             }
         }
         s.workLabel?.let { work ->

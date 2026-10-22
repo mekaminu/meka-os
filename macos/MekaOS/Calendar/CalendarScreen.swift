@@ -326,7 +326,13 @@ private struct AgendaSectionView: View {
                     .font(free ? MekaType.body : MekaType.itemTitle)
                     .foregroundStyle(free ? palette.textTertiary : palette.textPrimary)
                 if let sub = section.subtitle {
-                    Text(sub).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    // The quality gate's Agenda shots (2026-10-22): a date that doesn't fit beside the Work label is
+                    // said short ("Thu 22 Oct", core subtitleShort) rather than cut.
+                    ViewThatFits(in: .horizontal) {
+                        Text(sub).lineLimit(1)
+                        Text(section.subtitleShort ?? sub).lineLimit(1)
+                    }
+                    .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 // Work on the heading (Fold review 2026-10-12, polish 5): a thin bar and "Work 09:00–17:30" at its end,
                 // lit "Work until 17:30" while at work, instead of a band under every day; it cross-fades as it changes.

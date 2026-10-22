@@ -28,6 +28,17 @@ class CalendarAgendaTest {
         CalendarAgenda.build(tasks, events, now, cal)
 
     @Test
+    fun aNarrowHeadingShortensTodaysAndTomorrowsDateOnly() {
+        // The quality gate's Agenda shots (2026-10-22): "Thursday 22 October" was cut beside the Work label.
+        val v = build(events = listOf(ev("dentist", at(tue6 + 3, 9), at(tue6 + 3, 9, 30))))
+        assertEquals("Tue 6 Oct", v.sections[0].subtitleShort)
+        assertEquals("Wed 7 Oct", v.sections[1].subtitleShort)
+        // Other days' subtitles are already short: the same words.
+        assertEquals(v.sections[3].subtitle, v.sections[3].subtitleShort)
+        assertEquals("Nothing planned", v.sections[2].subtitleShort)
+    }
+
+    @Test
     fun todayAndTomorrowAlwaysShowAndEmptyDaysFoldIntoStretches() {
         val v = build(events = listOf(ev("dentist", at(tue6 + 3, 9), at(tue6 + 3, 9, 30))))
         assertEquals("Tuesday 6 October", v.todayLabel)

@@ -86,6 +86,13 @@ data class AgendaSection(
      * The quiet label beside the day's heading (Fold review 2026-10-12, polish 5: the Work row repeated under every day
      * read as an event): "Work 09:00–17:30", or "Work until 17:30" (lit) while at work today; null on a day off.
      */
+    /**
+     * The subtitle when the heading line is too narrow for it (the quality gate's Agenda shots, 2026-10-22: on the cover
+     * screen "Tomorrow  Thursday 22 October" beside the Work label was cut to "Thursday 22 Oct…"): Today's and Tomorrow's
+     * date as "Thu 22 Oct"; other subtitles are already short and stay as they are.
+     */
+    val subtitleShort: String? get() = if (subtitle != null && subtitle == CivilDate.longLabel(firstDay)) CivilDate.shortLabel(firstDay) else subtitle
+
     val workLabel: String? get() = if (workRunning && workTitle != null && workDetail != null) {
         "$workTitle until ${workDetail.substringAfter("until ")}"
     } else workLine
