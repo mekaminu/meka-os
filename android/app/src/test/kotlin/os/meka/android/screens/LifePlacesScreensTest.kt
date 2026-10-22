@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -141,10 +144,13 @@ class LifePlacesScreensTest {
                 if (fill == Fill.EMPTY && v.summary != ErrandRules.EMPTY_SUMMARY) fail("$name: \"${v.summary}\" with nothing in")
                 if (fill == Fill.MANY && v.places.size != 3) fail("$name: ${v.places.size} places for three")
                 // Slice 15: every row reads as a sentence ("Buy first-class stamps", not lower case).
-                v.places.flatMap { it.rows }.forEach { r ->
-                    ScreenShots.assertShows(compose, name, r.shown)
-                    if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case")
-                }
+                // (The inner screen is short: rows below it aren't composed, so the first is checked on screen and
+                // nothing on screen may read as a typed lower-case title.)
+                val rows = v.places.flatMap { it.rows }
+                rows.firstOrNull()?.let { ScreenShots.assertShows(compose, name, it.shown) }
+                rows.forEach { r -> if (r.shown.first().isLowerCase()) fail("$name: \"${r.shown}\" starts lower case") }
+                val raw = rows.map { it.title }.filter { it.first().isLowerCase() }.toSet()
+                ScreenShots.texts(compose).firstOrNull { it in raw }?.let { fail("$name: \"$it\" reads lower case") }
             }
             Place.DINNERS -> {
                 val v = core.mealsView.value
@@ -156,7 +162,15 @@ class LifePlacesScreensTest {
                     ScreenShots.texts(compose).firstOrNull { it != t && it.contains(t) }
                         ?.let { fail("$name: tonight's \"$t\" is said again in \"$it\"") }
                 }
-                ScreenShots.assertOneLine(compose, name, MealRules.ADD_HINT)
+                // The hint itself (exactly; the no-favourites line quotes it too). Below the fold on the inner screen.
+                val hints = compose.onAllNodes(hasText(MealRules.ADD_HINT, substring = false), useUnmergedTree = true).fetchSemanticsNodes()
+                if (hints.isEmpty() && fill != Fill.MANY) fail("$name: the add field's hint isn't on screen")
+                hints.forEach { n ->
+                    val results = mutableListOf<TextLayoutResult>()
+                    n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+                    val lines = results.firstOrNull()?.lineCount ?: 1
+                    if (lines != 1) fail("$name: the add field's hint takes $lines lines")
+                }
                 if (fill == Fill.MANY && v.week.count { it.mealId != null } != 3) fail("$name: the week doesn't hold its three dinners")
             }
         }
