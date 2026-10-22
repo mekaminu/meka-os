@@ -2861,3 +2861,4 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **New gate check:** `ScreenShots.assertHugs(tag, lastText, maxGapDp)` fails when a box reaches more than its padding and a little (32 dp) below its last line; the top card carries `NeedsYouStackRules.TOP_CARD_TAG`. The Needs you shots now also fail if a full stack doesn't show COMING UP and tomorrow's reminder.
 - Design check: no design file for Ask or Needs you; looks otherwise unchanged.
 - No server change, no migration. Mac checked nightly.
+- Landed deb64af + 000124f, CI run 1047 (39762431491) green, screens 3120fb7. Re-shot review: Needs you's top card ends just under its hint, COMING UP lists tomorrow's reminder; Ask's "Goals and habits" wraps whole. New, filed on the board: People's line "Alex · waiting for 1 · +1", the Goals icon centred beside a two-line name, Dinners' "Plan this week" after a meal was added.
