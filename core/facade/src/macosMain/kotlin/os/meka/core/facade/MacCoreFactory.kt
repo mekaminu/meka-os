@@ -78,6 +78,23 @@ object MacCoreFactory {
 
     private val http by lazy { HttpClient(Darwin) }
 
+    /** Ada's Live mode, slice 3: the Mac's own client for Google's Live WebSocket. */
+    private val liveHttp by lazy { HttpClient(Darwin) { install(io.ktor.client.plugins.websocket.WebSockets) } }
+
+    /**
+     * Ada's Live mode, slice 3: a Live conversation for the Mac's Talk, run in the core on the main thread (Swift moves
+     * only sound: base64 PCM in and out, and the loudness of each microphone chunk). One per Talk controller.
+     */
+    @OptIn(kotlin.time.ExperimentalTime::class)
+    fun liveConversation(core: MekaCore): LiveConversation {
+        val mark = kotlin.time.TimeSource.Monotonic.markNow()
+        return LiveConversation(
+            MekaLiveCore(core), KtorLiveSocket(liveHttp), kotlinx.coroutines.MainScope(),
+            { mark.elapsedNow().inWholeMilliseconds },
+            { kotlin.time.Clock.System.now().toEpochMilliseconds() },
+        )
+    }
+
     /** One-time enrolment from the Mac's Connect sheet. */
     suspend fun enrol(serverUrl: String, enrolCode: String, householdId: String, deviceId: String, deviceName: String): EnrolmentResult =
         Enrolment.enrol(http, serverUrl.trim().trimEnd('/'), enrolCode, householdId, deviceId, deviceName)

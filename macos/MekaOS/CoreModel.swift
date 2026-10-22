@@ -2517,6 +2517,59 @@ final class CoreModel {
         await refreshSpeed()
     }
 
+    // MARK: Ada's Live mode, slice 3 (the Mac)
+
+    /// The Live block in Ada's voice settings: the switch, its line (the month's meter or why Live can't run), what goes
+    /// to Google and the Live voices; nil until read.
+    private(set) var liveSettings: LiveSettingsView?
+
+    /// Reads the Live block (the server's meter with it; offline it says Live can't be reached).
+    func refreshLive() async {
+        guard let core else { liveSettings = nil; return }
+        liveSettings = try? await core.liveSettings()
+    }
+
+    /// Turns Live on or off on every device, lit at once (the voices show or fold away); the line follows from the
+    /// server's meter. A tick haptic. Only a Bool crosses.
+    func setLiveOn(_ on: Bool) {
+        guard let core, let now = liveSettings, now.on != on else { return }
+        MekaHaptics.tick()
+        liveSettings = now.doCopy(on: on, line: now.line, meterLine: now.meterLine, sharing: now.sharing, voices: now.voices, showVoices: on)
+        Task {
+            try? await core.setLiveOn(on: on)
+            await refreshLive()
+        }
+    }
+
+    /// Picks Ada's Live voice on every device, lit at once; a tick haptic. Only the name crosses.
+    func setLiveVoice(_ name: String) {
+        guard let core, let now = liveSettings else { return }
+        MekaHaptics.tick()
+        let voices = now.voices.map { LiveVoiceRow(name: $0.name, detail: $0.detail, selected: $0.name == name) }
+        liveSettings = now.doCopy(on: now.on, line: now.line, meterLine: now.meterLine, sharing: now.sharing, voices: voices, showVoices: now.showVoices)
+        Task { _ = try? await core.setLiveVoice(name: name) }
+    }
+
+    /// ▶ Sample on a Live voice: the sample in Google's studio voice of that name as MP3 data, or nil (never another voice).
+    func liveSample(_ name: String) async -> Data? {
+        guard let core else { return nil }
+        guard let clip = try? await core.liveVoiceSample(name: name) else { return nil }
+        return Data(base64Encoded: clip)
+    }
+
+    /// Whether Live is on (synced; off unless he turns it on). Only a Bool crosses.
+    func liveIsOn() async -> Bool {
+        guard let core else { return false }
+        return (try? await core.liveOn())?.boolValue ?? false
+    }
+
+    /// A Live conversation for Talk, run in the core on the main thread (`MacCoreFactory.liveConversation`); nil before
+    /// the core opens. The Talk controller keeps it and only it calls it, always on the main actor.
+    func newLiveConversation() -> LiveConversation? {
+        guard let core else { return nil }
+        return MacCoreFactory.shared.liveConversation(core: core)
+    }
+
     /// The companion, slice 5: whether Navilife remembers chats (synced; on by default).
     private(set) var remembersChats = true
     /// The companion, slice 5: what Navilife remembers of earlier chats, newest first ("Yesterday · Talked through …").

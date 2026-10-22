@@ -241,6 +241,26 @@ final class MekaSpeaker {
         }
     }
 
+    /// Ada's Live mode, slice 3: ▶ Sample on a Live voice row — the start of today's brief in Google's studio voice of
+    /// that name (`CoreModel.liveSample`), never another voice standing in: when it can't be had or played nothing is
+    /// said and `done(false)` lets the sheet say so. Stops anything already being said. Only Strings and Data cross.
+    func sampleLive(_ name: String, done: @escaping @MainActor (Bool) -> Void) {
+        stop()
+        line += 1
+        let id = line
+        speaking = true
+        task = Task { [weak self] in
+            guard let self else { return }
+            let clip = await self.model?.liveSample(name)
+            guard !Task.isCancelled, id == self.line else { return }
+            var played = false
+            if let clip { played = await self.play(clip) }
+            guard !Task.isCancelled, id == self.line else { return }
+            self.speaking = false
+            done(clip != nil && played)
+        }
+    }
+
     /// MEKA's audio is coming out right now (a clip playing or the Mac's voice speaking), not merely waiting for a
     /// clip: "Talk over MEKA" only learns and listens while it is (`BargeInRules`).
     var audible: Bool { (player?.isPlaying ?? false) || synthesizer.isSpeaking }

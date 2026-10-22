@@ -42,6 +42,82 @@ struct VoiceSheet: View {
         }
         .onDisappear { speaker.stop() }
         .task { await model.refreshVoicePicker() }
+        .task { await model.refreshLive() }
+    }
+
+    /// Ada's Live mode, slice 3: Live Off · On (synced, off until he turns it on), the line under it (the month's meter
+    /// or why Live can't run), what goes to Google, and while on Ada's Live voices, each with ▶ Sample in Google's
+    /// studio voice of that name (never another voice standing in). The voices unfold on the expand spring; lines
+    /// cross-fade; Reduce Motion: cross-fades.
+    private func liveBlock(_ lv: LiveSettingsView) -> some View {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(lv.title.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textSecondary)
+            Text(lv.intro).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Picker(lv.title, selection: Binding(get: { lv.on }, set: { model.setLiveOn($0) })) {
+                Text(LiveTalkRules.shared.OFF_LABEL).tag(false)
+                Text(LiveTalkRules.shared.ON_LABEL).tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 220)
+            .accessibilityLabel("Ada's Live mode")
+            Text(lv.line).font(MekaType.caption).foregroundStyle(lv.on ? palette.accent : palette.textTertiary)
+                .id(lv.line)
+                .transition(.opacity)
+                .fixedSize(horizontal: false, vertical: true)
+            if let meter = lv.meterLine {
+                Text(meter).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .transition(.opacity)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Text(lv.sharing).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            if lv.showVoices {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    Text(LiveTalkRules.shared.VOICE_TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                        .foregroundStyle(palette.textSecondary)
+                        .padding(.top, MekaSpace.xs)
+                    Text(LiveTalkRules.shared.SAMPLE_NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(Array(lv.voices.enumerated()), id: \.element.name) { i, v in
+                        row(VoiceChoice(id: "live:" + v.name, label: v.name, detail: v.detail, selected: v.selected, sample: true, group: nil),
+                            choose: { if !v.selected { model.setLiveVoice(v.name) } }, sample: { toggleLiveSample(v.name) })
+                            .staggeredAppear(i)
+                    }
+                    if liveSampleFailed {
+                        Text(LiveTalkRules.shared.SAMPLE_FAILED).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            .transition(.opacity)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .animation(MekaMotion.expand(reduced: reduceMotion), value: lv.showVoices)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: lv.line)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: liveSampleFailed)
+    }
+
+    /// A Live voice's sample that couldn't play says so under the rows.
+    @State private var liveSampleFailed = false
+
+    private func toggleLiveSample(_ name: String) {
+        let key = "live:" + name
+        if playing == key && speaker.speaking {
+            MekaHaptics.tick()
+            speaker.stop()
+            playing = nil
+            return
+        }
+        MekaHaptics.light()
+        playing = key
+        liveSampleFailed = false
+        speaker.sampleLive(name) { ok in
+            if !ok, playing == key { liveSampleFailed = true }
+        }
     }
 
     /// The companion, slice 3: how Navilife addresses him in Ask, Talk and Hello, by name or "sir", on every device.
@@ -158,6 +234,7 @@ struct VoiceSheet: View {
             callMe.staggeredAppear(1)
             memory.staggeredAppear(2)
             speed.staggeredAppear(3)
+            if let lv = model.liveSettings { liveBlock(lv).staggeredAppear(4) }
             if let v = model.voicePicker {
                 ForEach(Array(v.choices.enumerated()), id: \.element.id) { i, c in
                     // Each provider's voices under their heading (Google's British, American, then Polly's).

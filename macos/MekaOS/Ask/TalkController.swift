@@ -130,6 +130,7 @@ final class TalkController {
     func attach(_ model: CoreModel) {
         self.model = model
         speaker.attach(model)
+        attachLive()
         // The orb speed pass, slice 3: the hello's openers kept ready in Navilife's voice (checked every
         // `HelloRules.WARM_EVERY_MS`; ones already here cost nothing), so a click on the orb speaks at once.
         warmHello?.cancel()
@@ -199,6 +200,12 @@ final class TalkController {
             guard await Self.allowed() else {
                 if gen == generation { problem = .noPermission }
                 return
+            }
+            guard gen == generation else { return }
+            // Ada's Live mode, slice 3: with Live on, a Gemini Live conversation; normal Ada if it isn't open in 2 s.
+            if !afterBrief, await model?.liveIsOn() == true {
+                guard gen == generation, !active else { return }
+                return startLive()
             }
             guard gen == generation else { return }
             Task { await model?.warmVoice() } // MEKA's common lines in its voice, fetched once
@@ -272,6 +279,7 @@ final class TalkController {
                 return
             }
         }
+        if liveRunning { return stop() } // Live: he talks over her by voice; a click ends it
         switch phase {
         case .speaking: apply(TalkFlow.shared.bargeIn(s: session))
         case .ended: start()
@@ -286,8 +294,70 @@ final class TalkController {
         openAt = nil
         openLapsed = nil
         closeFollowOn()
+        if liveRunning {
+            // Slice 3: the sound stops now; the core ends the session (a turn cut short still shows in Ask).
+            live.stop()
+            phase = .ended
+            level = 0
+            return
+        }
         guard active else { return }
         apply(TalkFlow.shared.stop(s: session))
+    }
+
+    // MARK: Ada's Live mode, slice 3
+
+    /// The Live conversation (sound here, the conversation in the core), while one runs.
+    @ObservationIgnored private let live = MacLiveTalk()
+    /// A Live conversation is running (from asking for its session until the core says it ended).
+    @ObservationIgnored private var liveRunning = false
+
+    private func attachLive() {
+        live.onReady = { [weak self] in
+            guard let self, self.liveRunning, self.phase != .ended else { return }
+            self.phase = .listening
+        }
+        live.onSpeaking = { [weak self] speaking in
+            guard let self, self.liveRunning, self.phase != .ended else { return }
+            self.phase = speaking ? .speaking : .listening
+        }
+        live.onLevel = { [weak self] l in
+            guard let self, self.liveRunning, self.phase != .ended else { return }
+            self.level = VoiceOut.shared.follow(shown: self.level, target: l)
+        }
+        // His words and Ada's under the orb as Google transcribes them; each turn in Ask with its sources and cards.
+        live.onWords = { [weak self] heard, said in
+            guard let self, self.liveRunning else { return }
+            self.heard = heard
+            self.said = said
+        }
+        live.onTurn = { [weak self] question, answer in
+            guard let self, self.liveRunning else { return }
+            self.helloCards = []
+            self.onAnswer(question, answer)
+        }
+        live.onEnded = { [weak self] fellBack in
+            guard let self, self.liveRunning else { return }
+            self.liveRunning = false
+            self.level = 0
+            self.phase = .ended
+            // Live didn't open in time: normal Ada listens instead, so he is never left with a dead orb.
+            if fellBack { self.apply(TalkFlow.shared.start()) }
+        }
+    }
+
+    /// Opens the Live conversation: the orb thinks while the session is set up.
+    private func startLive() {
+        guard let model else { return apply(TalkFlow.shared.start()) }
+        liveRunning = true
+        heard = ""
+        said = ""
+        phase = .thinking
+        Task { await model.warmTalk() } // normal Ada's server is ready too, should Live fall back
+        if !live.start(model) {
+            liveRunning = false
+            apply(TalkFlow.shared.start())
+        }
     }
 
     /// A card clicked by hand while talking: it is no longer on offer aloud.
