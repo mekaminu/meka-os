@@ -426,10 +426,11 @@ class MekaCoreTest {
     @Test
     fun anExtendedFastSyncsAndEndsIntoTheHistory() = runTest {
         val a = core("android"); val m = core("mac")
-        a.startExtendedFast(120, 0)
+        // Started an hour ago: a fast ended within ten minutes of its start is never counted.
+        a.startExtendedFast(120, 60)
         assertEquals("5-day fast", a.fastingView.value.current?.title)
         a.syncNow(); m.syncNow()
-        assertEquals("Day 1 of 5 · 0 h", m.fastingView.value.current?.dayLine)
+        assertEquals("Day 1 of 5 · 1 h", m.fastingView.value.current?.dayLine)
         m.endFast()
         m.syncNow(); a.syncNow()
         val h = a.fastingView.value.history
