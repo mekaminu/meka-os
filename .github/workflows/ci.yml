@@ -55,6 +55,9 @@ jobs:
   android:
     runs-on: ubuntu-latest
     timeout-minutes: 40
+    # Write only for the screens branch (tools/publish-screens.sh); nothing in this job pushes to main.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-java@v5
@@ -66,6 +69,13 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with: { name: fold-screens, path: android/app/build/outputs/roborazzi, retention-days: 14, if-no-files-found: ignore }
+      # Quality gate, slice 2: the same shots pushed to the append-only `screens` branch (docs/screens/fold/), so a build
+      # run can look at them (it can't reach the artifact's download host). Green runs on main only; a commit only when
+      # an image changed; a publishing hiccup never turns the run red.
+      - name: Publish the screens for review (screens branch)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        run: tools/publish-screens.sh android/app/build/outputs/roborazzi fold "ci run ${{ github.run_number }} at ${GITHUB_SHA::7}"
 
   tokens-and-infra:
     runs-on: ubuntu-latest

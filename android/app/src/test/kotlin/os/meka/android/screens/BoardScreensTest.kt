@@ -29,8 +29,8 @@ import kotlin.random.Random
 /**
  * The quality gate, slice 1 (Meka 2026-10-21 20:21: "Why am I the one discovering what needs improvement?"): the Week
  * board drawn on the Fold's cover screen (≈ 904 × 2316 px) and inner screen (≈ 2176 × 1812 px), empty, with one task and
- * with a full week, Dark and Light, saved as images (CI keeps them as the `fold-screens` artifact; copies live in
- * docs/screens/board/). Every shot is also read for nonsense on screen ([ScreenShots.assertSensible]) and fails if it
+ * with a full week, Dark and Light, saved as images (CI keeps them as the `fold-screens` artifact, and a green run on main
+ * pushes them to the `screens` branch's docs/screens/fold/board/, tools/publish-screens.sh). Every shot is also read for nonsense on screen ([ScreenShots.assertSensible]) and fails if it
  * finds any. Invented tasks only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
