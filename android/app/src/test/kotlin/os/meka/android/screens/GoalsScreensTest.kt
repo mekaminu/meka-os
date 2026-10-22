@@ -6,10 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -54,7 +54,12 @@ class GoalsScreensTest {
         secureRandom = Random(17), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
     )
 
-    private companion object { const val SETTLE_MS = 3_000L }
+    private companion object {
+        const val SETTLE_MS = 3_000L
+        const val MAX_SWIPES = 6
+    }
+
+    private fun shown(text: String) = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
 
     private enum class Fill { EMPTY, ONE, MANY }
 
@@ -115,13 +120,17 @@ class GoalsScreensTest {
         }
         if (fill == Fill.EMPTY) return
         // Down to the habits: each whole, nothing cut or broken there either.
-        val list = compose.onAllNodes(hasScrollAction())[0] // the screen's own list comes first in the tree
-        titles(fill).filter { !it.startsWith("Run a") && it != "Learn Spanish" }.forEach { t ->
-            list.performScrollToNode(hasText(t))
+        // Swiped by finger, a bounded number of times: the test clock is paused, so a semantics scroll (which animates)
+        // would never move.
+        val habits = titles(fill).filter { !it.startsWith("Run a") && it != "Learn Spanish" }
+        var swipes = 0
+        while (habits.any { !shown(it) } && swipes < MAX_SWIPES) {
+            compose.onNodeWithTag("screen").performTouchInput { swipeUp(startY = bottom * 0.8f, endY = bottom * 0.45f, durationMillis = 400) }
             compose.mainClock.advanceTimeBy(SETTLE_MS)
             compose.waitForIdle()
-            ScreenShots.assertShows(compose, name, t)
+            swipes++
         }
+        habits.forEach { ScreenShots.assertShows(compose, name, it) }
         ScreenShots.assertSensible(compose, name)
         ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
         ScreenShots.assertNoBrokenWords(compose, name)
