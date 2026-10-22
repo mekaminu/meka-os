@@ -101,6 +101,23 @@ class CallSpamFacadeTest {
     }
 
     @Test
+    fun aCallHeTookAsksWasThatAScamAndScamBlocksItAsOne() = runTest {
+        val c = core()
+        val at = now - 2 * 60_000L
+        val o = c.unknownCallOffer("+441632960001", os.meka.core.domain.CallOutcome.ANSWERED, 90, at, emptyList())!!
+        assertTrue(o.ask)
+        assertEquals("Was that a scam? · Rang through · you spoke 1 min · 09:58", o.line)
+        // Fine on this phone: nothing offered for that number again.
+        val key = os.meka.core.domain.BlockedCallerRules.keyOf(o.number)!!
+        assertEquals(null, c.unknownCallOffer("+441632960001", os.meka.core.domain.CallOutcome.ANSWERED, 90, at, emptyList(), fine = setOf(key)))
+        // Scam: on the block list as a scam, with what happened.
+        assertTrue(c.markScamCaller(o.number, o.why))
+        assertEquals("Blocked today · You said it was a scam · Answered call · Sat 10 Oct", c.blockedCallers.value.rows.single().line)
+        assertEquals(setOf(key), c.blockedCallers.value.scamKeys)
+        assertFalse(c.markScamCaller("withheld", null))
+    }
+
+    @Test
     fun aSuspectFromTheServerGoesToTheAssistantUntilMekaBlocksItOrSaysNotSpam() = runTest {
         val c = core()
         c.setCallAssistant(true)

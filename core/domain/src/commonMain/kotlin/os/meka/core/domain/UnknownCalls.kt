@@ -35,6 +35,11 @@ data class UnknownCallOffer(
     val reportText: String,
     /** Call notifications, slice 3: the AI has the number flagged as likely spam, so Not spam is offered. */
     val notSpam: Boolean = false,
+    /**
+     * Scam call fix, slice 3: the note asks "Was that a scam?" with Scam · Block · Fine ([ScamAskRules.asks]) instead
+     * of offering Block and Report.
+     */
+    val ask: Boolean = false,
 )
 
 object UnknownCallRules {
@@ -106,22 +111,29 @@ object UnknownCallRules {
         suspected: Set<String> = emptySet(),
         /** Spam-call lookup (2026-10-17): what people report about the number ([NumberLookupRules.line]), beside who rang. */
         reputation: String? = null,
+        /** Scam call fix, slice 3: numbers he marked Fine (keys, this phone only): never asked or offered again. */
+        fine: Set<String> = emptySet(),
     ): UnknownCallOffer? {
         val key = BlockedCallerRules.keyOf(number) ?: return null
-        if (key in blocked) return null
+        if (key in blocked || key in fine) return null
         if (offered.any { it.callerKey == key && nowMs - it.atMs in 0 until ONCE_PER_MS }) return null
         val at = LocalClock.formatMinute(cal.minuteOfDay(atMs))
         val dayLabel = SearchRules.dayLabel(cal.epochDayOf(atMs), cal.epochDayOf(nowMs))
         val day = when (dayLabel) { "Today" -> ""; "Yesterday" -> "yesterday "; else -> "$dayLabel " }
+        val ask = ScamAskRules.asks(outcome, claim)
         // Call notifications, slice 1: what happened, in plain words, then the time.
-        val line = when (outcome) {
+        val happened = when (outcome) {
             CallOutcome.MISSED -> "Rang · you missed it · $day$at"
             CallOutcome.DECLINED -> "You declined it · $day$at"
             CallOutcome.ANSWERED -> "Rang through · you spoke ${length(durationS)} · $day$at"
             CallOutcome.TO_ASSISTANT -> if (reputation != null) "Sent to your call assistant · $day$at"
                 else "Sent to your call assistant · $day$at · the network couldn't verify the number"
             CallOutcome.UNKNOWN -> "Rang · $day$at"
-        } + (claim?.let { " · " + OfficialCallerRules.headsUp(it) }
+        }
+        // Slice 3: an asked note leads with the question; the block status is the buttons' to change.
+        val line = if (ask) {
+            ScamAskRules.QUESTION + " · " + happened + (claim?.let { " · " + OfficialCallerRules.headsUp(it) } ?: "")
+        } else happened + (claim?.let { " · " + OfficialCallerRules.headsUp(it) }
             ?: " · " + if (key in suspected) CallNoticeRules.SUSPECTED_STATUS else CallNoticeRules.NOT_BLOCKED)
         val what = when (outcome) {
             CallOutcome.MISSED -> "Missed call"
@@ -139,6 +151,7 @@ object UnknownCallRules {
             why = "$what · ${CivilDate.shortLabel(cal.epochDayOf(atMs))}",
             reportText = BlockedCallerRules.reportText(number)!!,
             notSpam = key in suspected,
+            ask = ask,
         )
     }
 

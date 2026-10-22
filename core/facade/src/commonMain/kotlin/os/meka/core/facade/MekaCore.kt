@@ -5633,8 +5633,18 @@ class MekaCore(
         lists: os.meka.core.domain.PeopleLists = os.meka.core.domain.PeopleLists(),
         /** Slice 6: the calls this phone screened (rang through, sent to the assistant, stopped), kept on the phone only. */
         phone: List<os.meka.core.domain.PhoneCall> = emptyList(),
+        /** Scam call fix, slice 3: numbers he marked Fine on this phone (keys), not asked about again. */
+        fine: Set<String> = emptySet(),
     ): os.meka.core.domain.CallLogView =
-        os.meka.core.domain.CallLogRules.view(calls, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone), names, lists, phone)
+        os.meka.core.domain.CallLogRules.view(calls, _blockedCallers.value, nowMs(), ZoneCalendar(timeZone), names, lists, phone, fine)
+
+    /**
+     * Scam on "Was that a scam?" (scam call fix, slice 3; the after-call note or Activity → Calls): [number] goes on the
+     * block list as a scam, with what happened ([happened]: "Rang · today"), and is marked suspected so it is never let
+     * through again by itself. False, saving nothing, when it can't be a phone number.
+     */
+    suspend fun markScamCaller(number: String, happened: String?): Boolean =
+        onCore { blockList.markScam(number, os.meka.core.domain.ScamAskRules.scamWhy(happened)).also { refresh() } }
 
     /**
      * Block in a call's detail (Activity → Calls, call notifications slice 4): the held call [id]'s number goes on the
@@ -5808,6 +5818,8 @@ class MekaCore(
         networkName: String? = null,
         /** Spam-call lookup: what the web's report sites say about the number ([numberReputation]), when known. */
         reputation: os.meka.core.domain.NumberReputation? = null,
+        /** Scam call fix, slice 3: numbers he marked Fine on this phone (keys): nothing is offered for them. */
+        fine: Set<String> = emptySet(),
     ): os.meka.core.domain.UnknownCallOffer? = onCore {
         val view = blockList.view()
         os.meka.core.domain.UnknownCallRules.offer(
@@ -5815,6 +5827,7 @@ class MekaCore(
             claim = os.meka.core.domain.OfficialCallerRules.claim(networkName),
             suspected = view.suspectedKeys,
             reputation = os.meka.core.domain.NumberLookupRules.line(reputation),
+            fine = fine,
         )
     }
 

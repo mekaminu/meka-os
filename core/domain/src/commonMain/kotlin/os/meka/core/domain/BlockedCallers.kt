@@ -68,8 +68,11 @@ data class StoppedCallerRow(
 /** One row of Spam protection's Suspected spam: a number MEKA's AI flagged, waiting for Meka's Block or Not spam. */
 data class SuspectedCallerRow(val key: String, val number: String, val line: String)
 
-/** One row of Work mode's Blocked numbers. */
-data class BlockedCallerRow(val key: String, val number: String, val line: String)
+/**
+ * One row of Work mode's Blocked numbers. [scam]: he marked it a scam ("Was that a scam?" → Scam, scam call fix
+ * slice 3), so Activity → Calls offers Report to Action Fraud.
+ */
+data class BlockedCallerRow(val key: String, val number: String, val line: String, val scam: Boolean = false)
 
 data class BlockedCallersView(
     val rows: List<BlockedCallerRow>,
@@ -84,6 +87,8 @@ data class BlockedCallersView(
 
     val keys: Set<String> get() = rows.map { it.key }.toSet()
     val suspectedKeys: Set<String> get() = suspects.map { it.key }.toSet()
+    /** Numbers on the list because he said they were scams. */
+    val scamKeys: Set<String> get() = rows.filter { it.scam }.map { it.key }.toSet()
 
     /** Whether [number] is on the list now (a held message's Block shows "Blocked" instead). */
     fun has(number: String?): Boolean = BlockedCallerRules.keyOf(number)?.let { it in keys } == true
@@ -183,7 +188,8 @@ class BlockedCallers(
             .sortedWith(compareByDescending<Triple<Long, String, *>> { it.first }.thenBy { it.second })
             .map { (at, key, s) ->
                 val number = s[BlockedCallerFields.NUMBER].textOrNull ?: key.removePrefix("tel:")
-                BlockedCallerRow(key, BlockedCallerRules.display(number), BlockedCallerRules.line(at, s[BlockedCallerFields.WHY].textOrNull, now, calendar))
+                val why = s[BlockedCallerFields.WHY].textOrNull
+                BlockedCallerRow(key, BlockedCallerRules.display(number), BlockedCallerRules.line(at, why, now, calendar), ScamAskRules.isScam(why))
             }
         val suspects = replica.entities(EntityTypes.BLOCKED_CALLER)
             .filter { it[BlockedCallerFields.SUSPECTED].boolOrNull == true && it[BlockedCallerFields.BLOCKED].boolOrNull != true }
@@ -256,6 +262,25 @@ class BlockedCallers(
         val s = replica.entity(EntityTypes.BLOCKED_CALLER, key) ?: return false
         if (s[BlockedCallerFields.SUSPECTED].boolOrNull != true) return false
         replica.commitLocal(EntityTypes.BLOCKED_CALLER, key, mapOf(BlockedCallerFields.SUSPECTED to false.fv()))
+        return true
+    }
+
+    /**
+     * Scam on "Was that a scam?" (scam call fix, slice 3): blocks [number] with [why] ([ScamAskRules.scamWhy]) and
+     * marks it suspected with his reason, so if it is ever unblocked its calls still go to the assistant until he says
+     * Not spam, and the server never asks the AI about it. False (nothing saved) when it can't be a phone number.
+     */
+    fun markScam(number: String, why: String): Boolean {
+        val key = BlockedCallerRules.keyOf(number) ?: return false
+        if (!block(number, why)) return false
+        replica.commitLocal(
+            EntityTypes.BLOCKED_CALLER, key,
+            mapOf(
+                BlockedCallerFields.SUSPECTED to true.fv(),
+                BlockedCallerFields.SUSPECTED_WHY to ScamAskRules.SCAM_WHY.fv(),
+                BlockedCallerFields.SUSPECTED_AT to nowMs().fv(),
+            ),
+        )
         return true
     }
 

@@ -60,6 +60,7 @@ import os.meka.android.work.VoiceMessagePlayer
 import os.meka.core.domain.CallDetail
 import os.meka.core.domain.CallLogRow
 import os.meka.core.domain.CallLogRules
+import os.meka.core.domain.ScamAskRules
 import os.meka.core.domain.VoiceRecordingRules
 
 /**
@@ -89,7 +90,9 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
     val lists by app.captures.lists.collectAsState()
     // Slice 6: with the calls this phone screened (rang through, sent to the assistant, stopped), kept on the phone only.
     val phone by remember { PhoneCallLog.calls(context) }.collectAsState()
-    val view = remember(calls, blocked, lists, phone) { core.callLogOf(calls, CallerLookup.names(context), lists, phone) }
+    // Scam call fix, slice 3: numbers he marked Fine aren't asked about again (this phone only).
+    val fine by remember { PhoneCallLog.fine(context) }.collectAsState()
+    val view = remember(calls, blocked, lists, phone, fine) { core.callLogOf(calls, CallerLookup.names(context), lists, phone, fine) }
     if (view.isEmpty) return
     val haptics = rememberMekaHaptics()
     val scope = rememberCoroutineScope()
@@ -141,6 +144,24 @@ internal fun CallLogSection(index: Int, onNote: (String?) -> Unit) {
                         haptics.light()
                         scope.launch { if (!runCatching { core.dismissSuspectedCaller(key) }.getOrDefault(false)) onNote("Couldn't change that. Try again.") }
                     },
+                    onScam = { number ->
+                        haptics.medium()
+                        scope.launch {
+                            if (runCatching { core.markScamCaller(number, row.detail.blockWhy) }.getOrDefault(false)) onNote(ScamAskRules.SCAM_DONE)
+                            else onNote("Couldn't block that number. Try again.")
+                        }
+                    },
+                    onFine = { key ->
+                        haptics.light()
+                        PhoneCallLog.markFine(context, key)
+                        onNote(ScamAskRules.FINE_DONE)
+                    },
+                    onReport = {
+                        haptics.light()
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(ScamAskRules.ACTION_FRAUD_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        }
+                    },
                     undoDelete = undoFor == row.id,
                     onDeleteRecording = {
                         haptics.light()
@@ -169,6 +190,9 @@ private fun CallRowView(
     onBlock: () -> Unit,
     onUnblock: (String) -> Unit,
     onNotSpam: (String) -> Unit,
+    onScam: (String) -> Unit,
+    onFine: (String) -> Unit,
+    onReport: () -> Unit,
     undoDelete: Boolean,
     onDeleteRecording: () -> Unit,
     onUndoDelete: () -> Unit,
@@ -210,7 +234,7 @@ private fun CallRowView(
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            CallDetailView(row.id, row.detail, fetch, onCallBack, onBlock, onUnblock, onNotSpam, undoDelete, onDeleteRecording, onUndoDelete)
+            CallDetailView(row.id, row.detail, fetch, onCallBack, onBlock, onUnblock, onNotSpam, onScam, onFine, onReport, undoDelete, onDeleteRecording, onUndoDelete)
         }
     }
 }
@@ -224,6 +248,9 @@ private fun CallDetailView(
     onBlock: () -> Unit,
     onUnblock: (String) -> Unit,
     onNotSpam: (String) -> Unit,
+    onScam: (String) -> Unit,
+    onFine: (String) -> Unit,
+    onReport: () -> Unit,
     undoDelete: Boolean,
     onDeleteRecording: () -> Unit,
     onUndoDelete: () -> Unit,
@@ -268,6 +295,22 @@ private fun CallDetailView(
                 else -> Spacer(Modifier.height(0.dp))
             }
         }
+        // Scam call fix, slice 3: "Was that a scam?" with Scam · Fine on a stranger's call that rang; it cross-fades away
+        // once answered (Scam blocks it: the chip and block line change too).
+        AnimatedVisibility(
+            d.scamAsk != null && d.number != null && d.key != null,
+            enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced)),
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
+                Text(d.scamAsk ?: ScamAskRules.QUESTION, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                val number = d.number
+                val key = d.key
+                if (number != null && key != null) {
+                    Action(d.scam ?: ScamAskRules.SCAM, Meka.colors.critical, Modifier.semantics { contentDescription = "It was a scam: block ${d.who}" }) { onScam(number) }
+                    Action(d.fine ?: ScamAskRules.FINE, Meka.colors.accent, Modifier.semantics { contentDescription = "It was fine: don't ask about ${d.who} again" }) { onFine(key) }
+                }
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
             val number = d.number
             if (d.callBack != null && number != null) Action(d.callBack!!, Meka.colors.accent) { onCallBack(number) }
@@ -277,6 +320,7 @@ private fun CallDetailView(
             val key = d.key
             if (d.unblock != null && key != null) Action(d.unblock!!, Meka.colors.accent) { onUnblock(key) }
             if (d.notSpam != null && key != null) Action(d.notSpam!!, Meka.colors.accent) { onNotSpam(key) }
+            d.reportFraud?.let { label -> Action(label, Meka.colors.accent) { onReport() } }
         }
     }
 }

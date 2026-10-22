@@ -116,5 +116,38 @@ object CallNotification {
         actions.take(MAX_ACTIONS).forEach { (label, intent) -> b.addAction(0, label, intent) }
     }
 
+    /**
+     * Scam call fix, slice 3: "Was that a scam?" — Scam (blocks it as a scam with [happened] as why), Block and Fine.
+     */
+    fun addScamAsk(context: Context, b: NotificationCompat.Builder, tag: String, number: String, happened: String) {
+        val base = id(tag)
+        b.addAction(0, os.meka.core.domain.ScamAskRules.SCAM, broadcast(context, base + 7, UnknownCallReceiver.ACTION_SCAM, number) { i ->
+            i.putExtra(UnknownCallReceiver.EXTRA_WHY, happened)
+        })
+        b.addAction(0, os.meka.core.domain.ScamAskRules.BLOCK, broadcast(context, base + 2, UnknownCallReceiver.ACTION_BLOCK, number) { i ->
+            i.putExtra(UnknownCallReceiver.EXTRA_WHY, happened)
+        })
+        b.addAction(0, os.meka.core.domain.ScamAskRules.FINE, broadcast(context, base + 8, UnknownCallReceiver.ACTION_FINE, number))
+    }
+
+    /** After Scam: Unblock, Report to Action Fraud (its page in the browser) and Report to 7726 (a text he sends). */
+    fun addScamReport(context: Context, b: NotificationCompat.Builder, tag: String, number: String) {
+        val base = id(tag)
+        b.addAction(0, os.meka.core.domain.CallNoticeRules.UNBLOCK, broadcast(context, base + 3, UnknownCallReceiver.ACTION_UNBLOCK, number))
+        b.addAction(0, os.meka.core.domain.ScamAskRules.ACTION_FRAUD, PendingIntent.getActivity(
+            context, base + 9,
+            Intent(Intent.ACTION_VIEW, Uri.parse(os.meka.core.domain.ScamAskRules.ACTION_FRAUD_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        ))
+        os.meka.core.domain.BlockedCallerRules.reportText(number)?.let { text ->
+            b.addAction(0, os.meka.core.domain.UnknownCallRules.REPORT_ACTION, PendingIntent.getActivity(
+                context, base + 6,
+                Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + os.meka.core.domain.BlockedCallerRules.REPORT_TO))
+                    .putExtra("sms_body", text).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            ))
+        }
+    }
+
     private const val MAX_ACTIONS = 3
 }

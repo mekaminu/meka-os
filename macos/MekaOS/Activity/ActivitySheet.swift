@@ -320,6 +320,11 @@ struct ActivitySheet: View {
                     Button(label) { model.dismissSuspectedCaller(key) }
                         .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
                 }
+                // Scam call fix, slice 3: a number he marked a scam on the Fold can be reported to Action Fraud from here.
+                if let label = d.reportFraud, let url = URL(string: ScamAskRules.shared.ACTION_FRAUD_URL) {
+                    Button(label) { MekaHaptics.light(); NSWorkspace.shared.open(url) }
+                        .buttonStyle(MekaPressStyle()).font(MekaType.itemMeta).foregroundStyle(palette.accent)
+                }
             }
         }
         .padding(.top, MekaSpace.xs)

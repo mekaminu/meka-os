@@ -70,9 +70,10 @@ class UnknownCallTest {
 
         fun line(outcome: CallOutcome, s: Long = 0) = UnknownCallRules.offer(stranger, outcome, s, at, at + 60_000, emptySet(), emptyList(), cal)!!.line
         assertEquals("You declined it · 14:05 · Not blocked · it will ring again", line(CallOutcome.DECLINED))
-        assertEquals("Rang through · you spoke 2 min · 14:05 · Not blocked · it will ring again", line(CallOutcome.ANSWERED, 125))
+        // Scam call fix, slice 3: a call he took (or whose ending is unknown) asks instead.
+        assertEquals("Was that a scam? · Rang through · you spoke 2 min · 14:05", line(CallOutcome.ANSWERED, 125))
         assertEquals("Sent to your call assistant · 14:05 · the network couldn't verify the number · Not blocked · it will ring again", line(CallOutcome.TO_ASSISTANT))
-        assertEquals("Rang · 14:05 · Not blocked · it will ring again", line(CallOutcome.UNKNOWN))
+        assertEquals("Was that a scam? · Rang · 14:05", line(CallOutcome.UNKNOWN))
         // Checked after midnight: the day is said.
         val late = UnknownCallRules.offer(stranger, CallOutcome.MISSED, 0, at, at + 12 * 3_600_000L, emptySet(), emptyList(), cal)!!
         assertEquals("Rang · you missed it · yesterday 14:05 · Not blocked · it will ring again", late.line)

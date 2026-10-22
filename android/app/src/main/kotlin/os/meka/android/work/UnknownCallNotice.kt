@@ -165,7 +165,9 @@ object UnknownCallNotice {
             block = UnknownCallRules.BLOCK_ACTION, notSpam = if (offer.notSpam) CallNoticeRules.NOT_SPAM else null,
         )
         val b = CallNotification.mark(context, base(context, offer.title, offer.line), tag, CallNoticeRules.Kind.AFTER_CALL)
-        CallNotification.addActions(context, b, tag, offer.number, notice, blockWhy = offer.why, reportText = offer.reportText)
+        // Scam call fix, slice 3: a call he took (or a claimed official body) asks "Was that a scam?": Scam · Block · Fine.
+        if (offer.ask) CallNotification.addScamAsk(context, b, tag, offer.number, offer.why)
+        else CallNotification.addActions(context, b, tag, offer.number, notice, blockWhy = offer.why, reportText = offer.reportText)
         return send(context, tag, b)
     }
 
@@ -182,6 +184,30 @@ object UnknownCallNotice {
         val b = CallNotification.mark(context, base(context, notice.title, notice.text), tag, CallNoticeRules.Kind.CONFIRM)
         CallNotification.addActions(context, b, tag, number, notice, blockWhy = WorkAlerts.BLOCK_WHY,
             reportText = BlockedCallerRules.reportText(number))
+        send(context, tag, b)
+    }
+
+    /** After Scam (scam call fix, slice 3): "Blocked as a scam · it won't ring again" with Unblock and the two ways to report. */
+    @SuppressLint("MissingPermission")
+    fun postScamDone(context: Context, number: String) {
+        if (!WorkAlerts.canPost(context)) return
+        val tag = CallNoticeRules.tag(number) ?: return
+        ensureChannel(context)
+        val title = UnknownCallRules.title(number)
+        val big = os.meka.core.domain.ScamAskRules.SCAM_DONE + "\n" + os.meka.core.domain.ScamAskRules.REPORT_HINT
+        val b = CallNotification.mark(context, base(context, title, os.meka.core.domain.ScamAskRules.SCAM_DONE, big), tag, CallNoticeRules.Kind.CONFIRM)
+        CallNotification.addScamReport(context, b, tag, number)
+        send(context, tag, b)
+    }
+
+    /** After Fine (slice 3): "Marked fine · …", gone by itself a few seconds later. */
+    @SuppressLint("MissingPermission")
+    fun postFine(context: Context, number: String) {
+        if (!WorkAlerts.canPost(context)) return
+        val tag = CallNoticeRules.tag(number) ?: return
+        ensureChannel(context)
+        val b = CallNotification.mark(context, base(context, UnknownCallRules.title(number), os.meka.core.domain.ScamAskRules.FINE_DONE), tag, CallNoticeRules.Kind.CONFIRM)
+            .setTimeoutAfter(os.meka.core.domain.ScamAskRules.FINE_NOTE_MS)
         send(context, tag, b)
     }
 
@@ -264,7 +290,10 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
             }
         }
         val offer = runCatching {
-            app.core.unknownCallOffer(number, outcome, entry?.second ?: 0L, atMs, UnknownCallNotice.offered(ctx), networkName, reputation)
+            app.core.unknownCallOffer(
+                number, outcome, entry?.second ?: 0L, atMs, UnknownCallNotice.offered(ctx), networkName, reputation,
+                fine = PhoneCallLog.fine(ctx).value,
+            )
         }.getOrNull() ?: return Result.success()
         if (UnknownCallNotice.post(ctx, offer)) UnknownCallNotice.markOffered(ctx, offer.key, System.currentTimeMillis())
         return Result.success()
@@ -280,7 +309,7 @@ class UnknownCallWorker(context: Context, params: WorkerParameters) : CoroutineW
 class UnknownCallReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
-        if (action !in setOf(ACTION_BLOCK, ACTION_UNDO, ACTION_UNBLOCK, ACTION_NOT_SPAM)) return
+        if (action !in setOf(ACTION_BLOCK, ACTION_UNDO, ACTION_UNBLOCK, ACTION_NOT_SPAM, ACTION_SCAM, ACTION_FINE)) return
         val number = intent.getStringExtra(EXTRA_NUMBER) ?: return
         val why = intent.getStringExtra(EXTRA_WHY)
         val activityId = intent.getStringExtra(EXTRA_ACTIVITY)
@@ -290,6 +319,16 @@ class UnknownCallReceiver : BroadcastReceiver() {
         CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
             try {
                 val key = BlockedCallerRules.keyOf(number)
+                // Scam call fix, slice 3: Scam blocks it as a scam and offers the reports; Fine stops the asking.
+                if (action == ACTION_SCAM) {
+                    if (runCatching { app.core.markScamCaller(number, why) }.getOrDefault(false)) UnknownCallNotice.postScamDone(app, number)
+                    return@launch
+                }
+                if (action == ACTION_FINE) {
+                    if (key != null) PhoneCallLog.markFine(app, key)
+                    UnknownCallNotice.postFine(app, number)
+                    return@launch
+                }
                 val done: Boolean? = when (action) {
                     // Undo on an auto-block: the same Undo as Activity's (it takes the number off the list).
                     ACTION_UNDO -> { if (activityId != null) runCatching { app.core.undoActivity(activityId) }; false }
@@ -320,6 +359,8 @@ class UnknownCallReceiver : BroadcastReceiver() {
         const val ACTION_UNDO = "os.meka.work.UNDO_AUTO_BLOCK"
         const val ACTION_UNBLOCK = "os.meka.work.UNBLOCK_CALLER"
         const val ACTION_NOT_SPAM = "os.meka.work.NOT_SPAM_CALLER"
+        const val ACTION_SCAM = "os.meka.work.SCAM_CALLER"
+        const val ACTION_FINE = "os.meka.work.FINE_CALLER"
         const val EXTRA_ACTIVITY = "os.meka.work.activity"
         const val EXTRA_NUMBER = "os.meka.work.number"
         const val EXTRA_WHY = "os.meka.work.why"

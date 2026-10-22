@@ -55,6 +55,15 @@ data class CallDetail(
      * the Fold blocks the [number] with it. Null for a held call (blocked by its id).
      */
     val blockWhy: String? = null,
+    /**
+     * Scam call fix, slice 3: [ScamAskRules.QUESTION] on a stranger's call that rang through, with [scam] and [fine]
+     * beside Block ([ScamAskRules.asksInLog]); null otherwise.
+     */
+    val scamAsk: String? = null,
+    val scam: String? = null,
+    val fine: String? = null,
+    /** [ScamAskRules.ACTION_FRAUD] once he marked the number a scam (opens [ScamAskRules.ACTION_FRAUD_URL]). */
+    val reportFraud: String? = null,
 )
 
 /**
@@ -350,6 +359,18 @@ object CallLogRules {
         )
     }
 
+    /** Slice 3 of the scam call fix: "Was that a scam?" on a stranger's call that rang, Report to Action Fraud once marked. */
+    private fun scamAsked(d: CallDetail, p: PhoneCall?, blocked: BlockedCallersView, fine: Set<String>): CallDetail {
+        val ask = p != null && ScamAskRules.asksInLog(p, blocked.keys, fine)
+        val report = d.key != null && d.key in blocked.scamKeys
+        return d.copy(
+            scamAsk = if (ask) ScamAskRules.QUESTION else null,
+            scam = if (ask) ScamAskRules.SCAM else null,
+            fine = if (ask) ScamAskRules.FINE else null,
+            reportFraud = if (report) ScamAskRules.ACTION_FRAUD else null,
+        )
+    }
+
     /**
      * Activity → Calls: [calls] ([HeldMessages.calls], newest first) grouped by day, each named with [names] and
      * [lists] (the Fold's contacts; the Mac shows numbers), with [blocked] for the chips and the block line.
@@ -358,6 +379,8 @@ object CallLogRules {
         calls: List<HeldCall>, blocked: BlockedCallersView, nowMs: Long, cal: LocalCalendar,
         names: CallerNames = CallerNames.NONE, lists: PeopleLists = PeopleLists(),
         phone: List<PhoneCall> = emptyList(),
+        /** Scam call fix, slice 3: numbers he marked Fine (keys, this phone only): not asked about again. */
+        fine: Set<String> = emptySet(),
     ): CallLogView {
         val shown = phoneShown(phone.filter { nowMs - it.atMs < PhoneCallRules.KEEP_MS }, calls)
         if (calls.isEmpty() && shown.isEmpty()) return CallLogView.EMPTY
@@ -379,7 +402,8 @@ object CallLogRules {
                 chip = chip, blocked = isBlocked,
                 urgent = p == null && item.kind == CaptureKind.VOICE_MESSAGE && CallNoticeRules.urgent(item),
                 automated = p == null && item.automated,
-                detail = if (p == null) base else base.copy(timeline = phoneTimeline(p, cal), blockWhy = phoneBlockWhy(p, nowMs, cal)),
+                detail = (if (p == null) base else base.copy(timeline = phoneTimeline(p, cal), blockWhy = phoneBlockWhy(p, nowMs, cal)))
+                    .let { d -> scamAsked(d, p, blocked, fine) },
             )
         }
         val days = rows.groupBy({ it.first }, { it.second }).entries.sortedByDescending { it.key }
