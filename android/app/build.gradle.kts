@@ -72,6 +72,7 @@ android {
 dependencies {
     implementation(project(":core:facade"))
     implementation(project(":core:data"))
+    implementation(project(":core:wire")) // Ada's Live mode: the Live session and protocol types
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
