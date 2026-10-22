@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -221,11 +223,12 @@ internal fun FastingPane(core: MekaCore, onClose: () -> Unit) {
         }
         if (s.isFasting) item(key = "tiles") {
             Column(Modifier.appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    EditTile("Started", s.startedTile.orEmpty(), editing == "start", Modifier.weight(1f)) {
+                // The two tiles keep one height when one of them wraps (the re-shot: "Wed 19:45 · 16h" on the cover screen).
+                Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    EditTile("Started", s.startedTile.orEmpty(), editing == "start", Modifier.weight(1f).fillMaxHeight()) {
                         haptics.tick(); editing = if (editing == "start") null else "start"
                     }
-                    EditTile("Goal", s.goalTile.orEmpty(), editing == "goal", Modifier.weight(1f)) {
+                    EditTile("Goal", s.goalTile.orEmpty(), editing == "goal", Modifier.weight(1f).fillMaxHeight()) {
                         haptics.tick(); editing = if (editing == "goal") null else "goal"
                     }
                 }
@@ -424,11 +427,16 @@ private fun EditTile(label: String, value: String, open: Boolean, modifier: Modi
         modifier.clip(RoundedCornerShape(MekaRadius.m)).background(bg)
             .clickable(role = Role.Button) { onClick() }
             .semantics { contentDescription = "$label $value. Change" }
-            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
+            .testTag("fasting-edit-tile"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
-        Text(label, style = MekaType.caption, color = Meka.colors.textTertiary)
-        Text("$value ✎", style = MekaType.metaStrong, color = Meka.colors.textPrimary)
+        // The pencil sits beside the label, so the value has the tile's whole width.
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(label, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+            Text("✎", style = MekaType.caption, color = Meka.colors.accent)
+        }
+        Text(value, style = MekaType.metaStrong, color = Meka.colors.textPrimary)
     }
 }
 
@@ -479,18 +487,19 @@ private fun StageRow(row: FastingStageRow, fasting: Boolean, open: Boolean, onCl
             .graphicsLayer { alpha = if (dim) 0.7f else 1f }
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
             .minTouch(),
-        verticalAlignment = Alignment.Top,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.padding(top = MekaSpace.xs).size(10.dp).clip(CircleShape).background(dot))
-        Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
+            // The dot sits on the name's line (the re-shot: it hung below it).
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(MekaSpace.xs).clip(CircleShape).background(dot))
+                Spacer(Modifier.width(MekaSpace.m))
                 Text(row.stage.name, style = MekaType.metaStrong, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                 Spacer(Modifier.width(MekaSpace.xs))
                 Text(row.stage.whenLabel, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1)
             }
             AnimatedVisibility(open, enter = unfold(), exit = fold()) {
-                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                Column(Modifier.padding(start = MekaSpace.l), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     Text(row.stage.body, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
                     Badge(row.stage.evidence, row.tone)
                 }
@@ -554,8 +563,10 @@ private fun HistoryLine(h: FastingHistoryRow, modifier: Modifier = Modifier) {
         Spacer(Modifier.width(MekaSpace.m))
         Text(h.span, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
         Spacer(Modifier.width(MekaSpace.xs))
-        Text(h.length, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
-        Spacer(Modifier.width(MekaSpace.xs))
-        Text(h.goal, style = MekaType.caption, color = if (h.onGoal) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+        // The length over its goal word, so "Sat 17 → Sun 18" keeps one line beside "6h 30m short" (the re-shot).
+        Column(horizontalAlignment = Alignment.End) {
+            Text(h.length, style = MekaType.metaStrong, color = Meka.colors.textPrimary, maxLines = 1)
+            Text(h.goal, style = MekaType.caption, color = if (h.onGoal) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1)
+        }
     }
 }

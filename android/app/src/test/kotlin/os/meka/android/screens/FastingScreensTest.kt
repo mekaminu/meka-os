@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -122,6 +123,9 @@ class FastingScreensTest {
                 ScreenShots.assertShows(compose, name, "Start fast")
             }
             else -> {
+                // The Started and Goal tiles keep one height (the first shots: the Goal tile's pencil wrapped alone).
+                val tiles = compose.onAllNodes(hasTestTag("fasting-edit-tile"), useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot.height }
+                if (tiles.size != 2 || kotlin.math.abs(tiles[0] - tiles[1]) > 1f) fail("$name: the Started and Goal tiles differ in height ($tiles)")
                 ScreenShots.assertShows(compose, name, "13:30")
                 ScreenShots.assertShows(compose, name, "Ends in 2:30")
                 ScreenShots.assertShows(compose, name, "End fast")
@@ -150,6 +154,8 @@ class FastingScreensTest {
             Fill.MANY -> {
                 ScreenShots.assertShows(compose, name, "on goal")
                 ScreenShots.assertShows(compose, name, "short")
+                // Each History span on one line, even beside "6h 30m short" (the first shots' finding).
+                ScreenShots.assertOneLine(compose, name, "→")
             }
         }
     }
