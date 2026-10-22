@@ -122,8 +122,8 @@ class ListsScreensTest {
                     // Something to chase today: the due line under the title is lit, never "Nothing to chase".
                     core.listsView.value.dueLine?.let { ScreenShots.assertShows(compose, name, it) }
                         ?: fail("$name: a chase due today but no due line")
-                    ScreenShots.assertShows(compose, name, "You promised")
-                    ScreenShots.assertShows(compose, name, "Waiting for")
+                    ScreenShots.assertShows(compose, name, "YOU PROMISED") // section labels draw upper case
+                    ScreenShots.assertShows(compose, name, "WAITING FOR")
                 }
             }
         }
