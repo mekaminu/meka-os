@@ -27,7 +27,7 @@ struct FastingSection: View {
         if let v = model.fasting {
             VStack(alignment: .leading, spacing: MekaSpace.m) {
                 HStack(alignment: .center, spacing: MekaSpace.m) {
-                    FastRing(current: v.current, palette: palette, burst: burst)
+                    FastRing(current: v.current, idleTop: v.idleRingTop, palette: palette, burst: burst)
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(v.current.map { $0.extended ? $0.title : "Fasting" } ?? "Not fasting")
                             .font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
@@ -151,6 +151,8 @@ struct FastingSection: View {
 private struct FastRing: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let current: FastNow?
+    /// The plan's goal ("16 h") shown when no fast runs, never a lone dash.
+    var idleTop: String = ""
     let palette: MekaPalette
     /// 0 → 1 while the "you did it" burst plays; 0 otherwise.
     var burst: Double = 0
@@ -188,7 +190,8 @@ private struct FastRing: View {
                         Text(cur.extended ? "of \(FastingRules.shared.daysLabel(hours: cur.targetHours))" : "of \(cur.targetHours) h")
                             .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     } else {
-                        Text("—").font(MekaType.itemTitle).foregroundStyle(palette.textTertiary)
+                        Text(idleTop).font(MekaType.itemTitle).monospacedDigit().foregroundStyle(palette.textSecondary)
+                        Text(FastingRules.shared.IDLE_RING_CAPTION).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                 }
             }

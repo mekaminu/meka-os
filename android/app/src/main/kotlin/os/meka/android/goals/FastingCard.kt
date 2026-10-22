@@ -126,7 +126,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(MekaSpace.m),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            FastRing(cur, now, burst.value)
+            FastRing(cur, now, burst.value, idleTop = v.idleRingTop)
             Spacer(Modifier.width(MekaSpace.m))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                 Text(
@@ -193,7 +193,7 @@ internal fun FastingCard(core: MekaCore, modifier: Modifier = Modifier) {
 
 /** The ring: sweeps with the clock, glows softly at the goal. Shows the timer, or the plan's goal when not fasting. */
 @Composable
-private fun FastRing(cur: FastNow?, now: Long, burst: Float = 0f) {
+private fun FastRing(cur: FastNow?, now: Long, burst: Float = 0f, idleTop: String = "") {
     val reduced = Meka.reducedMotion
     val target = cur?.progress(now) ?: 0f
     // A linear one-second glide keeps the sweep continuous between ticks.
@@ -239,7 +239,8 @@ private fun FastRing(cur: FastNow?, now: Long, burst: Float = 0f) {
                     style = MekaType.caption, color = Meka.colors.textTertiary,
                 )
             } else {
-                Text("—", style = MekaType.itemTitle, color = Meka.colors.textTertiary)
+                Text(idleTop, style = MekaType.itemTitle, color = Meka.colors.textSecondary)
+                Text(FastingRules.IDLE_RING_CAPTION, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
     }

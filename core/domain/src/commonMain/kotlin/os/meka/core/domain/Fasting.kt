@@ -162,6 +162,12 @@ data class FastingView(
 ) {
     val isFasting: Boolean get() = current != null
 
+    /**
+     * The ring's middle when no fast runs: the plan's goal, "16 h" over [FastingRules.IDLE_RING_CAPTION] (the quality
+     * gate's Goals shots, 2026-10-22: it showed a lone "—", which reads as a broken figure).
+     */
+    val idleRingTop: String get() = "${plan.targetHours} h"
+
     /** The moment [minuteOfDay] on [day] for a custom "until" end (a time skipped by a clock change moves forward). */
     fun untilAt(day: FastUntilDay, minuteOfDay: Int): Long = untilCalendar.toEpochMs(day.epochDay, minuteOfDay.mod(24 * 60))
 
@@ -223,6 +229,9 @@ object FastingRules {
     fun planAt(index: Int): FastingPlanChoice = PLAN_CHOICES[index.coerceIn(0, PLAN_CHOICES.size - 1)]
 
     /** "16:8" for a preset (or any plan whose window matches its goal), else "16 h". */
+    /** Under [FastingView.idleRingTop] in the ring: "16 h" / "goal". */
+    const val IDLE_RING_CAPTION = "goal"
+
     fun planLabel(p: FastingPlan): String {
         val match = PLAN_CHOICES.firstOrNull { it.targetHours == p.targetHours && it.eatingStartMin == p.eatingStartMin && it.eatingEndMin == p.eatingEndMin }
         return match?.label ?: "${p.targetHours} h"

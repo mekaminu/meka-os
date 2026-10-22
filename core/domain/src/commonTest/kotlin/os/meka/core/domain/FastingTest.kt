@@ -436,4 +436,12 @@ class FastingTest {
         val noon = Governor.evaluate(notices(), NotificationSettings.DEFAULT, DeviceAlerts.ALL, quiet.state, world.clock.nowMs, cal)
         assertTrue(noon.digest!!.lines.any { it.startsWith("3-day fast · Day 2 of 3 · 24 h so far") })
     }
+
+    @Test
+    fun anIdleRingShowsThePlansGoalNotADash() {
+        // The quality gate's Goals shots: the ring read a lone "—" when no fast ran.
+        assertEquals("16 h", FastingView.EMPTY.idleRingTop)
+        assertEquals("18 h", FastingView.EMPTY.copy(plan = FastingPlan(18, 13 * 60, 19 * 60)).idleRingTop)
+        assertTrue(ScreenSenseRules.problems(listOf(FastingView.EMPTY.idleRingTop, FastingRules.IDLE_RING_CAPTION)).isEmpty())
+    }
 }
