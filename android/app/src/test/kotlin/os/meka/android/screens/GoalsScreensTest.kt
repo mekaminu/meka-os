@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -106,12 +109,22 @@ class GoalsScreensTest {
         when (fill) {
             // Nothing set up: the pace line says what a habit does, never a bare heading.
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Add a habit")
-            Fill.ONE -> ScreenShots.assertShows(compose, name, "Read 20 pages")
-            Fill.MANY -> {
-                ScreenShots.assertShows(compose, name, "Read 20 pages")
-                ScreenShots.assertShows(compose, name, "Stretch")
-            }
+            // With habits the pace line under the title counts them (the habits themselves sit under the Fasting card,
+            // below the fold on the inner screen, so they are scrolled to and read below).
+            else -> core.goalsView.value.paceLine?.let { ScreenShots.assertShows(compose, name, it) }
         }
+        if (fill == Fill.EMPTY) return
+        // Down to the habits: each whole, nothing cut or broken there either.
+        val list = compose.onAllNodes(hasScrollAction())[0] // the screen's own list comes first in the tree
+        titles(fill).filter { !it.startsWith("Run a") && it != "Learn Spanish" }.forEach { t ->
+            list.performScrollToNode(hasText(t))
+            compose.mainClock.advanceTimeBy(SETTLE_MS)
+            compose.waitForIdle()
+            ScreenShots.assertShows(compose, name, t)
+        }
+        ScreenShots.assertSensible(compose, name)
+        ScreenShots.assertReadable(compose, name, titles(fill), mustShow = false)
+        ScreenShots.assertNoBrokenWords(compose, name)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
