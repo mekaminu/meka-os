@@ -645,6 +645,8 @@ internal fun NeedsYouColumn(
                 DecisionStackView(cards, moves.onMove, Modifier.animateItem().appear(rememberAppearance(1, play)),
                     toDays = { core.needsYouFeedDays() }, onToDay = moves.onToDay)
             }
+            // Under the stack, the next reminders (the gate's Needs you re-shot: the page below the stack was blank).
+            meanwhileItems(NeedsYouMeanwhileRules.underStack(meanwhile), play, firstIndex = 2, tick = tickHabit, open = moves.openLists, openTask = moves.openTask)
         }
     }
 }

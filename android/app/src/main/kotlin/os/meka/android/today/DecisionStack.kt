@@ -18,7 +18,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -34,11 +34,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -96,7 +98,11 @@ fun DecisionStackView(
     val top = shown.firstOrNull() ?: return
 
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
-        BoxWithConstraints(Modifier.fillMaxWidth().padding(bottom = MekaSpace.l), contentAlignment = Alignment.TopCenter) {
+        // The top card hugs its words (the gate's Needs you re-shot: a fixed 196 dp left a tall empty band under a short
+        // card); the cards behind take its height so the pile stays even.
+        var topHeightPx by remember { mutableIntStateOf(0) }
+        val density = LocalDensity.current
+        BoxWithConstraints(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
             val widthPx = constraints.maxWidth.toFloat()
             // The cards behind: smaller, lower and dimmer, so the stack reads as a pile.
             shown.drop(1).take(2).reversed().forEachIndexed { i, card ->
@@ -106,7 +112,9 @@ fun DecisionStackView(
                     val lift by animateFloatAsState(12f * depth, MekaMotion.approve(Meka.reducedMotion), label = "stack-lift")
                     DecisionCardFace(
                         card, armed = null, progress = 0f,
-                        modifier = Modifier.graphicsLayer {
+                        modifier = Modifier
+                            .then(if (topHeightPx > 0) Modifier.height(with(density) { topHeightPx.toDp() }) else Modifier)
+                            .graphicsLayer {
                             scaleX = scale; scaleY = scale
                             translationY = lift.dp.toPx()
                             alpha = 1f - 0.3f * depth
@@ -118,7 +126,8 @@ fun DecisionStackView(
                 TopCard(top, widthPx, onMove = { move, flies ->
                     if (flies && top.effect(move) != DecisionEffect.SET_ASIDE) gone = gone + top.id
                     onMove(top, move)
-                }, toDays = toDays, onToDay = { day -> gone = gone + top.id; onToDay(top, day) })
+                }, toDays = toDays, onToDay = { day -> gone = gone + top.id; onToDay(top, day) },
+                    onFaceHeight = { topHeightPx = it })
             }
         }
         NeedsYouStackRules.moreLine(shown.size)?.let {
@@ -132,6 +141,7 @@ fun DecisionStackView(
 private fun TopCard(
     card: DecisionCard, widthPx: Float, onMove: (DecisionMove, Boolean) -> Unit,
     toDays: () -> List<FeedDay> = { emptyList() }, onToDay: (Long) -> Unit = {},
+    onFaceHeight: (Int) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion
     val haptics = rememberMekaHaptics()
@@ -195,6 +205,8 @@ private fun TopCard(
             modifier = Modifier
                 // Open grows the task's detail out of the card (closed Fold).
                 .then(card.taskId?.let { Modifier.containerOrigin(it) } ?: Modifier)
+                .onSizeChanged { onFaceHeight(it.height) }
+                .testTag(NeedsYouStackRules.TOP_CARD_TAG)
                 .graphicsLayer {
                     translationX = x
                     translationY = y
@@ -312,7 +324,7 @@ private fun DecisionCardFace(card: DecisionCard, armed: DecisionMove?, progress:
     }
     val face = lerp(Meka.colors.surfaceRaised, leanColor, if (armed == null) 0f else MotionMath.swipeWash(progress))
     Box(
-        modifier.fillMaxWidth().heightIn(min = 196.dp).clip(RoundedCornerShape(MekaRadius.l))
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.l))
             .background(face).padding(MekaSpace.l),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {

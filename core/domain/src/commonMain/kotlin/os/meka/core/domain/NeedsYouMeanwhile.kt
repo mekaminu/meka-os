@@ -103,6 +103,14 @@ object NeedsYouMeanwhileRules {
         )
     }
 
+    /**
+     * Under a stack of cards (the quality gate's Needs you re-shot, 2026-10-22: a full stack left the cover screen's
+     * lower half blank and the next reminder unseen): only Coming up shows, so what's next is in view without the
+     * habits, Waiting on and renewals that belong to a page with nothing to decide. Pure.
+     */
+    fun underStack(m: NeedsYouMeanwhile): NeedsYouMeanwhile =
+        NeedsYouMeanwhile(habits = emptyList(), waiting = emptyList(), waitingMore = null, renewals = emptyList(), renewalsMore = null, comingUp = m.comingUp)
+
     /** "+2 more" past [MAX_ROWS]; null otherwise. */
     fun more(total: Int): String? = (total - MAX_ROWS).takeIf { it > 0 }?.let { "+$it more" }
 

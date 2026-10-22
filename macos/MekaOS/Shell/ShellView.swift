@@ -232,6 +232,8 @@ struct NeedsYouView: View {
                         NeedsYouMeanwhileView(palette: palette)
                     } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette).staggeredAppear(1)
+                        // Under the stack, the next reminders (the gate's Needs you re-shot).
+                        NeedsYouMeanwhileView(palette: palette, underStack: true)
                     }
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
                     ScamTextsView(palette: palette)

@@ -139,4 +139,20 @@ object ScreenShots {
             if (lines != 1) fail("$name: \"$text\" takes $lines lines")
         }
     }
+
+    /**
+     * The quality gate's "a box hugs its words" (Needs you's re-shot, 2026-10-22: on the cover screen the top card kept
+     * a tall empty band under its hint line): fails when the node tagged [tag] reaches more than [maxGapDp] below the
+     * bottom of [lastText] inside it (its padding and a little more).
+     */
+    fun assertHugs(compose: ComposeContentTestRule, name: String, tag: String, lastText: String, maxGapDp: Float) {
+        val box = compose.onAllNodes(hasTestTag(tag), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            ?: fail("$name: nothing tagged $tag")
+        val bottom = compose.onAllNodes(hasText(lastText, substring = true), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { it.boundsInRoot }
+            .filter { it.top >= box.top - 1f && it.bottom <= box.bottom + 1f }
+            .maxOfOrNull { it.bottom } ?: fail("$name: \"$lastText\" isn't inside $tag")
+        val gapDp = (box.bottom - bottom) / compose.density.density
+        if (gapDp > maxGapDp) fail("$name: $tag has ${gapDp.toInt()} dp of empty space under \"$lastText\" (at most ${maxGapDp.toInt()} dp)")
+    }
 }

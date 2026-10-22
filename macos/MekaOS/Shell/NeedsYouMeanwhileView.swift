@@ -11,9 +11,12 @@ struct NeedsYouMeanwhileView: View {
     let palette: MekaPalette
     /// The stagger index of the first section (the empty line takes the one before).
     var firstIndex: Int = 2
+    /// Under a stack of cards only Coming up shows (core `NeedsYouMeanwhileRules.underStack`).
+    var underStack: Bool = false
 
     var body: some View {
-        let m = NeedsYouMeanwhileRules.shared.build(goals: model.goals, lists: model.lists, comingUp: model.today?.comingUp ?? [])
+        let all = NeedsYouMeanwhileRules.shared.build(goals: model.goals, lists: model.lists, comingUp: model.today?.comingUp ?? [])
+        let m = underStack ? NeedsYouMeanwhileRules.shared.underStack(m: all) : all
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if !m.habits.isEmpty {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {

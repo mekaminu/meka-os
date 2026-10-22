@@ -85,6 +85,7 @@ struct CommandNeedsYouView: View {
                         NeedsYouMeanwhileView(palette: palette)
                     } else if !model.needsYouCards.isEmpty {
                         NeedsYouStackView(palette: palette, autofocus: false).staggeredAppear(1)
+                        NeedsYouMeanwhileView(palette: palette, underStack: true)
                     }
                     // Likely-scam texts, greyed at the foot (Mac presentation pass, item 6).
                     ScamTextsView(palette: palette)

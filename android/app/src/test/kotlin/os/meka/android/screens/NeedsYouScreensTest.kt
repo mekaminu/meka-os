@@ -21,6 +21,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.today.NeedsYouRoute
+import os.meka.core.domain.NeedsYouMeanwhileRules
 import os.meka.core.domain.NeedsYouStackRules
 import os.meka.core.domain.ObligationKind
 import os.meka.core.domain.RenewalRepeat
@@ -106,7 +107,14 @@ class NeedsYouScreensTest {
             else -> {
                 ScreenShots.assertShows(compose, name, titles(fill).first())
                 ScreenShots.assertShows(compose, name, "Overdue")
+                // The card hugs its words: its padding (24 dp) and a little more under the hint, no empty band.
+                ScreenShots.assertHugs(compose, name, NeedsYouStackRules.TOP_CARD_TAG, "↑ Open", maxGapDp = 32f)
             }
+        }
+        // Under a stack, the next reminder is in view (Coming up), not a blank page.
+        if (fill == Fill.MANY) {
+            ScreenShots.assertShows(compose, name, NeedsYouMeanwhileRules.COMING_LABEL.uppercase())
+            ScreenShots.assertShows(compose, name, "Check the passport dates")
         }
     }
 

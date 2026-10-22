@@ -82,4 +82,19 @@ class NeedsYouMeanwhileTest {
         )
         assertEquals(listOf("Habits today", "Waiting on", "Coming up to renew"), m.sections)
     }
+
+    @Test
+    fun underAStackOnlyComingUpShows() {
+        val coming = listOf(MeanwhileLine("t1", "Check the passport dates", "Reminder · Tomorrow · 09:15"))
+        val m = NeedsYouMeanwhileRules.build(
+            goals(habit("Stretch", HabitPace.DUE)),
+            lists(waiting = listOf(waiting("Ada"), waiting("Bo"), waiting("Cy"), waiting("Di")), upcoming = listOf(renewal("Home", RenewalState.LATER))),
+            coming,
+        )
+        val under = NeedsYouMeanwhileRules.underStack(m)
+        assertEquals(listOf("Coming up"), under.sections)
+        assertEquals(coming, under.comingUp)
+        assertNull(under.waitingMore)
+        assertTrue(NeedsYouMeanwhileRules.underStack(NeedsYouMeanwhileRules.build(goals(habit("Stretch", HabitPace.DUE)), null)).isEmpty)
+    }
 }

@@ -18,6 +18,8 @@ struct NeedsYouStackView: View {
     @State private var busy = false
     /// Week board item (5) part 3: the card whose "Which day?" chips are open.
     @State private var choosingDay: String?
+    /// The top card's height: the cards behind take it so the pile stays even while the top card hugs its words.
+    @State private var topHeight: CGFloat = 0
     @FocusState private var focused: Bool
 
     private let thresholdX: CGFloat = 110
@@ -33,12 +35,15 @@ struct NeedsYouStackView: View {
                     ForEach(Array(behind.enumerated().reversed()), id: \.element.id) { i, card in
                         let depth = CGFloat(i + 1)
                         DecisionCardFace(card: card, armed: nil, progress: 0, palette: palette)
+                            .frame(height: topHeight > 0 ? topHeight : nil, alignment: .top)
+                            .clipped()
                             .scaleEffect(1 - 0.05 * depth, anchor: .top)
                             .offset(y: 12 * depth)
                             .opacity(1 - 0.3 * Double(depth))
                             .allowsHitTesting(false)
                     }
                     DecisionCardFace(card: top, armed: armed ?? lean, progress: progress, palette: palette)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topHeight = $0 }
                         .offset(drag)
                         .rotationEffect(.degrees(reduceMotion ? 0 : Double(drag.width / 40)))
                         .gesture(dragGesture(top))
@@ -199,7 +204,8 @@ private struct DecisionCardFace: View {
             Text(NeedsYouStackRules.shared.hint(card: card)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+        // Hugs its words (the gate's Needs you re-shot: a fixed height left a tall empty band under a short card).
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .padding(MekaSpace.l)
         .background {
             RoundedRectangle(cornerRadius: MekaRadius.l).fill(palette.surfaceRaised)

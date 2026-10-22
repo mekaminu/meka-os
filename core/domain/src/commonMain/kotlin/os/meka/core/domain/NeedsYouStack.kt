@@ -221,6 +221,9 @@ object NeedsYouStackRules {
     /** A button's sides (8 dp each, about a character each at the label's size), counted in characters. */
     const val BUTTON_PAD = 2f
 
+    /** The top card's tag for the quality gate's shots (it must hug its words: no empty band under the hint). */
+    const val TOP_CARD_TAG = "needs-you-top-card"
+
     /** The hint under the top card: "→ Done · ← Tomorrow · ↑ Open". */
     fun hint(card: DecisionCard): String = "→ ${card.yesLabel} · ← ${card.laterLabel} · ↑ ${card.openLabel}"
 }
