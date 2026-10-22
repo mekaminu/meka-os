@@ -3,6 +3,14 @@
 Written by CI after each green run on main (tools/publish-screens.sh). Not code: the quality gate's
 screenshots, for review. Invented data only. This branch is append-only.
 
+- [fold/ask/cover-dark-empty.png](docs/screens/fold/ask/cover-dark-empty.png)
+- [fold/ask/cover-dark-many.png](docs/screens/fold/ask/cover-dark-many.png)
+- [fold/ask/cover-dark-one.png](docs/screens/fold/ask/cover-dark-one.png)
+- [fold/ask/cover-light-many.png](docs/screens/fold/ask/cover-light-many.png)
+- [fold/ask/inner-dark-empty.png](docs/screens/fold/ask/inner-dark-empty.png)
+- [fold/ask/inner-dark-many.png](docs/screens/fold/ask/inner-dark-many.png)
+- [fold/ask/inner-dark-one.png](docs/screens/fold/ask/inner-dark-one.png)
+- [fold/ask/inner-light-many.png](docs/screens/fold/ask/inner-light-many.png)
 - [fold/board/cover-dark-empty.png](docs/screens/fold/board/cover-dark-empty.png)
 - [fold/board/cover-dark-many.png](docs/screens/fold/board/cover-dark-many.png)
 - [fold/board/cover-dark-one.png](docs/screens/fold/board/cover-dark-one.png)
