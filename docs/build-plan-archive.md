@@ -2843,3 +2843,4 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Mac:** GreetingText is a ViewThatFits over the three steps on one line, then the smallest wrapping; `MekaType.greeting(scale:)`. The Mac's watch face already reads the system clock, which is the core's on a Mac.
 - **Quality gate:** `ScreenShots.assertOneLine(…, "Good afternoon")` in every Today shot.
 - No server change, no migration. Mac checked nightly.
+- Landed 174addc; run 1042 failed only tokens-and-infra (a hand edit to the generated MekaTokens.swift, and the type check wants "type: ok" on a shrink-to-fit size): fixed in 5877db6, CI run 1043 (39752986848) green, screens 32b0b3d.
