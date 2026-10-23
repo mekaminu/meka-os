@@ -3128,6 +3128,25 @@ Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of t
   core change, no server change, no migration.
 - Landed e0c6090; CI run 1130 (39942089862) green first try; re-shot f35fe1d: Turn off just under each line.
 
+### Quality gate — slice 46 (2026-10-23): the morning brief's shots and its first hand tests
+
+The next of Ask's places without shots. BriefScreensTest (11) draws the morning brief (`BriefPane`) on the Fold's
+cover and inner sizes at 07:40 on a Wednesday with nothing on, one event (a swimming lesson) and a full morning (an
+office day, an overdue task and three for today, a long meeting at a place, a chase due today, a habit, a fast running,
+four headlines from Top stories, World and Technology, one with no link, the name in About you), Dark and Light, plus
+the full morning's foot (headlines, one-liner, Got it) on the cover screen, under docs/screens/fold/brief/.
+- Every shot is read for nonsense, cut lines, broken words, split dates, times and numbers, a word left alone and a dot
+  starting or ending a line, over the date and work line, the protected, weather and school lines, the focus and Needs
+  you lines, the day's summary, plan and pressure lines, the waiting line and metas, You's lines, the headlines' metas
+  and the one-liner; the day's rows and headlines must read whole.
+- By hand: Topics opens the topic chips and a chip turns its topic on, Done folds them away; the Short chip picks the
+  spoken length; a task's circle completes it and its row leaves; Got it marks the brief read and leaves Done.
+- Fixed before the first run, as Week ahead's and News's shots found on their screens: the brief's lines keep their
+  last words and dots together (LoneWordGlue), Fold `BriefPane` and Mac `BriefSheet` (the day rows' own captions
+  unchanged); Fold: Topics/Done answers a 48 dp touch (tagged `brief-topics`), as News's does.
+- Design check: no design file covers the morning brief. No core change, no server change, no migration, Mac checked
+  nightly.
+
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
 The next of Ask's places without shots. WeekAheadScreensTest (9) draws Ask → More → Week ahead (`WeekAheadPane`) on

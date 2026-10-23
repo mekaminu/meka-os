@@ -25,20 +25,20 @@ struct BriefSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             if let v = model.brief {
                 Text(String(CallNameRules.shared.opening(greeting: v.greeting, name: model.aboutYou?.callName).dropLast())).font(MekaType.upNextTitle).staggeredAppear(0)
-                Text([v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · "))
+                Text(LoneWordGlue.shared.kept(line: [v.dateLabel, v.workLine].compactMap { $0 }.joined(separator: " · ")))
                     .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .staggeredAppear(0)
                 // Protected time, slice 5: "Protected from 19:00 tonight" / "Protected all day · tasks wait for Mon 19 Oct".
                 if let line = v.protectedLine {
-                    Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
                 }
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
                 if let weather = v.weatherLine {
-                    Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
+                    Text(LoneWordGlue.shared.kept(line: weather)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(0)
                 }
                 // School rhythm, slice 2: "Theo: PE today".
                 if let school = v.school {
-                    Text(school.text).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: school.text)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .accessibilityLabel(school.spoken).staggeredAppear(0)
                 }
                 Button { toggleListen(v) } label: {
@@ -67,7 +67,7 @@ struct BriefSheet: View {
                 .staggeredAppear(0)
                 // AI layer completeness slice 3: while Navilife's AI can't write it, how the brief is read instead.
                 if let aiLine = AiFeatureRules.shared.line(feature: .brief, view: model.aiStatus) {
-                    Text(aiLine).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: aiLine)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .transition(.opacity)
                 }
@@ -81,7 +81,7 @@ struct BriefSheet: View {
                                 BriefDayRow(line: r, palette: palette).staggeredAppear(1)
                             }
                             ForEach(focusMore, id: \.self) { line in
-                                Text(line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                                     .contentTransition(.opacity).staggeredAppear(1)
                             }
                             Spacer().frame(height: MekaSpace.m)
@@ -90,7 +90,7 @@ struct BriefSheet: View {
                         if !v.asks.isEmpty {
                             SectionLabel("Waiting on you", palette).staggeredAppear(1)
                             ForEach(v.asks, id: \.id) { a in
-                                Text(a.line).font(MekaType.body)
+                                Text(LoneWordGlue.shared.kept(line: a.line)).font(MekaType.body)
                                     .foregroundStyle(a.urgent ? palette.accent : palette.textPrimary)
                                     .padding(.vertical, MekaSpace.xxs)
                                     .accessibilityLabel(a.spoken)
@@ -99,18 +99,18 @@ struct BriefSheet: View {
                             Spacer().frame(height: MekaSpace.m)
                         }
                         SectionLabel("Today", palette).staggeredAppear(1)
-                        Text(v.daySummary).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: v.daySummary)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .staggeredAppear(1)
                         // Week board slice 5: "3 carried over · 5 planned · about 4h".
                         if let plan = v.planLine {
-                            Text(plan).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                            Text(LoneWordGlue.shared.kept(line: plan)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                                 .contentTransition(.opacity)
                                 .staggeredAppear(1)
                         }
                         // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber.
                         if let line = v.pressureLine {
-                            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.calendar3)
+                            Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.calendar3)
                                 .contentTransition(.opacity)
                                 .staggeredAppear(1)
                         }
@@ -122,11 +122,11 @@ struct BriefSheet: View {
 
                         if let waitingLine = v.waitingLine {
                             SectionLabel("Waiting on", palette).padding(.top, MekaSpace.l).staggeredAppear(2)
-                            Text(waitingLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(2)
+                            Text(LoneWordGlue.shared.kept(line: waitingLine)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(2)
                             ForEach(v.waiting, id: \.id) { w in
                                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                                     Text(w.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                                    Text(w.meta).font(MekaType.caption)
+                                    Text(LoneWordGlue.shared.kept(line: w.meta)).font(MekaType.caption)
                                         .foregroundStyle(w.state == .due ? palette.accent : palette.textTertiary)
                                 }
                                 .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
@@ -143,7 +143,7 @@ struct BriefSheet: View {
                             ForEach(v.attention, id: \.id) { a in
                                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                                     Text(a.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                                    if let d = a.detail { Text(d).font(MekaType.caption).foregroundStyle(palette.accent) }
+                                    if let d = a.detail { Text(LoneWordGlue.shared.kept(line: d)).font(MekaType.caption).foregroundStyle(palette.accent) }
                                 }
                                 .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
                                 .staggeredAppear(3)
@@ -154,7 +154,7 @@ struct BriefSheet: View {
                         if !extras.isEmpty {
                             SectionLabel("You", palette).padding(.top, MekaSpace.l).staggeredAppear(4)
                             ForEach(extras, id: \.self) { line in
-                                Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(4)
+                                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary).staggeredAppear(4)
                             }
                         }
 
@@ -184,7 +184,7 @@ struct BriefSheet: View {
                                 .staggeredAppear(5)
                         }
                         // Slice 3: the one-liner the spoken brief closes with.
-                        Text("“\(v.oneLiner)”").font(MekaType.body).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: "“\(v.oneLiner)”")).font(MekaType.body).foregroundStyle(palette.textSecondary)
                             .padding(.top, MekaSpace.l).staggeredAppear(6)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -305,7 +305,7 @@ private struct HeadlineRow: View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             Text(headline.title).font(MekaType.itemTitle)
                 .foregroundStyle(hovering && url != nil ? palette.accent : palette.textPrimary)
-            Text(headline.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: headline.meta)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
         }
         .padding(.vertical, MekaSpace.xs).padding(.horizontal, MekaSpace.xs)
         .frame(maxWidth: .infinity, alignment: .leading)

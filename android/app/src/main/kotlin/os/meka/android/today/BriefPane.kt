@@ -74,6 +74,7 @@ import os.meka.core.domain.BriefFollowOnRules
 import os.meka.core.domain.BriefHeadline
 import os.meka.core.domain.BriefLine
 import os.meka.core.domain.DueState
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MorningBriefView
 import os.meka.core.domain.WaitingItem
 import os.meka.core.facade.MekaCore
@@ -154,14 +155,14 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                 // The title arrives from the brief card in Today (Four tabs, slice 3).
                 Text(os.meka.core.domain.CallNameRules.opening(v.greeting, about.callName).removeSuffix("."), style = MekaType.greeting, color = Meka.colors.textPrimary,
                     modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(SharedMotion.BRIEF)))
-                Text(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · "), style = MekaType.itemMeta,
+                Text(LoneWordGlue.kept(listOfNotNull(v.dateLabel, v.workLine).joinToString(" · ")), style = MekaType.itemMeta,
                     color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
                 // Protected time, slice 5: "Protected from 19:00 tonight" / "Protected all day · tasks wait for Mon 19 Oct".
-                v.protectedLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+                v.protectedLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
                 // Today's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
-                v.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+                v.weatherLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
                 // School rhythm, slice 2: "Theo: PE today".
-                v.school?.let { Text(it.text, style = MekaType.caption, color = Meka.colors.textSecondary,
+                v.school?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = Meka.colors.textSecondary,
                     modifier = Modifier.padding(top = MekaSpace.xxs).semantics { contentDescription = it.spoken }) }
                 ListenPill(speaking = speaker.speaking, preparing = preparing != null, modifier = Modifier.padding(top = MekaSpace.m)) {
                     when {
@@ -172,7 +173,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                 }
                 // AI layer completeness slice 3: while Navilife's AI can't write it, the brief says how it's read instead.
                 AnimatedVisibility(aiLine != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
-                    Text(aiLine ?: "", style = MekaType.caption, color = Meka.colors.textSecondary,
+                    Text(LoneWordGlue.kept(aiLine ?: ""), style = MekaType.caption, color = Meka.colors.textSecondary,
                         modifier = Modifier.padding(top = MekaSpace.xs).testTag("brief-ai-line"))
                 }
                 // Slice 3: how long the spoken brief is (synced): Short ~45 s · Standard ~90 s · Full ~3 min.
@@ -203,7 +204,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                     Column(Modifier.padding(bottom = MekaSpace.m).animateItem().appear(rememberAppearance(1))) {
                         more.forEach { line ->
                             Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "focus-more") {
-                                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xxs))
+                                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xxs))
                             }
                         }
                     }
@@ -217,7 +218,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
                 SectionLabel("Waiting on you", Modifier.animateItem().appear(rememberAppearance(1)))
             }
             items(v.asks, key = { "k-" + it.id }) { a ->
-                Text(a.line, style = MekaType.body, color = if (a.urgent) Meka.colors.accent else Meka.colors.textPrimary,
+                Text(LoneWordGlue.kept(a.line), style = MekaType.body, color = if (a.urgent) Meka.colors.accent else Meka.colors.textPrimary,
                     modifier = Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs).animateItem().appear(rememberAppearance(1))
                         .semantics { contentDescription = a.spoken })
             }
@@ -227,14 +228,14 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
         item(key = "h-day") {
             Column(Modifier.animateItem().appear(rememberAppearance(1))) {
                 SectionLabel("Today")
-                Text(v.daySummary, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                Text(LoneWordGlue.kept(v.daySummary), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 // Week board slice 5: "3 carried over · 5 planned · about 4h".
                 v.planLine?.let { plan ->
-                    Text(plan, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                    Text(LoneWordGlue.kept(plan), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
                 // Week board item (10): "Friday is stacking up: Trip form, Council tax and Gym" in amber.
                 v.pressureLine?.let { line ->
-                    Text(line, style = MekaType.itemMeta, color = Meka.colors.calendar3, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                    Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.calendar3, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
             }
         }
@@ -249,7 +250,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             item(key = "h-waiting") {
                 Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(2))) {
                     SectionLabel("Waiting on")
-                    Text(waitingLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                    Text(LoneWordGlue.kept(waitingLine), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
                 }
             }
             items(v.waiting, key = { "w-" + it.id }) { w -> WaitingLine(w, Modifier.animateItem().appear(rememberAppearance(2))) }
@@ -273,7 +274,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             item(key = "h-you") {
                 Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(4))) {
                     SectionLabel("You")
-                    extras.forEach { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
+                    extras.forEach { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(vertical = MekaSpace.xxs)) }
                 }
             }
         }
@@ -282,8 +283,9 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
             Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(5))) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     SectionLabel("Headlines", Modifier.weight(1f))
+                    // Quality gate slice 46: Topics/Done answers a 48 dp touch, as News's does.
                     Text(if (topicsOpen) "Done" else "Topics", style = MekaType.caption, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { topicsOpen = !topicsOpen }.padding(MekaSpace.xs))
+                        modifier = Modifier.testTag("brief-topics").clickable(role = Role.Button) { topicsOpen = !topicsOpen }.minTouch().padding(horizontal = MekaSpace.xs))
                 }
                 AnimatedVisibility(
                     visible = topicsOpen,
@@ -312,7 +314,7 @@ fun BriefPane(core: MekaCore, onClose: () -> Unit, readAloud: Boolean = false, o
 
         // Slice 3: the one-liner the spoken brief closes with.
         item(key = "one-liner") {
-            Text("“${v.oneLiner}”", style = MekaType.body, color = Meka.colors.textSecondary,
+            Text(LoneWordGlue.kept("“${v.oneLiner}”"), style = MekaType.body, color = Meka.colors.textSecondary,
                 modifier = Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(6)))
         }
 
@@ -395,7 +397,7 @@ internal fun BriefDayRow(r: BriefDayLine, modifier: Modifier = Modifier, onCompl
 private fun WaitingLine(w: WaitingItem, modifier: Modifier) {
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs)) {
         Text(w.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        Text(w.meta, style = MekaType.caption, color = if (w.state == DueState.DUE) Meka.colors.accent else Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(w.meta), style = MekaType.caption, color = if (w.state == DueState.DUE) Meka.colors.accent else Meka.colors.textTertiary)
     }
 }
 
@@ -409,20 +411,20 @@ private fun HeadlineLine(h: BriefHeadline, modifier: Modifier, open: (String) ->
             .padding(vertical = MekaSpace.xs),
     ) {
         Text(h.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        Text(h.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(h.meta), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
 @Composable
 private fun NewsNote(text: String) {
-    Text(text, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xs))
+    Text(LoneWordGlue.kept(text), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(vertical = MekaSpace.xs))
 }
 
 @Composable
 private fun AttentionLine(a: BriefLine, modifier: Modifier) {
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs)) {
         Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        a.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
+        a.detail?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.accent) }
     }
 }
 
