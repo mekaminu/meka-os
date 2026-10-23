@@ -1,5 +1,6 @@
 package os.meka.android.screens
 
+import android.os.Looper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import os.meka.android.activity.ActivityPane
@@ -115,7 +117,7 @@ class TalkActivityScreensTest {
     /**
      * Works by hand (slice 28): Talk over's Turn off is a live button, and its line says Off once tapped. Slice 27's
      * version scrolled to the button first and the paused test clock never went idle (CI run 1103); the tap is now the
-     * button's own click action, which needs no scroll, and the clock is moved on by hand.
+     * button's own click action, which needs no scroll, and the main looper and the clock are moved on by hand.
      */
     private fun talkOverByHand() {
         val on = BargeInRules.section(true)
@@ -125,7 +127,13 @@ class TalkActivityScreensTest {
         if (count == 0) fail("Talk: no ${on.action} button")
         // Talk over's own button: the last section saying it carries it.
         buttons[count - 1].performSemanticsAction(SemanticsActions.OnClick)
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        // The tap's state change reaches the recomposer through a post on the main looper, which the paused clock never
+        // runs (CI run 1106: the line still said On). Run the looper and the frames by turns until the colour has
+        // blended; a waitForIdle here, with the blend waiting on the paused clock, is what never went idle in 1103.
+        repeat((SETTLE_MS / 100).toInt()) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            compose.mainClock.advanceTimeBy(100)
+        }
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         if (TalkAutoListen.talkOver(context)) fail("Talk: Turn off didn't turn Talk over off")
         ScreenShots.assertShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
