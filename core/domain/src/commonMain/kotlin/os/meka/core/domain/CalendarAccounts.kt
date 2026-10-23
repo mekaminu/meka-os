@@ -110,13 +110,23 @@ object CalendarAccountRules {
 
     /**
      * The line under the title. [syncedAt] is the last sync's time as the device writes it ("08:29"), or null before
-     * the first one. A signed-in account carries its address: "Google · meka@gmail.com · synced 08:29".
+     * the first one. A signed-in account carries its address: "Google · meka@gmail.com · synced 08:29". When the
+     * account's [title] is already its provider's name ("Outlook" over "Outlook · …" said it twice, quality gate slice
+     * 36) the line starts at the address. An expired account names its address after the state ("Access expired for
+     * alex.work@example.com"), so a long address never leaves the line ending on "·" with "access expired" under it.
      */
-    fun statusLine(provider: String, email: String, status: String, syncedAt: String?): String {
+    fun statusLine(provider: String, email: String, status: String, syncedAt: String?, title: String? = null): String {
+        val mail = isMailAccount(provider, email)
+        val label = providerLabel(provider)
+        val prefix: String? = label.takeUnless { title?.trim().equals(it, ignoreCase = true) }
+        if (mail && status == "needs_reconnect") {
+            val what = "access expired for ${email.trim()}"
+            return if (prefix != null) "$prefix · $what" else what.replaceFirstChar { it.uppercase() }
+        }
         val who: String? = when {
-            isMailAccount(provider, email) -> "${providerLabel(provider)} · ${email.trim()}"
+            mail -> listOfNotNull(prefix, email.trim()).joinToString(" · ")
             provider in KIND_TITLED -> email.trim().ifEmpty { null }
-            else -> providerLabel(provider)
+            else -> label
         }
         // The row's own Reconnect button says what to do (quality gate slice 34: "access expired · Reconnect" sat right
         // above it).

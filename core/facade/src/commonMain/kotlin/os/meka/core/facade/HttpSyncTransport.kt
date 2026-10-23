@@ -59,7 +59,7 @@ data class ConnectedAccount(
     /** [editingLine] as drawn, its dots and last words held together. */
     val editingShown: String? get() = editingLine?.let(os.meka.core.domain.LoneWordGlue::kept)
     /** "Google · meka@gmail.com · synced 08:29" · "Headlines · synced 08:29"; [syncedAt] as the device writes the time. */
-    fun statusLine(syncedAt: String?): String = os.meka.core.domain.CalendarAccountRules.statusLine(provider, email, status, syncedAt)
+    fun statusLine(syncedAt: String?): String = os.meka.core.domain.CalendarAccountRules.statusLine(provider, email, status, syncedAt, title)
     /** The line about editing under the account, or null (feeds, or the reconnect line says enough). */
     val editingLine: String? get() = os.meka.core.domain.CalendarAccessRules.line(provider, canEdit, needsReconnect)
     /** Allow editing · Stop editing · none. */

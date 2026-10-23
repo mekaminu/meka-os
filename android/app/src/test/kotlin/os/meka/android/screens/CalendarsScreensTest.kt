@@ -193,6 +193,12 @@ class CalendarsScreensTest {
         list.filter { it.needsReconnect }.forEach { a ->
             if ("Reconnect" in a.shownStatus) fail("$name: ${a.title}'s line says Reconnect above its button: \"${a.shownStatus}\"")
         }
+        // Quality gate slice 36: a card titled by its provider ("Outlook") doesn't say it again on its line, and an
+        // expired account's line is never drawn ending on a "·" with "access expired" under it.
+        list.forEach { a ->
+            if (a.shownStatus.replace(' ', ' ').startsWith("${a.title} · ")) fail("$name: ${a.title} said twice: \"${a.shownStatus}\"")
+        }
+        ScreenShots.assertNoDotEndingALine(compose, name, list.filter { it.needsReconnect }.map { it.shownStatus })
         when (fill) {
             Fill.EMPTY -> {
                 if (list.isNotEmpty()) fail("$name: ${list.size} accounts with nothing connected")

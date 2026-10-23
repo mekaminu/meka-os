@@ -26,7 +26,7 @@ class CalendarAccountsTest {
         assertEquals("Outlook", CalendarAccountRules.title("microsoft", "meka@outlook.com"))
         assertEquals("Google · meka@gmail.com · synced 08:29", CalendarAccountRules.statusLine("google", "meka@gmail.com", "ok", "08:29"))
         assertEquals("Outlook · meka@hotmail.co.uk · first sync in progress", CalendarAccountRules.statusLine("microsoft", "meka@hotmail.co.uk", "ok", null))
-        assertEquals("Google · meka@gmail.com · access expired", CalendarAccountRules.statusLine("google", "meka@gmail.com", "needs_reconnect", "08:29"))
+        assertEquals("Google · access expired for meka@gmail.com", CalendarAccountRules.statusLine("google", "meka@gmail.com", "needs_reconnect", "08:29"))
         assertEquals("Google · meka@gmail.com · couldn't sync last time · retrying", CalendarAccountRules.statusLine("google", "meka@gmail.com", "error", null))
     }
 
@@ -120,7 +120,26 @@ class CalendarAccountsTest {
     fun anExpiredAccountsLineLeavesReconnectToItsButton() {
         val line = CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "needs_reconnect", "08:29")
         assertFalse("Reconnect" in line, line)
-        assertTrue(line.endsWith("access expired"), line)
+        assertTrue(line.startsWith("Outlook · access expired for"), line)
+    }
+
+    @Test
+    fun anAccountTitledByItsProviderDoesNotSayItTwice() {
+        // Quality gate slice 36: the expired Outlook card read "Outlook" over "Outlook · alex.work@example.com ·" with
+        // "access expired" alone on the next line.
+        val expired = CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "needs_reconnect", "08:29", title = "Outlook")
+        assertEquals("Access expired for alex.work@example.com", expired)
+        val kept = LoneWordGlue.kept(expired)
+        assertFalse(kept.trimEnd().endsWith("·"), kept)
+        assertEquals("alex.work@example.com · synced 08:29",
+            CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "ok", "08:29", title = "Outlook"))
+        // A title of its own keeps the provider on the line, so two accounts still tell apart.
+        assertEquals("Outlook · meka@hotmail.co.uk · synced 08:29",
+            CalendarAccountRules.statusLine("microsoft", "meka@hotmail.co.uk", "ok", "08:29", title = "Hotmail"))
+        assertEquals("Google · access expired for sam@example.com",
+            CalendarAccountRules.statusLine("google", "sam@example.com", "needs_reconnect", null, title = "Personal"))
+        // Feeds are unchanged.
+        assertEquals("Headlines · synced 08:29", CalendarAccountRules.statusLine("news", "BBC News", "ok", "08:29", title = "BBC News"))
     }
 
     @Test

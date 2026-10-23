@@ -312,4 +312,28 @@ object ScreenShots {
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
         if (bad.isNotEmpty()) fail("$name starts a line with a dot:\n" + bad.joinToString("\n") { "- $it" })
     }
+
+    /** Quality gate slice 36: none of [texts], where drawn on more than one line, has a line ending on a "·". */
+    fun assertNoDotEndingALine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val wanted = texts.map { DateGlue.plain(it) }.toSet()
+        if (wanted.isEmpty()) return
+        val bad = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null && DateGlue.plain(text) in wanted) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.takeIf { it.lineCount > 1 }?.let { r ->
+                    for (line in 0 until r.lineCount - 1) {
+                        val words = DateGlue.plain(text.substring(r.getLineStart(line), r.getLineEnd(line))).trim()
+                        if (words.endsWith("·")) bad += "\"$words\" in \"${DateGlue.plain(text)}\""
+                    }
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (bad.isNotEmpty()) fail("$name ends a line with a dot:\n" + bad.joinToString("\n") { "- $it" })
+    }
 }
