@@ -40,6 +40,18 @@ object VoiceNoteStore {
     /** The notes, newest first (null until first read). */
     val notes: StateFlow<List<VoiceNote>?> = _notes
 
+    /**
+     * The quality gate's Voice notes shots (2026-10-23): the screen tests hold the notes in memory instead of the
+     * Keystore-encrypted files (Robolectric has no Keystore). Never set on a phone.
+     */
+    @Volatile private var inMemory = false
+
+    /** Test only: holds [notes] in memory from now on (load, keep, update, remove and sweep never touch a file). */
+    internal fun holdInMemoryForScreens(notes: List<VoiceNote>) {
+        inMemory = true
+        _notes.value = VoiceNoteRules.ordered(notes)
+    }
+
     fun dir(context: Context): File = File(context.filesDir, DIR).apply { mkdirs() }
 
     /** Where a recording in progress is written (plain, inside the private folder, until [keep]). */
@@ -77,12 +89,14 @@ object VoiceNoteStore {
     }
 
     private fun readIndex(context: Context): List<VoiceNote> {
+        if (inMemory) return _notes.value.orEmpty()
         val f = File(dir(context), VoiceNoteRules.INDEX_FILE)
         if (!f.exists()) return emptyList()
         return runCatching { VoiceNoteRules.decode(decrypt(f.readBytes()).decodeToString()) }.getOrDefault(emptyList())
     }
 
     private fun writeIndex(context: Context, notes: List<VoiceNote>) {
+        if (inMemory) { _notes.value = VoiceNoteRules.ordered(notes); return }
         writeAtomically(File(dir(context), VoiceNoteRules.INDEX_FILE), encrypt(VoiceNoteRules.encode(notes).encodeToByteArray()))
         _notes.value = VoiceNoteRules.ordered(notes)
     }
@@ -148,7 +162,7 @@ object VoiceNoteStore {
      */
     suspend fun sweep(context: Context, nowMs: Long, recording: String? = null) = withContext(Dispatchers.IO) {
         lock.withLock {
-            runCatching {
+            if (!inMemory) runCatching {
                 val all = readIndex(context)
                 val gone = VoiceNoteRules.expired(all, nowMs).map { it.id }.toSet()
                 val left = all.filter { it.id !in gone }

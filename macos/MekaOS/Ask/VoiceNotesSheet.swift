@@ -31,7 +31,7 @@ struct VoiceNotesSheet: View {
         let rows = model.voiceNoteRows(notes)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(rules.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(store.notes == nil ? "" : rules.summary(notes: notes, onMac: true))
+            Text(store.notes == nil ? "" : LoneWordGlue.shared.kept(line: rules.summary(notes: notes, onMac: true)))
                 .font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
@@ -39,7 +39,7 @@ struct VoiceNotesSheet: View {
                 .staggeredAppear(1)
             if let line {
                 HStack(spacing: MekaSpace.xs) {
-                    Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
                     if let u = undo {
@@ -77,7 +77,7 @@ struct VoiceNotesSheet: View {
                 .animation(MekaMotion.expand(reduced: reduceMotion), value: rows.map(\.id))
             }
             .frame(maxHeight: 460)
-            Text(rules.MAC_NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: rules.MAC_NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)
             HStack {
@@ -184,15 +184,15 @@ private struct VoiceNoteRowView: View {
             Button(action: onExpand) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(row.title).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    Text(row.text).font(MekaType.body)
+                    Text(LoneWordGlue.shared.kept(line: row.text)).font(MekaType.body)
                         .foregroundStyle(row.heard ? palette.textPrimary : palette.textSecondary)
                         .lineLimit(expanded ? nil : 3)
                         .fixedSize(horizontal: false, vertical: true)
                     if let people = row.peopleLine {
-                        Text(people).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: people)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     }
                     if let cards = row.cardsLine {
-                        Text(cards).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        Text(LoneWordGlue.shared.kept(line: cards)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,7 +209,7 @@ private struct VoiceNoteRowView: View {
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                     }
-                    Text(row.keepLine).font(MekaType.caption).foregroundStyle(row.kept ? palette.accent : palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: row.keepLine)).font(MekaType.caption).foregroundStyle(row.kept ? palette.accent : palette.textTertiary)
                 }
                 .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }

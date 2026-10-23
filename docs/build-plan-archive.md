@@ -3202,6 +3202,27 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 56 (2026-10-23): Voice notes' shots and its first hand test
+
+The next of Ask's places without shots. VoiceNotesScreensTest (7) draws Ask → Daily → Voice notes with no notes, one
+note not yet read for cards ("Today 14:02 · 1:23", Make cards offered) and five (a tidied one with "Mentions Sam" and
+two cards offered, a kept two-minute ramble, one where nothing was heard, one with nothing to add, one the phone
+couldn't turn into words) on the cover and inner sizes, Dark and Light, under docs/screens/fold/voice-notes/, read for
+nonsense, cut lines, broken words, split dates, times and numbers, a word left alone, a dot starting a line, each row's
+Make cards / Keep / Delete on one line and 48 dp touches. By hand: tapping a note opens it to say how long it's kept,
+Keep keeps it ("Kept · Navilife won't delete it"), Delete says "Deleted the note from Today 14:02" with Undo, and Undo
+puts it back.
+
+- Test seam: VoiceNoteStore.holdInMemoryForScreens (internal) holds the notes in memory for the screen tests, since
+  Robolectric has no Android Keystore; load, update, remove, restore and sweep then never touch a file. Never set on a
+  phone.
+- Fixed first: the Fold's rows were built from the phone's default zone and clock (ZoneId.systemDefault,
+  LocalDate.now), and Make cards' subject the same; they now read the core's clock and zone through
+  facade voiceNoteRows / voiceNoteSubject, as the Mac's sheet already did.
+- The pane's summary, line, note and each row's words, people, cards and keep lines keep their last words and dots
+  together (LoneWordGlue), Fold and Mac (VoiceNotesSheet).
+- Design check: no design file covers Voice notes. No core change, no server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 55 (2026-10-23): Speaking up said short, slim pills on both panes
 
 Slice 54's shots' findings. Speaking up's intro was a ten-line paragraph on the cover screen; now it reads "Ada says

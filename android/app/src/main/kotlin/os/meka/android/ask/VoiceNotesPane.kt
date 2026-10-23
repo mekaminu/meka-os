@@ -53,13 +53,12 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.VoiceNote
 import os.meka.core.domain.VoiceNoteRow
 import os.meka.core.domain.VoiceNoteRules
 import os.meka.core.facade.HandleOutcome
 import os.meka.core.facade.MekaCore
-import java.time.Instant
-import java.time.ZoneId
 
 /**
  * Ask → Daily → Voice notes (voice notes into actions, slice 1; the Fold only): the notes this phone keeps, newest
@@ -127,9 +126,8 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
         haptics.light()
         making = note.id
         scope.launch {
-            val minute = Instant.ofEpochMilli(note.atMs).atZone(ZoneId.systemDefault()).toLocalTime().let { it.hour * 60 + it.minute }
             // Slice 2: the words are tidied by the AI, which also pulls out the cards (and ideas for Someday).
-            val read = runCatching { core.tidyVoiceNote(note.transcript, VoiceNoteRules.subject(minute)) }.getOrNull()
+            val read = runCatching { core.tidyVoiceNote(note.transcript, core.voiceNoteSubject(note.atMs)) }.getOrNull()
             val out = read?.cards
             val count = when (out) {
                 is HandleOutcome.Cards -> { line = out.line + " · in Needs you"; out.cards.size }
@@ -150,11 +148,14 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
         scope.launch {
             val gone = VoiceNoteStore.remove(context, note.id) ?: return@launch
             undo = gone
-            line = "Deleted the note from " + rowFor(gone).title.substringBefore(" · ")
+            line = "Deleted the note from " + core.voiceNoteRows(listOf(gone), onMac = false).first().title.substringBefore(" · ")
         }
     }
 
     val list = notes.orEmpty()
+    // The quality gate (2026-10-23): days and times by the core's clock and zone, as the Mac's sheet already reads them
+    // (they were the phone's own default zone and clock).
+    val rows = remember(list) { core.voiceNoteRows(list, onMac = false).associateBy { it.id } }
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(MekaSpace.gutter),
@@ -170,13 +171,13 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
         }
         item(key = "summary") {
             Crossfade(if (notes == null) "" else VoiceNoteRules.summary(list), animationSpec = MekaMotion.appear(reduced), label = "voice-notes-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
         item(key = "line") {
             Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "voice-notes-line") { l ->
                 if (l != null) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f)
+                    Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f)
                         .semantics { liveRegion = LiveRegionMode.Polite })
                     val u = undo
                     if (u != null) {
@@ -190,7 +191,7 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
             }
         }
         itemsIndexed(list, key = { _, n -> "vn-${n.id}" }) { i, n ->
-            val row = rowFor(n)
+            val row = rows[n.id] ?: return@itemsIndexed
             NoteRow(
                 row, Modifier.animateItem().appear(rememberAppearance(2 + i)),
                 expanded = open == n.id,
@@ -208,19 +209,10 @@ fun VoiceNotesPane(core: MekaCore, onClose: () -> Unit, closeLabel: String = "Cl
             )
         }
         item(key = "note") {
-            Text(VoiceNoteRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(LoneWordGlue.kept(VoiceNoteRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
-}
-
-/** The pane's row for [note] in the phone's time zone. */
-private fun rowFor(note: VoiceNote): VoiceNoteRow {
-    val zone = ZoneId.systemDefault()
-    val at = Instant.ofEpochMilli(note.atMs).atZone(zone)
-    val today = java.time.LocalDate.now(zone).toEpochDay()
-    val expiry = VoiceNoteRules.expiresAtMs(note)?.let { Instant.ofEpochMilli(it).atZone(zone).toLocalDate().toEpochDay() }
-    return VoiceNoteRules.row(note, at.toLocalDate().toEpochDay(), at.hour * 60 + at.minute, expiry, today)
 }
 
 @Composable
@@ -250,11 +242,11 @@ private fun NoteRow(
         ) {
             Text(row.title, style = MekaType.caption, color = Meka.colors.textSecondary)
             Text(
-                row.text, style = MekaType.body, color = if (row.heard) Meka.colors.textPrimary else Meka.colors.textSecondary,
+                LoneWordGlue.kept(row.text), style = MekaType.body, color = if (row.heard) Meka.colors.textPrimary else Meka.colors.textSecondary,
                 maxLines = if (expanded) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
             )
-            row.peopleLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
-            row.cardsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            row.peopleLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
+            row.cardsLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
         AnimatedVisibility(
             expanded,
@@ -267,7 +259,7 @@ private fun NoteRow(
                     Text(VoiceNoteRules.WORDS_LABEL, style = MekaType.caption, color = Meka.colors.textTertiary)
                     Text(w, style = MekaType.body, color = Meka.colors.textSecondary)
                 }
-                Text(row.keepLine, style = MekaType.caption, color = if (row.kept) Meka.colors.accent else Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(row.keepLine), style = MekaType.caption, color = if (row.kept) Meka.colors.accent else Meka.colors.textTertiary)
             }
         }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
