@@ -3128,6 +3128,20 @@ Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of t
   core change, no server change, no migration.
 - Landed e0c6090; CI run 1130 (39942089862) green first try; re-shot f35fe1d: Turn off just under each line.
 
+### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
+
+The next of Ask's places without shots. WeekAheadScreensTest (9) draws Ask → More → Week ahead (`WeekAheadPane`) on
+the Fold's cover and inner sizes with nothing on, one event (today's swimming lesson) and a full week (Mon–Fri office
+with a short Thursday, the younger boy's INSET day on Friday while at the office, swimming and football from the Kids
+calendar, a long meeting at a place, dinner, a car boot sale, the garden bin every other Friday, two goals with one
+picked, the partner named), Dark and Light, plus the full week's foot (family sync, goals, Sunday heads-up) on the
+cover screen, under docs/screens/fold/week-ahead/.
+- Every shot is read for nonsense, cut lines, broken words, split dates, times and numbers, a word left alone and a dot
+  starting or ending a line, over the summary, each day's line and lines, the family sync, the goals and the heads-up.
+- By hand: Sunday heads-up's On turns it off (the times fold away, the line says so) and back on; a goal's row picks
+  it ("2 picked · up to 3") and a second tap unpicks it.
+- Design check: no design file covers the week ahead. Test only, no app change, no server change, no migration.
+
 ### Quality gate — slice 44 (2026-10-23): a lane's name and its count on one baseline
 
 Slice 43's re-shot finding: on News's lane headers "AI" and "TOP STORIES" (grey) sat a few px above their gold
