@@ -3202,6 +3202,18 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 53 (2026-10-23): Life admin unfolded as a centred column, overdue jobs first
+
+Slice 52's two findings from Life admin's shots.
+- Android `LifeAdminPane`: the LazyColumn sits in a TopCenter Box at most `WORK_COLUMN_MAX` (600 dp) wide, like Work
+  mode and Fasting, so unfolded the job rows no longer stretch across the 829 dp inner screen. Cover screen unchanged.
+- Core `LifeAdminRules.jobs`: tasks are ordered overdue first, then priority, then oldest (renewals still lead, nearest
+  due first, so an overdue renewal is already at the top). Fold and Mac (the Mac's 480 pt sheet takes the order from the
+  core; its width was already a column).
+- LifeAdminScreensTest: the full week adds the overdue form last (the newest job) and fails unless it is the first task;
+  fails unless the pane is at most 600 dp wide and centred. Core test: LifeAdminTest.anOverdueTaskComesFirstAfterTheRenewals.
+- Design check: no design file covers Life admin. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 52 (2026-10-23): Life admin's shots and its first hand test
 
 The next of Ask's places without shots. LifeAdminScreensTest (7) draws Ask → More → Life admin hour off, on with a renewal

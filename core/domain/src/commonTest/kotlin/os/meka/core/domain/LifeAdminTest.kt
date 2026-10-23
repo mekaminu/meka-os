@@ -181,6 +181,19 @@ class LifeAdminTest {
     }
 
     @Test
+    fun anOverdueTaskComesFirstAfterTheRenewals() {
+        assertTrue(aFold.set(6, 10 * 60))
+        val free = LifeAdminRules.slot(aFold.setting()!!, mon, cal) { emptyList() }!!
+        // The late form is the newest and the lowest priority; it still comes before the other tasks.
+        val late = task("t55555", "Fill in the school form").copy(dueAtMs = at(mon - 2, 9))
+        val jobs = LifeAdminRules.jobs(
+            listOf(task("t1", "Call the GP", priority = 2), task("t22", "Renew passport"), late), emptyList(), mon, free, cal,
+        )
+        assertEquals(listOf("Fill in the school form", "Call the GP", "Renew passport"), jobs.map { it.title })
+        assertEquals(listOf(true, false, false), jobs.map { it.overdue })
+    }
+
+    @Test
     fun askAndTalkKnowTheHourAndCanSkipThisWeeks() {
         assertTrue(aFold.set(6, 10 * 60))
         val s = aFold.setting()!!

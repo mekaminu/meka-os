@@ -31,6 +31,8 @@ import os.meka.android.ask.LifeAdminPane
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
+import os.meka.android.work.WORK_COLUMN_MAX
+import os.meka.core.domain.LifeAdminJobKind
 import os.meka.core.domain.LifeAdminRules
 import os.meka.core.domain.LocalClock
 import os.meka.core.domain.LoneWordGlue
@@ -84,13 +86,14 @@ class LifeAdminScreensTest {
                 core.setLifeAdmin(LifeAdminRules.DEFAULT_WEEKDAY, 19 * 60)
                 core.addRenewal("Car insurance", ObligationKind.INSURANCE, today + 3, RenewalRepeat.YEARLY, "£420", null)
                 core.addRenewal("Home insurance for the flat and its contents", ObligationKind.INSURANCE, today + 9, RenewalRepeat.YEARLY, null, null)
-                val form = core.addTask("Fill in the school trip form")
-                core.setDue(form, now - 2 * DAY_MS)
                 listOf(
                     "Call the GP about the results", "Renew the parking permit", "Reply to the council about the bins",
                     "Pay the window cleaner", "Book the boiler service", "Send the football kit money",
                     "Return the parcel to the shop before the refund window closes", "Scan the warranty letter",
                 ).forEach { core.addTask(it) }
+                // Added last (the newest job), so the shot shows it still comes first after the renewals.
+                val form = core.addTask("Fill in the school trip form")
+                core.setDue(form, now - 2 * DAY_MS)
             }
         }
     }
@@ -138,6 +141,17 @@ class LifeAdminScreensTest {
                 fail("$name: \"$label\" sits outside the pane (${n.positionInRoot.x / compose.density.density}–${right / compose.density.density} dp)")
             }
         }
+    }
+
+    /** Unfolded, the pane is a centred column at most 600 dp wide, not rows stretched across the page. */
+    private fun assertColumnWidth(name: String) {
+        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
+        val pane = compose.onNodeWithTag("life-admin-pane").fetchSemanticsNode().boundsInRoot
+        val d = compose.density.density
+        if (pane.width / d > WORK_COLUMN_MAX.value + 1f) fail("$name: the pane is ${(pane.width / d).toInt()} dp wide, not a column")
+        val left = pane.left - screen.left
+        val right = screen.right - pane.right
+        if (kotlin.math.abs(left - right) > 2 * d) fail("$name: the column isn't centred (${(left / d).toInt()} dp | ${(right / d).toInt()} dp)")
     }
 
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
@@ -193,6 +207,9 @@ class LifeAdminScreensTest {
                 if (v.jobCount <= v.jobs.size) fail("$name: ${v.jobCount} jobs all listed; the fixture should overflow")
                 if (v.overdueCount != 1) fail("$name: ${v.overdueCount} overdue, not the school form")
                 if (v.jobs.first().title != "Car insurance") fail("$name: the nearest renewal isn't first (${v.jobs})")
+                val firstTask = v.jobs.firstOrNull { it.kind == LifeAdminJobKind.TASK }
+                if (firstTask?.overdue != true) fail("$name: the overdue form isn't the first task (${v.jobs.map { it.title }})")
+                assertColumnWidth(name)
             }
         }
         return core

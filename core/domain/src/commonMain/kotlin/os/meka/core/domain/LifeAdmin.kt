@@ -80,7 +80,7 @@ data class LifeAdminView(
     val skipped: Boolean,
     /** The next hour that will happen (this week's, else next week's); null when off or with no room. */
     val next: LifeAdminSlot?,
-    /** What the hour gathers, renewals first; at most [LifeAdminRules.SHOWN]. */
+    /** What the hour gathers, renewals first, then overdue tasks; at most [LifeAdminRules.SHOWN]. */
     val jobs: List<LifeAdminJob>,
     /** All jobs gathered (more than [jobs] when cut). */
     val jobCount: Int,
@@ -175,7 +175,8 @@ object LifeAdminRules {
      * The jobs the hour gathers: the renewals radar's items needing attention (overdue, cancel-by or due within their
      * lead time; [renewals] is the radar's `attention` list), then open tasks (inbox or active, not waiting for a later
      * day, not a calendar event's prep) that read as admin and aren't planned for a set time other than within the hour
-     * [slot], higher priority first, then oldest first.
+     * [slot]: overdue ones first (quality gate, Life admin's shots: a late form sat below newer jobs), then higher
+     * priority, then oldest first.
      */
     fun jobs(tasks: List<Task>, renewals: List<RenewalItem>, today: Long, slot: LifeAdminSlot?, cal: LocalCalendar): List<LifeAdminJob> {
         val out = mutableListOf<LifeAdminJob>()
@@ -189,10 +190,14 @@ object LifeAdminRules {
         val open = tasks.filter { t ->
             (t.lifecycle == Lifecycle.INBOX || t.lifecycle == Lifecycle.ACTIVE) && !t.waitsForItsDay(today) && t.eventId == null &&
                 isAdmin(t.title) && (t.scheduledAtMs == null || (slot != null && t.scheduledAtMs >= slot.startMs && t.scheduledAtMs < slot.endMs))
-        }.sortedWith(compareByDescending<Task> { it.priority }.thenBy { it.createdAtMs }.thenBy { it.id })
-        for (t in open) {
+        }
+        fun overdue(t: Task): Boolean = t.dueAtMs?.let { cal.epochDayOf(it) < today } ?: false
+        val ordered = open.sortedWith(
+            compareByDescending<Task> { overdue(it) }.thenByDescending { it.priority }.thenBy { it.createdAtMs }.thenBy { it.id },
+        )
+        for (t in ordered) {
             val dueDay = t.dueAtMs?.let { cal.epochDayOf(it) }
-            val overdue = dueDay != null && dueDay < today
+            val overdue = overdue(t)
             val line = dueDay?.let { if (overdue) "overdue since ${CivilDate.shortLabel(it)}" else "due " + dueLabel(it, today) }
             out += LifeAdminJob(
                 TASK_PREFIX + t.id, LifeAdminJobKind.TASK, t.title, line, listOfNotNull(t.title, line).joinToString(", "), overdue,

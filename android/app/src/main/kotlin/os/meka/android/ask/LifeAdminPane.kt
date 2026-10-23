@@ -6,13 +6,16 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
@@ -47,6 +51,7 @@ import os.meka.android.lists.unfold
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.android.work.WORK_COLUMN_MAX
 import os.meka.core.domain.LifeAdminJob
 import os.meka.core.domain.LifeAdminRules
 import os.meka.core.domain.LocalClock
@@ -79,8 +84,11 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
         scope.launch { runCatching { core.setLifeAdmin(weekday, startMin) } }
     }
 
+    // Unfolded, the pane keeps a phone-like column centred on the page (like Work mode and Fasting), so the job rows
+    // don't stretch across the whole 829 dp inner screen (quality gate, Life admin's shots).
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     LazyColumn(
-        Modifier.fillMaxSize().testTag("life-admin-pane"),
+        Modifier.widthIn(max = WORK_COLUMN_MAX).fillMaxHeight().testTag("life-admin-pane"),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -168,6 +176,7 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
             Text(LoneWordGlue.kept(LifeAdminRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
+    }
     }
 }
 
