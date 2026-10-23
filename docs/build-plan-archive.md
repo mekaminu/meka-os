@@ -3139,6 +3139,7 @@ so centring lifted it. Barça's header was already one text and lined up.
 - Tests: NewsScreensTest's every shot fails if a drawn lane header isn't exactly one of the lanes' "NAME · N NEW" in
   one text, or no header carries its count while stories are new.
 - Design check: no design file covers News. No core change, no server change, no migration, Mac checked nightly.
+- Landed 76ceba7; CI run 1133 (39950412614) green first try; the re-shot publishes to `screens`.
 
 ### Quality gate — slice 43 (2026-10-23): News's shots, its first hand tests, and what they found
 
