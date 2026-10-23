@@ -3197,6 +3197,10 @@ docs/screens/fold/shutdown/.
   across lines (`ScreenShots.assertDurationsWhole`), On this day's offer over one line, Shut down's label off-centre
   or over 32 dp of empty band above the button (24 dp plus the list's 8 dp between items; slice 47 drew 64).
 - Design check: no design file covers Shut down the day. No server change, no migration, Mac checked nightly.
+- Landed b0b9fb9 + CI fixes f122d08 (run 1142: with "1 h 20 commute" one run, the dot before it ended a line; DurationGlue
+  now holds a dot beside a duration to both sides within 32 characters), 9164105 and 0e9160a (run 1143/1144: the
+  centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
+  green, published cad03ec.
 
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
