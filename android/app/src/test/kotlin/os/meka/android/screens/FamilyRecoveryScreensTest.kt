@@ -158,6 +158,19 @@ class FamilyRecoveryScreensTest {
         turns(1_000)
     }
 
+    /** Waits (real time too: the core finishes on its own thread before the screen's state changes) until [text] is drawn. */
+    private fun untilShows(name: String, text: String) {
+        fun drawn() = compose.onAllNodes(hasText(text, substring = true), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        var n = 0
+        while (!drawn() && n++ < 80) {
+            Shadows.shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+            compose.mainClock.advanceTimeBy(100)
+        }
+        turns(1_000)
+        ScreenShots.assertShows(compose, name, text)
+    }
+
     private fun settle(area: String, name: String) {
         turns()
         compose.waitForIdle()
@@ -225,14 +238,14 @@ class FamilyRecoveryScreensTest {
         if (make.fetchSemanticsNodes().isEmpty()) fail("Family: no Make a link for Sam with Sam named")
         make[0].performSemanticsAction(SemanticsActions.OnClick)
         until("Family: Make a link made no link (${server.invites})") { server.invites.isNotEmpty() }
-        ScreenShots.assertShows(compose, "family-by-hand", "Link made for Sam")
+        untilShows("family-by-hand", "Link made for Sam")
         ScreenShots.assertShows(compose, "family-by-hand", LoneWordGlue.kept("Waiting · link made today"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("family", "inner-dark-made"))
         val off = compose.onAllNodes(hasText("Turn off") and hasClickAction())
         if (off.fetchSemanticsNodes().isEmpty()) fail("Family: no Turn off on the new link")
         off[0].performSemanticsAction(SemanticsActions.OnClick)
         until("Family: Turn off left the link on (${server.invites})") { server.invites.first().state == "revoked" }
-        ScreenShots.assertShows(compose, "family-by-hand", "Turned off")
+        untilShows("family-by-hand", "Turned off")
     }
 
     // ---- Recovery key ----
@@ -310,7 +323,7 @@ class FamilyRecoveryScreensTest {
         }
         compose.onAllNodes(hasText("Save") and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
         until("$area: Save didn't send the key (${core.recoveryKeyView.value})") { server.verifier != null }
-        ScreenShots.assertShows(compose, area, LoneWordGlue.kept(RecoveryKeyRules.SAVED))
+        untilShows(area, LoneWordGlue.kept(RecoveryKeyRules.SAVED))
         if (asked.values.any { server.verifier!!.contains(it) }) fail("$area: a word reached the server")
     }
 
