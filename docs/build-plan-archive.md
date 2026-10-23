@@ -3202,6 +3202,22 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 57 (2026-10-23): Notifications' shots and its first hand test
+
+- NotificationsScreensTest (7, Robolectric + Roborazzi) draws Ask → More → Notifications with nothing set (no quiet hours,
+  no digests), as it comes (quiet 22:00–07:00, both digests) and set up (quiet hours 21:30–06:45, Morning brief and Bins
+  in the digest, Weekly review app only) on the cover and inner sizes, Dark and Light, under docs/screens/fold/notifications/;
+  read for nonsense, cut lines, broken words, split times and numbers, a word left alone, a dot starting a line, every
+  chip whole on one line and inside the pane, and every chip, switch row and − / + answering a 48 dp touch.
+- By hand: the quiet hours switch turns them on and the times unfold; Until's + moves it to 07:15 and the row says so;
+  the midday digest on and off again (the digest line follows); a kind of notice's Digest chip lowers it.
+- Fixed first (Fold): the chip rows scrolled sideways off the cover screen's edge, now they wrap (FlowRow); chips (~32 dp),
+  switch rows (~36 dp) and − / + (~40 dp) now answer 48 dp touches, the pills drawn the same size; quiet hours off read
+  "Off" beside its own "Off" pill, now "No quiet hours" (core NotifyRules.QUIET_OFF).
+- Both apps: the pane's lines keep their last words and dots together (LoneWordGlue); the three notes come from core
+  NotifyRules (QUIET_NOTE, DIGEST_NOTE, TIER_NOTE); the Mac's sheet gains the digests' note it lacked.
+- Design check: no design file covers Notifications. No server change, no wire change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 56 (2026-10-23): Voice notes' shots and its first hand test
 
 The next of Ask's places without shots. VoiceNotesScreensTest (7) draws Ask → Daily → Voice notes with no notes, one

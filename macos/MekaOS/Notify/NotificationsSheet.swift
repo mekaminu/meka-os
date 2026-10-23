@@ -29,14 +29,14 @@ struct NotificationsSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text("Notifications").font(MekaType.upNextTitle).staggeredAppear(0)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(model.notifyPreview?.quietLine ?? " ").contentTransition(.opacity)
-                Text(model.notifyPreview?.digestLine ?? " ").contentTransition(.opacity)
+                Text(model.notifyPreview.map { LoneWordGlue.shared.kept(line: $0.quietLine) } ?? " ").contentTransition(.opacity)
+                Text(model.notifyPreview.map { LoneWordGlue.shared.kept(line: $0.digestLine) } ?? " ").contentTransition(.opacity)
             }
             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
             .staggeredAppear(0)
             // Notifications never seen, slice 3: why silence between digests isn't broken.
             if let explain = model.notifyPreview?.explainLine, !explain.isEmpty {
-                Text(explain).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: explain)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .staggeredAppear(0)
@@ -65,14 +65,14 @@ struct NotificationsSheet: View {
                 Button("Send a test") { model.sendTestNotification() }
                     .disabled(model.notifyTest.map { !$0.done } ?? false)
                 if let test = model.notifyTest {
-                    Text(test.localLine).font(MekaType.itemMeta)
+                    Text(LoneWordGlue.shared.kept(line: test.localLine)).font(MekaType.itemMeta)
                         .foregroundStyle(test.localOk?.boolValue == false ? palette.critical : palette.textSecondary)
                         .contentTransition(.opacity)
                 }
             }
             .staggeredAppear(1)
             if let hint = model.notifyTest?.hint {
-                Text(hint).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: hint)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -84,7 +84,7 @@ struct NotificationsSheet: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     stepper("From", value: quietStart) { model.setQuietHours(enabled: true, start: $0, end: quietEnd) }
                     stepper("Until", value: quietEnd) { model.setQuietHours(enabled: true, start: quietStart, end: $0) }
-                    Text("Heads-ups that fall in quiet hours wait for the next digest. Only critical things come through.")
+                    Text(LoneWordGlue.shared.kept(line: NotifyRules.shared.QUIET_NOTE))
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -99,6 +99,9 @@ struct NotificationsSheet: View {
                 ))
             }
             .staggeredAppear(3)
+            Text(LoneWordGlue.shared.kept(line: NotifyRules.shared.DIGEST_NOTE))
+                .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
 
             section("WHAT GOES WHERE", 4)
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -121,7 +124,7 @@ struct NotificationsSheet: View {
             }
             .staggeredAppear(4)
 
-            Text("Heads-up: a notification at the time. Digest: in the midday or evening round-up. App only: never a notification. Nothing here sends anything for you.")
+            Text(LoneWordGlue.shared.kept(line: NotifyRules.shared.TIER_NOTE))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
 

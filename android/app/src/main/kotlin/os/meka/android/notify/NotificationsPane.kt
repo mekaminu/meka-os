@@ -15,15 +15,18 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.sizeIn
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -40,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -62,9 +66,11 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.work.WorkAlerts
 import os.meka.core.domain.DeviceAlerts
 import os.meka.core.domain.LocalClock
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NoticeSource
 import os.meka.core.domain.NoticeTier
 import os.meka.core.domain.NotificationSettings
+import os.meka.core.domain.NotifyRules
 import os.meka.core.domain.NotifyTestRules
 import os.meka.core.facade.MekaCore
 import os.meka.android.shell.SharedMotion
@@ -79,6 +85,9 @@ private const val STEP_MINUTES = 15
  *
  * Motion: sections stagger in; a chosen chip's colour blends across; the quiet-hour times unfold when turned on; the
  * "what happens next" lines cross-fade as settings change. Reduced motion: cross-fades only.
+ *
+ * Quality gate slice 57: the chips wrap onto new lines instead of scrolling off the cover screen's edge; every chip,
+ * switch row and − / + answers a 48 dp touch; the pane's lines keep their last words and dots together ([LoneWordGlue]).
  */
 @Composable
 fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
@@ -100,7 +109,7 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
         scope.launch { core.setQuietHours(enabled, start, end) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        Modifier.fillMaxSize().testTag("notifications-pane").verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -109,15 +118,15 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.NOTIFICATIONS)).appear(rememberAppearance(0)))
         Column(Modifier.appear(rememberAppearance(0))) {
             Crossfade(preview.quietLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "quiet-line") {
-                Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
             }
             Crossfade(preview.digestLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "digest-line") {
-                Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
             }
             // Slice 3: why silence between digests isn't broken.
             if (preview.explainLine.isNotEmpty()) {
                 Crossfade(preview.explainLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "explain-line") {
-                    Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                    Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
                 }
             }
         }
@@ -157,19 +166,19 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             Column(Modifier.padding(top = MekaSpace.xxs)) {
                 testView?.let { v ->
                     Crossfade(v.localLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "test-local") {
-                        Text(it, style = MekaType.itemMeta, color = testColor(v.localOk))
+                        Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = testColor(v.localOk))
                     }
                     Crossfade(v.pushLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "test-push") {
-                        Text(it, style = MekaType.itemMeta, color = testColor(v.pushOk))
+                        Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = testColor(v.pushOk))
                     }
-                    v.hint?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                    v.hint?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                 }
             }
         }
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("Quiet hours", 2)
-        ToggleRow(if (quiet.enabled) "On · ${quiet.summary}" else "Off", quiet.enabled, Modifier.appear(rememberAppearance(2))) {
+        ToggleRow(if (quiet.enabled) "On · ${quiet.summary}" else NotifyRules.QUIET_OFF, quiet.enabled, Modifier.appear(rememberAppearance(2))) {
             haptics.tick(); saveQuiet(enabled = !quiet.enabled)
         }
         AnimatedVisibility(
@@ -180,10 +189,7 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             Column {
                 TimeStepper("From", quiet.startMinute) { saveQuiet(start = it) }
                 TimeStepper("Until", quiet.endMinute) { saveQuiet(end = it) }
-                Text(
-                    "Heads-ups that fall in quiet hours wait for the next digest. Only critical things come through.",
-                    style = MekaType.caption, color = Meka.colors.textTertiary,
-                )
+                Text(LoneWordGlue.kept(NotifyRules.QUIET_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
 
@@ -195,8 +201,7 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
                 haptics.tick(); scope.launch { core.setDigest(minute, !on) }
             }
         }
-        Text("One quiet round-up of what's due: renewals, things to chase, decisions to review, overdue tasks.",
-            style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(NotifyRules.DIGEST_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
 
         Spacer(Modifier.height(MekaSpace.m))
         Label("What goes where", 4)
@@ -204,17 +209,13 @@ fun NotificationsPane(core: MekaCore, onClose: () -> Unit) {
             val choices = NoticeSource.CHOICES.filter { it.ordinal >= source.defaultTier.ordinal }
             val current = settings.tierFor(source)
             Column(Modifier.appear(rememberAppearance(4)).padding(vertical = MekaSpace.xxs)) {
-                Text(source.label, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                Text(LoneWordGlue.kept(source.label), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
                 ChipRow(choices.map { it.label }, choices.indexOf(current).coerceAtLeast(0), Modifier.padding(top = MekaSpace.xxs)) { i ->
                     haptics.tick(); scope.launch { core.setNoticeTier(source, choices[i]) }
                 }
             }
         }
-        Text(
-            "Heads-up: a notification at the time. Digest: in the midday or evening round-up. App only: never a " +
-                "notification. Nothing here sends anything for you.",
-            style = MekaType.caption, color = Meka.colors.textTertiary,
-        )
+        Text(LoneWordGlue.kept(NotifyRules.TIER_NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
         Spacer(Modifier.height(MekaSpace.xl))
     }
 }
@@ -231,20 +232,24 @@ private fun Label(text: String, index: Int) {
     Text(text.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(index)))
 }
 
-/** Chips with one lit; the lit colour blends across as the choice changes. */
+/**
+ * Chips with one lit; the lit colour blends across as the choice changes. They wrap onto a new line rather than scroll
+ * off the edge (quality gate slice 57), and each answers a 48 dp touch, the pill drawn the same size as before.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChipRow(labels: List<String>, selectedIndex: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
-    Row(modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         labels.forEachIndexed { i, label ->
             val on = i == selectedIndex
             val reduced = Meka.reducedMotion
             val bg by animateColorAsState(if (on) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "chip-bg")
             val fg by animateColorAsState(if (on) Meka.colors.onAccent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "chip-fg")
             Text(
-                label, style = MekaType.caption, color = fg,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                    .clickable(role = Role.RadioButton) { if (!on) onSelect(i) }
-                    .semantics { selected = on }
+                label, style = MekaType.caption, color = fg, maxLines = 1,
+                modifier = Modifier.semantics { selected = on }.clip(RoundedCornerShape(MekaRadius.pill))
+                    .clickable(role = Role.RadioButton) { if (!on) onSelect(i) }.minTouch()
+                    .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             )
         }
@@ -258,10 +263,11 @@ private fun ToggleRow(label: String, on: Boolean, modifier: Modifier = Modifier,
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Switch) { onToggle() }
             .semantics { contentDescription = label; selected = on }
+            .sizeIn(minHeight = MekaSpace.touch)
             .padding(vertical = MekaSpace.xs),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Text(LoneWordGlue.kept(label), style = MekaType.itemMeta, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
         Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(dot).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))
     }
@@ -274,11 +280,13 @@ private fun TimeStepper(label: String, minute: Int, onChange: (Int) -> Unit) {
         Text(label, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
         Text("−", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onChange((minute - STEP_MINUTES + day) % day) }
-                .semantics { contentDescription = "$label 15 minutes earlier" }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                .semantics { contentDescription = "$label 15 minutes earlier" }.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
+                .wrapContentSize().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
         Text(LocalClock.formatMinute(minute), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
         Text("+", style = MekaType.itemTitle, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { onChange((minute + STEP_MINUTES) % day) }
-                .semantics { contentDescription = "$label 15 minutes later" }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
+                .semantics { contentDescription = "$label 15 minutes later" }.sizeIn(minWidth = MekaSpace.touch, minHeight = MekaSpace.touch)
+                .wrapContentSize().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs))
     }
 }
 

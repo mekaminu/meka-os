@@ -1127,6 +1127,13 @@ class NotificationPrefs(private val replica: Replica) {
 
 /** Helpers for the Mac (Kotlin enum members and companions are awkward from Swift). */
 object NotifyRules {
+    /** The settings screens' notes (quality gate slice 57: shared by the Fold, the Mac and the shots). */
+    /** Quiet hours' switch row when off (it read "Off" beside its own "Off" pill). */
+    const val QUIET_OFF = "No quiet hours"
+    const val QUIET_NOTE = "Heads-ups that fall in quiet hours wait for the next digest. Only critical things come through."
+    const val DIGEST_NOTE = "One quiet round-up of what's due: renewals, things to chase, decisions to review, overdue tasks."
+    const val TIER_NOTE = "Heads-up: a notification at the time. Digest: in the midday or evening round-up. App only: never a " +
+        "notification. Nothing here sends anything for you."
     const val MIDDAY = NotificationSettings.MIDDAY
     const val EVENING = NotificationSettings.EVENING
     /** The sources the settings sheet lists (approvals aren't adjustable, so they aren't listed). */
