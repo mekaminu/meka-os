@@ -29,3 +29,9 @@ secrets/
 # Local-only eval data (ADR-006)
 evals/data/
 .DS_Store
+
+# Obi's face files: only ever in the private bucket (build plan, Obi's face)
+face/
+face-loop.mp4
+mouth-*.png
+obi-face.zip

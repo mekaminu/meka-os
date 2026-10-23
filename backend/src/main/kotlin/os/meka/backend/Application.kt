@@ -155,6 +155,8 @@ fun Application.mekaSync(
     recovery: Recovery? = null,
     /** The Vault's encrypted copies (Vault slice 2b): sealed bytes only; null leaves the routes out. */
     vaultFiles: VaultFiles? = null,
+    /** Obi's face (slice 1): the face's seven files from the private bucket; null leaves the routes out. */
+    faceFiles: FaceFiles? = null,
     /** Ada's Live mode (slice 1): Gemini Live session tokens and their meter; null leaves the routes out. */
     live: LiveSessions? = null,
 ) {
@@ -298,6 +300,26 @@ fun Application.mekaSync(
                 val body = call.boundedBody()
                 val who = call.device(devices, verifier, body, requireKey = true)
                 call.linkReply(withContext(Dispatchers.IO) { vaultFiles.delete(who, body) })
+            }
+        }
+
+        if (faceFiles != null) {
+            // Obi's face (slice 1): which of the face's seven files are in the private bucket, and one of them as raw
+            // bytes. Keyed phones and Macs only; only the seven allowed names are ever read; nothing is logged.
+            post(os.meka.core.wire.FaceCodec.MANIFEST_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                os.meka.core.wire.FaceCodec.decodeManifestRequest(body)
+                call.linkReply(withContext(Dispatchers.IO) { faceFiles.manifest(who) })
+            }
+            post(os.meka.core.wire.FaceCodec.FILE_PATH) {
+                val body = call.boundedBody()
+                val who = call.device(devices, verifier, body, requireKey = true)
+                val name = os.meka.core.wire.FaceCodec.decodeFileRequest(body)
+                val (bytes, refused) = withContext(Dispatchers.IO) { faceFiles.file(who, name) }
+                if (bytes == null) return@post call.linkReply(refused ?: LinkReply(404, "no such file"))
+                call.response.header("Cache-Control", FaceFiles.CACHE_CONTROL)
+                call.respondBytes(bytes, ContentType.parse(os.meka.core.wire.FaceCodec.contentType(name)))
             }
         }
 
@@ -1373,6 +1395,7 @@ fun main(args: Array<String>) {
                     liveFacts = liveFacts,
                     tradingExports = tradingExports,
                     vaultFiles = VaultFiles.fromEnv(),
+                    faceFiles = FaceFiles.fromEnv(),
                 )
             }.start(wait = true)
         }

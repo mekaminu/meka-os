@@ -21,6 +21,10 @@ Ways out, each visible in review:
   - a block between lines containing "personal-guard: off" and "personal-guard: on" is skipped (release 1's one-off
     copies, removed with release 2's final slice).
 
+Obi's face files (his talking face from a licensed package) are never committed either: any tracked file named like one
+of the seven (face-loop.mp4, mouth-*.png) or any video/image under a folder called face/ fails the check, with or
+without the secret. They live only in MEKA's private bucket under face/.
+
 Run from the repo root: python3 tools/check-personal.py   (exit 1 lists each hit)    --self-test checks the scanner.
 """
 import os
@@ -105,6 +109,20 @@ def read_text(path):
     return data.decode("utf-8", "replace")
 
 
+FACE_NAMES = re.compile(r"^(face-loop\.mp4|mouth-[a-z]+\.png)$", re.IGNORECASE)
+FACE_MEDIA = re.compile(r"\.(mp4|mov|webm|png|jpe?g|gif|webp)$", re.IGNORECASE)
+
+
+def face_files(paths):
+    """Tracked paths that look like Obi's face files (never in the public repo)."""
+    out = []
+    for p in paths:
+        parts = p.split("/")
+        if FACE_NAMES.match(parts[-1]) or ("face" in [d.lower() for d in parts[:-1]] and FACE_MEDIA.search(parts[-1])):
+            out.append(p)
+    return out
+
+
 def scan(patterns, exempt):
     found = []
     for path in tracked_files():
@@ -138,6 +156,9 @@ def self_test():
     assert hits_in(blocked, pats) == [(5, 3)], hits_in(blocked, pats)
     assert parse_exempt("# c\nbackend/x.sql # applied migration\n\n") == {"backend/x.sql"}
     assert parse_deny_list("") == []
+    assert face_files(["a/face-loop.mp4", "x/mouth-ah.png", "blobs/face/still.jpg", "docs/Face/x.PNG",
+                       "android/res/ic_face.png", "docs/face/readme.md", "src/FaceCodec.kt"]) == \
+        ["a/face-loop.mp4", "x/mouth-ah.png", "blobs/face/still.jpg", "docs/Face/x.PNG"]
     print("check-personal self-test ok")
 
 
@@ -145,6 +166,13 @@ def main():
     if "--self-test" in sys.argv:
         self_test()
         return 0
+    faces = face_files(tracked_files())
+    if faces:
+        for f in faces:
+            print(f"::error title=Obi's face file in the repo::{f}")
+        print(f"{len(faces)} face file(s) are tracked: remove them (git rm --cached) — they belong only in the private "
+              f"bucket under face/.")
+        return 1
     deny = os.environ.get("PERSONAL_DENY_LIST", "")
     patterns = parse_deny_list(deny)
     if not patterns:
