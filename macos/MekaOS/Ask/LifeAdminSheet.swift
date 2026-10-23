@@ -20,7 +20,7 @@ struct LifeAdminSheet: View {
         let rules = LifeAdminRules.shared
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Life admin hour").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
@@ -53,7 +53,7 @@ struct LifeAdminSheet: View {
             if v.on {
                 label("Gathered into it").padding(.top, MekaSpace.xs).staggeredAppear(5)
                 if v.jobs.isEmpty {
-                    Text(rules.NO_JOBS).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: rules.NO_JOBS)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                         .staggeredAppear(6)
                 }
@@ -65,11 +65,11 @@ struct LifeAdminSheet: View {
                 }
             }
             if let said = model.lifeAdminSaid {
-                Text(said).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
             }
-            Text(rules.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: rules.NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)
             HStack {
@@ -117,10 +117,9 @@ private struct JobRowView: View {
     let palette: MekaPalette
 
     var body: some View {
-        let line = [job.kind == LifeAdminJobKind.renewal ? "Renewal" : nil, job.line].compactMap { $0 }.joined(separator: " · ")
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(job.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-            if !line.isEmpty {
+            Text(LoneWordGlue.shared.kept(line: job.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+            if let line = job.lineShown {
                 Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
         }

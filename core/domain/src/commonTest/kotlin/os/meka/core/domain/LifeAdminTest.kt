@@ -228,4 +228,18 @@ class LifeAdminTest {
         assertFalse(aFold.skipThisWeek(false, onlyWeek = mon - 7))
         assertTrue(aFold.skipThisWeek(false, onlyWeek = mon))
     }
+    /** Quality gate (Life admin's shots): the row's grey line names a renewal and keeps its date and last words whole. */
+    @Test
+    fun aJobsLineIsDrawnWithItsDateWhole() {
+        val glue = LifeTileRules.GLUE[0]
+        val renewal = LifeAdminJob("renewal:r", LifeAdminJobKind.RENEWAL, "Home insurance", "due Thu 12 Nov", "Home insurance, due Thu 12 Nov")
+        val shown = renewal.lineShown!!
+        assertEquals("Renewal · due Thu 12 Nov", DateGlue.plain(shown))
+        assertTrue("Thu${glue}12${glue}Nov" in shown, shown)
+        assertFalse(shown.startsWith("·"))
+        val task = LifeAdminJob("task:t", LifeAdminJobKind.TASK, "Call the GP", null, "Call the GP")
+        assertNull(task.lineShown)
+        val due = LifeAdminJob("task:u", LifeAdminJobKind.TASK, "Fill in the form", "overdue since Mon 12 Oct", "x", overdue = true)
+        assertEquals("overdue since Mon 12 Oct", DateGlue.plain(due.lineShown!!))
+    }
 }

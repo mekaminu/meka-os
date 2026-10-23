@@ -3202,6 +3202,22 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 52 (2026-10-23): Life admin's shots and its first hand test
+
+The next of Ask's places without shots. LifeAdminScreensTest (7) draws Ask → More → Life admin hour off, on with a renewal
+and a call, and a full week (two renewals, an overdue school form, eleven jobs so the pane lists eight) on the cover and
+inner sizes, Dark and Light, under docs/screens/fold/life-admin/; read for nonsense, cut lines, broken words, split
+dates, times and numbers, a word left alone, a dot starting or ending a line, every chip whole and inside the pane, and
+48 dp touches. By hand: Sun moves the hour to Sunday; Skip this week skips it and Keep it keeps it; Turn off.
+- Fold `LifeAdminPane`: the weekday and time chips were a sideways-scrolling row (Sat, Sun and the evening times off the
+  cover screen's edge, as Protected time's were); now a FlowRow, each chip (`LifeAdminChip`) a 48 dp touch with its
+  pill drawn as before. The summary, the after-a-tap line, the empty line, the note and job titles go through
+  `LoneWordGlue.kept`; the pane is tagged `life-admin-pane`.
+- core `LifeAdminJob.lineShown` ("Renewal · due Thu 12 Nov", date, dots and last words held; `LifeAdminRules.RENEWAL_LABEL`);
+  LifeAdminTest.aJobsLineIsDrawnWithItsDateWhole.
+- Mac `LifeAdminSheet`: the same kept lines and `lineShown` (the 480 pt sheet fits the chips on one row each).
+- Design check: no design file covers Life admin. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 51 (2026-10-23): the Train queue's rows on the cover screen
 
 Slice 50's re-shot findings. On the cover screen each row's title and meta lost their first letter's edge ("Vhat"), and

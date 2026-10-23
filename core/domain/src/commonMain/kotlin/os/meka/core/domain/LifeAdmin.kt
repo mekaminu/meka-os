@@ -43,7 +43,15 @@ enum class LifeAdminJobKind { TASK, RENEWAL }
 data class LifeAdminJob(
     val id: String, val kind: LifeAdminJobKind, val title: String, val line: String?, val spoken: String,
     val overdue: Boolean = false,
-)
+) {
+    /**
+     * The row's grey line as drawn ("Renewal · due Thu 12 Nov"), its date, dots and last words held together
+     * ([LoneWordGlue]; quality gate, Life admin's shots); null when there's nothing to say under the title.
+     */
+    val lineShown: String?
+        get() = listOfNotNull(if (kind == LifeAdminJobKind.RENEWAL) LifeAdminRules.RENEWAL_LABEL else null, line)
+            .joinToString(" · ").takeIf { it.isNotEmpty() }?.let(LoneWordGlue::kept)
+}
 
 /** A week's hour as booked. */
 data class LifeAdminSlot(
@@ -114,6 +122,7 @@ object LifeAdminRules {
     /** Slice 2: a task ticked this long after the hour still counts as done in it. */
     const val CLOSE_GRACE_MS = 30 * 60_000L
     const val OFF_LABEL = "Turn off"
+    const val RENEWAL_LABEL = "Renewal"
     const val SKIP_LABEL = "Skip this week"
     const val KEEP_LABEL = "Keep it"
     const val NO_JOBS = "Nothing waiting yet · tasks like “Call the GP” or “Renew passport” gather here"

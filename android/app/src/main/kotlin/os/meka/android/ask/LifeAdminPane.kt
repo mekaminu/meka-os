@@ -2,19 +2,19 @@ package os.meka.android.ask
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +28,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -40,16 +42,15 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
-import os.meka.android.lists.Chip
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.LifeAdminJob
-import os.meka.core.domain.LifeAdminJobKind
 import os.meka.core.domain.LifeAdminRules
 import os.meka.core.domain.LocalClock
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
 /**
@@ -79,7 +80,7 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag("life-admin-pane"),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -93,7 +94,7 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "summary") {
             Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "life-admin-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
         item(key = "when") {
@@ -102,12 +103,12 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
                 ChipLine {
                     LifeAdminRules.WEEKDAY_CHOICES.forEachIndexed { i, label ->
                         val weekday = i + 1
-                        Chip(label, v.on && v.weekday == weekday) { set(weekday, v.startMin) }
+                        LifeAdminChip(label, v.on && v.weekday == weekday) { set(weekday, v.startMin) }
                     }
                 }
                 ChipLine {
                     LifeAdminRules.START_CHOICES.forEach { m ->
-                        Chip(LocalClock.formatMinute(m), v.startMin == m) { set(v.weekday, m) }
+                        LifeAdminChip(LocalClock.formatMinute(m), v.startMin == m) { set(v.weekday, m) }
                     }
                 }
             }
@@ -132,7 +133,7 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
             }
             if (v.jobs.isEmpty()) {
                 item(key = "no-jobs") {
-                    Text(LifeAdminRules.NO_JOBS, style = MekaType.caption, color = Meka.colors.textTertiary,
+                    Text(LoneWordGlue.kept(LifeAdminRules.NO_JOBS), style = MekaType.caption, color = Meka.colors.textTertiary,
                         modifier = Modifier.animateItem().appear(rememberAppearance(4)))
                 }
             }
@@ -148,7 +149,7 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "said") {
             Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "life-admin-said") { line ->
-                line?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                line?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
             }
         }
         item(key = "off") {
@@ -164,15 +165,33 @@ fun LifeAdminPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         item(key = "note") {
-            Text(LifeAdminRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(LoneWordGlue.kept(LifeAdminRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
 }
 
+/**
+ * The chips wrap to a new line rather than scroll sideways (quality gate, Life admin's shots: on the cover screen Sat,
+ * Sun and the evening times sat off the edge); each chip's 48 dp touch already spaces the lines apart.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChipLine(chips: @Composable () -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) { chips() }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) { chips() }
+}
+
+/** A choice chip: the pill drawn as Lists' chips, answering a 48 dp touch (as Protected time's). */
+@Composable
+private fun LifeAdminChip(label: String, lit: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "life-admin-chip")
+    Text(
+        label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
+        modifier = Modifier.semantics { selected = lit }.clip(RoundedCornerShape(MekaRadius.pill))
+            .clickable(role = Role.Button) { onClick() }.minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
 
 @Composable
@@ -184,8 +203,7 @@ private fun JobRow(job: LifeAdminJob, modifier: Modifier) {
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         // Tasks are things to act on (itemTitle weight would be heavy here: rows use body, like Today's task rows).
-        Text(job.title, style = MekaType.body, color = Meka.colors.textPrimary)
-        val line = listOfNotNull(if (job.kind == LifeAdminJobKind.RENEWAL) "Renewal" else null, job.line).joinToString(" · ")
-        if (line.isNotEmpty()) Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(LoneWordGlue.kept(job.title), style = MekaType.body, color = Meka.colors.textPrimary)
+        job.lineShown?.let { line -> Text(line, style = MekaType.caption, color = Meka.colors.textSecondary) }
     }
 }
