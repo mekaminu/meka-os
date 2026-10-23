@@ -96,6 +96,13 @@ class ProtectedTimeScreensTest {
         turns()
     }
 
+    /**
+     * [text] is on screen (as the pane draws it). The hand test waits for the words as well as the core's state: the
+     * pane's line comes back from the core thread a moment after the state changes, so waiting on the state alone
+     * raced it (CI run 1153).
+     */
+    private fun onScreen(text: String): Boolean = ScreenShots.texts(compose).any { it.contains(text) }
+
     /** Every button drawn answers a 48 dp touch (the chips were ~32 dp). */
     private fun assertTouchTargets(name: String) {
         val small = compose.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
@@ -207,21 +214,23 @@ class ProtectedTimeScreensTest {
         val later = compose.onAllNodes(hasText("19:30") and hasClickAction())
         if (later.fetchSemanticsNodes().isEmpty()) fail("$name: no 19:30 chip")
         later[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { core.protectedView.value.fromMin == 19 * 60 + 30 }
+        val moved = LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false)))
+        until { core.protectedView.value.fromMin == 19 * 60 + 30 && onScreen(moved) }
         if (core.protectedView.value.fromMin != 19 * 60 + 30) fail("$name: 19:30 left the evening at ${core.protectedView.value.fromMin}")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false))))
 
         val lift = compose.onAllNodes(hasText("Not protected tonight") and hasClickAction())
         if (lift.fetchSemanticsNodes().isEmpty()) fail("$name: no Not protected tonight")
         lift[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { core.protectedView.value.openToday }
+        val done = LoneWordGlue.kept(ProtectedRules.Lifted.EVENING.done)
+        until { core.protectedView.value.openToday && onScreen(done) }
         if (!core.protectedView.value.openToday) fail("$name: Not protected tonight left tonight protected")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.Lifted.EVENING.done))
 
         val undo = compose.onAllNodes(hasText("Undo · protect it again") and hasClickAction())
         if (undo.fetchSemanticsNodes().isEmpty()) fail("$name: no Undo once tonight is lifted")
         undo[0].performSemanticsAction(SemanticsActions.OnClick)
-        until { !core.protectedView.value.openToday }
+        until { !core.protectedView.value.openToday && onScreen("Not protected tonight") }
         if (core.protectedView.value.openToday) fail("$name: Undo left tonight lifted")
         ScreenShots.assertShows(compose, name, "Not protected tonight")
     }
