@@ -352,6 +352,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
 }
 
 /** One account: its label and provider, the address, its state, Reconnect when the sign-in ended, and the label chips. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MailAccountCard(
     row: MailAccountRow, modifier: Modifier, onReconnect: () -> Unit, onLabel: (MailLabel) -> Unit, onDisconnect: () -> Unit,
@@ -452,9 +453,15 @@ private fun MailAccountCard(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth().padding(top = MekaSpace.xs),
         ) {
-            MailAccountRules.LABELS.forEach { l -> LabelChip(l, selected = l == row.label) { if (l != row.label) onLabel(l) } }
-            Spacer(Modifier.weight(1f))
-            Text(MailAccountRules.DISCONNECT, style = MekaType.caption, color = Meka.colors.textSecondary,
+            // The quality gate's Mail shots (slice 31): on the cover screen the three chips squeezed "Disconnect" onto two
+            // lines; the chips wrap among themselves instead and Disconnect stays whole at the end.
+            FlowRow(
+                Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                MailAccountRules.LABELS.forEach { l -> LabelChip(l, selected = l == row.label) { if (l != row.label) onLabel(l) } }
+            }
+            Text(MailAccountRules.DISCONNECT, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, softWrap = false,
                 modifier = Modifier.clickable(role = Role.Button) { haptics.tick(); asking = !asking }.minTouch())
         }
         AnimatedVisibility(

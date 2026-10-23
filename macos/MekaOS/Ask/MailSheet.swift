@@ -769,6 +769,9 @@ private struct MailAccountRowView: View {
                 .buttonStyle(MekaPressStyle())
                 .font(MekaType.caption)
                 .foregroundStyle(palette.textSecondary)
+                // Never squeezed onto two lines by the chips (the Fold's Mail shots, quality gate slice 31).
+                .lineLimit(1)
+                .fixedSize()
             }
             .padding(.top, MekaSpace.xs)
             if asking {

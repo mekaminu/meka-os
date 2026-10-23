@@ -32,6 +32,7 @@ import os.meka.core.domain.MailAccountFacts
 import os.meka.core.domain.MailAccountRules
 import os.meka.core.domain.MailAccountsView
 import os.meka.core.domain.MailAutopilotPanelRules
+import os.meka.core.domain.MailProviders
 import os.meka.core.facade.AccountsApi
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.ConnectedAccount
@@ -80,13 +81,13 @@ class MailScreensTest {
     }
 
     private val personal = MailAccountFacts(
-        "gmail", "jordan@example.com", "ok", now - 4 * minute, "PERSONAL",
+        MailProviders.GMAIL, "jordan@example.com", "ok", now - 4 * minute, "PERSONAL",
         sorted = mapOf("NEEDS_YOU" to 3, "FYI" to 8, "NEWSLETTER" to 30, "RECEIPT" to 4, "PROMO" to 12),
         wouldTidy = mapOf("NEWSLETTER" to 30, "RECEIPT" to 4, "ARCHIVE" to 12),
         inboxTotal = 1_240, inboxUnread = 86,
     )
-    private val business = MailAccountFacts("gmail", "jordan.studio@example.com", "needs_reconnect", now - 2 * day, "BUSINESS")
-    private val outlook = MailAccountFacts("outlook", "jordan.work@example.com", "error", now - 3 * 60 * minute, "OUTLOOK", why = "busy")
+    private val business = MailAccountFacts(MailProviders.GMAIL, "jordan.studio@example.com", "needs_reconnect", now - 2 * day, "BUSINESS")
+    private val outlook = MailAccountFacts(MailProviders.OUTLOOK, "jordan.work@example.com", "error", now - 3 * 60 * minute, "OUTLOOK", why = "busy")
 
     private fun accounts(fill: Fill): List<MailAccountFacts> = when (fill) {
         Fill.OFFLINE, Fill.EMPTY -> emptyList()
