@@ -13,7 +13,7 @@ class CalendarAccountsTest {
         assertEquals("Headlines", CalendarAccountRules.providerLabel("news"))
         assertEquals("Headlines · synced 08:29", CalendarAccountRules.statusLine("news_more", "AI, tech and Barça news", "ok", "08:29"))
         assertEquals("Headlines · synced 08:29", CalendarAccountRules.statusLine("news", "BBC News", "ok", "08:29"))
-        assertEquals("Bank holidays · first sync in progress", CalendarAccountRules.statusLine("bank_holidays", "GOV.UK", "ok", null))
+        assertEquals("GOV.UK · first sync in progress", CalendarAccountRules.statusLine("bank_holidays", "GOV.UK", "ok", null))
         // A feed keeps its own name as the title.
         assertEquals("AI, tech and Barça news", CalendarAccountRules.title("news_more", "AI, tech and Barça news"))
         assertEquals("Weather", CalendarAccountRules.title("weather", " "))
@@ -26,7 +26,7 @@ class CalendarAccountsTest {
         assertEquals("Outlook", CalendarAccountRules.title("microsoft", "meka@outlook.com"))
         assertEquals("Google · meka@gmail.com · synced 08:29", CalendarAccountRules.statusLine("google", "meka@gmail.com", "ok", "08:29"))
         assertEquals("Outlook · meka@hotmail.co.uk · first sync in progress", CalendarAccountRules.statusLine("microsoft", "meka@hotmail.co.uk", "ok", null))
-        assertEquals("Google · meka@gmail.com · access expired · Reconnect", CalendarAccountRules.statusLine("google", "meka@gmail.com", "needs_reconnect", "08:29"))
+        assertEquals("Google · meka@gmail.com · access expired", CalendarAccountRules.statusLine("google", "meka@gmail.com", "needs_reconnect", "08:29"))
         assertEquals("Google · meka@gmail.com · couldn't sync last time · retrying", CalendarAccountRules.statusLine("google", "meka@gmail.com", "error", null))
     }
 
@@ -97,5 +97,29 @@ class CalendarAccountsTest {
         // The drawn line keeps "synced 17:11" together.
         val line = LoneWordGlue.kept(CalendarAccountRules.statusLine("google", "alex@example.com", "ok", "17:11"))
         assertFalse(line.endsWith(" 17:11"), line)
+    }
+
+    @Test
+    fun aKindOfFeedIsTitledByWhatItBringsWithItsSourceUnder() {
+        // Quality gate slice 34: "GOV.UK" over "Bank holidays" read the wrong way round.
+        assertEquals("Bank holidays", CalendarAccountRules.title("bank_holidays", "GOV.UK · England and Wales"))
+        assertEquals("GOV.UK · England and Wales · synced 08:29", CalendarAccountRules.statusLine("bank_holidays", "GOV.UK · England and Wales", "ok", "08:29"))
+        assertEquals("Weather", CalendarAccountRules.title("weather", "Open-Meteo · Springfield"))
+        assertEquals("Open-Meteo · Springfield · synced 08:29", CalendarAccountRules.statusLine("weather", "Open-Meteo · Springfield", "ok", "08:29"))
+        assertEquals("Train lines", CalendarAccountRules.title("lines", "TfL · the lines on your train route"))
+        assertEquals("Car (DVLA)", CalendarAccountRules.title(CarCheckRules.PROVIDER, CarCheckRules.LABEL))
+        assertEquals("${CarCheckRules.LABEL} · off · waiting for the DVLA keys", CalendarAccountRules.statusLine(CarCheckRules.PROVIDER, CarCheckRules.LABEL, CarCheckRules.STATUS_OFF, null))
+        // No source given: never the title said twice.
+        assertEquals("Synced 08:29", CalendarAccountRules.statusLine("weather", " ", "ok", "08:29"))
+        // Named feeds keep their own names.
+        assertEquals("FC Barcelona", CalendarAccountRules.title("fixtures", "FC Barcelona"))
+        assertEquals("Fixtures · synced 08:29", CalendarAccountRules.statusLine("fixtures", "FC Barcelona", "ok", "08:29"))
+    }
+
+    @Test
+    fun anExpiredAccountsLineLeavesReconnectToItsButton() {
+        val line = CalendarAccountRules.statusLine("microsoft", "alex.work@example.com", "needs_reconnect", "08:29")
+        assertFalse("Reconnect" in line, line)
+        assertTrue(line.endsWith("access expired"), line)
     }
 }

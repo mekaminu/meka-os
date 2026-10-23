@@ -54,6 +54,7 @@ object CalendarAccountRules {
      * (calendar key → name, [EventActions.calendarNames]), else the default.
      */
     fun title(provider: String, email: String, names: Map<String, String> = emptyMap()): String {
+        if (provider in KIND_TITLED) return providerLabel(provider)
         if (!isMailAccount(provider, email)) return email.trim().ifEmpty { providerLabel(provider) }
         val account = email.trim().lowercase()
         val own = names.entries.firstOrNull { (key, _) ->
@@ -62,6 +63,13 @@ object CalendarAccountRules {
         }?.value?.let { CalendarRules.cleanName(it) }
         return own ?: if (provider == "google") CalendarRules.PERSONAL else outlookName(email)
     }
+
+    /**
+     * Feeds titled by what they bring, with where it comes from under it (quality gate slice 34: the bank holidays feed
+     * read "GOV.UK · England and Wales" over "Bank holidays"; now "Bank holidays" over "GOV.UK · England and Wales ·
+     * synced …"). A named feed (BBC News, FC Barcelona) keeps its own name as the title.
+     */
+    val KIND_TITLED: Set<String> = setOf("bank_holidays", "weather", "lines", TravelRules.PROVIDER, CarCheckRules.PROVIDER)
 
     /** How far ahead [eventsLine] looks. */
     const val EVENTS_AHEAD_DAYS = 30
@@ -105,14 +113,21 @@ object CalendarAccountRules {
      * the first one. A signed-in account carries its address: "Google · meka@gmail.com · synced 08:29".
      */
     fun statusLine(provider: String, email: String, status: String, syncedAt: String?): String {
-        val who = if (isMailAccount(provider, email)) "${providerLabel(provider)} · ${email.trim()}" else providerLabel(provider)
-        return when {
-            status == "needs_reconnect" -> "$who · access expired · Reconnect"
-            status == "error" -> "$who · couldn't sync last time · retrying"
-            status == CarCheckRules.STATUS_OFF && provider == CarCheckRules.PROVIDER -> "$who · off · waiting for the DVLA keys"
-            status == TravelRules.STATUS_OFF -> "$who · off · add the Google key (see Setup)"
-            syncedAt != null -> "$who · synced $syncedAt"
-            else -> "$who · first sync in progress"
+        val who: String? = when {
+            isMailAccount(provider, email) -> "${providerLabel(provider)} · ${email.trim()}"
+            provider in KIND_TITLED -> email.trim().ifEmpty { null }
+            else -> providerLabel(provider)
         }
+        // The row's own Reconnect button says what to do (quality gate slice 34: "access expired · Reconnect" sat right
+        // above it).
+        val what = when {
+            status == "needs_reconnect" -> "access expired"
+            status == "error" -> "couldn't sync last time · retrying"
+            status == CarCheckRules.STATUS_OFF && provider == CarCheckRules.PROVIDER -> "off · waiting for the DVLA keys"
+            status == TravelRules.STATUS_OFF -> "off · add the Google key (see Setup)"
+            syncedAt != null -> "synced $syncedAt"
+            else -> "first sync in progress"
+        }
+        return if (who != null) "$who · $what" else what.replaceFirstChar { it.uppercase() }
     }
 }

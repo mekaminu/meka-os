@@ -105,7 +105,7 @@ class CalendarsScreensTest {
         Fill.MANY -> listOf(
             ConnectedAccount("google", personalEmail, "ok", now - 4 * minute, canEdit = true),
             ConnectedAccount("microsoft", workEmail, "needs_reconnect", now - 2 * day),
-            ConnectedAccount("bank_holidays", "GOV.UK", "ok", now - day),
+            ConnectedAccount("bank_holidays", "GOV.UK · England and Wales", "ok", now - day),
         )
     }
 
@@ -182,6 +182,10 @@ class CalendarsScreensTest {
             if (a.lastSyncAtMs == now - day && synced == "17:15") fail("$name: yesterday's sync reads as today's \"$synced\"")
         }
         if (name.startsWith("cover")) actionsUnderWords(name, list)
+        // Quality gate slice 34: the line never says Reconnect over its own Reconnect button.
+        list.filter { it.needsReconnect }.forEach { a ->
+            if ("Reconnect" in a.shownStatus) fail("$name: ${a.title}'s line says Reconnect above its button: \"${a.shownStatus}\"")
+        }
         when (fill) {
             Fill.EMPTY -> {
                 if (list.isNotEmpty()) fail("$name: ${list.size} accounts with nothing connected")
@@ -199,6 +203,9 @@ class CalendarsScreensTest {
                 if (list.size != 3) fail("$name: ${list.size} accounts for three")
                 ScreenShots.assertShows(compose, name, "Reconnect")
                 ScreenShots.assertShows(compose, name, CalendarAccessAction.STOP_EDITING.label)
+                // Quality gate slice 34: the feed is titled by what it brings, its source under it.
+                ScreenShots.assertShows(compose, name, "Bank holidays")
+                if (list.none { it.title == "Bank holidays" }) fail("$name: the bank holidays feed is titled ${list.map { it.title }}")
             }
         }
         return core
@@ -216,6 +223,9 @@ class CalendarsScreensTest {
             val button = compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes()
                 .firstOrNull { it.boundsInRoot.top >= status.boundsInRoot.top - 1f } ?: fail("$name: no $label for ${a.title}")
             if (button.boundsInRoot.top < status.boundsInRoot.bottom - 1f) fail("$name: ${a.title}'s $label sits beside its words")
+            // Quality gate slice 34: the card ends just under its button (its 48 dp touch height is its room), no tall
+            // empty band under it.
+            ScreenShots.assertHugs(compose, name, "account:${a.provider}:${a.email}", label, maxGapDp = 8f)
         }
     }
 

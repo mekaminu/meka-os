@@ -248,7 +248,9 @@ class TravelTest {
     fun withoutTheKeySetupAsksForItAndHealthDoesNotCallItTrouble() {
         val off = HealthAccount(TravelRules.PROVIDER, TravelRules.LABEL, TravelRules.LABEL, TravelRules.STATUS_OFF, null)
         assertEquals("Travel times", CalendarAccountRules.providerLabel(TravelRules.PROVIDER))
-        assertEquals("Travel times · off · add the Google key (see Setup)", CalendarAccountRules.statusLine(TravelRules.PROVIDER, TravelRules.LABEL, TravelRules.STATUS_OFF, null))
+        assertEquals("${TravelRules.LABEL} · off · add the Google key (see Setup)", CalendarAccountRules.statusLine(TravelRules.PROVIDER, TravelRules.LABEL, TravelRules.STATUS_OFF, null))
+        // Quality gate slice 34: titled "Travel times", the source on the line under it.
+        assertEquals("Travel times", CalendarAccountRules.title(TravelRules.PROVIDER, TravelRules.LABEL))
         fun step(accounts: List<HealthAccount>?) = SetupRules.view(
             SetupFacts(SetupDevice(mac = true), connected = true, server = null, accounts = accounts, ai = null, callAssistantOn = false,
                 voiceMessageSeen = false, voiceChosen = null, nowMs = world.clock.nowMs),

@@ -44,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
@@ -173,10 +174,15 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
 
 @Composable
 private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onReconnect: () -> Unit, onEditing: () -> Unit) {
-    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised)
+        .testTag("account:${a.provider}:${a.email}")) {
         // Quality gate slice 33: on the cover screen the actions beside the words squeezed them to a sliver; below
         // 420 dp they sit under them, each on one line.
-        val under = CalendarAccountRules.actionsUnder(maxWidth.value)
+        val under = CalendarAccountRules.actionsUnder((maxWidth - MekaSpace.m * 2).value)
+        val hasActions = a.needsReconnect || a.editingAction != null
+        // Quality gate slice 34: under the words, the buttons' 48 dp touch height already gives them room, so the card's
+        // own bottom padding and the gap above them go (a tall empty band sat under Stop editing / Reconnect).
+        val stackedActions = under && hasActions
         val words: @Composable (Modifier) -> Unit = { m ->
             Column(m) {
                 // Titled like its main calendar ("Personal", "Hotmail", Meka's own name) or the feed's name; the address and
@@ -209,14 +215,15 @@ private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onRec
                 }
             }
         }
-        val hasActions = a.needsReconnect || a.editingAction != null
+        val inner = Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.m,
+            bottom = if (stackedActions) MekaSpace.xxs else MekaSpace.m)
         if (under) {
-            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Column(inner, verticalArrangement = Arrangement.spacedBy(if (stackedActions) 0.dp else MekaSpace.xs)) {
                 words(Modifier.fillMaxWidth())
                 if (hasActions) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) { actions() }
             }
         } else {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+            Row(inner, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 words(Modifier.weight(1f))
                 actions()
             }
