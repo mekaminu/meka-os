@@ -101,6 +101,17 @@ object ProtectedRules {
     val FROM_CHOICES: List<Int> = listOf(18 * 60, 18 * 60 + 30, 19 * 60, 19 * 60 + 30, 20 * 60)
 
     const val EVENINGS_LABEL = "Evenings"
+    /**
+     * Quality gate slice 50: the evening's chips sit under "EVENINGS FROM" and read just the time ("18:00"), so the cover
+     * screen fits them on two rows instead of three with "From" six times; [fromSpoken] is what TalkBack/VoiceOver read.
+     */
+    const val EVENINGS_FROM_LABEL = "Evenings from"
+
+    /** The chip's words: "19:30". */
+    fun fromChip(minute: Int): String = LocalClock.formatMinute(minute)
+
+    /** What a screen reader says for the chip: "Evenings from 19:30". */
+    fun fromSpoken(minute: Int): String = "$EVENINGS_FROM_LABEL ${LocalClock.formatMinute(minute)}"
     const val WEEKENDS_LABEL = "Weekends and bank holidays"
     const val OFF_LINE = "Off · the planner may use evenings and weekends"
     const val NOTE = "Plan my day and Move to later never put a task into protected time. Habits, booked sessions, " +

@@ -25,6 +25,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
@@ -44,7 +45,6 @@ import os.meka.android.lists.unfold
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
-import os.meka.core.domain.LocalClock
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ProtectedMailRules
 import os.meka.core.domain.ProtectedRules
@@ -137,11 +137,14 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "evenings") {
             Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                SectionLabel(ProtectedRules.EVENINGS_LABEL.uppercase())
+                // Slice 50: "EVENINGS FROM" over chips that read just the time, two rows on the cover screen (was three).
+                SectionLabel(ProtectedRules.EVENINGS_FROM_LABEL.uppercase())
                 ChipLine {
                     ProtectedChip("Off", !v.evenings) { set(false, v.fromMin, v.weekends) }
                     ProtectedRules.FROM_CHOICES.forEach { m ->
-                        ProtectedChip("From ${LocalClock.formatMinute(m)}", v.evenings && v.fromMin == m) { set(true, m, v.weekends) }
+                        ProtectedChip(ProtectedRules.fromChip(m), v.evenings && v.fromMin == m, spoken = ProtectedRules.fromSpoken(m)) {
+                            set(true, m, v.weekends)
+                        }
                     }
                 }
             }
@@ -189,11 +192,11 @@ private fun ChipLine(chips: @Composable () -> Unit) {
 
 /** A choice chip: the pill drawn as Lists' chips, answering a 48 dp touch (quality gate slice 49). */
 @Composable
-private fun ProtectedChip(label: String, lit: Boolean, onClick: () -> Unit) {
+private fun ProtectedChip(label: String, lit: Boolean, spoken: String? = null, onClick: () -> Unit) {
     val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "protected-chip")
     Text(
         label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
-        modifier = Modifier.semantics { selected = lit }.clip(RoundedCornerShape(MekaRadius.pill))
+        modifier = Modifier.semantics { selected = lit; if (spoken != null) contentDescription = spoken }.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.Button) { onClick() }.minTouch()
             .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),

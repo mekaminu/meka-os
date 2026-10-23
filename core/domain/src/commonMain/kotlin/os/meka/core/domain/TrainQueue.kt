@@ -96,7 +96,9 @@ object QueueRules {
     private const val DAY_MS = 86_400_000L
 
     const val EMPTY_SUMMARY = "Nothing saved yet. Share a link to Navilife and choose For the train."
-    const val HINT = "Paste a link to save for the train…"
+    /** Quality gate slice 50: one short line that fits the cover screen's field; [HINT_SPOKEN] is the fuller how-to. */
+    const val HINT = "Paste a link for the train"
+    const val HINT_SPOKEN = "Paste a web link to save it for the train. Sharing from any app works too: choose For the train."
     const val NO_LINK = "That has no link in it. Paste or share a web link (https://…)."
     const val ALREADY = "Already in your train queue"
     const val ACTION = "For the train"

@@ -21,13 +21,14 @@ struct TrainQueueSheet: View {
         let v = model.queue ?? QueueView.companion.EMPTY
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Train queue").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
             TextField(QueueRules.shared.HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(QueueRules.shared.HINT_SPOKEN)
                 .onSubmit {
                     let typed = text
                     text = ""
@@ -39,7 +40,7 @@ struct TrainQueueSheet: View {
                 }
                 .staggeredAppear(2)
             if let said {
-                Text(said.line).font(MekaType.caption)
+                Text(LoneWordGlue.shared.kept(line: said.line)).font(MekaType.caption)
                     .foregroundStyle(said.refused ? palette.accent : palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
@@ -68,7 +69,7 @@ struct TrainQueueSheet: View {
             }
             .frame(maxHeight: 420)
             .staggeredAppear(3)
-            Text(QueueRules.shared.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: QueueRules.shared.NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -108,7 +109,7 @@ private struct QueueRowView: View {
                     Text(row.title).font(MekaType.body)
                         .foregroundStyle(row.done ? palette.textSecondary : palette.textPrimary)
                         .lineLimit(2)
-                    Text(row.meta).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    Text(LoneWordGlue.shared.kept(line: row.meta)).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())

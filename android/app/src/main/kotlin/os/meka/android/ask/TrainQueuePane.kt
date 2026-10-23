@@ -59,6 +59,7 @@ import os.meka.android.lists.Field
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.QueueAdded
 import os.meka.core.domain.QueueRow
 import os.meka.core.domain.QueueRules
@@ -130,12 +131,12 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
         }
         item(key = "summary") {
             Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "queue-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
         item(key = "field") {
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(QueueRules.HINT, value = text, onValue = { text = it }) { typed ->
+                Field(QueueRules.HINT, value = text, onValue = { text = it }, description = QueueRules.HINT_SPOKEN) { typed ->
                     scope.launch {
                         val r = runCatching { core.addToQueue(typed) }.getOrNull() ?: return@launch
                         said = r
@@ -143,7 +144,7 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
                     }
                 }
                 Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "queue-line") { l ->
-                    l?.let { Text(it, style = MekaType.caption, color = saidColor) }
+                    l?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = saidColor) }
                 }
             }
         }
@@ -177,7 +178,7 @@ private fun QueueList(core: MekaCore, onClose: () -> Unit, closeLabel: String, o
             )
         }
         item(key = "note") {
-            Text(QueueRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(LoneWordGlue.kept(QueueRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.animateItem().padding(top = MekaSpace.l))
         }
     }
@@ -212,7 +213,7 @@ private fun QueueRowView(
     ) {
         Column(
             Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onOpen)
+                .clickable(role = Role.Button, onClick = onOpen).minTouch()
                 .semantics(mergeDescendants = true) {
                     contentDescription = (if (offline != null) "Read " else "Open ") + row.spoken +
                         ((offline ?: onlineOnly)?.let { ", $it" } ?: "")
@@ -220,27 +221,29 @@ private fun QueueRowView(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text(row.title, style = MekaType.body, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(row.meta, style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            // Slice 50: a podcast's "open.spotify.com · Podcast · opens in your podcast app" was cut to "…" on the cover
+            // screen; it wraps (two lines at most) with its last words and dots kept together.
+            Text(LoneWordGlue.kept(row.meta), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             // "6 min read · saved to read offline" fades in once the phone has kept the article's words.
             AnimatedVisibility(offline != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
-                Text(offline.orEmpty(), style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(LoneWordGlue.kept(offline.orEmpty()), style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
             // "Online only for now · …" fades in (tertiary) when the phone couldn't keep the words: a paywall, an app page.
             AnimatedVisibility(offline == null && onlineOnly != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
-                Text(onlineOnly.orEmpty(), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(LoneWordGlue.kept(onlineOnly.orEmpty()), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
         Text(
             primary, style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onPrimary)
+                .clickable(role = Role.Button, onClick = onPrimary).minTouch()
                 .semantics { contentDescription = "$primary: ${row.title}" }
                 .padding(MekaSpace.xs),
         )
         Text(
             "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onRemove)
+                .clickable(role = Role.Button, onClick = onRemove).minTouch()
                 .semantics { contentDescription = "Remove ${row.title}" }
                 .padding(MekaSpace.xs),
         )

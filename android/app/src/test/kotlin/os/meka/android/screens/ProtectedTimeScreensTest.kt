@@ -45,7 +45,7 @@ import kotlin.test.fail
  * once, each on the Fold's cover and inner screens, Dark (and the full one in Light). Saved under `protected/` and read
  * for nonsense, cut lines, broken words, split dates, times and numbers, the pane's own lines leaving a word alone or
  * starting a line with a dot, every chip whole on one line and in view (they wrap, never scroll off the edge), and every
- * button answering a 48 dp touch. By hand: From 19:30 moves the evening; Not protected tonight lifts tonight and says
+ * button answering a 48 dp touch. By hand: 19:30 moves the evening; Not protected tonight lifts tonight and says
  * so, and Undo puts it back. Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -116,7 +116,7 @@ class ProtectedTimeScreensTest {
             val nodes = compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes()
             // The evening's chips sit near the top and must be there; ones further down may be past the screen's foot.
             if (nodes.isEmpty()) {
-                if (label == "Off" || label.startsWith("From ")) fail("$name: no \"$label\" chip")
+                if (label == "Off" || label.contains(':')) fail("$name: no \"$label\" chip")
                 return@forEach
             }
             val n = nodes.first()
@@ -125,6 +125,18 @@ class ProtectedTimeScreensTest {
                 fail("$name: \"$label\" sits outside the pane (${n.positionInRoot.x / compose.density.density}–${right / compose.density.density} dp)")
             }
         }
+    }
+
+    /**
+     * Slice 50: the evening's six chips read just the time under "EVENINGS FROM" and take at most two rows (on the cover
+     * screen they took three, "From" six times).
+     */
+    private fun assertEveningRows(name: String, labels: List<String>) {
+        val tops = labels.mapNotNull { label ->
+            compose.onAllNodes(hasText(label) and hasClickAction()).fetchSemanticsNodes().firstOrNull()?.positionInRoot?.y
+        }
+        val rows = tops.map { (it / compose.density.density / 8f).toInt() }.distinct().size
+        if (rows > 2) fail("$name: the evening's chips take $rows rows (at most 2)")
     }
 
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
@@ -158,10 +170,13 @@ class ProtectedTimeScreensTest {
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
-        val chips = listOf("Off") + ProtectedRules.FROM_CHOICES.map { "From " + os.meka.core.domain.LocalClock.formatMinute(it) } +
+        val evening = listOf("Off") + ProtectedRules.FROM_CHOICES.map(ProtectedRules::fromChip)
+        val chips = evening +
             listOf("Open", "Protected") + (if (v.on) listOf(ProtectedMailRules.ON, ProtectedMailRules.OFF) else emptyList())
         ScreenShots.assertEachOneLine(compose, name, chips)
         assertChipsInView(name, chips)
+        assertEveningRows(name, evening)
+        ScreenShots.assertShows(compose, name, ProtectedRules.EVENINGS_FROM_LABEL.uppercase())
         assertTouchTargets(name)
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         when (fill) {
@@ -184,16 +199,16 @@ class ProtectedTimeScreensTest {
     }
 
     /**
-     * Works by hand: From 19:30 moves the evening (the summary follows); Not protected tonight lifts tonight and says
+     * Works by hand: 19:30 moves the evening (the summary follows); Not protected tonight lifts tonight and says
      * what changed; Undo · protect it again puts it back.
      */
     private fun byHand(core: MekaCore) {
         val name = "protected-by-hand"
-        val later = compose.onAllNodes(hasText("From 19:30") and hasClickAction())
-        if (later.fetchSemanticsNodes().isEmpty()) fail("$name: no From 19:30 chip")
+        val later = compose.onAllNodes(hasText("19:30") and hasClickAction())
+        if (later.fetchSemanticsNodes().isEmpty()) fail("$name: no 19:30 chip")
         later[0].performSemanticsAction(SemanticsActions.OnClick)
         until { core.protectedView.value.fromMin == 19 * 60 + 30 }
-        if (core.protectedView.value.fromMin != 19 * 60 + 30) fail("$name: From 19:30 left the evening at ${core.protectedView.value.fromMin}")
+        if (core.protectedView.value.fromMin != 19 * 60 + 30) fail("$name: 19:30 left the evening at ${core.protectedView.value.fromMin}")
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(ProtectedRules.summary(os.meka.core.domain.ProtectedSetting(true, 19 * 60 + 30, false))))
 
         val lift = compose.onAllNodes(hasText("Not protected tonight") and hasClickAction())

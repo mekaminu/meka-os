@@ -178,4 +178,11 @@ class ProtectedTimeTest {
         assertTrue(lines.all { it.length <= 160 })
         assertTrue(lines[2].endsWith(", …"))
     }
+
+    @Test
+    fun eveningChipsReadJustTheTimeUnderEveningsFrom() {
+        assertEquals("19:30", ProtectedRules.fromChip(19 * 60 + 30))
+        assertEquals("Evenings from 18:00", ProtectedRules.fromSpoken(18 * 60))
+        assertTrue(ProtectedRules.FROM_CHOICES.all { ProtectedRules.fromChip(it).length == 5 })
+    }
 }

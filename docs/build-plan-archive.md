@@ -3202,6 +3202,30 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 50 (2026-10-23): the Train queue's shots and its first hand test, Protected time's chips on two rows
+
+The next of Ask's places without shots, plus slice 49's re-shot finding. TrainQueueScreensTest (7) draws Ask → More →
+Train queue (`TrainQueuePane`) on the Fold's cover and inner sizes with nothing saved, one article, and a full queue
+(an article kept to read offline, a long-titled one whose fetch failed so it reads "Online only for now", a podcast,
+one done lately), Dark and Light, under docs/screens/fold/train-queue/.
+- Every shot is read for nonsense, cut lines, broken words, split dates, times and numbers, the summary, each row's
+  meta, offline and online-only lines for a word left alone or a line starting with a dot, the field's hint on one line,
+  and every button answering a 48 dp touch.
+- By hand (cover screen): a pasted link (typed, then the keyboard's Done) is saved at the top; Done moves it to Done
+  lately, Back brings it back, Remove takes it off.
+- Fixed first, Fold `TrainQueuePane`: a row's Done and Remove (caption text with 8 dp padding, ~32 dp) and the row's
+  open area answer 48 dp (`minTouch`); the meta line ("open.spotify.com · Podcast · opens in your podcast app") was one
+  line with an ellipsis, now up to two; the summary, said line, meta, offline/online lines and the note go through
+  `LoneWordGlue.kept`; the hint is `QueueRules.HINT` "Paste a link for the train" with `HINT_SPOKEN` as the field's
+  description. Mac `TrainQueueSheet`: the same lines kept, meta up to two lines, the field's accessibility label the
+  spoken how-to.
+- Protected time (both apps): the evening's label is `ProtectedRules.EVENINGS_FROM_LABEL` ("EVENINGS FROM") and its
+  chips `fromChip` ("19:30"), read as `fromSpoken` ("Evenings from 19:30"); ProtectedTimeScreensTest fails if the
+  evening's chips take more than two rows and its hand test taps 19:30.
+- Core tests: ProtectedTimeTest.eveningChipsReadJustTheTimeUnderEveningsFrom, TrainQueueTest.hintIsShortAndTheFullHowToIsSpoken.
+- Design check: no design file covers the Train queue or Protected time. No server change, no migration, Mac checked
+  nightly.
+
 ### Quality gate — slice 49 (2026-10-23): Protected time's shots and its first hand test
 
 The next of Ask's places without shots. ProtectedTimeScreensTest (7) draws Ask → More → Protected time

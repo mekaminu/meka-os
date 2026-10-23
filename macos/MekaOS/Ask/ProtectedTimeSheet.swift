@@ -44,13 +44,13 @@ struct ProtectedTimeSheet: View {
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: action)
                     .transition(.opacity)
             }
-            label(rules.EVENINGS_LABEL).staggeredAppear(2)
+            label(rules.EVENINGS_FROM_LABEL).staggeredAppear(2)
             HStack(spacing: MekaSpace.xs) {
                 chip("Off", lit: !v.evenings) {
                     model.setProtectedTime(evenings: false, fromMin: v.fromMin, weekends: v.weekends)
                 }
                 ForEach(rules.FROM_CHOICES.map { $0.int32Value }, id: \.self) { m in
-                    chip("From " + LocalClock.companion.formatMinute(m: m), lit: v.evenings && v.fromMin == m) {
+                    chip(rules.fromChip(minute: m), lit: v.evenings && v.fromMin == m, spoken: rules.fromSpoken(minute: m)) {
                         model.setProtectedTime(evenings: true, fromMin: m, weekends: v.weekends)
                     }
                 }
@@ -109,7 +109,7 @@ struct ProtectedTimeSheet: View {
             .padding(.top, MekaSpace.xs)
     }
 
-    private func chip(_ label: String, lit: Bool, action: @escaping () -> Void) -> some View {
+    private func chip(_ label: String, lit: Bool, spoken: String? = nil, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label).font(MekaType.caption).lineLimit(1)
                 .foregroundStyle(lit ? palette.onAccent : palette.textPrimary)
@@ -118,6 +118,7 @@ struct ProtectedTimeSheet: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: lit)
         }
         .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(spoken ?? label)
         .accessibilityAddTraits(lit ? .isSelected : [])
     }
 }

@@ -170,4 +170,10 @@ class TrainQueueTest {
         assertNull(card("Done one"))
         assertNull(card(null))
     }
+
+    @Test
+    fun hintIsShortAndTheFullHowToIsSpoken() {
+        assertTrue(QueueRules.HINT.length <= 28)
+        assertTrue(QueueRules.HINT_SPOKEN.contains(QueueRules.ACTION))
+    }
 }
