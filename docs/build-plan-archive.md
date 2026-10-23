@@ -3217,6 +3217,7 @@ docs/screens/fold/shutdown/.
 - Both apps: the pane's lines keep their last words and dots together (LoneWordGlue); the three notes come from core
   NotifyRules (QUIET_NOTE, DIGEST_NOTE, TIER_NOTE); the Mac's sheet gains the digests' note it lacked.
 - Design check: no design file covers Notifications. No server change, no wire change, no migration, Mac checked nightly.
+- 331ebb5, CI run 1157 (40007996074) green first try; shots published 5c93b06.
 
 ### Quality gate — slice 56 (2026-10-23): Voice notes' shots and its first hand test
 
