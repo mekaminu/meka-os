@@ -69,6 +69,8 @@ android {
             isIncludeAndroidResources = true
             all {
                 it.systemProperty("roborazzi.test.record", "true")
+                // The quality gate's shots (16 classes, ~150 screens on native graphics) outgrew the 512 MB default (CI run 1103).
+                it.maxHeapSize = "3g"
                 // A failed shot names what it found (the cut or nonsense lines) in the CI log, not only in the report.
                 it.testLogging { exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
             }
