@@ -2958,6 +2958,7 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Trips' time difference** (core `TripRules.rowLine`): "1 h ahead of UK time" is joined with no-break spaces, so "· 1 h" never ends a line before "ahead of UK time"; Ask's lines keep their own plain words. TripZoneTest, TripsFacadeTest and AskMekaFacadeTest compare the plain line.
 - Checks: `ScreenShots.assertClocksWhole` (shares `assertDatesWhole`'s walk); PlansPlacesScreensTest fails on a wrapped hint, a split time difference or the wrong hint for the pane's state.
 - Design check: no design file for these panes. Fold and Mac, no server change, no migration, Mac checked nightly.
+- Landed 0284cc7; CI run 1090 (39873701109) green first try.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
