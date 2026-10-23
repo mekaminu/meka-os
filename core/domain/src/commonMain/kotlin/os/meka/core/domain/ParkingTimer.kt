@@ -10,7 +10,7 @@ import os.meka.core.sync.fv
  * He types how long he paid for, or until when ("2 h", "90 min", "until 15:30", "till 6pm", "1h30 RingGo 81234") on
  * either app; the car's timer runs until then and a heads-up comes **10 minutes before it ends** ("Parking ends at
  * 15:30" · "10 min left · extend it in your parking app, or move the car"). +15 min / +30 min / +1 h extend it (the
- * reminder comes again for the new time), Ended clears it (Undo). Unlike where the car is parked (the Fold's own,
+ * reminder comes again for the new time), Stop timer clears it (Undo). Unlike where the car is parked (the Fold's own,
  * never synced), the timer holds no location: only when it ends and the words he typed beside it (a RingGo location
  * code), so it is synced and the Mac shows it too (the item's "Mac shows the parking timer only").
  *
