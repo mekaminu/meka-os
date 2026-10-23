@@ -185,6 +185,7 @@ class TrainQueueScreensTest {
      */
     private fun byHand(core: MekaCore) {
         val name = "train-queue-by-hand"
+        now += 60_000 // a minute after the saved article, so the pasted link is the newest
         compose.onAllNodes(hasContentDescription(QueueRules.HINT_SPOKEN) and hasSetTextAction())[0]
             .performTextInput("Strike dates https://www.bbc.co.uk/news/strike-2")
         turns(500)
