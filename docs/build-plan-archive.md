@@ -3126,6 +3126,7 @@ Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of t
   or the card reaching more than 8 dp below the touch area.
 - Design check: no design file covers Family. Fold only (the Mac's 460 pt sheet keeps Turn off beside the words), no
   core change, no server change, no migration.
+- Landed e0c6090; CI run 1130 (39942089862) green first try; re-shot f35fe1d: Turn off just under each line.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
