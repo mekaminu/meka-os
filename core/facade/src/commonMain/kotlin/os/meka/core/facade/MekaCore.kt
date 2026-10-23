@@ -313,6 +313,10 @@ class MekaCore(
     /** The companion, slice 5: notes of earlier chats (Settings → Navilife's voice → What Navilife remembers). */
     private val companionMemory = os.meka.core.domain.CompanionMemoryStore(replica)
     private val speechClips = LinkedHashMap<String, String>()
+    /** Obi's face, slice 3b: the mouth sounds that came with clips in [speechClips] (same keys), while the face is drawn. */
+    private val speechMarkTexts = HashMap<String, String>()
+    /** Obi's face, slice 3b: this device draws the face, so clips are asked for with their mouth sounds. */
+    private var speechWantsMarks = false
     /** Voice completeness, slice 3: clips in [speechClips] that came with a spoken answer, not yet played. */
     private val speechAnswerClips = LinkedHashSet<String>()
     private var speechQuietUntilMs = 0L
@@ -9754,8 +9758,9 @@ class MekaCore(
         val started = nowMs()
         // Set here and kept on the core below: no core hop inside the timeout (a test's virtual clock would fire it).
         var unreachable = false
+        val marked = onCore { speechWantsMarks }
         val r = withTimeoutOrNull(wait) {
-            try { api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
+            try { if (marked) api.speakMarked(words, voice.name) else api.speak(words, voice.name) } catch (e: CancellationException) { throw e } catch (e: Exception) {
                 unreachable = true
                 os.meka.core.wire.SpeechCodec.Response(os.meka.core.wire.SpeechCodec.Response.FAILED)
             }
@@ -9771,8 +9776,12 @@ class MekaCore(
                 speechTimed(started, nowMs() - started, os.meka.core.domain.SpeechTiming.Outcome.SPOKEN)
                 speechUnreachable = false
                 speechOfflineSaid = false
-                speechClips[os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)] = audio
+                val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, words)
+                speechClips[key] = audio
+                val marks = r.visemes
+                if (marked && !marks.isNullOrBlank()) speechMarkTexts[key] = marks else speechMarkTexts.remove(key)
                 while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechClips.remove(speechClips.keys.first())
+                speechMarkTexts.keys.retainAll(speechClips.keys)
                 audio
             } else {
                 speechTimed(started, nowMs() - started, os.meka.core.domain.SpeechTiming.Outcome.FAILED)
@@ -11126,10 +11135,33 @@ class MekaCore(
         return SpeechVoice(chosen)
     }
 
+    /**
+     * Obi's face, slice 3b: whether this device draws the face ([os.meka.core.domain.FaceFileRules.shows]). While it
+     * does, clips are asked for with their mouth sounds ([SpeechApi.speakMarked]) so his lips follow each word; turning
+     * it on lets go of clips made ahead without them (they're asked for again, marked), never a spoken answer's own.
+     */
+    suspend fun speechFaceMarks(on: Boolean) = onCore {
+        if (on == speechWantsMarks) return@onCore
+        speechWantsMarks = on
+        if (on) speechClips.keys.retainAll { it in speechMarkTexts || it in speechAnswerClips }
+        else speechMarkTexts.clear()
+    }
+
+    /**
+     * Obi's face, slice 3b: the mouth sounds of the clip kept for [text] in the voice now (as the speaker asked for it),
+     * for [os.meka.core.domain.LipSync.fromPolly]; empty when there are none (the face follows the loudness). Never throws.
+     */
+    suspend fun speechMarks(text: String): List<os.meka.core.domain.LipSync.Mark> = onCore {
+        val voice = speechVoiceNow() ?: return@onCore emptyList()
+        val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, text.trim())
+        os.meka.core.wire.SpeechCodec.decodeMarks(speechMarkTexts[key]).map { os.meka.core.domain.LipSync.Mark(it.atMs, it.viseme) }
+    }
+
     /** Keeps a first piece the server said with a spoken answer ([AskReply.Answered.firstAudio]) ready for [speechClip]. */
     private fun speechWithAnswer(voice: String?, words: String, audio: String) {
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words.trim())
         speechClips.remove(key)
+        speechMarkTexts.remove(key)
         speechClips[key] = audio
         speechAnswerClips += key
         while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechClips.keys.first().also { speechClips.remove(it) })

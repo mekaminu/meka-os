@@ -597,12 +597,14 @@ private fun TalkPanel(talk: TalkController, needsYou: Int, onOrb: () -> Unit) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
-        HelloOrbView(
-            HelloOrb.state(talk.phase, needsYou), talk.level,
+        // Obi's face, slice 3b: while talking, his face dissolves in over the orb (once its files are here and Face is on).
+        val orbState = HelloOrb.state(talk.phase, needsYou)
+        ObiOrbOrFace(
+            orbState, talk.level, size = HelloOrb.SIZE.dp, faceWanted = talk.active,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(enabled = talk.active, role = Role.Button, onClick = onOrb)
                 .semantics { contentDescription = "Navilife, ${os.meka.core.domain.ConversationModeRules.label(talk.phase, mac = false, talkOver = talk.talkOver, followOn = talk.followOn)}" },
-        )
+        ) { m -> HelloOrbView(orbState, talk.level, modifier = m) }
         AnimatedContent(
             targetState = talk.problem?.line ?: os.meka.core.domain.ConversationModeRules.label(talk.phase, mac = false, talkOver = talk.talkOver, followOn = talk.followOn),
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },

@@ -30,6 +30,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import os.meka.core.domain.DeviceVoice
 import os.meka.core.domain.DeviceVoiceRules
 import os.meka.core.domain.DeviceVoiceSettings
+import os.meka.core.domain.LipSync
 import os.meka.core.domain.MekaVoiceRules
 import os.meka.core.domain.PlayStep
 import os.meka.core.domain.SpeechRules
@@ -199,7 +200,8 @@ class MekaSpeaker(
             val clip = queue.removeFirstOrNull()?.let { clipOf(it) }
             if (clip != null) lastMekaVoiceMs = System.currentTimeMillis() // heard in this conversation
             topUp()
-            if (clip != null && play(clip)) {
+            // Obi's face, slice 3b: the piece's mouth sounds (kept with its clip while the face is drawn), so his lips follow it.
+            if (clip != null && play(clip, core.speechMarks(pieces[i]))) {
                 lastMekaVoiceMs = System.currentTimeMillis()
                 i++
                 continue
@@ -362,14 +364,14 @@ class MekaSpeaker(
     }
 
     /** Plays one MP3 clip (base64) to the end. False when it can't be played (the phone's voice takes over). */
-    private suspend fun play(base64: String): Boolean {
+    private suspend fun play(base64: String, marks: List<LipSync.Mark> = emptyList()): Boolean {
         val bytes = try { Base64.decode(base64, Base64.DEFAULT) } catch (e: IllegalArgumentException) { null }
         if (bytes == null || bytes.isEmpty()) return false
-        return playBytes(bytes, recording = false)
+        return playBytes(bytes, recording = false, marks = marks)
     }
 
     /** Plays MP3 [bytes] from memory to the end (a caller's [recording] as speech on the media stream). */
-    private suspend fun playBytes(bytes: ByteArray, recording: Boolean): Boolean = suspendCancellableCoroutine { cont ->
+    private suspend fun playBytes(bytes: ByteArray, recording: Boolean, marks: List<LipSync.Mark> = emptyList()): Boolean = suspendCancellableCoroutine { cont ->
         fun done(ok: Boolean) { if (cont.isActive) cont.resume(ok) }
         if (bytes.isEmpty()) return@suspendCancellableCoroutine done(false)
         val mp = MediaPlayer()
@@ -377,7 +379,12 @@ class MekaSpeaker(
         try {
             mp.setAudioAttributes(if (recording) recordingAttributes() else speechAttributes())
             mp.setDataSource(ClipSource(bytes))
-            mp.setOnPreparedListener { attachMeter(it); it.start() }
+            mp.setOnPreparedListener {
+                attachMeter(it)
+                // Obi's face, slice 3b: the mouth timed against this clip's own position (none: the loudness mouth).
+                if (marks.isNotEmpty()) ObiMouth.start(mp, LipSync.fromPolly(marks, it.duration.toLong())) { mp.currentPosition.toLong() }
+                it.start()
+            }
             mp.setOnCompletionListener { releasePlayer(mp); done(true) }
             mp.setOnErrorListener { _, _, _ -> releasePlayer(mp); done(false); true }
             mp.prepareAsync()
@@ -389,6 +396,7 @@ class MekaSpeaker(
     }
 
     private fun releasePlayer(mp: MediaPlayer) {
+        ObiMouth.end(mp)
         if (player === mp) { player = null; closeMeter() }
         try { mp.release() } catch (_: Exception) {}
     }

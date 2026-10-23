@@ -9,18 +9,23 @@ import android.graphics.SurfaceTexture
 import android.media.MediaPlayer
 import android.view.Surface
 import android.view.TextureView
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -44,9 +49,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import os.meka.android.designsystem.Meka
+import os.meka.core.domain.FaceFileRules
 import os.meka.core.domain.FaceGeometry
 import os.meka.core.domain.FaceGold
 import os.meka.core.domain.FaceLook
+import os.meka.core.domain.HelloEntrance
 import os.meka.core.domain.LipSync
 import os.meka.core.domain.MouthFollower
 import os.meka.core.domain.MouthShape
@@ -58,7 +65,8 @@ import kotlin.math.roundToInt
 /**
  * Obi's face, slice 3 (the approved mockup): Meka's face film, cropped to hide the vendor's HUD
  * ([FaceGeometry.CROP]), turned gold ([FaceGold]), its edge faded to black by the ellipse, and one of the six mouth
- * patches cross-fading over the film's mouth as Obi speaks. This slice drives the mouth from the voice's loudness
+ * patches cross-fading over the film's mouth as Obi speaks. Slice 3b: a clip that came with its mouth sounds drives the
+ * mouth from them, against the clip's own position ([ObiMouth]); any other voice from its loudness
  * ([FaceLook.mouthFromLevel], held and cross-faded by [MouthFollower]); idle, no patch: the film's own blinking face.
  * Listening it is a touch brighter; thinking, a slow gold glint passes across. Reduced motion ([still] too): the film
  * held on its first frame, the mouth shapes only. Drawn only when [ObiFaceStore] holds all seven files; drawing only,
@@ -92,7 +100,9 @@ fun ObiFaceView(state: OrbState, level: Float, height: Dp, modifier: Modifier = 
     LaunchedEffect(moving, reduced) {
         if (!moving) return@LaunchedEffect
         while (true) withFrameMillis { t ->
-            frame = follower.step(FaceLook.mouthFromLevel(currentState, currentLevel, t), t)
+            // Slice 3b: a clip with its own mouth sounds drives the mouth exactly; otherwise the loudness does.
+            val live = follower.step(FaceLook.mouthFromLevel(currentState, currentLevel, t), t)
+            frame = (if (currentState == OrbState.SPEAKING) ObiMouth.frame() else null) ?: live
             glintAt = FaceLook.glint(currentState, t, reduced)
         }
     }
@@ -224,5 +234,33 @@ private class FaceFilmView(context: Context, private val file: File) : TextureVi
         prepared = false
         surface?.release()
         surface = null
+    }
+}
+
+/**
+ * Obi's face, slice 3b: the orb ([orb], drawn at [size]) with Obi's face dissolving in over it while [faceWanted] (a
+ * conversation is running) and the face can show ([FaceFileRules.shows]: all seven files kept and Face on); back to
+ * the orb when it ends. The dissolve is the stage's 600 ms ([FaceLook.DISSOLVE_MS], smoothstep); reduced motion: the
+ * 200 ms fade. [modifier] (the tap, the label) goes on the spot itself, so it works the same either way.
+ */
+@Composable
+fun ObiOrbOrFace(
+    state: OrbState, level: Float, size: Dp, faceWanted: Boolean, modifier: Modifier = Modifier,
+    orb: @Composable (Modifier) -> Unit,
+) {
+    val context = LocalContext.current
+    LaunchedEffect(Unit) { ObiFaceStore.load(context) }
+    val ready by ObiFaceStore.ready.collectAsState()
+    val on by ObiFaceStore.on.collectAsState()
+    val face = faceWanted && FaceFileRules.shows(ready, on)
+    val reduced = Meka.reducedMotion
+    val faceIn by animateFloatAsState(
+        if (face) 1f else 0f,
+        tween((if (reduced) HelloEntrance.FADE_MS else FaceLook.DISSOLVE_MS).toInt(), easing = FastOutSlowInEasing),
+        label = "obiFace",
+    )
+    Box(modifier, contentAlignment = Alignment.Center) {
+        orb(Modifier.graphicsLayer { alpha = 1f - faceIn })
+        if (faceIn > 0f) ObiFaceView(state, level, height = size, modifier = Modifier.graphicsLayer { alpha = faceIn })
     }
 }

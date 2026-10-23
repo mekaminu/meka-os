@@ -185,6 +185,13 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val reducedShell = Meka.reducedMotion
     // Obi's face, slice 3: keep the face's files on this phone (asked about weekly; nothing shows until all seven are here).
     LaunchedEffect(Unit) { os.meka.android.ask.ObiFaceStore.refresh(shellContext, core) }
+    // Slice 3b: while the face is drawn, Obi's clips come with their mouth sounds (so his lips follow each word).
+    LaunchedEffect(Unit) {
+        os.meka.android.ask.ObiFaceStore.load(shellContext)
+        kotlinx.coroutines.flow.combine(os.meka.android.ask.ObiFaceStore.ready, os.meka.android.ask.ObiFaceStore.on) { ready, on ->
+            os.meka.core.domain.FaceFileRules.shows(ready, on)
+        }.collect { core.speechFaceMarks(it) }
+    }
     LaunchedEffect(Unit) {
         val prefs = shellContext.getSharedPreferences(HELLO_PREFS, android.content.Context.MODE_PRIVATE)
         val last = prefs.getLong(MORNING_KEY, -1L).takeIf { it >= 0 }
