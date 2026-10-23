@@ -100,5 +100,30 @@ class ObiFaceFilesTest {
         assertEquals(LipSync.Frame(MouthShape.EE, null, 0.0), m.step(null, 1_300))
         assertEquals(LipSync.Frame(null, null, 1.0), m.step(null, 1_400))
     }
-}
 
+    @Test
+    fun theDockedOrbHintsAtAFaceOnlyWhileObiSpeaksWithTheFaceShown() {
+        assertEquals(1f, FaceLook.hint(OrbState.SPEAKING, faceShown = true))
+        assertEquals(0f, FaceLook.hint(OrbState.SPEAKING, faceShown = false))
+        assertEquals(0f, FaceLook.hint(OrbState.LISTENING, faceShown = true))
+        assertEquals(0f, FaceLook.hint(OrbState.IDLE, faceShown = true))
+        // No hint: every point as before.
+        assertEquals(1f, FaceLook.pointShade(0f, 0f, 0f))
+        assertEquals(1f, FaceLook.pointShade(0.95f, 0.9f, 0f))
+    }
+
+    @Test
+    fun theSilhouetteLightsTheFaceAndLeavesTheEyesMouthAndEdgesDark() {
+        assertTrue(FaceLook.onFace(0f, 0f)) // the cheeks and nose
+        assertTrue(FaceLook.onFace(0f, -0.6f)) // the forehead
+        assertFalse(FaceLook.onFace(-0.29f, -0.2f)) // an eye
+        assertFalse(FaceLook.onFace(0.29f, -0.2f))
+        assertFalse(FaceLook.onFace(0f, 0.44f)) // the mouth
+        assertFalse(FaceLook.onFace(0.9f, 0f)) // beside the face
+        assertFalse(FaceLook.onFace(0f, 0.97f)) // under the chin
+        assertEquals(1f + FaceLook.HINT_STRENGTH, FaceLook.pointShade(0f, 0f, 1f))
+        assertEquals(1f - FaceLook.HINT_STRENGTH, FaceLook.pointShade(0f, 0.44f, 1f))
+        assertEquals(1f - FaceLook.HINT_STRENGTH / 2, FaceLook.pointShade(0.9f, 0f, 0.5f))
+        assertEquals(1f + FaceLook.HINT_STRENGTH, FaceLook.pointShade(0f, 0f, 3f)) // clamped
+    }
+}

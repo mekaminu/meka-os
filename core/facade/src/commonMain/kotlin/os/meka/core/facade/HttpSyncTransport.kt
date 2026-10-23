@@ -92,6 +92,14 @@ interface NewsImagesApi {
     suspend fun newsImage(key: String): ByteArray?
 }
 
+/** Obi's face, slice 3c: a streamed piece's handler that takes mouth sounds, from one that doesn't (they're dropped). */
+internal fun ignoringMarks(n: suspend (String, String, String?) -> Unit): suspend (String, String, String?, String?) -> Unit =
+    { t, a, v, _ -> n(t, a, v) }
+
+/** Obi's face, slice 3c: a streamed piece's handler without mouth sounds, from one that takes them (it gets none). */
+internal fun withoutMarks(n: suspend (String, String, String?, String?) -> Unit): suspend (String, String, String?) -> Unit =
+    { t, a, v -> n(t, a, v, null) }
+
 /** What MEKA's server said to a question (Ask MEKA, V1 AI layer): words and proposed actions, or why there are none. */
 sealed class AskReply {
     /**
@@ -105,6 +113,8 @@ sealed class AskReply {
         val sources: List<Pair<String, String>> = emptyList(),
         /** The companion, slice 5: the server's note of what this conversation was about; checked again on the core. */
         val note: String? = null,
+        /** Obi's face, slice 3c: [firstAudio]'s mouth sounds ([os.meka.core.wire.SpeechCodec.encodeMarks] text), when asked. */
+        val firstVisemes: String? = null,
     ) : AskReply()
     /** [state]: off · over (the month's budget) · failed, with the server's [reason]. */
     data class Unavailable(val state: String, val reason: String?) : AskReply()
@@ -160,6 +170,30 @@ interface AiApi {
          */
         onNext: (suspend (text: String, audio: String, voice: String?) -> Unit)? = null,
     ): AskReply = askSpoken(question, context, history, speakVoice)
+
+    /**
+     * Obi's face, slice 3c: [askSpoken] with the first piece's mouth sounds too ([AskReply.Answered.firstVisemes]), for a
+     * device drawing the face. A transport without it asks as [askSpoken] does (no marks: the loudness mouth).
+     */
+    suspend fun askSpokenMarked(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+    ): AskReply = askSpoken(question, context, history, speakVoice)
+
+    /**
+     * Obi's face, slice 3c: [askStreamed] with each piece's mouth sounds as the last argument (null when the server had
+     * none). A transport without it asks as [askStreamed] does, handing every piece no marks.
+     */
+    suspend fun askStreamedMarked(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+        onFirst: suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit,
+        onNext: (suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit)? = null,
+    ): AskReply = askStreamed(question, context, history, speakVoice, withoutMarks(onFirst), onNext?.let { withoutMarks(it) })
     /** Whether MEKA's AI is on and the month's spend; null when the server has no AI layer. */
     suspend fun aiStatus(): AiStatusReply? = null
 
@@ -803,6 +837,13 @@ class HttpSyncTransport(
         speakVoice: String?,
     ): AskReply = askWith(question, context, history, voice = true, speak = true, speakVoice = speakVoice)
 
+    override suspend fun askSpokenMarked(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+    ): AskReply = askWith(question, context, history, voice = true, speak = true, speakVoice = speakVoice, speakVisemes = true)
+
     /** The server answered 404 to the stream once (an older server): ask as before from then on. */
     private var streamMissing = false
 
@@ -813,9 +854,31 @@ class HttpSyncTransport(
         speakVoice: String?,
         onFirst: suspend (text: String, audio: String, voice: String?) -> Unit,
         onNext: (suspend (text: String, audio: String, voice: String?) -> Unit)?,
+    ): AskReply = streamWith(question, context, history, speakVoice, false, ignoringMarks(onFirst), onNext?.let { ignoringMarks(it) })
+
+    override suspend fun askStreamedMarked(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+        onFirst: suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit,
+        onNext: (suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit)?,
+    ): AskReply = streamWith(question, context, history, speakVoice, marked = true, onFirst = onFirst, onNext = onNext)
+
+    private suspend fun streamWith(
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+        marked: Boolean,
+        onFirst: suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit,
+        onNext: (suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit)?,
     ): AskReply {
-        if (streamMissing) return askSpoken(question, context, history, speakVoice)
-        val body = askBody(question, context, history, voice = true, speak = true, speakVoice = speakVoice, speakNext = onNext != null)
+        val spokenAgain: suspend () -> AskReply = {
+            if (marked) askSpokenMarked(question, context, history, speakVoice) else askSpoken(question, context, history, speakVoice)
+        }
+        if (streamMissing) return spokenAgain()
+        val body = askBody(question, context, history, voice = true, speak = true, speakVoice = speakVoice, speakNext = onNext != null, speakVisemes = marked)
         prepare() // the ask routes require the device's signing key on the server
         val path = AskCodec.STREAM_PATH
         val reply: AskReply? = sendStreaming(path, body) { resp ->
@@ -830,15 +893,15 @@ class HttpSyncTransport(
             while (whole == null) {
                 val line = channel.readUTF8Line() ?: break
                 when (val l = AskCodec.decodeStreamLine(line)) {
-                    is AskCodec.StreamLine.First -> onFirst(l.text, l.audio, l.voice)
-                    is AskCodec.StreamLine.Next -> onNext?.invoke(l.text, l.audio, l.voice)
+                    is AskCodec.StreamLine.First -> onFirst(l.text, l.audio, l.voice, l.visemes.takeIf { marked })
+                    is AskCodec.StreamLine.Next -> onNext?.invoke(l.text, l.audio, l.voice, l.visemes.takeIf { marked })
                     is AskCodec.StreamLine.Final -> whole = l.response
                     null -> Unit
                 }
             }
             replyOf(whole ?: throw TransportException("the answer stopped part way from $path"))
         }
-        return reply ?: askSpoken(question, context, history, speakVoice)
+        return reply ?: spokenAgain()
     }
 
     private fun askBody(
@@ -849,6 +912,7 @@ class HttpSyncTransport(
         speak: Boolean,
         speakVoice: String?,
         speakNext: Boolean = false,
+        speakVisemes: Boolean = false,
     ): String = AskCodec.encodeRequest(
         AskCodec.Request(
             question, context.dateIso, context.nowLine, context.items.map { AskCodec.Item(it.ref, it.kind.wire, it.line) },
@@ -861,6 +925,7 @@ class HttpSyncTransport(
             name = AskCodec.plainName(context.callName),
             introduce = context.introduce,
             speakNext = speakNext,
+            speakVisemes = speakVisemes,
         ),
     )
 
@@ -868,7 +933,7 @@ class HttpSyncTransport(
         if (r.state == AskCodec.Response.ANSWERED) {
             AskReply.Answered(
                 r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
-                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note,
+                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note, r.firstVisemes,
             )
         } else {
             AskReply.Unavailable(r.state, r.reason)
@@ -881,8 +946,9 @@ class HttpSyncTransport(
         voice: Boolean,
         speak: Boolean,
         speakVoice: String?,
+        speakVisemes: Boolean = false,
     ): AskReply {
-        val body = askBody(question, context, history, voice, speak, speakVoice)
+        val body = askBody(question, context, history, voice, speak, speakVoice, speakVisemes = speakVisemes)
         prepare() // the ask route requires the device's signing key on the server
         val resp = send("/v1/ai/ask", body)
         when {

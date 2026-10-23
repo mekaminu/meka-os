@@ -9295,25 +9295,28 @@ class MekaCore(
         val speakVoice = if (voice && speechApi != null) onCore { speechVoiceNow() } else null
         // The orb speed pass, slice 2: a spoken question's trace marks when it left and when the answer began.
         if (voice) onCore { openTurn()?.sent(nowMs()) }
+        // Obi's face, slice 3c: while the face is drawn, the answer's own pieces come with their mouth sounds too.
+        val marked = speakVoice != null && onCore { speechWantsMarks }
         val reply = try {
             // The companion, slice 9: the first sentence comes ahead, said, while the model writes the rest.
-            if (speakVoice != null && onEarly != null) api.askStreamed(
-                q, context, history.map(::sendable), speakVoice.name,
-                onFirst = { text, audio, _ ->
+            if (speakVoice != null && onEarly != null) api.askStreamedMarkedIf(
+                marked, q, context, history.map(::sendable), speakVoice.name,
+                onFirst = { text, audio, _, marks ->
                     if (text.isNotBlank() && audio.isNotEmpty() && talkEarly == null) {
                         onCore {
                             openTurn()?.firstPiece(nowMs())
-                            speechWithAnswer(speakVoice.name, text, audio)
+                            speechWithAnswer(speakVoice.name, text, audio, marks)
                         }
                         talkEarly = text
                         onEarly(text)
                     }
                 },
                 // Talking to Ada like a conversation, slice 7: the rest's pieces, said ahead, wait in memory for the speaker.
-                onNext = { text, audio, _ ->
-                    if (text.isNotBlank() && audio.isNotEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio) }
+                onNext = { text, audio, _, marks ->
+                    if (text.isNotBlank() && audio.isNotEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio, marks) }
                 },
             )
+            else if (speakVoice != null && marked) api.askSpokenMarked(q, context, history.map(::sendable), speakVoice.name)
             else if (speakVoice != null) api.askSpoken(q, context, history.map(::sendable), speakVoice.name)
             else api.ask(q, context, history.map(::sendable), voice)
         } catch (e: CancellationException) { throw e } catch (e: Exception) {
@@ -9323,7 +9326,7 @@ class MekaCore(
         if (speakVoice != null && reply is AskReply.Answered) {
             val text = reply.firstText
             val audio = reply.firstAudio
-            if (!text.isNullOrBlank() && !audio.isNullOrEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio) }
+            if (!text.isNullOrBlank() && !audio.isNullOrEmpty()) onCore { speechWithAnswer(speakVoice.name, text, audio, reply.firstVisemes.takeIf { marked }) }
         }
         return when (reply) {
             is AskReply.Unavailable -> unavailable(os.meka.core.domain.AskRules.unavailableLine(reply.state, reply.reason))
@@ -11157,15 +11160,34 @@ class MekaCore(
         os.meka.core.wire.SpeechCodec.decodeMarks(speechMarkTexts[key]).map { os.meka.core.domain.LipSync.Mark(it.atMs, it.viseme) }
     }
 
-    /** Keeps a first piece the server said with a spoken answer ([AskReply.Answered.firstAudio]) ready for [speechClip]. */
-    private fun speechWithAnswer(voice: String?, words: String, audio: String) {
+    /** Obi's face, slice 3c: the streamed ask, with each piece's mouth sounds when [marked], else none. */
+    private suspend fun AiApi.askStreamedMarkedIf(
+        marked: Boolean,
+        question: String,
+        context: os.meka.core.domain.AskContext,
+        history: List<os.meka.core.domain.TalkTurn>,
+        speakVoice: String?,
+        onFirst: suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit,
+        onNext: suspend (text: String, audio: String, voice: String?, visemes: String?) -> Unit,
+    ): AskReply =
+        if (marked) askStreamedMarked(question, context, history, speakVoice, onFirst, onNext)
+        else askStreamed(question, context, history, speakVoice, withoutMarks(onFirst), withoutMarks(onNext))
+
+    /**
+     * Keeps a first piece the server said with a spoken answer ([AskReply.Answered.firstAudio]) ready for [speechClip],
+     * with its mouth sounds ([marks], Obi's face slice 3c) when the face is drawn and they read cleanly (else none: the
+     * loudness mouth; a bad list never stops the clip).
+     */
+    private fun speechWithAnswer(voice: String?, words: String, audio: String, marks: String? = null) {
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice, words.trim())
         speechClips.remove(key)
         speechMarkTexts.remove(key)
         speechClips[key] = audio
+        if (speechWantsMarks && !marks.isNullOrBlank() && os.meka.core.wire.SpeechCodec.decodeMarks(marks).isNotEmpty()) speechMarkTexts[key] = marks
         speechAnswerClips += key
         while (speechClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechClips.keys.first().also { speechClips.remove(it) })
         while (speechAnswerClips.size > os.meka.core.domain.SpeechRules.CACHE_CLIPS) speechAnswerClips.remove(speechAnswerClips.first())
+        speechMarkTexts.keys.retainAll(speechClips.keys)
     }
 
     private fun speechCached(voice: String?, words: String): String? {

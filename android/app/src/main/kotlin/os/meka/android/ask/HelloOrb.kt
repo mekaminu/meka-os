@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -71,6 +72,8 @@ fun HelloOrbView(
     state: OrbState, level: Float, modifier: Modifier = Modifier, size: Dp = HelloOrb.SIZE.dp, still: Boolean = false,
     /** The entrance (slice 7, [os.meka.core.domain.HelloEntrance]): how far the points are flung out, to [reach]× the radius, and its one shockwave. */
     spread: Float = 0f, reach: Float = 1f, entranceShock: Pair<Float, Float>? = null,
+    /** Obi's face, slice 3c: how much the points hint at his face (0…1, [os.meka.core.domain.FaceLook.pointShade]); the docked orb while he speaks. */
+    faceHint: Float = 0f,
 ) {
     val reduced = Meka.reducedMotion || still
     val accent = Meka.colors.accent
@@ -154,8 +157,9 @@ fun HelloOrbView(
             // The points, far to near; the nearest catch the bright gold.
             for (i in 0 until n) {
                 val d = frame.depth[i]
+                val shade = if (faceHint > 0f) os.meka.core.domain.FaceLook.pointShade(frame.px[i], frame.py[i], faceHint) else 1f
                 drawCircle(
-                    (if (d > 0.7f) bright else accent).copy(alpha = frame.alpha[i]),
+                    (if (d > 0.7f) bright else accent).copy(alpha = (frame.alpha[i] * shade).coerceIn(0f, 1f)),
                     radius = Constellation.dotRadius(d, n) * r,
                     center = Offset(c.x + frame.px[i] * r, c.y + frame.py[i] * r), blendMode = blend,
                 )
@@ -260,8 +264,17 @@ fun DockedHelloOrb(phase: TalkPhase, needsYou: Int, onTap: () -> Unit, modifier:
     val pressed by source.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && !reduced) 0.94f else 1f, MekaMotion.complete(reduced), label = "dockPress")
     val state = os.meka.core.domain.HelloDock.state(phase, needsYou)
+    // Obi's face, slice 3c: it stays an orb, but while he speaks with the face shown its points hint at his face.
+    val faceReady by ObiFaceStore.ready.collectAsState()
+    val faceOn by ObiFaceStore.on.collectAsState()
+    val faceShown = os.meka.core.domain.FaceFileRules.shows(faceReady, faceOn)
+    val faceHint by animateFloatAsState(
+        os.meka.core.domain.FaceLook.hint(state, faceShown),
+        if (reduced) androidx.compose.animation.core.snap() else androidx.compose.animation.core.tween(os.meka.core.domain.FaceLook.HINT_MS.toInt()),
+        label = "dockFace",
+    )
     HelloOrbView(
-        state, os.meka.core.domain.HelloDock.level(state), size = os.meka.core.domain.HelloDock.SIZE.dp,
+        state, os.meka.core.domain.HelloDock.level(state), size = os.meka.core.domain.HelloDock.SIZE.dp, faceHint = faceHint,
         modifier = modifier.onGloballyPositioned { onPlaced(it.boundsInWindow().center) }.scale(scale).clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(interactionSource = source, indication = null, role = Role.Button) { haptics.light(); onTap() }
             .semantics { contentDescription = os.meka.core.domain.HelloDock.label(phase, needsYou) },

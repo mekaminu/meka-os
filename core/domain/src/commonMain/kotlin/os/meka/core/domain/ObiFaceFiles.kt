@@ -96,6 +96,38 @@ object FaceLook {
     fun mouthFromLevel(state: OrbState, level: Float, tMs: Long): MouthShape? =
         if (state != OrbState.SPEAKING) null else LipSync.shapeForLoudness(level.toDouble(), LipSync.beat(tMs))
 
+    /**
+     * Slice 3c, the docked orb (the bottom bar's small gold orb stays an orb; a face at 54 dp reads poorly): while Obi
+     * speaks with the face shown, its points hint at a face, faintly. [hint] is how much (1 speaking with the face, 0
+     * otherwise; the app eases between them over [HINT_MS], reduced motion at once).
+     */
+    const val HINT_MS = 400L
+    const val HINT_STRENGTH = 0.55f
+
+    fun hint(state: OrbState, faceShown: Boolean): Float = if (faceShown && state == OrbState.SPEAKING) 1f else 0f
+
+    /**
+     * The face's silhouette in the orb's own units (the sphere's radius is 1, y down): 1 on the face (an oval a little
+     * taller than wide), 0 off it and in the eyes and mouth, so the points there stay dark and the features read.
+     */
+    fun onFace(x: Float, y: Float): Boolean {
+        fun inEllipse(cx: Float, cy: Float, rx: Float, ry: Float): Boolean {
+            val dx = (x - cx) / rx
+            val dy = (y - cy) / ry
+            return dx * dx + dy * dy <= 1f
+        }
+        if (!inEllipse(0f, -0.04f, 0.70f, 0.90f)) return false
+        if (inEllipse(-0.29f, -0.20f, 0.15f, 0.10f) || inEllipse(0.29f, -0.20f, 0.15f, 0.10f)) return false // the eyes
+        if (inEllipse(0f, 0.44f, 0.24f, 0.09f)) return false // the mouth
+        return true
+    }
+
+    /** A point's brightness multiplier at ([x], [y]) for [hint]: brighter on the face, dimmer off it; 1 with no hint. */
+    fun pointShade(x: Float, y: Float, hint: Float): Float {
+        val h = hint.coerceIn(0f, 1f) * HINT_STRENGTH
+        return if (onFace(x, y)) 1f + h else 1f - h
+    }
+
     /** The Face setting in Ask → Settings → Obi's voice. */
     const val SETTING_TITLE = "Face"
     const val ON = "On"
