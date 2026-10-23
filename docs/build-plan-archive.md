@@ -3151,6 +3151,7 @@ Findings fixed on both apps:
   DataExportTest (the intro names documents); VaultScreensTest also fails if a "Vault lands" line returns, the hint wraps
   or Export everything is enabled with nothing to export.
 - Design check: no design file covers the Vault or Your data. No server change, no migration, Mac checked nightly.
+- Landed 749daba; CI run 1131 (39944777725) green first try; published 6cdbfec (vault/ 6 shots, your-data/ 4).
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
