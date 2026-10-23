@@ -134,4 +134,19 @@ class ParkingTimerTest {
         timers.put(old)
         assertEquals(old, timers.timer("car"))
     }
+
+    /** Quality gate, Car's re-shot (2026-10-23): no "Ended" button beside a running timer; names start a line capitalised. */
+    @Test
+    fun theButtonSaysWhatItDoesAndNamesStartCapitalised() {
+        val t = ParkingTimer("car", at(14), at(16))
+        val running = ParkingTimerRules.row(t, "the Golf", at(15), cal)
+        val ended = ParkingTimerRules.row(t, "the Golf", at(16, 5), cal)
+        assertEquals("Stop timer", ParkingTimerRules.endAction(running))
+        assertEquals("Clear", ParkingTimerRules.endAction(ended))
+        assertEquals("The Golf", ParkingRules.heading("the Golf"))
+        assertEquals("Car 2", ParkingRules.heading("Car 2"))
+        assertEquals("", ParkingRules.heading(""))
+        assertEquals("Saved where the Golf is · ±6 m", ParkingRules.save(emptyMap(), "car", "the Golf",
+            LocationFix(51.5, -0.12, 6.0, at(15)), at(15)).line)
+    }
 }

@@ -40,7 +40,7 @@ struct CarSheet: View {
             if cars.count > 1 {
                 HStack(spacing: MekaSpace.xs) {
                     ForEach(cars, id: \.carId) { c in
-                        chip(c.title, lit: c.carId == forCar) { chosen = c.carId }
+                        chip(ParkingRules.shared.heading(title: c.title), lit: c.carId == forCar) { chosen = c.carId }
                     }
                 }
             }
@@ -84,7 +84,7 @@ struct CarSheet: View {
                 } label: {
                     HStack {
                         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                            Text(c.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                            Text(ParkingRules.shared.heading(title: c.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                             Text(c.summary.isEmpty ? ParkingRules.shared.DATES_LINE : c.summary)
                                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         }
@@ -120,7 +120,7 @@ struct CarSheet: View {
         return VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 if showTitle {
-                    Text(row.title).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(ParkingRules.shared.heading(title: row.title)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 Text(row.line).font(MekaType.body)
                     .foregroundStyle(row.lit ? palette.accent : palette.textPrimary)
@@ -139,13 +139,14 @@ struct CarSheet: View {
                         }
                     }
                 }
-                Button(rules.ENDED) {
+                // Quality gate slice 22: "Stop timer" while it runs, "Clear" once ended (never "Ended" beside "2 h left").
+                Button(rules.endAction(row: row)) {
                     model.endParkingTimer(carId) { line in
                         if let line { said = line; refused = false; undoCar = carId }
                     }
                 }
                 .buttonStyle(.link)
-                .accessibilityLabel("\(rules.ENDED): \(row.title)")
+                .accessibilityLabel("\(rules.endAction(row: row)): \(row.title)")
             }
         }
         .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)

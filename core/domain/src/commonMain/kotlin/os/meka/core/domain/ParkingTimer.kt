@@ -70,11 +70,19 @@ object ParkingTimerRules {
     const val HEADING = "PARKING TIMER"
     const val HINT = "Paid until 15:30, or 2 h"
     const val SET = "Start"
-    const val ENDED = "Ended"
+    /**
+     * The timer's own button (quality gate, Car's re-shot 2026-10-23: a button reading "Ended" beside "2 h left" read as
+     * a status that contradicts the line above it): "Stop timer" while it runs, "Clear" once it has ended.
+     */
+    const val STOP = "Stop timer"
+    const val CLEAR = "Clear"
     const val NOT_READ = "Type how long (2 h, 90 min) or until when (15:30, 6pm)"
     const val EMPTY_LINE = "No timer · type how long you paid for and Navilife reminds you 10 min before it ends"
     /** The extend chips, in minutes. */
     val EXTEND_MIN = listOf(15, 30, 60)
+
+    /** [STOP] while [row] runs, [CLEAR] once it has ended. */
+    fun endAction(row: TimerRow): String = if (row.ended) CLEAR else STOP
 
     fun extendLabel(min: Int): String = if (min % 60 == 0) "+${min / 60} h" else "+$min min"
 

@@ -300,7 +300,7 @@ fun CarPane(
                     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                         Text(ParkingRules.WHICH_CAR, style = MekaType.caption, color = Meka.colors.textTertiary)
                         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                            choices.forEach { (id, title) -> Chip(title, false) { startPark(id) } }
+                            choices.forEach { (id, title) -> Chip(ParkingRules.heading(title), false) { startPark(id) } }
                         }
                     }
                 }
@@ -346,7 +346,7 @@ fun CarPane(
                     ?: ParkingRules.onlyCar(cars).takeIf { choices.isEmpty() } ?: choices.firstOrNull()?.first ?: ParkingRules.onlyCar(cars)
                 if (choices.isNotEmpty()) {
                     Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                        choices.forEach { (id, title) -> Chip(title, id == forCar) { timerCar = id } }
+                        choices.forEach { (id, title) -> Chip(ParkingRules.heading(title), id == forCar) { timerCar = id } }
                     }
                 }
                 Field(ParkingTimerRules.HINT) { text ->
@@ -414,7 +414,7 @@ fun CarPane(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(c.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(ParkingRules.heading(c.title), style = MekaType.body, color = Meka.colors.textPrimary)
                     Text(c.summary.ifEmpty { ParkingRules.DATES_LINE }, style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
                 Text(ParkingRules.DATES_ACTION, style = MekaType.caption, color = Meka.colors.accent)
@@ -543,7 +543,7 @@ private fun BluetoothRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f).semantics(mergeDescendants = true) {}) {
-                Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Text(ParkingRules.heading(title), style = MekaType.body, color = Meka.colors.textPrimary)
                 Crossfade(CarBluetoothRules.rowLine(link), animationSpec = MekaMotion.appear(reduced), label = "bt-line") { l ->
                     Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
                 }
@@ -609,7 +609,7 @@ private fun FuelCarRow(title: String, fuel: FuelKind, open: Boolean, modifier: M
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Crossfade("$title takes ${fuel.label.replaceFirstChar { it.lowercase() }}", animationSpec = MekaMotion.appear(reduced),
+            Crossfade("${ParkingRules.heading(title)} takes ${fuel.label.replaceFirstChar { it.lowercase() }}", animationSpec = MekaMotion.appear(reduced),
                 modifier = Modifier.weight(1f), label = "fuel-car") { l ->
                 Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
             }
@@ -647,7 +647,7 @@ private fun PillAction(label: String, enabled: Boolean = true, onClick: () -> Un
 
 /**
  * One car's parking timer: the time left (brass in its last ten minutes and once ended), the note he typed, +15 min /
- * +30 min / +1 h and Ended (wrapping whole to the next line when the row is narrow). The line cross-fades as the minutes go.
+ * +30 min / +1 h and Stop timer (Clear once ended; wrapping whole to the next line when the row is narrow). The line cross-fades as the minutes go.
  */
 @Composable
 private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onExtend: (Int) -> Unit, onEnd: () -> Unit) {
@@ -661,21 +661,24 @@ private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onE
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Column(Modifier.semantics(mergeDescendants = true) {}) {
-            if (showTitle) Text(row.title, style = MekaType.caption, color = Meka.colors.textTertiary)
+            if (showTitle) Text(ParkingRules.heading(row.title), style = MekaType.caption, color = Meka.colors.textTertiary)
             Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "timer-left") { l ->
                 Text(l, style = MekaType.body, color = lineColor)
             }
             row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
-        // Quality gate slice 21: on the cover screen the three chips left "Ended" a sliver ("End-ed" across two lines);
-        // a flow row moves it whole to the next line when it doesn't fit.
+        // Quality gate slice 21: on the cover screen the three chips left the button a sliver (broken across two lines);
+        // a flow row moves it whole to the next line when it doesn't fit. Slice 22: it says what it does ("Stop timer",
+        // "Clear" once ended), and sits level with the chips.
         androidx.compose.foundation.layout.FlowRow(
             horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             ParkingTimerRules.EXTEND_MIN.forEach { m -> Chip(ParkingTimerRules.extendLabel(m), false) { onExtend(m) } }
-            Text(ParkingTimerRules.ENDED, style = MekaType.caption, color = Meka.colors.textTertiary,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onEnd)
-                    .semantics { contentDescription = "${ParkingTimerRules.ENDED}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
+            val end = ParkingTimerRules.endAction(row)
+            Text(end, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false,
+                modifier = Modifier.align(Alignment.CenterVertically).clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClick = onEnd)
+                    .semantics { contentDescription = "$end: ${row.title}" }.minTouch().padding(MekaSpace.xs))
         }
     }
 }
@@ -694,7 +697,7 @@ private fun ParkedCard(
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
     ) {
         Column(Modifier.semantics(mergeDescendants = true) {}) {
-            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(ParkingRules.heading(row.title), style = MekaType.body, color = Meka.colors.textPrimary)
             row.label?.let { Text(it, style = MekaType.metaStrong, color = Meka.colors.accent) }
             Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
         }
@@ -714,14 +717,18 @@ private fun ParkedCard(
                         .semantics { contentDescription = "${ParkingRules.REMOVE_PHOTO}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-            Text(ParkingRules.FIND, style = MekaType.caption, color = Meka.colors.accent,
+        // Quality gate slice 22 (Car's re-shot): on the cover screen "Drove off" broke across two lines beside Find my car
+        // and Photo of the bay; a flow row moves an action whole to the next line instead.
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
+            Text(ParkingRules.FIND, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onFind)
                     .semantics { contentDescription = "${ParkingRules.FIND}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
-            Text(ParkingRules.photoAction(row.spot), style = MekaType.caption, color = Meka.colors.accent,
+            Text(ParkingRules.photoAction(row.spot), style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onPhoto)
                     .semantics { contentDescription = "${ParkingRules.photoAction(row.spot)}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
-            Text(ParkingRules.DROVE_OFF, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(ParkingRules.DROVE_OFF, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onDroveOff)
                     .semantics { contentDescription = "${ParkingRules.DROVE_OFF}: ${row.title}" }.minTouch().padding(MekaSpace.xs))
         }

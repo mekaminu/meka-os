@@ -117,8 +117,19 @@ class CarScreensTest {
                 if (core.parkingTimersView.value.rows.isEmpty()) fail("$name: no parking timer after setting one")
             }
         }
-        // The timer's add field: one example on one line (the quality gate's rule for hints).
-        ScreenShots.assertEachOneLine(compose, name, listOf(ParkingTimerRules.HINT))
+        // The timer's add field: one example on one line (the quality gate's rule for hints); slice 22: each action on
+        // one line ("Drove off" broke across two on the cover screen).
+        ScreenShots.assertEachOneLine(compose, name, listOf(ParkingTimerRules.HINT, ParkingRules.FIND, ParkingRules.DROVE_OFF,
+            ParkingRules.PHOTO, ParkingTimerRules.STOP, ParkingTimerRules.CLEAR))
+        // Slice 22: a car's name starts its line capitalised ("The Golf", never "the Golf" heading a card or chip), and
+        // a running timer's button says what it does (no "Ended" beside "2 h left").
+        val lowerStart = ScreenShots.texts(compose).filter { t -> cars.cars.any { c -> c.title != ParkingRules.heading(c.title) && t.startsWith(c.title) } }
+        if (lowerStart.isNotEmpty()) fail("$name starts a line with a lower-case car name: $lowerStart")
+        if (fill != Fill.EMPTY) {
+            ScreenShots.assertShows(compose, name, ParkingTimerRules.STOP)
+            if (ScreenShots.texts(compose).any { it == "Ended" }) fail("$name: an \"Ended\" button beside a running timer")
+            ScreenShots.assertShows(compose, name, "The Golf")
+        }
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER) fun carCoverEmpty() = shoot("cover-dark-empty", Fill.EMPTY)

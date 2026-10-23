@@ -444,6 +444,12 @@ object ParkingRules {
         }
     }
 
+    /**
+     * A car's title where it starts a line (a card's name, a chip, the timer's label): "The Golf", "Car 2". Mid-sentence
+     * it stays as named ("Saved where the Golf is"). Quality gate, Car's re-shot 2026-10-23: cards read "the Golf".
+     */
+    fun heading(title: String): String = capitalise(title)
+
     /** [carId]'s title among [cars] ("the Golf", "Car 2"); "Car" when it's the only one or unknown. */
     fun titleOf(carId: String, cars: CarsView): String = cars.cars.firstOrNull { it.carId == carId }?.title ?: TITLE
 

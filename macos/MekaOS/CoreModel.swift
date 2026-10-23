@@ -1868,7 +1868,7 @@ final class CoreModel {
         }
     }
 
-    /// Ended: clears a car's timer ([undoEndParkingTimer] puts it back). Only Strings cross.
+    /// Stop timer (Clear once ended): clears a car's timer ([undoEndParkingTimer] puts it back). Only Strings cross.
     func endParkingTimer(_ carId: String, said: @escaping @MainActor (String?) -> Void) {
         guard let core else { return }
         MekaHaptics.tick()
