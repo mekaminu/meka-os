@@ -3146,6 +3146,9 @@ the full morning's foot (headlines, one-liner, Got it) on the cover screen, unde
   unchanged); Fold: Topics/Done answers a 48 dp touch (tagged `brief-topics`), as News's does.
 - Design check: no design file covers the morning brief. No core change, no server change, no migration, Mac checked
   nightly.
+- Landed 277de94 + CI fix f633279 (the test found the pane by its scroll-to-index action, since the chip rows scroll
+  sideways too; the third headline moved to AI, a default topic; the empty day's line looked for kept); CI run 1139
+  (39963353784) green.
 
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
