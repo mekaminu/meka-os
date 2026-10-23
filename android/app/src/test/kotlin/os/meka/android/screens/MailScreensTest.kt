@@ -192,6 +192,9 @@ class MailScreensTest {
             return core
         }
         val v = runBlocking { core.mailAccounts() } ?: fail("$name: Mail never read the accounts")
+        // Reading the accounts here can land the screen's own read too: let it draw before the checks look at it.
+        turns()
+        compose.waitForIdle()
         val lines = lines(v)
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
