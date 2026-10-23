@@ -61,6 +61,13 @@ object FamilyRules {
     const val OFFLINE = "Couldn't reach Navilife's server · try again"
 
     /**
+     * Whether a link row [widthDp] wide puts Turn off under its words (quality gate slice 40: on the cover screen the
+     * button beside them squeezed "Waiting · link made yesterday" onto two lines); the same width as Calendars' and
+     * Mail's buttons.
+     */
+    fun turnOffUnder(widthDp: Float): Boolean = MailAutopilotPanelRules.stacked(widthDp)
+
+    /**
      * A name MEKA's server accepts ("Sam", "Mary-Jane"): letters, spaces, hyphens and apostrophes, up to 30, and
      * not Meka's own. Spaces are tidied; null when it isn't one.
      */

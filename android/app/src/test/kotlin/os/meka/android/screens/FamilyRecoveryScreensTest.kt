@@ -36,6 +36,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.AboutField
+import os.meka.core.domain.FamilyRow
 import os.meka.core.domain.FamilyRules
 import os.meka.core.domain.Household
 import os.meka.core.domain.HouseholdNames
@@ -209,6 +210,7 @@ class FamilyRecoveryScreensTest {
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
+        if (name.startsWith("cover")) turnOffUnderWords(name, v.rows)
         when {
             !connected -> if (v.problem != FamilyRules.NOT_CONNECTED) fail("$name: not connected, but the problem says \"${v.problem}\"")
             fill == Fill.EMPTY -> {
@@ -226,6 +228,21 @@ class FamilyRecoveryScreensTest {
             }
         }
         return core
+    }
+
+    /**
+     * Quality gate slice 40: on the cover screen a link's Turn off sits under its words, never squeezing them: each row's
+     * line reads on one line and the button starts below it.
+     */
+    private fun turnOffUnderWords(name: String, rows: List<FamilyRow>) {
+        ScreenShots.assertEachOneLine(compose, name, rows.map { LoneWordGlue.kept(it.line) })
+        rows.filter { it.canTurnOff }.forEach { r ->
+            val line = compose.onAllNodes(hasText(LoneWordGlue.kept(r.line)), useUnmergedTree = true).fetchSemanticsNodes()
+                .firstOrNull() ?: return@forEach // below the fold
+            val off = compose.onAllNodes(hasText("Turn off"), useUnmergedTree = true).fetchSemanticsNodes()
+                .firstOrNull { it.boundsInRoot.top >= line.boundsInRoot.top - 1f } ?: fail("$name: no Turn off for ${r.title}")
+            if (off.boundsInRoot.top < line.boundsInRoot.bottom - 1f) fail("$name: ${r.title}'s Turn off sits beside its words")
+        }
     }
 
     /** Works by hand: with Sam named and no link yet, Make a link shows "Link made for Sam"; Turn off turns it off. */

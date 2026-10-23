@@ -114,4 +114,13 @@ class FamilyTest {
         assertEquals("Turned off Jordan's link", FamilyRules.turnedOffSummary("jordan"))
         assertEquals("Made a shopping list link for Jordan", FamilyRules.invitedSummary("jordan"))
     }
+
+    @Test
+    fun turnOffGoesUnderTheWordsOnANarrowRow() {
+        // The cover screen's row (~312 dp) stacks; the inner screen's and a wide pane's don't.
+        assertTrue(FamilyRules.turnOffUnder(312f))
+        assertTrue(FamilyRules.turnOffUnder(419f))
+        assertFalse(FamilyRules.turnOffUnder(420f))
+        assertFalse(FamilyRules.turnOffUnder(568f))
+    }
 }

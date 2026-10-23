@@ -3099,6 +3099,20 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Design check: no design file covers Family or Recovery key. No server change, no migration, Mac checked nightly.
 - Landed d827e81 + CI fixes 5c22f7e (the test's matcher imported getOrNull) and 59674c6 (the by-hand checks wait in real time for the core's thread before the link and the saved key are drawn); CI run 1127 (39936198929) green; shots published ca6f286. Re-shot finding: on the cover screen the rows' Turn off squeezes their lines into two ("Waiting · link" / "made yesterday").
 
+### Quality gate — slice 40 (2026-10-23): Family's Turn off under the words on the cover screen
+
+Slice 39's re-shot finding: on the cover screen (w344dp) Family's Turn off pill beside each link's words squeezed the line
+onto two ("Waiting · link" / "made yesterday", "Joined" / "Sat 10 Oct · seen today").
+- Core: `FamilyRules.turnOffUnder(widthDp)` = `MailAutopilotPanelRules.stacked` (below 420 dp), like
+  `CalendarAccountRules.actionsUnder`; `FamilyTest.turnOffGoesUnderTheWordsOnANarrowRow`.
+- Fold: `FamilyRowView` is a `BoxWithConstraints` (tag `family-row:<title>`); stacked, the dot and the words keep one
+  48 dp row and Turn off sits under them, indented past the dot (10 dp + xs); wide, the old single row. The merged
+  TalkBack description moved onto the words, so Turn off stays its own button.
+- Test: `FamilyRecoveryScreensTest.turnOffUnderWords` on every cover Family shot: each row's line on one line and its
+  Turn off starting below the line.
+- Mac unchanged: the Family sheet is a fixed 460 pt with Mac-sized text, so the button fits beside the words.
+- No server change, no migration, Mac checked nightly.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

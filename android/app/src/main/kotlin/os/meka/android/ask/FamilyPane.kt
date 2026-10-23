@@ -15,6 +15,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -171,27 +173,53 @@ private fun FamilyRowView(row: FamilyRow, enabled: Boolean, modifier: Modifier, 
         },
         MekaMotion.appear(reduced), label = "family-dot",
     )
-    Row(
+    BoxWithConstraints(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .semantics(mergeDescendants = true) { contentDescription = "${row.title}. ${row.line}" },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            .testTag("family-row:${row.title}"),
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
-        Column(Modifier.weight(1f)) {
-            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "family-row-line") { l ->
-                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = lineColor)
+        // Quality gate slice 40: on the cover screen Turn off beside the words squeezed each line onto two ("Waiting ·
+        // link" / "made yesterday"); below 420 dp it sits under them, lined up with the words, as Calendars' and Mail's do.
+        val under = row.canTurnOff && FamilyRules.turnOffUnder((maxWidth - MekaSpace.m * 2).value)
+        val dotSlot: @Composable () -> Unit = { Box(Modifier.size(10.dp).clip(CircleShape).background(dot)) }
+        val words: @Composable (Modifier) -> Unit = { m ->
+            Column(m.semantics(mergeDescendants = true) { contentDescription = "${row.title}. ${row.line}" }) {
+                Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "family-row-line") { l ->
+                    Text(LoneWordGlue.kept(l), style = MekaType.caption, color = lineColor)
+                }
             }
         }
-        if (row.canTurnOff) {
+        val turnOff: @Composable (Modifier) -> Unit = { m ->
             Box(
-                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                m.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .clickable(enabled = enabled, role = Role.Button, onClick = onTurnOff)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
-                Text("Turn off", style = MekaType.itemMeta, color = Meka.colors.critical)
+                Text("Turn off", style = MekaType.itemMeta, color = Meka.colors.critical, maxLines = 1, softWrap = false)
+            }
+        }
+        if (under) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                Row(Modifier.fillMaxWidth().minTouch(), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    dotSlot()
+                    words(Modifier.weight(1f))
+                }
+                // Under the words, starting where they start (past the dot), so the row still reads as one.
+                turnOff(Modifier.padding(start = 10.dp + MekaSpace.xs))
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                dotSlot()
+                words(Modifier.weight(1f))
+                if (row.canTurnOff) turnOff(Modifier)
             }
         }
     }
