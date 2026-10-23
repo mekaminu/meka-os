@@ -3032,6 +3032,12 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - No server change, no wire change, no migration, Mac checked nightly. tools/core-verify.sh green (3195).
 - Landed 9b94b1e + CI fix ffda58f, CI run 1111 (39906302066) green.
 
+### Quality gate — slice 31 (2026-10-23): Mail's shots and its first hand test
+- **Shots (MailScreensTest):** Ask → Settings → Mail when the server can't be reached, with nothing connected, one Gmail sorted and tidied (3 need you, 30 newsletters…), and three accounts (Personal sorted, Business whose sign-in ended, Outlook whose last check was "busy"), on the cover and inner sizes, Dark and Light, against a stand-in server held in the test, saved under docs/screens/fold/mail/. Read for nonsense, cut and broken words, split dates/times/numbers, a word left alone and a line starting with a dot; titles, Connect buttons, Reconnect, Disconnect and Autopilot's button each on one line; the order Personal → Business → Outlook; a busy check says why, not the catch-all.
+- **By hand:** Autopilot's Turn off (its own click action) turns Autopilot off in the synced data, its line reads Off and the note "Autopilot is off · …", with Turn on in its place.
+- **Fix with them:** Mail's lines were drawn plain: the header, the empty and still-to-connect lines, the replies line, each account's line, sorted and tidy lines, the switches', the ten-minute inbox's, meeting prep's and warranty's lines and the note now go through `LoneWordGlue.kept`, Fold (MailPane) and Mac (MailSheet).
+- Design check: no design file covers Mail. No core change, no server change, no wire change, no migration, Mac checked nightly. tools/core-verify.sh green (3195).
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

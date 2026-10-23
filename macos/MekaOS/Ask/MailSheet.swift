@@ -27,17 +27,17 @@ struct MailSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(MailAccountRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(MailAccountRules.shared.HEADER).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: MailAccountRules.shared.HEADER)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(1)
             if let view = model.mail {
                 if let empty = view.emptyLine {
-                    Text(empty).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: empty)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
                 if let line = view.repliesLine {
-                    Text(line).font(MekaType.itemMeta)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta)
                         .foregroundStyle(line == MailAutoDraftRules.shared.NONE_WAITING ? palette.textSecondary : palette.accent)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
@@ -130,7 +130,7 @@ struct MailSheet: View {
                     .transition(.opacity)
                 }
                 if let left = view.toConnect {
-                    Text(left).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: left)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 HStack(spacing: MekaSpace.xs) {
                     ForEach(view.connects, id: \.provider) { c in
@@ -150,7 +150,7 @@ struct MailSheet: View {
                 SkeletonRows(count: 2, rowHeight: 56, palette: palette)
             }
             if let note = model.mailNote {
-                Text(note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: note)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -273,7 +273,7 @@ private struct MomentPanelView: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(MailMomentRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -315,7 +315,7 @@ private struct PrepLeadPanelView: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(MeetingPrepRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -355,7 +355,7 @@ private struct WarrantyPanelView: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: 0) {
                 Text(MailWarrantyRules.shared.TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -455,7 +455,7 @@ private struct AutopilotPanelView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.on)
             VStack(alignment: .leading, spacing: 0) {
                 Text(panel.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(panel.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: panel.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -487,7 +487,7 @@ private struct MarkReadPanelView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.markRead)
             VStack(alignment: .leading, spacing: 0) {
                 Text(panel.markReadTitle).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(panel.markReadLine).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: panel.markReadLine)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -523,7 +523,7 @@ private struct SwitchPanelView: View {
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
             VStack(alignment: .leading, spacing: 0) {
                 Text(title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
             }
@@ -656,18 +656,18 @@ private struct MailAccountRowView: View {
                         .foregroundStyle(palette.accent)
                 }
             }
-            Text(row.line).font(MekaType.caption)
+            Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.caption)
                 .foregroundStyle(row.ending ? palette.accent : row.needsReconnect ? palette.critical : palette.textTertiary)
                 .contentTransition(.opacity)
             // Slice 2a: what the rules made of the inbox, once the server has sorted the account.
             if let sorted = row.sortedLine {
-                Text(sorted).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: sorted)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .transition(.opacity)
             }
             // Slice 3a: Autopilot's dry run, what it would tidy (nothing moves yet).
             if let tidy = row.tidyLine {
-                Text(tidy).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: tidy)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .contentTransition(.opacity)
                     .transition(.opacity)
             }

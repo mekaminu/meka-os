@@ -69,6 +69,7 @@ import os.meka.core.domain.FollowUpWaitsPanel
 import os.meka.core.domain.LifeAuditReview
 import os.meka.core.domain.LifeAuditReviewLine
 import os.meka.core.domain.LifeAuditReviewRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailAccountRow
 import os.meka.core.domain.MailBacklogRules
 import os.meka.core.domain.MailAccountRules
@@ -281,7 +282,7 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text(MailAccountRules.TITLE, style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.MAIL)))
-        Text(MailAccountRules.HEADER, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        Text(LoneWordGlue.kept(MailAccountRules.HEADER), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         Spacer(Modifier.height(MekaSpace.m))
 
         val current = view
@@ -290,11 +291,11 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
             current.isFailure -> Text(MailAccountRules.OFFLINE, style = MekaType.itemMeta, color = Meka.colors.critical)
             else -> {
                 val v = current.getOrThrow()
-                v.emptyLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
+                v.emptyLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textTertiary) }
                 // Drafted replies, slice 2: "3 emails need a reply · 2 drafted", or "No emails waiting on you ✓".
                 v.repliesLine?.let { line ->
                     Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-replies") { t ->
-                        Text(t, style = MekaType.itemMeta,
+                        Text(LoneWordGlue.kept(t), style = MekaType.itemMeta,
                             color = if (t == MailAutoDraftRules.NONE_WAITING) Meka.colors.textSecondary else Meka.colors.accent,
                             modifier = Modifier.appear(rememberAppearance(0)))
                     }
@@ -331,13 +332,13 @@ fun MailPane(core: MekaCore, onClose: () -> Unit) {
                 }
                 // Inbox fixes, slice 5: every sender with his own rule, once, under the accounts.
                 RulesCard(v, Modifier.appear(rememberAppearance(v.rows.size + 1))) { id, sets -> setRule(id, sets) }
-                v.toConnect?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                v.toConnect?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
                 Spacer(Modifier.height(MekaSpace.l))
                 v.connects.forEach { c -> ConnectButton(c.label) { connect(c.provider, c.note) } }
             }
         }
         Crossfade(note, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-note") { n ->
-            n?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+            n?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         }
         // Slice 4: Undo on the last Chase waits change (light haptic).
         AnimatedVisibility(waitUndo, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
@@ -379,7 +380,7 @@ private fun MailAccountCard(
             }
         }
         Crossfade(row.line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "mail-line") {
-            Text(it, style = MekaType.caption, color = when {
+            Text(LoneWordGlue.kept(it), style = MekaType.caption, color = when {
                 row.ending -> Meka.colors.accent
                 row.needsReconnect -> Meka.colors.critical
                 else -> Meka.colors.textTertiary
@@ -392,7 +393,7 @@ private fun MailAccountCard(
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
             Crossfade(row.sortedLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-sorted") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         // Slice 3a: Autopilot's dry run, what it would tidy (nothing moves yet); unfolds the same way.
@@ -402,7 +403,7 @@ private fun MailAccountCard(
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
             Crossfade(row.tidyLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "mail-tidy") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
         // Slice 3b-2: what Autopilot tidied here, newest first, each with Undo.
@@ -492,7 +493,7 @@ private fun MomentCard(time: MailMomentTime, modifier: Modifier, onPick: (MailMo
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MailMomentRules.TITLE + ". " + MailMomentRules.settingLine(time) }) {
             Text(MailMomentRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(MailMomentRules.settingLine(time), animationSpec = MekaMotion.appear(reduced), label = "moment-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -527,7 +528,7 @@ private fun PrepLeadCard(lead: MeetingPrepLead, modifier: Modifier, onPick: (Mee
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MeetingPrepRules.TITLE + ". " + MeetingPrepRules.settingLine(lead) }) {
             Text(MeetingPrepRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(MeetingPrepRules.settingLine(lead), animationSpec = MekaMotion.appear(reduced), label = "prep-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -562,7 +563,7 @@ private fun WarrantyCard(level: MailWarrantyLevel, modifier: Modifier, onPick: (
         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = MailWarrantyRules.TITLE + ". " + MailWarrantyRules.settingLine(level) }) {
             Text(MailWarrantyRules.TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(MailWarrantyRules.settingLine(level), animationSpec = MekaMotion.appear(reduced), label = "warranty-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -715,7 +716,7 @@ private fun AutopilotCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitc
         Column(Modifier.weight(1f)) {
             Text(panel.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(panel.line, animationSpec = MekaMotion.appear(reduced), label = "autopilot-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         Crossfade(panel.action, animationSpec = MekaMotion.appear(reduced), label = "autopilot-action") { a ->
@@ -755,7 +756,7 @@ private fun SwitchCard(on: Boolean, title: String, line: String, action: String,
         Column(Modifier.weight(1f)) {
             Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "$tag-line") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         Crossfade(action, animationSpec = MekaMotion.appear(reduced), label = "$tag-action") { a ->
