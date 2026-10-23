@@ -247,4 +247,16 @@ class HealthTest {
         assertEquals("09:30", HealthRules.at(day * CivilDate.DAY_MS + 570 * HealthRules.MIN, now, cal))
         assertEquals("Thu 8 Oct 23:59", HealthRules.at(day * CivilDate.DAY_MS - HealthRules.MIN, now, cal))
     }
+
+    /** The quality gate's Health shots: "Checked …" reads the calendar's zone the core hands in, not the device's. */
+    @Test
+    fun theCheckedLineReadsTheCoresZone() {
+        val v = HealthRules.view(facts(), cal)
+        assertEquals("Checked 14:05", v.checkedLine)
+        assertEquals("Checked 15:05", HealthRules.view(facts(), LocalCalendar.fixedOffset(60 * HealthRules.MIN)).checkedLine)
+        assertEquals("Checked 14:05", HealthRules.checkedShown(v, checking = false))
+        assertEquals("Checking… · Checked 14:05", HealthRules.checkedShown(v, checking = true))
+        // A view made before the line existed still reads as a check.
+        assertEquals("Checked", HealthRules.checkedShown(v.copy(checkedLine = ""), checking = false))
+    }
 }

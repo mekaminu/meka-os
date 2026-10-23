@@ -46,6 +46,11 @@ data class HealthView(
     val todayLine: String?,
     /** When this was worked out (the screen says "Checked 14:05"). */
     val checkedAtMs: Long,
+    /**
+     * "Checked 14:05" in the core's own zone (the quality gate's Health shots: each app formatted [checkedAtMs] in the
+     * device's default zone, so a check read differently from every other time on screen when the two differed).
+     */
+    val checkedLine: String = "",
 )
 
 /** What the server said (`/v1/health/household`); null in [HealthFacts.server] when it couldn't be reached. */
@@ -216,8 +221,15 @@ object HealthRules {
             1 -> "${others[0].title} · ${others[0].line}"
             else -> "Navilife health · ${others.size} things need a look"
         }
-        return HealthView(rows, summary, attention, critical, todayLine, f.nowMs)
+        return HealthView(rows, summary, attention, critical, todayLine, f.nowMs, checkedLine(f.nowMs, cal))
     }
+
+    /** "Checked 14:05" in [cal]'s zone. */
+    fun checkedLine(atMs: Long, cal: LocalCalendar): String = "Checked " + LocalClock.formatMinute(cal.minuteOfDay(atMs))
+
+    /** The line under Health's summary: "Checked 14:05", or "Checking… · Checked 14:05" while a check runs. */
+    fun checkedShown(view: HealthView, checking: Boolean): String =
+        (if (checking) "Checking… · " else "") + view.checkedLine.ifEmpty { "Checked" }
 
     private fun server(f: HealthFacts, cal: LocalCalendar): HealthRow {
         val title = "Navilife's server"

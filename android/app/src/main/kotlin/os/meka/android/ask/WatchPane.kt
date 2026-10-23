@@ -101,9 +101,9 @@ fun WatchPane(core: MekaCore, onClose: () -> Unit) {
         Text("Watch", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.WATCH)).appear(rememberAppearance(0)))
         Crossfade(v?.summary ?: "Checking…", animationSpec = MekaMotion.appear(reduced), label = "watch-summary") { s ->
-            Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+            Text(os.meka.core.domain.LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
         }
-        Text(WatchLinkRules.HOW, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
+        Text(os.meka.core.domain.LoneWordGlue.kept(v?.how ?: WatchLinkRules.HOW), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
         Row(
             Modifier.appear(rememberAppearance(2)),
             verticalAlignment = Alignment.CenterVertically,
@@ -131,7 +131,7 @@ fun WatchPane(core: MekaCore, onClose: () -> Unit) {
         }
         val problem = v?.problem
         AnimatedVisibility(problem != null, enter = enter, exit = exit) {
-            Text(problem.orEmpty(), style = MekaType.caption, color = Meka.colors.accent)
+            Text(os.meka.core.domain.LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.accent)
         }
         if (v == null) {
             SkeletonRows(1, Modifier.padding(top = MekaSpace.xs))
@@ -165,7 +165,7 @@ private fun WatchLinkRowView(row: LinkedWatchRow, enabled: Boolean, modifier: Mo
         Column(Modifier.weight(1f)) {
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "watch-row-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         Box(

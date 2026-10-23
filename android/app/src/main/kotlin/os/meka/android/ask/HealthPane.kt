@@ -71,7 +71,6 @@ import os.meka.core.domain.HealthState
 import os.meka.core.domain.HealthView
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.MekaCore
-import java.util.Calendar
 
 /**
  * What only the Fold can tell the Health screen (Reliability first, item 3): the battery exemption (and a stop during
@@ -232,11 +231,11 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
         Text("Health", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.HEALTH)).appear(rememberAppearance(0)))
         Crossfade(v?.summary ?: "Checking…", animationSpec = MekaMotion.appear(reduced), label = "health-summary-text") { s ->
-            Text(s, style = MekaType.body, color = summaryColor, modifier = Modifier.appear(rememberAppearance(0)))
+            Text(os.meka.core.domain.LoneWordGlue.kept(s), style = MekaType.body, color = summaryColor, modifier = Modifier.appear(rememberAppearance(0)))
         }
         if (v != null) {
-            val checked = Calendar.getInstance().apply { timeInMillis = v.checkedAtMs }
-            val line = (if (checking) "Checking… · " else "") + "Checked %02d:%02d".format(checked.get(Calendar.HOUR_OF_DAY), checked.get(Calendar.MINUTE))
+            // The core's zone, like every other time on screen (the quality gate's Health shots).
+            val line = os.meka.core.domain.HealthRules.checkedShown(v, checking)
             Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "health-checked") { t ->
                 Text(t, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
@@ -312,7 +311,7 @@ private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, 
         Column(Modifier.weight(1f)) {
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "health-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
         val label = row.fixLabel

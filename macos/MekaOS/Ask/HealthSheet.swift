@@ -18,12 +18,12 @@ struct HealthSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Health").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.health {
-                Text(view.summary).font(MekaType.body)
+                Text(LoneWordGlue.shared.kept(line: view.summary)).font(MekaType.body)
                     .foregroundStyle(view.critical ? palette.critical : view.attention > 0 ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: view.summary)
                     .staggeredAppear(0)
-                Text((model.checkingHealth ? "Checking… · " : "") + "Checked " + Self.time(view.checkedAtMs))
+                Text(HealthRules.shared.checkedShown(view: view, checking: model.checkingHealth))
                     .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .contentTransition(.opacity)
                 ScrollView {
@@ -52,12 +52,6 @@ struct HealthSheet: View {
         .frame(width: 500)
         .background(palette.surface)
         .task { await model.refreshHealth() }
-    }
-
-    private static func time(_ ms: Int64) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f.string(from: Date(timeIntervalSince1970: TimeInterval(ms) / 1000))
     }
 
     /// What a row's button does on the Mac. Only the strings cross into the core.
@@ -118,7 +112,7 @@ private struct HealthRowView: View {
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: spoken)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)

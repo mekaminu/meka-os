@@ -8643,7 +8643,7 @@ class MekaCore(
     private suspend fun refreshHealthLocal(device: os.meka.core.domain.DeviceHealth, last: os.meka.core.domain.HealthView): os.meka.core.domain.HealthView {
         lastHealthServer ?: return last
         val facts = onCore { healthFacts(device, isConnected, lastHealthServer?.server, lastHealthServer?.accounts, lastHealthServer?.ai, lastHealthServer?.mail) }
-        val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone)).copy(checkedAtMs = last.checkedAtMs)
+        val view = os.meka.core.domain.HealthRules.view(facts, ZoneCalendar(timeZone)).copy(checkedAtMs = last.checkedAtMs, checkedLine = last.checkedLine)
         _health.value = view
         return view
     }
