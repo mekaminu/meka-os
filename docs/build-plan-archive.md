@@ -3082,6 +3082,7 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **By hand:** Stop work now stops work (Start work now and Back to my hours appear); Saturday's chip adds Saturday to the hours.
 - **Kept lines:** those lines now go through core LoneWordGlue on the Fold (WorkScreens.kt: AT_WORK_NOTE, callAssistantNote, HOURS_ON_LINE/HOURS_OFF_LINE named) and the Mac (WorkSheet: the status line, the call line, the test line, Screen unknown's line and trade-off).
 - Design check: no design file covers Work mode. Fold and Mac, no core change, no server change, no migration, Mac checked nightly.
+- Landed 844e1e6; CI run 1122 (39928079093) green first try; shots published 16dd64e. Seen in them for the next slice: on the inner screen the column runs the full width (the pill and the steppers at the far edge); on the cover screen the commute's To work / Home labels sit tight on their chips.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
