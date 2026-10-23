@@ -9,11 +9,22 @@ class DurationGlueTest {
     @Test
     fun aDurationIsKeptWithTheWordItMeasures() {
         assertEquals(
-            "Suggested from Work at 09:00 · 1${nb}h${nb}20${nb}commute · 1${nb}h to get ready",
+            "Suggested from Work at 09:00${nb}·${nb}1${nb}h${nb}20${nb}commute${nb}·${nb}1${nb}h to get ready",
             DurationGlue.kept("Suggested from Work at 09:00 · 1 h 20 commute · 1 h to get ready"),
         )
-        assertEquals("19:00–21:00 · 2${nb}h${nb}free", DurationGlue.kept("19:00–21:00 · 2 h free"))
+        assertEquals("19:00–21:00${nb}·${nb}2${nb}h${nb}free", DurationGlue.kept("19:00–21:00 · 2 h free"))
         assertEquals("45${nb}min${nb}walk", DurationGlue.kept("45 min walk"))
+    }
+
+    @Test
+    fun aDotBesideADurationGoesWithIt() {
+        // No line ends on the dot before "1 h 20 commute", nor starts with it.
+        assertEquals("Leave at 07:40${nb}·${nb}45${nb}min${nb}walk", DurationGlue.kept("Leave at 07:40 · 45 min walk"))
+        // A dot between plain words is left to LoneWordGlue.
+        assertEquals("Work · Home", DurationGlue.kept("Work · Home"))
+        // Too long a run stays free to wrap.
+        val long = "Extraordinarilylongplacename · 1 h 20 commute"
+        assertEquals("Extraordinarilylongplacename · 1${nb}h${nb}20${nb}commute", DurationGlue.kept(long))
     }
 
     @Test

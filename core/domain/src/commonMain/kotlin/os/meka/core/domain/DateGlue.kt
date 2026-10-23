@@ -66,12 +66,42 @@ object DurationGlue {
     /** "1 h", "1 h 20", "45 min", "90 mins", with the following word when it's a word of four letters or more. */
     val DURATION = Regex("\\b\\d+ (?:h(?: \\d{1,2}(?! ?(?:h\\b|min|:)))?|mins?)\\b(?: ([a-z]{4,})\\b)?")
 
-    /** [line] with each duration (and the word it measures) made whole. */
-    fun kept(line: String): String = DURATION.replace(line) { m ->
-        val word = m.groupValues[1]
-        val keep = if (word.isNotEmpty() && word in SMALL) m.value.removeSuffix(" $word") else m.value
-        keep.replace(' ', LifeTileRules.GLUE[0]) + m.value.substring(keep.length)
+    /** The longest run a " · " beside a duration may make with the words either side of it. */
+    const val DOT_RUN_MAX = 32
+
+    /**
+     * [line] with each duration (and the word it measures) made whole, and each " · " beside one held to the words on
+     * both sides (CI run 1142: with "1 h 20 commute" one long run, [LoneWordGlue.dotsHeld] couldn't take the dot along,
+     * so the cover screen's line ended "Suggested from Work at 09:00 ·").
+     */
+    fun kept(line: String): String {
+        val glued = DURATION.replace(line) { m ->
+            val word = m.groupValues[1]
+            val keep = if (word.isNotEmpty() && word in SMALL) m.value.removeSuffix(" $word") else m.value
+            keep.replace(' ', NBSP) + m.value.substring(keep.length)
+        }
+        val tokens = glued.split(' ')
+        val out = mutableListOf<String>()
+        var i = 0
+        while (i < tokens.size) {
+            val t = tokens[i]
+            val next = tokens.getOrNull(i + 1)
+            val prev = out.lastOrNull()
+            if (t == "·" && prev != null && next != null && prev.isNotEmpty() && next.isNotEmpty() && next != "·" &&
+                (isDuration(prev) || isDuration(next)) && prev.length + next.length + 3 <= DOT_RUN_MAX
+            ) {
+                out[out.lastIndex] = prev + NBSP + "·" + NBSP + next
+                i += 2
+                continue
+            }
+            out += t
+            i++
+        }
+        return out.joinToString(" ")
     }
+
+    private val NBSP = LifeTileRules.GLUE[0]
+    private fun isDuration(token: String) = DURATION.containsMatchIn(DateGlue.plain(token))
 
     /** The ranges in [line] (plain or kept) of each duration and its word, for a screen test that checks none wraps. */
     fun ranges(line: String): List<IntRange> = DURATION.findAll(DateGlue.plain(line)).map { m ->
