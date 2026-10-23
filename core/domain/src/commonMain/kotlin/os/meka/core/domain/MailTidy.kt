@@ -420,6 +420,13 @@ data class MailAutopilotPanel(
     val readerReadTitle: String = MailAutopilotPanelRules.READER_READ_TITLE,
     val readerReadLine: String = MailAutopilotPanelRules.READER_READ_OFF_LINE,
     val readerReadAction: String = MailAutopilotPanelRules.TURN_ON,
+    /**
+     * Quality gate slice 32: each switch's short line, shown on the card; the full [line] / [markReadLine] /
+     * [readerReadLine] is what TalkBack/VoiceOver reads and what "How it works" opens.
+     */
+    val shortLine: String = line,
+    val markReadShort: String = MailAutopilotPanelRules.MARK_READ_ON_SHORT,
+    val readerReadShort: String = MailAutopilotPanelRules.READER_READ_OFF_SHORT,
 )
 
 object MailAutopilotPanelRules {
@@ -433,6 +440,21 @@ object MailAutopilotPanelRules {
         "you wrote in. Each account's first day is a dry run."
     const val OFF_LINE = "Off · new mail stays where it lands. Turn on to have Navilife tidy it as it arrives."
     const val PAUSED_LINE = "Paused with everything Navilife does on its own · Resume in What Navilife may do"
+    /** Quality gate slice 32: the short lines the switch cards show (the full ones above sit behind "How it works"). */
+    const val ON_SHORT = "On · newsletters, receipts and promos are tidied as they arrive, each with Undo"
+    const val OFF_SHORT = "Off · new mail stays where it lands"
+    const val PAUSED_SHORT = "Paused · Resume in What Navilife may do"
+    const val HOW_IT_WORKS = "How it works"
+    const val HIDE_HOW = "Hide"
+    /** Below this width (dp/pt) a switch card puts its button under the words, not beside them. */
+    const val STACK_BELOW_DP = 420
+
+    /** Whether a switch card [widthDp] wide puts its button under the words. */
+    fun stacked(widthDp: Float): Boolean = widthDp < STACK_BELOW_DP
+
+    /** Whether a switch has more to say than its short line ("How it works" only then). */
+    fun hasMore(short: String, full: String): Boolean = full != short
+
     const val PUTTING_BACK = "Putting back at the next check…"
     /** An account whose sign-in ended: Autopilot waits for Reconnect (Setup and Today say so too). */
     const val SIGN_IN_ENDED_LINE = "Autopilot · paused · the sign-in ended · Reconnect and it carries on"
@@ -450,6 +472,13 @@ object MailAutopilotPanelRules {
         },
         action = if (setting.on) TURN_OFF else TURN_ON,
         paused = paused,
+        shortLine = when {
+            paused && setting.on -> PAUSED_SHORT
+            setting.on -> ON_SHORT
+            else -> OFF_SHORT
+        },
+        markReadShort = if (setting.markRead) MARK_READ_ON_SHORT else MARK_READ_OFF_SHORT,
+        readerReadShort = if (setting.readerMarksRead) READER_READ_ON_SHORT else READER_READ_OFF_SHORT,
         markRead = setting.markRead,
         markReadLine = if (setting.markRead) MARK_READ_ON_LINE else MARK_READ_OFF_LINE,
         markReadAction = if (setting.markRead) TURN_OFF else TURN_ON,
@@ -463,6 +492,8 @@ object MailAutopilotPanelRules {
     const val READER_READ_TITLE = "Mark an email read when I open it"
     const val READER_READ_OFF_LINE = "Off · reading an email in Navilife leaves it unread in your mail; Done still archives it"
     const val READER_READ_ON_LINE = "On · opening an email in Navilife's reader marks it read in your mail too, as opening it there would"
+    const val READER_READ_OFF_SHORT = "Off · emails you open here stay unread"
+    const val READER_READ_ON_SHORT = "On · emails you open here are marked read"
 
     /** What the switch says once flipped (Mail's note). */
     fun readerReadSwitchedLine(on: Boolean): String =
@@ -474,6 +505,8 @@ object MailAutopilotPanelRules {
     const val MARK_READ_ON_LINE = "On · whatever Navilife tidies (archived, cleaned up or sent from Junk to Trash) is marked read, " +
         "so your unread counts fall; Undo puts it back unread"
     const val MARK_READ_OFF_LINE = "Off · tidied mail keeps its unread mark; turn on to have your unread counts fall"
+    const val MARK_READ_ON_SHORT = "On · tidied mail is marked read, so unread counts fall"
+    const val MARK_READ_OFF_SHORT = "Off · tidied mail stays unread"
 
     /** What the switch says once flipped (Mail's note). */
     fun markReadSwitchedLine(on: Boolean): String =

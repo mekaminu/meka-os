@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -129,7 +130,37 @@ class MailScreensTest {
     private fun lines(v: MailAccountsView): List<String> =
         listOf(MailAccountRules.HEADER) + listOfNotNull(v.emptyLine, v.toConnect, v.repliesLine) +
             v.rows.flatMap { listOfNotNull(it.line, it.sortedLine, it.tidyLine) } +
-            listOfNotNull(v.autopilot?.line, v.autopilot?.markReadLine, v.autopilot?.readerReadLine)
+            listOfNotNull(v.autopilot?.shortLine, v.autopilot?.markReadShort, v.autopilot?.readerReadShort) +
+            listOfNotNull(v.autopilot?.title, v.autopilot?.markReadTitle, v.autopilot?.readerReadTitle)
+
+    /** Lines [text] takes as laid out (its first drawn node), or null when it isn't drawn. */
+    private fun lineCount(text: String): Int? =
+        compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()?.let { n ->
+            val results = mutableListOf<TextLayoutResult>()
+            n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+            results.firstOrNull()?.lineCount
+        }
+
+    /**
+     * Quality gate slice 32 (Mail's shots: Autopilot's 14-line paragraph beside its Turn off): every switch shows a
+     * short line of at most three lines (titles keep their last words, see [lines]), and on the cover screen its button under the words.
+     */
+    private fun switchesShort(name: String, v: MailAccountsView, cover: Boolean) {
+        val p = v.autopilot ?: return
+        listOf(p.shortLine, p.markReadShort, p.readerReadShort).forEach { short ->
+            val lines = lineCount(LoneWordGlue.kept(short)) ?: fail("$name: \"$short\" isn't drawn")
+            if (lines > 3) fail("$name: \"$short\" takes $lines lines")
+        }
+        listOf(p.shortLine, p.markReadLine, p.readerReadLine).forEach {
+            if (it != p.shortLine && compose.onAllNodes(hasText(LoneWordGlue.kept(it)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                fail("$name: the full \"$it\" shows before How it works is tapped")
+        }
+        if (cover) {
+            val line = compose.onAllNodes(hasText(LoneWordGlue.kept(p.shortLine)), useUnmergedTree = true).fetchSemanticsNodes().first()
+            val button = compose.onAllNodes(hasText(p.action), useUnmergedTree = true).fetchSemanticsNodes().first()
+            if (button.boundsInRoot.top < line.boundsInRoot.bottom - 1f) fail("$name: Autopilot's ${p.action} sits beside its words on the cover screen")
+        }
+    }
 
     private fun mail(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val core = setUp(theme, fill)
@@ -159,6 +190,7 @@ class MailScreensTest {
                 listOfNotNull(v.autopilot?.action),
         )
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
+        switchesShort(name, v, cover = name.startsWith("cover"))
         when (fill) {
             Fill.EMPTY -> {
                 if (v.rows.isNotEmpty() || v.autopilot != null) fail("$name: $v with nothing connected")
@@ -205,7 +237,15 @@ class MailScreensTest {
         turns()
         val after = runBlocking { core.mailAccounts() }?.autopilot ?: fail("Mail: Autopilot went away after Turn off")
         if (after.on) fail("Mail: Turn off didn't turn Autopilot off")
-        ScreenShots.assertShows(compose, "mail-by-hand", LoneWordGlue.kept(MailAutopilotPanelRules.OFF_LINE))
+        ScreenShots.assertShows(compose, "mail-by-hand", LoneWordGlue.kept(MailAutopilotPanelRules.OFF_SHORT))
+        // How it works opens the full line under the short one (Autopilot's card is the first).
+        val how = compose.onAllNodes(hasText(MailAutopilotPanelRules.HOW_IT_WORKS) and hasClickAction(), useUnmergedTree = true)
+        if (how.fetchSemanticsNodes().isEmpty()) fail("Mail: no How it works")
+        how[0].performSemanticsAction(SemanticsActions.OnClick)
+        turns()
+        if (compose.onAllNodes(hasText(LoneWordGlue.kept(MailAutopilotPanelRules.OFF_LINE)), useUnmergedTree = true).fetchSemanticsNodes().isEmpty())
+            fail("Mail: How it works didn't open Autopilot's full line")
+        ScreenShots.assertShows(compose, "mail-by-hand", MailAutopilotPanelRules.HIDE_HOW)
         ScreenShots.assertShows(compose, "mail-by-hand", LoneWordGlue.kept(MailAutopilotPanelRules.switchedLine(false)))
         if (compose.onAllNodes(hasText(MailAutopilotPanelRules.TURN_ON) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
             fail("Mail: no Turn on after Turn off")

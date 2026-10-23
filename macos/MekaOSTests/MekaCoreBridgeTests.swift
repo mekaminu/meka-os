@@ -3223,6 +3223,11 @@ final class MekaCoreBridgeTests: XCTestCase {
         // Slice 3b-2: Autopilot's switch (its panel from the core) and the switch and Undo offline.
         let panel = MailAutopilotPanelRules.shared.panel(setting: MailAutopilotSetting(on: true, changedAtMs: nil, markRead: true), paused: false)
         XCTAssertEqual(panel.action, MailAutopilotPanelRules.shared.TURN_OFF)
+        // Quality gate slice 32: the short line on the card, the full one behind How it works; narrow stacks the button.
+        XCTAssertEqual(panel.shortLine, MailAutopilotPanelRules.shared.ON_SHORT)
+        XCTAssertTrue(MailAutopilotPanelRules.shared.hasMore(short: panel.shortLine, full: panel.line))
+        XCTAssertTrue(MailAutopilotPanelRules.shared.stacked(widthDp: 300))
+        XCTAssertFalse(MailAutopilotPanelRules.shared.stacked(widthDp: 600))
         XCTAssertTrue(v.rows.allSatisfy { $0.tidies.isEmpty })
         let switched = try await core.setMailAutopilot(on: false)
         XCTAssertTrue(switched.line.hasPrefix("Autopilot is off"))

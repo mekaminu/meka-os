@@ -49,19 +49,22 @@ struct MailSheet: View {
                         .staggeredAppear(2)
                 }
                 if let panel = view.autopilot {
-                    AutopilotPanelView(panel: panel, palette: palette) {
+                    // Quality gate slice 32: each switch shows its short line; the full one is behind How it works.
+                    SwitchPanelView(on: panel.on && !panel.paused, title: panel.title, short: panel.shortLine, full: panel.line,
+                                    action: panel.action, palette: palette) {
                         let on = !panel.on
                         Task { await model.setMailAutopilot(on) }
                     }
                     .staggeredAppear(2)
                     // Inbox fixes, slice 5: "Mark tidied mail as read" (synced with the Fold).
-                    MarkReadPanelView(panel: panel, palette: palette) {
+                    SwitchPanelView(on: panel.markRead, title: panel.markReadTitle, short: panel.markReadShort, full: panel.markReadLine,
+                                    action: panel.markReadAction, palette: palette) {
                         let on = !panel.markRead
                         Task { await model.setMailMarkRead(on) }
                     }
                     .staggeredAppear(2)
                     // Read the full email, slice 3: "Mark an email read when I open it" (synced with the Fold).
-                    SwitchPanelView(on: panel.readerRead, title: panel.readerReadTitle, line: panel.readerReadLine,
+                    SwitchPanelView(on: panel.readerRead, title: panel.readerReadTitle, short: panel.readerReadShort, full: panel.readerReadLine,
                                     action: panel.readerReadAction, palette: palette) {
                         let on = !panel.readerRead
                         Task { await model.setMailReaderMarksRead(on) }
@@ -441,103 +444,87 @@ private struct WaitsPanelView: View {
     }
 }
 
-/// Autopilot's switch: what it does (or that it's off or paused) and Turn off / Turn on.
-private struct AutopilotPanelView: View {
-    let panel: MailAutopilotPanel
-    let palette: MekaPalette
-    let onSwitch: () -> Void
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(alignment: .center, spacing: MekaSpace.xs) {
-            Circle().fill(panel.on && !panel.paused ? palette.accent : palette.hairline)
-                .frame(width: 10, height: 10)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.on)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(panel.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(LoneWordGlue.shared.kept(line: panel.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-            }
-            Spacer(minLength: MekaSpace.xs)
-            Button(panel.action, action: onSwitch)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.itemMeta)
-                .foregroundStyle(palette.accent)
-                .padding(.horizontal, MekaSpace.m)
-                .padding(.vertical, MekaSpace.xxs)
-                .background(Capsule().fill(palette.hairline))
-        }
-        .padding(MekaSpace.m)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-    }
-}
-
-/// Inbox fixes, slice 5: "Mark tidied mail as read", its line and Turn off / Turn on.
-private struct MarkReadPanelView: View {
-    let panel: MailAutopilotPanel
-    let palette: MekaPalette
-    let onSwitch: () -> Void
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(alignment: .center, spacing: MekaSpace.xs) {
-            Circle().fill(panel.markRead ? palette.accent : palette.hairline)
-                .frame(width: 10, height: 10)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: panel.markRead)
-            VStack(alignment: .leading, spacing: 0) {
-                Text(panel.markReadTitle).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(LoneWordGlue.shared.kept(line: panel.markReadLine)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
-            }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: MekaSpace.xs)
-            Button(panel.markReadAction, action: onSwitch)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.itemMeta)
-                .foregroundStyle(palette.accent)
-                .padding(.horizontal, MekaSpace.m)
-                .padding(.vertical, MekaSpace.xxs)
-                .background(Capsule().fill(palette.hairline))
-        }
-        .padding(MekaSpace.m)
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
-    }
-}
-
-/// Read the full email, slice 3: one of Mail's switches from plain values (only Strings and a Bool cross).
+/// One of Mail's switches from plain values (only Strings and a Bool cross): the dot on the title's line, the title,
+/// its short line, How it works (the full line, which VoiceOver reads), and Turn off / Turn on; below 420 pt wide the
+/// button sits under the words (quality gate slice 32).
 private struct SwitchPanelView: View {
     let on: Bool
     let title: String
-    let line: String
+    let short: String
+    let full: String
     let action: String
     let palette: MekaPalette
     let onSwitch: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
+    @State private var open = false
+    @State private var width: CGFloat = 600
 
-    var body: some View {
-        HStack(alignment: .center, spacing: MekaSpace.xs) {
-            Circle().fill(on ? palette.accent : palette.hairline)
-                .frame(width: 10, height: 10)
-                .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
+    private var rules: MailAutopilotPanelRules { MailAutopilotPanelRules.shared }
+
+    private var words: some View {
+        VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 0) {
-                Text(title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
+                    Circle().fill(on ? palette.accent : palette.hairline)
+                        .frame(width: 10, height: 10)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: on)
+                    Text(LoneWordGlue.shared.kept(line: title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                }
+                Text(LoneWordGlue.shared.kept(line: short)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
+                    .animation(MekaMotion.appear(reduced: reduceMotion), value: short)
             }
-            .accessibilityElement(children: .combine)
-            Spacer(minLength: MekaSpace.xs)
-            Button(action, action: onSwitch)
-                .buttonStyle(MekaPressStyle())
-                .font(MekaType.itemMeta)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title + ". " + full)
+            if rules.hasMore(short: short, full: full) {
+                if open {
+                    Text(LoneWordGlue.shared.kept(line: full)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, MekaSpace.xs)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                        .accessibilityHidden(true)
+                }
+                Button(open ? rules.HIDE_HOW : rules.HOW_IT_WORKS) {
+                    withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open.toggle() }
+                }
+                .buttonStyle(.plain)
+                .font(MekaType.caption)
                 .foregroundStyle(palette.accent)
-                .padding(.horizontal, MekaSpace.m)
-                .padding(.vertical, MekaSpace.xxs)
-                .background(Capsule().fill(palette.hairline))
+                .padding(.top, MekaSpace.xxs)
+            }
+        }
+    }
+
+    private var button: some View {
+        Button(action, action: onSwitch)
+            .buttonStyle(MekaPressStyle())
+            .font(MekaType.itemMeta)
+            .foregroundStyle(palette.accent)
+            .padding(.horizontal, MekaSpace.m)
+            .padding(.vertical, MekaSpace.xxs)
+            .background(Capsule().fill(palette.hairline))
+    }
+
+    var body: some View {
+        Group {
+            if rules.stacked(widthDp: Float(width)) {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    words
+                    button
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .top, spacing: MekaSpace.s) {
+                    words
+                    Spacer(minLength: MekaSpace.xs)
+                    button
+                }
+            }
         }
         .padding(MekaSpace.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.width - 2 * MekaSpace.m } action: { width = $0 }
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
     }
 }

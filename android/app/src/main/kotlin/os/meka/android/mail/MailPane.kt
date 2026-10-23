@@ -12,6 +12,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -708,70 +709,84 @@ private fun AuditLine(l: LifeAuditReviewLine, modifier: Modifier) {
 
 /** Autopilot's switch: what it does (or that it's off or paused) and Turn off / Turn on. */
 @Composable
-private fun AutopilotCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) {
-    val reduced = Meka.reducedMotion
-    val dot by animateColorAsState(
-        if (panel.on && !panel.paused) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "autopilot-dot",
-    )
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
-            .semantics(mergeDescendants = true) { contentDescription = panel.title + ". " + panel.line },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
-        Column(Modifier.weight(1f)) {
-            Text(panel.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(panel.line, animationSpec = MekaMotion.appear(reduced), label = "autopilot-line") {
-                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
-            }
-        }
-        Crossfade(panel.action, animationSpec = MekaMotion.appear(reduced), label = "autopilot-action") { a ->
-            Text(
-                a, style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
-                    .clickable(role = Role.Button) { onSwitch() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            )
-        }
-    }
-}
+private fun AutopilotCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) =
+    SwitchCard(panel.on && !panel.paused, panel.title, panel.shortLine, panel.line, panel.action, "autopilot", modifier, onSwitch)
 
 /** Inbox fixes, slice 5: "Mark tidied mail as read" with its line and Turn off / Turn on (tick haptic). */
 @Composable
 private fun MarkReadCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) =
-    SwitchCard(panel.markRead, panel.markReadTitle, panel.markReadLine, panel.markReadAction, "mark-read", modifier, onSwitch)
+    SwitchCard(panel.markRead, panel.markReadTitle, panel.markReadShort, panel.markReadLine, panel.markReadAction, "mark-read", modifier, onSwitch)
 
 /** Read the full email, slice 3: "Mark an email read when I open it" (off unless he turns it on), the same card. */
 @Composable
 private fun ReaderReadCard(panel: MailAutopilotPanel, modifier: Modifier, onSwitch: () -> Unit) =
-    SwitchCard(panel.readerRead, panel.readerReadTitle, panel.readerReadLine, panel.readerReadAction, "reader-read", modifier, onSwitch)
+    SwitchCard(panel.readerRead, panel.readerReadTitle, panel.readerReadShort, panel.readerReadLine, panel.readerReadAction, "reader-read", modifier, onSwitch)
 
-/** One of Mail's switches: a dot (gold when on), the title, its line and Turn off / Turn on, crossfading as it flips. */
+/**
+ * One of Mail's switches: a dot (gold when on) on the title's line, the title kept whole, its short line and
+ * Turn off / Turn on, crossfading as it flips. Quality gate slice 32: the full line is what TalkBack reads and what
+ * "How it works" opens (expand, or a fade under reduced motion); below 420 dp the button sits under the words.
+ */
 @Composable
-private fun SwitchCard(on: Boolean, title: String, line: String, action: String, tag: String, modifier: Modifier, onSwitch: () -> Unit) {
+private fun SwitchCard(
+    on: Boolean, title: String, short: String, full: String, action: String, tag: String, modifier: Modifier, onSwitch: () -> Unit,
+) {
     val reduced = Meka.reducedMotion
+    var open by rememberSaveable(tag) { mutableStateOf(false) }
     val dot by animateColorAsState(
         if (on) Meka.colors.accent else Meka.colors.hairline, MekaMotion.appear(reduced), label = "$tag-dot",
     )
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)
-            .semantics(mergeDescendants = true) { contentDescription = "$title. $line" },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    BoxWithConstraints(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "$tag-line") {
-                Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
+        val stacked = MailAutopilotPanelRules.stacked(maxWidth.value)
+        val button: @Composable () -> Unit = {
+            Crossfade(action, animationSpec = MekaMotion.appear(reduced), label = "$tag-action") { a ->
+                Text(
+                    a, style = MekaType.itemMeta, color = Meka.colors.accent,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
+                        .clickable(role = Role.Button) { onSwitch() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                )
             }
         }
-        Crossfade(action, animationSpec = MekaMotion.appear(reduced), label = "$tag-action") { a ->
-            Text(
-                a, style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)
-                    .clickable(role = Role.Button) { onSwitch() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            )
+        val words: @Composable (Modifier) -> Unit = { m ->
+            Column(m) {
+                Column(Modifier.semantics(mergeDescendants = true) { contentDescription = "$title. $full" }) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
+                        Text(LoneWordGlue.kept(title), style = MekaType.body, color = Meka.colors.textPrimary)
+                    }
+                    Crossfade(short, animationSpec = MekaMotion.appear(reduced), label = "$tag-line") {
+                        Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+                if (MailAutopilotPanelRules.hasMore(short, full)) {
+                    AnimatedVisibility(
+                        open,
+                        enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
+                        exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
+                    ) {
+                        Text(LoneWordGlue.kept(full), style = MekaType.caption, color = Meka.colors.textTertiary,
+                            modifier = Modifier.padding(top = MekaSpace.xs))
+                    }
+                    Text(
+                        if (open) MailAutopilotPanelRules.HIDE_HOW else MailAutopilotPanelRules.HOW_IT_WORKS,
+                        style = MekaType.caption, color = Meka.colors.accent,
+                        modifier = Modifier.clickable(role = Role.Button) { open = !open }.minTouch(),
+                    )
+                }
+            }
+        }
+        if (stacked) {
+            Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                words(Modifier.fillMaxWidth())
+                button()
+            }
+        } else {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+                words(Modifier.weight(1f))
+                button()
+            }
         }
     }
 }
