@@ -3089,6 +3089,7 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Cover screen:** CommuteSection's chip-row labels ("To work", "Home", and the one-day title, both in the usual and one-day rows) go through `ChipRowLabel` (8 dp top padding); the two notes get 4 dp top padding.
 - **WorkScreensTest** now fails if the work-pane is wider than 600 dp or not centred within 2 dp, or if the commute's Home label sits under 8 dp below the lowest To work chip.
 - Design check: no design file covers Work mode. Fold only (the Mac's Work sheet is a fixed 460 pt with pickers, neither finding applies), no core change, no server change, no migration.
+- Landed f31fce4 + CI fix a874922 (the Home check first read boundsInRoot, clipped to 0 below the inner screen's fold; now positionInRoot + size); CI run 1124 (39931471481) green; shots published fc5fc79.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
