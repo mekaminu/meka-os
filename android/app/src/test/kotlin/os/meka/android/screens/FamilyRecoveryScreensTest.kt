@@ -13,6 +13,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -242,8 +243,24 @@ class FamilyRecoveryScreensTest {
             val off = compose.onAllNodes(hasText("Turn off"), useUnmergedTree = true).fetchSemanticsNodes()
                 .firstOrNull { it.boundsInRoot.top >= line.boundsInRoot.top - 1f } ?: fail("$name: no Turn off for ${r.title}")
             if (off.boundsInRoot.top < line.boundsInRoot.bottom - 1f) fail("$name: ${r.title}'s Turn off sits beside its words")
+            // Quality gate slice 41: Turn off follows its line closely (about 20 dp of air sat between them), the card ends
+            // just under it, and its touch is 48 dp tall.
+            val gapDp = (off.boundsInRoot.top - line.boundsInRoot.bottom) / compose.density.density
+            if (gapDp > TURN_OFF_GAP_DP) fail("$name: ${gapDp.toInt()} dp between ${r.title}'s line and its Turn off (at most ${TURN_OFF_GAP_DP.toInt()})")
+            val touch = compose.onAllNodes(hasText("Turn off") and hasClickAction()).fetchSemanticsNodes()
+                .firstOrNull { it.boundsInRoot.top <= off.boundsInRoot.top && it.boundsInRoot.bottom >= off.boundsInRoot.bottom }
+                ?: fail("$name: ${r.title}'s Turn off can't be tapped")
+            val touchDp = touch.boundsInRoot.height / compose.density.density
+            if (touchDp < 47.5f) fail("$name: ${r.title}'s Turn off is ${touchDp.toInt()} dp tall to tap (at least 48)")
+            val card = compose.onAllNodes(hasTestTag("family-row:${r.title}"), useUnmergedTree = true).fetchSemanticsNodes()
+                .firstOrNull()?.boundsInRoot ?: fail("$name: no card for ${r.title}")
+            val underDp = (card.bottom - touch.boundsInRoot.bottom) / compose.density.density
+            if (underDp > 8f) fail("$name: ${r.title}'s card has ${underDp.toInt()} dp of empty space under Turn off (at most 8)")
         }
     }
+
+    /** The most air between a link's line and its Turn off's words: the touch room above the pill plus its padding. */
+    private val TURN_OFF_GAP_DP = 18f
 
     /** Works by hand: with Sam named and no link yet, Make a link shows "Link made for Sam"; Turn off turns it off. */
     private fun familyByHand() {

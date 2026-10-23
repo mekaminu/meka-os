@@ -3112,6 +3112,20 @@ onto two ("Waiting · link" / "made yesterday", "Joined" / "Sat 10 Oct · seen t
   Turn off starting below the line.
 - Mac unchanged: the Family sheet is a fixed 460 pt with Mac-sized text, so the button fits beside the words.
 - No server change, no migration, Mac checked nightly.
+- Landed 5a8a7fc + CI fix 3662af3; CI run 1129 (39939777640) green; shots published b0588e4. Re-shot finding: about 20 dp of air between a link's line and its Turn off on the cover screen.
+
+### Quality gate — slice 41 (2026-10-23): Turn off follows its line on the cover screen
+
+Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of their own (minTouch) and the column added
+8 dp between them and Turn off, so about 20 dp of air sat between "Waiting · link made yesterday" and the pill.
+- Fold: stacked, the words row takes just its height (the words aren't a button) and the column has no gap and no bottom
+  padding; Turn off's clickable area is 48 dp tall (clickable → `minTouch()` → the pill's clip and background), its
+  ripple rounded, the pill drawn at its old size, so the touch room is the space above and below it (Calendars' slice 34
+  model). Wide, the same button in the old single row (its touch now 48 dp there too).
+- Test: `turnOffUnderWords` also fails on more than 18 dp from a row's line to its Turn off's words, a touch under 48 dp,
+  or the card reaching more than 8 dp below the touch area.
+- Design check: no design file covers Family. Fold only (the Mac's 460 pt sheet keeps Turn off beside the words), no
+  core change, no server change, no migration.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.

@@ -193,20 +193,24 @@ private fun FamilyRowView(row: FamilyRow, enabled: Boolean, modifier: Modifier, 
             }
         }
         val turnOff: @Composable (Modifier) -> Unit = { m ->
+            // Quality gate slice 41: the pill answers a 48 dp touch (the clickable area wraps it, its ripple rounded like
+            // it); the pill itself stays its drawn size, so the touch height is the only room it needs above and below.
             Box(
-                m.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+                m.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(enabled = enabled, role = Role.Button, onClick = onTurnOff)
+                    .minTouch()
+                    .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
                     .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
             ) {
                 Text("Turn off", style = MekaType.itemMeta, color = Meka.colors.critical, maxLines = 1, softWrap = false)
             }
         }
         if (under) {
-            Column(
-                Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-                verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-            ) {
-                Row(Modifier.fillMaxWidth().minTouch(), verticalAlignment = Alignment.CenterVertically,
+            // Quality gate slice 41: about 20 dp of air sat between the line and Turn off (the words' own 48 dp row plus a
+            // gap); the words aren't a button, so they take just their height and Turn off's touch height is the room
+            // above and below it, the card ending just under it (Calendars' slice 34).
+            Column(Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     dotSlot()
                     words(Modifier.weight(1f))
