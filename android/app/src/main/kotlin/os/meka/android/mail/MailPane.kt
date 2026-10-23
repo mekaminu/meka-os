@@ -783,7 +783,7 @@ private fun SwitchCard(
                 button()
             }
         } else {
-            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.s)) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
                 words(Modifier.weight(1f))
                 button()
             }

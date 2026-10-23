@@ -515,7 +515,7 @@ private struct SwitchPanelView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                HStack(alignment: .top, spacing: MekaSpace.s) {
+                HStack(alignment: .top, spacing: MekaSpace.m) {
                     words
                     Spacer(minLength: MekaSpace.xs)
                     button
