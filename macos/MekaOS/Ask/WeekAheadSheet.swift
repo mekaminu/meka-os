@@ -43,14 +43,14 @@ struct WeekAheadSheet: View {
                 .accessibilityLabel(speaker.speaking ? "Stop reading the week" : "Read the week aloud")
                 .staggeredAppear(0)
             }
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
             // Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week".
             if let mail = v.mail {
-                Text(mail).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: mail)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: mail)
@@ -58,7 +58,7 @@ struct WeekAheadSheet: View {
             }
             // Protected time, slice 5: "Protected · Sat, Sun all day · 5 evenings from 19:00".
             if let line = v.protectedLine {
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
@@ -66,7 +66,7 @@ struct WeekAheadSheet: View {
             }
             // Balance view, slice 3: "Balance as planned · family 6 h of 8 h · work 2 h over".
             if let line = v.balance {
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
@@ -84,7 +84,7 @@ struct WeekAheadSheet: View {
                             ForEach(v.sync, id: \.self) { line in
                                 HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                                     Circle().fill(palette.accent).frame(width: 6, height: 6)
-                                    Text(line).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                                         .fixedSize(horizontal: false, vertical: true)
                                 }
                             }
@@ -151,7 +151,7 @@ struct WeekAheadSheet: View {
                         TickRingView(done: goal.picked, palette: palette).frame(width: 18, height: 18)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(goal.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                            Text(goal.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            Text(LoneWordGlue.shared.kept(line: goal.meta)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         }
                         Spacer(minLength: 0)
                     }
@@ -178,7 +178,7 @@ struct WeekAheadSheet: View {
             label("Sunday heads-up")
             HStack(spacing: MekaSpace.m) {
                 Toggle(isOn: Binding(get: { on }, set: { model.setWeekAhead(on: $0, minute: minute) })) {
-                    Text(s.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: s.summary)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: s.summary)
                 }
@@ -219,7 +219,7 @@ private struct WeekAheadDayView: View {
             // Protected time, slice 5: "Protected all day" / "Protected from 19:00" beside the day's hours.
             let meta = [day.dayLine, day.weather, day.protectedLine].compactMap { $0 }.joined(separator: " · ")
             if !meta.isEmpty {
-                Text(meta).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: meta)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
             }
             if day.lines.isEmpty && day.dayLine == nil {
                 Text("Nothing in the diary").font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -228,7 +228,7 @@ private struct WeekAheadDayView: View {
                 HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
                     Text(l.time ?? WeekAheadDayView.mark(l.kind)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .frame(width: 52, alignment: .leading)
-                    Text(l.text).font(MekaType.body).foregroundStyle(l.lit ? palette.accent : palette.textPrimary)
+                    Text(LoneWordGlue.shared.kept(line: l.text)).font(MekaType.body).foregroundStyle(l.lit ? palette.accent : palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .ignore)

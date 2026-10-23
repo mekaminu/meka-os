@@ -3140,7 +3140,13 @@ cover screen, under docs/screens/fold/week-ahead/.
   starting or ending a line, over the summary, each day's line and lines, the family sync, the goals and the heads-up.
 - By hand: Sunday heads-up's On turns it off (the times fold away, the line says so) and back on; a goal's row picks
   it ("2 picked · up to 3") and a second tap unpicks it.
-- Design check: no design file covers the week ahead. Test only, no app change, no server change, no migration.
+- First CI run (1134) found: on the cover screen the balance line ended a line on a dot ("Balance with what's planned
+  · family 45 min of 8 h ·"); Week ahead's summary, mail, protected and balance lines, each day's line and lines, the
+  family sync, the goals' lines and the heads-up line now keep their last words and dots together (LoneWordGlue), Fold
+  `WeekAheadPane` and Mac `WeekAheadSheet`. The nonsense check read "family 4 h 15 of 8 h" as "15 of 8" done; core
+  ScreenSenseRules now never reads a duration ("h 15 of", "of 8 h", "of 30 min") as a count. The hand tests' scrolls
+  ran out of memory with the clock paused (a lazy list's scroll waits for a frame); the clock runs while they scroll.
+- Design check: no design file covers the week ahead. No server change, no migration, Mac checked nightly.
 
 ### Quality gate — slice 44 (2026-10-23): a lane's name and its count on one baseline
 

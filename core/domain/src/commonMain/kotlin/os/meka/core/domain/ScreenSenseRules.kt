@@ -15,7 +15,8 @@ object ScreenSenseRules {
 
     private val statWords = Regex("""\b(average|avg|longest|shortest|last|mean|typical)\b""", RegexOption.IGNORE_CASE)
     private val zeroLength = Regex("""(?<![\d.:])0 ?(m|min|mins|h|hrs?|s)\b""")
-    private val ofDone = Regex("""\b(\d+) of (\d+)\b""")
+    // A count ("3 of 2 done"), never a duration: "family 4 h 15 of 8 h" is four and a quarter hours of eight (slice 45).
+    private val ofDone = Regex("""(?<!\d h )\b(\d+) of (\d+)\b(?! ?(h|m|min|mins|hrs?)\b)""")
     private val negative = Regex("""(?<![\w\d:–-])-\d+(\.\d+)? ?(m|min|h|s|days?|tasks?|done|items?)\b""")
     private val codeValue = Regex("""\b(null|NaN|undefined|Infinity|lateinit)\b""")
     private val template = Regex("""%[sd]|%\d\$[sd]|\{[a-zA-Z_][a-zA-Z0-9_]*\}|\$\{""")

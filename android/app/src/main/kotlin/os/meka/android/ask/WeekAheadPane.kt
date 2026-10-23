@@ -59,6 +59,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.android.work.SettingChip
 import os.meka.android.designsystem.TickRing
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.WeekAheadDay
 import os.meka.core.domain.WeekAheadGoals
 import os.meka.core.domain.WeekAheadKind
@@ -134,14 +135,14 @@ fun WeekAheadPane(
         }
         item(key = "summary") {
             Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
         // Inbox autopilot, slice 9b: "Mail · 3 emails need you, from … · 2 to chase this week" (cross-fades as it changes).
         v.mail?.let { mail ->
             item(key = "mail") {
                 Crossfade(mail, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-mail", modifier = Modifier.animateItem()) { m ->
-                    Text(m, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                    Text(LoneWordGlue.kept(m), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
                 }
             }
         }
@@ -149,7 +150,7 @@ fun WeekAheadPane(
         v.protectedLine?.let { line ->
             item(key = "protected") {
                 Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-protected", modifier = Modifier.animateItem()) { l ->
-                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                    Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
                 }
             }
         }
@@ -157,7 +158,7 @@ fun WeekAheadPane(
         v.balance?.let { line ->
             item(key = "balance") {
                 Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "week-ahead-balance", modifier = Modifier.animateItem()) { l ->
-                    Text(l, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                    Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
                 }
             }
         }
@@ -173,7 +174,7 @@ fun WeekAheadPane(
                     v.sync.forEach { line ->
                         Row(Modifier.fillMaxWidth().padding(vertical = MekaSpace.xxs), verticalAlignment = Alignment.Top) {
                             Box(Modifier.padding(top = MekaSpace.xs).size(6.dp).background(Meka.colors.accent, CircleShape))
-                            Text(line, style = MekaType.body, color = Meka.colors.textPrimary,
+                            Text(LoneWordGlue.kept(line), style = MekaType.body, color = Meka.colors.textPrimary,
                                 modifier = Modifier.padding(start = MekaSpace.xs).weight(1f))
                         }
                     }
@@ -228,7 +229,7 @@ private fun GoalsPick(g: WeekAheadGoals, modifier: Modifier, onPick: (String, Bo
                 TickRing(goal.picked, Modifier.size(24.dp).clip(CircleShape))
                 Column(Modifier.padding(start = MekaSpace.m).weight(1f)) {
                     Text(goal.title, style = MekaType.body, color = Meka.colors.textPrimary)
-                    Text(goal.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(LoneWordGlue.kept(goal.meta), style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
         }
@@ -260,7 +261,7 @@ private fun HeadsUpSetting(s: WeekAheadSettingView, modifier: Modifier, onSet: (
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         SectionLabel("Sunday heads-up", Modifier.semantics { heading() })
         Crossfade(s.summary, animationSpec = MekaMotion.appear(reduced), label = "week-heads-up-line") { line ->
-            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         SettingChip(if (s.on) "On" else "Off", s.on, spoken = "Sunday heads-up, ${if (s.on) "on" else "off"}") { onSet(!s.on, s.minute) }
         AnimatedVisibility(
@@ -284,7 +285,7 @@ private fun DayBlock(d: WeekAheadDay, modifier: Modifier) {
         SectionLabel(d.label, Modifier.semantics { heading() })
         // Protected time, slice 5: "Protected all day" / "Protected from 19:00" beside the day's hours.
         val meta = listOfNotNull(d.dayLine, d.weather, d.protectedLine).joinToString(" · ")
-        if (meta.isNotEmpty()) Text(meta, style = MekaType.caption, color = Meka.colors.textSecondary)
+        if (meta.isNotEmpty()) Text(LoneWordGlue.kept(meta), style = MekaType.caption, color = Meka.colors.textSecondary)
         if (d.lines.isEmpty() && d.dayLine == null) {
             Text("Nothing in the diary", style = MekaType.caption, color = Meka.colors.textTertiary)
         }
@@ -300,7 +301,7 @@ private fun WeekLine(l: WeekAheadLine) {
         verticalAlignment = Alignment.Top,
     ) {
         Text(l.time ?: mark(l.kind), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.width(56.dp))
-        Text(l.text, style = MekaType.body, color = if (l.lit) Meka.colors.accent else Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+        Text(LoneWordGlue.kept(l.text), style = MekaType.body, color = if (l.lit) Meka.colors.accent else Meka.colors.textPrimary, modifier = Modifier.weight(1f))
     }
 }
 

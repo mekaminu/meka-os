@@ -24,6 +24,11 @@ class ScreenSenseRulesTest {
         assertEquals(listOf("an empty count shown as a figure (“0 of 0”)"), whys("0 of 0 done"))
         assertTrue(whys("2 of 5 done").isEmpty())
         assertTrue(whys("1 of 3").isEmpty())
+        // Durations aren't counts: "4 h 15 of 8 h" is a quarter past four hours of eight (week ahead's balance line).
+        assertTrue(whys("Balance with what's planned · family 4 h 15 of 8 h").isEmpty())
+        assertTrue(whys("3 h 30 of 2 h").isEmpty())
+        assertTrue(whys("45 of 30 min").isEmpty())
+        assertEquals(listOf("more done than there are (“5 of 3”)"), whys("1 h 30 free · 5 of 3 done"))
     }
 
     @Test

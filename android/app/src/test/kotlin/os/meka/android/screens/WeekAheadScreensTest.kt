@@ -37,6 +37,8 @@ import os.meka.core.domain.AboutField
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.GoalHorizon
+import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.WeekAheadRules
 import os.meka.core.domain.MekaSchema
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.HlcClock
@@ -149,8 +151,12 @@ class WeekAheadScreensTest {
         turns(1_000)
     }
 
+    /** Scrolls the pane to [matcher]; the clock runs while it does (a lazy list's scroll waits for a frame). */
     private fun scrollTo(matcher: SemanticsMatcher) {
+        compose.mainClock.autoAdvance = true
         compose.onNode(hasScrollAction()).performScrollToNode(matcher)
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
         turns(1_000)
     }
 
@@ -192,8 +198,11 @@ class WeekAheadScreensTest {
         check(core, name)
         when (fill) {
             Fill.EMPTY -> {
-                if (v.summary != "A quiet week so far") fail("$name: nothing on, but \"${v.summary}\"")
-                ScreenShots.assertShows(compose, name, v.summary)
+                // Nothing on but the default work hours: the summary says the office days and that it's otherwise quiet.
+                if (v.summary != WeekAheadRules.QUIET && !v.summary.endsWith("otherwise quiet")) fail("$name: nothing on, but \"${v.summary}\"")
+                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
+                // The balance still says what the plan leaves short ("family 0 h of 8 h …"), kept whole at its dots.
+                v.balance?.let { ScreenShots.assertShows(compose, name, LoneWordGlue.kept(it)) }
                 if (v.sync.isNotEmpty() || v.goals.goals.isNotEmpty()) fail("$name: nothing on, but a family sync or goals")
             }
             Fill.ONE -> {
@@ -240,7 +249,7 @@ class WeekAheadScreensTest {
         tap(name, "the heads-up's On", hasContentDescription("Sunday heads-up, on"))
         until { !core.weekAheadSettingView.value.on }
         if (core.weekAheadSettingView.value.on) fail("$name: tapping On left the heads-up on")
-        ScreenShots.assertShows(compose, name, core.weekAheadSettingView.value.summary)
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(core.weekAheadSettingView.value.summary))
         if (compose.onAllNodes(hasContentDescription("Sundays at 18:00")).fetchSemanticsNodes().isNotEmpty()) fail("$name: off, but the times still show")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
         tap(name, "the heads-up's Off", hasContentDescription("Sunday heads-up, off"))
@@ -260,7 +269,7 @@ class WeekAheadScreensTest {
         tap(name, "Learn Spanish", hasContentDescription(spanish.spoken))
         until { core.weekAheadView.value.goals.picked == 2 }
         if (core.weekAheadView.value.goals.line != "2 picked · up to 3") fail("$name: after a pick \"${core.weekAheadView.value.goals.line}\"")
-        ScreenShots.assertShows(compose, name, "2 picked · up to 3")
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept("2 picked · up to 3"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
         val picked = core.weekAheadView.value.goals.goals.first { it.title == "Learn Spanish" }
         tap(name, "Learn Spanish again", hasContentDescription(picked.spoken))
