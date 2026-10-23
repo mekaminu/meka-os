@@ -3195,7 +3195,7 @@ docs/screens/fold/shutdown/.
 - ShutdownScreensTest's checks now also fail on: a left or Tomorrow title heavier than body, a Tomorrow chip's touch
   starting over 2 dp under the words above it, a Tomorrow title over 32 dp after its time's text, a duration split
   across lines (`ScreenShots.assertDurationsWhole`), On this day's offer over one line, Shut down's label off-centre
-  or over 28 dp of empty band above the button.
+  or over 32 dp of empty band above the button (24 dp plus the list's 8 dp between items; slice 47 drew 64).
 - Design check: no design file covers Shut down the day. No server change, no migration, Mac checked nightly.
 
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests

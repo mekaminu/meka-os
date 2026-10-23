@@ -283,7 +283,8 @@ class ShutdownScreensTest {
         val notNow = textNodes(OnThisDayRules.NOT_NOW).firstOrNull() ?: return
         // The label's node is the whole button (its padding included).
         val band = dp(button.boundsInRoot.top - notNow.boundsInRoot.bottom)
-        if (band > 28f) fail("$name: ${band.toInt()} dp of empty band above Shut down (at most 28)")
+        // 24 dp above the item plus the list's 8 dp between items: 32 (slice 47 drew 64).
+        if (band > 33f) fail("$name: ${band.toInt()} dp of empty band above Shut down (at most 32)")
     }
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
