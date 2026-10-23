@@ -2960,6 +2960,11 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Design check: no design file for these panes. Fold and Mac, no server change, no migration, Mac checked nightly.
 - Landed 0284cc7; CI run 1090 (39873701109) green first try.
 
+### Quality gate — slice 21 (2026-10-23): Car's shots
+- **CarScreensTest** (android test, Roborazzi on Robolectric like slice 18): Ask → Life → Car on the Fold's cover (w344dp) and inner (w829dp) sizes, no car set up, one car and two cars, Dark and two cars in Light (6 shots) under docs/screens/fold/car/. Invented data: "the Golf" registered, parked 95 minutes ago at "Level 3 · Row F", a 2-hour timer, its MOT due in three weeks; then "the van" parked at a long-named retail park bay. The spots go straight into ParkingStore (no location in a test); fuel and Bluetooth show their allow lines (no permissions).
+- Read for nonsense, cut short lines, broken words and split dates; the empty pane says "Not parked…", each car's title and summary readable, one parked card per car kept, the timer running, the timer's hint on one line.
+- Design check: no design file for this pane. Test only: no app change, no core change, no server change, no migration.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.
