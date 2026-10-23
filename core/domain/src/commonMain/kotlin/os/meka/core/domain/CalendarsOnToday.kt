@@ -37,6 +37,9 @@ data class CalendarChoice(
 ) {
     /** Whether Meka gave it his own name. */
     val renamed: Boolean get() = canRename && label != defaultLabel
+
+    /** [detail] without its provider, for a line too narrow for it whole ([CalendarRules.detailShort]); null: keep [detail]. */
+    val detailShort: String? get() = CalendarRules.detailShort(detail)
 }
 
 /**
@@ -101,6 +104,26 @@ object CalendarRules {
 
     /** The `calendar_mark` entity id for [key]: the same on every device. */
     fun markId(key: String): String = "c" + ActivityRules.fnv64("calendar:$key")
+
+    /** The provider words [detail] starts a line with. */
+    val PROVIDER_NAMES = listOf("Google", "Outlook")
+
+    /**
+     * [detail] with its provider dropped when an address follows it ("Outlook · alex.work@example.com" →
+     * "alex.work@example.com"), for a row too narrow for it on one line (quality gate slice 35: on the cover screen ON
+     * TODAY read "Outlook ·" with the address alone on the line under it). The address already says whose it is; the
+     * rest ("· Holiday calendar …") stays. Null when there's no provider and address to drop.
+     */
+    fun detailShort(detail: String?): String? {
+        val d = detail?.trim() ?: return null
+        for (p in PROVIDER_NAMES) {
+            val head = "$p · "
+            if (!d.startsWith(head)) continue
+            val rest = d.removePrefix(head)
+            return rest.takeIf { '@' in it.substringBefore(" · ") }
+        }
+        return null
+    }
 
     fun detail(e: CalendarEvent): String? = when {
         e.isFixture -> "FC Barcelona"

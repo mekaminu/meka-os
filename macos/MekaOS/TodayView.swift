@@ -1527,7 +1527,14 @@ private struct CalendarOnTodayRow: View {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(label).font(MekaType.itemMeta).id(label).transition(.opacity)
                         if let detail = choice.detail {
-                            Text(detail).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            // Quality gate slice 35: whole when it fits on one line, else without its provider so the
+                            // address starts the line (core detailShort), never "Outlook ·" alone above it.
+                            ViewThatFits(in: .horizontal) {
+                                Text(detail).lineLimit(1)
+                                Text(choice.detailShort ?? detail)
+                            }
+                            .font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            .accessibilityLabel(detail)
                         }
                     }
                 }

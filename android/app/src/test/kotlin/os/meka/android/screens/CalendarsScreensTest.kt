@@ -7,6 +7,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -34,6 +39,7 @@ import os.meka.android.today.WEATHER_HINT
 import os.meka.core.domain.CalendarAccessAction
 import os.meka.core.domain.CalendarAccessRules
 import os.meka.core.domain.CalendarRules
+import os.meka.core.domain.DateGlue
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.LoneWordGlue
@@ -175,6 +181,7 @@ class CalendarsScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertEachOneLine(compose, name, list.map { it.title } + CalendarAccessAction.entries.map { it.label } + "Reconnect")
         ScreenShots.assertReadable(compose, name, list.map { it.title }, mustShow = false)
+        providerNeverAlone(name, core)
         // Every time on screen is the core's (17:15 in London), never the test machine's zone.
         list.filter { it.lastSyncAtMs != null && !it.needsReconnect }.forEach { a ->
             val synced = a.syncedAt ?: fail("$name: ${a.title} has no synced time")
@@ -227,6 +234,36 @@ class CalendarsScreensTest {
             // empty band under it.
             ScreenShots.assertHugs(compose, name, "account:${a.provider}:${a.email}", label, maxGapDp = 8f)
         }
+    }
+
+    /**
+     * Quality gate slice 35: an ON TODAY row's line never leaves "Outlook ·" alone above its address; a line too narrow
+     * for it whole drops the provider (core CalendarRules.detailShort). Each detail line is shown whole or short.
+     */
+    private fun providerNeverAlone(name: String, core: MekaCore) {
+        val choices = core.calendarsOnToday.value.filter { it.detail != null }
+        val wanted = choices.flatMap { listOfNotNull(it.detail, it.detailShort) }.map { DateGlue.plain(it) }.toSet()
+        val bad = mutableListOf<String>()
+        var seen = 0
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null && DateGlue.plain(text) in wanted) {
+                seen++
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.let { r ->
+                    for (line in 0 until r.lineCount) {
+                        val words = DateGlue.plain(text.substring(r.getLineStart(line), r.getLineEnd(line))).trim()
+                        if (CalendarRules.PROVIDER_NAMES.any { words == "$it ·" || words == it && r.lineCount > 1 }) bad += "\"$words\" in \"${DateGlue.plain(text)}\""
+                    }
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (seen < choices.size) fail("$name: ${choices.size - seen} of ON TODAY's lines not drawn as their whole or short line")
+        if (bad.isNotEmpty()) fail("$name leaves a provider alone on a line:\n" + bad.joinToString("\n") { "- $it" })
     }
 
     /** Works by hand: a calendar's On takes it off Today (and its pill says Off); Rename opens its name field. */

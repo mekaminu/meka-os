@@ -252,7 +252,7 @@ internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier,
                 Crossfade(c.label, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "calendar-name") {
                     Text(it, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
                 }
-                c.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                c.detail?.let { CalendarDetailLine(it, c.detailShort) }
             }
             if (c.canRename) {
                 Text(if (renaming) "Cancel" else "Rename", style = MekaType.caption, color = Meka.colors.accent,
@@ -271,6 +271,25 @@ internal fun CalendarSwitchRow(c: CalendarChoice, modifier: Modifier = Modifier,
                 renaming = false
             }
         }
+    }
+}
+
+/**
+ * The line under a calendar's name: whole when it fits on one line, else without its provider so the address starts the
+ * line (quality gate slice 35: on the cover screen "Outlook ·" sat alone above its address; core CalendarRules.detailShort).
+ */
+@Composable
+private fun CalendarDetailLine(full: String, short: String?) {
+    androidx.compose.foundation.layout.BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val measurer = androidx.compose.ui.text.rememberTextMeasurer()
+        val style = MekaType.caption
+        val oneLine = remember(full, style, measurer) {
+            measurer.measure(full, style, maxLines = 1, softWrap = false).size.width
+        }
+        val fits = !constraints.hasBoundedWidth || oneLine <= constraints.maxWidth
+        val shown = if (fits || short == null) full else short
+        Text(LoneWordGlue.kept(shown), style = style, color = Meka.colors.textTertiary,
+            modifier = Modifier.semantics { contentDescription = full })
     }
 }
 

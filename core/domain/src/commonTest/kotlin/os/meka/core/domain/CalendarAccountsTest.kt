@@ -122,4 +122,22 @@ class CalendarAccountsTest {
         assertFalse("Reconnect" in line, line)
         assertTrue(line.endsWith("access expired"), line)
     }
+
+    @Test
+    fun aNarrowOnTodayRowDropsTheProviderBeforeAnAddress() {
+        // Quality gate slice 35: on the cover screen "Outlook ·" sat alone above its address.
+        assertEquals("alex.work@example.com", CalendarRules.detailShort("Outlook · alex.work@example.com"))
+        assertEquals("sam@example.com", CalendarRules.detailShort("Google · sam@example.com"))
+        // The rest of the line stays.
+        assertEquals(
+            "sam@example.com · ${HolidayCalendars.DETAIL}",
+            CalendarRules.detailShort("Google · sam@example.com · ${HolidayCalendars.DETAIL}"),
+        )
+        // Nothing to drop: no address after the provider, no provider, or nothing at all.
+        assertEquals(null, CalendarRules.detailShort("Google"))
+        assertEquals(null, CalendarRules.detailShort("Google · ${HolidayCalendars.DETAIL}"))
+        assertEquals(null, CalendarRules.detailShort("FC Barcelona"))
+        assertEquals(null, CalendarRules.detailShort(null))
+        assertEquals("alex.work@example.com", CalendarChoice("k", "Outlook", "Outlook · alex.work@example.com", true).detailShort)
+    }
 }
