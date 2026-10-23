@@ -3202,6 +3202,22 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 51 (2026-10-23): the Train queue's rows on the cover screen
+
+Slice 50's re-shot findings. On the cover screen each row's title and meta lost their first letter's edge ("Vhat"), and
+Done · Remove beside the words squeezed them: the podcast's meta still read "opens in your …" and titles left a word
+alone.
+- Fold `TrainQueuePane.QueueRowView`: a `BoxWithConstraints`; below 420 dp (`QueueRules.actionsUnder`, the same width
+  as `CalendarAccountRules.actionsUnder` and Mail's switches) Done (Back) and Remove sit in a row under the words, their
+  text lined up with the words (no side padding; each still a 48 dp touch); unfolded they stay beside them. The open
+  area's own `clip(RoundedCornerShape)` is gone (it cut the glyphs at its corner); the row's rounded shape bounds the
+  press. Titles go through `LoneWordGlue.kept`.
+- Mac `TrainQueueSheet`: titles kept the same way (the sheet is 480 pt, so the buttons stay beside the words).
+- TrainQueueScreensTest: on the cover screen fails if a row's Done/Back or Remove sits beside its meta line; titles join
+  the lone-word check.
+- Core test: TrainQueueTest.actionsGoUnderTheWordsOnTheCoverScreen.
+- Design check: no design file covers the Train queue. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 50 (2026-10-23): the Train queue's shots and its first hand test, Protected time's chips on two rows
 
 The next of Ask's places without shots, plus slice 49's re-shot finding. TrainQueueScreensTest (7) draws Ask → More →

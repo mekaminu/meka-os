@@ -14,6 +14,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performImeAction
@@ -35,6 +36,7 @@ import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.QueueRow
 import os.meka.core.domain.QueueRules
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.InMemoryReplicaStore
@@ -129,6 +131,24 @@ class TrainQueueScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * Quality gate slice 51: on the cover screen a row's Done (Back) and Remove sit under its words, never beside them
+     * squeezing the title and the podcast's line.
+     */
+    private fun actionsUnderWords(name: String, rows: List<QueueRow>) {
+        rows.forEach { r ->
+            val meta = compose.onAllNodes(hasText(LoneWordGlue.kept(r.meta)), useUnmergedTree = true).fetchSemanticsNodes().firstOrNull()
+                ?: return@forEach // below the fold
+            val primary = if (r.done) "Back" else "Done"
+            listOf(primary, "Remove").forEach { label ->
+                val button = compose.onAllNodes(hasText(label), useUnmergedTree = true).fetchSemanticsNodes()
+                    .filter { it.boundsInRoot.top >= meta.boundsInRoot.top - 1f }
+                    .minByOrNull { it.boundsInRoot.top } ?: fail("$name: no $label for \"${r.title}\"")
+                if (button.boundsInRoot.top < meta.boundsInRoot.bottom - 1f) fail("$name: \"${r.title}\"'s $label sits beside its words")
+            }
+        }
+    }
+
     private fun pane(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
@@ -159,10 +179,11 @@ class TrainQueueScreensTest {
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         ScreenShots.assertEachOneLine(compose, name, listOf(QueueRules.HINT))
         val rows = v.waiting + v.done
-        val lines = listOf(v.summary) + rows.map { it.meta } + core.queuePages.value.values + core.queueOnline.value.values
+        val lines = listOf(v.summary) + rows.map { it.title } + rows.map { it.meta } + core.queuePages.value.values + core.queueOnline.value.values
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)
         assertTouchTargets(name)
+        if (name.startsWith("cover")) actionsUnderWords(name, rows)
         ScreenShots.assertReadable(compose, name, rows.map { it.title }, mustShow = false)
         when (fill) {
             Fill.EMPTY -> if (v.summary != QueueRules.EMPTY_SUMMARY) fail("$name: the empty queue says \"${v.summary}\"")

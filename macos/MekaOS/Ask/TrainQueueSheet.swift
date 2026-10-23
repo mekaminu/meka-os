@@ -106,7 +106,7 @@ private struct QueueRowView: View {
         HStack(spacing: MekaSpace.xs) {
             Button(action: onOpen) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(row.title).font(MekaType.body)
+                    Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.body)
                         .foregroundStyle(row.done ? palette.textSecondary : palette.textPrimary)
                         .lineLimit(2)
                     Text(LoneWordGlue.shared.kept(line: row.meta)).font(MekaType.caption).foregroundStyle(palette.textSecondary).lineLimit(2)

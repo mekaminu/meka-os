@@ -17,6 +17,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -205,48 +206,68 @@ private fun QueueRowView(
     onRemove: () -> Unit,
 ) {
     val ink = if (row.done) Meka.colors.textSecondary else Meka.colors.textPrimary
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(
-            Modifier.weight(1f).clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onOpen).minTouch()
-                .semantics(mergeDescendants = true) {
-                    contentDescription = (if (offline != null) "Read " else "Open ") + row.spoken +
-                        ((offline ?: onlineOnly)?.let { ", $it" } ?: "")
-                },
-            verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-        ) {
-            Text(row.title, style = MekaType.body, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            // Slice 50: a podcast's "open.spotify.com · Podcast · opens in your podcast app" was cut to "…" on the cover
-            // screen; it wraps (two lines at most) with its last words and dots kept together.
-            Text(LoneWordGlue.kept(row.meta), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            // "6 min read · saved to read offline" fades in once the phone has kept the article's words.
-            AnimatedVisibility(offline != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
-                Text(LoneWordGlue.kept(offline.orEmpty()), style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            // "Online only for now · …" fades in (tertiary) when the phone couldn't keep the words: a paywall, an app page.
-            AnimatedVisibility(offline == null && onlineOnly != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
-                Text(LoneWordGlue.kept(onlineOnly.orEmpty()), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)) {
+        // Quality gate slice 51: on the cover screen Done · Remove beside the words squeezed them ("opens in your …", a
+        // title's last word alone); below 420 dp they sit under the words, lined up with them.
+        val under = QueueRules.actionsUnder((maxWidth - MekaSpace.m * 2).value)
+        // The open area is not clipped on its own: its rounded corner cut the first letter's edge off the title and the
+        // line ("Vhat"); the row's own rounded shape bounds its press.
+        val words: @Composable (Modifier) -> Unit = { m ->
+            Column(
+                m.clickable(role = Role.Button, onClick = onOpen).minTouch()
+                    .semantics(mergeDescendants = true) {
+                        contentDescription = (if (offline != null) "Read " else "Open ") + row.spoken +
+                            ((offline ?: onlineOnly)?.let { ", $it" } ?: "")
+                    },
+                verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+            ) {
+                Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = ink, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // Slice 50: a podcast's "open.spotify.com · Podcast · opens in your podcast app" was cut to "…" on the
+                // cover screen; it wraps (two lines at most) with its last words and dots kept together.
+                Text(LoneWordGlue.kept(row.meta), style = MekaType.caption, color = Meka.colors.textSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                // "6 min read · saved to read offline" fades in once the phone has kept the article's words.
+                AnimatedVisibility(offline != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                    Text(LoneWordGlue.kept(offline.orEmpty()), style = MekaType.caption, color = Meka.colors.accent, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+                // "Online only for now · …" fades in (tertiary) when the phone couldn't keep the words: a paywall, an app page.
+                AnimatedVisibility(offline == null && onlineOnly != null, enter = fadeIn(MekaMotion.appear(Meka.reducedMotion)), exit = fadeOut(MekaMotion.appear(Meka.reducedMotion))) {
+                    Text(LoneWordGlue.kept(onlineOnly.orEmpty()), style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
             }
         }
-        Text(
-            primary, style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onPrimary).minTouch()
-                .semantics { contentDescription = "$primary: ${row.title}" }
-                .padding(MekaSpace.xs),
-        )
-        Text(
-            "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onRemove).minTouch()
-                .semantics { contentDescription = "Remove ${row.title}" }
-                .padding(MekaSpace.xs),
-        )
+        // Under the words the buttons' text lines up with the words (no side padding); beside them they keep theirs.
+        val side = if (under) 0.dp else MekaSpace.xs
+        val actions: @Composable () -> Unit = {
+            Text(
+                primary, style = MekaType.caption, color = Meka.colors.accent, maxLines = 1, softWrap = false,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClick = onPrimary).minTouch()
+                    .semantics { contentDescription = "$primary: ${row.title}" }
+                    .padding(horizontal = side, vertical = MekaSpace.xs),
+            )
+            Text(
+                "Remove", style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, softWrap = false,
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+                    .clickable(role = Role.Button, onClick = onRemove).minTouch()
+                    .semantics { contentDescription = "Remove ${row.title}" }
+                    .padding(horizontal = side, vertical = MekaSpace.xs),
+            )
+        }
+        if (under) {
+            Column(Modifier.fillMaxWidth().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs)) {
+                words(Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.l)) { actions() }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                words(Modifier.weight(1f))
+                actions()
+            }
+        }
     }
 }
 

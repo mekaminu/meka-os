@@ -103,6 +103,13 @@ object QueueRules {
     const val ALREADY = "Already in your train queue"
     const val ACTION = "For the train"
     const val NOTE = "Saved on both apps. On Wi-Fi the Fold keeps each waiting article's words (up to ${ReaderRules.MAX_SAVED}) to read on the train without a signal, and lets them go once it's done; podcasts open in your podcast app, which keeps its downloads."
+    /**
+     * Below this width a row's Done (or Back) and Remove sit under its title and line, not beside them (quality gate
+     * slice 51: on the cover screen they squeezed the podcast's line back to "opens in your …" and left titles' last
+     * words alone); the same width as Calendars' and Mail's.
+     */
+    fun actionsUnder(widthDp: Float): Boolean = MailAutopilotPanelRules.stacked(widthDp)
+
     /** A podcast row's extra words: it plays in his podcast app, not in Navilife. */
     const val PODCAST_OPENS = "opens in your podcast app"
 

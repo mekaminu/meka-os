@@ -176,4 +176,13 @@ class TrainQueueTest {
         assertTrue(QueueRules.HINT.length <= 28)
         assertTrue(QueueRules.HINT_SPOKEN.contains(QueueRules.ACTION))
     }
+
+    @Test
+    fun actionsGoUnderTheWordsOnTheCoverScreen() {
+        // The cover screen's row is ~312 dp inside its padding; unfolded it has room beside the words.
+        assertTrue(QueueRules.actionsUnder(312f))
+        assertTrue(QueueRules.actionsUnder(419f))
+        assertFalse(QueueRules.actionsUnder(420f))
+        assertFalse(QueueRules.actionsUnder(760f))
+    }
 }
