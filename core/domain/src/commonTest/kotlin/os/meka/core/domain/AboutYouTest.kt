@@ -18,6 +18,27 @@ class AboutYouTest {
         Replica("hh", "android", HlcClock("android", { now }), InMemoryReplicaStore(), MekaSchema) { "op" + n++ }, { now })
 
     @Test
+    fun eachHintIsOneShortExampleThatReads() {
+        // The quality gate, slice 25: an empty field's hint fits the cover screen's field on one line; TalkBack and
+        // the Mac's label read the fuller how-to.
+        for (f in AboutField.entries) {
+            assertTrue(f.hint.length <= 28, "${f.name}: \"${f.hint}\" is too long for one line")
+            assertTrue(f.spokenHint.startsWith(f.label), f.name)
+            assertTrue(f.spokenHint.contains(f.hint), f.name)
+        }
+        assertTrue(AboutYouRules.CHILD_HINT.length <= 28)
+        assertTrue(AboutYouRules.CHILD_DESCRIPTION.contains(AboutYouRules.CHILD_HINT))
+        // The examples are ones the field takes.
+        for (f in listOf(AboutField.ROUTE, AboutField.HOME_STATION, AboutField.STATION_WALK, AboutField.SCHOOL_WEBSITE, AboutField.SCHOOL_MAIL,
+            AboutField.CLUBS, AboutField.OFFICIAL_NUMBERS)) {
+            assertTrue(!AboutYouRules.clean(f, f.hint).isNullOrEmpty(), "${f.name}: its own example \"${f.hint}\" is refused")
+        }
+        assertEquals("Alex", AboutYouRules.parseChild(AboutYouRules.CHILD_HINT)?.name)
+        val row = AboutYouRules.view(AboutYou.EMPTY, LocalCalendar.UTC, now).rows.first { it.field == AboutField.ROUTE }
+        assertEquals(AboutField.ROUTE.spokenHint, row.spokenHint)
+    }
+
+    @Test
     fun linesAreCleanedOrRefused() {
         assertEquals("Sam", AboutYouRules.clean(AboutField.PARTNER_NAME, "  Sam "))
         assertEquals("Mary-Jane O'Neil", AboutYouRules.clean(AboutField.PARTNER_NAME, "Mary-Jane   O'Neil"))

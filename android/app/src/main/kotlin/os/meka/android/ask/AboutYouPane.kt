@@ -143,7 +143,7 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
         item(key = "children-add") {
             val line = said["children"]
             Column(Modifier.animateItem(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(v.childHint, value = childText["add"] ?: "", onValue = { childText["add"] = it }) { typed ->
+                Field(v.childHint, value = childText["add"] ?: "", onValue = { childText["add"] = it }, description = v.childDescription) { typed ->
                     scope.launch {
                         val r = runCatching { core.addAboutYouChild(typed) }.getOrNull() ?: return@launch
                         react("children", r)
@@ -179,7 +179,7 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit
                 else -> KeyboardType.Text
             }),
             keyboardActions = KeyboardActions(onDone = { onSave(text) }),
-            modifier = Modifier.fillMaxWidth().semantics { contentDescription = row.label },
+            modifier = Modifier.fillMaxWidth().semantics { contentDescription = row.spokenHint },
         )
     }
     if (said != null) SaidLine(said, onUndo)

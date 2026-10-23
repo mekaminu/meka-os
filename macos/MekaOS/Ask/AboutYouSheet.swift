@@ -58,6 +58,7 @@ struct AboutYouSheet: View {
                 .padding(.top, MekaSpace.xs)
             TextField(row.hint, text: Binding(get: { texts[key] ?? row.value ?? "" }, set: { texts[key] = $0 }))
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(row.spokenHint)
                 .onSubmit {
                     let typed = texts[key] ?? row.value ?? ""
                     Task {
@@ -123,6 +124,7 @@ struct AboutYouSheet: View {
             }
             TextField(v.childHint, text: $childText)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(v.childDescription)
                 .onSubmit {
                     let typed = childText
                     childText = ""

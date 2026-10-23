@@ -176,33 +176,44 @@ data class AboutYou(
     }
 }
 
-/** The fields About you edits one line at a time, in the pane's order. */
-enum class AboutField(val key: String, val label: String, val hint: String, val emptyLine: String) {
+/**
+ * The fields About you edits one line at a time, in the pane's order. [hint] is what the empty field shows: one short
+ * example that fits the cover screen's field on one line (the quality gate's rule for hints, slice 25); [spokenHint]
+ * is the fuller how-to TalkBack and the Mac's label read ("Train route, for example …").
+ */
+enum class AboutField(val key: String, val label: String, val hint: String, val emptyLine: String, val spokenHint: String = "$label, $hint") {
     SHOWN_NAME(AboutYouFields.SHOWN_NAME, "Your name", "What Ada calls you", "Ada says “you” until you add it"),
     PARTNER_NAME(AboutYouFields.PARTNER_NAME, "Partner", "Their first name", "Add your partner to get their requests flagged"),
     PARTNER_PHONE(AboutYouFields.PARTNER_PHONE, "Partner's number", "Their mobile number", "Add their number so their calls always ring"),
     PARTNER_EMAIL(AboutYouFields.PARTNER_EMAIL, "Partner's email", "Their email address", "Add it so Inbox autopilot never tidies their emails away"),
     HOME(AboutYouFields.HOME, "Home", "Your town", "Add home for its weather and the commute"),
     WORK(AboutYouFields.WORK, "Work", "Where the office is", "Add work for office-day weather"),
-    ROUTE(AboutYouFields.ROUTE, "Train route", "South Rail to Oakfield Junction, then Metro; or North Rail to Riverside",
-        "Add your train route so Today, the brief and Leaving now say how its lines are running"),
-    HOME_STATION(AboutYouFields.HOME_STATION, "Home station", "The station you catch the train from: Oakfield",
-        "Add your home station for live departures on Today"),
-    STATION_WALK(AboutYouFields.STATION_WALK, "Time to the train", "Minutes from home to the train, then from work: 10, 15",
-        "Add it so Today says when to leave for the next good train"),
-    SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "The school's web address", "Add it to open the school's INSET days from School"),
-    SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk, parentmail.co.uk",
-        "Add the addresses the school writes from so its trips, payments and days off are offered for School"),
-    CLUBS(AboutYouFields.CLUBS, "Clubs", "Short name first: OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names"),
+    ROUTE(AboutYouFields.ROUTE, "Train route", "South Rail, then Metro",
+        "Add your train route so Today, the brief and Leaving now say how its lines are running",
+        "Train route, for example South Rail, then Metro, or with where you change and the line you take instead: South Rail to Oakfield Junction, then Metro; or North Rail to Riverside"),
+    HOME_STATION(AboutYouFields.HOME_STATION, "Home station", "Oakfield",
+        "Add your home station for live departures on Today",
+        "Home station, the station you catch the train from, for example Oakfield"),
+    STATION_WALK(AboutYouFields.STATION_WALK, "Time to the train", "10, 15",
+        "Add it so Today says when to leave for the next good train",
+        "Time to the train, minutes from home to the train, then from work, for example 10, 15"),
+    SCHOOL_WEBSITE(AboutYouFields.SCHOOL_WEBSITE, "School's website", "oakfield.sch.uk", "Add it to open the school's INSET days from School",
+        "School's website, the school's web address, for example oakfield.sch.uk"),
+    SCHOOL_MAIL(AboutYouFields.SCHOOL_MAIL, "School's email", "office@oakfield.sch.uk",
+        "Add the addresses the school writes from so its trips, payments and days off are offered for School",
+        "School's email, the addresses the school writes from, with commas, for example office@oakfield.sch.uk, parentmail.co.uk"),
+    CLUBS(AboutYouFields.CLUBS, "Clubs", "OFC Oakfield Town, HRFC", "Add the children's clubs so their fixtures get kit reminders and their names",
+        "Clubs, each club's short name first, for example OFC Oakfield Town, HRFC"),
     MOBILE(AboutYouFields.MOBILE, "Your mobile", "Your own mobile number", "Add it so the call assistant can put a genuine urgent caller through to you"),
     ASSISTANT_NUMBER(AboutYouFields.ASSISTANT_NUMBER, "Call assistant's number", "The number callers reach", "Add it once the call assistant has a number"),
     VOICEMAIL_NUMBER(AboutYouFields.VOICEMAIL_NUMBER, "Voicemail number", "Your network's voicemail", "Not added · only needed for call forwarding"),
-    OFFICIAL_NUMBERS(AboutYouFields.OFFICIAL_NUMBERS, "Official numbers", "Your police force's and bank's switchboards: police 01632 960000, bank 0306 999 0000",
-        "Add them so a call faking one gets “Could be spoofed” on its warning"),
+    OFFICIAL_NUMBERS(AboutYouFields.OFFICIAL_NUMBERS, "Official numbers", "police 01632 960000",
+        "Add them so a call faking one gets “Could be spoofed” on its warning",
+        "Official numbers, your police force's and bank's switchboards, for example police 01632 960000, bank 0306 999 0000"),
 }
 
 /** One row of the pane: the label, what's held (null when empty) and the line under it. */
-data class AboutRow(val field: AboutField, val label: String, val value: String?, val hint: String, val line: String)
+data class AboutRow(val field: AboutField, val label: String, val value: String?, val hint: String, val line: String, val spokenHint: String = "$label, $hint")
 
 /** A child's row: "Alex" and "Under 7s · Oakfield School". */
 data class AboutChildRow(val index: Int, val name: String, val line: String, val spoken: String)
@@ -222,6 +233,8 @@ data class AboutYouView(
     val isEmpty: Boolean,
     /** One name everywhere: what Today, the orb and the brief call him ([CallNameRules.called]); null when empty. */
     val callName: String? = null,
+    /** The add-a-child field's fuller how-to for TalkBack and the Mac's label ([AboutYouRules.CHILD_DESCRIPTION]). */
+    val childDescription: String = AboutYouRules.CHILD_DESCRIPTION,
 ) {
     companion object {
         val EMPTY: AboutYouView = AboutYouRules.view(AboutYou.EMPTY, LocalCalendar.UTC, 0L)
@@ -243,7 +256,8 @@ object AboutYouRules {
     const val MAX_PLACE = 60
     const val MAX_SCHOOL = 60
     const val MAX_CHILDREN = 8
-    const val CHILD_HINT = "Add a child… (Alex, U7, Oakfield School)"
+    const val CHILD_HINT = "Alex, U7, Oakfield School"
+    const val CHILD_DESCRIPTION = "Add a child: their name, age group and school, for example Alex, U7, Oakfield School"
     const val NO_CHILDREN = "No children added · add each one to name their clubs and school days"
     const val WELCOME = "Tell Navilife who's who once. It stays in your own data (synced, encrypted), never in Navilife's code."
     const val TYPED = "Kept in your own data (synced, encrypted) on both apps. Change anything here."
@@ -620,7 +634,7 @@ object AboutYouRules {
     fun view(a: AboutYou, cal: LocalCalendar, nowMs: Long): AboutYouView {
         val rows = AboutField.entries.map { f ->
             val v = value(a, f)
-            AboutRow(f, f.label, v, f.hint, if (v == null) f.emptyLine else SAVED_LINE)
+            AboutRow(f, f.label, v, f.hint, if (v == null) f.emptyLine else SAVED_LINE, f.spokenHint)
         }
         val kids = a.children.mapIndexed { i, c ->
             AboutChildRow(i, c.name, childLine(c), "${c.name}, ${childLine(c)}")
