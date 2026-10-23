@@ -61,6 +61,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
 import os.meka.core.domain.FaceFileRules
 import os.meka.core.domain.FaceLook
+import os.meka.core.domain.FaceGather
 import os.meka.core.domain.FaceGeometry
 import os.meka.core.domain.HelloCards
 import os.meka.core.domain.HelloOpen
@@ -230,11 +231,14 @@ fun HelloStage(
                 closeT >= 0 -> FaceLook.faceIn(t - greetAt, reduced) * (1f - closeT.toFloat() / HelloEntrance.FADE_MS).coerceIn(0f, 1f)
                 else -> FaceLook.faceIn(t - greetAt, reduced)
             }
+            // Slice 3d: the points gather into his face as it comes in (and leave it again as the stage closes), staying
+            // lit while they gather; the face shows through over them. Reduced motion: the plain cross-fade.
             HelloOrbView(
                 state, level, size = HelloEntrance.STAGE_SIZE.dp, spread = spread, reach = reach, entranceShock = shock,
+                gather = FaceGather.gather(faceIn, reduced),
                 modifier = Modifier
                     .offset { IntOffset((c.x - stagePx / 2).roundToInt(), (c.y - stagePx / 2).roundToInt()) }
-                    .graphicsLayer { scaleX = scale; scaleY = scale; alpha = (if (closeT >= 0 && reduced) travel else 1f) * (1f - faceIn) },
+                    .graphicsLayer { scaleX = scale; scaleY = scale; alpha = (if (closeT >= 0 && reduced) travel else 1f) * FaceGather.orbAlpha(faceIn, reduced) },
             )
             if (face) {
                 val faceW = stagePx * (FaceGeometry.CROP.w / FaceGeometry.CROP.h).toFloat()
@@ -242,7 +246,7 @@ fun HelloStage(
                     state, level, height = HelloEntrance.STAGE_SIZE.dp, still = calm,
                     modifier = Modifier
                         .offset { IntOffset((c.x - faceW / 2).roundToInt(), (c.y - stagePx / 2).roundToInt()) }
-                        .graphicsLayer { scaleX = scale; scaleY = scale; alpha = faceIn },
+                        .graphicsLayer { scaleX = scale; scaleY = scale; alpha = FaceGather.faceAlpha(faceIn, reduced) },
                 )
             }
             // Slice 8: the cards rising round the orb — the answer's (with their buttons), else the greeting's as it says them.

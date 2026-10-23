@@ -53,6 +53,7 @@ import os.meka.core.domain.FaceFileRules
 import os.meka.core.domain.FaceGeometry
 import os.meka.core.domain.FaceGold
 import os.meka.core.domain.FaceLook
+import os.meka.core.domain.FaceGather
 import os.meka.core.domain.HelloEntrance
 import os.meka.core.domain.LipSync
 import os.meka.core.domain.MouthFollower
@@ -246,7 +247,8 @@ private class FaceFilmView(context: Context, private val file: File) : TextureVi
 @Composable
 fun ObiOrbOrFace(
     state: OrbState, level: Float, size: Dp, faceWanted: Boolean, modifier: Modifier = Modifier,
-    orb: @Composable (Modifier) -> Unit,
+    /** The orb, given how far its points have gathered into the face (slice 3d) and its modifier. */
+    orb: @Composable (gather: Float, Modifier) -> Unit,
 ) {
     val context = LocalContext.current
     LaunchedEffect(Unit) { ObiFaceStore.load(context) }
@@ -259,8 +261,9 @@ fun ObiOrbOrFace(
         tween((if (reduced) HelloEntrance.FADE_MS else FaceLook.DISSOLVE_MS).toInt(), easing = FastOutSlowInEasing),
         label = "obiFace",
     )
+    // Slice 3d: the orb's points gather into the face as it comes in, then the face shows through over them.
     Box(modifier, contentAlignment = Alignment.Center) {
-        orb(Modifier.graphicsLayer { alpha = 1f - faceIn })
-        if (faceIn > 0f) ObiFaceView(state, level, height = size, modifier = Modifier.graphicsLayer { alpha = faceIn })
+        orb(FaceGather.gather(faceIn, reduced), Modifier.graphicsLayer { alpha = FaceGather.orbAlpha(faceIn, reduced) })
+        if (faceIn > 0f) ObiFaceView(state, level, height = size, modifier = Modifier.graphicsLayer { alpha = FaceGather.faceAlpha(faceIn, reduced) })
     }
 }

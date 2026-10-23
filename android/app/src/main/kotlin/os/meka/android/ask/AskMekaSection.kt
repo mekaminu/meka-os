@@ -604,7 +604,7 @@ private fun TalkPanel(talk: TalkController, needsYou: Int, onOrb: () -> Unit) {
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                 .clickable(enabled = talk.active, role = Role.Button, onClick = onOrb)
                 .semantics { contentDescription = "Navilife, ${os.meka.core.domain.ConversationModeRules.label(talk.phase, mac = false, talkOver = talk.talkOver, followOn = talk.followOn)}" },
-        ) { m -> HelloOrbView(orbState, talk.level, modifier = m) }
+        ) { gather, m -> HelloOrbView(orbState, talk.level, modifier = m, gather = gather) }
         AnimatedContent(
             targetState = talk.problem?.line ?: os.meka.core.domain.ConversationModeRules.label(talk.phase, mac = false, talkOver = talk.talkOver, followOn = talk.followOn),
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },

@@ -74,6 +74,8 @@ fun HelloOrbView(
     spread: Float = 0f, reach: Float = 1f, entranceShock: Pair<Float, Float>? = null,
     /** Obi's face, slice 3c: how much the points hint at his face (0…1, [os.meka.core.domain.FaceLook.pointShade]); the docked orb while he speaks. */
     faceHint: Float = 0f,
+    /** Obi's face, slice 3d: how far the points have gathered into his face (0…1, [os.meka.core.domain.FaceGather]); the rings and comets let go with it. */
+    gather: Float = 0f,
 ) {
     val reduced = Meka.reducedMotion || still
     val accent = Meka.colors.accent
@@ -102,6 +104,8 @@ fun HelloOrbView(
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Canvas(Modifier.size(size).clearAndSetSemantics { }) {
             Constellation.frame(geo, frame, state, shownLevel, angle, elapsed, reduced, spread, reach)
+            os.meka.core.domain.FaceGather.apply(geo, frame, gather)
+            val ext = 1f - gather.coerceIn(0f, 1f) // the rings, comets and halo let go as the points gather into the face
             val c = center
             val half = this.size.minDimension / 2
             val r = half / Constellation.EXTENT
@@ -118,7 +122,7 @@ fun HelloOrbView(
                 for (t in 0 until 9) { // the head, then a fading tail behind it
                     val (x, y) = Constellation.ringPoint(phi, squash, theta - t * 0.07f, radius)
                     val fade = 1f - t / 9f
-                    drawCircle(color.copy(alpha = (0.95f * fade * fade).coerceIn(0f, 1f)), radius = head * (0.45f + 0.55f * fade),
+                    drawCircle(color.copy(alpha = (0.95f * fade * fade * ext).coerceIn(0f, 1f)), radius = head * (0.45f + 0.55f * fade),
                         center = Offset(c.x + x * r, c.y + y * r), blendMode = blend)
                 }
             }
@@ -126,7 +130,7 @@ fun HelloOrbView(
             if (state == OrbState.NEEDS_YOU) {
                 val p = HelloOrb.pulse(elapsed, reduced)
                 drawCircle(
-                    Brush.radialGradient(listOf(amber.copy(alpha = 0.20f * (0.4f + 0.6f * p)), Color.Transparent), c, half),
+                    Brush.radialGradient(listOf(amber.copy(alpha = 0.20f * (0.4f + 0.6f * p) * ext), Color.Transparent), c, half),
                     radius = half,
                 )
             }
@@ -137,7 +141,7 @@ fun HelloOrbView(
             )
             // Speaking: the soft shockwave on the beat.
             Constellation.shock(state, elapsed, reduced)?.let { (reach, a) ->
-                drawCircle(gold(a), radius = r * reach, style = Stroke(hair * 3 * (1f - (reach - 1f))), blendMode = blend)
+                drawCircle(gold(a * ext), radius = r * reach, style = Stroke(hair * 3 * (1f - (reach - 1f))), blendMode = blend)
             }
             // The entrance: one gold shockwave as the points re-form.
             entranceShock?.let { (reach2, a) ->
@@ -171,19 +175,19 @@ fun HelloOrbView(
             // Thinking: three tilted orbit rings, each with a bright comet.
             if (state == OrbState.THINKING) {
                 Constellation.RINGS.forEachIndexed { k, (phi, squash) ->
-                    drawPath(ellipse(phi, squash, Constellation.RING_R), gold(0.22f), style = Stroke(hair), blendMode = blend)
+                    drawPath(ellipse(phi, squash, Constellation.RING_R), gold(0.22f * ext), style = Stroke(hair), blendMode = blend)
                     if (!reduced) comet(phi, squash, Constellation.RING_R, Constellation.comet(k, elapsed), bright, hair * 3.2f)
                 }
             }
             // Speaking: a voice-reactive gold ring round the equator.
             if (state == OrbState.SPEAKING) {
                 val (w, a) = Constellation.equator(frame.amp)
-                drawPath(ellipse(0f, Constellation.EQUATOR_SQUASH, Constellation.EQUATOR_R), gold(a), style = Stroke(hair * w * 1.6f), blendMode = blend)
+                drawPath(ellipse(0f, Constellation.EQUATOR_SQUASH, Constellation.EQUATOR_R), gold(a * ext), style = Stroke(hair * w * 1.6f), blendMode = blend)
             }
             // Needs you: two amber comets on faint rings.
             if (state == OrbState.NEEDS_YOU) {
                 Constellation.AMBER_RINGS.forEachIndexed { k, (phi, squash) ->
-                    drawPath(ellipse(phi, squash, Constellation.AMBER_R), amber.copy(alpha = 0.12f), style = Stroke(hair), blendMode = blend)
+                    drawPath(ellipse(phi, squash, Constellation.AMBER_R), amber.copy(alpha = 0.12f * ext), style = Stroke(hair), blendMode = blend)
                     val theta = if (reduced) k * PI.toFloat() else Constellation.comet(k, elapsed, Constellation.AMBER_COMET_MS)
                     comet(phi, squash, Constellation.AMBER_R, theta, amber, hair * 2.6f)
                 }

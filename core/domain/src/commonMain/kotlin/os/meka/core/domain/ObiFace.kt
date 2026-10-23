@@ -261,3 +261,87 @@ object LipSync {
     const val BEAT_MS = 150L
     fun beat(tMs: Long): Boolean = (tMs / BEAT_MS) % 2 == 0L
 }
+
+/**
+ * Obi's face, slice 3d: as the face comes in, the constellation's points **gather into it** rather than the orb simply
+ * fading (motion catalogue "Hello, Navilife": "the points gather into the face instead of re-forming the sphere"). Each
+ * point leaves its place on the turning sphere for a fixed spot on the face's oval (where the face shows clearly, inside
+ * [FaceGeometry]'s edge fade), staggered by its seed so they arrive as a swirl, not in step; the sphere's flat
+ * projection makes the oval's rim denser, so the gathered points read as a head before the film shows through. The
+ * points stay lit while they gather, then fade as the face comes up over them ([orbAlpha], [faceAlpha]); the lines,
+ * core and dust let go as they gather. Going back (the stage closing), the same run backwards: the points leave the face
+ * and re-form the sphere. Reduced motion: no gathering, the plain cross-fade. Positions are in the orb's own units (the
+ * sphere's radius is 1, y down), the face drawn in the orb's box: as tall as it, centred.
+ */
+object FaceGather {
+    /** The share of the dissolve (0…1 of [FaceLook.faceIn]) over which the points gather; the face finishes after. */
+    const val GATHER_SHARE = 0.7f
+    /** The face starts showing through at this much of the dissolve, the points start fading at [ORB_FADE_FROM]. */
+    const val FACE_FROM = 0.35f
+    const val ORB_FADE_FROM = 0.6f
+    /** How far into the face's edge fade the points land (of its radius): where the face shows at about ¾ strength. */
+    const val OVAL_SHARE = 0.72f
+    /** The lines keep this much of their brightness once gathered (a faint mesh over the face, not a tangle). */
+    const val LINKS_KEPT = 0.35f
+
+    /** The face's half-width in orb units: the crop drawn as tall as the orb's box ([Constellation.EXTENT] each way). */
+    val HALF_W: Float = (Constellation.EXTENT * FaceGeometry.CROP.w / FaceGeometry.CROP.h).toFloat()
+
+    /** The oval the points gather into: its centre's height and its two radii, in orb units. */
+    val OVAL_CY: Float = ((FaceGeometry.FADE_CY - 0.5) * 2 * Constellation.EXTENT).toFloat()
+    val OVAL_RX: Float = (0.5 * OVAL_SHARE * 2 * HALF_W).toFloat()
+    val OVAL_RY: Float = (0.5 * FaceGeometry.FADE_TALL * FaceGeometry.CROP.w / FaceGeometry.CROP.h * OVAL_SHARE * 2 * Constellation.EXTENT).toFloat()
+
+    /** How far the points have gathered (0…1) for the face's dissolve [faceIn]; reduced motion: 0 (a plain fade). */
+    fun gather(faceIn: Float, reduced: Boolean): Float =
+        if (reduced) 0f else (faceIn / GATHER_SHARE).coerceIn(0f, 1f)
+
+    /** The orb's (the points') opacity for [faceIn]: held while they gather, then fading as the face comes up. */
+    fun orbAlpha(faceIn: Float, reduced: Boolean): Float =
+        if (reduced) 1f - faceIn.coerceIn(0f, 1f) else 1f - smooth((faceIn - ORB_FADE_FROM) / (1f - ORB_FADE_FROM))
+
+    /** The face's opacity for [faceIn]: showing through once the points have mostly gathered. */
+    fun faceAlpha(faceIn: Float, reduced: Boolean): Float =
+        if (reduced) faceIn.coerceIn(0f, 1f) else smooth((faceIn - FACE_FROM) / (1f - FACE_FROM))
+
+    /** Point [i]'s spot on the face (x, y in orb units): its place on the unturned sphere, flattened into the oval. */
+    fun target(geo: ConstellationGeometry, i: Int): Pair<Float, Float> {
+        val x = geo.xs[i]; val y = geo.ys[i]
+        val r = kotlin.math.sqrt(x * x + y * y)
+        val k = if (r > 1f) 1f / r else 1f // the sphere's gentle wobble stays inside the oval
+        return x * k * OVAL_RX to OVAL_CY + y * k * OVAL_RY
+    }
+
+    /**
+     * Moves the frame [out] (worked out by [Constellation.frame]) [gather] of the way to the face: each point by its
+     * own staggered share, eased; the points brighten evenly (the face's points all near); the lines dim to
+     * [LINKS_KEPT], the core and the dust go. Nothing changes at 0.
+     */
+    fun apply(geo: ConstellationGeometry, out: ConstellationFrame, gather: Float) {
+        val g = gather.coerceIn(0f, 1f)
+        if (g <= 0f) return
+        for (i in 0 until out.n) {
+            val f = smooth(HelloEntrance.pointSpread(g, geo.seeds[i]))
+            val (tx, ty) = target(geo, i)
+            out.px[i] = toward(out.px[i], tx, f)
+            out.py[i] = toward(out.py[i], ty, f)
+            out.depth[i] = toward(out.depth[i], NEAR, f)
+            out.alpha[i] = toward(out.alpha[i], LIT, f)
+        }
+        out.linkBoost *= 1f - (1f - LINKS_KEPT) * g
+        out.core *= 1f - g
+        for (k in 0 until out.dustN) out.da[k] *= 1f - g
+    }
+
+    /** A gathered point's depth and brightness: near and lit, so the face's points shine evenly. */
+    const val NEAR = 0.8f
+    const val LIT = 0.75f
+
+    /** [from] moved [f] of the way to [to]; exactly [to] once arrived (so a gathered face holds dead still). */
+    private fun toward(from: Float, to: Float, f: Float): Float = if (f >= 1f) to else from + (to - from) * f
+
+    private fun smooth(x: Float): Float {
+        val t = x.coerceIn(0f, 1f)
+        return t * t * (3 - 2 * t)
+    }
+}

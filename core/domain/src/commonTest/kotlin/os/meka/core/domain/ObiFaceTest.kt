@@ -116,4 +116,68 @@ class ObiFaceTest {
         assertEquals(MouthShape.REST, LipSync.shapeForLoudness(0.3, LipSync.beat(160)))
         assertEquals(MouthShape.AH, LipSync.shapeForLoudness(0.8, false))
     }
+
+    // Slice 3d: the points gather into the face.
+    private fun gathered(g: Float, state: OrbState = OrbState.SPEAKING, angle: Float = 0.3f): Pair<ConstellationGeometry, ConstellationFrame> {
+        val geo = Constellation.geometry(Constellation.POINTS)
+        val f = ConstellationFrame(geo.n, Constellation.DUST)
+        Constellation.frame(geo, f, state, 0.5f, angle, 1_000L, reduced = false)
+        FaceGather.apply(geo, f, g)
+        return geo to f
+    }
+
+    @Test
+    fun thePointsGatherOntoTheFaceWhereItShowsClearly() {
+        val (geo, f) = gathered(1f)
+        for (i in 0 until geo.n) {
+            val (tx, ty) = FaceGather.target(geo, i)
+            assertTrue(abs(f.px[i] - tx) < 1e-5f && abs(f.py[i] - ty) < 1e-5f, "point $i not on its spot")
+            // In the face's crop (u, v 0…1), where the edge fade still shows most of the face.
+            val u = (f.px[i] / (2 * FaceGather.HALF_W) + 0.5f).toDouble()
+            val v = (f.py[i] / (2 * Constellation.EXTENT) + 0.5f).toDouble()
+            assertTrue(FaceGeometry.fadeAlpha(u, v) >= 0.6, "point $i at $u, $v is in the faded edge")
+            assertEquals(FaceGather.NEAR, f.depth[i])
+        }
+        // Gathered, the face is still once the sphere's turn no longer moves the points.
+        val (_, turned) = gathered(1f, angle = 2.1f)
+        assertTrue((0 until geo.n).all { f.px[it] == turned.px[it] && f.py[it] == turned.py[it] })
+        // The lines dim to a faint mesh; the core and the dust go.
+        assertEquals(0f, f.core)
+        assertTrue((0 until f.dustN).all { f.da[it] == 0f })
+        val (_, none) = gathered(0f)
+        assertTrue(abs(f.linkBoost - none.linkBoost * FaceGather.LINKS_KEPT) < 1e-5f)
+    }
+
+    @Test
+    fun theGatheringIsStaggeredAndNothingMovesAtZero() {
+        val (geo, start) = gathered(0f)
+        val fresh = ConstellationFrame(geo.n, Constellation.DUST)
+        Constellation.frame(geo, fresh, OrbState.SPEAKING, 0.5f, 0.3f, 1_000L, reduced = false)
+        assertTrue((0 until geo.n).all { start.px[it] == fresh.px[it] && start.py[it] == fresh.py[it] })
+        // Half way, some points have arrived and some have barely left: a swirl, not in step.
+        val (_, half) = gathered(0.5f)
+        val shares = (0 until geo.n).map { i ->
+            val (tx, ty) = FaceGather.target(geo, i)
+            val whole = kotlin.math.hypot(tx - fresh.px[i], ty - fresh.py[i])
+            if (whole < 1e-3f) 1f else 1f - kotlin.math.hypot(tx - half.px[i], ty - half.py[i]) / whole
+        }
+        assertTrue(shares.maxOrNull()!! - shares.minOrNull()!! > 0.3f, "every point moved in step")
+    }
+
+    @Test
+    fun thePointsHoldWhileTheyGatherThenTheFaceComesUp() {
+        // The points gather over the first 70 % of the dissolve, still lit; the face shows through after.
+        assertEquals(0f, FaceGather.gather(0f, false))
+        assertEquals(1f, FaceGather.gather(FaceGather.GATHER_SHARE, false))
+        assertEquals(1f, FaceGather.orbAlpha(0.5f, false))
+        assertEquals(0f, FaceGather.faceAlpha(0.3f, false))
+        assertEquals(0f, FaceGather.orbAlpha(1f, false))
+        assertEquals(1f, FaceGather.faceAlpha(1f, false))
+        // Both are somewhere in between near the end, so the points dissolve into the face rather than vanish first.
+        assertTrue(FaceGather.orbAlpha(0.8f, false) in 0.05f..0.95f && FaceGather.faceAlpha(0.8f, false) in 0.05f..0.95f)
+        // Reduced motion: no gathering, the plain cross-fade.
+        assertEquals(0f, FaceGather.gather(1f, true))
+        assertTrue(abs(FaceGather.orbAlpha(0.4f, true) - 0.6f) < 1e-6f)
+        assertTrue(abs(FaceGather.faceAlpha(0.4f, true) - 0.4f) < 1e-6f)
+    }
 }
