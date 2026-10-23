@@ -3216,6 +3216,9 @@ SpeakUpAutonomyScreensTest: every pill drawn at most 36 dp (`touch-pill` tag), S
 words above, the short intro and How it works shown with the full how-to folded away; by hand How it works opens it and
 Hide closes it. Core test SpeakUpTest.theIntroIsSaidShortWithTheFullHowToKept (at most 100 characters). Design check: no
 design file covers either pane. No server change, no migration, Mac checked nightly.
+Landed 64eedc6; CI run 1153 failed on ProtectedTimeScreensTest.byHand (it waited on the core's state, then raced the
+pane's line coming back from the core thread), fixed in 6353ccf (each step waits for the words on screen too); CI run
+1154 (40001088272) green, published 5b4b55d.
 
 ### Quality gate — slice 54 (2026-10-23): Speaking up's and What Navilife may do's shots and their first hand tests
 
