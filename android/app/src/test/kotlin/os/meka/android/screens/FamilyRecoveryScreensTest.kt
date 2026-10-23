@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -269,7 +270,7 @@ class FamilyRecoveryScreensTest {
     /** Every drawn text that matches [pattern] whole. */
     private fun texts(pattern: Regex): List<String> =
         compose.onAllNodes(SemanticsMatcher("text matches $pattern") { n ->
-            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.let(pattern::matches) == true
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }?.let { t -> pattern.matches(t) } == true
         }, useUnmergedTree = true).fetchSemanticsNodes()
             .mapNotNull { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } }
 
