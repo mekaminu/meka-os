@@ -225,6 +225,8 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/notifications/cover-light-many.png](docs/screens/fold/notifications/cover-light-many.png)
 - [fold/notifications/inner-dark-empty.png](docs/screens/fold/notifications/inner-dark-empty.png)
 - [fold/notifications/inner-dark-many.png](docs/screens/fold/notifications/inner-dark-many.png)
+- [fold/obi-face/cover-dark-gather.png](docs/screens/fold/obi-face/cover-dark-gather.png)
+- [fold/obi-face/cover-light-gather.png](docs/screens/fold/obi-face/cover-light-gather.png)
 - [fold/people/cover-dark-empty.png](docs/screens/fold/people/cover-dark-empty.png)
 - [fold/people/cover-dark-many.png](docs/screens/fold/people/cover-dark-many.png)
 - [fold/people/cover-dark-one.png](docs/screens/fold/people/cover-dark-one.png)
