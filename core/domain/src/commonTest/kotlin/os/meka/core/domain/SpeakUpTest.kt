@@ -220,4 +220,15 @@ class SpeakUpTest {
         assertEquals(SpeakMoment.REPLY.label, SpeakUpRules.view(SpeakUpSettings(), 0, now, cal).sections[SpeakMoment.entries.size - 1].label)
         assertTrue(AlertHoldRules.holds(n))
     }
+
+    /** Quality gate slice 55: the pane shows the intro said short; the full how-to stays for How it works. */
+    @Test
+    fun theIntroIsSaidShortWithTheFullHowToKept() {
+        val v = SpeakUpRules.view(SpeakUpSettings(), 0, now, cal)
+        assertEquals(SpeakUpRules.INTRO_SHORT, v.introShort)
+        assertEquals(SpeakUpRules.INTRO, v.intro)
+        assertTrue(v.introShort.length <= 100, "the short intro is ${v.introShort.length} characters")
+        assertTrue(v.intro.length > v.introShort.length)
+        assertTrue(MailAutopilotPanelRules.hasMore(v.introShort, v.intro))
+    }
 }

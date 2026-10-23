@@ -42,6 +42,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.minTouch
+import os.meka.android.designsystem.TouchPill
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
@@ -200,21 +201,13 @@ private fun AutonomyRowView(row: AutonomyRow, modifier: Modifier, onAction: () -
 /** A row's mark (lit while Navilife does it on its own). */
 private val DOT = 10.dp
 
+/** Quality gate slice 55: the pill drawn 32 dp high, its 48 dp touch outside it ([TouchPill]). */
 @Composable
 private fun Pill(label: String, lit: Boolean, onClick: () -> Unit) {
     val reduced = Meka.reducedMotion
     val fill by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(reduced), label = "autonomy-pill")
     val ink by animateColorAsState(if (lit) Meka.colors.onAccent else Meka.colors.accent, MekaMotion.appear(reduced), label = "autonomy-pill-ink")
-    Box(
-        Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(fill)
-            .clickable(role = Role.Button, onClick = onClick)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        contentAlignment = Alignment.Center,
-    ) {
-        Crossfade(label, animationSpec = MekaMotion.appear(reduced), label = "autonomy-pill-label") { t ->
-            Text(t, style = MekaType.itemMeta, color = ink)
-        }
-    }
+    TouchPill(label, fill, ink, onClick = onClick)
 }
 
 /**

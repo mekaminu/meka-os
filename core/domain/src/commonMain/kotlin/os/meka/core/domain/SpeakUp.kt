@@ -52,8 +52,18 @@ data class SpeakUpSettings(
 /** What the device says now: the notice it is for, and the line ("Meka, your 07:42 is cancelled. …"). */
 data class SpeakUpPick(val key: String, val moment: SpeakMoment, val line: String)
 
-/** Ask → Settings → Speaking up, in the Talk pane's shape: a section per switch, then how often, then mute. */
-data class SpeakUpView(val title: String, val intro: String, val sections: List<TalkSetupSection>, val footer: String)
+/**
+ * Ask → Settings → Speaking up, in the Talk pane's shape: a section per switch, then how often, then mute. Quality gate
+ * slice 55: [introShort] is what the pane shows under the title; [intro] (the full how-to) is what "How it works" opens
+ * and what TalkBack / VoiceOver read.
+ */
+data class SpeakUpView(
+    val title: String,
+    val intro: String,
+    val sections: List<TalkSetupSection>,
+    val footer: String,
+    val introShort: String = intro,
+)
 
 /** The device's situation as it posts: where it would speak and what it is busy with. */
 data class SpeakContext(
@@ -73,6 +83,8 @@ object SpeakUpRules {
     const val TITLE = "Speaking up"
     const val ROW_LINE = "When Ada says something out loud on her own"
     const val INTRO = "For a few moments that really matter, Ada lights the orb, plays a soft chime and says it in a sentence or two, starting with your name. Only through headphones or the car, on the bedside clock in the evening, or on the Mac while you're using it; never out of the phone's speaker. Never in quiet hours, in a meeting or on a call. It only tells you: anything to do is the usual card."
+    /** Quality gate slice 55: the intro said short (the full [INTRO] was ten lines on the cover screen). */
+    const val INTRO_SHORT = "Ada says what really matters out loud, starting with your name, only where just you can hear."
     const val OFTEN_LABEL = "How often"
     const val MUTE_LABEL = "Mute"
     const val MUTE_ACTION = "Mute for 2 hours"
@@ -227,7 +239,7 @@ object SpeakUpRules {
             if (muted) "Muted till ${LocalClock.formatMinute(cal.minuteOfDay(s.mutedUntilMs!!))}" else "Not muted", muted,
             listOf("Nothing is said out loud on any of your devices until then; notifications still arrive."),
             if (muted) UNMUTE_ACTION else MUTE_ACTION)
-        return SpeakUpView(TITLE, INTRO, moments + often + mute, "Everything Ada says on her own is in Activity.")
+        return SpeakUpView(TITLE, INTRO, moments + often + mute, "Everything Ada says on her own is in Activity.", INTRO_SHORT)
     }
 
     /** Activity's line for a moment said: "Said: Meka, your 07:42 is cancelled. …". */

@@ -13,14 +13,35 @@ struct SpeakUpSheet: View {
     @Environment(CoreModel.self) private var model
     let palette: MekaPalette
     @State private var view: SpeakUpView?
+    @State private var howOpen = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(SpeakUpRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
             if let v = view {
-                Text(LoneWordGlue.shared.kept(line: v.intro)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .staggeredAppear(0)
+                // Quality gate slice 55: the intro said short, How it works opens the full how-to (as Mail's switches).
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(LoneWordGlue.shared.kept(line: v.introShort)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityLabel(v.intro)
+                    if MailAutopilotPanelRules.shared.hasMore(short: v.introShort, full: v.intro) {
+                        if howOpen {
+                            Text(LoneWordGlue.shared.kept(line: v.intro)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.top, MekaSpace.xs)
+                                .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+                                .accessibilityHidden(true)
+                        }
+                        Button(howOpen ? MailAutopilotPanelRules.shared.HIDE_HOW : MailAutopilotPanelRules.shared.HOW_IT_WORKS) {
+                            withAnimation(MekaMotion.appear(reduced: reduceMotion)) { howOpen.toggle() }
+                        }
+                        .buttonStyle(.plain)
+                        .font(MekaType.caption)
+                        .foregroundStyle(palette.accent)
+                        .padding(.top, MekaSpace.xxs)
+                    }
+                }
+                .staggeredAppear(0)
                 ForEach(Array(v.sections.enumerated()), id: \.offset) { i, s in
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         Text(s.label.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)

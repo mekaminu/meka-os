@@ -13,6 +13,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -35,7 +36,9 @@ import os.meka.android.designsystem.MekaTheme
 import os.meka.android.designsystem.ThemeChoice
 import os.meka.core.domain.AutonomyRules
 import os.meka.core.domain.DateGlue
+import os.meka.core.domain.DonePillSpec
 import os.meka.core.domain.LoneWordGlue
+import os.meka.core.domain.MailAutopilotPanelRules
 import os.meka.core.domain.MailFindAutoRules
 import os.meka.core.domain.SpeakMoment
 import os.meka.core.domain.SpeakOften
@@ -111,6 +114,27 @@ class SpeakUpAutonomyScreensTest {
         if (small.isNotEmpty()) fail("$name: buttons under 48 dp to tap:\n" + small.joinToString("\n") { "- $it" })
     }
 
+    /**
+     * Quality gate slice 55: every settings pill is drawn at most [DonePillSpec.MAX_DRAWN_HEIGHT_DP] high (its 48 dp
+     * touch outside it), and with [maxGapDp] each sits close under the words above it, no tall gap.
+     */
+    private fun assertSlimPills(name: String, maxGapDp: Float? = null) {
+        val d = compose.density.density
+        val pills = compose.onAllNodes(hasTestTag("touch-pill"), useUnmergedTree = true).fetchSemanticsNodes()
+        if (pills.isEmpty()) fail("$name: no pill drawn")
+        val tall = pills.filter { it.size.height / d > DonePillSpec.MAX_DRAWN_HEIGHT_DP + 0.5f }
+        if (tall.isNotEmpty()) fail("$name: pills drawn ${tall.map { (it.size.height / d).toInt() }} dp high, not ~32 dp")
+        if (maxGapDp == null) return
+        val words = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+            .fetchSemanticsNodes()
+        pills.forEach { p ->
+            val above = words.filter { it.boundsInRoot.bottom <= p.boundsInRoot.top + 0.5f }.maxOfOrNull { it.boundsInRoot.bottom }
+                ?: return@forEach
+            val gap = (p.boundsInRoot.top - above) / d
+            if (gap > maxGapDp) fail("$name: a pill sits ${gap.toInt()} dp under the words above it (at most ${maxGapDp.toInt()})")
+        }
+    }
+
     private fun checks(name: String, area: String, title: String, lines: List<String>) {
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path(area, name))
@@ -166,9 +190,16 @@ class SpeakUpAutonomyScreensTest {
         val v = runBlocking { core.speakUpView() }
         until { onScreen(SpeakMoment.URGENT.label.uppercase()) }
         compose.waitForIdle()
-        val lines = listOf(v.intro, v.footer) + v.sections.flatMap { it.steps + it.status }
+        val lines = listOf(v.introShort, v.footer) + v.sections.flatMap { it.steps + it.status }
         checks(name, "speak-up", SpeakUpRules.TITLE, lines)
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.footer))
+        // Slice 55: the intro said short, the full how-to folded away under How it works; slim pills close under the words.
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept(SpeakUpRules.INTRO_SHORT))
+        ScreenShots.assertShows(compose, name, MailAutopilotPanelRules.HOW_IT_WORKS)
+        if (compose.onAllNodes(hasTestTag("speak-up-how"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("$name: the full how-to shows before How it works is tapped")
+        }
+        assertSlimPills(name, maxGapDp = 16f)
         val mute = v.sections.last()
         when (fill) {
             Fill.EMPTY -> {
@@ -198,6 +229,16 @@ class SpeakUpAutonomyScreensTest {
             if (n.fetchSemanticsNodes().isEmpty()) fail("$name: no \"$description\"")
             n[0].performSemanticsAction(SemanticsActions.OnClick)
         }
+        fun howShown() = compose.onAllNodes(hasTestTag("speak-up-how"), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+        val how = compose.onAllNodes(hasText(MailAutopilotPanelRules.HOW_IT_WORKS) and hasClickAction())
+        if (how.fetchSemanticsNodes().isEmpty()) fail("$name: no How it works")
+        how[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { howShown() }
+        if (!howShown()) fail("$name: How it works didn't open the full how-to")
+        compose.onAllNodes(hasText(MailAutopilotPanelRules.HIDE_HOW) and hasClickAction())[0].performSemanticsAction(SemanticsActions.OnClick)
+        until { !howShown() }
+        if (howShown()) fail("$name: Hide left the how-to open")
+
         tap("${SpeakUpRules.TURN_OFF}: ${SpeakMoment.URGENT.label}")
         until { runBlocking { core.speakUpView() }.sections.first().status == "Off" }
         if (runBlocking { core.speakUpView() }.sections.first().status != "Off") fail("$name: Turn off left urgent from family on")
@@ -252,6 +293,7 @@ class SpeakUpAutonomyScreensTest {
         val lines = listOf(v.summary, AutonomyRules.PAUSE_TITLE, AutonomyRules.PAUSE_LINE, AutonomyRules.NOTE) +
             rows.map { it.line } + rows.map { it.title }
         checks(name, "autonomy", "What Navilife may do", lines)
+        assertSlimPills(name)
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.summary))
         if (cover) {
             assertButtonUnder(name, AutonomyRules.PAUSE, LoneWordGlue.kept(AutonomyRules.PAUSE_LINE))

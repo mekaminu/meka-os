@@ -3202,6 +3202,21 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 55 (2026-10-23): Speaking up said short, slim pills on both panes
+
+Slice 54's shots' findings. Speaking up's intro was a ten-line paragraph on the cover screen; now it reads "Ada says
+what really matters out loud, starting with your name, only where just you can hear." with **How it works** under it
+opening the full how-to (expand spring, a fade under reduced motion) and Hide closing it, as Mail's switches do;
+TalkBack / VoiceOver read the full how-to (core SpeakUpRules.INTRO_SHORT, SpeakUpView.introShort, the full
+SpeakUpView.intro kept), Fold and Mac. Both panes drew their pills (Speaking up's Turn off / Turn on / Mute / Speak
+again now, What Navilife may do's Ask first / Turn off / Let Navilife offer again / Pause / Resume) the full 48 dp tall;
+now a shared designsystem TouchPill draws a 32 dp pill (DonePillSpec.HEIGHT_DP, 16 dp sides) with the 48 dp touch
+outside it, and Speaking up's extra 8 dp spacer above each pill is gone (Fold; the Mac's pills were already slim).
+SpeakUpAutonomyScreensTest: every pill drawn at most 36 dp (`touch-pill` tag), Speaking up's at most 16 dp under the
+words above, the short intro and How it works shown with the full how-to folded away; by hand How it works opens it and
+Hide closes it. Core test SpeakUpTest.theIntroIsSaidShortWithTheFullHowToKept (at most 100 characters). Design check: no
+design file covers either pane. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 54 (2026-10-23): Speaking up's and What Navilife may do's shots and their first hand tests
 
 The next of Ask's places without shots. SpeakUpAutonomyScreensTest (12) draws Ask → Settings → Speaking up (as it comes,
