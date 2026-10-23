@@ -11,12 +11,27 @@ class LoneWordGlueTest {
     @Test
     fun theLastTwoWordsGoDownTogether() {
         assertEquals("When Ada says something out loud on her${nb}own", LoneWordGlue.kept(SpeakUpRules.ROW_LINE))
-        assertEquals("Gmail and Outlook · read, tidied, sent only on your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
+        assertEquals("Gmail and Outlook${nb}·${nb}read, tidied, sent only on your${nb}tap", LoneWordGlue.kept(MailAccountRules.ROW_LINE))
     }
 
     @Test
     fun noLineStartsWithADot() {
-        assertEquals("Waiting for · Someday · Decisions${nb}·${nb}Renewals", LoneWordGlue.kept("Waiting for · Someday · Decisions · Renewals"))
+        assertEquals("Waiting for${nb}·${nb}Someday${nb}·${nb}Decisions${nb}·${nb}Renewals", LoneWordGlue.kept("Waiting for · Someday · Decisions · Renewals"))
+    }
+
+    @Test
+    fun aDotStaysWithTheWordsEitherSide() {
+        assertEquals("Instant updates${nb}·${nb}last push 16:55 ago${nb}today", LoneWordGlue.kept("Instant updates · last push 16:55 ago today"))
+        assertEquals("jordan@example.com${nb}·${nb}sign-in expired${nb}·${nb}sign in${nb}again", LoneWordGlue.kept("jordan@example.com · sign-in expired · sign in again"))
+        assertEquals("Fri${nb}13${nb}Nov${nb}·${nb}09:00", LoneWordGlue.kept("Fri 13 Nov · 09:00"))
+        assertEquals("a·b stays", LoneWordGlue.kept("a·b stays"))
+    }
+
+    @Test
+    fun aDotAtALineEdgeIsSeen() {
+        assertTrue(LoneWordGlue.dotAtEdge("· last push 16:55"))
+        assertTrue(LoneWordGlue.dotAtEdge("Outlook sign-in expired ·${nb}"))
+        assertFalse(LoneWordGlue.dotAtEdge("expired${nb}·${nb}sign in"))
     }
 
     @Test

@@ -66,9 +66,13 @@ object LoneWordGlue {
     private val NBSP = LifeTileRules.GLUE[0]
     private val JOINERS = setOf("·", "–", "-", "—")
 
-    /** [line] with its dates, numbers and counts whole ([PhraseGlue.kept]) and its last words held together. */
+    /**
+     * [line] with its dates, numbers and counts whole ([PhraseGlue.kept]), each " · " held to the words either side
+     * (no line starts with "· last push 16:55" or ends on "sign-in expired ·": Health's re-shot, quality gate slice 30)
+     * and its last words held together.
+     */
     fun kept(line: String): String {
-        val s = PhraseGlue.kept(line.trimEnd())
+        val s = dotsHeld(PhraseGlue.kept(line.trimEnd()))
         val starts = wordStarts(s)
         if (starts.size < 3) return s
         var from = starts.size - 2
@@ -77,6 +81,14 @@ object LoneWordGlue {
         if (tail.length > PAIR_MAX) return s
         return s.substring(0, starts[from]) + tail.replace(' ', NBSP)
     }
+
+    private val DOT = Regex("[ \u00A0]·[ \u00A0]")
+
+    /** [s] with every spaced "·" joined to its neighbours by no-break spaces, so the dot never starts or ends a line. */
+    fun dotsHeld(s: String): String = DOT.replace(s, "$NBSP·$NBSP")
+
+    /** True when a laid-out line (plain or kept) starts or ends on a "·", for a screen test. */
+    fun dotAtEdge(laidLine: String): Boolean = laidLine.trim { it.isWhitespace() || it == NBSP }.let { it.startsWith("·") || it.endsWith("·") }
 
     /** The index where each word of [s] starts (words split on plain and no-break spaces). */
     private fun wordStarts(s: String): List<Int> =
