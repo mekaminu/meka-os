@@ -3147,6 +3147,8 @@ cover screen, under docs/screens/fold/week-ahead/.
   ScreenSenseRules now never reads a duration ("h 15 of", "of 8 h", "of 30 min") as a count. The hand tests' scrolls
   ran out of memory with the clock paused (a lazy list's scroll waits for a frame); the clock runs while they scroll.
 - Design check: no design file covers the week ahead. No server change, no migration, Mac checked nightly.
+- Landed 0c8a219 + CI fixes 68d738a (the lines kept, a duration not a count), 73ad4a0 (the goals line kept too, the
+  foot found by its chip), 245020f (the foot shot doesn't look for the title); CI run 1137 (39959123999) green.
 
 ### Quality gate — slice 44 (2026-10-23): a lane's name and its count on one baseline
 
