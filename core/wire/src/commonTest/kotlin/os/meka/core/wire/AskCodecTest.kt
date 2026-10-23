@@ -330,4 +330,28 @@ class AskCodecTest {
         assertEquals(false, AskCodec.decodeRequest(AskCodec.encodeRequest(spoken.copy(speak = false))).speakNext)
         assertFalse("speakNext" in AskCodec.encodeRequest(spoken.copy(speakNext = false)))
     }
+
+    @Test
+    fun obisFaceGetsEachSpokenPiecesMouthSoundsOnlyWhenItAsks() {
+        // Obi's face, slice 2.
+        val spoken = AskCodec.Request("why", "2026-10-23", "Friday", emptyList(), voice = true, speak = true, speakNext = true, speakVisemes = true)
+        val body = AskCodec.encodeRequest(spoken)
+        assertTrue("speakVisemes" in body)
+        assertEquals(spoken, AskCodec.decodeRequest(body))
+        // Not without speak; left out when false so an older server reads the request as before.
+        assertEquals(false, AskCodec.decodeRequest(AskCodec.encodeRequest(spoken.copy(speak = false))).speakVisemes)
+        assertFalse("speakVisemes" in AskCodec.encodeRequest(spoken.copy(speakVisemes = false)))
+        val marks = "0:sil 62:p 125:a 300:sil"
+        val first = AskCodec.StreamLine.First("Right, done.", "AQID", "Brian", marks)
+        assertEquals(first, AskCodec.decodeStreamLine(AskCodec.encodeStreamFirst(first)))
+        val next = AskCodec.StreamLine.Next("It's on Friday.", "AQID", "Brian", marks)
+        assertEquals(next, AskCodec.decodeStreamLine(AskCodec.encodeStreamNext(next)))
+        val answer = AskCodec.Response(AskCodec.Response.ANSWERED, "Right, done.", firstText = "Right, done.", firstAudio = "AQID", firstVoice = "Brian", firstVisemes = marks)
+        assertEquals(answer, AskCodec.decodeResponse(AskCodec.encodeResponse(answer)))
+        // Bad marks are simply not there; the clip still is.
+        assertEquals(first.copy(visemes = null), AskCodec.decodeStreamLine(AskCodec.encodeStreamFirst(first.copy(visemes = "0:zz"))))
+        assertEquals(null, AskCodec.decodeResponse(AskCodec.encodeResponse(answer.copy(firstVisemes = "9:p 3:a"))).firstVisemes)
+        // Marks without a clip aren't sent.
+        assertFalse("firstVisemes" in AskCodec.encodeResponse(answer.copy(firstAudio = null)))
+    }
 }

@@ -42,6 +42,63 @@ object SpeechCodec {
     private const val BINARY = "mp3"
 
     /**
+     * Obi's face, slice 2 (lips that move with the words): a request with [Request.visemes] also gets the clip's mouth
+     * sounds, Polly's viseme speech marks, beside the audio: in [HEADER_VISEMES] with raw MP3, in `"visemes"` in JSON.
+     * Compact text: `time:viseme` pairs (milliseconds from the clip's start, Polly's own viseme name) joined by spaces,
+     * e.g. `"0:sil 62:p 125:a"`. A voice that gives no marks (Google's) sends none and the face follows the loudness.
+     * Only ever sent when asked, so a device without the face never pays for them.
+     */
+    const val HEADER_VISEMES = "X-Meka-Visemes"
+    /** At most this many marks (a 600-character piece is well under it); more is cut at the limit. */
+    const val MAX_MARKS = 900
+    /** The marks' text at most this long (fits a response header comfortably). */
+    const val MAX_MARKS_CHARS = 7_200
+    /** Polly's English viseme names; anything else is not a mark. */
+    val POLLY_VISEMES = setOf("p", "t", "S", "T", "f", "k", "i", "r", "s", "u", "@", "a", "e", "E", "o", "O", "sil")
+
+    /** One mouth sound in a clip: from [atMs] after its start, Polly's viseme [viseme]. */
+    data class Mark(val atMs: Long, val viseme: String)
+
+    /**
+     * [marks] as the compact text, in time order, cut to [MAX_MARKS] and [MAX_MARKS_CHARS]; marks with a negative time
+     * or a viseme Polly doesn't use are left out. Null when nothing is left.
+     */
+    fun encodeMarks(marks: List<Mark>): String? {
+        val sb = StringBuilder()
+        var n = 0
+        for (m in marks.filter { it.atMs >= 0 && it.viseme in POLLY_VISEMES }.sortedBy { it.atMs }) {
+            val part = "${m.atMs}:${m.viseme}"
+            if (n >= MAX_MARKS || sb.length + part.length + 1 > MAX_MARKS_CHARS) break
+            if (sb.isNotEmpty()) sb.append(' ')
+            sb.append(part)
+            n++
+        }
+        return sb.toString().takeIf { it.isNotEmpty() }
+    }
+
+    /**
+     * The compact text back to marks. Never trusted: anything malformed, too long, out of order or naming an unknown
+     * viseme gives no marks at all (the face then follows the loudness), never half a list.
+     */
+    fun decodeMarks(text: String?): List<Mark> {
+        if (text.isNullOrBlank() || text.length > MAX_MARKS_CHARS) return emptyList()
+        val parts = text.trim().split(' ')
+        if (parts.size > MAX_MARKS) return emptyList()
+        val out = ArrayList<Mark>(parts.size)
+        var last = -1L
+        for (p in parts) {
+            val colon = p.indexOf(':')
+            if (colon <= 0 || colon > 7) return emptyList()
+            val t = p.substring(0, colon).toLongOrNull() ?: return emptyList()
+            val v = p.substring(colon + 1)
+            if (t < 0 || t < last || v !in POLLY_VISEMES) return emptyList()
+            last = t
+            out += Mark(t, v)
+        }
+        return out
+    }
+
+    /**
      * A voice's id: a Polly name ("Amy"), or a Google Chirp 3 HD voice's short name ("Aoede" for the British one,
      * "Aoede-US" for the American; natural voice, slice 1). The server keeps the ids unique across providers.
      */
@@ -55,9 +112,10 @@ object SpeechCodec {
 
     /**
      * [voice] is a Polly voice name ("Amy"); null or one the server doesn't offer means the default voice. [binary]: send
-     * a spoken clip back as raw MP3 rather than base64 JSON (`"as": "mp3"` on the wire).
+     * a spoken clip back as raw MP3 rather than base64 JSON (`"as": "mp3"` on the wire). [visemes]: send the clip's mouth
+     * sounds too ([HEADER_VISEMES]; `"visemes": true` on the wire, left out when false).
      */
-    data class Request(val text: String, val voice: String? = null, val binary: Boolean = false)
+    data class Request(val text: String, val voice: String? = null, val binary: Boolean = false, val visemes: Boolean = false)
 
     /**
      * [state]: spoken (with [audio], base64 [format] "mp3", and the [voice] and [engine] that said it) · off (no voice on
@@ -71,6 +129,8 @@ object SpeechCodec {
         val voice: String? = null,
         val engine: String? = null,
         val reason: String? = null,
+        /** Obi's face, slice 2: the clip's mouth sounds as [encodeMarks] text, when asked for and the voice gave them. */
+        val visemes: String? = null,
     ) {
         companion object {
             const val SPOKEN = "spoken"
@@ -133,6 +193,7 @@ object SpeechCodec {
         put("text", r.text)
         r.voice?.let { put("voice", it) }
         if (r.binary) put("as", BINARY)
+        if (r.visemes) put("visemes", true)
     }.toString()
 
     fun decodeRequest(body: String): Request = wrap("speech request") {
@@ -144,7 +205,8 @@ object SpeechCodec {
         val voice = (o["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content
         require(voice == null || VOICE.matches(voice)) { "voice" }
         val binary = (o["as"] as? JsonPrimitive)?.takeIf { it.isString }?.content == BINARY
-        Request(text, voice, binary)
+        val visemes = (o["visemes"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        Request(text, voice, binary, visemes)
     }
 
     /**
@@ -152,12 +214,15 @@ object SpeechCodec {
      * no difference), [voice] and [engine] from the headers. Empty or oversized audio, or a voice header that isn't a
      * plain name, is a failed answer, never trusted.
      */
-    fun binaryResponse(audioB64: String, voice: String?, engine: String?): Response {
+    fun binaryResponse(audioB64: String, voice: String?, engine: String?, visemes: String? = null): Response {
         if (audioB64.isEmpty() || audioB64.length > MAX_AUDIO_B64) return Response(Response.FAILED, reason = "Navilife's voice sent an unusable clip")
         val v = voice?.takeIf { VOICE.matches(it) }
         val e = engine?.takeIf { ENGINE.matches(it) }
-        return Response(Response.SPOKEN, audioB64, BINARY, v, e)
+        return Response(Response.SPOKEN, audioB64, BINARY, v, e, visemes = checkedMarks(visemes))
     }
+
+    /** [text] when it reads as marks ([decodeMarks]), else null: a bad header or field is simply not there. */
+    fun checkedMarks(text: String?): String? = text?.takeIf { decodeMarks(it).isNotEmpty() }
 
     /** The voices request carries nothing but the version (it is signed like every device request). */
     fun encodeVoicesRequest(): String = buildJsonObject { put("w", WireCodec.VERSION) }.toString()
@@ -172,6 +237,7 @@ object SpeechCodec {
         r.voice?.let { put("voice", it) }
         r.engine?.let { put("engine", it) }
         r.reason?.let { put("reason", it) }
+        r.visemes?.let { put("visemes", it) }
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("speech response") {
@@ -184,6 +250,7 @@ object SpeechCodec {
             voice = o.optStr("voice"),
             engine = o.optStr("engine"),
             reason = o.optStr("reason", MAX_REASON),
+            visemes = checkedMarks(o.optStr("visemes", MAX_MARKS_CHARS)),
         )
     }
 

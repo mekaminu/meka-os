@@ -99,6 +99,12 @@ object AskCodec {
          * so an older device is never sent a line it can't read, and an older server ignores it.
          */
         val speakNext: Boolean = false,
+        /**
+         * Obi's face, slice 2: a device drawing Obi's face asks for each spoken piece's mouth sounds too
+         * ([SpeechCodec.encodeMarks] text in [Response.firstVisemes] and on the stream's lines). Only with [speak]; left
+         * out of the JSON when false, so nobody pays for marks a device won't use.
+         */
+        val speakVisemes: Boolean = false,
     )
 
     /** A proposal as the model wrote it: every field optional, strings at most [MAX_FIELD] characters. */
@@ -130,6 +136,8 @@ object AskCodec {
          * [MAX_NOTE]); null when there's nothing worth keeping. Left out of the JSON when null; an older device ignores it.
          */
         val note: String? = null,
+        /** Obi's face, slice 2: [firstAudio]'s mouth sounds ([SpeechCodec.encodeMarks]); only with a first clip. */
+        val firstVisemes: String? = null,
     ) {
         companion object {
             const val ANSWERED = "answered"
@@ -187,6 +195,7 @@ object AskCodec {
             put("speak", true)
             r.speakVoice?.let { put("speakVoice", it) }
             if (r.speakNext) put("speakNext", true)
+            if (r.speakVisemes) put("speakVisemes", true)
         }
         if (r.callMe == CALL_SIR) put("callMe", CALL_SIR)
         if (r.recall.isNotEmpty()) putJsonArray("recall") { r.recall.forEach { add(JsonPrimitive(it)) } }
@@ -239,7 +248,8 @@ object AskCodec {
         val name = plainName((o["name"] as? JsonPrimitive)?.takeIf { it.isString }?.content)
         val introduce = (o["introduce"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
         val speakNext = speak && (o["speakNext"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
-        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name, introduce, speakNext)
+        val speakVisemes = speak && (o["speakVisemes"] as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+        Request(q, date, now, items, history, voice, speak, speakVoice, callMe, recall, name, introduce, speakNext, speakVisemes)
     }
 
     /** The answer's sources: only whole ones with an https URL within the limits; anything else is simply not there. */
@@ -265,6 +275,7 @@ object AskCodec {
             put("firstText", r.firstText)
             put("firstAudio", r.firstAudio)
             r.firstVoice?.let { put("firstVoice", it) }
+            SpeechCodec.checkedMarks(r.firstVisemes)?.let { put("firstVisemes", it) }
         }
         if (r.sources.isNotEmpty()) {
             putJsonArray("sources") { r.sources.take(MAX_SOURCES).forEach { src -> addJsonObject { put("title", src.title); put("url", src.url) } } }
@@ -286,7 +297,11 @@ object AskCodec {
             // The first piece's clip: kept only whole and within SpeechCodec's limits, else simply not there.
             val text = o.optStr("firstText")?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT }
             val audio = o.optStr("firstAudio")?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 }
-            if (text == null || audio == null) r else r.copy(firstText = text, firstAudio = audio, firstVoice = o.optStr("firstVoice")?.take(40))
+            if (text == null || audio == null) r
+            else r.copy(
+                firstText = text, firstAudio = audio, firstVoice = o.optStr("firstVoice")?.take(40),
+                firstVisemes = SpeechCodec.checkedMarks((o["firstVisemes"] as? JsonPrimitive)?.takeIf { it.isString }?.content),
+            )
         }
     }
 
@@ -300,14 +315,14 @@ object AskCodec {
 
     sealed interface StreamLine {
         /** The first piece of Navilife's own words, and its clip (base64 MP3) in [voice]. */
-        data class First(val text: String, val audio: String, val voice: String?) : StreamLine
+        data class First(val text: String, val audio: String, val voice: String?, val visemes: String? = null) : StreamLine
         data class Final(val response: Response) : StreamLine
         /**
          * Talking to Ada like a conversation, slice 7: a later piece of Navilife's own words (one the device will say
          * after the first), said ahead while the model was still writing, and its clip. Sent only to a device that asked
          * ([Request.speakNext]), always before the [Final] line.
          */
-        data class Next(val text: String, val audio: String, val voice: String?) : StreamLine
+        data class Next(val text: String, val audio: String, val voice: String?, val visemes: String? = null) : StreamLine
     }
 
     fun encodeStreamNext(n: StreamLine.Next): String = buildJsonObject {
@@ -316,6 +331,7 @@ object AskCodec {
             put("text", n.text)
             put("audio", n.audio)
             n.voice?.let { put("voice", it) }
+            SpeechCodec.checkedMarks(n.visemes)?.let { put("visemes", it) }
         })
     }.toString()
 
@@ -325,6 +341,7 @@ object AskCodec {
             put("text", f.text)
             put("audio", f.audio)
             f.voice?.let { put("voice", it) }
+            SpeechCodec.checkedMarks(f.visemes)?.let { put("visemes", it) }
         })
     }.toString()
 
@@ -342,7 +359,7 @@ object AskCodec {
             val text = (fo["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT } ?: return null
             val audio = (fo["audio"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 } ?: return null
             val voice = (fo["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.take(40)
-            return StreamLine.First(text, audio, voice)
+            return StreamLine.First(text, audio, voice, SpeechCodec.checkedMarks((fo["visemes"] as? JsonPrimitive)?.takeIf { it.isString }?.content))
         }
         val n = o["next"]
         if (n != null) {
@@ -351,7 +368,7 @@ object AskCodec {
             val text = (no["text"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT } ?: return null
             val audio = (no["audio"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.takeIf { it.isNotEmpty() && it.length <= SpeechCodec.MAX_AUDIO_B64 } ?: return null
             val voice = (no["voice"] as? JsonPrimitive)?.takeIf { it.isString }?.content?.take(40)
-            return StreamLine.Next(text, audio, voice)
+            return StreamLine.Next(text, audio, voice, SpeechCodec.checkedMarks((no["visemes"] as? JsonPrimitive)?.takeIf { it.isString }?.content))
         }
         return StreamLine.Final(decodeResponse(line))
     }

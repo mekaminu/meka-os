@@ -604,4 +604,32 @@ class AiAskTest {
         assertFalse(text.contains("dentist", ignoreCase = true))
         assertEquals(HttpStatusCode.Unauthorized, client.post(os.meka.core.wire.ServerSpeedCodec.PATH) { header("Authorization", "Bearer $foldSecret"); setBody("{}") }.status)
     }
+
+    @Test
+    fun aDeviceDrawingObisFaceGetsEachPiecesMouthSounds() {
+        // Obi's face, slice 2: the marked clips only for a device that asked; everyone else as before.
+        val model = StreamingModel(listOf("Oh nice. ", "Heat pumps suit a well", "-insulated house. Is ", "yours?", "\n<after>{\"actions\":[]}</after>"))
+        val plainCalls = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val markedCalls = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val service = AskService(
+            model, { t, v -> plainCalls += t; AskService.FirstClip(byteArrayOf(9), v) },
+            markedClip = { t, v -> markedCalls += t; AskService.FirstClip(byteArrayOf(9), v, "0:sil 40:p") },
+        )
+        val firsts = java.util.Collections.synchronizedList(mutableListOf<AskCodec.StreamLine.First>())
+        val nexts = java.util.Collections.synchronizedList(mutableListOf<AskCodec.StreamLine.Next>())
+        val spoken = request.copy(question = "I'm thinking of a heat pump", voice = true, speak = true, speakVoice = "Amy", speakNext = true, speakVisemes = true)
+        service.askStream(spoken, next = { nexts += it }) { firsts += it }
+        assertEquals(listOf("0:sil 40:p"), firsts.map { it.visemes })
+        assertTrue(nexts.isNotEmpty() && nexts.all { it.visemes == "0:sil 40:p" })
+        assertTrue(plainCalls.isEmpty() && markedCalls.isNotEmpty())
+        val plain = java.util.Collections.synchronizedList(mutableListOf<AskCodec.StreamLine.First>())
+        service.askStream(spoken.copy(speakVisemes = false)) { plain += it }
+        assertEquals(listOf<String?>(null), plain.map { it.visemes })
+        assertTrue(plainCalls.isNotEmpty())
+        // The whole-answer route too.
+        val one = AskService(FakeModel(answered("""{"answer":"Right, done.","actions":[]}""")), { _, v -> AskService.FirstClip(byteArrayOf(1), v) },
+            markedClip = { _, v -> AskService.FirstClip(byteArrayOf(1), v, "0:p") })
+        assertEquals("0:p", one.ask(spoken).firstVisemes)
+        assertEquals(null, one.ask(spoken.copy(speakVisemes = false)).firstVisemes)
+    }
 }

@@ -6,6 +6,8 @@ import os.meka.core.wire.SpeechCodec
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient
 import software.amazon.awssdk.services.polly.PollyClient
 import software.amazon.awssdk.services.polly.model.DescribeVoicesRequest
+import software.amazon.awssdk.services.polly.model.OutputFormat
+import software.amazon.awssdk.services.polly.model.SpeechMarkType
 import software.amazon.awssdk.services.polly.model.SynthesizeSpeechRequest
 import java.time.Instant
 import java.time.ZoneOffset
@@ -38,6 +40,12 @@ interface SpeechEngine {
      * it answered. Throws when the service can't be reached.
      */
     fun touch(): Boolean = false
+
+    /**
+     * Obi's face, slice 2: the mouth sounds of [text] said by [voice] on [engine] (Polly's viseme speech marks), times
+     * in milliseconds from the clip's start. Empty when the voice gives none (Google's). Throws on failure.
+     */
+    fun visemes(text: String, voice: String, engine: String): List<SpeechCodec.Mark> = emptyList()
 }
 
 /** Amazon Polly in the service's own region (credentials from the task role). */
@@ -70,7 +78,37 @@ class PollySpeech : SpeechEngine {
         ).asByteArray()
     }
 
+    /**
+     * Polly's viseme speech marks for the same words, marked up the same way as the clip so the timings match. The
+     * generative engine gives no speech marks, so its clips borrow the neural engine's marks for the same voice (the
+     * service then stretches them to the clip's length: [SpeechService.fitMarks]).
+     */
+    override fun visemes(text: String, voice: String, engine: String): List<SpeechCodec.Mark> {
+        val marksEngine = if (engine == SpeechService.GENERATIVE) SpeechService.NEURAL else engine
+        val bytes = sayMarkedUp(text, marksEngine, plainOnly) { words, type ->
+            polly.synthesizeSpeechAsBytes(
+                SynthesizeSpeechRequest.builder().text(words).textType(type).voiceId(voice).engine(marksEngine)
+                    .outputFormat(OutputFormat.JSON).speechMarkTypes(SpeechMarkType.VISEME).build(),
+            ).asByteArray()
+        }
+        return parseMarks(bytes.decodeToString())
+    }
+
     companion object {
+        /**
+         * Polly's speech marks (one JSON object a line: `{"time":62,"type":"viseme","start":0,"end":3,"value":"p"}`) →
+         * marks: viseme lines only, with a known viseme and a time ≥ 0; anything else is skipped.
+         */
+        fun parseMarks(lines: String): List<SpeechCodec.Mark> = lines.lineSequence().mapNotNull { line ->
+            if (line.isBlank()) return@mapNotNull null
+            val o = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(line) as? kotlinx.serialization.json.JsonObject }.getOrNull() ?: return@mapNotNull null
+            fun str(k: String) = (o[k] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+            if (str("type") != "viseme") return@mapNotNull null
+            val t = (o["time"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { !it.isString }?.content?.toLongOrNull() ?: return@mapNotNull null
+            val v = str("value")?.takeIf { it in SpeechCodec.POLLY_VISEMES } ?: return@mapNotNull null
+            if (t < 0) null else SpeechCodec.Mark(t, v)
+        }.take(SpeechCodec.MAX_MARKS * 2).toList()
+
         /**
          * Talking to Ada like a conversation, slice 7 (speech that sounds alive): [text] said as SSML
          * ([os.meka.core.domain.SpokenSsmlRules]: a small pause after an opening reaction, a touch quicker) through
@@ -389,7 +427,10 @@ class SpeechService(
     }
 
     /** What [say] did: the answer, and the clip itself as raw MP3 when something was said. */
-    class Said(val response: SpeechCodec.Response, val mp3: ByteArray? = null)
+    class Said(val response: SpeechCodec.Response, val mp3: ByteArray? = null) {
+        /** Obi's face, slice 2: the clip's mouth sounds ([SpeechCodec.encodeMarks]), when asked for and given. */
+        val visemes: String? get() = response.visemes
+    }
 
     /**
      * Says [r]'s words, metered. A spoken [Said] carries the MP3 bytes (the route sends them raw to a device that asked
@@ -417,14 +458,35 @@ class SpeechService(
         val voice = if (wanted.provider == SpeechCodec.POLLY) wanted else default
         if (usage.used(m) + chars > capChars) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = OVER))
         if (budget?.over() == true) return Said(SpeechCodec.Response(SpeechCodec.Response.OVER, reason = BUDGET_OVER))
+        // Obi's face, slice 2: the mouth sounds asked for alongside the clip, at the same time, so they add no wait.
+        val marking = if (r.visemes && usage.used(m) + 2 * chars <= capChars) {
+            java.util.concurrent.CompletableFuture.supplyAsync { e.visemes(r.text, voice.id, voice.engine) }
+        } else null
         val audio = runCatching { e.synthesize(r.text, voice.id, voice.engine) }.getOrElse {
+            marking?.cancel(false)
             return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = UNREACHABLE))
         }
         if (audio.isEmpty()) return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly said nothing"))
         if (audio.size > SpeechCodec.MAX_AUDIO_BYTES) return Said(SpeechCodec.Response(SpeechCodec.Response.FAILED, reason = "Amazon Polly's clip was too long"))
         usage.add(m, chars)
         meterPolly(chars, voice.engine)
-        return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine), audio)
+        val visemes = marking?.let { f -> markedUp(f, chars, voice.engine, audio) }
+        return Said(SpeechCodec.Response(SpeechCodec.Response.SPOKEN, null, "mp3", voice.id, voice.engine, visemes = visemes), audio)
+    }
+
+    /**
+     * The mouth sounds from [f] (waited for within [MARKS_WAIT_MS]; the clip never waits longer), metered like a clip
+     * (Polly bills speech marks by the character, at the neural price when they were borrowed for a generative clip),
+     * fitted to [audio]'s length when they came from another engine. Null when Polly gave none in time. Never throws.
+     */
+    private fun markedUp(f: java.util.concurrent.CompletableFuture<List<SpeechCodec.Mark>>, chars: Long, engine: String, audio: ByteArray): String? {
+        val marks = runCatching { f.get(MARKS_WAIT_MS, java.util.concurrent.TimeUnit.MILLISECONDS) }.getOrElse { f.cancel(false); null }
+            ?: return null
+        if (marks.isEmpty()) return null
+        runCatching { usage.add(month(), chars) }
+        meterPolly(chars, if (engine == GENERATIVE) NEURAL else engine)
+        val fitted = if (engine == GENERATIVE) Mp3Length.ms(audio)?.let { fitMarks(marks, it) } ?: marks else marks
+        return SpeechCodec.encodeMarks(fitted)
     }
 
     /**
@@ -575,6 +637,24 @@ class SpeechService(
         const val GOOGLE_FALLBACK_AT = 900_000L
         /** What the deploy report's probe clip says (sent only to Google, never played). */
         const val PROBE_LINE = "Navilife voice check."
+        /** How long a clip's mouth sounds may lag the clip itself before they're left out (Obi's face, slice 2). */
+        const val MARKS_WAIT_MS = 1_500L
+
+        /**
+         * Marks borrowed from another engine stretched to a clip [clipMs] long: the last mark (Polly ends with the
+         * closing "sil") lands [TAIL_MS] before the clip's end, every other in proportion. Unchanged when they can't be
+         * fitted (no span, or a clip shorter than the tail).
+         */
+        fun fitMarks(marks: List<SpeechCodec.Mark>, clipMs: Long): List<SpeechCodec.Mark> {
+            val span = marks.maxOfOrNull { it.atMs } ?: return marks
+            val target = clipMs - TAIL_MS
+            if (span <= 0 || target <= 0) return marks
+            return marks.map { it.copy(atMs = it.atMs * target / span) }
+        }
+
+        /** The quiet Polly leaves after the last sound of a clip, roughly. */
+        const val TAIL_MS = 60L
+
         const val GENERATIVE = "generative"
         const val NEURAL = "neural"
         /** Meka's shortlist (build plan): these lead the list on the same engine. */
@@ -651,4 +731,48 @@ fun speechFromEnv(ds: DataSource, budget: AiBudget? = null): SpeechService? {
         google = google, googleUsage = PostgresSpeechUsageStore(ds, "speech_usage_google"),
         budget = budget,
     )
+}
+
+/**
+ * How long an MP3 clip plays (Obi's face, slice 2: fitting borrowed mouth sounds to a generative clip): the MPEG audio
+ * frames counted from their headers, after any ID3 tag. Null when the bytes aren't MP3 frames.
+ */
+object Mp3Length {
+    private val BITRATES_V1_L3 = intArrayOf(0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0)
+    private val BITRATES_V2_L3 = intArrayOf(0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0)
+    private val RATES_V1 = intArrayOf(44_100, 48_000, 32_000, 0)
+
+    fun ms(bytes: ByteArray): Long? {
+        var i = 0
+        if (bytes.size >= 10 && bytes[0] == 'I'.code.toByte() && bytes[1] == 'D'.code.toByte() && bytes[2] == '3'.code.toByte()) {
+            val size = (bytes[6].toInt() and 0x7f shl 21) or (bytes[7].toInt() and 0x7f shl 14) or (bytes[8].toInt() and 0x7f shl 7) or (bytes[9].toInt() and 0x7f)
+            i = 10 + size
+        }
+        var samples = 0L
+        var rate = 0
+        var frames = 0
+        while (i + 4 <= bytes.size) {
+            val b1 = bytes[i].toInt() and 0xff
+            val b2 = bytes[i + 1].toInt() and 0xff
+            val b3 = bytes[i + 2].toInt() and 0xff
+            if (b1 != 0xff || b2 and 0xe0 != 0xe0) { if (frames == 0) { i++; continue } else break }
+            val version = b2 shr 3 and 3 // 3 = MPEG1, 2 = MPEG2, 0 = MPEG2.5
+            val layer = b2 shr 1 and 3 // 1 = Layer III
+            if (version == 1 || layer != 1) { if (frames == 0) { i++; continue } else break }
+            val mpeg1 = version == 3
+            val kbps = (if (mpeg1) BITRATES_V1_L3 else BITRATES_V2_L3)[b3 shr 4]
+            val base = RATES_V1[b3 shr 2 and 3]
+            if (kbps == 0 || base == 0) { if (frames == 0) { i++; continue } else break }
+            val sr = when (version) { 3 -> base; 2 -> base / 2; else -> base / 4 }
+            val pad = b3 shr 1 and 1
+            val len = (if (mpeg1) 144 else 72) * kbps * 1000 / sr + pad
+            if (len < 4) break
+            samples += if (mpeg1) 1152 else 576
+            rate = sr
+            frames++
+            i += len
+        }
+        if (frames == 0 || rate == 0) return null
+        return samples * 1000 / rate
+    }
 }

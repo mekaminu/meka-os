@@ -701,12 +701,16 @@ fun Application.mekaSync(
             }
             // Ask MEKA: a question with the device's picture of today; words and proposed actions back. Nothing is kept.
             // Voice completeness, slice 3: a spoken answer brings its first piece's clip in the chosen voice.
-            val askService = AskService(ai.provider, speech?.let { sp ->
-                { text: String, voice: String? ->
-                    val said = sp.say(SpeechCodec.Request(text, voice))
-                    said.mp3?.takeIf { said.response.state == SpeechCodec.Response.SPOKEN }?.let { AskService.FirstClip(it, said.response.voice) }
-                }
-            }, budgetLevel = { ai.budget?.state()?.level }, live = liveFacts?.let { lf -> { q: String -> lf.look(q) } })
+            // Obi's face, slice 2: for a device drawing the face, each piece comes with its mouth sounds.
+            fun clips(sp: SpeechService, marked: Boolean) = { text: String, voice: String? ->
+                val said = sp.say(SpeechCodec.Request(text, voice, visemes = marked))
+                said.mp3?.takeIf { said.response.state == SpeechCodec.Response.SPOKEN }?.let { AskService.FirstClip(it, said.response.voice, said.visemes) }
+            }
+            val askService = AskService(
+                ai.provider, speech?.let { clips(it, false) },
+                budgetLevel = { ai.budget?.state()?.level }, live = liveFacts?.let { lf -> { q: String -> lf.look(q) } },
+                markedClip = speech?.let { clips(it, true) },
+            )
             post("/v1/ai/ask") {
                 val body = call.boundedBody()
                 val who = call.device(devices, verifier, body, requireKey = true)
@@ -861,6 +865,7 @@ fun Application.mekaSync(
                 if (mp3 != null && request.binary) {
                     said.response.voice?.let { call.response.header(SpeechCodec.HEADER_VOICE, it) }
                     said.response.engine?.let { call.response.header(SpeechCodec.HEADER_ENGINE, it) }
+                    said.visemes?.let { call.response.header(SpeechCodec.HEADER_VISEMES, it) }
                     call.respondBytes(mp3, ContentType.parse(SpeechCodec.AUDIO_TYPE))
                 } else {
                     val spoken = mp3?.let { said.response.copy(audio = java.util.Base64.getEncoder().encodeToString(it)) } ?: said.response

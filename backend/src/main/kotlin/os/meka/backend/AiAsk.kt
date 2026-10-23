@@ -37,7 +37,16 @@ class AskService(
     private val wallMs: () -> Long = System::currentTimeMillis,
     /** Talking to Ada like a conversation, slice 7: the longest the whole answer waits for its later pieces' clips. */
     private val nextClipWaitMs: Long = NEXT_CLIP_WAIT_MS,
+    /**
+     * Obi's face, slice 2: [firstClip] with the piece's mouth sounds too ([FirstClip.visemes]), used for a device that
+     * asked ([AskCodec.Request.speakVisemes]); null: such a device gets plain clips, as before.
+     */
+    private val markedClip: ((text: String, voice: String?) -> FirstClip?)? = null,
 ) {
+    /** How [r]'s pieces are said: with their mouth sounds when the device draws Obi's face and asked, else as before. */
+    private fun clipper(r: AskCodec.Request): ((String, String?) -> FirstClip?)? =
+        if (r.speakVisemes) markedClip ?: firstClip else firstClip
+
     /**
      * The model call for [r]. The companion, slice 1: an open turn ([CompanionRules.isOpen]: advice, ideas, an
      * explanation, a long question, or a follow-up to one) is metered as `ask.companion` on the larger model (the small
@@ -76,7 +85,7 @@ class AskService(
         web != null || os.meka.core.domain.CompanionRules.isOpen(r.question, r.history.map { it.question })
 
     /** One piece said: the MP3 and the voice that said it. */
-    class FirstClip(val mp3: ByteArray, val voice: String?)
+    class FirstClip(val mp3: ByteArray, val voice: String?, val visemes: String? = null)
 
     /**
      * Talking to Ada like a conversation, slice 2: [timed] gets this answer's timing (times only, never the words) once
@@ -124,7 +133,7 @@ class AskService(
         // Slice 2 of the conversation item: the server's own marks (times only); each is taken once.
         val watch = ServerTurnStopwatch(start, isOpenTurn(r, web), r.voice)
         if (web != null) watch.web(clockMs())
-        val say = firstClip?.takeIf { r.voice && r.speak }
+        val say = clipper(r)?.takeIf { r.voice && r.speak }
         val written = StringBuilder()
         val gate = Any()
         var closed = false
@@ -139,7 +148,7 @@ class AskService(
             ahead[piece] = java.util.concurrent.CompletableFuture.supplyAsync {
                 val clip = runCatching { speak(piece, r.speakVoice) }.getOrNull()
                 if (clip == null || clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) null
-                else AskCodec.StreamLine.Next(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice)
+                else AskCodec.StreamLine.Next(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice, clip.visemes)
             }
         }
         val outcome = p.stream(request(r, web)) { delta ->
@@ -157,7 +166,7 @@ class AskService(
                             if (clip == null || clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) null
                             else {
                                 synchronized(watch) { watch.clip(clockMs()) }
-                                AskCodec.StreamLine.First(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice).also { f -> synchronized(gate) { if (!closed) runCatching { emit(f) } } }
+                                AskCodec.StreamLine.First(piece, java.util.Base64.getEncoder().encodeToString(clip.mp3), clip.voice, clip.visemes).also { f -> synchronized(gate) { if (!closed) runCatching { emit(f) } } }
                             }
                         }
                     }
@@ -244,7 +253,7 @@ class AskService(
      * [firstClipWaitMs]; anything else (no voice, a refusal, slow, too big) sends the answer as it was. Never throws.
      */
     private fun withFirstClip(r: AskCodec.Request, answer: AskCodec.Response): AskCodec.Response {
-        val say = firstClip ?: return answer
+        val say = clipper(r) ?: return answer
         if (!r.voice || !r.speak) return answer
         val piece = os.meka.core.domain.TalkRules.firstPiece(answer.answer)?.takeIf { it.length <= SpeechCodec.MAX_TEXT } ?: return answer
         val clip = try {
@@ -252,7 +261,7 @@ class AskService(
                 .get(firstClipWaitMs, java.util.concurrent.TimeUnit.MILLISECONDS)
         } catch (e: Exception) { null } ?: return answer
         if (clip.mp3.isEmpty() || clip.mp3.size > SpeechCodec.MAX_AUDIO_BYTES) return answer
-        return answer.copy(firstText = piece, firstAudio = java.util.Base64.getEncoder().encodeToString(clip.mp3), firstVoice = clip.voice)
+        return answer.copy(firstText = piece, firstAudio = java.util.Base64.getEncoder().encodeToString(clip.mp3), firstVoice = clip.voice, firstVisemes = clip.visemes)
     }
 
     companion object {

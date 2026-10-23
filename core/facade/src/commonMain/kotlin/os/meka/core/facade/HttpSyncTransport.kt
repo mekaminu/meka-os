@@ -395,6 +395,11 @@ data class ApprovalAnswer(val done: Boolean, val line: String)
 interface SpeechApi {
     /** [voice]: a Polly name, or null for the server's default. A server without a voice answers "off". */
     suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response
+    /**
+     * Obi's face, slice 2: [speak] with the clip's mouth sounds too ([os.meka.core.wire.SpeechCodec.Response.visemes]),
+     * for a device drawing the face. A transport that can't ask for them just speaks.
+     */
+    suspend fun speakMarked(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response = speak(text, voice)
     /** The voices the server can speak with and the month's characters. */
     suspend fun speechVoices(): os.meka.core.wire.SpeechCodec.Voices
 }
@@ -1045,9 +1050,13 @@ class HttpSyncTransport(
         return codec.decodeResponse(resp.bodyAsText())
     }
 
-    override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response {
+    override suspend fun speak(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response = speakClip(text, voice, false)
+
+    override suspend fun speakMarked(text: String, voice: String?): os.meka.core.wire.SpeechCodec.Response = speakClip(text, voice, true)
+
+    private suspend fun speakClip(text: String, voice: String?, visemes: Boolean): os.meka.core.wire.SpeechCodec.Response {
         // Raw MP3 back (a quarter smaller than base64 JSON, nothing to parse); an older server answers JSON as before.
-        val body = os.meka.core.wire.SpeechCodec.encodeRequest(os.meka.core.wire.SpeechCodec.Request(text, voice, binary = true))
+        val body = os.meka.core.wire.SpeechCodec.encodeRequest(os.meka.core.wire.SpeechCodec.Request(text, voice, binary = true, visemes = visemes))
         prepare() // the speech routes require the device's signing key on the server
         val resp = send("/v1/speech/speak", body)
         when {
@@ -1063,7 +1072,9 @@ class HttpSyncTransport(
             if (size != null && size > SpeechCodec.MAX_AUDIO_BYTES) return unusable
             val bytes = resp.readRawBytes()
             if (bytes.size > SpeechCodec.MAX_AUDIO_BYTES) return unusable
-            return SpeechCodec.binaryResponse(Base64.encode(bytes), resp.headers[SpeechCodec.HEADER_VOICE], resp.headers[SpeechCodec.HEADER_ENGINE])
+            return SpeechCodec.binaryResponse(
+                Base64.encode(bytes), resp.headers[SpeechCodec.HEADER_VOICE], resp.headers[SpeechCodec.HEADER_ENGINE], resp.headers[SpeechCodec.HEADER_VISEMES],
+            )
         }
         return SpeechCodec.decodeResponse(resp.bodyAsText())
     }

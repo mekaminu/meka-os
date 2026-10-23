@@ -3,6 +3,7 @@ package os.meka.core.wire
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -105,5 +106,34 @@ class SpeechCodecTest {
         assertFailsWith<WireFormatException> { SpeechCodec.decodeRequest("""{"w":1,"text":"Hi","voice":"Charon-FR"}""") }
         // A Google clip's engine comes through the header.
         assertEquals("chirp3hd", SpeechCodec.binaryResponse("SUQz", "Aoede", "chirp3hd").engine)
+    }
+
+    @Test
+    fun aClipsMouthSoundsTravelCompactAndAreNeverHalfTrusted() {
+        // Obi's face, slice 2.
+        val r = SpeechCodec.Request("Right, done.", "Brian", binary = true, visemes = true)
+        assertEquals(r, SpeechCodec.decodeRequest(SpeechCodec.encodeRequest(r)))
+        assertFalse("visemes" in SpeechCodec.encodeRequest(r.copy(visemes = false)))
+        val marks = listOf(SpeechCodec.Mark(125, "a"), SpeechCodec.Mark(0, "sil"), SpeechCodec.Mark(62, "p"), SpeechCodec.Mark(-5, "p"), SpeechCodec.Mark(80, "zz"))
+        val text = SpeechCodec.encodeMarks(marks)
+        assertEquals("0:sil 62:p 125:a", text)
+        assertEquals(listOf(SpeechCodec.Mark(0, "sil"), SpeechCodec.Mark(62, "p"), SpeechCodec.Mark(125, "a")), SpeechCodec.decodeMarks(text))
+        assertNull(SpeechCodec.encodeMarks(emptyList()))
+        // Out of order, unknown, malformed or too long: none at all.
+        for (bad in listOf("62:p 0:a", "0:p 5:Q", "0p", ":p", "x:p", "0:p  5:a", "1".repeat(9) + ":p", "0:p ".repeat(SpeechCodec.MAX_MARKS + 1).trim())) {
+            assertTrue(SpeechCodec.decodeMarks(bad).isEmpty(), bad)
+        }
+        // A long piece is cut at the limits, still in order and readable.
+        val many = (0 until 2_000).map { SpeechCodec.Mark(it * 50L, if (it % 2 == 0) "p" else "a") }
+        val cut = SpeechCodec.encodeMarks(many)!!
+        assertTrue(cut.length <= SpeechCodec.MAX_MARKS_CHARS)
+        assertTrue(SpeechCodec.decodeMarks(cut).size in 1..SpeechCodec.MAX_MARKS)
+        // In JSON and through the header; a bad header is dropped and the clip kept.
+        val spoken = SpeechCodec.Response(SpeechCodec.Response.SPOKEN, "SUQz", "mp3", "Brian", "neural", visemes = text)
+        assertEquals(spoken, SpeechCodec.decodeResponse(SpeechCodec.encodeResponse(spoken)))
+        assertEquals(text, SpeechCodec.binaryResponse("SUQz", "Brian", "neural", text).visemes)
+        val bad = SpeechCodec.binaryResponse("SUQz", "Brian", "neural", "0:p\r\nX-Evil: 1")
+        assertNull(bad.visemes)
+        assertEquals(SpeechCodec.Response.SPOKEN, bad.state)
     }
 }
