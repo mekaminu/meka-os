@@ -147,7 +147,11 @@ object AutonomyRules {
     /** The row's key; the apps send it to the facade's `resetTrust` like any row's action, which switches Autopilot. */
     const val MAIL_AUTOPILOT = MailAutopilotRules.ENTITY_ID
     const val MAIL_AUTOPILOT_TITLE = "Inbox autopilot"
-    const val MAIL_ON_LINE = "Archives newsletters, receipts, notifications and promos as they arrive, a blocked or unsubscribed sender's mail goes to Trash, and Junk is checked daily (scams to Trash, real mail rescued) · each with Undo in Mail and Activity"
+    /**
+     * Quality gate slice 54: the row's line says it short (the full how-to is Mail's How it works); the old line ran to
+     * forty words beside its Turn off, eleven lines on the cover screen.
+     */
+    const val MAIL_ON_LINE = "Tidies new mail as it arrives, a blocked sender's mail to Trash, Junk checked daily · each with Undo"
     const val MAIL_OFF_LINE = "Off · new mail stays where it lands"
 
     fun mailRow(mail: MailAutopilotSetting, paused: Boolean) = AutonomyRow(
@@ -250,6 +254,12 @@ object AutonomyRules {
             if (s.label == LISTS_LABEL) s.copy(rows = listOf(DirectAddRules.row(direct, setting.paused)) + s.rows) else s
         })
     }
+
+    /**
+     * Quality gate slice 54: below 420 dp (the cover screen) a row's button (Pause, Ask first, Turn off …) sits under its
+     * words, lined up with them, instead of squeezing them beside it; the same width as Mail's and Calendars'.
+     */
+    fun actionUnder(widthDp: Float): Boolean = MailAutopilotPanelRules.stacked(widthDp)
 
     /** The undo bar's line after Pause / Resume. */
     fun pausedLine(paused: Boolean): String =

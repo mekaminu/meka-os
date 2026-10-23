@@ -22,22 +22,22 @@ struct AutonomySheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 Text("What Navilife may do").font(MekaType.upNextTitle).staggeredAppear(0)
-                Text(v.summary).font(MekaType.body)
+                Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body)
                     .foregroundStyle(paused ? palette.accent : palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                     .staggeredAppear(1)
                 if let said = model.autonomySaid {
-                    Text(said).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: said)
                         .transition(.opacity)
                 }
                 HStack(spacing: MekaSpace.xs) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(rules.PAUSE_TITLE).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                        Text(rules.PAUSE_LINE).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: rules.PAUSE_TITLE)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                        Text(LoneWordGlue.shared.kept(line: rules.PAUSE_LINE)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer(minLength: MekaSpace.xs)
@@ -56,7 +56,7 @@ struct AutonomySheet: View {
                     }
                     .staggeredAppear(4 + 2 * i)
                 }
-                Text(rules.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: rules.NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, MekaSpace.xs)
                     .staggeredAppear(3 + 2 * v.sections.count)
@@ -79,8 +79,8 @@ struct AutonomySheet: View {
             Circle().fill(dot).frame(width: 10, height: 10)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: row.onItsOwn)
             VStack(alignment: .leading, spacing: 0) {
-                Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: row.title)).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)

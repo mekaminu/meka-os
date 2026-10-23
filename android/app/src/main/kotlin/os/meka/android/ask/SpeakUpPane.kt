@@ -24,6 +24,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -41,6 +42,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.SpeakUpView
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.facade.MekaCore
@@ -52,6 +54,8 @@ import os.meka.core.facade.MekaCore
  *
  * Motion: the pane springs up (MekaPane) with the row's title travelling in; sections stagger in 40 ms apart; a
  * button presses in with a tick haptic and the status line blends to the accent while on. Reduced motion: cross-fades.
+ * Quality gate slice 54: the pane's lines keep their last words and dots together ([LoneWordGlue]); the pane is tagged
+ * `speak-up-pane` for its shots.
  */
 @Composable
 fun SpeakUpPane(core: MekaCore, onClose: () -> Unit) {
@@ -60,7 +64,7 @@ fun SpeakUpPane(core: MekaCore, onClose: () -> Unit) {
     var view by remember { mutableStateOf<SpeakUpView?>(null) }
     LaunchedEffect(Unit) { view = runCatching { core.speakUpView() }.getOrNull() }
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter).testTag("speak-up-pane"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -68,14 +72,14 @@ fun SpeakUpPane(core: MekaCore, onClose: () -> Unit) {
         Text(MoreItem.SPEAK_UP.label, style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.SPEAK_UP)).appear(rememberAppearance(0)))
         val v = view ?: return@Column
-        Text(v.intro, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text(LoneWordGlue.kept(v.intro), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
         v.sections.forEachIndexed { i, s ->
             SpeakSection(s, Modifier.appear(rememberAppearance(i + 1))) {
                 haptics.tick()
                 scope.launch { view = runCatching { core.speakUpAction(s.label) }.getOrNull() ?: view }
             }
         }
-        Text(v.footer, style = MekaType.caption, color = Meka.colors.textTertiary,
+        Text(LoneWordGlue.kept(v.footer), style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(v.sections.size + 1)))
     }
 }
@@ -88,8 +92,8 @@ private fun SpeakSection(s: TalkSetupSection, modifier: Modifier, onAction: () -
     )
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(s.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
-        Text(s.status, style = MekaType.body, color = statusColor)
-        s.steps.forEach { step -> Text(step, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        Text(LoneWordGlue.kept(s.status), style = MekaType.body, color = statusColor)
+        s.steps.forEach { step -> Text(LoneWordGlue.kept(step), style = MekaType.caption, color = Meka.colors.textSecondary) }
         s.action?.let { label ->
             Spacer(Modifier.height(MekaSpace.xs))
             Box(

@@ -78,4 +78,18 @@ class AutonomyTest {
         assertEquals("Navilife may offer again after 5 yeses in a row.", AutonomyRules.resetLine(TrustKind.ADD_WIN, TrustRules.answered(false)))
         assertNull(AutonomyRules.resetLine(TrustKind.ADD_WIN, TrustState(streak = 2)))
     }
+
+    /** Quality gate slice 54: on the cover screen a row's button goes under its words, and no row's line runs on. */
+    @Test
+    fun aRowsButtonGoesUnderItsWordsOnTheCoverScreenAndLinesStayShort() {
+        assertTrue(AutonomyRules.actionUnder(312f))
+        assertFalse(AutonomyRules.actionUnder(797f))
+        val v = AutonomyRules.view(
+            mapOf(TrustKind.ADD_TASK to TrustRules.answered(true)), AutonomySetting(false, null), cal, 0L,
+            MailAutopilotSetting(on = true, changedAtMs = null), mailFinds = true, direct = DirectAddSetting(askFirst = false),
+        )
+        val long = v.sections.flatMap { it.rows }.filter { it.line.length > 120 }.map { it.title to it.line.length }
+        assertEquals(emptyList(), long)
+        assertFalse("Renewals and promises on Waiting" in MailFindAutoRules.ON_LINE)
+    }
 }

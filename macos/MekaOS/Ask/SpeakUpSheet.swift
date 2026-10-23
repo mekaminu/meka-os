@@ -18,7 +18,7 @@ struct SpeakUpSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text(SpeakUpRules.shared.TITLE).font(MekaType.upNextTitle).staggeredAppear(0)
             if let v = view {
-                Text(v.intro).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: v.intro)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .staggeredAppear(0)
                 ForEach(Array(v.sections.enumerated()), id: \.offset) { i, s in
@@ -26,11 +26,11 @@ struct SpeakUpSheet: View {
                         Text(s.label.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                             .foregroundStyle(palette.textTertiary)
                             .accessibilityAddTraits(.isHeader)
-                        Text(s.status).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
+                        Text(LoneWordGlue.shared.kept(line: s.status)).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
                             .contentTransition(.opacity)
                             .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: s.lit)
                         ForEach(s.steps, id: \.self) { step in
-                            Text(step).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                            Text(LoneWordGlue.shared.kept(line: step)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
                         if let action = s.action {
@@ -48,7 +48,7 @@ struct SpeakUpSheet: View {
                     .padding(.top, MekaSpace.m)
                     .staggeredAppear(i + 1)
                 }
-                Text(v.footer).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: v.footer)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .padding(.top, MekaSpace.m)
             }
             HStack {

@@ -3202,6 +3202,29 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 54 (2026-10-23): Speaking up's and What Navilife may do's shots and their first hand tests
+
+The next of Ask's places without shots. SpeakUpAutonomyScreensTest (12) draws Ask → Settings → Speaking up (as it comes,
+muted, and changed: the reply moment on, tomorrow stacking up off, up to 3 a day, muted) and Ask → More → What Navilife
+may do (nothing trusted, Add a task trusted, and a full page: two kinds trusted, Keep a win "keep asking", Renewals and
+promises from mail on) on the cover and inner sizes, Dark and Light, under docs/screens/fold/{speak-up,autonomy}/, read
+for nonsense, cut lines, broken words, split dates, times and numbers, a word left alone, a dot starting or ending a
+line and 48 dp touches. By hand: Speaking up's Turn off (urgent from family), How often (up to 3 a day), Mute for 2 hours
+("Muted till 19:15") and Speak again now; What Navilife may do's Pause ("Paused since 17:15") and Resume, and Add a
+task's Ask first.
+Fixed first (read from the code before the shots):
+- What Navilife may do's rows put Ask first / Turn off / Let Navilife offer again beside the words; on the cover screen
+  "Let Navilife offer again" left the words a sliver. Below 420 dp (core AutonomyRules.actionUnder, the same width as
+  Mail's and Calendars') the button sits under the words, lined up past the row's dot; the kill switch's Pause too.
+  Fold only (the Mac's sheet is wide).
+- Inbox autopilot's row line was forty words beside its Turn off; now "Tidies new mail as it arrives, a blocked
+  sender's mail to Trash, Junk checked daily · each with Undo" (the full how-to is Mail's How it works). Renewals and
+  promises from mail read "Puts renewals from your mail on Renewals and promises on Waiting for …"; now "Adds renewals
+  and promises from your mail to your lists · each with Undo · never pays, cancels or replies". Core test
+  AutonomyTest.aRowsButtonGoesUnderItsWordsOnTheCoverScreenAndLinesStayShort (no row's line over 120 characters).
+- Both panes' lines keep their last words and dots together (LoneWordGlue), Fold and Mac.
+- Design check: no design file covers either pane. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 53 (2026-10-23): Life admin unfolded as a centred column, overdue jobs first
 
 Slice 52's two findings from Life admin's shots.

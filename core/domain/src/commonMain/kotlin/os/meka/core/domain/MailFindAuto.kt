@@ -29,8 +29,9 @@ object MailFindAutoRules {
     const val ENTITY_ID = "mail_finds_auto"
 
     const val TITLE = "Renewals and promises from mail"
-    const val ON_LINE = "Puts renewals from your mail on Renewals and promises on Waiting for as they're spotted · each in " +
-        "Activity with Undo · never pays, cancels or replies"
+    /** Quality gate slice 54: said plainly (it read "Puts renewals from your mail on Renewals and promises on …"). */
+    const val ON_LINE = "Adds renewals and promises from your mail to your lists · each with Undo · never pays, cancels " +
+        "or replies"
     const val OFF_LINE = "Off · each waits in Needs you for your Add"
     const val TURN_ON = "Turn on"
     const val TURN_OFF = "Turn off"

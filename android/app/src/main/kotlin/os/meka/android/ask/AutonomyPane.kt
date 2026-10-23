@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -50,6 +52,7 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.AutonomyRow
 import os.meka.core.domain.AutonomyRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
 /**
@@ -72,7 +75,7 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
     var said by remember { mutableStateOf<String?>(null) }
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter).testTag("autonomy-pane"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -80,29 +83,47 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
         Text("What Navilife may do", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.AUTONOMY)).appear(rememberAppearance(0)))
         Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "autonomy-summary") { s ->
-            Text(s, style = MekaType.body, color = if (v.paused) Meka.colors.accent else Meka.colors.textSecondary,
+            Text(LoneWordGlue.kept(s), style = MekaType.body, color = if (v.paused) Meka.colors.accent else Meka.colors.textSecondary,
                 modifier = Modifier.appear(rememberAppearance(1)))
         }
         AnimatedVisibility(said != null, enter = unfold(), exit = fold()) {
             Crossfade(said.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "autonomy-said") { line ->
-                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
 
-        // The kill switch.
-        Row(
+        // The kill switch. Quality gate slice 54: on the cover screen (below 420 dp) Pause sits under its words.
+        BoxWithConstraints(
             Modifier.fillMaxWidth().padding(top = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-                .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs).appear(rememberAppearance(2)),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                .testTag("autonomy-pause").appear(rememberAppearance(2)),
         ) {
-            Column(Modifier.weight(1f)) {
-                Text(AutonomyRules.PAUSE_TITLE, style = MekaType.body, color = Meka.colors.textPrimary)
-                Text(AutonomyRules.PAUSE_LINE, style = MekaType.caption, color = Meka.colors.textSecondary)
+            val under = AutonomyRules.actionUnder((maxWidth - MekaSpace.m * 2).value)
+            val words: @Composable (Modifier) -> Unit = { m ->
+                Column(m) {
+                    Text(LoneWordGlue.kept(AutonomyRules.PAUSE_TITLE), style = MekaType.body, color = Meka.colors.textPrimary)
+                    Text(LoneWordGlue.kept(AutonomyRules.PAUSE_LINE), style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
             }
-            Pill(v.pauseButton, lit = v.paused) {
-                haptics.light()
-                scope.launch { runCatching { core.setAutonomyPaused(!v.paused) }.getOrNull()?.let { said = it } }
+            val pill: @Composable () -> Unit = {
+                Pill(v.pauseButton, lit = v.paused) {
+                    haptics.light()
+                    scope.launch { runCatching { core.setAutonomyPaused(!v.paused) }.getOrNull()?.let { said = it } }
+                }
+            }
+            if (under) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)) {
+                    words(Modifier.fillMaxWidth())
+                    pill()
+                }
+            } else {
+                Row(
+                    Modifier.fillMaxWidth().minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+                ) {
+                    words(Modifier.weight(1f))
+                    pill()
+                }
             }
         }
 
@@ -117,7 +138,7 @@ fun AutonomyPane(core: MekaCore, onClose: () -> Unit) {
             }
             step++
         }
-        Text(AutonomyRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+        Text(LoneWordGlue.kept(AutonomyRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(step)))
     }
 }
@@ -133,30 +154,51 @@ private fun AutonomyRowView(row: AutonomyRow, modifier: Modifier, onAction: () -
         },
         MekaMotion.appear(reduced), label = "autonomy-dot",
     )
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .semantics(mergeDescendants = true) {
-                contentDescription = row.title + ". " + row.line + if (row.locked) ". Locked" else ""
-            },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+    // Quality gate slice 54: on the cover screen (below 420 dp) Ask first / Turn off / Let Navilife offer again sits
+    // under the row's words, lined up with them past the dot, instead of squeezing them beside it.
+    BoxWithConstraints(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface).testTag("autonomy-row"),
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
-        Column(Modifier.weight(1f)) {
-            Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "autonomy-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+        val under = AutonomyRules.actionUnder((maxWidth - MekaSpace.m * 2).value)
+        val action = row.action
+        val words: @Composable (Modifier) -> Unit = { m ->
+            Row(
+                m.semantics(mergeDescendants = true) {
+                    contentDescription = row.title + ". " + row.line + if (row.locked) ". Locked" else ""
+                },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                Box(Modifier.size(DOT).clip(CircleShape).background(dot))
+                Column(Modifier.weight(1f)) {
+                    Text(LoneWordGlue.kept(row.title), style = MekaType.body, color = Meka.colors.textPrimary)
+                    Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "autonomy-line") { l ->
+                        Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
+                    }
+                }
+                if (row.locked) Text("Locked", style = MekaType.caption, color = Meka.colors.textTertiary)
             }
         }
-        val action = row.action
-        if (row.locked) {
-            Text("Locked", style = MekaType.caption, color = Meka.colors.textTertiary)
-        } else if (action != null) {
-            Pill(action, lit = false, onClick = onAction)
+        if (under && action != null && !row.locked) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)) {
+                words(Modifier.fillMaxWidth().minTouch())
+                Box(Modifier.padding(start = DOT + MekaSpace.xs)) { Pill(action, lit = false, onClick = onAction) }
+            }
+        } else {
+            Row(
+                Modifier.fillMaxWidth().minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            ) {
+                words(Modifier.weight(1f))
+                if (!row.locked && action != null) Pill(action, lit = false, onClick = onAction)
+            }
         }
     }
 }
+
+/** A row's mark (lit while Navilife does it on its own). */
+private val DOT = 10.dp
 
 @Composable
 private fun Pill(label: String, lit: Boolean, onClick: () -> Unit) {
