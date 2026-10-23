@@ -139,7 +139,7 @@ struct WeekAheadSheet: View {
     private func goalsPick(_ g: WeekAheadGoals) -> some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
             label("Goals for the week")
-            Text(g.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: g.line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: g.line)
             ForEach(g.goals, id: \.goalId) { goal in

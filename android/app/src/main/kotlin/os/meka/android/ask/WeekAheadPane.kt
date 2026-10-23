@@ -205,7 +205,7 @@ private fun GoalsPick(g: WeekAheadGoals, modifier: Modifier, onPick: (String, Bo
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         SectionLabel("Goals for the week", Modifier.semantics { heading() })
         Crossfade(g.line, animationSpec = MekaMotion.appear(reduced), label = "week-goals-line") { line ->
-            Text(line, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         g.goals.forEach { goal ->
             val enabled = goal.picked || !g.full

@@ -10,7 +10,6 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToNode
@@ -233,9 +232,10 @@ class WeekAheadScreensTest {
     fun coverManyFoot() {
         val name = "cover-dark-many-foot"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
-        scrollTo(hasText("Sunday heads-up"))
+        // Section labels draw upper case; the heads-up's chip is found by what TalkBack reads.
+        scrollTo(hasContentDescription("Sunday heads-up, on"))
         check(core, name)
-        ScreenShots.assertShows(compose, name, "Sunday heads-up")
+        ScreenShots.assertShows(compose, name, "Sunday heads-up, on")
     }
 
     // ---- By hand ----
@@ -269,8 +269,8 @@ class WeekAheadScreensTest {
         tap(name, "Learn Spanish", hasContentDescription(spanish.spoken))
         until { core.weekAheadView.value.goals.picked == 2 }
         if (core.weekAheadView.value.goals.line != "2 picked · up to 3") fail("$name: after a pick \"${core.weekAheadView.value.goals.line}\"")
-        ScreenShots.assertShows(compose, name, LoneWordGlue.kept("2 picked · up to 3"))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
+        ScreenShots.assertShows(compose, name, LoneWordGlue.kept("2 picked · up to 3"))
         val picked = core.weekAheadView.value.goals.goals.first { it.title == "Learn Spanish" }
         tap(name, "Learn Spanish again", hasContentDescription(picked.spoken))
         until { core.weekAheadView.value.goals.picked == 1 }
