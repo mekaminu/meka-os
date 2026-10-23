@@ -97,7 +97,9 @@ object FactRules {
     const val MAX_VALUE = 200
     const val MAX_FACTS = 200
 
-    const val HINT = "Add a fact… (Car reg: AB12 CDE)"
+    /** One example, on one line on the cover screen (quality gate slice 23); TalkBack reads [DESCRIPTION]. */
+    const val HINT = "Car reg: AB12 CDE"
+    const val DESCRIPTION = "Add a fact: its name, a colon, then the fact, for example Car reg: AB12 CDE"
     const val EMPTY_SUMMARY = "Nothing yet. Add the things you look up: the car's reg, the GP, shoe sizes, the energy supplier. Navilife answers from them."
     const val NOT_READ = "Type the name, a colon, then the fact: “Car reg: AB12 CDE”."
     const val REFUSED_SECRET = "Navilife keeps passwords and PINs off this page. Write where they're kept instead: “Passwords: in the family password manager”."

@@ -116,4 +116,18 @@ class EmergencyCardTest {
         val her = EmergencyRules.view(emptyList(), viewer = "jordan")
         assertEquals("Meka hasn't filled the emergency card in yet.", her.summary)
     }
+
+    @Test
+    fun eachPartsHintIsOneShortExampleThatReads() {
+        // Quality gate slice 23: the hint fits one line on the cover screen; TalkBack reads the fuller words.
+        EmergencySection.entries.forEach { s ->
+            assertTrue(s.hint.length <= 28, s.hint)
+            assertFalse(s.hint.startsWith("Add"), s.hint)
+            val line = EmergencyRules.read(s.hint) ?: error("${s.hint} doesn't read")
+            assertNull(EmergencyRules.refusal(s, "${line.title}: ${line.detail}"), s.hint)
+            assertTrue(s.hint in s.spokenHint || s.spokenHint.contains(s.hint.substringBefore(',')), s.spokenHint)
+        }
+        val g = EmergencyRules.view(emptyList()).groups.first()
+        assertEquals(EmergencySection.CALL.spokenHint, g.spokenHint)
+    }
 }

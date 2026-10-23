@@ -24,11 +24,17 @@ object EmergencyFields {
     const val DELETED = ActionableFields.DELETED
 }
 
-/** The card's three parts, in the order the card shows them. */
-enum class EmergencySection(val key: String, val label: String, val hint: String) {
-    CALL("call", "Who to call", "Add someone to call… (GP: Dr Patel, 01632 123456)"),
-    DOCUMENTS("documents", "Where things are", "Add where something is… (Passports: study desk, top drawer)"),
-    ACCOUNTS("accounts", "Key accounts", "Add an account by name… (Home insurance: Aviva)"),
+/**
+ * The card's three parts, in the order the card shows them. [hint] is one example on one line on the cover screen
+ * (quality gate slice 23); TalkBack and the Mac's label read the fuller [spokenHint].
+ */
+enum class EmergencySection(val key: String, val label: String, val hint: String, val spokenHint: String) {
+    CALL("call", "Who to call", "GP: Dr Patel, 01632 123456",
+        "Add someone to call: a name, a colon, then the details, for example GP: Dr Patel, 01632 123456"),
+    DOCUMENTS("documents", "Where things are", "Passports: study desk",
+        "Add where something is, for example Passports: study desk, top drawer"),
+    ACCOUNTS("accounts", "Key accounts", "Home insurance: Aviva",
+        "Add an account by name, never its number, for example Home insurance: Aviva"),
     ;
 
     companion object {
@@ -52,7 +58,7 @@ data class EmergencyRow(
 )
 
 /** One part of the card with its rows. */
-data class EmergencyGroup(val section: String, val label: String, val hint: String, val rows: List<EmergencyRow>)
+data class EmergencyGroup(val section: String, val label: String, val hint: String, val rows: List<EmergencyRow>, val spokenHint: String = hint)
 
 data class EmergencyView(
     /** Always the three parts, in order (an empty part shows its hint). */
@@ -63,7 +69,7 @@ data class EmergencyView(
 ) {
     companion object {
         val EMPTY = EmergencyView(
-            EmergencySection.entries.map { EmergencyGroup(it.key, it.label, it.hint, emptyList()) },
+            EmergencySection.entries.map { EmergencyGroup(it.key, it.label, it.hint, emptyList(), it.spokenHint) },
             EmergencyRules.EMPTY_SUMMARY, 0,
         )
     }
@@ -197,7 +203,7 @@ object EmergencyRules {
     /** The card: the three parts in order, each in the order its lines were added. */
     fun view(entries: List<EmergencyEntry>, viewer: String = ShoppingRules.OWNER): EmergencyView {
         val groups = EmergencySection.entries.map { s ->
-            EmergencyGroup(s.key, s.label, s.hint, entries.filter { it.section == s }.sortedWith(compareBy({ it.addedAtMs }, { it.id })).map(::row))
+            EmergencyGroup(s.key, s.label, s.hint, entries.filter { it.section == s }.sortedWith(compareBy({ it.addedAtMs }, { it.id })).map(::row), s.spokenHint)
         }
         val n = entries.size
         val summary = when {

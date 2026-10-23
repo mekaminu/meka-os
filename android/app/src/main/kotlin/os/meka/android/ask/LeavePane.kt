@@ -103,7 +103,7 @@ fun LeavePane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "field") {
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(LeaveRules.ADD_HINT) { text ->
+                Field(LeaveRules.ADD_HINT, description = LeaveRules.ADD_DESCRIPTION) { text ->
                     haptics.light()
                     scope.launch {
                         val r = runCatching { core.addLeave(text) }.getOrNull()

@@ -115,7 +115,9 @@ object LeaveRules {
     /** A school holiday with nothing booked that starts within this many days is lit: "book before the good weeks go". */
     const val NUDGE_DAYS = 56
 
-    const val ADD_HINT = "Add… (27–30 Oct, Spain 18 Dec – 4 Jan, Fri 13 Nov)"
+    /** One example, on one line on the cover screen (quality gate slice 23); TalkBack reads [ADD_DESCRIPTION]. */
+    const val ADD_HINT = "Spain 18 Dec – 4 Jan"
+    const val ADD_DESCRIPTION = "Add a stretch of leave, for example 27–30 Oct, Spain 18 Dec – 4 Jan, or Fri 13 Nov"
     const val EMPTY_LINE = "Nothing booked yet. Type each stretch of leave once; only work days count."
     const val NOT_READ = "Navilife couldn't read a date in that. Try \"27–30 Oct\" or \"Fri 13 Nov\" (add the year for leave already taken)."
     const val NOTE = "Booked leave is a day off on both apps: no work band, no commute, and the brief says “Annual leave · no work”."

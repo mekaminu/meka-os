@@ -5,6 +5,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -97,7 +100,7 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
                 if (line?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "facts-said",
             )
             Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                Field(FactRules.HINT, value = text, onValue = { text = it }) { typed ->
+                Field(FactRules.HINT, value = text, onValue = { text = it }, description = FactRules.DESCRIPTION) { typed ->
                     scope.launch {
                         val r = runCatching { core.addFact(typed) }.getOrNull() ?: return@launch
                         said = r
@@ -147,16 +150,14 @@ fun FactsPane(core: MekaCore, onClose: () -> Unit) {
     }
 }
 
+/** Under this width the row's three buttons go under the fact (quality gate slice 23: on the cover screen they left the fact ~25 dp). */
+private val FACT_ACTIONS_BELOW = 420.dp
+
 @Composable
 private fun FactRowView(row: FactRow, modifier: Modifier, onCopy: () -> Unit, onAi: () -> Unit, onRemove: () -> Unit) {
     val reduced = Meka.reducedMotion
-    Row(
-        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
-    ) {
-        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.spoken },
+    val texts: @Composable (Modifier) -> Unit = { m ->
+        Column(m.semantics(mergeDescendants = true) { contentDescription = row.spoken },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(row.label, style = MekaType.caption, color = Meka.colors.textSecondary)
             Text(row.value, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -164,26 +165,39 @@ private fun FactRowView(row: FactRow, modifier: Modifier, onCopy: () -> Unit, on
                 l?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
             }
         }
-        Text(
-            FactRules.COPY_BUTTON, style = MekaType.caption, color = Meka.colors.accent,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onCopy)
-                .semantics { contentDescription = row.copySpoken }
-                .padding(MekaSpace.xs),
-        )
-        Text(
-            row.aiButton, style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onAi)
-                .semantics { contentDescription = "${row.aiButton}: ${row.label}" }
-                .padding(MekaSpace.xs),
-        )
-        Text(
-            "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
-                .clickable(role = Role.Button, onClick = onRemove)
-                .semantics { contentDescription = "Remove ${row.label}" }
-                .padding(MekaSpace.xs),
-        )
     }
+    val actions: @Composable () -> Unit = {
+        FactAction(FactRules.COPY_BUTTON, Meka.colors.accent, row.copySpoken, onCopy)
+        FactAction(row.aiButton, Meka.colors.textTertiary, "${row.aiButton}: ${row.label}", onAi)
+        FactAction("Remove", Meka.colors.textTertiary, "Remove ${row.label}", onRemove)
+    }
+    BoxWithConstraints(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    ) {
+        if (maxWidth < FACT_ACTIONS_BELOW) {
+            // Narrow (the cover screen): the fact keeps the row's width and its buttons sit under it, each whole.
+            Column(Modifier.fillMaxWidth()) {
+                texts(Modifier.fillMaxWidth())
+                FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs, Alignment.End)) { actions() }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                texts(Modifier.weight(1f))
+                actions()
+            }
+        }
+    }
+}
+
+@Composable
+private fun FactAction(label: String, color: androidx.compose.ui.graphics.Color, spoken: String, onClick: () -> Unit) {
+    Text(
+        label, style = MekaType.caption, color = color, maxLines = 1, softWrap = false,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m))
+            .clickable(role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = spoken }
+            .minTouch()
+            .padding(MekaSpace.xs),
+    )
 }

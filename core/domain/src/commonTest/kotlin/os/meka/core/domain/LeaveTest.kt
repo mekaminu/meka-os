@@ -263,4 +263,12 @@ class LeaveTest {
         assertNull(card(null, "2026-10-17"))
         assertNull(AskRules.card(AskRawAction("book_leave", title = "Mon 2 Nov"), ctx, emptyMap(), at(sat, 10), cal))
     }
+
+    @Test
+    fun theHintIsOneShortExampleThatReads() {
+        // Quality gate slice 23: one line on the cover screen; TalkBack reads ADD_DESCRIPTION.
+        assertTrue(LeaveRules.ADD_HINT.length <= 28)
+        assertTrue(LeaveRules.read(LeaveRules.ADD_HINT, sat) != null)
+        assertTrue(LeaveRules.ADD_HINT in LeaveRules.ADD_DESCRIPTION)
+    }
 }

@@ -43,6 +43,7 @@ struct LeaveSheet: View {
             .staggeredAppear(1)
             TextField(LeaveRules.shared.ADD_HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(LeaveRules.shared.ADD_DESCRIPTION)
                 .onSubmit {
                     let typed = text
                     text = ""

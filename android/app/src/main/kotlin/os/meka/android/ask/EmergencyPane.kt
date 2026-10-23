@@ -102,7 +102,7 @@ fun EmergencyPane(core: MekaCore, onClose: () -> Unit) {
                     if (line?.refused == true) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "em-said-${group.section}",
                 )
                 Column(Modifier.animateItem().appear(rememberAppearance(base + 1 + group.rows.size)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    Field(group.hint, value = texts[group.section] ?: "", onValue = { texts[group.section] = it }) { typed ->
+                    Field(group.hint, value = texts[group.section] ?: "", onValue = { texts[group.section] = it }, description = group.spokenHint) { typed ->
                         scope.launch {
                             val r = runCatching { core.addEmergency(group.section, typed) }.getOrNull() ?: return@launch
                             said[group.section] = r

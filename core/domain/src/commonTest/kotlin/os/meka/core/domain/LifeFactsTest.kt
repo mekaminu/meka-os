@@ -187,4 +187,14 @@ class LifeFactsTest {
         val kept = fFold.view().groups.flatMap { it.rows }.first { it.label == "Car reg" }
         assertEquals("AB12 CDE", kept.copyText)
     }
+
+    @Test
+    fun theHintIsOneShortExampleThatReads() {
+        // Quality gate slice 23: one line on the cover screen; TalkBack reads DESCRIPTION.
+        assertTrue(FactRules.HINT.length <= 28)
+        val line = FactRules.read(FactRules.HINT) ?: error("the hint doesn't read")
+        assertEquals("Car reg", line.label)
+        assertNull(FactRules.refusal(FactRules.HINT))
+        assertTrue(FactRules.HINT in FactRules.DESCRIPTION)
+    }
 }

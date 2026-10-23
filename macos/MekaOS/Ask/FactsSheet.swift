@@ -31,6 +31,7 @@ struct FactsSheet: View {
                 .staggeredAppear(1)
             TextField(FactRules.shared.HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(FactRules.shared.DESCRIPTION)
                 .onSubmit {
                     let typed = text
                     text = ""

@@ -64,6 +64,7 @@ struct EmergencySheet: View {
             }
             TextField(group.hint, text: Binding(get: { texts[section] ?? "" }, set: { texts[section] = $0 }))
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(group.spokenHint)
                 .onSubmit {
                     let typed = texts[section] ?? ""
                     texts[section] = ""
