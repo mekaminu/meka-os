@@ -3148,6 +3148,8 @@ Findings fixed:
 - Tests: core NewsTest (the bare-story line never points at Read full story); NewsScreensTest fails on Topics under
   48 dp, a story's source line wrapping, or a bare story naming Read full story.
 - Design check: no design file covers News. No server change, no migration, Mac checked nightly.
+- Landed a1e7754; CI run 1132 (39947703855) green first try; published e267004 (news/ 10 shots). Re-shot finding filed:
+  a lane header's grey label and its coloured "2 new" don't share a baseline (Barça's single text does).
 
 ### Quality gate — slice 42 (2026-10-23): the Vault's and Your data's shots, and what they found
 
