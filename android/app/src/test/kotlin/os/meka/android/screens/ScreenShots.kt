@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PhraseGlue
 import os.meka.core.domain.ScreenSenseRules
 import kotlin.test.fail
@@ -73,6 +74,17 @@ object ScreenShots {
         return out
     }
 
+    /** The bottom (px) of every piece of text on screen, for a test that checks the gap under what's above. */
+    fun laidOutBounds(compose: ComposeContentTestRule): List<Float> {
+        val out = mutableListOf<Float>()
+        fun walk(n: SemanticsNode) {
+            if (n.config.getOrNull(SemanticsProperties.Text) != null) out += n.boundsInRoot.bottom
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        return out
+    }
+
     /**
      * The quality gate's "cut to a word or two" (2026-10-22, the Week board's first shots): fails, naming each one, when
      * one of [titles] is cut before it can be read ([BoardFitRules.titleReadable]) or any short line (a header, a
@@ -83,7 +95,7 @@ object ScreenShots {
         val laid = laidOut(compose)
         val problems = buildList {
             titles.forEach { t ->
-                val shown = laid.filter { it.text == t }
+                val shown = laid.filter { it.text == t || DateGlue.plain(it.text) == t }
                 if (shown.isEmpty() && mustShow) add("\"$t\" isn't on screen")
                 shown.filterNot { BoardFitRules.titleReadable(t, it.cut, it.wholeLines) }
                     .forEach { add("\"$t\" is cut after ${it.wholeLines} characters") }
@@ -248,5 +260,30 @@ object ScreenShots {
             }
         }
         if (wrapped.isNotEmpty()) fail("$name wraps what should be one line:\n" + wrapped.joinToString("\n") { "- \"$it\"" })
+    }
+
+    /**
+     * The quality gate's "no word left alone" (Settings' shots, slice 25: "…out loud on her / own"): fails, naming
+     * each, when one of [texts] (plain words; drawn plain or kept) wraps and its last line holds a single word.
+     */
+    fun assertNoLoneWords(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+        val wanted = texts.map { DateGlue.plain(it) }.toSet()
+        val alone = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            val text = n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }
+            val action = n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action
+            if (text != null && action != null && DateGlue.plain(text) in wanted) {
+                val results = mutableListOf<TextLayoutResult>()
+                action(results)
+                results.firstOrNull()?.takeIf { it.lineCount > 1 }?.let { r ->
+                    val last = r.lineCount - 1
+                    val words = text.substring(r.getLineStart(last), r.getLineEnd(last))
+                    if (LoneWordGlue.alone(words)) alone += "\"${words.trim()}\" alone under \"${DateGlue.plain(text)}\""
+                }
+            }
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        if (alone.isNotEmpty()) fail("$name leaves a word alone on a line:\n" + alone.joinToString("\n") { "- $it" })
     }
 }

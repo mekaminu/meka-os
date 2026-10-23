@@ -52,3 +52,39 @@ object PhraseGlue {
             COUNT.findAll(p).map { it.range }
     }
 }
+
+/**
+ * No word left alone on a line (the quality gate's Settings shots, slice 25: on the cover screen "When Ada says
+ * something out loud on her / own" and "Gmail and Outlook · read, tidied, sent only on / your tap"). The last two
+ * words of a line of three or more are joined by a no-break space, so a line that must wrap takes them down together;
+ * a "·" or "–" just before them goes too, so no line starts with one. A pair longer than [PAIR_MAX] characters is
+ * left free to wrap. Dates, numbers and counts are kept whole as [PhraseGlue] does. Non-AI, pure; only for words
+ * drawn on screen (spoken and compared lines keep plain spaces).
+ */
+object LoneWordGlue {
+    const val PAIR_MAX = 22
+    private val NBSP = LifeTileRules.GLUE[0]
+    private val JOINERS = setOf("·", "–", "-", "—")
+
+    /** [line] with its dates, numbers and counts whole ([PhraseGlue.kept]) and its last words held together. */
+    fun kept(line: String): String {
+        val s = PhraseGlue.kept(line.trimEnd())
+        val starts = wordStarts(s)
+        if (starts.size < 3) return s
+        var from = starts.size - 2
+        if (s.substring(starts[from], starts[from + 1]).trim() in JOINERS && from > 0) from--
+        val tail = s.substring(starts[from])
+        if (tail.length > PAIR_MAX) return s
+        return s.substring(0, starts[from]) + tail.replace(' ', NBSP)
+    }
+
+    /** The index where each word of [s] starts (words split on plain and no-break spaces). */
+    private fun wordStarts(s: String): List<Int> =
+        s.indices.filter { i -> !s[i].isSpace() && (i == 0 || s[i - 1].isSpace()) }
+
+    private fun Char.isSpace() = this == ' ' || this == NBSP
+
+    /** True when [lastLine] (one laid-out line's words, plain or kept) is a single word left alone, for a screen test. */
+    fun alone(lastLine: String): Boolean = lastLine.trim().let { it.isNotEmpty() && it.none { c -> c.isSpace() } }
+}
+

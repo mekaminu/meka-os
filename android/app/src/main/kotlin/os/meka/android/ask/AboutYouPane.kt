@@ -37,7 +37,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
@@ -103,7 +102,9 @@ fun AboutYouPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         itemsIndexed(v.rows, key = { _, r -> "about-${r.field.key}" }) { i, row ->
-            Column(Modifier.animateItem().padding(top = if (row.field == AboutField.SHOWN_NAME || row.field == AboutField.HOME || row.field == AboutField.MOBILE) MekaSpace.l else 0.dp)
+            // A field's line belongs to its field: 16 dp more before the next label (24 dp in all), 32 dp more before a
+            // new group (Your name, Home, Your mobile), so the fields no longer run together (quality gate slice 26).
+            Column(Modifier.animateItem().padding(top = if (row.field == AboutField.SHOWN_NAME || row.field == AboutField.HOME || row.field == AboutField.MOBILE) MekaSpace.xl else MekaSpace.m)
                 .appear(rememberAppearance(2 + i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 AboutLine(row, said[row.field.key],
                     onSave = { typed -> scope.launch { runCatching { core.setAboutYou(row.field, typed) }.getOrNull()?.let { react(row.field.key, it) } } },
@@ -183,7 +184,7 @@ private fun AboutLine(row: AboutRow, said: AboutSaved?, onSave: (String) -> Unit
         )
     }
     if (said != null) SaidLine(said, onUndo)
-    else Text(row.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+    else Text(os.meka.core.domain.LoneWordGlue.kept(row.line), style = MekaType.caption, color = Meka.colors.textTertiary)
 }
 
 /** What the last save said, lit in the accent when refused, with Undo after a clear or a removal. */
@@ -213,7 +214,7 @@ private fun WatchRow(on: Boolean, line: String, onToggle: () -> Unit) {
     ) {
         Column(Modifier.weight(1f)) {
             Text("Watch for requests", style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(os.meka.core.domain.LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
         Text(if (on) "On" else "Off", style = MekaType.caption, color = Meka.colors.onAccent,
             modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(dot).padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs))

@@ -320,7 +320,7 @@ private struct MoreRow: View {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     // Places and settings you open, not things you act on: the regular weight (type weight, 2026-10-06).
                     Text(item.label).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                    Text(line)
+                    Text(LoneWordGlue.shared.kept(line: line))
                         .font(MekaType.caption)
                         .foregroundStyle(lit ? palette.accent : palette.textSecondary)
                         .contentTransition(.opacity)

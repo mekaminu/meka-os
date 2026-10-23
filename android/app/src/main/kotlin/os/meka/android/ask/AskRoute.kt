@@ -490,7 +490,7 @@ internal fun MoreRow(
                 targetState = line,
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "more-row-line",
-            ) { l -> Text(l, style = MekaType.caption, color = lineColor, maxLines = 2) }
+            ) { l -> Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = lineColor, maxLines = 2) }
         }
         if (opens) Text("›", style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.padding(start = MekaSpace.xs))
     }

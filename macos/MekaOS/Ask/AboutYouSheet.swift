@@ -54,8 +54,9 @@ struct AboutYouSheet: View {
     private func line(_ row: AboutRow, watch: String?, watching: Bool) -> some View {
         let key = row.field.key
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            // A field's line belongs to its field: a wider gap before the next label (quality gate slice 26).
             Text(row.label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                .padding(.top, MekaSpace.xs)
+                .padding(.top, MekaSpace.m)
             TextField(row.hint, text: Binding(get: { texts[key] ?? row.value ?? "" }, set: { texts[key] = $0 }))
                 .textFieldStyle(.roundedBorder)
                 .accessibilityLabel(row.spokenHint)
@@ -158,7 +159,7 @@ struct AboutYouSheet: View {
             .contentTransition(.opacity)
             .animation(MekaMotion.appear(reduced: reduceMotion), value: s)
         } else if let fallback {
-            Text(fallback).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: fallback)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
         }
     }
 }

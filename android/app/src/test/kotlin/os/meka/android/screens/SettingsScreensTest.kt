@@ -133,6 +133,7 @@ class SettingsScreensTest {
         ScreenShots.assertShows(compose, name, rows.first().label)
         ScreenShots.assertReadable(compose, name, rows.flatMap { listOf(it.label, it.line) }, mustShow = false)
         ScreenShots.assertEachOneLine(compose, name, rows.map { it.label })
+        ScreenShots.assertNoLoneWords(compose, name, rows.map { it.line } + ShellNav.moreLine(MoreItem.WORK, 0, false, null, null))
     }
 
     private fun aboutYou(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {
@@ -151,6 +152,9 @@ class SettingsScreensTest {
         // An empty field shows one short example on one line (the quality gate's rule for hints).
         ScreenShots.assertEachOneLine(compose, name, AboutField.entries.map { it.hint } + AboutYouRules.CHILD_HINT)
         ScreenShots.assertEachOneLine(compose, name, AboutField.entries.map { it.label })
+        ScreenShots.assertNoLoneWords(compose, name, v.rows.map { it.line } + listOfNotNull(v.watchLine))
+        // A field's line sits with its field, clear of the next label (slice 25's shots: they ran together).
+        assertFieldsApart(name, v.rows.map { it.label })
         ScreenShots.assertReadable(compose, name, v.rows.flatMap { listOf(it.label, it.line) } +
             v.children.flatMap { listOf(it.name, it.line) }, mustShow = false)
         when (fill) {
@@ -165,6 +169,21 @@ class SettingsScreensTest {
                 if (v.children.size != 2) fail("$name: ${v.children.size} children for two")
                 if (v.watchLine == null || !v.partnerWatch) fail("$name: Watch for requests isn't on with a partner named")
             }
+        }
+    }
+
+    /** Each label after the first sits at least 20 dp below the line (or field) above it. */
+    private fun assertFieldsApart(name: String, labels: List<String>) {
+        val d = compose.density.density
+        val tops = labels.mapNotNull { l ->
+            compose.onAllNodes(androidx.compose.ui.test.hasText(l), useUnmergedTree = true).fetchSemanticsNodes()
+                .firstOrNull()?.boundsInRoot?.let { l to it.top }
+        }
+        val bottoms = ScreenShots.laidOutBounds(compose)
+        tops.drop(1).forEach { (label, top) ->
+            val above = bottoms.filter { it < top - 0.5f }.maxOrNull() ?: return@forEach
+            val gap = (top - above) / d
+            if (gap < 20f) fail("$name: \"$label\" sits ${gap.toInt()} dp under the line above it (at least 20 dp)")
         }
     }
 
