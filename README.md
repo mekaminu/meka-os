@@ -3,6 +3,12 @@
 Written by CI after each green run on main (tools/publish-screens.sh). Not code: the quality gate's
 screenshots, for review. Invented data only. This branch is append-only.
 
+- [fold/about-you/cover-dark-empty.png](docs/screens/fold/about-you/cover-dark-empty.png)
+- [fold/about-you/cover-dark-many.png](docs/screens/fold/about-you/cover-dark-many.png)
+- [fold/about-you/cover-dark-one.png](docs/screens/fold/about-you/cover-dark-one.png)
+- [fold/about-you/cover-light-many.png](docs/screens/fold/about-you/cover-light-many.png)
+- [fold/about-you/inner-dark-empty.png](docs/screens/fold/about-you/inner-dark-empty.png)
+- [fold/about-you/inner-dark-many.png](docs/screens/fold/about-you/inner-dark-many.png)
 - [fold/appointments/cover-dark-empty.png](docs/screens/fold/appointments/cover-dark-empty.png)
 - [fold/appointments/cover-dark-many.png](docs/screens/fold/appointments/cover-dark-many.png)
 - [fold/appointments/cover-dark-one.png](docs/screens/fold/appointments/cover-dark-one.png)
@@ -163,6 +169,11 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/school/cover-light-many.png](docs/screens/fold/school/cover-light-many.png)
 - [fold/school/inner-dark-empty.png](docs/screens/fold/school/inner-dark-empty.png)
 - [fold/school/inner-dark-many.png](docs/screens/fold/school/inner-dark-many.png)
+- [fold/settings/cover-dark-appearance.png](docs/screens/fold/settings/cover-dark-appearance.png)
+- [fold/settings/cover-dark-connected.png](docs/screens/fold/settings/cover-dark-connected.png)
+- [fold/settings/cover-dark.png](docs/screens/fold/settings/cover-dark.png)
+- [fold/settings/cover-light-connected.png](docs/screens/fold/settings/cover-light-connected.png)
+- [fold/settings/inner-dark-connected.png](docs/screens/fold/settings/inner-dark-connected.png)
 - [fold/today/cover-dark-empty.png](docs/screens/fold/today/cover-dark-empty.png)
 - [fold/today/cover-dark-fasting.png](docs/screens/fold/today/cover-dark-fasting.png)
 - [fold/today/cover-dark-many.png](docs/screens/fold/today/cover-dark-many.png)
