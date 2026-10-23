@@ -90,7 +90,8 @@ class WatchHealthScreensTest {
             watches.add(0, DeviceLinkCodec.Watch(id, WatchLinkRules.DEFAULT_NAME, now))
             return DeviceLinkCodec.Linked(id, WatchLinkRules.DEFAULT_NAME)
         }
-        override suspend fun linkedWatches(): List<DeviceLinkCodec.Watch> = watches.toList()
+        var listed = 0
+        override suspend fun linkedWatches(): List<DeviceLinkCodec.Watch> { listed++; return watches.toList() }
         override suspend fun unlinkWatch(id: String) { watches.removeAll { it.id == id } }
         override suspend fun answerDeviceJoin(requestId: String, allow: Boolean) = "allowed"
         override suspend fun householdHealth() = HealthCodec.Response(
@@ -144,14 +145,24 @@ class WatchHealthScreensTest {
         if (fill != Fill.EMPTY) server!!.watches += DeviceLinkCodec.Watch("watch00000000000000b1", WatchLinkRules.DEFAULT_NAME, now - 2 * 60 * minute)
         if (fill == Fill.MANY) server!!.watches += DeviceLinkCodec.Watch("watch00000000000000b2", "Galaxy Watch8 Classic", now - 9 * day)
         val core = setUp(theme, server)
-        runBlocking {
-            core.refreshWatches()
-            if (fill == Fill.MANY) {
-                server!!.refuse = DeviceLinkCodec.ERR_CODE
-                check(!core.linkWatch("1234 5678"))
-            }
-        }
+        runBlocking { core.refreshWatches() }
         show { WatchPane(core, onClose = {}) }
+        if (fill == Fill.MANY) {
+            // A wrong code typed once the screen is open (opening it reads the watches afresh and clears a problem).
+            compose.mainClock.advanceTimeBy(SETTLE_MS)
+            compose.waitForIdle()
+            // Wait for the screen's own read (the second) to finish, so it can't clear the problem afterwards.
+            var turns = 0
+            while (turns++ < 40 && server!!.listed < 2) {
+                Shadows.shadowOf(Looper.getMainLooper()).idle()
+                Thread.sleep(50)
+                compose.mainClock.advanceTimeBy(100)
+            }
+            if (server!!.listed < 2) fail("$name: Watch didn't read the watches on open")
+            Thread.sleep(100)
+            server.refuse = DeviceLinkCodec.ERR_CODE
+            runBlocking { check(!core.linkWatch("1234 5678")) }
+        }
         settle("watch", name)
         val v = core.watchLinkView.value ?: fail("$name: Watch never read the server")
         ScreenShots.assertShows(compose, name, "Watch")
