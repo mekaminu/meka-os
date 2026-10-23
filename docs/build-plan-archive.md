@@ -3030,6 +3030,7 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - **Test:** `ScreenShots.assertNoDotStartingALine` (each line of each named text's layout); WatchHealthScreensTest runs it over Watch's summary/how-to/rows/problem and Health's summary and rows. LoneWordGlueTest: aDotStaysWithTheWordsEitherSide, aLongLineKeepsSomewhereToBreak, aDotStartingALineIsSeen.
 - **First try (9b94b1e, CI run 1110 red):** holding both sides of every dot plus the last words made "Google · jordan@example.com · synced 17:10" one unbreakable run, so the cover screen broke it mid-time ("0" alone); the 20/28-character limits fix it.
 - No server change, no wire change, no migration, Mac checked nightly. tools/core-verify.sh green (3195).
+- Landed 9b94b1e + CI fix ffda58f, CI run 1111 (39906302066) green.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
