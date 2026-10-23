@@ -647,7 +647,7 @@ private fun PillAction(label: String, enabled: Boolean = true, onClick: () -> Un
 
 /**
  * One car's parking timer: the time left (brass in its last ten minutes and once ended), the note he typed, +15 min /
- * +30 min / +1 h and Ended. The line cross-fades as the minutes go.
+ * +30 min / +1 h and Ended (wrapping whole to the next line when the row is narrow). The line cross-fades as the minutes go.
  */
 @Composable
 private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onExtend: (Int) -> Unit, onEnd: () -> Unit) {
@@ -667,7 +667,11 @@ private fun TimerCard(row: TimerRow, showTitle: Boolean, modifier: Modifier, onE
             }
             row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        // Quality gate slice 21: on the cover screen the three chips left "Ended" a sliver ("End-ed" across two lines);
+        // a flow row moves it whole to the next line when it doesn't fit.
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+        ) {
             ParkingTimerRules.EXTEND_MIN.forEach { m -> Chip(ParkingTimerRules.extendLabel(m), false) { onExtend(m) } }
             Text(ParkingTimerRules.ENDED, style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onEnd)
