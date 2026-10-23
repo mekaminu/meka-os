@@ -297,8 +297,12 @@ class NewsScreensTest {
         untilShows(name, first.title)
         tap(name, "story", hasText(first.title))
         untilShows(name, "1 of 7")
-        repeat(i) { tap(name, "Next", hasText("Next ›")) }
-        untilShows(name, "${i + 1} of 7")
+        // One story at a time: each Next waits for its page before the next tap (taps sent faster than the pages turn
+        // could land on the page going out, and the count fell short on a busy runner, CI run 1166).
+        repeat(i) { k ->
+            tap(name, "Next", hasText("Next ›"))
+            untilShows(name, "${k + 2} of 7")
+        }
         ScreenShots.assertShows(compose, name, LoneWordGlue.kept(NewsRules.noSummary(bare.source, hasLink = false)))
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("news", name))
         ScreenShots.assertSensible(compose, name)
