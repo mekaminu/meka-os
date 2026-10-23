@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -71,11 +72,14 @@ import os.meka.android.today.BatteryCare
 import os.meka.android.work.MekaCallScreeningService
 import os.meka.android.work.WorkAlerts
 import os.meka.android.work.openListenerSettings
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.SetupDevice
 import os.meka.core.domain.SetupFix
 import os.meka.core.domain.SetupRules
 import os.meka.core.domain.SetupState
 import os.meka.core.domain.SetupStep
+import os.meka.core.domain.SetupView
+import os.meka.android.designsystem.TouchPill
 import os.meka.core.facade.MekaCore
 
 /**
@@ -168,6 +172,17 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
     }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { check() }
     val fix = rememberSetupFixer(openPane) { check() }
+    SetupList(view, checking, onClose) { fix(it) }
+}
+
+/**
+ * Setup's page drawn from [view] (quality gate slice 58: split from [SetupPane] so the shots draw it from invented
+ * views; [SetupPane] checks the device and the server). The summary and each step's line keep their last words and
+ * dots together ([LoneWordGlue]); a step's button is a slim [TouchPill] under its words (it sat beside them, squeezing
+ * the line to a word a row on the cover screen, and was a ~30 dp tap).
+ */
+@Composable
+internal fun SetupList(view: SetupView?, checking: Boolean, onClose: () -> Unit, onFix: (SetupStep) -> Unit) {
     val reduced = Meka.reducedMotion
     val v = view
     val summaryColor by animateColorAsState(
@@ -176,7 +191,7 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
     )
 
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        Modifier.fillMaxSize().testTag("setup-pane").verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -184,7 +199,7 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
         Text("Setup", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.SETUP)).appear(rememberAppearance(0)))
         Crossfade(v?.summary ?: (if (checking) "Checking…" else ""), animationSpec = MekaMotion.appear(reduced), label = "setup-summary-text") { s ->
-            Text(s, style = MekaType.body, color = summaryColor, modifier = Modifier.appear(rememberAppearance(0)))
+            Text(LoneWordGlue.kept(s), style = MekaType.body, color = summaryColor, modifier = Modifier.appear(rememberAppearance(0)))
         }
         if (v != null) {
             var step = 1
@@ -192,7 +207,7 @@ fun SetupPane(core: MekaCore, onClose: () -> Unit, openPane: (SetupFix) -> Unit)
                 Text(section.title.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
                     modifier = Modifier.padding(top = MekaSpace.m).semantics { heading() }.appear(rememberAppearance(step++)))
                 section.steps.forEach { s ->
-                    SetupStepView(s, Modifier.appear(rememberAppearance(step++))) { fix(s) }
+                    SetupStepView(s, Modifier.appear(rememberAppearance(step++))) { onFix(s) }
                 }
             }
         } else {
@@ -216,33 +231,37 @@ private fun spoken(state: SetupState) = when (state) {
     SetupState.UNKNOWN -> "couldn't check"
 }
 
+/** A step's dot, and where its words start past it (the button under them lines up with the words). */
+private val DOT = 10.dp
+private val WORDS_START = DOT + MekaSpace.xs
+
 @Composable
 private fun SetupStepView(step: SetupStep, modifier: Modifier, onFix: () -> Unit) {
     val reduced = Meka.reducedMotion
     val dot by animateColorAsState(setupColor(step.state), MekaMotion.appear(reduced), label = "setup-dot")
-    Row(
+    val label = step.fixLabel
+    val button = SetupRules.hasButton(step) && label != null
+    Column(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
-            .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .semantics(mergeDescendants = true) { contentDescription = "${step.title}, ${spoken(step.state)}. ${step.line}" },
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+            .minTouch().padding(start = MekaSpace.m, end = MekaSpace.m, top = MekaSpace.xs, bottom = if (button) 0.dp else MekaSpace.xs),
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(dot))
-        Column(Modifier.weight(1f)) {
-            Text(step.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Crossfade(step.line, animationSpec = MekaMotion.appear(reduced), label = "setup-line") { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textSecondary)
+        Row(
+            Modifier.fillMaxWidth().semantics(mergeDescendants = true) { contentDescription = "${step.title}, ${spoken(step.state)}. ${step.line}" },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
+        ) {
+            Box(Modifier.size(DOT).clip(CircleShape).background(dot))
+            Column(Modifier.weight(1f)) {
+                Text(step.title, style = MekaType.body, color = Meka.colors.textPrimary)
+                Crossfade(step.line, animationSpec = MekaMotion.appear(reduced), label = "setup-line") { l ->
+                    Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
+                }
             }
         }
-        val label = step.fixLabel
-        if ((step.toDo || step.state == SetupState.UNKNOWN) && step.fix != null && label != null) {
-            Box(
-                Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-                    .clickable(role = Role.Button, onClick = onFix)
-                    .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-            ) {
-                Text(label, style = MekaType.itemMeta, color = Meka.colors.accent)
-            }
+        if (button && label != null) {
+            // Under the words, lined up with them (past the dot), the 48 dp touch around a 32 dp pill.
+            TouchPill(label, Meka.colors.surfaceRaised, Meka.colors.accent, Modifier.padding(start = WORDS_START),
+                spoken = "$label · ${step.title}", onClick = onFix)
         }
     }
 }

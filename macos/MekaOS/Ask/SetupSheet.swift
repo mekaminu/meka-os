@@ -19,7 +19,7 @@ struct SetupSheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Setup").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.setup {
-                Text(view.summary).font(MekaType.body)
+                Text(LoneWordGlue.shared.kept(line: view.summary)).font(MekaType.body)
                     .foregroundStyle(view.toDo > 0 ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: view.summary)
@@ -131,7 +131,7 @@ private struct SetupStepView: View {
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: spoken)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(step.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                Text(step.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: step.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: step.line)

@@ -3202,6 +3202,23 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 58 (2026-10-23): Setup's shots and its first hand test
+
+- SetupScreensTest (7, Robolectric + Roborazzi) draws Ask → More → Setup from invented checks: nothing reachable (every
+  server step "Couldn't check"), a fresh Fold (most steps to do, each with its button) and all set (Google's voices
+  speaking), on the cover and inner sizes, Dark and Light, under docs/screens/fold/setup/; read for nonsense, cut lines,
+  broken words, split times and numbers, a word left alone, a dot starting a line, every button whole on one line, inside
+  the pane, drawn as a slim 32 dp pill and answering a 48 dp touch.
+- By hand: Pick a voice's Choose and Battery's Keep Navilife awake each hand their own step over to be done.
+- Fixed first (Fold): SetupPane split into SetupPane (checks the device and server) and SetupList (draws a view), so the
+  shots draw invented checks; a step's button sat beside its words (squeezing the line on the cover screen) and was a
+  ~30 dp tap, now a TouchPill under the words, lined up with them, read as "Choose · Pick a voice".
+- Core: Setup's Natural voice said "On · Amazon Polly" while Google's Chirp 3 HD voices spoke; now
+  SetupRules.naturalVoiceLine names them ("On · Google Chirp 3 HD, Amazon Polly standing by"); SetupRules.hasButton says
+  where a button goes; SetupTest checks every variant with ScreenSenseRules.
+- Both apps: the summary and each step's line keep their last words and dots together (LoneWordGlue).
+- Design check: no design file covers Setup. No server change, no wire change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 57 (2026-10-23): Notifications' shots and its first hand test
 
 - NotificationsScreensTest (7, Robolectric + Roborazzi) draws Ask → More → Notifications with nothing set (no quiet hours,

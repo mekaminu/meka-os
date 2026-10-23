@@ -161,6 +161,20 @@ object SetupRules {
     fun cardShown(view: SetupView?, hiddenOnDay: Long?, today: Long): Boolean =
         view?.todayLine != null && hiddenOnDay != today
 
+    /** Whether the Fold draws a button under [step]'s words: something to do (or unread) that Navilife can open. */
+    fun hasButton(step: SetupStep): Boolean =
+        (step.toDo || step.state == SetupState.UNKNOWN) && step.fix != null && step.fixLabel != null
+
+    /**
+     * Natural voice's line (quality gate slice 58: it said "On · Amazon Polly" while Google's Chirp 3 HD voices spoke):
+     * the voices the server speaks with, as Health names them without its failure notes.
+     */
+    fun naturalVoiceLine(s: ServerHealth): String = when (s.speechGoogle) {
+        ServerHealth.GOOGLE_ON -> "On · Google Chirp 3 HD, Amazon Polly standing by"
+        ServerHealth.GOOGLE_FAILED -> "On · Amazon Polly · Google's voices can't be reached"
+        else -> "On · Amazon Polly"
+    }
+
     private fun isCalendar(p: String) = p == "google" || p == "microsoft"
 
     private fun calendars(f: SetupFacts): List<SetupStep> {
@@ -251,7 +265,7 @@ object SetupRules {
     private fun voice(f: SetupFacts): List<SetupStep> {
         val natural = when (f.server?.speech) {
             null -> SetupStep("voice.natural", "Natural voice", COULDNT, SetupState.UNKNOWN)
-            true -> SetupStep("voice.natural", "Natural voice", "On · Amazon Polly", SetupState.DONE)
+            true -> SetupStep("voice.natural", "Natural voice", naturalVoiceLine(f.server), SetupState.DONE)
             false -> SetupStep("voice.natural", "Natural voice", "Not set up on Navilife's server · the device's own voice speaks", SetupState.LATER)
         }
         val chosen = f.voiceChosen

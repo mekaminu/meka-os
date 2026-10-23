@@ -230,4 +230,38 @@ class SetupTest {
         // No commute passed: no step (the older callers).
         assertNull(SetupRules.view(facts()).steps.firstOrNull { it.key == SetupRules.COMMUTE_KEY })
     }
+
+    @Test
+    fun naturalVoiceNamesTheVoicesThatSpeak() {
+        // Quality gate slice 58: Setup said "On · Amazon Polly" while Google's voices spoke.
+        assertEquals("On · Amazon Polly", SetupRules.view(facts()).step("voice.natural").line)
+        val google = server.copy(speechGoogle = ServerHealth.GOOGLE_ON)
+        assertEquals("On · Google Chirp 3 HD, Amazon Polly standing by", SetupRules.view(facts(server = google)).step("voice.natural").line)
+        val down = server.copy(speechGoogle = ServerHealth.GOOGLE_FAILED)
+        assertEquals("On · Amazon Polly · Google's voices can't be reached", SetupRules.view(facts(server = down)).step("voice.natural").line)
+    }
+
+    @Test
+    fun aButtonOnlyWhereThereIsSomethingToOpen() {
+        val v = SetupRules.view(facts(device = fold.copy(batteryExempt = false), voiceChosen = null, server = null))
+        assertTrue(SetupRules.hasButton(v.step("device.battery")))
+        assertTrue(SetupRules.hasButton(v.step("voice.picked")))
+        assertFalse(SetupRules.hasButton(v.step("calls.number"))) // couldn't check, nothing to open
+        assertFalse(SetupRules.hasButton(v.step("calendar.google"))) // done
+    }
+
+    @Test
+    fun everyVariantReadsSensibly() {
+        val fresh = SetupDevice(mac = false, notificationsAllowed = false, batteryExempt = false, notificationAccess = false, callRoleHeld = false,
+            people = PeopleLists(), watch = RequestWatch())
+        val views = listOf(
+            SetupRules.view(facts(device = SetupDevice(mac = false), server = null, accounts = null, ai = null, connected = false), SetupRecovery(null), SetupScreenSaver(null), null),
+            SetupRules.view(facts(device = fresh, accounts = emptyList(), signIns = emptyList(), voiceChosen = null, callAssistantOn = false, voiceMessageSeen = false), SetupRecovery(null), SetupScreenSaver(false), CommuteSetting(80, 80)),
+            SetupRules.view(facts(server = server.copy(speechGoogle = ServerHealth.GOOGLE_ON)), SetupRecovery(null), SetupScreenSaver(true), CommuteSetting(80, 75, chosen = true)),
+        )
+        views.forEach { v ->
+            val texts = listOf(v.summary) + v.steps.flatMap { listOfNotNull(it.title, it.line, it.fixLabel) }
+            assertEquals(emptyList(), ScreenSenseRules.problems(texts), v.summary)
+        }
+    }
 }
