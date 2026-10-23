@@ -149,8 +149,8 @@ private struct LeaveHolidayRow: View {
         HStack(spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(holiday.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(holiday.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                Text(holiday.note).font(MekaType.caption)
+                Text(holiday.lineShown).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(holiday.noteShown).font(MekaType.caption)
                     .foregroundStyle(holiday.nudge ? palette.accent : palette.textTertiary)
                     .contentTransition(.opacity)
             }
@@ -183,7 +183,7 @@ private struct LeaveRowView: View {
         HStack(spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                Text(row.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(row.lineShown).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 if let note = row.note {
                     Text(note).font(MekaType.caption).foregroundStyle(palette.accent)
                 }

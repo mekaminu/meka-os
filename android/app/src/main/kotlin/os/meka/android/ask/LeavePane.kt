@@ -198,8 +198,8 @@ private fun HolidayRowView(h: LeaveHoliday, modifier: Modifier, onBook: () -> Un
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = h.spoken },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(h.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(h.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-            Crossfade(h.note, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "holiday-${h.id}") { n ->
+            Text(h.lineShown, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Crossfade(h.noteShown, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "holiday-${h.id}") { n ->
                 Text(n, style = MekaType.caption, color = if (h.nudge) Meka.colors.accent else Meka.colors.textTertiary)
             }
         }
@@ -226,7 +226,7 @@ private fun LeaveRowView(row: LeaveRow, modifier: Modifier, onRemove: () -> Unit
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.spoken },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(row.lineShown, style = MekaType.caption, color = Meka.colors.textSecondary)
             row.note?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
         }
         Text(

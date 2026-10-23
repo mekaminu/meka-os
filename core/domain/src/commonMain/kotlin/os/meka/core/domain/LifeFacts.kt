@@ -69,7 +69,10 @@ data class FactRow(
     val copyText: String,
     /** The Copy button's spoken label: "Copy Car reg". */
     val copySpoken: String,
-)
+) {
+    /** [value] as drawn: phone numbers, dates and counts kept whole (quality gate slice 24); Copy keeps [copyText]. */
+    val valueShown: String get() = PhraseGlue.kept(value)
+}
 
 /** One group of the page with its facts, oldest first. */
 data class FactGroupView(val group: String, val label: String, val rows: List<FactRow>)

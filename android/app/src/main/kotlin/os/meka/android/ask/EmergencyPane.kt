@@ -138,7 +138,7 @@ private fun EmergencyRowView(row: EmergencyRow, modifier: Modifier, onRemove: ()
         Column(Modifier.weight(1f).semantics(mergeDescendants = true) { contentDescription = row.spoken },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            row.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+            row.detailShown?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
         }
         Text(
             "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,

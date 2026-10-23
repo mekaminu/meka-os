@@ -160,7 +160,7 @@ private fun FactRowView(row: FactRow, modifier: Modifier, onCopy: () -> Unit, on
         Column(m.semantics(mergeDescendants = true) { contentDescription = row.spoken },
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(row.label, style = MekaType.caption, color = Meka.colors.textSecondary)
-            Text(row.value, style = MekaType.body, color = Meka.colors.textPrimary)
+            Text(row.valueShown, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(row.aiLine, animationSpec = MekaMotion.appear(reduced), label = "fact-ai-${row.id}") { l ->
                 l?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
             }

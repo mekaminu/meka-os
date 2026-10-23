@@ -54,7 +54,10 @@ data class LeaveRow(
     val note: String?,
     /** One sentence for TalkBack / VoiceOver. */
     val spoken: String,
-)
+) {
+    /** [line] as drawn: "12 days" and dates kept whole (quality gate slice 24). */
+    val lineShown: String get() = PhraseGlue.kept(line)
+}
 
 /**
  * A school holiday in the Leave pane: "Half term" · "Mon 26 – Fri 30 Oct · 5 work days" · "In 2 weeks · book before
@@ -71,7 +74,12 @@ data class LeaveHoliday(
     /** "Book 3 days" while some of its work days aren't booked; null once they all are. */
     val bookLabel: String?,
     val spoken: String,
-)
+) {
+    /** [line] as drawn: "5 work days" and dates kept whole, never "5 work / days" (quality gate slice 24). */
+    val lineShown: String get() = PhraseGlue.kept(line)
+    /** [note] as drawn: "4 of 5 booked" kept whole. */
+    val noteShown: String get() = PhraseGlue.kept(note)
+}
 
 /** What adding or booking said: the line under the field, and whether nothing was written. */
 data class LeaveAdded(val line: String, val refused: Boolean)

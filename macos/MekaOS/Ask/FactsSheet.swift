@@ -110,7 +110,7 @@ private struct FactRowView: View {
         HStack(spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.label).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                Text(row.value).font(MekaType.body).foregroundStyle(palette.textPrimary).textSelection(.enabled)
+                Text(row.valueShown).font(MekaType.body).foregroundStyle(palette.textPrimary).textSelection(.enabled)
                 if let line = row.aiLine {
                     Text(line).font(MekaType.caption).foregroundStyle(palette.accent)
                         .transition(.opacity)

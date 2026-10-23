@@ -22,3 +22,33 @@ object DateGlue {
     /** The character ranges of the date phrases in [line] (plain or already kept), for a test that checks none wraps. */
     fun ranges(line: String): List<IntRange> = DATE.findAll(plain(line)).map { it.range }.toList()
 }
+
+/**
+ * Numbers held together on screen (the quality gate's re-shot of slice 23, 2026-10-23: on the cover screen the
+ * Emergency card read "Sam two doors down, 07700 / 900123" and Annual leave "Mon 26 – Fri 30 Oct · 5 work / days").
+ * A phone number ("07700 900123", "+44 7700 900123"), a count with its unit ("5 work days", "12 days", "3 weeks") and
+ * "4 of 5" each get no-break spaces, as do dates ([DateGlue]). Non-AI, pure; only for words drawn on screen.
+ */
+object PhraseGlue {
+    /** A run of digits with single spaces between them, led by 0 or +: a phone number when it holds 10–13 digits. */
+    private val PHONE = Regex("(?<![\\d+])(?:\\+|0)\\d+(?: \\d+)+(?!\\d)")
+    /** "5 work days", "1 day", "12 nights", "3 weeks", "2 months", "4 of 5". */
+    val COUNT = Regex("\\b\\d+ (?:(?:work |working )?(?:days?|nights?|weeks?|months?|years?|hours?|mins?)|of \\d+)\\b")
+
+    private fun glue(s: String) = s.replace(' ', LifeTileRules.GLUE[0])
+
+    /** [line] with its dates, phone numbers and counts made whole. */
+    fun kept(line: String): String {
+        val dated = DateGlue.kept(line)
+        val phoned = PHONE.replace(dated) { m -> if (m.value.count { it.isDigit() } in 10..13) glue(m.value) else m.value }
+        return COUNT.replace(phoned) { glue(it.value) }
+    }
+
+    /** The ranges in [line] (plain or kept) that must not wrap: dates, phone numbers and counts, for a screen test. */
+    fun ranges(line: String): List<IntRange> {
+        val p = DateGlue.plain(line)
+        return DateGlue.ranges(p) +
+            PHONE.findAll(p).filter { m -> m.value.count { it.isDigit() } in 10..13 }.map { it.range } +
+            COUNT.findAll(p).map { it.range }
+    }
+}

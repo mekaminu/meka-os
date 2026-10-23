@@ -2983,6 +2983,12 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Tests: EmergencyCardTest `eachPartsHintIsOneShortExampleThatReads`, LifeFactsTest and LeaveTest `theHintIsOneShortExampleThatReads` (each hint ≤ 28 characters, reads as a line, isn't refused, sits inside the fuller words); core-verify 3179 tests OK.
 - Design check: no design file for these panes. Fold and Mac, no server change, no migration, Mac checked nightly.
 
+### Quality gate — slice 24 (2026-10-23): the re-shot of slice 23, numbers kept whole
+- Re-shot read (screens f9cbaf4, CI run 1097): Date night, What Navilife knows and the hints all right. Two findings on the cover screen: the Emergency card's "Sam two doors down, 07700 / 900123" (a phone number split) and Annual leave's half term "Mon 26 – Fri 30 Oct · 5 work / days" (a count split from its unit).
+- Fixed: core **PhraseGlue** (DateGlue.kt) — no-break spaces inside a phone number (a 0- or +-led run of 10–13 digits with single spaces), a count with its unit (days, work days, nights, weeks, months, years, hours, mins) and "N of M", on top of DateGlue's dates; `ranges` for screen tests. Drawn through computed fields: `EmergencyRow.detailShown`, `LeaveRow.lineShown`, `LeaveHoliday.lineShown`/`noteShown`, `FactRow.valueShown` (Copy keeps `copyText`; TalkBack and Ask keep plain words). Fold panes and Mac sheets both.
+- KeptPlacesScreensTest now also fails on a number split across lines (`ScreenShots.assertNumbersWhole`).
+- Tests: PhraseGlueTest (5). Design check: no design file for these panes. Fold and Mac, no server change, no migration, Mac checked nightly.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

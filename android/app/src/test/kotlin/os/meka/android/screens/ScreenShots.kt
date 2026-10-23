@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
+import os.meka.core.domain.PhraseGlue
 import os.meka.core.domain.ScreenSenseRules
 import kotlin.test.fail
 
@@ -204,6 +205,13 @@ object ScreenShots {
      */
     fun assertDatesWhole(compose: ComposeContentTestRule, name: String) =
         assertPhrasesWhole(compose, name, "a date") { DateGlue.ranges(it) }
+
+    /**
+     * A phone number, a count with its unit and "4 of 5" stay whole (the re-shot of slice 23: "07700 / 900123",
+     * "5 work / days"), with dates ([PhraseGlue.ranges]).
+     */
+    fun assertNumbersWhole(compose: ComposeContentTestRule, name: String) =
+        assertPhrasesWhole(compose, name, "a number") { PhraseGlue.ranges(it) }
 
     /** Trips' clocks phrase ("1 h ahead of UK time"), on one line wherever it wraps (quality gate slice 20). */
     private val CLOCKS = Regex("\\d+ (?:h|min)(?: \\d+)? (?:ahead of|behind) UK time")

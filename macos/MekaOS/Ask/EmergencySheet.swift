@@ -94,7 +94,7 @@ private struct EmergencyRowView: View {
         HStack(spacing: MekaSpace.xs) {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                if let detail = row.detail {
+                if let detail = row.detailShown {
                     Text(detail).font(MekaType.caption).foregroundStyle(palette.textSecondary).textSelection(.enabled)
                 }
             }

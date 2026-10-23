@@ -55,7 +55,10 @@ data class EmergencyRow(
     /** Under "Who to call": the phone number in the line as digits ("01632123456", "+447700900123"), for a tap to ring. */
     val phone: String?,
     val spoken: String,
-)
+) {
+    /** [detail] as drawn: a phone number and dates kept whole, never "07700 / 900123" (quality gate slice 24). */
+    val detailShown: String? get() = detail?.let(PhraseGlue::kept)
+}
 
 /** One part of the card with its rows. */
 data class EmergencyGroup(val section: String, val label: String, val hint: String, val rows: List<EmergencyRow>, val spokenHint: String = hint)

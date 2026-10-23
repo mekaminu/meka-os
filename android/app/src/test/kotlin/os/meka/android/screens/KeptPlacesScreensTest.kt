@@ -144,6 +144,7 @@ class KeptPlacesScreensTest {
         ScreenShots.assertNoBrokenWords(compose, name)
         ScreenShots.assertDatesWhole(compose, name)
         ScreenShots.assertClocksWhole(compose, name)
+        ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertShows(compose, name, place.title)
         // Each add field's hint is one example on one line (the quality gate's rule for hints, slice 20), and each
         // row's buttons keep their words whole.
