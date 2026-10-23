@@ -25,12 +25,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -51,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -169,8 +172,12 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
     val schedule = work.schedule
     fun save(s: WorkSchedule) = scope.launch { core.setWorkSchedule(s.days.sorted(), s.startMinute, s.endMinute, s.enabled) }
 
+    // Unfolded, Work mode keeps a phone-like column centred on the page (like Fasting), so the pills and the time
+    // steppers don't sit at the far edge of the 829 dp inner screen (quality gate slice 37's finding).
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(MekaSpace.gutter),
+        Modifier.widthIn(max = WORK_COLUMN_MAX).fillMaxHeight().verticalScroll(rememberScrollState())
+            .padding(MekaSpace.gutter).testTag("work-pane"),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
         Text("Close", style = MekaType.itemMeta, color = Meka.colors.accent,
@@ -302,7 +309,11 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         DiscordSetupSection(core, 9)
         Spacer(Modifier.height(MekaSpace.xl))
     }
+    }
 }
+
+/** Work mode's widest column, unfolded (Fasting's cap): the rest of the inner screen stays background. */
+internal val WORK_COLUMN_MAX = 600.dp
 
 /**
  * "While you were at work": one screen, grouped by person, urgent first then family. Tapping a person opens

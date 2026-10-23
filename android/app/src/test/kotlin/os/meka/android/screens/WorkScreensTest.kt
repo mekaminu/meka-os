@@ -30,6 +30,7 @@ import os.meka.android.designsystem.ThemeChoice
 import os.meka.android.work.AT_WORK_NOTE
 import os.meka.android.work.HOURS_OFF_LINE
 import os.meka.android.work.HOURS_ON_LINE
+import os.meka.android.work.WORK_COLUMN_MAX
 import os.meka.android.work.WorkPane
 import os.meka.android.work.callAssistantNote
 import os.meka.core.domain.CallScreeningRules
@@ -142,6 +143,22 @@ class WorkScreensTest {
         ScreenShots.assertNoDotStartingALine(compose, name, lines + callLine)
         ScreenShots.assertEachOneLine(compose, name, listOf("Stop work now", "Start work now", "Usual start", "Usual end"))
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
+        // Unfolded, the column keeps to Fasting's 600 dp, centred, so Stop work now and the steppers don't sit at the far edge.
+        val pane = compose.onNodeWithTag("work-pane").fetchSemanticsNode().boundsInRoot
+        val screen = compose.onNodeWithTag("screen").fetchSemanticsNode().boundsInRoot
+        val density = compose.density.density
+        val paneDp = pane.width / density
+        if (paneDp > WORK_COLUMN_MAX.value + 0.5f) fail("$name: Work mode's column is ${paneDp.toInt()} dp wide (max ${WORK_COLUMN_MAX.value.toInt()})")
+        val leftGap = pane.left - screen.left
+        val rightGap = screen.right - pane.right
+        if (kotlin.math.abs(leftGap - rightGap) > density * 2) fail("$name: Work mode's column isn't centred (${leftGap / density} dp left, ${rightGap / density} dp right)")
+        // The commute's "Home" label sits clear of the To work chips above it (at least 8 dp of air), as its own heading.
+        val toWorkChips = compose.onAllNodes(hasContentDescription("Commute to work:", substring = true)).fetchSemanticsNodes()
+        val homeLabel = compose.onAllNodes(hasText("Home", substring = false)).fetchSemanticsNodes()
+        if (toWorkChips.isNotEmpty() && homeLabel.isNotEmpty()) {
+            val air = (homeLabel.first().boundsInRoot.top - toWorkChips.maxOf { it.boundsInRoot.bottom }) / density
+            if (air < 8f) fail("$name: the commute's Home label sits ${air.toInt()} dp under the To work chips (want ≥ 8)")
+        }
         when (fill) {
             Fill.EMPTY -> ScreenShots.assertShows(compose, name, "Add from contacts")
             Fill.ONE -> {

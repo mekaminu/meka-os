@@ -3084,6 +3084,12 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Design check: no design file covers Work mode. Fold and Mac, no core change, no server change, no migration, Mac checked nightly.
 - Landed 844e1e6; CI run 1122 (39928079093) green first try; shots published 16dd64e. Seen in them for the next slice: on the inner screen the column runs the full width (the pill and the steppers at the far edge); on the cover screen the commute's To work / Home labels sit tight on their chips.
 
+### Quality gate — slice 38 (2026-10-23): Work mode's findings fixed
+- **Inner screen:** WorkPane's scrolling column sits in a full-size Box aligned TopCenter and is capped at `WORK_COLUMN_MAX` (600 dp, Fasting's cap) with `testTag("work-pane")`; on the cover screen (344 dp) nothing changes.
+- **Cover screen:** CommuteSection's chip-row labels ("To work", "Home", and the one-day title, both in the usual and one-day rows) go through `ChipRowLabel` (8 dp top padding); the two notes get 4 dp top padding.
+- **WorkScreensTest** now fails if the work-pane is wider than 600 dp or not centred within 2 dp, or if the commute's Home label sits under 8 dp below the lowest To work chip.
+- Design check: no design file covers Work mode. Fold only (the Mac's Work sheet is a fixed 460 pt with pickers, neither finding applies), no core change, no server change, no migration.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

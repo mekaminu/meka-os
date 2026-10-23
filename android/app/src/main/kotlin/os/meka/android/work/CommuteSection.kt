@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,7 +49,7 @@ fun CommuteSection(
         Crossfade(CommuteRules.summary(commute), animationSpec = MekaMotion.appear(reduced), label = "commute-line") { line ->
             Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
-        Text("To work", style = MekaType.caption, color = Meka.colors.textTertiary)
+        ChipRowLabel("To work")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             CommuteRules.choices(commute.toWorkMin).forEach { m ->
                 val label = CommuteRules.label(m)
@@ -58,7 +59,7 @@ fun CommuteSection(
                 }
             }
         }
-        Text("Home", style = MekaType.caption, color = Meka.colors.textTertiary)
+        ChipRowLabel("Home")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             CommuteRules.choices(commute.homeMin).forEach { m ->
                 val label = CommuteRules.label(m)
@@ -68,7 +69,7 @@ fun CommuteSection(
                 }
             }
         }
-        Text(CommuteRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(CommuteRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
         if (days.isNotEmpty()) OneDay(days, onSetDay, onClearDay)
     }
 }
@@ -88,7 +89,7 @@ private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit
     // Keeps the last day's chips on screen while they fold away.
     var shown by remember { mutableStateOf<CommuteDayRow?>(null) }
     if (row != null) shown = row
-    Text(CommuteRules.ONE_DAY_TITLE, style = MekaType.caption, color = Meka.colors.textTertiary)
+    ChipRowLabel(CommuteRules.ONE_DAY_TITLE)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         days.forEach { d ->
             val label = if (d.changed) "${d.label} •" else d.label
@@ -108,7 +109,7 @@ private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit
             Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "commute-day-line") { line ->
                 Text(line, style = MekaType.itemMeta, color = if (r.changed) Meka.colors.accent else Meka.colors.textSecondary)
             }
-            Text("To work", style = MekaType.caption, color = Meka.colors.textTertiary)
+            ChipRowLabel("To work")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 CommuteRules.choices(r.toWorkMin).forEach { m ->
                     val label = CommuteRules.label(m)
@@ -118,7 +119,7 @@ private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit
                     }
                 }
             }
-            Text("Home", style = MekaType.caption, color = Meka.colors.textTertiary)
+            ChipRowLabel("Home")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 CommuteRules.choices(r.homeMin).forEach { m ->
                     val label = CommuteRules.label(m)
@@ -135,5 +136,14 @@ private fun OneDay(days: List<CommuteDayRow>, onSetDay: (Long, Int, Int) -> Unit
             }
         }
     }
-    Text(CommuteRules.ONE_DAY_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+    Text(CommuteRules.ONE_DAY_NOTE, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+}
+
+/**
+ * A chip row's label ("To work", "Home"): 8 dp of air above it, so it reads as the next row's heading rather than
+ * hugging the chips before it (quality gate slice 37's cover-screen finding); the chips sit 4 dp under it.
+ */
+@Composable
+private fun ChipRowLabel(text: String) {
+    Text(text, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs))
 }
