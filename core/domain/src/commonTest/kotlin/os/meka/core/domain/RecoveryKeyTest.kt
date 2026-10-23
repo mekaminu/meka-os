@@ -136,4 +136,20 @@ class RecoveryKeyTest {
         assertEquals("The old key stops working once the new one is saved", made.warning)
         assertEquals(RecoveryKeyRules.OFFLINE, RecoveryKeyRules.pane(null, 0, cal, RecoveryKeyRules.OFFLINE).problem)
     }
+
+    @Test
+    fun theWordsGoTwoToARowWhereFourWouldSplitThem() {
+        // Quality gate slice 39: the cover screen's words box is about 280 dp wide; the inner screen's about 765.
+        assertEquals(2, RecoveryKeyRules.columnsFor(280f))
+        assertEquals(4, RecoveryKeyRules.columnsFor(765f))
+        assertEquals(4, RecoveryKeyRules.columnsFor(4 * RecoveryKeyRules.WORD_MIN_DP + 24f))
+        val d = RecoveryKeyRules.draft(ByteArray(32) { it.toByte() }) { 0 }
+        val two = d.rowsIn(2)
+        assertEquals(12, two.size)
+        assertEquals(listOf("1 ${d.words[0]}", "2 ${d.words[1]}"), two[0])
+        assertEquals("24 ${d.words[23]}", two.last().last())
+        assertEquals(d.rows, d.rowsIn(4))
+        // The longest numbered word fits the narrowest column at the body size's ~9.5 dp a character.
+        assertTrue(d.words.all { ("24 " + it).length * 9.5f <= RecoveryKeyRules.WORD_MIN_DP })
+    }
 }

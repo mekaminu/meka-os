@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,6 +63,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.RecoveryKeyDraft
 import os.meka.core.domain.RecoveryKeyRules
 import os.meka.core.facade.MekaCore
@@ -138,7 +140,7 @@ fun RecoveryKeyPane(core: MekaCore, onClose: () -> Unit) {
         }
         val problem = view?.problem
         AnimatedVisibility(problem != null, enter = enter, exit = exit) {
-            Text(problem.orEmpty(), style = MekaType.caption, color = Meka.colors.accent)
+            Text(LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.accent)
         }
     }
 }
@@ -156,10 +158,10 @@ private fun StatusSection(view: os.meka.core.domain.RecoveryKeyView?, saved: Boo
             if (view.lit && !saved) Meka.colors.accent else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "recovery-lit",
         ).value
         Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "recovery-line") { l ->
-            Text(l, style = MekaType.body, color = color, modifier = Modifier.appear(rememberAppearance(1)))
+            Text(LoneWordGlue.kept(l), style = MekaType.body, color = color, modifier = Modifier.appear(rememberAppearance(1)))
         }
-        Text(RecoveryKeyRules.HOW, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
-        view.warning?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(2))) }
+        Text(LoneWordGlue.kept(RecoveryKeyRules.HOW), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
+        view.warning?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(2))) }
         Pill(view.action, enabled = !busy, modifier = Modifier.appear(rememberAppearance(2)), onClick = onMake)
     }
 }
@@ -168,16 +170,22 @@ private fun StatusSection(view: os.meka.core.domain.RecoveryKeyView?, saved: Boo
 private fun WordsSection(draft: RecoveryKeyDraft, onWritten: () -> Unit, onCancel: () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text("Your 24 words", style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        Text(RecoveryKeyRules.HOW, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(RecoveryKeyRules.HOW), style = MekaType.caption, color = Meka.colors.textTertiary)
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {
-            draft.rows.forEachIndexed { i, row ->
-                // Each row fades in after the last (the stagger); reduced motion: all at once.
-                Row(Modifier.fillMaxWidth().appear(rememberAppearance(i + 1)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    row.forEach { w ->
-                        Text(w, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+            // Four to a row where each word reads whole, two on the cover screen (RecoveryKeyRules.columnsFor).
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val rows = draft.rowsIn(RecoveryKeyRules.columnsFor(maxWidth.value, MekaSpace.xs.value))
+                Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                    rows.forEachIndexed { i, row ->
+                        // Each row fades in after the last (the stagger); reduced motion: all at once.
+                        Row(Modifier.fillMaxWidth().appear(rememberAppearance(i + 1)), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                            row.forEach { w ->
+                                Text(w, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
+                            }
+                        }
                     }
                 }
             }

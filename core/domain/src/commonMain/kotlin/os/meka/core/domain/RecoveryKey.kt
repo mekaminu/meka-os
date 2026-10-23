@@ -63,8 +63,20 @@ object RecoveryKeyRules {
             positions.zip(answers).all { (p, a) -> p in phrase.indices && wordOf(tokens(a).singleOrNull().orEmpty()) == phrase[p] }
 
     /** The words as shown: six rows of four, numbered ("1 abandon"). */
-    fun rows(phrase: List<String>): List<List<String>> =
-        phrase.mapIndexed { i, w -> "${i + 1} $w" }.chunked(4)
+    fun rows(phrase: List<String>): List<List<String>> = rows(phrase, 4)
+
+    /** The words numbered ("1 abandon") in rows of [columns], read across then down. */
+    fun rows(phrase: List<String>, columns: Int): List<List<String>> =
+        phrase.mapIndexed { i, w -> "${i + 1} $w" }.chunked(columns.coerceIn(1, WORDS))
+
+    /**
+     * The narrowest a numbered word ("24 strategy", the longest list words are 8 letters) reads whole in the body
+     * style (quality gate slice 39: on the cover screen four to a row left about 64 dp each and split "1 / abandon").
+     */
+    const val WORD_MIN_DP = 112f
+
+    /** Four words to a row when four fit [widthDp] (with [gapDp] between them) at [WORD_MIN_DP], else two. */
+    fun columnsFor(widthDp: Float, gapDp: Float = 8f): Int = if (4 * WORD_MIN_DP + 3 * gapDp <= widthDp) 4 else 2
 
     // ---- recovering ----
 
@@ -237,6 +249,9 @@ class RecoveryKeyDraft(
 ) {
     /** "Word 3" · "Word 11" · "Word 20": each confirmation field's label. */
     val confirmLabels: List<String> get() = confirmPositions.map { "Word ${it + 1}" }
+
+    /** The words in rows of [columns] (four unfolded and on the Mac, two on the cover screen: [RecoveryKeyRules.columnsFor]). */
+    fun rowsIn(columns: Int): List<List<String>> = RecoveryKeyRules.rows(words, columns)
 }
 
 /** Settings → Recovery key: the status row, [warning] before replacing a key, and the last [problem]. */

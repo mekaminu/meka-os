@@ -56,6 +56,7 @@ import os.meka.android.designsystem.sharedTitleInPane
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.FamilyLink
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.FamilyRow
 import os.meka.core.domain.FamilyRules
 import os.meka.core.domain.FamilyState
@@ -94,16 +95,16 @@ fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
         Text("Family", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.FAMILY)).appear(rememberAppearance(0)))
         Crossfade(v?.summary ?: "Checking…", animationSpec = MekaMotion.appear(reduced), label = "family-summary") { s ->
-            Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+            Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
         }
-        Text(FamilyRules.SHARED, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
+        Text(LoneWordGlue.kept(FamilyRules.SHARED), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
         val problem = v?.problem
         AnimatedVisibility(
             problem != null,
             enter = if (reduced) fadeIn(MekaMotion.appear(true)) else expandVertically(MekaMotion.expand(false)) + fadeIn(MekaMotion.appear(false)),
             exit = if (reduced) fadeOut(MekaMotion.appear(true)) else shrinkVertically(MekaMotion.expand(false)) + fadeOut(MekaMotion.appear(false)),
         ) {
-            Text(problem.orEmpty(), style = MekaType.caption, color = Meka.colors.accent)
+            Text(LoneWordGlue.kept(problem.orEmpty()), style = MekaType.caption, color = Meka.colors.accent)
         }
         if (v == null) {
             SkeletonRows(2, Modifier.padding(top = MekaSpace.xs))
@@ -146,7 +147,7 @@ fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 Text("Link made for ${link?.name.orEmpty()}", style = MekaType.body, color = Meka.colors.textPrimary)
-                Text(FamilyRules.NOTE, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(FamilyRules.NOTE), style = MekaType.caption, color = Meka.colors.textSecondary)
                 PillButton("Share the link again", enabled = link != null) {
                     haptics.light()
                     link?.let { shareFamilyLink(context, it) }
@@ -181,7 +182,7 @@ private fun FamilyRowView(row: FamilyRow, enabled: Boolean, modifier: Modifier, 
         Column(Modifier.weight(1f)) {
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
             Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "family-row-line") { l ->
-                Text(l, style = MekaType.caption, color = lineColor)
+                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = lineColor)
             }
         }
         if (row.canTurnOff) {

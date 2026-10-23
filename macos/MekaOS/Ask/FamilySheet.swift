@@ -23,13 +23,13 @@ struct FamilySheet: View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Family").font(MekaType.upNextTitle).staggeredAppear(0)
             if let view = model.family {
-                Text(view.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: view.summary)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: view.summary)
                     .staggeredAppear(1)
-                Text(view.shared).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(1)
+                Text(LoneWordGlue.shared.kept(line: view.shared)).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(1)
                 if let problem = view.problem {
-                    Text(problem).font(MekaType.caption).foregroundStyle(palette.accent)
+                    Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.accent)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
@@ -71,7 +71,7 @@ struct FamilySheet: View {
             if let made {
                 VStack(alignment: .leading, spacing: MekaSpace.xs) {
                     Text("Link made for \(made.name)").font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text(made.note).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: made.note)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: MekaSpace.xs) {
                         ShareLink(item: made.shareText) { Text("Share…") }
@@ -131,7 +131,7 @@ private struct FamilyRowView: View {
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: row.line)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-                Text(row.line).font(MekaType.caption).foregroundStyle(row.lit ? palette.accent : palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.caption).foregroundStyle(row.lit ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)
             }

@@ -39,7 +39,7 @@ struct RecoveryKeySheet: View {
             }
             .transition(.opacity)
             if let problem = model.recoveryKey?.problem {
-                Text(problem).font(MekaType.caption).foregroundStyle(palette.accent)
+                Text(LoneWordGlue.shared.kept(line: problem)).font(MekaType.caption).foregroundStyle(palette.accent)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
             }
@@ -64,16 +64,16 @@ struct RecoveryKeySheet: View {
     @ViewBuilder private var status: some View {
         if let view = model.recoveryKey {
             let line = saved ? RecoveryKeyRules.shared.SAVED : view.line
-            Text(line).font(MekaType.body)
+            Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.body)
                 .foregroundStyle(view.lit && !saved ? palette.accent : palette.textSecondary)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: line)
                 .staggeredAppear(1)
-            Text(RecoveryKeyRules.shared.HOW).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: RecoveryKeyRules.shared.HOW)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(1)
             if let warning = view.warning {
-                Text(warning).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)
+                Text(LoneWordGlue.shared.kept(line: warning)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)
             }
             pill(view.action, enabled: !model.recoveryBusy, action: make).staggeredAppear(2)
         } else {
@@ -86,7 +86,7 @@ struct RecoveryKeySheet: View {
         if let d = draft {
             let rows = d.rows
             Text("Your 24 words").font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-            Text(RecoveryKeyRules.shared.HOW).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: RecoveryKeyRules.shared.HOW)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
