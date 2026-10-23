@@ -181,6 +181,7 @@ screenshots, for review. Invented data only. This branch is append-only.
 - [fold/settings/cover-dark.png](docs/screens/fold/settings/cover-dark.png)
 - [fold/settings/cover-light-connected.png](docs/screens/fold/settings/cover-light-connected.png)
 - [fold/settings/inner-dark-connected.png](docs/screens/fold/settings/inner-dark-connected.png)
+- [fold/talk/cover-dark-by-hand.png](docs/screens/fold/talk/cover-dark-by-hand.png)
 - [fold/talk/cover-dark-changed.png](docs/screens/fold/talk/cover-dark-changed.png)
 - [fold/talk/cover-dark.png](docs/screens/fold/talk/cover-dark.png)
 - [fold/talk/cover-light.png](docs/screens/fold/talk/cover-light.png)
