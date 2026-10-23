@@ -4,6 +4,7 @@ import os.meka.core.sync.FieldValue
 import os.meka.core.testing.SyncWorld
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class DataExportTest {
@@ -88,5 +89,13 @@ class DataExportTest {
     fun fileNameIsTheLocalDay() {
         val ms = CivilDate.toEpochDay(2026, 10, 7) * CivilDate.DAY_MS + 2 * 3_600_000L
         assertEquals("meka-export-2026-10-07.json", DataExport.fileName(ms, LocalCalendar.UTC))
+    }
+
+    @Test
+    fun introNamesDocumentsAndTheDevice() {
+        assertTrue("documents" in DataExport.intro(DataExport.PHONE), "the Vault's documents are in the file")
+        assertTrue(DataExport.intro(DataExport.MAC).startsWith("Everything on this Mac "))
+        assertFalse("Vault lands" in DataExport.intro(DataExport.PHONE))
+        assertTrue(DataExport.TYPES.contains(EntityTypes.VAULT_DOC))
     }
 }

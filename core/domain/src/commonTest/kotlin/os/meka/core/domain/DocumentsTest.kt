@@ -138,4 +138,15 @@ class DocumentsTest {
         assertEquals("Added Passport · expires Thu 1 Oct 2026 · it has run out: renew it", dFold.add("Passport expired 1 Oct 2026").line)
         assertEquals("Added Will · no expiry", dFold.add("Will").line)
     }
+
+    @Test
+    fun hintIsOneExampleAndTheLinesNeverRepeat() {
+        // Quality gate slice 42: the field's hint is one example (the rest goes to TalkBack) and it still reads.
+        assertFalse("," in DocumentRules.ADD_HINT)
+        assertTrue(DocumentRules.ADD_HINT in DocumentRules.ADD_SPOKEN)
+        val today = CivilDate.toEpochDay(2026, 10, 21)
+        assertTrue(DocumentRules.read(DocumentRules.ADD_HINT, today) is DocumentRules.Read.Doc, "the hint is a line Navilife can read")
+        val renew = DocumentRules.VAULT_LINE.substringAfter(";").trim()
+        assertFalse(renew in DocumentRules.EMPTY_LINE, "the empty line doesn't say what the Vault's line says")
+    }
 }

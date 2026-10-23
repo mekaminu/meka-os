@@ -111,8 +111,13 @@ object DocumentRules {
     /** Besides the kind's own window: a month, a week and the day itself. */
     val STAGES = listOf(30, 7, 0)
 
-    const val ADD_HINT = "Add… (Passport expires 3 Mar 2029, Alex passport 20 May 2027, Railcard 05/2027)"
-    const val EMPTY_LINE = "No documents yet. Type each one with the date it runs out; Navilife reminds you in time to renew."
+    /** The add field's hint: one example on one line (the quality gate's rule for hints, slice 20). */
+    const val ADD_HINT = "Passport expires 3 Mar 2029"
+    /** What TalkBack / VoiceOver read for the field: the full how-to the hint used to carry. */
+    const val ADD_SPOKEN = "Add a document with the day it runs out, like Passport expires 3 Mar 2029, Driving licence 12 Nov 2031 or Railcard 05/2027"
+    /** Under the Vault's title on both apps (quality gate slice 42: the renewal half no longer repeats in [EMPTY_LINE]). */
+    const val VAULT_LINE = "Your documents and when they run out; Navilife reminds you in time to renew."
+    const val EMPTY_LINE = "No documents yet. Type each one with the date it runs out."
     const val NOT_READ = "Navilife couldn't read that. Try \"Passport expires 3 Mar 2029\" or \"Railcard 05/2027\"."
     const val BAD_DATE = "Navilife couldn't read that date. Try \"3 Mar 2029\" or \"05/2029\"."
     const val NOTE = "Names and dates only: Navilife keeps no document numbers. Open a document to add a copy (a photo or PDF), encrypted on this device first."

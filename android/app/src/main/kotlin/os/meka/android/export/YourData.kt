@@ -51,8 +51,10 @@ import os.meka.android.designsystem.SkeletonRows
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
+import os.meka.core.domain.DataExport
 import os.meka.core.domain.DatabaseProtectionRules
 import os.meka.core.domain.ExportSummary
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.DataExportFile
 import os.meka.core.facade.MekaCore
 import os.meka.android.designsystem.LocalPlaceTitleKey
@@ -131,15 +133,14 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
         Text(if (vaultLine != null) "Vault" else "Your data", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.YOUR_DATA)).sharedPlace(LocalPlaceTitleKey.current)
                 .appear(rememberAppearance(0)))
-        vaultLine?.let { Text(it, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0))) }
+        vaultLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0))) }
         // The Vault (V2, slice 1): the documents and when they run out, above the export.
         if (vaultLine != null) VaultDocuments(core, firstIndex = 1)
 
         Spacer(Modifier.height(MekaSpace.m))
         Text("EXPORT EVERYTHING", style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
         Text(
-            "Everything on this phone as one file you can keep: tasks, steps, lists, renewals, goals, habits, fasts, " +
-                "calendar events and settings. Documents join it when the Vault lands.",
+            LoneWordGlue.kept(DataExport.intro(DataExport.PHONE)),
             style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)),
         )
         Column(Modifier.appear(rememberAppearance(2))) {
@@ -147,7 +148,7 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
             if (s == null) SkeletonRows(count = 1, rowHeight = 36.dp)
             else {
                 Text(s.totalLine, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-                if (s.partsLine.isNotEmpty()) Text(s.partsLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+                if (s.partsLine.isNotEmpty()) Text(LoneWordGlue.kept(s.partsLine), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
             }
         }
 
@@ -162,7 +163,8 @@ fun YourData(core: MekaCore, modifier: Modifier = Modifier, onClose: (() -> Unit
                         ExportButton("Try again") { export() }
                     }
                     is ExportPhase.Saved -> ExportButton("Export again", filled = false) { export() }
-                    ExportPhase.Idle -> ExportButton("Export everything") { if (summary?.total != 0) export() }
+                    // Quality gate slice 42: with nothing to export the button is dimmed and says so, never a dead tap.
+                    ExportPhase.Idle -> ExportButton(DataExport.EXPORT_BUTTON, enabled = summary?.total != 0) { export() }
                 }
             }
         }
@@ -201,12 +203,17 @@ private fun SavedCheck(saved: ExportPhase.Saved?) {
 }
 
 @Composable
-private fun ExportButton(label: String, filled: Boolean = true, onClick: () -> Unit) {
+private fun ExportButton(label: String, filled: Boolean = true, enabled: Boolean = true, onClick: () -> Unit) {
+    val lit = filled && enabled
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill))
-            .background(if (filled) Meka.colors.accent else Meka.colors.surfaceRaised)
-            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
+            .background(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised)
+            .clickable(enabled = enabled, role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
     ) {
-        Text(label, style = MekaType.itemTitle, color = if (filled) Meka.colors.onAccent else Meka.colors.accent)
+        Text(label, style = MekaType.itemTitle, color = when {
+            lit -> Meka.colors.onAccent
+            enabled -> Meka.colors.accent
+            else -> Meka.colors.textTertiary
+        })
     }
 }

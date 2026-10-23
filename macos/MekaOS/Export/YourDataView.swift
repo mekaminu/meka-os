@@ -17,7 +17,7 @@ struct YourDataSection: View {
             Text("EXPORT EVERYTHING")
                 .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking).foregroundStyle(palette.textTertiary)
                 .staggeredAppear(firstIndex)
-            Text("Everything on this Mac as one file you can keep: tasks, steps, lists, renewals, goals, habits, fasts, calendar events and settings. Documents join it when the Vault lands.")
+            Text(DataExport.shared.intro(device: DataExport.shared.MAC))
                 .font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(firstIndex)

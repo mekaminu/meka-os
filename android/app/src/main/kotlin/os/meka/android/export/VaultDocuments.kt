@@ -50,6 +50,7 @@ import os.meka.android.security.FoldBiometric
 import os.meka.core.domain.DocumentAdded
 import os.meka.core.domain.DocumentRow
 import os.meka.core.domain.DocumentRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MailOpenRules
 import os.meka.core.domain.VaultReceiptRules
 import os.meka.core.domain.VaultFileOpened
@@ -112,9 +113,9 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
         Text("DOCUMENTS", style = MekaType.sectionLabel, color = Meka.colors.textTertiary,
             modifier = Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(firstIndex)))
         Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "docs-summary") { s ->
-            Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(firstIndex + 1)))
+            Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(firstIndex + 1)))
         }
-        Field(DocumentRules.ADD_HINT, Modifier.appear(rememberAppearance(firstIndex + 2))) { text ->
+        Field(DocumentRules.ADD_HINT, Modifier.appear(rememberAppearance(firstIndex + 2)), description = DocumentRules.ADD_SPOKEN) { text ->
             scope.launch {
                 val r = runCatching { core.addDocument(text) }.getOrNull()
                 if (r?.refused == false) haptics.light() else haptics.tick()
@@ -175,7 +176,7 @@ fun VaultDocuments(core: MekaCore, firstIndex: Int) {
                 )
             }
         }
-        Text(DocumentRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(DocumentRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
         if (v.rows.any { it.hasCopy }) Text(VaultFileRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
         VaultLockRules.note(v.rows)?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
         // Slice 2a: the household's Vault key, and the devices asking for it.
@@ -223,8 +224,8 @@ private fun DocumentRowView(
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(row.line, style = MekaType.caption, color = Meka.colors.textSecondary)
-            Text(row.status, style = MekaType.caption, color = statusColor)
+            Text(LoneWordGlue.kept(row.line), style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(row.status), style = MekaType.caption, color = statusColor)
             Crossfade(row.copyLine, animationSpec = MekaMotion.appear(reduced), label = "doc-copy") { c ->
                 c?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
             }

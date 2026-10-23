@@ -400,7 +400,7 @@ enum ShellNav {
     /// Placeholder line for destinations whose feature hasn't landed yet.
     static func upcomingLine(_ d: ShellDestination) -> String? {
         switch d {
-        case .vault: "Your documents and when they run out; Navilife reminds you in time to renew."
+        case .vault: DocumentRules.shared.VAULT_LINE
         case .today, .needsYou, .calendar, .ask, .lists, .goals, .review: nil
         }
     }

@@ -327,7 +327,7 @@ private fun Destination(
         ShellDestination.REVIEW -> BehindAsk(go) { ReviewRoute(core) }
         // The Vault: the documents and when they run out (V2, slice 1), then the export of everything (build plan M1).
         ShellDestination.VAULT -> BehindAsk(go) {
-            YourData(core, vaultLine = "Your documents and when they run out; Navilife reminds you in time to renew.")
+            YourData(core, vaultLine = os.meka.core.domain.DocumentRules.VAULT_LINE)
         }
     }
 }

@@ -3128,6 +3128,30 @@ Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of t
   core change, no server change, no migration.
 - Landed e0c6090; CI run 1130 (39942089862) green first try; re-shot f35fe1d: Turn off just under each line.
 
+### Quality gate — slice 42 (2026-10-23): the Vault's and Your data's shots, and what they found
+
+The next of Ask's places without shots. `VaultScreensTest` (10, Robolectric + Roborazzi) draws the Vault (documents and
+the export) on the cover and inner screens with no documents, one and six, Dark and Light, and Your data (Ask's pane)
+with nothing and a full set, under docs/screens/fold/vault/ and your-data/; each is read for nonsense, cut lines, broken
+words, dates and counts split across lines and lone last words.
+Findings fixed on both apps:
+- The export's line still said "Documents join it when the Vault lands", but the Vault's documents have been in the file
+  since V2 slice 1 (`vault_doc` is in `DataExport.TYPES`). Core `DataExport.intro(device)` now names documents; the Fold
+  and the Mac read it from there.
+- The add field's hint carried three examples and wrapped onto two or three lines on the cover screen; it is now one
+  ("Passport expires 3 Mar 2029", `DocumentRules.ADD_HINT`), the full how-to moved to TalkBack / VoiceOver
+  (`ADD_SPOKEN`).
+- With no documents the Vault said "Navilife reminds you in time to renew" twice (its line and the empty summary);
+  `DocumentRules.VAULT_LINE` is the one place it's said, `EMPTY_LINE` now just "No documents yet. Type each one with the
+  date it runs out." (the Mac's Vault line comes from the same rule).
+- Fold: with nothing to export, Export everything looked live and did nothing; it is now dimmed and not a button
+  (`DataExport.EXPORT_BUTTON`; the Mac's was already disabled). The summary, rows' lines and status, the note, the
+  Vault's line and the export's lines keep dates, counts and their last words together (`LoneWordGlue`).
+- Tests: core DocumentsTest (the hint is one example Navilife can read, the empty line doesn't repeat the Vault's) and
+  DataExportTest (the intro names documents); VaultScreensTest also fails if a "Vault lands" line returns, the hint wraps
+  or Export everything is enabled with nothing to export.
+- Design check: no design file covers the Vault or Your data. No server change, no migration, Mac checked nightly.
+
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
 - **The 0 m cause:** a fast's start → end records its real length (a 16-hour fast records 16 h); the "Last fast 0 m · average 0 m · longest 0 m" lines came from fasts **started and ended at once** — Start then End straight after (the old card puts End fast where Start's chips were, so a double tap does both), the watch's one button tapped twice, or End from the shade just after starting. Each was kept and counted as a 0 m fast.
 - **Fix:** a fast that lasted under 10 minutes (`FastingRules.MIN_COUNTED_MS`) is left in the data but never counted: not the last fast, the week, the averages, the history, the totals, the heat strip or the weekly review (`Fasting.merged`). His existing 0 m fasts drop out on the next look; no migration.

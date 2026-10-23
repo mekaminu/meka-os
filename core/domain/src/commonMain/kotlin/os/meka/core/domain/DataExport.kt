@@ -34,12 +34,23 @@ data class ExportSummary(val total: Int, val totalLine: String, val partsLine: S
  * Export everything (build plan M1, non-AI). The export is this device's replica as it stands: every entity Meka's
  * data is made of, with the winning value of each field and, where two devices disagree and nobody has chosen,
  * every value on offer, so nothing is lost. Deleted entities are left out. Headlines are left out too: they are BBC
- * content the server mirrors (ADR-009), not Meka's data. Documents join the export when the Vault lands (V2).
+ * content the server mirrors (ADR-009), not Meka's data. The Vault's documents (names and dates) are part of it.
  */
 object DataExport {
     /** Format name and version written into every file; bump the version only when a reader would misread it. */
     const val FORMAT = "meka-os-export"
     const val VERSION = 1
+
+    /** The device word in [intro]. */
+    const val PHONE = "phone"
+    const val MAC = "Mac"
+    /** The export's button with nothing exported yet (shown dimmed while there is nothing to export). */
+    const val EXPORT_BUTTON = "Export everything"
+
+    /** The line under EXPORT EVERYTHING on both apps; documents are in the file since the Vault landed (quality gate slice 42). */
+    fun intro(device: String): String =
+        "Everything on this $device as one file you can keep: tasks, steps, lists, renewals, goals, habits, fasts, " +
+            "calendar events, documents and settings."
 
     /** What is exported, in file order. Never-renamed wire names (ADR-008). */
     val TYPES: List<String> = EntityTypes.ALL - EntityTypes.HEADLINE

@@ -41,6 +41,7 @@ struct VaultDocumentsSection: View {
                 .staggeredAppear(firstIndex + 1)
             TextField(DocumentRules.shared.ADD_HINT, text: $text)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityLabel(DocumentRules.shared.ADD_SPOKEN)
                 .onSubmit {
                     let typed = text
                     text = ""
