@@ -277,11 +277,12 @@ class ShutdownScreensTest {
         val button = textNodes("Shut down").firstOrNull() ?: return
         val l = layout(button) ?: return
         val left = l.getLineLeft(0)
-        val right = button.size.width - l.getLineRight(0)
+        // Measured inside the text's own layout: the node also holds the button's padding (CI run 1143: 88 vs 136 dp).
+        val right = l.size.width - l.getLineRight(0)
         if (kotlin.math.abs(left - right) > 4f) fail("$name: Shut down's label isn't centred (${dp(left).toInt()} dp left, ${dp(right).toInt()} dp right)")
         val notNow = textNodes(OnThisDayRules.NOT_NOW).firstOrNull() ?: return
-        // The label's node sits inside the button's 16 dp padding.
-        val band = dp(button.boundsInRoot.top - notNow.boundsInRoot.bottom) - 16f
+        // The label's node is the whole button (its padding included).
+        val band = dp(button.boundsInRoot.top - notNow.boundsInRoot.bottom)
         if (band > 28f) fail("$name: ${band.toInt()} dp of empty band above Shut down (at most 28)")
     }
 
