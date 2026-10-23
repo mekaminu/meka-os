@@ -10,7 +10,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -39,6 +39,7 @@ import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.EventFields
 import os.meka.core.domain.HabitTiming
 import os.meka.core.domain.HeadlineFields
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.MekaSchema
 import os.meka.core.facade.MekaCore
 import os.meka.core.sync.FieldValue
@@ -125,7 +126,7 @@ class BriefScreensTest {
         event("ev2", longTitle, at(10, 0), at(11, 30), place = "Harbour House, Dock Street")
         headline("top-0", "Rail fares to rise less than expected next year", "top", 40, "BBC News")
         headline("world-0", "Leaders meet to agree a new climate fund", "world", 95, "BBC News")
-        headline("tech-0", "A new open model tops the coding charts", "technology", 150, "BBC News")
+        headline("ai-0", "A new open model tops the coding charts", "ai", 150, "The Verge")
         // Some feeds send the headline only, with no link: it isn't a button.
         headline("top-1", "Storm warning for the coast this weekend", "top", 200, "BBC News", url = null)
     }
@@ -186,10 +187,13 @@ class BriefScreensTest {
         turns(1_000)
     }
 
-    /** Scrolls the pane to [matcher]; the clock runs while it does (a lazy list's scroll waits for a frame). */
+    /**
+     * Scrolls the pane to [matcher]; the clock runs while it does (a lazy list's scroll waits for a frame). The pane is
+     * the one lazy list (its chip rows scroll sideways too, so it's found by its scroll-to-index action).
+     */
     private fun scrollTo(matcher: SemanticsMatcher) {
         compose.mainClock.autoAdvance = true
-        compose.onNode(hasScrollAction()).performScrollToNode(matcher)
+        compose.onNode(hasScrollToIndexAction()).performScrollToNode(matcher)
         compose.waitForIdle()
         compose.mainClock.autoAdvance = false
         turns(1_000)
@@ -240,7 +244,7 @@ class BriefScreensTest {
             Fill.EMPTY -> {
                 // Nothing on: the day says so, never "0 events".
                 if (v.dayLines.isNotEmpty()) fail("$name: nothing on, but ${v.dayLines.size} rows in Today")
-                ScreenShots.assertShows(compose, name, v.daySummary)
+                ScreenShots.assertShows(compose, name, LoneWordGlue.kept(v.daySummary))
             }
             Fill.ONE -> {
                 if (v.dayLines.none { it.title == "Swimming lesson" }) fail("$name: the swimming lesson isn't in Today (${v.dayLines.map { it.title }})")
@@ -248,7 +252,7 @@ class BriefScreensTest {
             }
             Fill.MANY -> {
                 if (v.workLine == null) fail("$name: an office Wednesday, but no work line")
-                if (v.headlines.size != 4) fail("$name: ${v.headlines.size} headlines, not the four from Top stories, World and Technology")
+                if (v.headlines.size != 4) fail("$name: ${v.headlines.size} headlines, not the four from Top stories, World and AI (chosen by default)")
                 if (v.fastingLine == null) fail("$name: a fast is running, but the brief doesn't say so")
                 if (v.waitingLine == null) fail("$name: a chase today, but nothing waiting")
             }
@@ -281,13 +285,13 @@ class BriefScreensTest {
     fun topicsOpenPickAndCloseByHand() {
         val name = "cover-dark-topics"
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
-        val science = core.briefView.value.newsTopics.first { it.id == "science" }
-        val wasOn = science.chosen
+        val barca = core.briefView.value.newsTopics.first { it.id == "barca" }
+        val wasOn = barca.chosen
         tap(name, "Topics", hasTestTag("brief-topics"))
         ScreenShots.assertShows(compose, name, "Done")
-        tap(name, "the Science chip", hasText(science.label))
-        until { core.briefView.value.newsTopics.first { it.id == "science" }.chosen != wasOn }
-        if (core.briefView.value.newsTopics.first { it.id == "science" }.chosen == wasOn) fail("$name: tapping Science left it as it was")
+        tap(name, "the Barça chip", hasText(barca.label))
+        until { core.briefView.value.newsTopics.first { it.id == "barca" }.chosen != wasOn }
+        if (core.briefView.value.newsTopics.first { it.id == "barca" }.chosen == wasOn) fail("$name: tapping Barça left it as it was")
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("brief", name))
         tap(name, "Done", hasTestTag("brief-topics"))
         if (compose.onAllNodes(hasText("Topics") and hasTestTag("brief-topics"), useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) {
