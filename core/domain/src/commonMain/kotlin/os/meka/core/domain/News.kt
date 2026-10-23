@@ -463,6 +463,14 @@ object NewsRules {
         else -> "$unread new · ${total - unread} read"
     }
 
+    /**
+     * Quality gate slice 43: what a story's detail says when its feed sent no summary. With a link it points at Read
+     * full story under it; without one (some feeds give none) it never sends him to a button that isn't there.
+     */
+    fun noSummary(source: String, hasLink: Boolean): String =
+        if (hasLink) "No summary from $source. Read the full story for the details."
+        else "$source sent the headline only, with no summary or link."
+
     /** What Save for the train says for a story without a link (some feeds give none). */
     const val NO_LINK_TO_SAVE = "This story has no link to save for the train"
 

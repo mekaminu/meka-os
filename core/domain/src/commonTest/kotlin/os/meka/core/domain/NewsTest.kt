@@ -316,4 +316,13 @@ class NewsTest {
         // The facade passes only the events on my day; a hidden fixture isn't among them.
         assertNull(News(m.replica).place(now, emptyList(), bst).matchday)
     }
+
+    /** Quality gate slice 43: a story with no summary never points at Read full story when it has no link to read. */
+    @Test
+    fun noSummaryNeverPointsAtAButtonThatIsntThere() {
+        assertEquals("No summary from The Verge. Read the full story for the details.", NewsRules.noSummary("The Verge", hasLink = true))
+        val bare = NewsRules.noSummary("The Verge", hasLink = false)
+        assertTrue("The Verge" in bare)
+        assertTrue("Read" !in bare && "full story" !in bare)
+    }
 }

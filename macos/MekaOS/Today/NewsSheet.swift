@@ -79,7 +79,7 @@ struct NewsSheet: View {
                 }
         }
         HStack {
-            Text(followNote ?? place.followsLine).font(MekaType.caption)
+            Text(LoneWordGlue.shared.kept(line: followNote ?? place.followsLine)).font(MekaType.caption)
                 .foregroundStyle(followNote != nil ? palette.accent : palette.textTertiary)
                 .contentTransition(.opacity)
             Spacer()
@@ -140,17 +140,17 @@ struct NewsSheet: View {
             }
             .menuStyle(.borderlessButton).fixedSize()
         }
-        Text("Spanish sources: " + place.spanishLine + " · " + place.sourcesCaption)
+        Text(LoneWordGlue.shared.kept(line: "Spanish sources: " + place.spanishLine + " · " + place.sourcesCaption))
             .font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
             .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: place.spanishSources)
         if let line = place.sourcesLine {
-            Text("Sources: " + line).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
+            Text(LoneWordGlue.shared.kept(line: "Sources: " + line)).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(0)
                 .contentTransition(.opacity).animation(reduceMotion ? nil : .easeInOut(duration: 0.2), value: line)
         }
         followRow(place).staggeredAppear(0)
         if let line = place.unreadLine {
             HStack {
-                Text(marked ?? line).font(MekaType.itemMeta)
+                Text(LoneWordGlue.shared.kept(line: marked ?? line)).font(MekaType.itemMeta)
                     .foregroundStyle(marked != nil ? palette.accent : palette.textSecondary)
                     .contentTransition(.opacity)
                 Spacer()
@@ -182,7 +182,7 @@ struct NewsSheet: View {
                     matchday(md).staggeredAppear(1)
                 }
                 if let line = place.emptyLine {
-                    Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).staggeredAppear(1)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).staggeredAppear(1)
                 }
                 ForEach(Array(place.lanes.enumerated()), id: \.element.topicId) { i, lane in
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
@@ -202,7 +202,7 @@ struct NewsSheet: View {
                             }
                         }
                         if !lane.sources.isEmpty {
-                            Text(lane.sources).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                            Text(LoneWordGlue.shared.kept(line: lane.sources)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         }
                     }
                     .padding(.top, i == 0 ? 0 : MekaSpace.l)
@@ -215,7 +215,7 @@ struct NewsSheet: View {
                 if !place.quiet.isEmpty {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                         ForEach(place.quiet, id: \.self) { line in
-                            Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
+                            Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary)
                         }
                     }
                     .padding(.top, MekaSpace.l)
@@ -268,8 +268,9 @@ struct NewsSheet: View {
                     }
                     Text(d.item.title).font(MekaType.upNextTitle).foregroundStyle(palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(d.item.meta).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                    Text(d.item.summary ?? "No summary from \(d.item.source). Read the full story for the details.")
+                    Text(LoneWordGlue.shared.kept(line: d.item.meta)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    // Quality gate slice 43: without a link it never says to read the full story (there's no button).
+                    Text(d.item.summary ?? LoneWordGlue.shared.kept(line: NewsRules.shared.noSummary(source: d.item.source, hasLink: d.item.url != nil)))
                         .font(MekaType.body)
                         .foregroundStyle(d.item.summary != nil ? palette.textPrimary : palette.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -349,7 +350,7 @@ private struct StoryRow: View {
                 Text(item.title).font(MekaType.body)
                     .foregroundStyle(hovering ? palette.accent : (item.read ? palette.textSecondary : palette.textPrimary))
                     .fixedSize(horizontal: false, vertical: true)
-                Text(item.meta).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: item.meta)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             Spacer(minLength: MekaSpace.xs)
             NewsThumb(item: item, palette: palette).frame(width: 72, height: 54).padding(.top, 2) // rhythm: ok (lines the picture up with the title's first line)

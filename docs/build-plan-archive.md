@@ -3128,6 +3128,27 @@ Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of t
   core change, no server change, no migration.
 - Landed e0c6090; CI run 1130 (39942089862) green first try; re-shot f35fe1d: Turn off just under each line.
 
+### Quality gate — slice 43 (2026-10-23): News's shots, its first hand tests, and what they found
+
+The next of Ask's places without shots. `NewsScreensTest` (10, Robolectric + Roborazzi) draws Ask → More → News on the
+cover and inner screens with no headlines (not connected), one story and a full set (Barça, AI and Top stories, one
+read, World quiet), Dark and Light, plus Topics open, a story's detail and a story with no summary or link, under
+docs/screens/fold/news/; headlines reach the core from a stand-in sync server held in the test. Each is read for
+nonsense, cut lines, broken words, split dates, times and numbers, lone last words and lines starting with a dot.
+By hand: Topics opens the chips and Done folds them; Mark all read says "Marked 6 read" with Undo, Undo brings back
+"6 new · 1 read"; a story opens at "1 of 7" (marked read), Next moves to "2 of 7".
+Findings fixed:
+- A story whose feed sent no summary said "No summary from BBC News. Read the full story for the details." even when
+  it had no link, so no Read full story button was there to read it. Core `NewsRules.noSummary(source, hasLink)`:
+  without a link, "BBC News sent the headline only, with no summary or link." The Fold and the Mac read it from there.
+- Fold: Topics / Done was its words plus 4 dp to tap; now a 48 dp touch (`minTouch`), tagged `news-topics`.
+- Both apps: the unread line, follows line, Spanish line, sources caption and switches line, the empty and quiet
+  lines, each lane's "From …" and every story's "Source · 3 h ago" keep their last words, dots and ages together
+  (`LoneWordGlue`).
+- Tests: core NewsTest (the bare-story line never points at Read full story); NewsScreensTest fails on Topics under
+  48 dp, a story's source line wrapping, or a bare story naming Read full story.
+- Design check: no design file covers News. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 42 (2026-10-23): the Vault's and Your data's shots, and what they found
 
 The next of Ask's places without shots. `VaultScreensTest` (10, Robolectric + Roborazzi) draws the Vault (documents and

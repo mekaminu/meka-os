@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -75,10 +76,12 @@ import os.meka.android.shell.SharedMotion
 import os.meka.android.calendar.EventDetailPane
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.CalendarEvent
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.NewsDetail
 import os.meka.core.domain.NewsItem
 import os.meka.core.domain.NewsLane
 import os.meka.core.domain.NewsMatchday
+import os.meka.core.domain.NewsRules
 import os.meka.core.facade.MekaCore
 
 /** A horizontal drag past this many dp moves to the next or previous story. */
@@ -145,8 +148,10 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                     // The title arrives from Ask's More row.
                     Text("News", style = MekaType.greeting, color = Meka.colors.textPrimary,
                         modifier = Modifier.weight(1f).sharedTitleInPane(SharedMotion.paneKey(MoreItem.NEWS)))
+                    // Quality gate slice 43: a 48 dp touch, like every other button (it was the words plus 4 dp).
                     Text(if (topicsOpen) "Done" else "Topics", style = MekaType.itemMeta, color = Meka.colors.accent,
-                        modifier = Modifier.clickable(role = Role.Button) { topicsOpen = !topicsOpen }.padding(MekaSpace.xs))
+                        modifier = Modifier.testTag("news-topics").clickable(role = Role.Button) { topicsOpen = !topicsOpen }
+                            .minTouch().padding(horizontal = MekaSpace.xs))
                 }
             }
             item(key = "topics") {
@@ -171,9 +176,9 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                                 }
                             }
                         }
-                        Text(place.spanishLine, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                        Text(LoneWordGlue.kept(place.spanishLine), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
                         Text(
-                            place.sourcesCaption,
+                            LoneWordGlue.kept(place.sourcesCaption),
                             style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xs),
                         )
                         // Full news hub, slice 2: a switch per source in the chosen topics; off leaves its stories out
@@ -187,7 +192,7 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                                 }
                             }
                             place.sourcesLine?.let { line ->
-                                Text(line, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                                Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
                             }
                         }
                         // Full news hub, slice 3: words and names he follows; a story naming one leads News (any topic),
@@ -220,10 +225,10 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                         }
                         AnimatedContent(followNote, label = "follow-note") { note ->
                             if (note == null) {
-                                Text(place.followsLine, style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                                Text(LoneWordGlue.kept(place.followsLine), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.xxs))
                             } else {
                                 Row(Modifier.padding(top = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
-                                    Text(note, style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
+                                    Text(LoneWordGlue.kept(note), style = MekaType.caption, color = Meka.colors.accent, modifier = Modifier.weight(1f))
                                     unfollowed?.let { name ->
                                         Text("Undo", style = MekaType.captionStrong, color = Meka.colors.accent,
                                             modifier = Modifier.clickable(role = Role.Button) {
@@ -263,7 +268,7 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
             }
             place.emptyLine?.let { line ->
                 item(key = "empty") {
-                    Text(line, style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
+                    Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textTertiary, modifier = Modifier.appear(rememberAppearance(1)))
                 }
             }
             place.lanes.forEachIndexed { i, lane ->
@@ -279,7 +284,7 @@ fun NewsPane(core: MekaCore, onClose: () -> Unit, backLabel: String = "‹ Ask",
                 item(key = "quiet") {
                     Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(1 + place.lanes.size))) {
                         place.quiet.forEach { line ->
-                            Text(line, style = MekaType.itemMeta, color = Meka.colors.textTertiary)
+                            Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textTertiary)
                         }
                     }
                 }
@@ -340,7 +345,7 @@ private fun UnreadRow(line: String, canMark: Boolean, marked: String?, modifier:
         label = "news-unread",
     ) { (m, l) ->
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(m ?: l.first, style = MekaType.itemMeta, color = if (m != null) Meka.colors.accent else Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+            Text(LoneWordGlue.kept(m ?: l.first), style = MekaType.itemMeta, color = if (m != null) Meka.colors.accent else Meka.colors.textSecondary, modifier = Modifier.weight(1f))
             val action = when {
                 m != null -> "Undo" to undo
                 l.second -> "Mark all read" to markAll
@@ -366,7 +371,7 @@ private fun LaneHeader(lane: NewsLane, modifier: Modifier) {
             SectionLabel(lane.label)
             lane.unreadLabel?.let { Text(" · " + it.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent) }
         }
-        if (lane.sources.isNotEmpty()) Text(lane.sources, style = MekaType.caption, color = Meka.colors.textTertiary)
+        if (lane.sources.isNotEmpty()) Text(LoneWordGlue.kept(lane.sources), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }
 
@@ -396,7 +401,7 @@ private fun StoryRow(core: MekaCore, n: NewsItem, modifier: Modifier, open: () -
             .background(dot))
         Column(Modifier.weight(1f).semantics { if (!n.read) contentDescription = "New. ${n.title}" }) {
             Text(n.title, style = MekaType.body, color = titleColour)
-            Text(n.meta, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(LoneWordGlue.kept(n.meta), style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         NewsThumb(core, n, Modifier.padding(start = MekaSpace.xs, top = 2.dp).size(width = 72.dp, height = 54.dp)) // rhythm: ok (lines the picture up with the title)
     }
@@ -462,10 +467,11 @@ private fun NewsDetailSheet(core: MekaCore, d: NewsDetail, onClose: () -> Unit, 
                     )
                 }
                 Text(s.item.title, style = MekaType.greeting, color = Meka.colors.textPrimary)
-                Text(s.item.meta, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
+                Text(LoneWordGlue.kept(s.item.meta), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
                 Spacer(Modifier.height(MekaSpace.l))
                 Text(
-                    s.item.summary ?: "No summary from ${s.item.source}. Read the full story for the details.",
+                    // Quality gate slice 43: without a link it never says to read the full story (there's no button).
+                    s.item.summary ?: LoneWordGlue.kept(NewsRules.noSummary(s.item.source, hasLink = s.item.url != null)),
                     style = MekaType.body, color = if (s.item.summary != null) Meka.colors.textPrimary else Meka.colors.textTertiary,
                 )
                 val url = s.item.url
