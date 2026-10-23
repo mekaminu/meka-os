@@ -156,7 +156,8 @@ class WorkScreensTest {
         val toWorkChips = compose.onAllNodes(hasContentDescription("Commute to work:", substring = true)).fetchSemanticsNodes()
         val homeLabel = compose.onAllNodes(hasText("Home", substring = false)).fetchSemanticsNodes()
         if (toWorkChips.isNotEmpty() && homeLabel.isNotEmpty()) {
-            val air = (homeLabel.first().boundsInRoot.top - toWorkChips.maxOf { it.boundsInRoot.bottom }) / density
+            // Unclipped positions: on the inner screen the commute sits below the fold, where boundsInRoot is clipped to 0.
+            val air = (homeLabel.first().positionInRoot.y - toWorkChips.maxOf { it.positionInRoot.y + it.size.height }) / density
             if (air < 8f) fail("$name: the commute's Home label sits ${air.toInt()} dp under the To work chips (want ≥ 8)")
         }
         when (fill) {
