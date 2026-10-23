@@ -148,18 +148,29 @@ class MailScreensTest {
      */
     private fun switchesShort(name: String, v: MailAccountsView, cover: Boolean) {
         val p = v.autopilot ?: return
-        listOf(p.shortLine, p.markReadShort, p.readerReadShort).forEach { short ->
-            val lines = lineCount(LoneWordGlue.kept(short)) ?: fail("$name: \"$short\" isn't drawn")
-            if (lines > 3) fail("$name: \"$short\" takes $lines lines")
-        }
-        listOf(p.shortLine, p.markReadLine, p.readerReadLine).forEach {
-            if (it != p.shortLine && compose.onAllNodes(hasText(LoneWordGlue.kept(it)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-                fail("$name: the full \"$it\" shows before How it works is tapped")
+        val r = MailAutopilotPanelRules
+        // Each switch's short line in whichever state the screen drew (it may still be catching up with the sync).
+        val switches = listOf(
+            listOf(r.ON_SHORT, r.OFF_SHORT, r.PAUSED_SHORT) to listOf(r.ON_LINE, r.OFF_LINE, r.PAUSED_LINE),
+            listOf(r.MARK_READ_ON_SHORT, r.MARK_READ_OFF_SHORT) to listOf(r.MARK_READ_ON_LINE, r.MARK_READ_OFF_LINE),
+            listOf(r.READER_READ_ON_SHORT, r.READER_READ_OFF_SHORT) to listOf(r.READER_READ_ON_LINE, r.READER_READ_OFF_LINE),
+        )
+        val drawn = switches.map { (shorts, fulls) ->
+            fulls.forEach {
+                if (compose.onAllNodes(hasText(LoneWordGlue.kept(it)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
+                    fail("$name: the full \"$it\" shows before How it works is tapped")
+            }
+            val shown = shorts.firstOrNull { lineCount(LoneWordGlue.kept(it)) != null }
+                ?: fail("$name: none of ${shorts.map { "\"$it\"" }} is drawn (${p.shortLine}); on screen:\n" +
+                    ScreenShots.texts(compose).filter { "·" in it }.joinToString("\n") { "- $it" })
+            val lines = lineCount(LoneWordGlue.kept(shown)) ?: 0
+            if (lines > 3) fail("$name: \"$shown\" takes $lines lines")
+            shown
         }
         if (cover) {
-            val line = compose.onAllNodes(hasText(LoneWordGlue.kept(p.shortLine)), useUnmergedTree = true).fetchSemanticsNodes().first()
-            val button = compose.onAllNodes(hasText(p.action), useUnmergedTree = true).fetchSemanticsNodes().first()
-            if (button.boundsInRoot.top < line.boundsInRoot.bottom - 1f) fail("$name: Autopilot's ${p.action} sits beside its words on the cover screen")
+            val line = compose.onAllNodes(hasText(LoneWordGlue.kept(drawn[0])), useUnmergedTree = true).fetchSemanticsNodes().first()
+            val button = compose.onAllNodes(hasText(r.TURN_OFF) or hasText(r.TURN_ON), useUnmergedTree = true).fetchSemanticsNodes().first()
+            if (button.boundsInRoot.top < line.boundsInRoot.bottom - 1f) fail("$name: Autopilot's button sits beside its words on the cover screen")
         }
     }
 
