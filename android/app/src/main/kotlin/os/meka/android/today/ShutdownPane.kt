@@ -63,6 +63,7 @@ import os.meka.core.domain.AlertHoldRules
 import os.meka.core.domain.Feeling
 import os.meka.core.domain.FeelingOffer
 import os.meka.core.domain.FeelingRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ShutdownItem
 import os.meka.core.domain.ShutdownRules
 import os.meka.core.domain.ShutdownView
@@ -111,7 +112,7 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
                 if (v.doneCount > 0) {
                     CountUpText(v.doneCount, MekaType.itemMeta, Meka.colors.textSecondary, Modifier.padding(top = MekaSpace.xxs)) { "$it done today" }
                 } else {
-                    Text(v.doneCountLine, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
+                    Text(LoneWordGlue.kept(v.doneCountLine), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs))
                 }
             }
         }
@@ -209,7 +210,7 @@ private fun CardSwitch(v: ShutdownView, said: String?, modifier: Modifier, onSet
     val reduced = Meka.reducedMotion
     Column(modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(ShutdownRules.cardLine(v.cardOff, v.onLeave), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
+            Text(LoneWordGlue.kept(ShutdownRules.cardLine(v.cardOff, v.onLeave)), style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.weight(1f))
             Text(
                 if (v.cardOff) "Turn on" else "Turn off", style = MekaType.caption, color = Meka.colors.accent,
                 modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
@@ -220,7 +221,7 @@ private fun CardSwitch(v: ShutdownView, said: String?, modifier: Modifier, onSet
             targetState = said,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "card-switch-said",
-        ) { line -> if (line != null) Text(line, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        ) { line -> if (line != null) Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary) }
     }
 }
 
@@ -239,7 +240,7 @@ private fun LeftRow(
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
             Text(t.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-            item.line?.let { Text(it, style = MekaType.itemMeta, color = if (item.overdue) Meka.colors.critical else Meka.colors.textSecondary) }
+            item.line?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = if (item.overdue) Meka.colors.critical else Meka.colors.textSecondary) }
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -259,22 +260,22 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
     Column(modifier) {
         SectionLabel(p.label)
         // Done for the day: tomorrow's first commitment, "Tomorrow starts at 09:30 · Standup".
-        v.firstLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
-        p.workLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        v.firstLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textPrimary) }
+        p.workLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         // Done for the day, the first train: "First train · the 07:42 · leave by 07:32", in the accent when it often runs late.
-        p.train?.let { Text(it.text, style = MekaType.caption, color = if (it.lit) Meka.colors.accent else Meka.colors.textSecondary,
+        p.train?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = if (it.lit) Meka.colors.accent else Meka.colors.textSecondary,
             modifier = Modifier.semantics { contentDescription = it.spoken }) }
         // Tomorrow's weather (Weather slice 2): "9–15°, light rain from 15:00 — take a coat".
-        p.weatherLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        p.weatherLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
         // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent so the kit gets packed.
-        p.school?.let { Text(it.text, style = MekaType.caption, color = Meka.colors.accent,
+        p.school?.let { Text(LoneWordGlue.kept(it.text), style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.semantics { contentDescription = it.spoken }) }
         // The summary rolls over to its new value as items are carried in.
         AnimatedContent(
             targetState = p.summary,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "tomorrow-summary",
-        ) { s -> Text(s, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
+        ) { s -> Text(LoneWordGlue.kept(s), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs)) }
     }
 }
 
@@ -284,7 +285,7 @@ internal fun TomorrowLine(r: TomorrowRow, modifier: Modifier) {
         Text(r.time ?: "", style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(92.dp))
         Column(Modifier.weight(1f)) {
             Text(r.title, style = MekaType.itemTitle, color = if (r.isEvent) Meka.colors.textPrimary else Meka.colors.textSecondary)
-            r.detail?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            r.detail?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
 }
@@ -316,7 +317,7 @@ private fun ShutDownCheck(visible: Boolean, line: String) {
             Box(Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent).padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs)) {
                 Text("✓", style = MekaType.upNextTitle, color = Meka.colors.onAccent)
             }
-            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
+            Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xs))
         }
     }
 }
@@ -325,8 +326,10 @@ private fun ShutDownCheck(visible: Boolean, line: String) {
 private fun ShutdownChip(label: String, onClick: () -> Unit) {
     Text(
         label, style = MekaType.caption, color = Meka.colors.textPrimary, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
-            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+        // Quality gate slice 47: the chip answers a 48 dp touch; the pill itself stays its drawn size.
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClick() }.minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }
 
@@ -460,9 +463,9 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
         ) {
             val o = offer
             if (o != null) Column(Modifier.padding(top = MekaSpace.xs)) {
-                Text(o.line, style = MekaType.itemMeta, color = Meka.colors.textPrimary)
-                o.holdLine?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
-                Text(FeelingRules.pickedLine(o.feeling), style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(o.line), style = MekaType.itemMeta, color = Meka.colors.textPrimary)
+                o.holdLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+                Text(LoneWordGlue.kept(FeelingRules.pickedLine(o.feeling)), style = MekaType.caption, color = Meka.colors.textTertiary)
                 Row(
                     Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs),
                     horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
@@ -506,7 +509,7 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
         ) {
             val line = held
             if (line != null) Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-                Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
                 Text(
                     AlertHoldRules.RESUME, style = MekaType.itemMeta, color = Meka.colors.accent,
                     modifier = Modifier.padding(start = MekaSpace.xs).clip(RoundedCornerShape(MekaRadius.pill))
@@ -527,7 +530,7 @@ private fun FeelingSection(core: MekaCore, modifier: Modifier) {
             label = "feeling-did",
         ) { line ->
             if (line != null) Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-                Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
                 undo?.let { u ->
                     Text(
                         "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,

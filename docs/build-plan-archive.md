@@ -3150,6 +3150,30 @@ the full morning's foot (headlines, one-liner, Got it) on the cover screen, unde
   sideways too; the third headline moved to AI, a default topic; the empty day's line looked for kept); CI run 1139
   (39963353784) green.
 
+### Quality gate — slice 47 (2026-10-23): Shut down the day's shots, its first hand tests and 48 dp touches
+
+The next of Ask's places without shots. ShutdownScreensTest (11) draws Shut down the day (`ShutdownPane`) on the Fold's
+cover and inner sizes at 19:10 on a Wednesday with nothing done or left, one done and one left, and a full evening
+(work Mon–Fri 09:00–17:30; seven done, so "+ 1 more"; an overdue task, one planned for 14:00, one repeating every day
+and a long one; tomorrow an office Thursday with a standup at 09:30, a long meeting at a place and a task), Dark and
+Light, plus the full evening's foot (wake alarm, On this day, Shut down, the card's switch) on the cover screen, under
+docs/screens/fold/shutdown/.
+- Every shot is read for nonsense, cut lines, broken words, split dates, times and numbers, a word left alone and a dot
+  starting or ending a line (the done count, the card's line, tomorrow's first, work, summary, weather, train and
+  school lines, the wake line, the On this day offer, each left task's line and tomorrow's details); left tasks and
+  tomorrow's rows must read whole; and **every button (Role.Button) must answer a 48 dp touch** (new in this test).
+- By hand: a left task's Tomorrow carries it into Tomorrow; its circle completes it into Done today; Tired is kept as
+  today's feeling; the evening card's Turn off turns it off (Turn on shows); Shut down shuts the day down and the check
+  says "Day shut down".
+- Fixed before the first run: Tomorrow · Skip · Someday under a left task, Lighten / drop / hold under a feeling, the
+  wake alarm's ‹ ›, Set alarm / Turn off and the get-ready chips were ~32 dp to tap — each now answers 48 dp with its
+  pill drawn as before; "Use 06:30", the trains' wake-earlier, "Allow on time" and On this day's offer/denied lines
+  too. The pane's and the wake alarm's lines keep their last words and dots together (LoneWordGlue), Fold
+  `ShutdownPane`/`WakeSection`/`OnThisDaySection` and Mac `ShutdownSheet`/`WakeSection`.
+- Design check: no design file covers Shut down the day. No core change, no server change, no migration, Mac checked
+  nightly. Not changed: a task's tick circle (CompleteButton, 28 dp across, everywhere) is still under 48 dp; the test
+  checks buttons, not checkboxes.
+
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
 The next of Ask's places without shots. WeekAheadScreensTest (9) draws Ask → More → Week ahead (`WeekAheadPane`) on

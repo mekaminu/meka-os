@@ -44,8 +44,10 @@ import os.meka.android.designsystem.MekaMotion
 import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
+import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AlarmRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
 /**
@@ -105,11 +107,11 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
             targetState = w.line,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "wake-line",
-        ) { line -> Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+        ) { line -> Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
         AnimatedVisibility(w.useSuggestionLabel != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
             Text(
                 w.useSuggestionLabel ?: "", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) { haptics.light(); act { core.useSuggestedWake() } },
+                modifier = Modifier.padding(top = MekaSpace.xs).clickable(role = Role.Button) { haptics.light(); act { core.useSuggestedWake() } }.minTouch(),
             )
         }
         // Tomorrow morning's trains in trouble (the commute counts everywhere, slice 7): the line, and the offer to wake
@@ -121,13 +123,13 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
                     targetState = t?.line ?: "",
                     transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                     label = "wake-trains",
-                ) { line -> Text(line, style = MekaType.caption, color = Meka.colors.accent) }
+                ) { line -> Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.accent) }
                 t?.actionLabel?.let { label ->
                     Text(
                         label, style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.padding(top = MekaSpace.xxs).clickable(role = Role.Button) {
                             haptics.light(); draft = null; act { core.wakeEarlierForTrains(null) }
-                        },
+                        }.minTouch(),
                     )
                 }
             }
@@ -144,7 +146,7 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                         )
                     }
-                },
+                }.minTouch(),
             )
         }
         Text("Time to get ready", style = MekaType.caption, color = Meka.colors.textTertiary, modifier = Modifier.padding(top = MekaSpace.m))
@@ -160,8 +162,10 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
                 Text(
                     AlarmRules.duration(b), style = MekaType.caption,
                     color = if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
-                        .clickable(role = Role.Button) { haptics.tick(); act { core.setWakeBuffer(b) } }
+                    // Quality gate slice 47: a 48 dp touch; the pill itself stays its drawn size.
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                        .clickable(role = Role.Button) { haptics.tick(); act { core.setWakeBuffer(b) } }.minTouch()
+                        .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
                         .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
                 )
             }
@@ -174,7 +178,7 @@ private fun WakeStep(glyph: String, description: String, onClick: () -> Unit) {
     Text(
         glyph, style = MekaType.upNextTitle, color = Meka.colors.textSecondary,
         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).semantics { contentDescription = description }
-            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
+            .clickable(role = Role.Button) { onClick() }.minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xxs),
     )
 }
 
@@ -182,8 +186,10 @@ private fun WakeStep(glyph: String, description: String, onClick: () -> Unit) {
 private fun WakePill(label: String, filled: Boolean, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemMeta, color = if (filled) Meka.colors.onAccent else Meka.colors.textPrimary,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+        // Quality gate slice 47: a 48 dp touch; the pill itself stays its drawn size.
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onClick() }.minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill))
             .background(if (filled) Meka.colors.accent else Meka.colors.surfaceRaised)
-            .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }

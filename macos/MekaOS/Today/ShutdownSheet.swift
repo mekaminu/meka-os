@@ -56,27 +56,27 @@ struct ShutdownSheet: View {
                         SectionLabel(v.tomorrow.label, palette).padding(.top, MekaSpace.l).staggeredAppear(2)
                         // Done for the day: tomorrow's first commitment.
                         if let first = v.firstLine {
-                            Text(first).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(2)
+                            Text(LoneWordGlue.shared.kept(line: first)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary).staggeredAppear(2)
                         }
                         if let work = v.tomorrow.workLine {
-                            Text(work).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(2)
+                            Text(LoneWordGlue.shared.kept(line: work)).font(MekaType.caption).foregroundStyle(palette.textTertiary).staggeredAppear(2)
                         }
                         // Done for the day, the first train: "First train · the 07:42 · leave by 07:32".
                         if let train = v.tomorrow.train {
-                            Text(train.text).font(MekaType.caption)
+                            Text(LoneWordGlue.shared.kept(line: train.text)).font(MekaType.caption)
                                 .foregroundStyle(train.lit ? palette.accent : palette.textSecondary)
                                 .accessibilityLabel(train.spoken).staggeredAppear(2)
                         }
                         // Tomorrow's weather (Weather slice 2).
                         if let weather = v.tomorrow.weatherLine {
-                            Text(weather).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)
+                            Text(LoneWordGlue.shared.kept(line: weather)).font(MekaType.caption).foregroundStyle(palette.textSecondary).staggeredAppear(2)
                         }
                         // School rhythm, slice 2: the evening before, "Tomorrow · Theo: PE kit", in the accent.
                         if let school = v.tomorrow.school {
-                            Text(school.text).font(MekaType.caption).foregroundStyle(palette.accent)
+                            Text(LoneWordGlue.shared.kept(line: school.text)).font(MekaType.caption).foregroundStyle(palette.accent)
                                 .accessibilityLabel(school.spoken).staggeredAppear(2)
                         }
-                        Text(v.tomorrow.summary)
+                        Text(LoneWordGlue.shared.kept(line: v.tomorrow.summary))
                             .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                             .contentTransition(.opacity)
                             .staggeredAppear(2)
@@ -107,7 +107,7 @@ struct ShutdownSheet: View {
                 }
                 // Done for the day, completeness: the evening card's switch (synced) and what the last click did.
                 HStack(spacing: MekaSpace.xs) {
-                    Text(ShutdownRules.shared.cardLine(off: v.cardOff, onLeave: v.onLeave))
+                    Text(LoneWordGlue.shared.kept(line: ShutdownRules.shared.cardLine(off: v.cardOff, onLeave: v.onLeave)))
                         .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     Spacer()
                     Button(v.cardOff ? "Turn on" : "Turn off") { setCard(on: v.cardOff) }
@@ -115,7 +115,7 @@ struct ShutdownSheet: View {
                 }
                 .padding(.top, MekaSpace.xs)
                 if let said = cardSaid {
-                    Text(said).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: said)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .transition(.opacity)
                 }
             } else {
@@ -142,7 +142,7 @@ struct ShutdownSheet: View {
             CountUpText(Int(v.doneCount)) { "\($0) done today" }
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
         } else {
-            Text(v.doneCountLine).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: v.doneCountLine)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
         }
     }
 
@@ -179,7 +179,7 @@ private struct LeftRow: View {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(item.task.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
-                    Text(line).font(MekaType.itemMeta).foregroundStyle(item.overdue ? palette.critical : palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(item.overdue ? palette.critical : palette.textSecondary)
                 }
                 HStack(spacing: MekaSpace.m) {
                     Button("Tomorrow") { model.carryOver(item.task.id) }
@@ -226,7 +226,7 @@ struct TomorrowLine: View {
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 Text(row.title).font(MekaType.itemTitle).foregroundStyle(row.isEvent ? palette.textPrimary : palette.textSecondary)
                 if let d = row.detail {
-                    Text(d).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: d)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
             }
             Spacer()
@@ -356,11 +356,11 @@ struct FeelingSection: View {
             }
             if let o = offer {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    Text(o.line).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    Text(LoneWordGlue.shared.kept(line: o.line)).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
                     if let hl = o.holdLine {
-                        Text(hl).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: hl)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     }
-                    Text(FeelingRules.shared.pickedLine(f: o.feeling)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: FeelingRules.shared.pickedLine(f: o.feeling))).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     HStack(spacing: MekaSpace.xs) {
                         if let label = o.lightenLabel, let name = picked {
                             chip(label, selected: true) { model.lightenTomorrow(name); close() }
@@ -382,7 +382,7 @@ struct FeelingSection: View {
             }
             if let line = held {
                 HStack(spacing: MekaSpace.xs) {
-                    Text(line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     Spacer(minLength: MekaSpace.xs)
                     Button(AlertHoldRules.shared.RESUME) {
                         Task {

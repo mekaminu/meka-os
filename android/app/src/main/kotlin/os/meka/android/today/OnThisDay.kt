@@ -61,6 +61,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.CivilDate
 import os.meka.core.domain.MemoryPhoto
 import os.meka.core.domain.OnThisDayPick
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.OnThisDayRules
 import java.util.TimeZone
 
@@ -225,11 +226,12 @@ internal fun OnThisDaySection(modifier: Modifier = Modifier) {
             !on && offerGone -> note?.let { Caption(it) }
             !on -> {
                 Text(
-                    if (refused) OnThisDayRules.DENIED else OnThisDayRules.OFFER,
+                    LoneWordGlue.kept(if (refused) OnThisDayRules.DENIED else OnThisDayRules.OFFER),
                     style = MekaType.caption, color = Meka.colors.textSecondary,
+                    // Quality gate slice 47: a 48 dp touch even when the offer fits one line (unfolded).
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Switch) { turnOn() }
                         .semantics { contentDescription = OnThisDayRules.OFFER_LABEL + " · off · " + OnThisDayRules.PRIVACY }
-                        .padding(vertical = MekaSpace.xs),
+                        .minTouch().padding(vertical = MekaSpace.xs),
                 )
                 Text(
                     OnThisDayRules.NOT_NOW, style = MekaType.caption, color = Meka.colors.textTertiary,
@@ -240,8 +242,8 @@ internal fun OnThisDaySection(modifier: Modifier = Modifier) {
             }
             access == ScreenshotWatch.Access.NONE -> {
                 Text(
-                    OnThisDayRules.DENIED, style = MekaType.caption, color = Meka.colors.textSecondary,
-                    modifier = Modifier.clickable(role = Role.Button) { turnOn() }.padding(vertical = MekaSpace.xs),
+                    LoneWordGlue.kept(OnThisDayRules.DENIED), style = MekaType.caption, color = Meka.colors.textSecondary,
+                    modifier = Modifier.clickable(role = Role.Button) { turnOn() }.minTouch().padding(vertical = MekaSpace.xs),
                 )
             }
             else -> {
