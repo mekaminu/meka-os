@@ -177,7 +177,7 @@ fun HelloStage(
     var origin by remember { mutableStateOf(Offset.Zero) }
     // Obi's face, slice 3: the big stage shows his face instead of the orb once its files are kept and Face is on.
     val faceContext = LocalContext.current
-    remember { ObiFaceStore.load(faceContext) }
+    LaunchedEffect(Unit) { ObiFaceStore.load(faceContext) }
     val faceReady by ObiFaceStore.ready.collectAsState()
     val faceOn by ObiFaceStore.on.collectAsState()
     val face = kind == EntranceKind.BIG && FaceFileRules.shows(faceReady, faceOn)
