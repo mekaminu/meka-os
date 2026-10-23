@@ -3173,6 +3173,11 @@ docs/screens/fold/shutdown/.
 - Design check: no design file covers Shut down the day. No core change, no server change, no migration, Mac checked
   nightly. Not changed: a task's tick circle (CompleteButton, 28 dp across, everywhere) is still under 48 dp; the test
   checks buttons, not checkboxes.
+- Landed 892ba41 + CI fix 4eaed65 (`getOrNull` needs its import); CI run 1141 (39967431515) green, every check passing on
+  the first drawing; published a58c6c5. Found in the shots, for the next slice: left tasks' titles in `itemTitle` (task
+  rows use `body`) with their chips ~20 dp below the line; Tomorrow's event titles bold beside a 92 dp time column; the
+  wake line "… · 1 h 20 / commute · …" splits a duration; On this day's offer is a three-line how-to; Shut down's label
+  left-aligned in its button, a tall empty band above it (the hidden check's slot).
 
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
