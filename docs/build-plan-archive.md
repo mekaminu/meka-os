@@ -3202,6 +3202,25 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 49 (2026-10-23): Protected time's shots and its first hand test
+
+The next of Ask's places without shots. ProtectedTimeScreensTest (7) draws Ask → More → Protected time
+(`ProtectedTimePane`) on the Fold's cover and inner sizes off, with evenings from 19:00, and with evenings and weekends
+protected and tonight lifted just this once, Dark and Light, under docs/screens/fold/protected/.
+- Every shot is read for nonsense, cut lines, broken words, split dates, times and numbers, and the summary, today's
+  line, the mail line and both notes for a word left alone or a line starting with a dot; every chip must be whole on
+  one line and inside the pane's width, and every button must answer a 48 dp touch.
+- By hand (cover screen): From 19:30 moves the evening and the summary follows; Not protected tonight lifts tonight and
+  shows what changed (`Lifted.EVENING.done`); Undo · protect it again puts it back.
+- Fixed first, Fold `ProtectedTimePane`: the chip rows were a sideways scroll, and on the cover screen (≈ 312 dp inside
+  the gutters) Off and the five From chips ran off the edge; they now wrap (FlowRow). The chips (Lists' `Chip`, ~32 dp)
+  are a local `ProtectedChip` that answers a 48 dp touch (`minTouch`) with the pill drawn as before; Lists' shared
+  chip is unchanged so other screens keep their layout. The summary, today's line, the lifted line, the mail line and
+  both notes go through `LoneWordGlue.kept`. The pane carries the `protected-pane` test tag.
+- Mac `ProtectedTimeSheet`: the same lines through `LoneWordGlue.kept` (its 560 pt sheet already fits the chips).
+- Design check: no design file covers Protected time. No core change, no server change, no migration, Mac checked
+  nightly.
+
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
 The next of Ask's places without shots. WeekAheadScreensTest (9) draws Ask → More → Week ahead (`WeekAheadPane`) on

@@ -11,6 +11,7 @@ import SwiftUI
 /// Slice 3: WORK MAIL (Waits till morning · Shows as it comes) arrives on the expand spring once something is protected.
 /// Slice 4: "Not protected tonight" (or "… today") under today's line lifts today's protected time just this once; it
 /// cross-fades to "Undo · protect it again". Only a Bool crosses to the core.
+/// Quality gate slice 49: the sheet's lines keep their last words and dots together (LoneWordGlue), like the Fold's.
 struct ProtectedTimeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(CoreModel.self) private var model
@@ -22,13 +23,13 @@ struct ProtectedTimeSheet: View {
         let rules = ProtectedRules.shared
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Protected time").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(LoneWordGlue.shared.kept(line: v.summary)).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
                 .staggeredAppear(1)
             if let today = v.todayLine {
-                Text(today).font(MekaType.caption).foregroundStyle(palette.accent)
+                Text(LoneWordGlue.shared.kept(line: today)).font(MekaType.caption).foregroundStyle(palette.accent)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: today)
                     .transition(.opacity)
@@ -74,15 +75,15 @@ struct ProtectedTimeSheet: View {
                     chip(mail.OFF, lit: !v.holdMail) { model.setProtectedMail(hold: false) }
                 }
                 if let held = v.mailLine {
-                    Text(held).font(MekaType.caption).foregroundStyle(palette.accent)
+                    Text(LoneWordGlue.shared.kept(line: held)).font(MekaType.caption).foregroundStyle(palette.accent)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: held)
                         .transition(.opacity)
                 }
-                Text(mail.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: mail.NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            Text(rules.NOTE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: rules.NOTE)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, MekaSpace.xs)
                 .staggeredAppear(6)

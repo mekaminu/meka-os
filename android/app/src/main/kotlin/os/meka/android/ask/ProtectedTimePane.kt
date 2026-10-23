@@ -2,16 +2,17 @@ package os.meka.android.ask
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -20,11 +21,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
 import os.meka.android.designsystem.MekaMotion
+import os.meka.android.designsystem.MekaRadius
 import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
@@ -32,13 +39,13 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.android.designsystem.sharedTitleInPane
-import os.meka.android.lists.Chip
 import os.meka.android.lists.fold
 import os.meka.android.lists.unfold
 import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.android.today.SectionLabel
 import os.meka.core.domain.LocalClock
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ProtectedMailRules
 import os.meka.core.domain.ProtectedRules
 import os.meka.core.facade.MekaCore
@@ -59,6 +66,10 @@ import os.meka.core.facade.MekaCore
  * Slice 4: under today's line, "Not protected tonight" (or "… today" on a protected whole day) in the accent lifts
  * today's protected time just this once; it cross-fades to "Undo · protect it again" with the line below saying what
  * changed. Tick haptic; reduced motion: cross-fades.
+ *
+ * Quality gate slice 49: the chips wrap onto a second line instead of scrolling sideways (on the cover screen the
+ * evening's From 19:30 and From 20:00 sat off the edge), each answers a 48 dp touch with its pill drawn as before, and
+ * the pane's lines keep their last words and dots together ([LoneWordGlue]).
  */
 @Composable
 fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
@@ -85,7 +96,7 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        Modifier.fillMaxSize().testTag("protected-pane"),
         contentPadding = PaddingValues(MekaSpace.gutter),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -99,13 +110,13 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
         }
         item(key = "summary") {
             Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "protected-summary") { s ->
-                Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
+                Text(LoneWordGlue.kept(s), style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }
         item(key = "today") {
             AnimatedVisibility(v.todayLine != null, enter = unfold(), exit = fold()) {
                 Crossfade(v.todayLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-today") { line ->
-                    Text(line, style = MekaType.caption, color = Meka.colors.accent)
+                    Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.accent)
                 }
             }
         }
@@ -119,7 +130,7 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
                             modifier = Modifier.clickable(role = Role.Button) { setOpen(!v.openToday) }.minTouch())
                     }
                     AnimatedVisibility(openLine != null, enter = unfold(), exit = fold()) {
-                        Text(openLine.orEmpty(), style = MekaType.caption, color = Meka.colors.textSecondary)
+                        Text(LoneWordGlue.kept(openLine.orEmpty()), style = MekaType.caption, color = Meka.colors.textSecondary)
                     }
                 }
             }
@@ -128,9 +139,9 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
             Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(2)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 SectionLabel(ProtectedRules.EVENINGS_LABEL.uppercase())
                 ChipLine {
-                    Chip("Off", !v.evenings) { set(false, v.fromMin, v.weekends) }
+                    ProtectedChip("Off", !v.evenings) { set(false, v.fromMin, v.weekends) }
                     ProtectedRules.FROM_CHOICES.forEach { m ->
-                        Chip("From ${LocalClock.formatMinute(m)}", v.evenings && v.fromMin == m) { set(true, m, v.weekends) }
+                        ProtectedChip("From ${LocalClock.formatMinute(m)}", v.evenings && v.fromMin == m) { set(true, m, v.weekends) }
                     }
                 }
             }
@@ -139,8 +150,8 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
             Column(Modifier.padding(top = MekaSpace.m).appear(rememberAppearance(3)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 SectionLabel(ProtectedRules.WEEKENDS_LABEL.uppercase())
                 ChipLine {
-                    Chip("Open", !v.weekends) { set(v.evenings, v.fromMin, false) }
-                    Chip("Protected", v.weekends) { set(v.evenings, v.fromMin, true) }
+                    ProtectedChip("Open", !v.weekends) { set(v.evenings, v.fromMin, false) }
+                    ProtectedChip("Protected", v.weekends) { set(v.evenings, v.fromMin, true) }
                 }
             }
         }
@@ -150,26 +161,41 @@ fun ProtectedTimePane(core: MekaCore, onClose: () -> Unit) {
                 Column(Modifier.padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                     SectionLabel(ProtectedMailRules.LABEL.uppercase())
                     ChipLine {
-                        Chip(ProtectedMailRules.ON, v.holdMail) { setMail(true) }
-                        Chip(ProtectedMailRules.OFF, !v.holdMail) { setMail(false) }
+                        ProtectedChip(ProtectedMailRules.ON, v.holdMail) { setMail(true) }
+                        ProtectedChip(ProtectedMailRules.OFF, !v.holdMail) { setMail(false) }
                     }
                     AnimatedVisibility(v.mailLine != null, enter = unfold(), exit = fold()) {
                         Crossfade(v.mailLine.orEmpty(), animationSpec = MekaMotion.appear(reduced), label = "protected-mail") { line ->
-                            Text(line, style = MekaType.caption, color = Meka.colors.accent)
+                            Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.accent)
                         }
                     }
-                    Text(ProtectedMailRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(LoneWordGlue.kept(ProtectedMailRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
         }
         item(key = "note") {
-            Text(ProtectedRules.NOTE, style = MekaType.caption, color = Meka.colors.textTertiary,
+            Text(LoneWordGlue.kept(ProtectedRules.NOTE), style = MekaType.caption, color = Meka.colors.textTertiary,
                 modifier = Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(4)))
         }
     }
 }
 
+/** The chips wrap to a new line rather than scroll sideways; each chip's 48 dp touch already spaces the lines apart. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ChipLine(chips: @Composable () -> Unit) {
-    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) { chips() }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) { chips() }
+}
+
+/** A choice chip: the pill drawn as Lists' chips, answering a 48 dp touch (quality gate slice 49). */
+@Composable
+private fun ProtectedChip(label: String, lit: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "protected-chip")
+    Text(
+        label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 1,
+        modifier = Modifier.semantics { selected = lit }.clip(RoundedCornerShape(MekaRadius.pill))
+            .clickable(role = Role.Button) { onClick() }.minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }
