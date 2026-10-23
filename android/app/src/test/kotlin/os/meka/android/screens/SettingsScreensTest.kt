@@ -82,7 +82,7 @@ class SettingsScreensTest {
         check(!core.setAboutYou(AboutField.SHOWN_NAME, "Jordan").refused)
         if (fill != Fill.MANY) return
         typed.forEach { (f, t) -> core.setAboutYou(f, t).let { if (it.refused) fail("${f.name}: \"$t\" refused: ${it.line}") } }
-        check(core.setAboutYouPartnerWatch(true))
+        // Watch for requests is on by default once a partner is named.
         check(!core.addAboutYouChild("Alex, U7, Oakfield School").refused)
         check(!core.addAboutYouChild("Robin, U10, Oakfield School").refused)
     }
@@ -163,7 +163,7 @@ class SettingsScreensTest {
                 val empty = v.rows.filter { it.value == null }.map { it.field.name }
                 if (empty.isNotEmpty()) fail("$name: still empty after typing every line: $empty")
                 if (v.children.size != 2) fail("$name: ${v.children.size} children for two")
-                if (v.watchLine == null) fail("$name: no Watch for requests line with a partner named")
+                if (v.watchLine == null || !v.partnerWatch) fail("$name: Watch for requests isn't on with a partner named")
             }
         }
     }
