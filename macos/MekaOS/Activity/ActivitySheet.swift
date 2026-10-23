@@ -184,8 +184,8 @@ struct ActivitySheet: View {
             ForEach(view.stopped, id: \.key) { row in
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(row.number).font(MekaType.body).foregroundStyle(palette.textPrimary)
-                    Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-                    Text(row.why).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(LoneWordGlue.shared.kept(line: row.line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: row.why)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                         .id(row.why).transition(.opacity)
                     let key = row.key
                     if row.blocked {
@@ -338,12 +338,12 @@ struct ActivitySheet: View {
             Text(row.time).font(MekaType.itemMeta).foregroundStyle(palette.textTertiary).monospacedDigit()
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                 // Context, not something to act on: the regular body weight.
-                Text(row.summary).font(MekaType.body).foregroundStyle(palette.textPrimary)
+                Text(LoneWordGlue.shared.kept(line: row.summary)).font(MekaType.body).foregroundStyle(palette.textPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let detail = row.detail {
-                    Text(detail).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                    Text(LoneWordGlue.shared.kept(line: detail)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 }
-                Text(row.why).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: row.why)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 Group {
                     if let undone = row.undoneLine {
                         Text(undone).font(MekaType.caption).foregroundStyle(palette.textSecondary)

@@ -47,6 +47,7 @@ import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.ActivityRow
 import os.meka.core.domain.ActivityFilter
 import os.meka.core.domain.ActivityRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.StoppedCallRules
 import os.meka.core.domain.StoppedCallerRow
 import os.meka.android.lists.Chip
@@ -268,9 +269,9 @@ private fun ActivityRowView(row: ActivityRow, undo: () -> Unit) {
         Spacer(Modifier.width(MekaSpace.xs))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             // Context, not something to act on: the regular body weight (Meka, 2026-10-06).
-            Text(row.summary, style = MekaType.body, color = Meka.colors.textPrimary)
-            row.detail?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
-            Text(row.why, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(LoneWordGlue.kept(row.summary), style = MekaType.body, color = Meka.colors.textPrimary)
+            row.detail?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+            Text(LoneWordGlue.kept(row.why), style = MekaType.caption, color = Meka.colors.textTertiary)
             AnimatedContent(
                 targetState = row.undoneLine to row.canUndo,
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
@@ -301,14 +302,14 @@ private fun StoppedCallRowView(row: StoppedCallerRow, toggle: () -> Unit) {
     ) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
             Text(row.number, style = MekaType.body, color = Meka.colors.textPrimary)
-            Text(row.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(row.line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
             AnimatedContent(
                 targetState = row.why to row.blocked,
                 transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
                 label = "activity-blocked-call",
             ) { (why, isBlocked) ->
                 Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                    Text(why, style = MekaType.caption, color = Meka.colors.textTertiary)
+                    Text(LoneWordGlue.kept(why), style = MekaType.caption, color = Meka.colors.textTertiary)
                     Text(
                         if (isBlocked) StoppedCallRules.UNBLOCK_LABEL else StoppedCallRules.BLOCK_AGAIN_LABEL,
                         style = MekaType.itemMeta, color = Meka.colors.accent,

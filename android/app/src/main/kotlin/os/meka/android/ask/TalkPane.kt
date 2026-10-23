@@ -52,6 +52,7 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.shell.SharedMotion
 import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.HelloWakeRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.TalkOnOpenRules
 import os.meka.core.domain.TalkSetupSection
 import os.meka.core.domain.TalkStartRules
@@ -148,8 +149,8 @@ private fun TalkSection(s: TalkSetupSection, modifier: Modifier, onAction: () ->
     )
     Column(modifier.fillMaxWidth().padding(top = MekaSpace.m), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
         Text(s.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textTertiary, modifier = Modifier.semantics { heading() })
-        Text(s.status, style = MekaType.body, color = statusColor)
-        s.steps.forEach { step -> Text(step, style = MekaType.caption, color = Meka.colors.textSecondary) }
+        Text(LoneWordGlue.kept(s.status), style = MekaType.body, color = statusColor)
+        s.steps.forEach { step -> Text(LoneWordGlue.kept(step), style = MekaType.caption, color = Meka.colors.textSecondary) }
         s.action?.let { label ->
             Spacer(Modifier.height(MekaSpace.xs))
             Box(

@@ -32,6 +32,7 @@ import os.meka.core.domain.ActivityRules
 import os.meka.core.domain.BargeInRules
 import os.meka.core.domain.CallSignals
 import os.meka.core.domain.DeviceAlerts
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.Digest
 import os.meka.core.domain.NoticeTarget
 import os.meka.core.domain.PeopleLists
@@ -115,7 +116,7 @@ class TalkActivityScreensTest {
         compose.onAllNodes(hasText(on.action!!) and hasClickAction())[button.size - 1].performScrollTo().performClick()
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
-        ScreenShots.assertShows(compose, "talk-by-hand", off.status)
+        ScreenShots.assertShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         if (TalkAutoListen.talkOver(context)) fail("Talk: Turn off didn't turn Talk over off")
     }
@@ -191,7 +192,7 @@ class TalkActivityScreensTest {
         compose.onAllNodes(hasText(reminders.label) and hasClickAction())[0].performClick()
         compose.mainClock.advanceTimeBy(SETTLE_MS)
         compose.waitForIdle()
-        val still = doneForYou.filter { r -> compose.onAllNodes(hasText(r.summary), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        val still = doneForYou.filter { r -> compose.onAllNodes(hasText(LoneWordGlue.kept(r.summary)), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
         if (still.isNotEmpty()) fail("Activity: Reminders still shows ${still.map { it.summary }}")
         compose.onAllNodes(hasText(ActivityFilter.ALL.label) and hasClickAction())[0].performClick()
         compose.mainClock.advanceTimeBy(SETTLE_MS)

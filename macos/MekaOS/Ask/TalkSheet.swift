@@ -53,12 +53,12 @@ struct TalkSheet: View {
                     Text(s.label.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
                         .foregroundStyle(palette.textTertiary)
                         .accessibilityAddTraits(.isHeader)
-                    Text(s.status).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
+                    Text(LoneWordGlue.shared.kept(line: s.status)).font(MekaType.body).foregroundStyle(s.lit ? palette.accent : palette.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.themeBlend(reduced: reduceMotion), value: s.lit)
                     ForEach(s.steps, id: \.self) { step in
-                        Text(step).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: step)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if let action = s.action, s.label == TalkOnOpenRules.shared.LABEL {
