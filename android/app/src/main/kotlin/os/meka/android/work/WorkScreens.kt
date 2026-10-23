@@ -92,6 +92,7 @@ import os.meka.core.domain.PersonSummary
 import os.meka.core.domain.WorkSchedule
 import os.meka.core.domain.CommuteRules
 import os.meka.core.domain.LeavingRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 import java.time.Instant
 import java.time.ZoneId
@@ -101,6 +102,21 @@ import os.meka.android.shell.MoreItem
 import os.meka.android.designsystem.sharedTitleInPane
 
 internal const val STEP_MINUTES = 15
+
+/** Under "While you're at work" (quality gate slice 37: drawn kept, so no word is left alone on the cover screen). */
+internal const val AT_WORK_NOTE =
+    "\"Urgent\" or \"emergency\" in a message, or anyone on your always-notify list, alerts you straight away. " +
+        "Navilife never replies and never marks anything read. What it holds stays on this phone."
+
+/** The hours' own switch line, either way. */
+internal const val HOURS_ON_LINE = "Using these hours · tap to use the switch only"
+internal const val HOURS_OFF_LINE = "Switch only · tap to use these hours"
+
+/** Under the call assistant's switch. */
+internal fun callAssistantNote() =
+    "At work, family, your always-notify list and anyone who calls twice within 3 minutes ring. Other calls are " +
+        "declined, and your network's \"forward when busy\" sends them to ${CallScreeningRules.assistantName()}, " +
+        "which takes a message. Declined calls still show as missed calls."
 
 /**
  * Work mode settings (build plan M1): the switch, work hours, notification access, alerts, the two people
@@ -161,7 +177,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             modifier = Modifier.clickable(role = Role.Button) { onClose() }.minTouch())
         Text("Work mode", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.WORK)).appear(rememberAppearance(0)))
-        Text(work.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
+        Text(LoneWordGlue.kept(work.line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(0)))
 
         Column(Modifier.appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
             PillButton(if (work.atWork) "Stop work now" else "Start work now", filled = true) {
@@ -189,7 +205,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             onSet = { d, a, b -> scope.launch { core.setWorkDayHours(d, a, b) } },
             onClear = { d -> scope.launch { core.clearWorkDayHours(d) } })
         Text(
-            if (schedule.enabled) "Using these hours · tap to use the switch only" else "Switch only · tap to use these hours",
+            LoneWordGlue.kept(if (schedule.enabled) HOURS_ON_LINE else HOURS_OFF_LINE),
             style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.clickable(role = Role.Button) { save(schedule.copy(enabled = !schedule.enabled)) }.padding(vertical = MekaSpace.xxs),
         )
@@ -213,8 +229,10 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.m))
         Label("While you're at work", 3)
         Text(
-            if (listening) "Navilife is holding WhatsApp, texts and missed calls for after work."
-            else "Give Navilife notification access so it can hold WhatsApp, texts and missed calls for after work.",
+            LoneWordGlue.kept(
+                if (listening) "Navilife is holding WhatsApp, texts and missed calls for after work."
+                else "Give Navilife notification access so it can hold WhatsApp, texts and missed calls for after work.",
+            ),
             style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(3)),
         )
         if (!listening) {
@@ -230,8 +248,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         Text(
-            "\"Urgent\" or \"emergency\" in a message, or anyone on your always-notify list, alerts you straight away. " +
-                "Navilife never replies and never marks anything read. What it holds stays on this phone.",
+            LoneWordGlue.kept(AT_WORK_NOTE),
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
 
@@ -241,7 +258,7 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             CallScreeningRules.statusLine(work.callAssistant, work.atWork, screening, work.callAssistantPaused, work.screenUnknownAlways),
             animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "call-line",
         ) { line ->
-            Text(line, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))
+            Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(4)))
         }
         PillButton(if (work.callAssistant) "Turn the call assistant off" else "Turn the call assistant on", filled = false) {
             haptics.tick(); scope.launch { core.setCallAssistant(!work.callAssistant) }
@@ -256,13 +273,11 @@ fun WorkPane(core: MekaCore, onClose: () -> Unit) {
             }
         }
         Text(
-            "At work, family, your always-notify list and anyone who calls twice within 3 minutes ring. Other calls are " +
-                "declined, and your network's \"forward when busy\" sends them to ${CallScreeningRules.assistantName()}, " +
-                "which takes a message. Declined calls still show as missed calls.",
+            LoneWordGlue.kept(callAssistantNote()),
             style = MekaType.caption, color = Meka.colors.textTertiary,
         )
         // The number is About you's (rule 13); without it the line says where to add it.
-        Text(CallScreeningRules.testLine(), style = MekaType.caption, color = Meka.colors.textSecondary)
+        Text(LoneWordGlue.kept(CallScreeningRules.testLine()), style = MekaType.caption, color = Meka.colors.textSecondary)
         ScreenUnknownRow(work.screenUnknownAlways, work.callAssistant, Modifier.appear(rememberAppearance(4))) {
             haptics.tick(); scope.launch { core.setScreenUnknownAlways(!work.screenUnknownAlways) }
         }
@@ -568,7 +583,7 @@ private enum class ListKind(val title: String, val hint: String) {
 @Composable
 private fun PeopleSection(kind: ListKind, lists: PeopleLists, set: (PeopleLists) -> Unit, index: Int, onAdd: () -> Unit) {
     Label(kind.title, index)
-    Text(kind.hint, style = MekaType.caption, color = Meka.colors.textTertiary)
+    Text(LoneWordGlue.kept(kind.hint), style = MekaType.caption, color = Meka.colors.textTertiary)
     kind.names(lists).sortedBy { it.lowercase() }.forEach { name ->
         Row(Modifier.fillMaxWidth().appear(rememberAppearance(index)), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -729,8 +744,8 @@ internal fun ScreenUnknownRow(on: Boolean, assistantOn: Boolean, modifier: Modif
             )
         }
         Crossfade(ScreenUnknownRules.line(on, assistantOn), animationSpec = MekaMotion.appear(reduced), label = "screen-unknown-line") { line ->
-            Text(line, style = MekaType.caption, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(line), style = MekaType.caption, color = Meka.colors.textSecondary)
         }
-        Text(ScreenUnknownRules.TRADE_OFF, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(ScreenUnknownRules.TRADE_OFF), style = MekaType.caption, color = Meka.colors.textTertiary)
     }
 }

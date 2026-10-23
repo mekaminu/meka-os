@@ -37,7 +37,7 @@ struct WorkSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.m) {
             Text("Work mode").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(model.work?.line ?? " ")
+            Text(LoneWordGlue.shared.kept(line: model.work?.line ?? " "))
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .contentTransition(.opacity)
                 .staggeredAppear(0)
@@ -83,7 +83,7 @@ struct WorkSheet: View {
             Toggle(isOn: Binding(get: { callAssistant }, set: { model.setCallAssistant($0) })) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text("Screen calls at work on the Fold").font(MekaType.itemMeta)
-                    Text(CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil, paused: model.work?.callAssistantPaused ?? false, screenUnknownAlways: screenUnknownAlways))
+                    Text(LoneWordGlue.shared.kept(line: CallScreeningRules.shared.statusLine(switchedOn: callAssistant, atWork: atWork, screeningAllowed: nil, paused: model.work?.callAssistantPaused ?? false, screenUnknownAlways: screenUnknownAlways)))
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)
                 }
@@ -95,7 +95,7 @@ struct WorkSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .staggeredAppear(3)
             // The number is About you's (rule 13); without it the line says where to add it.
-            Text(CallScreeningRules.shared.testLine(number: CallScreeningRules.shared.assistantNumber))
+            Text(LoneWordGlue.shared.kept(line: CallScreeningRules.shared.testLine(number: CallScreeningRules.shared.assistantNumber)))
                 .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 .staggeredAppear(3)
             screenUnknown.staggeredAppear(3)
@@ -364,14 +364,14 @@ struct WorkSheet: View {
             Toggle(isOn: Binding(get: { screenUnknownAlways }, set: { model.setScreenUnknownAlways($0) })) {
                 VStack(alignment: .leading, spacing: MekaSpace.xxs) {
                     Text(ScreenUnknownRules.shared.TITLE).font(MekaType.itemMeta)
-                    Text(ScreenUnknownRules.shared.line(on: screenUnknownAlways, assistantOn: callAssistant))
+                    Text(LoneWordGlue.shared.kept(line: ScreenUnknownRules.shared.line(on: screenUnknownAlways, assistantOn: callAssistant)))
                         .font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                 }
             }
             .toggleStyle(.switch)
-            Text(ScreenUnknownRules.shared.TRADE_OFF)
+            Text(LoneWordGlue.shared.kept(line: ScreenUnknownRules.shared.TRADE_OFF))
                 .font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
