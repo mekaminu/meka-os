@@ -43,6 +43,7 @@ import os.meka.core.domain.SetupFacts
 import os.meka.core.domain.SetupRecovery
 import os.meka.core.domain.SetupRules
 import os.meka.core.domain.SetupScreenSaver
+import os.meka.core.domain.SetupState
 import os.meka.core.domain.SetupStep
 import os.meka.core.domain.SetupView
 import os.meka.core.domain.SignIn
@@ -190,9 +191,10 @@ class SetupScreensTest {
         ScreenShots.assertReadable(compose, name, emptyList(), mustShow = false)
         when (fill) {
             Fill.EMPTY -> {
-                // Only the screen saver's (Android's setting, read on the phone) can still be opened from here.
-                val buttons = v.steps.filter(SetupRules::hasButton).map { it.key }
-                if (buttons != listOf(BedsideDreamRules.SETUP_KEY)) fail("$name: buttons on $buttons")
+                // Of the steps that couldn't be checked only the screen saver's (Android's own setting) has a button;
+                // the ones done in Navilife (Work mode, the voice) keep theirs.
+                val unknown = v.steps.filter { it.state == SetupState.UNKNOWN && SetupRules.hasButton(it) }.map { it.key }
+                if (unknown != listOf(BedsideDreamRules.SETUP_KEY)) fail("$name: buttons on unchecked steps $unknown")
                 if (!onScreen("Couldn't check")) fail("$name: doesn't say what couldn't be checked")
             }
             Fill.ONE -> {
