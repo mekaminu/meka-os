@@ -47,6 +47,7 @@ import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.AlarmRules
+import os.meka.core.domain.DurationGlue
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.facade.MekaCore
 
@@ -107,7 +108,7 @@ internal fun WakeSection(core: MekaCore, modifier: Modifier = Modifier) {
             targetState = w.line,
             transitionSpec = { fadeIn(MekaMotion.appear(reduced)) togetherWith fadeOut(MekaMotion.appear(reduced)) },
             label = "wake-line",
-        ) { line -> Text(LoneWordGlue.kept(line), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
+        ) { line -> Text(LoneWordGlue.kept(DurationGlue.kept(line)), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs)) }
         AnimatedVisibility(w.useSuggestionLabel != null, enter = fadeIn(MekaMotion.appear(reduced)), exit = fadeOut(MekaMotion.appear(reduced))) {
             Text(
                 w.useSuggestionLabel ?: "", style = MekaType.itemMeta, color = Meka.colors.accent,

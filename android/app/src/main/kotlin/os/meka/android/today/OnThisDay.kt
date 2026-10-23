@@ -230,7 +230,7 @@ internal fun OnThisDaySection(modifier: Modifier = Modifier) {
                     style = MekaType.caption, color = Meka.colors.textSecondary,
                     // Quality gate slice 47: a 48 dp touch even when the offer fits one line (unfolded).
                     modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Switch) { turnOn() }
-                        .semantics { contentDescription = OnThisDayRules.OFFER_LABEL + " · off · " + OnThisDayRules.PRIVACY }
+                        .semantics { contentDescription = if (refused) OnThisDayRules.DENIED else OnThisDayRules.OFFER_SPOKEN }
                         .minTouch().padding(vertical = MekaSpace.xs),
                 )
                 Text(

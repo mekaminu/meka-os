@@ -52,7 +52,10 @@ object OnThisDayRules {
     const val HIDE = "Not this one"
     const val TURN_OFF = "Turn off"
     const val OPEN_HINT = "Opens in Gallery"
-    const val OFFER = "📷 On this day · a photo from this date in past years, in the evening · picked on this phone, never uploaded · Turn on"
+    /** The offer on screen, one short line (quality gate slice 48: the full how-to took three lines on the cover screen). */
+    const val OFFER = "📷 On this day in past years · Turn on"
+    /** What TalkBack reads for the offer: the full how-to. */
+    const val OFFER_SPOKEN = "On this day: a photo from this date in past years, in the evening. Picked on this phone, never uploaded. Turn on"
     const val OFFER_LABEL = "On this day photo"
     const val NOT_NOW = "Not now"
     const val NONE = "No photos from this date in past years · it'll look again tomorrow"

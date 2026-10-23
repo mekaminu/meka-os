@@ -39,7 +39,7 @@ struct WakeSection: View {
                         .buttonStyle(MekaPressStyle()).font(MekaType.itemTitle).foregroundStyle(palette.accent)
                 }
             }
-            Text(LoneWordGlue.shared.kept(line: wake.line))
+            Text(LoneWordGlue.shared.kept(line: DurationGlue.shared.kept(line: wake.line)))
                 .font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .contentTransition(.opacity)
             if let use = wake.useSuggestionLabel {

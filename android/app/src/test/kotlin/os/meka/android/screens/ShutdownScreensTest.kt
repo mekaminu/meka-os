@@ -8,9 +8,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToIndexAction
@@ -52,7 +55,7 @@ import kotlin.random.Random
 import kotlin.test.fail
 
 /**
- * The quality gate, slice 47 (build plan: "the rest of Ask's places", Shutdown next): Shut down the day on the Fold's
+* The quality gate, slice 47 (build plan: "the rest of Ask's places", Shutdown next): Shut down the day on the Fold's
  * cover and inner screens at 19:10 on a Wednesday (work ended 17:30) with nothing done or left, one done and one left,
  * and a full evening (seven done, so "+ 1 more"; an overdue task, one planned for 14:00, one that repeats every day and
  * a long one; tomorrow an office day with a standup, a long meeting at a place and a task), Dark and Light, plus the full
@@ -60,7 +63,9 @@ import kotlin.test.fail
  * dates, times and numbers, a word left alone, a dot starting or ending a line, and every button's touch at least
  * 48 dp. By hand: a left task's Tomorrow carries it to tomorrow; its circle completes it; Tired is kept as today's
  * feeling; the evening card's Turn off turns it off; Shut down shuts the day down. Events are written as the calendar
- * mirror writes them. Invented data only (rule 13).
+ * mirror writes them. Invented data only (rule 13). Slice 48 adds the shots' findings as checks: rows in the regular
+ * body weight, a left task's chips right under its words, tomorrow's titles close to their times, the wake line's
+ * durations whole, On this day's offer on one line, and Shut down's label centred with no empty band above it.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -198,6 +203,7 @@ class ShutdownScreensTest {
         ScreenShots.assertDatesWhole(compose, name)
         ScreenShots.assertClocksWhole(compose, name)
         ScreenShots.assertNumbersWhole(compose, name)
+        ScreenShots.assertDurationsWhole(compose, name)
         if (atTop) ScreenShots.assertShows(compose, name, "Shut down the day")
         val v = core.shutdownView.value
         val p = v.tomorrow
@@ -211,6 +217,72 @@ class ShutdownScreensTest {
         ScreenShots.assertNoDotEndingALine(compose, name, lines)
         ScreenShots.assertReadable(compose, name, v.left.map { it.task.title } + p.rows.map { it.title }, mustShow = false)
         assertTouchTargets(name)
+        assertRegularWeight(name, v.left.map { it.task.title } + p.rows.map { it.title })
+        assertChipsFollowTheirTask(name, v.left.size)
+        assertTomorrowTimesClose(name, p.rows.filter { it.time != null }.map { it.title })
+        assertShutDownButton(name)
+        if (compose.onAllNodes(hasText(OnThisDayRules.OFFER), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            ScreenShots.assertOneLine(compose, name, OnThisDayRules.OFFER)
+        }
+    }
+
+    private fun layout(n: SemanticsNode): TextLayoutResult? {
+        val results = mutableListOf<TextLayoutResult>()
+        n.config.getOrNull(SemanticsActions.GetTextLayoutResult)?.action?.invoke(results)
+        return results.firstOrNull()
+    }
+
+    private fun textNodes(text: String) = compose.onAllNodes(hasText(text), useUnmergedTree = true).fetchSemanticsNodes()
+    private fun dp(px: Float) = px / compose.density.density
+
+    /** Task and tomorrow rows use the regular body weight (Fold review 2026-10-08); slice 47's shots had them bold. */
+    private fun assertRegularWeight(name: String, titles: List<String>) {
+        val bold = titles.distinct().flatMap { t -> textNodes(t).mapNotNull { n ->
+            val w = layout(n)?.layoutInput?.style?.fontWeight ?: return@mapNotNull null
+            if (w.weight > FontWeight.Normal.weight) "\"$t\" weight ${w.weight}" else null
+        } }
+        if (bold.isNotEmpty()) fail("$name: rows drawn heavier than body:\n" + bold.joinToString("\n") { "- $it" })
+    }
+
+    /** A left task's Tomorrow chip sits right under its words (slice 47's shots: ~20 dp below its line). */
+    private fun assertChipsFollowTheirTask(name: String, left: Int) {
+        if (left == 0) return
+        val chips = compose.onAllNodes(hasText("Tomorrow") and hasClickAction(), useUnmergedTree = true).fetchSemanticsNodes()
+        val texts = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
+        chips.forEach { chip ->
+            val top = chip.boundsInRoot.top
+            val above = texts.filter { it.id != chip.id && it.boundsInRoot.bottom <= top + 1f && it.boundsInRoot.left >= chip.boundsInRoot.left - 1f }
+                .maxByOrNull { it.boundsInRoot.bottom } ?: return@forEach
+            val gap = dp(top - above.boundsInRoot.bottom)
+            // The chip's 48 dp touch leaves ~7 dp over its pill; anything more is a gap of its own.
+            if (gap > 2f) fail("$name: a Tomorrow chip's touch starts ${gap.toInt()} dp under the words above it (at most 2)")
+        }
+    }
+
+    /** Tomorrow's titles start close to their times (slice 47: a 92 dp column pushed them far right). */
+    private fun assertTomorrowTimesClose(name: String, titles: List<String>) {
+        titles.forEach { t ->
+            val title = textNodes(t).firstOrNull() ?: return@forEach
+            val row = compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true).fetchSemanticsNodes()
+                .filter { it.boundsInRoot.right <= title.boundsInRoot.left && it.boundsInRoot.top in (title.boundsInRoot.top - 4f)..(title.boundsInRoot.top + 4f) }
+                .maxByOrNull { it.boundsInRoot.right } ?: return@forEach
+            val time = layout(row) ?: return@forEach
+            val gap = dp(title.boundsInRoot.left - (row.boundsInRoot.left + time.getLineRight(0)))
+            if (gap > 32f) fail("$name: \"$t\" starts ${gap.toInt()} dp after its time (at most 32)")
+        }
+    }
+
+    /** Shut down's label is centred in its button, which follows the section above without a tall empty band. */
+    private fun assertShutDownButton(name: String) {
+        val button = textNodes("Shut down").firstOrNull() ?: return
+        val l = layout(button) ?: return
+        val left = l.getLineLeft(0)
+        val right = button.size.width - l.getLineRight(0)
+        if (kotlin.math.abs(left - right) > 4f) fail("$name: Shut down's label isn't centred (${dp(left).toInt()} dp left, ${dp(right).toInt()} dp right)")
+        val notNow = textNodes(OnThisDayRules.NOT_NOW).firstOrNull() ?: return
+        // The label's node sits inside the button's 16 dp padding.
+        val band = dp(button.boundsInRoot.top - notNow.boundsInRoot.bottom) - 16f
+        if (band > 28f) fail("$name: ${band.toInt()} dp of empty band above Shut down (at most 28)")
     }
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK) {

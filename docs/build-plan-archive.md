@@ -3179,6 +3179,25 @@ docs/screens/fold/shutdown/.
   wake line "… · 1 h 20 / commute · …" splits a duration; On this day's offer is a three-line how-to; Shut down's label
   left-aligned in its button, a tall empty band above it (the hidden check's slot).
 
+### Quality gate — slice 48 (2026-10-23): slice 47's findings fixed
+
+- Fold `ShutdownPane`: a left task's title and Tomorrow's row titles use `MekaType.body` (task rows use `body`, Fold
+  review 2026-10-08); the chip row under a left task drops its 8 dp top padding (the chips' 48 dp touch already leaves
+  ~7 dp over their pills); Tomorrow's time column is `TOMORROW_TIME_WIDTH` 64 dp (was 92); `ShutdownButton` centres
+  its label; the Shut down item's top is 24 dp (was 32) and the 16 dp spacer under the check shows only with the check.
+- Fold `WakeSection` and Mac `WakeSection`: the wake line goes through core `DurationGlue.kept` before `LoneWordGlue`, so
+  "1 h 20 commute" (a duration with the word it measures; a joining word like "from" or "before" stays free) never
+  splits. `DurationGlue` lives beside `PhraseGlue` in DateGlue.kt; it is not part of `PhraseGlue.kept`, so other
+  screens' lines are unchanged. DurationGlueTest (4).
+- Core `OnThisDayRules.OFFER` is one short line, "📷 On this day in past years · Turn on"; TalkBack reads
+  `OFFER_SPOKEN`, the full how-to. Fold only (the Mac has no On this day).
+- Mac `ShutdownSheet`: left task and Tomorrow titles in `MekaType.body`, the time column 56 pt (was 96).
+- ShutdownScreensTest's checks now also fail on: a left or Tomorrow title heavier than body, a Tomorrow chip's touch
+  starting over 2 dp under the words above it, a Tomorrow title over 32 dp after its time's text, a duration split
+  across lines (`ScreenShots.assertDurationsWhole`), On this day's offer over one line, Shut down's label off-centre
+  or over 28 dp of empty band above the button.
+- Design check: no design file covers Shut down the day. No server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 45 (2026-10-23): Week ahead's shots and its first hand tests
 
 The next of Ask's places without shots. WeekAheadScreensTest (9) draws Ask → More → Week ahead (`WeekAheadPane`) on

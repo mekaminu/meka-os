@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import os.meka.core.domain.BoardFitRules
 import os.meka.core.domain.DateGlue
+import os.meka.core.domain.DurationGlue
 import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.PhraseGlue
 import os.meka.core.domain.ScreenSenseRules
@@ -224,6 +225,13 @@ object ScreenShots {
      */
     fun assertNumbersWhole(compose: ComposeContentTestRule, name: String) =
         assertPhrasesWhole(compose, name, "a number") { PhraseGlue.ranges(it) }
+
+    /**
+     * A duration and the word it measures stay whole (Shut down's shots, slice 47: the wake line read "1 h 20 /
+     * commute"), [DurationGlue.ranges]. Only for screens that draw their lines through [DurationGlue].
+     */
+    fun assertDurationsWhole(compose: ComposeContentTestRule, name: String) =
+        assertPhrasesWhole(compose, name, "a duration") { DurationGlue.ranges(it) }
 
     /** Trips' clocks phrase ("1 h ahead of UK time"), on one line wherever it wraps (quality gate slice 20). */
     private val CLOCKS = Regex("\\d+ (?:h|min)(?: \\d+)? (?:ahead of|behind) UK time")

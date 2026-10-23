@@ -54,6 +54,33 @@ object PhraseGlue {
 }
 
 /**
+ * Durations held together on screen (the quality gate's Shut down the day shots, slice 47: on the cover screen the wake
+ * alarm's line read "Suggested from Work at 09:00 · 1 h 20 / commute"). "1 h 20", "45 min" and "2 h" get no-break
+ * spaces, and so does the word they measure when it follows ("1 h 20 commute", "2 h free"), so a line that must wrap
+ * takes the whole phrase down. A short joining word after it ("1 h to get ready") stays free. Non-AI, pure; only for
+ * words drawn on screen, and only where a screen asks for it (lines compared elsewhere keep plain spaces).
+ */
+object DurationGlue {
+    private val SMALL = setOf("from", "then", "with", "into", "over", "till", "until", "before", "after")
+
+    /** "1 h", "1 h 20", "45 min", "90 mins", with the following word when it's a word of four letters or more. */
+    val DURATION = Regex("\\b\\d+ (?:h(?: \\d{1,2}(?! ?(?:h\\b|min|:)))?|mins?)\\b(?: ([a-z]{4,})\\b)?")
+
+    /** [line] with each duration (and the word it measures) made whole. */
+    fun kept(line: String): String = DURATION.replace(line) { m ->
+        val word = m.groupValues[1]
+        val keep = if (word.isNotEmpty() && word in SMALL) m.value.removeSuffix(" $word") else m.value
+        keep.replace(' ', LifeTileRules.GLUE[0]) + m.value.substring(keep.length)
+    }
+
+    /** The ranges in [line] (plain or kept) of each duration and its word, for a screen test that checks none wraps. */
+    fun ranges(line: String): List<IntRange> = DURATION.findAll(DateGlue.plain(line)).map { m ->
+        val word = m.groupValues[1]
+        if (word.isNotEmpty() && word in SMALL) m.range.first until m.range.last + 1 - word.length - 1 else m.range
+    }.toList()
+}
+
+/**
  * No word left alone on a line (the quality gate's Settings shots, slice 25: on the cover screen "When Ada says
  * something out loud on her / own" and "Gmail and Outlook · read, tidied, sent only on / your tap"). The last two
  * words of a line of three or more are joined by a no-break space, so a line that must wrap takes them down together;

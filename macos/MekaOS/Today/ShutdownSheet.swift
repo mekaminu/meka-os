@@ -177,7 +177,7 @@ private struct LeftRow: View {
         HStack(alignment: .top, spacing: MekaSpace.m) {
             CompleteButton(task: item.task, palette: palette)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(item.task.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
+                Text(item.task.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                 if let line = item.line {
                     Text(LoneWordGlue.shared.kept(line: line)).font(MekaType.itemMeta).foregroundStyle(item.overdue ? palette.critical : palette.textSecondary)
                 }
@@ -222,9 +222,9 @@ struct TomorrowLine: View {
         HStack(alignment: .firstTextBaseline, spacing: MekaSpace.m) {
             Text(row.time ?? "").font(MekaType.itemMeta).monospacedDigit()
                 .foregroundStyle(palette.textSecondary)
-                .frame(width: 96, alignment: .leading)
+                .frame(width: 56, alignment: .leading)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                Text(row.title).font(MekaType.itemTitle).foregroundStyle(row.isEvent ? palette.textPrimary : palette.textSecondary)
+                Text(row.title).font(MekaType.body).foregroundStyle(row.isEvent ? palette.textPrimary : palette.textSecondary)
                 if let d = row.detail {
                     Text(LoneWordGlue.shared.kept(line: d)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }

@@ -44,6 +44,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -175,9 +176,10 @@ fun ShutdownPane(core: MekaCore, onClose: () -> Unit) {
         }
 
         item(key = "shut") {
-            Column(Modifier.padding(top = MekaSpace.xl).animateItem().appear(rememberAppearance(4)), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.padding(top = MekaSpace.l).animateItem().appear(rememberAppearance(4)), horizontalAlignment = Alignment.CenterHorizontally) {
                 ShutDownCheck(visible = closing || v.doneToday, line = v.doneLine ?: "Day shut down")
-                Spacer(Modifier.height(MekaSpace.m))
+                // Only under the check: before it shows, the button follows the section above (slice 48: no empty band).
+                if (closing || v.doneToday) Spacer(Modifier.height(MekaSpace.m))
                 if (!v.doneToday && !closing) {
                     ShutdownButton("Shut down", filled = true) {
                         closing = true
@@ -239,10 +241,12 @@ private fun LeftRow(
         CompleteButton(t, tick)
         Spacer(Modifier.width(MekaSpace.m))
         Column(Modifier.weight(1f)) {
-            Text(t.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+            // Quality gate slice 48: task rows use the regular body weight (Fold review 2026-10-08).
+            Text(t.title, style = MekaType.body, color = Meka.colors.textPrimary)
             item.line?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = if (item.overdue) Meka.colors.critical else Meka.colors.textSecondary) }
             Row(
-                Modifier.horizontalScroll(rememberScrollState()).padding(top = MekaSpace.xs),
+                // No padding above: the chips' 48 dp touch already leaves ~8 dp over their pills (slice 48).
+                Modifier.horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
             ) {
                 ShutdownChip("Tomorrow", tomorrow)
@@ -279,12 +283,16 @@ private fun TomorrowHeader(v: ShutdownView, modifier: Modifier) {
     }
 }
 
+/** Tomorrow's time column: "09:30" in itemMeta with a little air (was 92 dp, which pushed titles far right). */
+internal val TOMORROW_TIME_WIDTH = 64.dp
+
 @Composable
 internal fun TomorrowLine(r: TomorrowRow, modifier: Modifier) {
     Row(modifier.fillMaxWidth().padding(vertical = MekaSpace.xs), verticalAlignment = Alignment.Top) {
-        Text(r.time ?: "", style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(92.dp))
+        // Quality gate slice 48: a time column just wide enough for "09:30", and titles in the regular body weight.
+        Text(r.time ?: "", style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.width(TOMORROW_TIME_WIDTH))
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MekaType.itemTitle, color = if (r.isEvent) Meka.colors.textPrimary else Meka.colors.textSecondary)
+            Text(r.title, style = MekaType.body, color = if (r.isEvent) Meka.colors.textPrimary else Meka.colors.textSecondary)
             r.detail?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         }
     }
@@ -337,6 +345,7 @@ private fun ShutdownChip(label: String, onClick: () -> Unit) {
 private fun ShutdownButton(label: String, filled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Text(
         label, style = MekaType.itemTitle, color = if (filled) Meka.colors.onAccent else Meka.colors.accent,
+        textAlign = TextAlign.Center,
         modifier = modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill))
             .background(if (filled) Meka.colors.accent else Meka.colors.surfaceRaised)
             .clickable(role = Role.Button) { onClick() }.padding(horizontal = MekaSpace.l, vertical = MekaSpace.m),
