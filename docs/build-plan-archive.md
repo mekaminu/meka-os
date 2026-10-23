@@ -2987,6 +2987,7 @@ He tapped Later on the update card by mistake and couldn't find the build again:
 - Re-shot read (screens f9cbaf4, CI run 1097): Date night, What Navilife knows and the hints all right. Two findings on the cover screen: the Emergency card's "Sam two doors down, 07700 / 900123" (a phone number split) and Annual leave's half term "Mon 26 – Fri 30 Oct · 5 work / days" (a count split from its unit).
 - Fixed: core **PhraseGlue** (DateGlue.kt) — no-break spaces inside a phone number (a 0- or +-led run of 10–13 digits with single spaces), a count with its unit (days, work days, nights, weeks, months, years, hours, mins) and "N of M", on top of DateGlue's dates; `ranges` for screen tests. Drawn through computed fields: `EmergencyRow.detailShown`, `LeaveRow.lineShown`, `LeaveHoliday.lineShown`/`noteShown`, `FactRow.valueShown` (Copy keeps `copyText`; TalkBack and Ask keep plain words). Fold panes and Mac sheets both.
 - KeptPlacesScreensTest now also fails on a number split across lines (`ScreenShots.assertNumbersWhole`).
+- Landed 147736e; CI run 1098 (39886191995) green first try; re-shot 9eaecb3 shows the neighbour's number whole.
 - Tests: PhraseGlueTest (5). Design check: no design file for these panes. Fold and Mac, no server change, no migration, Mac checked nightly.
 
 ### Fasting rebuild — slice 1 (2026-10-22): why every fast showed 0 m, and the screen's words from the core
