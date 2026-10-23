@@ -71,6 +71,9 @@ data class DateNightView(
     /** The week-before card for Needs you (slice 2); null when there's nothing to book. */
     val nudge: DateNightNudge? = null,
 ) {
+    /** [summary] as the pane draws it: a date never splits across lines (quality gate slice 23, "next Fri / 23 Oct"). */
+    val summaryShown: String get() = DateGlue.kept(summary)
+
     companion object {
         val EMPTY = DateNightView(false, DateNightRules.DEFAULT_WEEKDAY, DateNightRules.DEFAULT_START, DateNightRules.OFF_LINE, emptyList(), emptyList())
     }

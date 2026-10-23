@@ -93,7 +93,7 @@ fun DateNightPane(core: MekaCore, onClose: () -> Unit) {
                 modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.DATE_NIGHT)).appear(rememberAppearance(0)))
         }
         item(key = "summary") {
-            Crossfade(v.summary, animationSpec = MekaMotion.appear(reduced), label = "date-night-summary") { s ->
+            Crossfade(v.summaryShown, animationSpec = MekaMotion.appear(reduced), label = "date-night-summary") { s ->
                 Text(s, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(1)))
             }
         }

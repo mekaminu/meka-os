@@ -40,6 +40,7 @@ class DateNightTest {
         val v = DateNightRules.view(nFold.setting(), sat)
         assertTrue(v.on)
         assertEquals("Every other Friday from 19:00 · next Fri 16 Oct", v.summary)
+        assertEquals("Every other Friday from 19:00 · next Fri\u00A016\u00A0Oct", v.summaryShown)
         assertEquals(listOf(fri16, fri16 + 14, fri16 + 28, fri16 + 42), v.nights.map { it.day })
         assertEquals("19:00 · kept clear", v.nights.first().line)
         assertEquals(listOf("Fri 16 Oct" to true, "Fri 23 Oct" to false), v.starts.map { it.label to it.chosen })

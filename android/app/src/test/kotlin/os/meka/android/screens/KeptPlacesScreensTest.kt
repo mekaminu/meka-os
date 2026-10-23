@@ -153,7 +153,7 @@ class KeptPlacesScreensTest {
         when (place) {
             Place.DATE_NIGHT -> {
                 val v = core.dateNightView.value
-                ScreenShots.assertShows(compose, name, v.summary)
+                ScreenShots.assertShows(compose, name, v.summaryShown)
                 ScreenShots.assertReadable(compose, name, v.nights.flatMap { listOf(it.label, it.line) }, mustShow = false)
                 if (fill == Fill.EMPTY && v.on) fail("$name: date night on with nothing chosen")
                 if (fill != Fill.EMPTY && v.nights.isEmpty()) fail("$name: no nights coming up once it's on")

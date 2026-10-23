@@ -20,7 +20,7 @@ struct DateNightSheet: View {
         let rules = DateNightRules.shared
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             Text("Date night").font(MekaType.upNextTitle).staggeredAppear(0)
-            Text(v.summary).font(MekaType.body).foregroundStyle(palette.textSecondary)
+            Text(v.summaryShown).font(MekaType.body).foregroundStyle(palette.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: v.summary)
