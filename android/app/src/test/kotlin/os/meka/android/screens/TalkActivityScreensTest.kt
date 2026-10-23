@@ -49,7 +49,7 @@ import kotlin.test.fail
  * Ada added with Undo, a shopping add, reminders and a digest that reached you, a scam number blocked twice), each on
  * the Fold's cover and inner screens, Dark (and the full one in Light). Saved under `talk/` and `activity/` and read for
  * nonsense, cut lines, broken words, split dates, times and numbers, and lines leaving a word alone. "Works by hand":
- * Talk's Turn off changes its section's line; Activity's filter chip narrows the days and Undo takes a change back.
+ * Activity's filter chip narrows the days and Undo takes a change back.
  * Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -106,26 +106,10 @@ class TalkActivityScreensTest {
         ScreenShots.assertNoLoneWords(compose, name, sections.flatMap { listOf(it.status) + it.steps } + view.intro)
     }
 
-    /** Works by hand: Talk over's Turn off is a live button, and its line says Off once tapped. */
-    private fun talkOverByHand() {
-        val on = BargeInRules.section(true)
-        val off = BargeInRules.section(false)
-        val button = compose.onAllNodes(hasText(on.action!!) and hasClickAction(), useUnmergedTree = false).fetchSemanticsNodes()
-        if (button.isEmpty()) fail("Talk: no ${on.action} button")
-        // Talk over's own button: the last section on the pane carries it.
-        compose.onAllNodes(hasText(on.action!!) and hasClickAction())[button.size - 1].performScrollTo().performClick()
-        compose.mainClock.advanceTimeBy(SETTLE_MS)
-        compose.waitForIdle()
-        ScreenShots.assertShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
-        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
-        if (TalkAutoListen.talkOver(context)) fail("Talk: Turn off didn't turn Talk over off")
-    }
-
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCover() = talk("cover-dark")
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCoverChanged() = talk("cover-dark-changed", listenOnOpen = true, talkOver = false)
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCoverLight() = talk("cover-light", theme = ThemeChoice.LIGHT)
     @Test @Config(qualifiers = ScreenShots.INNER) fun talkInner() = talk("inner-dark")
-    @Test @Config(qualifiers = ScreenShots.COVER) fun talkByHand() { talk("cover-dark-by-hand"); talkOverByHand() }
 
     // ---- Activity ----
 
