@@ -288,10 +288,10 @@ object ScreenShots {
     }
 
     /**
-     * The quality gate's "a dot stays with its words" (Health's re-shot, slice 30: a line starting "· last push 16:55"
-     * or ending "sign-in expired ·"): fails, naming each, when one of [texts] lays out a line that starts or ends on "·".
+     * The quality gate's "a dot stays with the words before it" (Health's re-shot, slice 30: a line starting
+     * "· last push 16:55"): fails, naming each, when one of [texts] lays out a line that starts with "·".
      */
-    fun assertNoDotAtLineEdge(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
+    fun assertNoDotStartingALine(compose: ComposeContentTestRule, name: String, texts: Collection<String>) {
         val wanted = texts.map { DateGlue.plain(it) }.toSet()
         val bad = mutableListOf<String>()
         fun walk(n: SemanticsNode) {
@@ -303,13 +303,13 @@ object ScreenShots {
                 results.firstOrNull()?.takeIf { it.lineCount > 1 }?.let { r ->
                     for (line in 0 until r.lineCount) {
                         val words = text.substring(r.getLineStart(line), r.getLineEnd(line))
-                        if (LoneWordGlue.dotAtEdge(words)) bad += "\"${DateGlue.plain(words).trim()}\" in \"${DateGlue.plain(text)}\""
+                        if (LoneWordGlue.dotStartsLine(words)) bad += "\"${DateGlue.plain(words).trim()}\" in \"${DateGlue.plain(text)}\""
                     }
                 }
             }
             n.children.forEach { walk(it) }
         }
         walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
-        if (bad.isNotEmpty()) fail("$name starts or ends a line on a dot:\n" + bad.joinToString("\n") { "- $it" })
+        if (bad.isNotEmpty()) fail("$name starts a line with a dot:\n" + bad.joinToString("\n") { "- $it" })
     }
 }

@@ -170,7 +170,7 @@ class WatchHealthScreensTest {
         ScreenShots.assertEachOneLine(compose, name, listOf("Code from the watch") + v.rows.map { it.title })
         val lines = listOf(v.summary, v.how) + v.rows.map { it.line } + listOfNotNull(v.problem)
         ScreenShots.assertNoLoneWords(compose, name, lines)
-        ScreenShots.assertNoDotAtLineEdge(compose, name, lines)
+        ScreenShots.assertNoDotStartingALine(compose, name, lines)
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
         when {
             !connected -> if (v.problem != WatchLinkRules.NOT_CONNECTED) fail("$name: not connected, but the problem says \"${v.problem}\"")
@@ -257,7 +257,7 @@ class WatchHealthScreensTest {
         ScreenShots.assertShows(compose, name, v.checkedLine)
         ScreenShots.assertEachOneLine(compose, name, v.rows.mapNotNull { it.fixLabel })
         ScreenShots.assertNoLoneWords(compose, name, listOf(v.summary) + v.rows.map { it.line })
-        ScreenShots.assertNoDotAtLineEdge(compose, name, listOf(v.summary) + v.rows.map { it.line })
+        ScreenShots.assertNoDotStartingALine(compose, name, listOf(v.summary) + v.rows.map { it.line })
         ScreenShots.assertReadable(compose, name, v.rows.map { it.title }, mustShow = false)
         val server0 = v.rows.first { it.key == "server" }
         when (fill) {
