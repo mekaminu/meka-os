@@ -21,6 +21,13 @@ class DirectAddTest {
         assertEquals(AskProposal.AddTask("Call the garage", today + 1, null), task("Add call the garage tomorrow."))
     }
 
+    @Test fun bookAsTheVerb() {
+        // Quality gate slice 28: Activity showed "book The boiler service on friday" (Reading had taken it).
+        // Friday 23 October.
+        assertEquals(AskProposal.AddTask("Book the boiler service", today + 6, null), task("add book the boiler service on friday"))
+        assertEquals(AskProposal.AddTask("Book a table", today, null), task("add book a table for Saturday"))
+    }
+
     @Test fun remindMeWithDayAndTime() {
         assertEquals(AskProposal.AddTask("Ring Sam", today, 15 * 60), task("remind me to ring Sam at 3pm"))
         // Friday 23 October.

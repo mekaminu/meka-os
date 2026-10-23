@@ -61,6 +61,22 @@ object ReadingAskRules {
         Regex("""^i\s+(?:want|'d\s+like|would\s+like)\s+to\s+read\s+(.+)$""", opt),
     )
 
+    /**
+     * Quality gate slice 28: "add book the boiler service on friday", "add book a table for Saturday", "add book my MOT"
+     * use "book" as the verb, a task for the plain adds. Only a bare "book" (no "the"/"a" before it) followed by "a",
+     * "an", "my", "our", "in" or a person, or ending in a day or time, is read that way; "add book The Hobbit" and
+     * "add the book Dune" stay Reading's.
+     */
+    private val bookVerb = Regex("""^(?:add|save)\s+book\s+(.+)$""", opt)
+    private val bookVerbObject = Regex("""^(?:a|an|my|our|your|his|her|their|in|me|us|him|them|some)\b""", opt)
+
+    private fun bookIsTheVerb(q: String): Boolean {
+        val rest = bookVerb.matchEntire(q)?.groupValues?.get(1)?.trim() ?: return false
+        if (bookVerbObject.containsMatchIn(rest)) return true
+        // A day or time at the end ("on friday", "tomorrow at 3pm") is when to do it, never part of a title.
+        return EventTypingRules.parse(rest, 0, 0) != null
+    }
+
     /** "the podcast Hard Fork" → "podcast Hard Fork", so Reading reads the kind. */
     private val article = Regex("""^(?:the|a|an)\s+(?=(?:book|audiobook|podcast|course)\s)""", opt)
 
@@ -103,7 +119,8 @@ object ReadingAskRules {
         val q = clean(question) ?: return null
         if (what.any { it.matches(q) }) return ReadingAsk.What(null)
         howFar.matchEntire(q)?.let { m -> return ReadingAsk.What(named(m.groupValues[1])) }
-        add.firstNotNullOfOrNull { it.matchEntire(q) }?.let { m -> return ReadingAsk.Add(m.groupValues[1].trim().replace(article, "")) }
+        // "… to my reading list" is always Reading's; otherwise a verb "book" is a task's.
+        (add.first().matchEntire(q) ?: if (bookIsTheVerb(q)) null else add.drop(1).firstNotNullOfOrNull { it.matchEntire(q) })?.let { m -> return ReadingAsk.Add(m.groupValues[1].trim().replace(article, "")) }
         progressAt.matchEntire(q)?.let { m ->
             val text = "${m.groupValues[1]} ${m.groupValues[2]}" + (m.groupValues[3].takeIf { it.isNotEmpty() }?.let { " of $it" } ?: "")
             return ReadingAsk.Progress(named(m.groupValues[4]), text.lowercase())

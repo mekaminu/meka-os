@@ -43,6 +43,17 @@ class DirectAddFacadeTest {
     )
 
     @Test
+    fun bookAsTheVerbIsATaskNotABook() = runTest {
+        // Quality gate slice 28: Activity showed "book The boiler service on friday", added to Reading.
+        val c = core()
+        val did = assertIs<AskOutcome.Answered>(c.askMeka("add book the boiler service on friday")).answer.did.single()
+        // Thu 8 Oct: Friday is tomorrow.
+        assertEquals(AskProposal.AddTask("Book the boiler service", c.todayEpochDay() + 1, null), did.proposal)
+        assertTrue(c.readingView.value.isEmpty, "${c.readingView.value}")
+        assertEquals(0, server.asked)
+    }
+
+    @Test
     fun anAddIsDoneAtOnceWithoutTheAiAndUndoTakesItBack() = runTest {
         val c = core()
         val answer = assertIs<AskOutcome.Answered>(c.talk("add call the garage tomorrow", emptyList())).answer

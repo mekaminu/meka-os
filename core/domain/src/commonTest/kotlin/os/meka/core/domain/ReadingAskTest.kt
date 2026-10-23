@@ -44,6 +44,17 @@ class ReadingAskTest {
         assertEquals(ReadingAsk.Add("Dune"), ReadingAskRules.request("I want to read Dune"))
         assertEquals(ReadingAsk.Start("Dune", reading = true), ReadingAskRules.request("I've started reading Dune"))
         assertEquals(ReadingAsk.Start("Dune", reading = false), ReadingAskRules.request("I've started Dune"))
+        // Quality gate slice 28: "book" as a noun stays Reading's...
+        assertEquals(ReadingAsk.Add("book The Hobbit"), ReadingAskRules.request("add book The Hobbit"))
+        assertEquals(ReadingAsk.Add("book Dune"), ReadingAskRules.request("add the book Dune"))
+        assertEquals(ReadingAsk.Add("book a day in the life"), ReadingAskRules.request("add book a day in the life to my reading list"))
+        // ...and as the verb it's a task, for the plain adds.
+        listOf(
+            "add book the boiler service on friday", "add book a table for Saturday", "add book my MOT",
+            "add book in the car service tomorrow at 9", "add book the dentist next Tuesday",
+        ).forEach {
+            assertNull(ReadingAskRules.request(it), it)
+        }
         // Not about reading: the other rules' and the AI's.
         listOf("add milk to the shopping", "what's the weather", "remind me to read the contract", "I'm reading it", "page me").forEach {
             assertNull(ReadingAskRules.request(it), it)

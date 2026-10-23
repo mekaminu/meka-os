@@ -5,11 +5,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -49,7 +51,9 @@ import kotlin.test.fail
  * Ada added with Undo, a shopping add, reminders and a digest that reached you, a scam number blocked twice), each on
  * the Fold's cover and inner screens, Dark (and the full one in Light). Saved under `talk/` and `activity/` and read for
  * nonsense, cut lines, broken words, split dates, times and numbers, and lines leaving a word alone. "Works by hand":
- * Activity's filter chip narrows the days and Undo takes a change back.
+ * Talk over's Turn off changes its line (slice 28), Activity's filter chip narrows the days and Undo takes a change back.
+ * Slice 28: "add book the boiler service on friday" is a task on Friday (not Reading's), and the blocked number's two
+ * calls, a minute apart, read "2 calls stopped".
  * Invented data only (rule 13).
  */
 @RunWith(RobolectricTestRunner::class)
@@ -59,7 +63,9 @@ class TalkActivityScreensTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
+    private val start = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
+    /** The fixture's clock: the full day's calls come a minute apart, as real ones do. */
+    private var now = start
 
     private fun core(): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
@@ -106,10 +112,33 @@ class TalkActivityScreensTest {
         ScreenShots.assertNoLoneWords(compose, name, sections.flatMap { listOf(it.status) + it.steps } + view.intro)
     }
 
+    /**
+     * Works by hand (slice 28): Talk over's Turn off is a live button, and its line says Off once tapped. Slice 27's
+     * version scrolled to the button first and the paused test clock never went idle (CI run 1103); the tap is now the
+     * button's own click action, which needs no scroll, and the clock is moved on by hand.
+     */
+    private fun talkOverByHand() {
+        val on = BargeInRules.section(true)
+        val off = BargeInRules.section(false)
+        val buttons = compose.onAllNodes(hasText(on.action!!) and hasClickAction())
+        val count = buttons.fetchSemanticsNodes().size
+        if (count == 0) fail("Talk: no ${on.action} button")
+        // Talk over's own button: the last section saying it carries it.
+        buttons[count - 1].performSemanticsAction(SemanticsActions.OnClick)
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        val context = ApplicationProvider.getApplicationContext<ShotApplication>()
+        if (TalkAutoListen.talkOver(context)) fail("Talk: Turn off didn't turn Talk over off")
+        ScreenShots.assertShows(compose, "talk-by-hand", LoneWordGlue.kept(off.status))
+        if (compose.onAllNodes(hasText(off.action!!) and hasClickAction()).fetchSemanticsNodes().isEmpty()) {
+            fail("Talk: no ${off.action} after Turn off")
+        }
+    }
+
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCover() = talk("cover-dark")
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCoverChanged() = talk("cover-dark-changed", listenOnOpen = true, talkOver = false)
     @Test @Config(qualifiers = ScreenShots.COVER) fun talkCoverLight() = talk("cover-light", theme = ThemeChoice.LIGHT)
     @Test @Config(qualifiers = ScreenShots.INNER) fun talkInner() = talk("inner-dark")
+    @Test @Config(qualifiers = ScreenShots.COVER) fun talkByHand() { talk("cover-dark-by-hand"); talkOverByHand() }
 
     // ---- Activity ----
 
@@ -124,12 +153,14 @@ class TalkActivityScreensTest {
         core.digestPosted(Digest("Evening digest · 2 things", "2 to chase", listOf("a", "b"), 2, "Evening digest", NoticeTarget.LISTS))
         check(core.blockCaller("01632 960691", "Scam call claiming to be the police"))
         core.screenIncomingCall("+441632960691", PeopleLists(), emptyList(), CallSignals.NONE)
+        now += 60_000
         core.screenIncomingCall("+441632960691", PeopleLists(), emptyList(), CallSignals.NONE)
     }
 
     private fun activity(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK): MekaCore {
         val context = ApplicationProvider.getApplicationContext<ShotApplication>()
         ThemeChoice.save(context, theme)
+        now = start
         val core = core()
         context.useCoreForScreens(core)
         runBlocking {
@@ -156,7 +187,12 @@ class TalkActivityScreensTest {
             Fill.MANY -> {
                 if (rows.size < 5) fail("$name: only ${rows.size} rows for a full day: $rows")
                 if (rows.none { it.canUndo }) fail("$name: nothing Ada did can be undone")
-                if (core.blockedCallers.value.stopped.isEmpty()) fail("$name: the blocked number's calls aren't counted")
+                val stopped = core.blockedCallers.value.stopped
+                if (stopped.singleOrNull()?.count != 2L) fail("$name: the blocked number's two calls aren't counted as two: $stopped")
+                // Slice 28: "add book the boiler service on friday" is Friday's task, never a book on Reading.
+                if (rows.none { it.summary.contains("“Book the boiler service”") && it.summary.contains("Fri") }) {
+                    fail("$name: the boiler service isn't Friday's task: ${rows.map { it.summary }}")
+                }
                 ScreenShots.assertShows(compose, name, v.weekLine)
             }
         }
