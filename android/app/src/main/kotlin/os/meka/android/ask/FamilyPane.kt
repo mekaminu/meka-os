@@ -159,6 +159,9 @@ fun FamilyPane(core: MekaCore, onClose: () -> Unit) {
     }
 }
 
+/** A link row's state dot; Turn off under the words is indented past it. */
+private val FAMILY_DOT = 10.dp
+
 @Composable
 private fun FamilyRowView(row: FamilyRow, enabled: Boolean, modifier: Modifier, onTurnOff: () -> Unit) {
     val reduced = Meka.reducedMotion
@@ -180,7 +183,7 @@ private fun FamilyRowView(row: FamilyRow, enabled: Boolean, modifier: Modifier, 
         // Quality gate slice 40: on the cover screen Turn off beside the words squeezed each line onto two ("Waiting ·
         // link" / "made yesterday"); below 420 dp it sits under them, lined up with the words, as Calendars' and Mail's do.
         val under = row.canTurnOff && FamilyRules.turnOffUnder((maxWidth - MekaSpace.m * 2).value)
-        val dotSlot: @Composable () -> Unit = { Box(Modifier.size(10.dp).clip(CircleShape).background(dot)) }
+        val dotSlot: @Composable () -> Unit = { Box(Modifier.size(FAMILY_DOT).clip(CircleShape).background(dot)) }
         val words: @Composable (Modifier) -> Unit = { m ->
             Column(m.semantics(mergeDescendants = true) { contentDescription = "${row.title}. ${row.line}" }) {
                 Text(row.title, style = MekaType.body, color = Meka.colors.textPrimary)
@@ -209,7 +212,7 @@ private fun FamilyRowView(row: FamilyRow, enabled: Boolean, modifier: Modifier, 
                     words(Modifier.weight(1f))
                 }
                 // Under the words, starting where they start (past the dot), so the row still reads as one.
-                turnOff(Modifier.padding(start = 10.dp + MekaSpace.xs))
+                turnOff(Modifier.padding(start = FAMILY_DOT + MekaSpace.xs))
             }
         } else {
             Row(
