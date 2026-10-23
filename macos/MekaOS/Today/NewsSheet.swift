@@ -192,14 +192,12 @@ struct NewsSheet: View {
                                 .foregroundStyle(palette.barca)
                                 .padding(.bottom, MekaSpace.xxs)
                         } else {
-                            HStack(spacing: 0) {
-                                SectionLabel(lane.label, palette)
-                                if let u = lane.unreadLabel {
-                                    Text(" · " + u.uppercased())
-                                        .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
-                                        .foregroundStyle(palette.accent)
-                                }
-                            }
+                            // Quality gate slice 44: the grey name and the gold count are one text, so they share
+                            // a baseline (in a centred HStack the label's bottom padding lifted it above the count).
+                            (Text(lane.label.uppercased()).foregroundStyle(palette.textTertiary)
+                                + Text(lane.unreadLabel.map { " · " + $0.uppercased() } ?? "").foregroundStyle(palette.accent))
+                                .font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                                .padding(.bottom, MekaSpace.xxs)
                         }
                         if !lane.sources.isEmpty {
                             Text(LoneWordGlue.shared.kept(line: lane.sources)).font(MekaType.caption).foregroundStyle(palette.textTertiary)

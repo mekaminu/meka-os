@@ -3128,6 +3128,18 @@ Slice 40's re-shot finding: stacked, the dot and the words kept a 48 dp row of t
   core change, no server change, no migration.
 - Landed e0c6090; CI run 1130 (39942089862) green first try; re-shot f35fe1d: Turn off just under each line.
 
+### Quality gate — slice 44 (2026-10-23): a lane's name and its count on one baseline
+
+Slice 43's re-shot finding: on News's lane headers "AI" and "TOP STORIES" (grey) sat a few px above their gold
+"· 2 NEW". Each was two texts in a centred row, and the label (Today's `SectionLabel`) carries 4 dp of bottom padding,
+so centring lifted it. Barça's header was already one text and lined up.
+- Fold (`NewsPane.LaneHeader`): one `Text` with an annotated string, the name in the tertiary colour and the count in
+  the accent, the label's bottom padding on the whole; Barça's one text kept; both tagged `news-lane-header`.
+- Mac (`NewsSheet`): `Text + Text` in the two colours with the label's font, tracking and bottom padding.
+- Tests: NewsScreensTest's every shot fails if a drawn lane header isn't exactly one of the lanes' "NAME · N NEW" in
+  one text, or no header carries its count while stories are new.
+- Design check: no design file covers News. No core change, no server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 43 (2026-10-23): News's shots, its first hand tests, and what they found
 
 The next of Ask's places without shots. `NewsScreensTest` (10, Robolectric + Roborazzi) draws Ask → More → News on the

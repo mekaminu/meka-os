@@ -17,6 +17,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -363,13 +366,22 @@ private fun UnreadRow(line: String, canMark: Boolean, marked: String?, modifier:
 private fun LaneHeader(lane: NewsLane, modifier: Modifier) {
     Column(modifier.fillMaxWidth()) {
         if (lane.isBarca) {
-            Row(Modifier.padding(bottom = MekaSpace.xxs)) {
-                Text(lane.label.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.barca)
-                lane.unreadLabel?.let { Text(" · " + it.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.barca) }
-            }
-        } else Row(verticalAlignment = Alignment.CenterVertically) {
-            SectionLabel(lane.label)
-            lane.unreadLabel?.let { Text(" · " + it.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.accent) }
+            Text(lane.label.uppercase() + (lane.unreadLabel?.let { " · " + it.uppercase() } ?: ""),
+                style = MekaType.sectionLabel, color = Meka.colors.barca,
+                modifier = Modifier.padding(bottom = MekaSpace.xxs).testTag("news-lane-header"))
+        } else {
+            // Quality gate slice 44: the grey name and the gold count are one text, so they share a baseline (as two
+            // texts in a centred row the label's bottom padding lifted "AI" above "· 2 NEW").
+            val tertiary = Meka.colors.textTertiary
+            val accent = Meka.colors.accent
+            Text(
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = tertiary)) { append(lane.label.uppercase()) }
+                    lane.unreadLabel?.let { withStyle(SpanStyle(color = accent)) { append(" · " + it.uppercase()) } }
+                },
+                style = MekaType.sectionLabel, color = tertiary,
+                modifier = Modifier.padding(bottom = MekaSpace.xxs).testTag("news-lane-header"),
+            )
         }
         if (lane.sources.isNotEmpty()) Text(LoneWordGlue.kept(lane.sources), style = MekaType.caption, color = Meka.colors.textTertiary)
     }

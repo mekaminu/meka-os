@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -182,6 +184,13 @@ class NewsScreensTest {
         ScreenShots.assertReadable(compose, name, place.items.map { it.title }, mustShow = false)
         // Every lane's story says where it's from and how old it is, whole.
         ScreenShots.assertEachOneLine(compose, name, place.items.map { LoneWordGlue.kept(it.meta) })
+        // A lane's name and its "· 2 NEW" are one text, so they share a baseline (slice 44: "AI" sat higher than its count).
+        val headers = compose.onAllNodes(hasTestTag("news-lane-header"), useUnmergedTree = true).fetchSemanticsNodes()
+            .map { node -> node.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty() }
+        val wanted = place.lanes.map { lane -> lane.label.uppercase() + (lane.unreadLabel?.let { " · " + it.uppercase() } ?: "") }
+        if (place.lanes.isNotEmpty() && headers.isEmpty()) fail("$name: ${place.lanes.size} lanes, but no lane header drawn")
+        headers.forEach { h -> if (h !in wanted) fail("$name: a lane's header reads \"$h\", not one of $wanted in one text") }
+        if (place.lanes.any { it.unreadLabel != null } && headers.none { "·" in it }) fail("$name: no lane header carries its count ($headers)")
         // Topics is a real button: 48 dp to tap, like the rest.
         val topics = compose.onAllNodes(hasTestTag("news-topics")).fetchSemanticsNodes().firstOrNull() ?: fail("$name: no Topics")
         val touchDp = topics.boundsInRoot.height / compose.density.density
