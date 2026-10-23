@@ -3218,6 +3218,7 @@ docs/screens/fold/shutdown/.
   where a button goes; SetupTest checks every variant with ScreenSenseRules.
 - Both apps: the summary and each step's line keep their last words and dots together (LoneWordGlue).
 - Design check: no design file covers Setup. No server change, no wire change, no migration, Mac checked nightly.
+- fae4002 + CI fix 9b4551f (the empty shot expected no buttons, but Work mode's and the voice's rightly stay), CI run 1159 (40012243603) green; shots published f40ad1c.
 
 ### Quality gate — slice 57 (2026-10-23): Notifications' shots and its first hand test
 
