@@ -3218,6 +3218,8 @@ protected and tonight lifted just this once, Dark and Light, under docs/screens/
   chip is unchanged so other screens keep their layout. The summary, today's line, the lifted line, the mail line and
   both notes go through `LoneWordGlue.kept`. The pane carries the `protected-pane` test tag.
 - Mac `ProtectedTimeSheet`: the same lines through `LoneWordGlue.kept` (its 560 pt sheet already fits the chips).
+- Landed 9e2d114, CI run 1146 (39979116333) green first try, published f548530: the evening's chips on three rows,
+  all in view, every line whole.
 - Design check: no design file covers Protected time. No core change, no server change, no migration, Mac checked
   nightly.
 
