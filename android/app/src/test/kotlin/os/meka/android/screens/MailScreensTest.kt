@@ -179,6 +179,13 @@ class MailScreensTest {
         show(core)
         turns()
         compose.waitForIdle()
+        // Reading the accounts here can land the screen's own read too: let it draw before the shot and the checks
+        // (slice 33: the inner shot was taken before it, still drawing its first read).
+        val v = if (fill == Fill.OFFLINE) null else runBlocking { core.mailAccounts() } ?: fail("$name: Mail never read the accounts")
+        if (v != null) {
+            turns()
+            compose.waitForIdle()
+        }
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("mail", name))
         ScreenShots.assertSensible(compose, name)
@@ -187,14 +194,10 @@ class MailScreensTest {
         ScreenShots.assertClocksWhole(compose, name)
         ScreenShots.assertNumbersWhole(compose, name)
         ScreenShots.assertShows(compose, name, MailAccountRules.TITLE)
-        if (fill == Fill.OFFLINE) {
+        if (v == null) {
             ScreenShots.assertShows(compose, name, MailAccountRules.OFFLINE)
             return core
         }
-        val v = runBlocking { core.mailAccounts() } ?: fail("$name: Mail never read the accounts")
-        // Reading the accounts here can land the screen's own read too: let it draw before the checks look at it.
-        turns()
-        compose.waitForIdle()
         val lines = lines(v)
         ScreenShots.assertNoLoneWords(compose, name, lines)
         ScreenShots.assertNoDotStartingALine(compose, name, lines)

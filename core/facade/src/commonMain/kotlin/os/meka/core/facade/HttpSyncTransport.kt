@@ -47,8 +47,17 @@ data class ConnectedAccount(
     val eventsLine: String? = null,
     /** Full news hub, slice 5: a news account's feeds the server couldn't read at its last tries. */
     val newsDown: List<os.meka.core.domain.NewsFeedDown> = emptyList(),
+    /**
+     * When it last synced as both apps show it ("17:11", "Tue 08:29"), on the core's clock and zone; [MekaCore.connectedAccounts]
+     * fills it in (quality gate slice 33).
+     */
+    val syncedAt: String? = null,
 ) {
     val needsReconnect: Boolean get() = status == "needs_reconnect"
+    /** The status line as Calendars draws it: [syncedAt]'s time, dots and last words held together ([os.meka.core.domain.LoneWordGlue]). */
+    val shownStatus: String get() = os.meka.core.domain.LoneWordGlue.kept(statusLine(syncedAt))
+    /** [editingLine] as drawn, its dots and last words held together. */
+    val editingShown: String? get() = editingLine?.let(os.meka.core.domain.LoneWordGlue::kept)
     /** "Google · meka@gmail.com · synced 08:29" · "Headlines · synced 08:29"; [syncedAt] as the device writes the time. */
     fun statusLine(syncedAt: String?): String = os.meka.core.domain.CalendarAccountRules.statusLine(provider, email, status, syncedAt)
     /** The line about editing under the account, or null (feeds, or the reconnect line says enough). */

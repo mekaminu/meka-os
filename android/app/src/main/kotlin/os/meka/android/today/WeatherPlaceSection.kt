@@ -60,6 +60,9 @@ import os.meka.core.domain.WeatherPlaceRules
 import os.meka.core.domain.WeatherPlaceView
 import os.meka.core.facade.MekaCore
 
+/** The line under WEATHER (in Calendars' shots, quality gate slice 33). */
+internal const val WEATHER_HINT = "Home and work for Today's weather line, the brief and Ask. Only the names are sent to Open-Meteo."
+
 /**
  * Weather places (Calendars → Weather): **Home**, the town the forecast is for, About you's home unless Meka types
  * another, and **Work** (Places item 2), About you's work unless he types another (rule 13: no place in the code); on office days Today's weather line and the brief
@@ -73,7 +76,7 @@ internal fun WeatherPlaceSection(core: MekaCore, modifier: Modifier = Modifier) 
     val view by core.weatherView.collectAsState()
     Column(modifier, verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Text("WEATHER", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-        Text("Home and work for Today's weather line, the brief and Ask. Only the names are sent to Open-Meteo.",
+        Text(os.meka.core.domain.LoneWordGlue.kept(WEATHER_HINT),
             style = MekaType.caption, color = Meka.colors.textTertiary)
         PlaceField(
             label = "Home", choice = view.placeChoice, fallback = WeatherPlaceRules.defaultName,

@@ -88,6 +88,19 @@ object CalendarAccountRules {
     }
 
     /**
+     * When an account last synced, on the core's clock and zone (quality gate slice 33: Calendars wrote it in each
+     * device's own zone, as Health did before slice 29): "17:11" today, "Tue 08:29" on an earlier day, "just now".
+     */
+    /**
+     * Below this width an account's Reconnect / Allow editing sit under its words, not beside them (quality gate slice
+     * 33: on the cover screen they squeezed the address and the status to a sliver); the same width as Mail's switches.
+     */
+    fun actionsUnder(widthDp: Float): Boolean = MailAutopilotPanelRules.stacked(widthDp)
+
+    fun syncedAt(lastSyncAtMs: Long?, nowMs: Long, cal: LocalCalendar): String? =
+        lastSyncAtMs?.let { HealthRules.at(it, nowMs, cal) }
+
+    /**
      * The line under the title. [syncedAt] is the last sync's time as the device writes it ("08:29"), or null before
      * the first one. A signed-in account carries its address: "Google · meka@gmail.com · synced 08:29".
      */

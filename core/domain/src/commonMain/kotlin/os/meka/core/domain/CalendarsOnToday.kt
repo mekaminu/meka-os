@@ -50,6 +50,9 @@ data class CalendarChoice(
  * - [choices] lists every calendar in the mirror, plus hidden ones that have no events right now, by name.
  */
 object CalendarRules {
+    /** The Fold's line under Calendars' ON TODAY (the Mac says "Calendar section"). */
+    const val ON_TODAY_HINT = "Turn a calendar off to keep it in the Calendar tab but off Today and your day."
+
     /** "google|meka@gmail.com|Timestripe" · "fixtures||" */
     fun key(e: CalendarEvent): String =
         listOf(e.provider, e.account.orEmpty().trim().lowercase(), if (e.isFixture) "" else e.calendarName.orEmpty().trim()).joinToString("|")

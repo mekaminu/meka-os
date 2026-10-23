@@ -3,6 +3,7 @@ package os.meka.android.today
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -68,9 +69,8 @@ import os.meka.android.designsystem.MekaType
 import os.meka.core.facade.ConnectStart
 import os.meka.core.facade.ConnectedAccount
 import os.meka.core.facade.MekaCore
-import java.time.Instant
-import java.time.ZoneId
-import java.time.format.DateTimeFormatter
+import os.meka.core.domain.CalendarAccountRules
+import os.meka.core.domain.LoneWordGlue
 import os.meka.android.shell.SharedMotion
 import os.meka.android.shell.MoreItem
 import os.meka.android.designsystem.sharedTitleInPane
@@ -122,7 +122,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         Text("Calendars", style = MekaType.greeting, color = Meka.colors.textPrimary,
             modifier = Modifier.sharedTitleInPane(SharedMotion.paneKey(MoreItem.CALENDARS)))
         Crossfade(CalendarAccessRules.header(accounts.orEmpty().any { it.canEdit }), animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "calendars-header") {
-            Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
         Spacer(Modifier.height(MekaSpace.m))
 
@@ -143,7 +143,7 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         if (onToday.isNotEmpty()) {
             Spacer(Modifier.height(MekaSpace.m))
             Text("ON TODAY", style = MekaType.sectionLabel, color = Meka.colors.textTertiary)
-            Text("Turn a calendar off to keep it in the Calendar tab but off Today and your day.",
+            Text(LoneWordGlue.kept(CalendarRules.ON_TODAY_HINT),
                 style = MekaType.caption, color = Meka.colors.textTertiary)
             onToday.forEachIndexed { i, c ->
                 CalendarSwitchRow(
@@ -164,43 +164,61 @@ fun CalendarsPane(core: MekaCore, onClose: () -> Unit) {
         Spacer(Modifier.height(MekaSpace.l))
         ConnectButton("Connect Google Calendar") { connect("google") }
         ConnectButton("Connect Outlook Calendar") { connect("microsoft") }
-        note?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
+        note?.let { Text(LoneWordGlue.kept(it), style = MekaType.itemMeta, color = Meka.colors.textSecondary) }
         message?.let { Text(it, style = MekaType.itemMeta, color = Meka.colors.critical) }
         Text("Refresh", style = MekaType.caption, color = Meka.colors.accent,
             modifier = Modifier.padding(top = MekaSpace.m).clickable(role = Role.Button) { reload++ })
     }
 }
 
-private val syncedFmt = DateTimeFormatter.ofPattern("HH:mm")
-
 @Composable
 private fun AccountRow(a: ConnectedAccount, modifier: Modifier = Modifier, onReconnect: () -> Unit, onEditing: () -> Unit) {
-    Row(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
-        Column(Modifier.weight(1f)) {
-            // Titled like its main calendar ("Personal", "Hotmail", Meka's own name) or the feed's name; the address and
-            // "Headlines" (never "news_more") on the line under it (Meka's screenshot 2026-10-09 09:01).
-            Text(a.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-            val status = a.statusLine(a.lastSyncAtMs?.let { syncedFmt.format(Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault())) })
-            Text(status, style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
-            // Whether its events come through: "No events in the next 30 days" says an empty calendar, not a broken one.
-            a.eventsLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
-            // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
-            a.editingLine?.let { line ->
-                Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-line") {
-                    Text(it, style = MekaType.caption, color = if (a.canEdit) Meka.colors.accent else Meka.colors.textTertiary)
+    BoxWithConstraints(modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surfaceRaised).padding(MekaSpace.m)) {
+        // Quality gate slice 33: on the cover screen the actions beside the words squeezed them to a sliver; below
+        // 420 dp they sit under them, each on one line.
+        val under = CalendarAccountRules.actionsUnder(maxWidth.value)
+        val words: @Composable (Modifier) -> Unit = { m ->
+            Column(m) {
+                // Titled like its main calendar ("Personal", "Hotmail", Meka's own name) or the feed's name; the address and
+                // "Headlines" (never "news_more") on the line under it (Meka's screenshot 2026-10-09 09:01).
+                Text(LoneWordGlue.kept(a.title), style = MekaType.itemTitle, color = Meka.colors.textPrimary)
+                // The time on the core's clock and zone, like Health's (quality gate slice 33).
+                Text(a.shownStatus, style = MekaType.caption, color = if (a.needsReconnect) Meka.colors.critical else Meka.colors.textTertiary)
+                // Whether its events come through: "No events in the next 30 days" says an empty calendar, not a broken one.
+                a.eventsLine?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
+                // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
+                a.editingShown?.let { line ->
+                    Crossfade(line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-line") {
+                        Text(it, style = MekaType.caption, color = if (a.canEdit) Meka.colors.accent else Meka.colors.textTertiary)
+                    }
                 }
             }
         }
-        if (a.needsReconnect) {
-            Text("Reconnect", style = MekaType.itemMeta, color = Meka.colors.accent,
-                modifier = Modifier.clickable(role = Role.Button) { onReconnect() }.padding(start = MekaSpace.m))
+        val actions: @Composable () -> Unit = {
+            if (a.needsReconnect) {
+                Text("Reconnect", style = MekaType.itemMeta, color = Meka.colors.accent, maxLines = 1, softWrap = false,
+                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onReconnect() }
+                        .minTouch().padding(vertical = MekaSpace.xxs))
+            }
+            a.editingAction?.let { action ->
+                Crossfade(action, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-action") {
+                    Text(it.label, style = MekaType.itemMeta, maxLines = 1, softWrap = false,
+                        color = if (it == CalendarAccessAction.ALLOW_EDITING) Meka.colors.accent else Meka.colors.textSecondary,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onEditing() }
+                            .minTouch().padding(vertical = MekaSpace.xxs))
+                }
+            }
         }
-        a.editingAction?.let { action ->
-            Crossfade(action, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "editing-action") {
-                Text(it.label, style = MekaType.itemMeta,
-                    color = if (it == CalendarAccessAction.ALLOW_EDITING) Meka.colors.accent else Meka.colors.textSecondary,
-                    modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).clickable(role = Role.Button) { onEditing() }
-                        .padding(start = MekaSpace.m, top = MekaSpace.xxs, bottom = MekaSpace.xxs))
+        val hasActions = a.needsReconnect || a.editingAction != null
+        if (under) {
+            Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                words(Modifier.fillMaxWidth())
+                if (hasActions) Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) { actions() }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                words(Modifier.weight(1f))
+                actions()
             }
         }
     }

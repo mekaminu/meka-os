@@ -850,7 +850,8 @@ struct CalendarsSheet: View {
                             // Titled like its main calendar ("Personal", "Hotmail", Meka's own) or the feed's name;
                             // the address and "Headlines" (never "news_more") under it (Meka's screenshot 2026-10-09 09:01).
                             Text(a.title).font(MekaType.itemTitle)
-                            Text(status(a)).font(MekaType.caption)
+                            // On the core's clock and zone, like Health's (quality gate slice 33).
+                            Text(a.shownStatus).font(MekaType.caption)
                                 .foregroundStyle(a.needsReconnect ? palette.critical : palette.textTertiary)
                             // Whether its events come through: "No events in the next 30 days" says an empty calendar,
                             // not a broken one (Meka's 10:48 screenshots, 2026-10-09).
@@ -858,7 +859,7 @@ struct CalendarsSheet: View {
                                 Text(events).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                             }
                             // Calendar editing: read-only or editing allowed; the line cross-fades as it changes.
-                            if let line = a.editingLine {
+                            if let line = a.editingShown {
                                 Text(line).font(MekaType.caption)
                                     .foregroundStyle(a.canEdit ? palette.accent : palette.textTertiary)
                                     .contentTransition(.opacity)
@@ -928,11 +929,6 @@ struct CalendarsSheet: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await model.loadAccounts() }
         }
-    }
-
-    private func status(_ a: ConnectedAccount) -> String {
-        let synced = a.lastSyncAtMs.map { Date(timeIntervalSince1970: Double($0.int64Value) / 1000).formatted(date: .omitted, time: .shortened) }
-        return a.statusLine(syncedAt: synced)
     }
 }
 

@@ -6670,6 +6670,7 @@ class MekaCore(
             it.copy(
                 title = os.meka.core.domain.CalendarAccountRules.title(it.provider, it.email, names),
                 eventsLine = os.meka.core.domain.CalendarAccountRules.eventsLine(it.provider, it.email, it.status, it.lastSyncAtMs != null, mirrored, now),
+                syncedAt = os.meka.core.domain.CalendarAccountRules.syncedAt(it.lastSyncAtMs, now, ZoneCalendar(timeZone)),
             )
         }
     }

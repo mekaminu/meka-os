@@ -80,4 +80,22 @@ class CalendarAccountsTest {
         kotlin.test.assertNull(CalendarAccountRules.eventsLine("google", "meka@gmail.com", "needs_reconnect", true, events, now))
         kotlin.test.assertNull(CalendarAccountRules.eventsLine("google", "meka@gmail.com", "ok", false, events, now))
     }
+
+    @Test
+    fun syncedAtReadsTheCoresZoneNotTheDevices() {
+        // Quality gate slice 33: Calendars wrote the time in the device's own zone. Wed 21 Oct 2026, 17:15 BST (UTC+1).
+        val bst = LocalCalendar.fixedOffset(3_600_000L)
+        val now = 1_792_599_300_000L
+        val min = 60_000L
+        assertEquals("17:11", CalendarAccountRules.syncedAt(now - 4 * min, now, bst))
+        assertEquals("16:11", CalendarAccountRules.syncedAt(now - 4 * min, now, LocalCalendar.UTC))
+        assertEquals("just now", CalendarAccountRules.syncedAt(now - 30_000L, now, bst))
+        // An earlier day names it, so "synced 08:29" never passes for this morning.
+        val yesterday = CalendarAccountRules.syncedAt(now - 24 * 60 * min, now, bst)!!
+        assertTrue(yesterday.endsWith("17:15") && yesterday != "17:15", yesterday)
+        kotlin.test.assertNull(CalendarAccountRules.syncedAt(null, now, bst))
+        // The drawn line keeps "synced 17:11" together.
+        val line = LoneWordGlue.kept(CalendarAccountRules.statusLine("google", "alex@example.com", "ok", "17:11"))
+        assertFalse(line.endsWith(" 17:11"), line)
+    }
 }
