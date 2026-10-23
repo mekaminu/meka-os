@@ -237,7 +237,9 @@ private fun NoteRow(
     ) {
         Column(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClick = onExpand)
-                .semantics(mergeDescendants = true) { contentDescription = row.title + ". " + row.text },
+                .semantics(mergeDescendants = true) { contentDescription = row.title + ". " + row.text }
+                // A note with no words is two short lines (~39 dp): the row still answers a 48 dp touch (quality gate).
+                .minTouch(),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
         ) {
             Text(row.title, style = MekaType.caption, color = Meka.colors.textSecondary)

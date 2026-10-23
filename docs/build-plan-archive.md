@@ -3221,6 +3221,8 @@ puts it back.
   facade voiceNoteRows / voiceNoteSubject, as the Mac's sheet already did.
 - The pane's summary, line, note and each row's words, people, cards and keep lines keep their last words and dots
   together (LoneWordGlue), Fold and Mac (VoiceNotesSheet).
+- CI fix (run 1155): a note with no words ("Nothing was heard in it") is two short lines, a 39 dp tap; the row now
+  answers a 48 dp touch (minTouch), Fold only.
 - Design check: no design file covers Voice notes. No core change, no server change, no migration, Mac checked nightly.
 
 ### Quality gate — slice 55 (2026-10-23): Speaking up said short, slim pills on both panes
