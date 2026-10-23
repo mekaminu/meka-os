@@ -167,7 +167,7 @@ class WeekAheadScreensTest {
         turns()
     }
 
-    private fun check(core: MekaCore, name: String) {
+    private fun check(core: MekaCore, name: String, atTop: Boolean = true) {
         compose.waitForIdle()
         // Shot first, so a failing screen is still in the `fold-screens` artifact to look at.
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("week-ahead", name))
@@ -176,7 +176,8 @@ class WeekAheadScreensTest {
         ScreenShots.assertDatesWhole(compose, name)
         ScreenShots.assertClocksWhole(compose, name)
         ScreenShots.assertNumbersWhole(compose, name)
-        ScreenShots.assertShows(compose, name, "Week ahead")
+        // The title is at the top; a shot scrolled to the foot has left it behind.
+        if (atTop) ScreenShots.assertShows(compose, name, "Week ahead")
         val v = core.weekAheadView.value
         val setting = core.weekAheadSettingView.value
         val lines = listOfNotNull(v.summary, v.mail, v.protectedLine, v.balance, setting.summary, v.goals.line.takeIf { it.isNotEmpty() }) +
@@ -234,7 +235,7 @@ class WeekAheadScreensTest {
         val core = setUp(ThemeChoice.DARK, Fill.MANY)
         // Section labels draw upper case; the heads-up's chip is found by what TalkBack reads.
         scrollTo(hasContentDescription("Sunday heads-up, on"))
-        check(core, name)
+        check(core, name, atTop = false)
         ScreenShots.assertShows(compose, name, "Sunday heads-up, on")
     }
 
