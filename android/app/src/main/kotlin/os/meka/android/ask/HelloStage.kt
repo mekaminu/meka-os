@@ -57,6 +57,11 @@ import os.meka.core.domain.CardRise
 import os.meka.core.domain.CardSlot
 import os.meka.core.domain.Constellation
 import os.meka.core.domain.HelloCard
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.collectAsState
+import os.meka.core.domain.FaceFileRules
+import os.meka.core.domain.FaceLook
+import os.meka.core.domain.FaceGeometry
 import os.meka.core.domain.HelloCards
 import os.meka.core.domain.HelloOpen
 import os.meka.core.domain.EntranceKind
@@ -170,6 +175,12 @@ fun HelloStage(
     val words = if (settled) HelloEntrance.words(phase, heard, said) else null
     val dens = LocalDensity.current
     var origin by remember { mutableStateOf(Offset.Zero) }
+    // Obi's face, slice 3: the big stage shows his face instead of the orb once its files are kept and Face is on.
+    val faceContext = LocalContext.current
+    remember { ObiFaceStore.load(faceContext) }
+    val faceReady by ObiFaceStore.ready.collectAsState()
+    val faceOn by ObiFaceStore.on.collectAsState()
+    val face = kind == EntranceKind.BIG && FaceFileRules.shows(faceReady, faceOn)
 
     // The night scene in both themes: the orb draws its Dark gold, additive.
     CompositionLocalProvider(
@@ -212,12 +223,28 @@ fun HelloStage(
             // Flung to just past the screen's far corner (in the orb's radii).
             val radius = stagePx / 2 / Constellation.EXTENT
             val reach = (max(w, h) * 0.62f) / radius
+            // Obi's face, slice 3: once the stage has settled the constellation dissolves into his face (when its files
+            // are on this phone and Face is on), and the face fades back to the orb as the stage closes.
+            val faceIn = when {
+                !face || greetAt == null -> 0f
+                closeT >= 0 -> FaceLook.faceIn(t - greetAt, reduced) * (1f - closeT.toFloat() / HelloEntrance.FADE_MS).coerceIn(0f, 1f)
+                else -> FaceLook.faceIn(t - greetAt, reduced)
+            }
             HelloOrbView(
                 state, level, size = HelloEntrance.STAGE_SIZE.dp, spread = spread, reach = reach, entranceShock = shock,
                 modifier = Modifier
                     .offset { IntOffset((c.x - stagePx / 2).roundToInt(), (c.y - stagePx / 2).roundToInt()) }
-                    .graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (closeT >= 0 && reduced) travel else 1f },
+                    .graphicsLayer { scaleX = scale; scaleY = scale; alpha = (if (closeT >= 0 && reduced) travel else 1f) * (1f - faceIn) },
             )
+            if (face) {
+                val faceW = stagePx * (FaceGeometry.CROP.w / FaceGeometry.CROP.h).toFloat()
+                ObiFaceView(
+                    state, level, height = HelloEntrance.STAGE_SIZE.dp, still = calm,
+                    modifier = Modifier
+                        .offset { IntOffset((c.x - faceW / 2).roundToInt(), (c.y - stagePx / 2).roundToInt()) }
+                        .graphicsLayer { scaleX = scale; scaleY = scale; alpha = faceIn },
+                )
+            }
             // Slice 8: the cards rising round the orb — the answer's (with their buttons), else the greeting's as it says them.
             val shownCards: List<Pair<Any, CardRise>> = when {
                 !settled -> emptyList()

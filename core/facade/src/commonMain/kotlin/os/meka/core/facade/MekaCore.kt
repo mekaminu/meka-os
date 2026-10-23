@@ -296,6 +296,7 @@ class MekaCore(
     /** Recovery key (slice 2): the household's key as the server last said, when it was read, and the pane's state. */
     private var recoveryApi: RecoveryApi? = transport as? RecoveryApi
     private var vaultFileApi: VaultFileApi? = transport as? VaultFileApi
+    private var faceFilesApi: FaceFilesApi? = transport as? FaceFilesApi
     private var recoveryStatus: os.meka.core.domain.RecoveryKeyRules.Status? = null
     private var recoveryReadAtMs: Long? = null
     private val _recovery = MutableStateFlow<os.meka.core.domain.RecoveryKeyView?>(null)
@@ -6601,7 +6602,7 @@ class MekaCore(
             updateFailureApi = transport as? UpdateFailureApi; foldPostureApi = transport as? FoldPostureApi
             notifyDiagnosticsApi = transport as? NotifyDiagnosticsApi
             voiceMessageApi = transport as? VoiceMessageApi; familyApi = transport as? FamilyApi; deviceLinkApi = transport as? DeviceLinkApi
-            recoveryApi = transport as? RecoveryApi; vaultFileApi = transport as? VaultFileApi
+            recoveryApi = transport as? RecoveryApi; vaultFileApi = transport as? VaultFileApi; faceFilesApi = transport as? FaceFilesApi
         }
         startSync()
     }
@@ -10384,6 +10385,22 @@ class MekaCore(
             if (sealed.length / 4 * 3 > r.MAX_SEALED_BYTES) continue
             onCore { if (documents.items().any { it.file?.id == id }) keepVaultCopy(id, sealed) }
         }
+    }
+
+    /**
+     * Obi's face, slice 3: the server's list of the face's files (name → tag), or null when it couldn't be read (not
+     * connected, offline, a failure): the device keeps what it has and looks again later ([os.meka.core.domain.FaceFileRules]).
+     */
+    suspend fun faceManifest(): Map<String, String>? {
+        val api = faceFilesApi ?: return null
+        return runCatchingNotCancel { api.faceManifest() }?.associate { it.name to it.tag }
+    }
+
+    /** One of the face's files, or null (not there, unusable, offline). Only the wire's allow-list is ever asked for. */
+    suspend fun faceFile(name: String): ByteArray? {
+        val api = faceFilesApi ?: return null
+        if (!os.meka.core.wire.FaceCodec.allowed(name)) return null
+        return runCatchingNotCancel { api.faceFile(name) }
     }
 
     // The Vault, slice 4: the copies behind the fingerprint (VaultLockRules). Memory only, per device.

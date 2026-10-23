@@ -33,6 +33,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -142,6 +143,15 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
         // Lit at once; the saved choice follows to every device.
         view = view?.let { v -> v.copy(choices = v.choices.map { it.copy(selected = it.id == c.id) }) }
         scope.launch { if (runCatching { core.chooseMekaVoice(c.id) }.getOrDefault(false)) view = runCatching { core.voicePicker(mac = false) }.getOrNull() ?: view }
+    }
+
+    LaunchedEffect(Unit) { ObiFaceStore.load(context) }
+    val faceOn by ObiFaceStore.on.collectAsState()
+    val faceReady by ObiFaceStore.ready.collectAsState()
+    fun setFace(on: Boolean) {
+        if (faceOn == on) return
+        haptics.tick()
+        ObiFaceStore.setOn(context, on)
     }
 
     fun callSir(on: Boolean) {
@@ -263,6 +273,15 @@ fun VoicePane(core: MekaCore, onClose: () -> Unit) {
                     Text(CompanionRules.callLine(now), style = MekaType.caption, color = Meka.colors.textTertiary)
                 }
             }
+        }
+        // Obi's face, slice 3: Face On · Off (on by default); until the face's files are kept, a line says the orb stays.
+        Column(Modifier.padding(vertical = MekaSpace.xs).appear(rememberAppearance(1)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+            Text(os.meka.core.domain.FaceLook.SETTING_TITLE.uppercase(), style = MekaType.sectionLabel, color = Meka.colors.textSecondary)
+            Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                SettingChip(os.meka.core.domain.FaceLook.ON, on = faceOn, spoken = "Show the face when talking") { setFace(true) }
+                SettingChip(os.meka.core.domain.FaceLook.OFF, on = !faceOn, spoken = "Show the orb when talking") { setFace(false) }
+            }
+            if (!faceReady) Text(os.meka.core.domain.FaceLook.WAITING_LINE, style = MekaType.caption, color = Meka.colors.textTertiary)
         }
         remembers?.let { on ->
             // The companion, slice 5: what Navilife remembers of earlier chats, viewable and clearable.

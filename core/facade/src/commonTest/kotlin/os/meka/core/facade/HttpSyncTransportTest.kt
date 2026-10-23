@@ -54,9 +54,15 @@ class HttpSyncTransportTest {
     private val watchId = "watch0123456789abcdef"
     private val familyId = "fam" + "0123456789abcdef0123"
     private val familyToken = "cd".repeat(32)
+    private var faceStatus = HttpStatusCode.OK
+    private val faceBytes = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47)
     private fun client() = HttpClient(MockEngine { req ->
         requests += req
         when (req.url.encodedPath) {
+            "/v1/face/manifest" -> respond(
+                """{"w":${WireCodec.VERSION},"files":[{"name":"mouth-m.png","tag":"t1","size":4},{"name":"notes.txt","tag":"t","size":4}]}""", faceStatus, json,
+            )
+            "/v1/face/file" -> if (faceStatus == HttpStatusCode.OK) respond(faceBytes, faceStatus, headersOf("Content-Type", "image/png")) else respond("", faceStatus)
             "/v1/sync/pull" -> respond(WireCodec.encodePullResponse(os.meka.core.sync.PullResponse(emptyList(), false)), HttpStatusCode.OK, json)
             "/v1/devices/key" -> respond(WireCodec.encodeDeviceKey("A".repeat(124)), HttpStatusCode.OK, json)
             "/v1/integrations/google/connect" -> respond("not configured", HttpStatusCode.Conflict)
@@ -225,6 +231,28 @@ class HttpSyncTransportTest {
         assertEquals("off", t.hereWeather(52.21, 0.12).state)
         hereStatus = HttpStatusCode.Forbidden
         assertEquals("failed", t.hereWeather(52.21, 0.12).state)
+    }
+
+    @Test
+    fun theFacesFilesAreListedAndFetchedSignedAndAnOlderServerMeansTheOrb() = runTest {
+        val t = HttpSyncTransport(client(), "https://meka.example", RecordingKey()) { "s".repeat(64) }
+        val core = MekaCore("home", "fold", os.meka.core.sync.InMemoryReplicaStore(), t, kotlin.random.Random(1))
+        // Only allowed names come through the list; a stray file in the folder is dropped.
+        assertEquals(mapOf("mouth-m.png" to "t1"), core.faceManifest())
+        assertTrue(requests.last().headers[RequestSigning.HEADER_SIGNATURE] != null)
+        assertEquals(faceBytes.toList(), core.faceFile("mouth-m.png")?.toList())
+        assertEquals("mouth-m.png", os.meka.core.wire.FaceCodec.decodeFileRequest((requests.last().body as TextContent).text))
+        // A name outside the seven is never asked for.
+        val before = requests.size
+        assertNull(core.faceFile("../secrets.json"))
+        assertEquals(before, requests.size)
+        // No file there → null; an older server without the routes → an empty list (the orb, no error).
+        faceStatus = HttpStatusCode.NotFound
+        assertNull(core.faceFile("mouth-m.png"))
+        assertEquals(emptyMap<String, String>(), core.faceManifest())
+        // A failure → null: keep what's kept and look again later.
+        faceStatus = HttpStatusCode.InternalServerError
+        assertNull(core.faceManifest())
     }
 
     @Test

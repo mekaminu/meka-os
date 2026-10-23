@@ -405,6 +405,16 @@ interface SpeechApi {
 }
 
 /**
+ * Obi's face, slice 3: the face's seven files from Navilife's server ([os.meka.core.wire.FaceCodec]). [faceManifest]:
+ * the files there (empty when none, or when an older server lacks the route); [faceFile]: one file's bytes, or null when
+ * it isn't there or came back unusable. Network failures throw.
+ */
+interface FaceFilesApi {
+    suspend fun faceManifest(): List<os.meka.core.wire.FaceCodec.Entry>
+    suspend fun faceFile(name: String): ByteArray?
+}
+
+/**
  * The orb speed pass, slice 5: "he's about to talk" (`POST /v1/talk/warm`): Navilife's server opens its connections to
  * the AI and to Navilife's voice ahead of the answer. Nothing he said or anything about him is sent. False when an
  * older server lacks the route or has nothing to warm. Network failures throw.
@@ -606,7 +616,7 @@ class HttpSyncTransport(
     private val deviceKey: DeviceKey? = null,
     private val nowMs: () -> Long = { Clock.System.now().toEpochMilliseconds() },
     private val deviceSecret: () -> String,
-) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi, LiveApi {
+) : SyncTransport, AccountsApi, ReleasesApi, PushApi, NewsImagesApi, AiApi, SpeechApi, HereApi, FuelApi, NumberLookupApi, TradingExportApi, HealthApi, VoiceMessageApi, FamilyApi, DeviceLinkApi, UpdateFailureApi, FoldPostureApi, NotifyDiagnosticsApi, RecoveryApi, VaultFileApi, TalkWarmApi, ServerSpeedApi, LiveApi, FaceFilesApi {
     private var keyRegistered = false
 
     override suspend fun prepare() {
@@ -1077,6 +1087,33 @@ class HttpSyncTransport(
             )
         }
         return SpeechCodec.decodeResponse(resp.bodyAsText())
+    }
+
+    override suspend fun faceManifest(): List<os.meka.core.wire.FaceCodec.Entry> {
+        val codec = os.meka.core.wire.FaceCodec
+        prepare() // the face routes require the device's signing key on the server
+        val resp = send(codec.MANIFEST_PATH, codec.encodeManifestRequest())
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.MANIFEST_PATH}")
+            // An older server without the face, or a device it won't show it to: the orb stays.
+            resp.status.value == 404 || resp.status.value == 403 -> return emptyList()
+            !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.MANIFEST_PATH}")
+        }
+        return codec.decodeManifest(resp.bodyAsText())
+    }
+
+    override suspend fun faceFile(name: String): ByteArray? {
+        val codec = os.meka.core.wire.FaceCodec
+        if (!codec.allowed(name)) return null
+        prepare()
+        val resp = send(codec.FILE_PATH, codec.encodeFileRequest(name))
+        when {
+            resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.FILE_PATH}")
+            !resp.status.isSuccess() -> return null
+        }
+        val size = resp.contentLength()
+        if (size != null && size > codec.MAX_BYTES) return null
+        return resp.readRawBytes().takeIf { it.isNotEmpty() && it.size <= codec.MAX_BYTES }
     }
 
     override suspend fun talkWarm(): Boolean {

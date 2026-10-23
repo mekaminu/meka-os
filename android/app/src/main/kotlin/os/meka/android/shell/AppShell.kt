@@ -183,6 +183,8 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val dock: @Composable (Modifier) -> Unit = { m -> DockedHelloOrb(dockPhase, needsYou, { if (speakingUp) app.speakUp.stop(); dockTap() }, m, onPlaced = { dockAt = it }) }
     val shellContext = LocalContext.current
     val reducedShell = Meka.reducedMotion
+    // Obi's face, slice 3: keep the face's files on this phone (asked about weekly; nothing shows until all seven are here).
+    LaunchedEffect(Unit) { os.meka.android.ask.ObiFaceStore.refresh(shellContext, core) }
     LaunchedEffect(Unit) {
         val prefs = shellContext.getSharedPreferences(HELLO_PREFS, android.content.Context.MODE_PRIVATE)
         val last = prefs.getLong(MORNING_KEY, -1L).takeIf { it >= 0 }
