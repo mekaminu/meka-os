@@ -31,12 +31,24 @@ import Speech
 final class TalkController {
     private(set) var phase: TalkPhase = .ended {
         // Speaking up: Obi never speaks up over a conversation.
-        didSet { model?.talkActive = phase != .ended }
+        didSet {
+            model?.talkActive = phase != .ended
+            // Meka 2026-10-24 14:34: why the last conversation ended, for Health → Obi's voice (no words kept).
+            if phase == .ended, oldValue != .ended {
+                MacStageLog.record(problem != nil ? .problem : stoppedByHand ? .closed : spokeThisTime ? .spoke : .noSpeech)
+                stoppedByHand = false
+                spokeThisTime = false
+            }
+        }
     }
+    @ObservationIgnored private var stoppedByHand = false
+    @ObservationIgnored private var spokeThisTime = false
     /// Meka's voice level, 0 … 1, smoothed (`TalkOrb.smooth`).
     private(set) var level: Float = 0
     /// The live transcript while listening, then the question as heard.
-    private(set) var heard = ""
+    private(set) var heard = "" {
+        didSet { if !heard.isEmpty, phase != .ended { spokeThisTime = true } }
+    }
     /// What MEKA last said aloud.
     private(set) var said = ""
     /// "Hello, Navilife" slice 7: when the last hello's entrance began (the orb scatters, gathers and sends its shockwave).
@@ -171,7 +183,14 @@ final class TalkController {
             // The orb speed pass, slice 2: this hello is timed from the click to Navilife's voice (Voice → Speed).
             await model?.turnHelloBegan()
             let liveOn = await model?.liveIsOn() == true
-            guard gen == generation, let hello = await model?.hello() else { return }
+            guard gen == generation else { return }
+            // Meka 2026-10-24 14:34: a hello that can't be made no longer leaves Talk with nothing listening.
+            guard let hello = await model?.hello() else {
+                guard gen == generation, !active else { return }
+                if liveOn { return startLive() }
+                apply(TalkFlow.shared.start())
+                return
+            }
             guard gen == generation, !active else { return }
             let words = hello.words
             // Obi's Live mode, slice 3b (the Fold's 2c): with Live on, the hello is still said at once from memory and
@@ -304,6 +323,7 @@ final class TalkController {
         openLapsed = nil
         closeFollowOn()
         if liveAfterHello { liveAfterHello = false; live.discardPrepared() } // slice 3b: the hello ended by hand
+        if active { stoppedByHand = true }
         if liveRunning {
             // Slice 3: the sound stops now; the core ends the session (a turn cut short still shows in Ask).
             live.stop()
@@ -1090,5 +1110,20 @@ enum MacAudioOut {
         address.mSelector = kAudioDevicePropertyDataSource
         address.mScope = kAudioDevicePropertyScopeOutput
         return AudioObjectGetPropertyData(device, &address, 0, nil, &size, &source) == noErr && source == 0x6864_706E // 'hdpn'
+    }
+}
+
+/// Meka 2026-10-24 14:34: why the last conversation on this Mac ended, kept in its defaults (the reason and the time,
+/// never any words), for Health → Obi's voice.
+enum MacStageLog {
+    private static let key = "obiStageLastClose"
+
+    @MainActor static func record(_ why: StageClose) {
+        let closed = StageClosed(why: why, atMs: Int64(Date().timeIntervalSince1970 * 1000))
+        UserDefaults.standard.set(StageRules.shared.encode(c: closed), forKey: key)
+    }
+
+    @MainActor static func last() -> StageClosed? {
+        StageRules.shared.decode(text: UserDefaults.standard.string(forKey: key))
     }
 }

@@ -112,6 +112,7 @@ object HealthDevice {
             notifications = os.meka.android.notify.NotifyTraceStore.health(context),
             callerLookups = os.meka.android.work.CallerLookup.allowed(context),
             face = runCatching { ObiFaceStore.health(context) }.getOrNull(),
+            stageClosed = StageCloseLog.last(context),
         )
     }
 }

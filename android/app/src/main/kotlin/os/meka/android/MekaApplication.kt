@@ -129,6 +129,10 @@ open class MekaApplication : Application() {
     val talkNow = MutableStateFlow<os.meka.core.domain.TalkStart?>(null)
     /** "Hello, Navilife" slice 5: the running conversation's phase (ENDED when none), so the docked orb in the bar can show it. */
     val talkPhase = MutableStateFlow(os.meka.core.domain.TalkPhase.ENDED)
+    /** Meka 2026-10-24 14:34: why the running conversation couldn't listen (the stage says so); null when fine. */
+    val talkProblem = MutableStateFlow<os.meka.core.domain.TalkProblem?>(null)
+    /** The stage's "try again": Ask listens again (no second hello), then clears it. */
+    val talkListenNow = MutableStateFlow(false)
     /** "Hello, Navilife" slice 7: the running conversation's words and voice level, for the stage's orb and the words under it. */
     val talkSaid = MutableStateFlow("")
     val talkHeard = MutableStateFlow("")

@@ -206,8 +206,13 @@ class TalkController(
             // The orb speed pass, slice 2: this hello is timed from the tap to Navilife's voice (Settings → Speed).
             core.turnHelloBegan()
             val live = runCatching { core.liveOn() }.getOrDefault(false)
-            val greeting = runCatching { core.hello() }.getOrNull() ?: return@launch
+            // Meka 2026-10-24 14:34: a hello that can't be made no longer leaves the stage with nothing listening.
+            val greeting = runCatching { core.hello() }.getOrNull()
             if (gen != generation || active) return@launch
+            if (greeting == null) {
+                if (live) startLive() else begin(TalkFlow.start())
+                return@launch
+            }
             // Obi's Live mode, slice 2c: with Live on, the hello is still said at once from memory, and the Live session
             // is asked for while it plays, so when it ends (or he talks over it) Obi carries on live.
             liveAfterHello = live

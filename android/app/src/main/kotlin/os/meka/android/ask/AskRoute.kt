@@ -279,10 +279,19 @@ fun AskRoute(
     val context = LocalContext.current.applicationContext
     // "To set up" open or closed, remembered on this device (null until he taps it: open on the first run only).
     var setUpChoice by remember { mutableStateOf(AskPrefs.setUpOpen(context)) }
+    // Meka 2026-10-24 14:34: the conversation lives in the field at the list's top. Scrolled far down (Health,
+    // say), the field wasn't composed, so a tap on the orb found nothing listening and its stage closed: a hello or a
+    // listen waiting brings the field back first (it is pinned from then on).
+    val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val talkWaiting = (healthApp?.talkNow?.collectAsState()?.value != null) || (healthApp?.talkListenNow?.collectAsState()?.value == true)
+    LaunchedEffect(talkWaiting) {
+        if (talkWaiting && os.meka.core.domain.StageRules.fieldHidden(listState.firstVisibleItemIndex)) listState.scrollToItem(0)
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(Meka.colors.background)) {
         val columns = os.meka.core.domain.LifeTileRules.columns(maxWidth.value)
         LazyColumn(
             Modifier.fillMaxSize(),
+            state = listState,
             contentPadding = PaddingValues(horizontal = MekaSpace.gutter, vertical = MekaSpace.xl),
             verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
         ) {

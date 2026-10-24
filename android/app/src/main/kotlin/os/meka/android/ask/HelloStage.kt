@@ -71,6 +71,16 @@ import os.meka.core.domain.HelloEntrance
 import os.meka.core.domain.HelloOrb
 import os.meka.core.domain.StageNext
 import os.meka.core.domain.TalkPhase
+import os.meka.core.domain.TalkProblem
+import os.meka.core.domain.StageClose
+import os.meka.core.domain.StageNote
+import os.meka.core.domain.StageRules
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
+import os.meka.android.designsystem.MekaRadius
+import androidx.compose.foundation.layout.heightIn
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -112,6 +122,14 @@ fun HelloStage(
     fromSize: Int = HelloDock.SIZE,
     /** Slice 9: the calm cross-fade whatever the motion setting (the stand in quiet hours, [HelloEntrance.standCalm]). */
     calm: Boolean = false,
+    /** Meka 2026-10-24 14:34: why the conversation couldn't listen ([StageRules]); the stage says so instead of closing. */
+    problem: TalkProblem? = null,
+    /** A tap on the stage's "try again": listen again (no second hello). */
+    onRetry: () -> Unit = {},
+    /** The stage's "Open settings" (the microphone is off for Navilife). */
+    onOpenSettings: () -> Unit = {},
+    /** Why it closed, once, as it starts to close (kept on the device for Health → Obi's voice). */
+    onWhy: (StageClose) -> Unit = {},
 ) {
     val reduced = Meka.reducedMotion || calm
     val theme = Meka.theme
@@ -136,8 +154,10 @@ fun HelloStage(
     val length = HelloEntrance.length(kind, reduced)
 
     fun dimNow(): Float = if (closeT >= 0) HelloEntrance.closing(closeT, closeFrom, reduced).second else HelloEntrance.dim(kind, t, reduced)
-    fun close(stop: Boolean) {
+    val why by rememberUpdatedState(onWhy)
+    fun close(stop: Boolean, reason: StageClose? = if (stop) StageClose.SWIPED else null) {
         if (closing) return
+        if (kind == EntranceKind.BIG && reason != null) why(reason)
         if (stop) onStop()
         closeFrom = dimNow()
         closing = true
@@ -161,10 +181,19 @@ fun HelloStage(
             }
         }
     }
+    // Meka 2026-10-24 14:34: once he has spoken or it can't listen, the stage stays and says so ([StageRules]).
+    var spoke by remember { mutableStateOf(false) }
+    if (heard.isNotBlank() && !spoke) spoke = true
+    var endedAt by remember { mutableLongStateOf(-1L) }
+    LaunchedEffect(phase, started) { endedAt = if (phase == TalkPhase.ENDED && started) t else -1L }
+    val call = if (kind == EntranceKind.BIG && greetAt != null && t >= length && !closing)
+        StageRules.call(phase, started, spoke, cards.needsAsk, problem, t - greetAt, if (endedAt >= 0) t - endedAt else null)
+    else null
+    val note = call?.note ?: StageNote.NONE
     // Once settled, the conversation decides: stay up, or shrink back into the bar.
-    if (kind == EntranceKind.BIG && greetAt != null && t >= length && !closing &&
-        HelloEntrance.next(phase, started, cards.needsAsk, t - greetAt) == StageNext.CLOSE
-    ) LaunchedEffect(Unit) { close(stop = false) }
+    if (call?.next == StageNext.CLOSE) LaunchedEffect(Unit) { close(stop = false, reason = call?.close) }
+    val retry by rememberUpdatedState(onRetry)
+    fun tryAgain() { endedAt = -1L; retry() }
     BackHandler { close(stop = true) }
 
     val dim = dimNow()
@@ -173,7 +202,7 @@ fun HelloStage(
     val shock = if (closeT >= 0) null else HelloEntrance.shock(kind, t, reduced)
     val settled = kind == EntranceKind.BIG && t >= HelloEntrance.GREET_AT.coerceAtMost(length) && !closing
     val state = if (kind == EntranceKind.BIG && greeted) HelloOrb.state(phase, needsYou) else HelloOrb.state(TalkPhase.ENDED, needsYou)
-    val words = if (settled) HelloEntrance.words(phase, heard, said) else null
+    val words = if (!settled) null else StageRules.line(note, problem) ?: HelloEntrance.words(phase, heard, said)
     val dens = LocalDensity.current
     var origin by remember { mutableStateOf(Offset.Zero) }
     // Obi's face, slice 3: the big stage shows his face instead of the orb once its files are kept and Face is on.
@@ -202,10 +231,12 @@ fun HelloStage(
                         ) { change, dy -> change.consume(); drag += dy }
                     }
                 }
-                .pointerInput(kind, reduced) {
+                .pointerInput(kind, reduced, note, problem) {
                     // A tap while the orb is still flying up and gathering jumps to the end; the hello carries on.
                     if (kind == EntranceKind.BIG) detectTapGestures {
-                        if (!closing) HelloEntrance.tapThrough(kind, t, reduced)?.let { to -> skipped += to - t }
+                        if (closing) return@detectTapGestures
+                        if (StageRules.tapRetries(note, problem)) { tryAgain(); return@detectTapGestures }
+                        HelloEntrance.tapThrough(kind, t, reduced)?.let { to -> skipped += to - t }
                     }
                 }
                 .semantics {
@@ -269,7 +300,7 @@ fun HelloStage(
             @Composable
             fun StageCard(item: Any, rise: CardRise, m: Modifier) {
                 when (item) {
-                    is HelloCard -> StageHelloCard(item, rise, dens.density, m) { close(stop = true); onOpen(item.open) }
+                    is HelloCard -> StageHelloCard(item, rise, dens.density, m) { close(stop = true, reason = StageClose.OPENED_CARD); onOpen(item.open) }
                     is AskCard -> StageAnswerCard(item, rise, dens.density, m) { onCard(item) }
                 }
             }
@@ -298,6 +329,16 @@ fun HelloStage(
             }
             shownCards.forEachIndexed { i, (item, rise) ->
                 if (slots.getOrNull(i) == CardSlot.BELOW) StageCard(item, rise, Modifier)
+            }
+            StageRules.button(note, problem)?.let { label ->
+                // The whole 48 dp answers the tap, not just the pill's words.
+                Box(Modifier.clickable(role = Role.Button, onClick = onOpenSettings).heightIn(min = MekaSpace.touch), contentAlignment = Alignment.Center) {
+                    Text(
+                        label, style = MekaType.itemMeta, color = MekaDarkColors.onAccent,
+                        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(MekaDarkColors.accent)
+                            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+                    )
+                }
             }
             }
             if (settled) Text(

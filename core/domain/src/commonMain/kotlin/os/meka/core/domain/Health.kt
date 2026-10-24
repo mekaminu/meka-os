@@ -130,6 +130,8 @@ data class DeviceHealth(
     val callerLookups: Boolean? = null,
     /** Obi's face on this device (Meka 2026-10-24 13:12); null leaves the face line out. */
     val face: FaceHealth? = null,
+    /** Why the hello's stage last closed on this device (Meka 2026-10-24 14:34, [StageRules]); null leaves it out. */
+    val stageClosed: StageClosed? = null,
 )
 
 data class HealthFacts(
@@ -362,8 +364,10 @@ object HealthRules {
             true -> HealthRow("voice", "Obi's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
             false -> HealthRow("voice", "Obi's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
         }
-        val face = f.device.face ?: return row
-        val withFace = row.copy(detail = FaceHealthRules.line(face, f.device.mac, f.nowMs, cal))
+        val closed = StageRules.healthLine(f.device.stageClosed, f.nowMs, cal)
+        val face = f.device.face ?: return if (closed == null) row else row.copy(detail = closed)
+        val detail = listOfNotNull(FaceHealthRules.line(face, f.device.mac, f.nowMs, cal), closed).joinToString("\n")
+        val withFace = row.copy(detail = detail)
         val fixed = if (FaceHealthRules.lookAgain(face)) withFace.copy(fix = HealthFix.FACE_LOOK_AGAIN, fixLabel = FaceHealthRules.LOOK_AGAIN) else withFace
         // The server has all seven but this device didn't keep them: worth a look (waiting for an upload isn't).
         return if (FaceHealthRules.fault(face) && fixed.state == HealthState.OK) fixed.copy(state = HealthState.WARN) else fixed

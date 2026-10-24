@@ -181,7 +181,16 @@ fun AskMekaSection(
     // "Hello, Navilife" slice 5: the docked orb in the bar follows this conversation (ENDED again once it's gone).
     val phaseApp = context.applicationContext as? os.meka.android.MekaApplication
     LaunchedEffect(talk.phase) { phaseApp?.talkPhase?.value = talk.phase }
-    DisposableEffect(talk) { onDispose { phaseApp?.talkPhase?.value = TalkPhase.ENDED } }
+    DisposableEffect(talk) { onDispose { phaseApp?.talkPhase?.value = TalkPhase.ENDED; phaseApp?.talkProblem?.value = null } }
+    // Meka 2026-10-24 14:34: the stage says why it can't listen rather than closing.
+    LaunchedEffect(talk.problem) { phaseApp?.talkProblem?.value = talk.problem }
+    // Meka 2026-10-24 14:34: Ask's list scrolled this field out of view, which took the conversation with it (the
+    // stage then closed with nothing listening). Pinned, it stays composed while a pane or a scroll hides it.
+    val pinnable = androidx.compose.ui.layout.LocalPinnableContainer.current
+    DisposableEffect(pinnable) {
+        val handle = pinnable?.pin()
+        onDispose { handle?.release() }
+    }
     // "Hello, Navilife" slice 7: the stage over the shell shows these words under its orb and moves with this voice.
     LaunchedEffect(talk.said, talk.heard) { phaseApp?.talkSaid?.value = talk.said; phaseApp?.talkHeard?.value = talk.heard }
     LaunchedEffect(talk) { androidx.compose.runtime.snapshotFlow { talk.level }.collect { phaseApp?.talkLevel?.value = it } }
@@ -236,6 +245,14 @@ fun AskMekaSection(
             // "Listen when I open MEKA" (slice 4): the room check, then a short window; nothing said → Today again.
             talk.startOnOpen { app?.openDestination?.value = os.meka.android.shell.ShellDestination.TODAY }
         } else startTalking()
+    }
+    // The stage's "try again" (Meka 2026-10-24 14:34): listen again, no second hello.
+    val listenNow = app?.talkListenNow?.collectAsState()?.value == true
+    LaunchedEffect(listenNow) {
+        if (!listenNow) return@LaunchedEffect
+        lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+        app?.talkListenNow?.value = false
+        if (!talk.active) startTalking()
     }
     // After the brief's Listen ran to its end (slice 7): listen for 8 s; nothing said → back where the brief was.
     val talkAfterBrief = app?.talkAfterBrief?.collectAsState()?.value

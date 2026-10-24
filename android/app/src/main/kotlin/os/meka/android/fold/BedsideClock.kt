@@ -423,12 +423,18 @@ private fun BedsideHelloStage(
     val answerCards by app.talkAnswerCards.collectAsState()
     val cardsDone by app.talkCardsDone.collectAsState()
     val needsAsk by app.talkNeedsAsk.collectAsState()
+    val problem by app.talkProblem.collectAsState()
     os.meka.android.ask.HelloStage(
         os.meka.core.domain.EntranceKind.BIG, orbAt, phase, level, heard, said, needsYou,
         cards = os.meka.android.ask.StageCards(greeting, answerCards, cardsDone, needsAsk),
         onGreet = { os.meka.android.ask.helloAtBedside(app) },
         onStop = { app.talkStopNow.value = true },
         onClosed = { onClosed(os.meka.core.domain.HelloEntrance.standKeepsTalk(app.talkNeedsAsk.value)) },
+        // Meka 2026-10-24 14:34: it says why it can't listen instead of closing; a tap tries again.
+        problem = problem,
+        onRetry = { app.talkListenNow.value = true },
+        onOpenSettings = { os.meka.android.ask.StageCloseLog.openMicSettings(app) },
+        onWhy = { os.meka.android.ask.StageCloseLog.record(app, it) },
         onOpen = { open ->
             onOpen(
                 when (open) {

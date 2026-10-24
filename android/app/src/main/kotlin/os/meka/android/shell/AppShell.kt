@@ -266,6 +266,7 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
             val answerCards by app.talkAnswerCards.collectAsState()
             val cardsDone by app.talkCardsDone.collectAsState()
             val needsAsk by app.talkNeedsAsk.collectAsState()
+            val talkProblem by app.talkProblem.collectAsState()
             key(kind) {
                 HelloStage(
                     kind, dockAt, talkPhase, level, heard, said, needsYou,
@@ -283,6 +284,11 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
                         app.openDestination.value = d
                     },
                     onCard = { app.talkCardTap.value = it },
+                    // Meka 2026-10-24 14:34: it says why it can't listen instead of closing; a tap tries again.
+                    problem = talkProblem,
+                    onRetry = { app.talkListenNow.value = true },
+                    onOpenSettings = { os.meka.android.ask.StageCloseLog.openMicSettings(shellContext) },
+                    onWhy = { os.meka.android.ask.StageCloseLog.record(shellContext, it) },
                 )
             }
         }
