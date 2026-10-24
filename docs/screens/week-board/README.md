@@ -30,3 +30,12 @@ about 829 dp wide, so it sits between the two design widths. The Mac's shots com
 Match slice 4 adds `inner-dark-match-gaps` (screens branch).
 
 Calm with few tasks: no empty bordered boxes anywhere.
+
+## The density pass (2026-10-24, CI run 1211)
+
+`app-fold-unfolded.png` is now `inner-dark-dense` (screens branch) at the Fold's real 829 dp: Mon–Fri and today's
+timeline fit side by side (each weekday ~116 dp, the timeline 200 dp), dates 19 sp serif, cards 13.5 sp with "● House"
+beside the tick, no "Any time" chips (the length alone), the weekend no wider than 1.5 weekdays. Still off against
+`design-1280.png`, for the next slice: the header is the old size (the 34 sp month, 48 dp Obi pill and buttons) and
+the goals row takes a line of its own; "+ add" is a 40 dp box where the mockup's is a slim dashed row; the narrow
+pills stack "nothing yet / 4h" over three lines; the weekend's empty pills and "+ add" are still big.
