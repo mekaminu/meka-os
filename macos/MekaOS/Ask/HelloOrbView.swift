@@ -19,14 +19,18 @@ struct HelloOrbView: View {
     var frameRate: Double
     /// Slice 7, the entrance: when it began; the points scatter to the edge of the orb's box, gather and send one shockwave.
     var entranceAt: Date?
+    /// Obi's face, slice 4: how far the points have gathered into the face (0 the orb as ever; `FaceGather`); the
+    /// rings, comets, shockwave and halo go with it.
+    var gather: Float
     @Environment(\.mekaReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @State private var began = Date()
     @State private var orb: OrbConstellation
 
     init(state: OrbState, level: Float, palette: MekaPalette, size: CGFloat = CGFloat(HelloOrb.shared.SIZE), frameRate: Double = 30,
-         entranceAt: Date? = nil) {
+         entranceAt: Date? = nil, gather: Float = 0) {
         self.entranceAt = entranceAt
+        self.gather = gather
         self.state = state
         self.level = level
         self.palette = palette
@@ -71,6 +75,9 @@ struct HelloOrbView: View {
         let spread: Float = entering ? HelloEntrance.shared.spread(kind: .big, t: entranceMs, reduced: false) : 0
         k.frame(geo: orb.geo, out: orb.frame, state: state, level: shownLevel, angle: orb.angle, elapsedMs: elapsedMs, reduced: reduceMotion,
                 spread: spread, reach: k.EXTENT * 0.97)
+        // Obi's face, slice 4: the points leave the sphere for their spots on the face's oval (a pass after the frame).
+        if gather > 0 { FaceGather.shared.apply(geo: orb.geo, out: orb.frame, gather: gather) }
+        let extras = Double(1 - min(max(gather, 0), 1))
         let f = orb.frame
         let n = Int(orb.geo.n)
         let c = CGPoint(x: box.width / 2, y: box.height / 2)
@@ -103,9 +110,9 @@ struct HelloOrbView: View {
         }
         func pair(_ p: KotlinPair<KotlinFloat, KotlinFloat>) -> (Float, Float) { (p.first?.floatValue ?? 0, p.second?.floatValue ?? 0) }
         // Needs you: a warm amber halo breathing outside the sphere.
-        if state == .needsYou {
+        if state == .needsYou && extras > 0 {
             let p = Double(HelloOrb.shared.pulse(elapsedMs: elapsedMs, reduced: reduceMotion))
-            g.fill(circle(c, half), with: .radialGradient(Gradient(colors: [amber.opacity(0.20 * (0.4 + 0.6 * p)), .clear]),
+            g.fill(circle(c, half), with: .radialGradient(Gradient(colors: [amber.opacity(0.20 * (0.4 + 0.6 * p) * extras), .clear]),
                                                           center: c, startRadius: 0, endRadius: half))
         }
         // The core: a soft gold glow, brighter at the centre.
@@ -113,9 +120,9 @@ struct HelloOrbView: View {
         g.fill(circle(c, r * 0.9), with: .radialGradient(Gradient(colors: [bright.opacity(0.55 * core), gold(0.18 * core), .clear]),
                                                          center: c, startRadius: 0, endRadius: r * 0.9))
         // Speaking: the soft shockwave on the beat.
-        if let shock = k.shock(state: state, elapsedMs: elapsedMs, reduced: reduceMotion) {
+        if extras > 0, let shock = k.shock(state: state, elapsedMs: elapsedMs, reduced: reduceMotion) {
             let (reach, a) = pair(shock)
-            g.stroke(circle(c, r * CGFloat(reach)), with: .color(gold(Double(a))), lineWidth: hair * 3 * CGFloat(1 - (reach - 1)))
+            g.stroke(circle(c, r * CGFloat(reach)), with: .color(gold(Double(a) * extras)), lineWidth: hair * 3 * CGFloat(1 - (reach - 1)))
         }
         // The entrance: one gold shockwave as the points re-form.
         if entering, let wave = HelloEntrance.shared.shock(kind: .big, t: entranceMs, reduced: false) {
@@ -146,6 +153,8 @@ struct HelloOrbView: View {
             let idx = Int32(i)
             g.fill(circle(at(f.dx.get(index: idx), f.dy.get(index: idx)), hair * 1.2), with: .color(gold(Double(f.da.get(index: idx)))))
         }
+        // The rest fades out as the points gather into the face.
+        g.opacity = extras
         // Thinking: three tilted orbit rings, each with a bright comet.
         if state == .thinking {
             for (i, ring) in k.RINGS.enumerated() {

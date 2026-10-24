@@ -10415,6 +10415,10 @@ class MekaCore(
         return runCatchingNotCancel { api.faceFile(name) }
     }
 
+    /** Slice 4: [faceFile] as base64, for the Mac (Swift turns it into `Data` without copying byte by byte). */
+    suspend fun faceFileBase64(name: String): String? =
+        faceFile(name)?.takeIf { it.isNotEmpty() }?.let { kotlin.io.encoding.Base64.encode(it) }
+
     // The Vault, slice 4: the copies behind the fingerprint (VaultLockRules). Memory only, per device.
     private var vaultUnlockedAtMs = 0L
 
@@ -11158,6 +11162,16 @@ class MekaCore(
         val voice = speechVoiceNow() ?: return@onCore emptyList()
         val key = os.meka.core.domain.SpeechRules.cacheKey(voice.name, text.trim())
         os.meka.core.wire.SpeechCodec.decodeMarks(speechMarkTexts[key]).map { os.meka.core.domain.LipSync.Mark(it.atMs, it.viseme) }
+    }
+
+    /**
+     * Obi's face, slice 4 (the Mac): the kept clip's mouth for [text], [clipMs] long, as a track the Mac asks each
+     * frame at the player's position; null without marks (the loudness mouth then). Nothing leaves the device.
+     */
+    suspend fun speechMouth(text: String, clipMs: Long): os.meka.core.domain.MouthTrack? {
+        val marks = speechMarks(text)
+        if (marks.isEmpty()) return null
+        return os.meka.core.domain.MouthTrack(marks, clipMs).takeIf { !it.empty }
     }
 
     /** Obi's face, slice 3c: the streamed ask, with each piece's mouth sounds when [marked], else none. */

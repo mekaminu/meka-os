@@ -3486,6 +3486,23 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(SpeechRules.shared.AHEAD_AUDIO_MS, 10_000)
     }
 
+    /// Obi's face, slice 4: the Mac draws the face by the core's numbers (the film placed so only its crop shows, the
+    /// gold as a colour cube, the seven names, the mouth from a clip's own marks).
+    func testObisFaceReachesTheMac() {
+        let film = FaceGeometry.shared.filmIn(w: 624, h: 900)
+        XCTAssertEqual(film.x, -93, accuracy: 0.001)
+        XCTAssertEqual(film.w, 810, accuracy: 0.001)
+        let cube = FaceGold.shared.cube(dimension: 8, brightness: 1)
+        XCTAssertEqual(cube.size, 8 * 8 * 8 * 4)
+        XCTAssertEqual(FaceFileRules.shared.FILES.count, 7)
+        XCTAssertEqual(FaceFileRules.shared.FILES.first, FaceFileRules.shared.LOOP)
+        XCTAssertEqual(MouthMix.companion.file(shape: .ah), "mouth-ah.png")
+        let track = MouthTrack(marks: [LipSync.Mark(atMs: 0, viseme: "sil"), LipSync.Mark(atMs: 100, viseme: "p")], clipMs: 600)
+        XCTAssertEqual(track.at(tMs: 300).over, MouthShape.m)
+        XCTAssertTrue(LiveMouth().at(state: .listening, level: 0.9, tMs: 0).empty)
+        XCTAssertFalse(FaceFileRules.shared.shows(ready: false, faceOn: true))
+    }
+
     /// Speaking up, slice 1: the Mac speaks only while in use, and the line starts with his name.
     func testSpeakingUpOnlyWhileTheMacIsInUse() {
         let rules = SpeakUpRules.shared

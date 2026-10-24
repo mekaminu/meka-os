@@ -180,4 +180,66 @@ class ObiFaceTest {
         assertTrue(abs(FaceGather.orbAlpha(0.4f, true) - 0.6f) < 1e-6f)
         assertTrue(abs(FaceGather.faceAlpha(0.4f, true) - 0.4f) < 1e-6f)
     }
+
+    @Test
+    fun theMacDrawsTheWholeFilmSoOnlyTheCropShows() {
+        // The mockup's 624×900 view: the crop fills it exactly (×1.5), the film starting off its top-left corner.
+        val f = FaceGeometry.filmIn(624.0, 900.0)
+        near(f.x, -62 * 1.5); near(f.y, -10 * 1.5); near(f.w, 540 * 1.5); near(f.h, 720 * 1.5)
+        // A wider view centres it, so the crop's left edge lands where the mouth box's maths puts it.
+        val wide = FaceGeometry.filmIn(824.0, 900.0)
+        near(wide.x + FaceGeometry.CROP.x * 1.5, 100.0)
+        near(wide.x + (FaceGeometry.CROP.x + FaceGeometry.MOUTH.x) * 1.5, FaceGeometry.mouthIn(824.0, 900.0).x)
+    }
+
+    @Test
+    fun theMacsColourCubeIsTheSameGold() {
+        val n = 17
+        val cube = FaceGold.cube(n)
+        assertEquals(n * n * n * 4, cube.size)
+        fun at(r: Int, g: Int, b: Int) = ((b * n + g) * n + r) * 4
+        // Black and white are the lut's ends; every alpha is 1.
+        val w = FaceGold.lut[255]
+        near(cube[at(n - 1, n - 1, n - 1)].toDouble(), (w shr 16 and 0xFF) / 255.0, 1e-5)
+        near(cube[at(0, 0, 0) + 2].toDouble(), (FaceGold.lut[0] and 0xFF) / 255.0, 1e-5)
+        assertTrue((0 until n * n * n).all { cube[it * 4 + 3] == 1f })
+        // Pure green is brighter than pure blue (luminance decides), and both are gold: red over blue.
+        val green = at(0, n - 1, 0); val blue = at(0, 0, n - 1)
+        assertTrue(cube[green] > cube[blue])
+        val grey = at(n / 2, n / 2, n / 2)
+        assertTrue(cube[grey] > cube[grey + 2])
+        // Listening: brighter, never past 1.
+        val lit = FaceGold.cube(n, FaceLook.LISTEN_BRIGHT)
+        assertTrue(lit[grey + 2] > cube[grey + 2] && lit.all { it <= 1f })
+    }
+
+    @Test
+    fun aFramesMouthIsAtMostTwoPatches() {
+        assertEquals(MouthMix.NONE, MouthMix.of(LipSync.Frame(null, null, 1.0)))
+        assertTrue(MouthMix.NONE.empty)
+        // A change: the old full under the new fading in.
+        assertEquals(MouthMix(MouthShape.M, 1f, MouthShape.AH, 0.5f), MouthMix.of(LipSync.Frame(MouthShape.M, MouthShape.AH, 0.5)))
+        // Settled, or coming in from the film's face: the one shape.
+        assertEquals(MouthMix(null, 0f, MouthShape.EE, 1f), MouthMix.of(LipSync.Frame(MouthShape.EE, MouthShape.EE, 1.0)))
+        assertEquals(MouthMix(null, 0f, MouthShape.EE, 0.25f), MouthMix.of(LipSync.Frame(null, MouthShape.EE, 0.25)))
+        // Going back to the film's face: the old shape alone, fading.
+        assertEquals(MouthMix(MouthShape.REST, 0.75f, null, 0f), MouthMix.of(LipSync.Frame(MouthShape.REST, null, 0.25)))
+        assertEquals("mouth-rest.png", MouthMix.file(MouthShape.REST))
+        assertEquals("mouth-ee.png", MouthMix.file(MouthShape.EE))
+    }
+
+    @Test
+    fun theMacsMouthFollowsTheClipsOwnMarks() {
+        val track = MouthTrack(listOf(LipSync.Mark(0, "sil"), LipSync.Mark(100, "p"), LipSync.Mark(400, "a")), 800)
+        assertTrue(!track.empty)
+        assertEquals(MouthShape.M, track.at(300).over)
+        assertEquals(MouthShape.AH, track.at(600).over)
+        assertTrue(track.at(5_000).empty) // after the clip: the film's own face
+        assertTrue(MouthTrack(emptyList(), 800).empty)
+        assertEquals(MouthMix.NONE, MouthTrack(emptyList(), 800).at(10))
+        // No marks: the loudness drives it while speaking, nothing otherwise.
+        val live = LiveMouth()
+        assertEquals(MouthShape.AH, live.at(OrbState.SPEAKING, 0.9f, 0).over)
+        assertTrue(LiveMouth().at(OrbState.LISTENING, 0.9f, 0).empty)
+    }
 }

@@ -242,6 +242,9 @@ class HttpSyncTransportTest {
         assertTrue(requests.last().headers[RequestSigning.HEADER_SIGNATURE] != null)
         assertEquals(faceBytes.toList(), core.faceFile("mouth-m.png")?.toList())
         assertEquals("mouth-m.png", os.meka.core.wire.FaceCodec.decodeFileRequest((requests.last().body as TextContent).text))
+        // Slice 4, the Mac: the same bytes as base64 (Swift makes Data of it); nothing for a name outside the seven.
+        assertEquals(kotlin.io.encoding.Base64.encode(faceBytes), core.faceFileBase64("mouth-m.png"))
+        assertNull(core.faceFileBase64("../secrets.json"))
         // A name outside the seven is never asked for.
         val before = requests.size
         assertNull(core.faceFile("../secrets.json"))

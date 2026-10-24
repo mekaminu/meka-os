@@ -126,4 +126,13 @@ class ObiFaceFilesTest {
         assertEquals(1f - FaceLook.HINT_STRENGTH / 2, FaceLook.pointShade(0.9f, 0f, 0.5f))
         assertEquals(1f + FaceLook.HINT_STRENGTH, FaceLook.pointShade(0f, 0f, 3f)) // clamped
     }
+
+    @Test
+    fun theMacKnowsTheSevenNames() {
+        assertEquals(7, FaceFileRules.FILES.toSet().size)
+        assertEquals("face-loop.mp4", FaceFileRules.FILES.first())
+        assertTrue(FaceFileRules.allowed("mouth-oh.png"))
+        assertTrue(!FaceFileRules.allowed("../mouth-oh.png"))
+        assertTrue(FaceFileRules.ready(FaceFileRules.FILES.toSet(), FaceFileRules.FILES.toSet()))
+    }
 }

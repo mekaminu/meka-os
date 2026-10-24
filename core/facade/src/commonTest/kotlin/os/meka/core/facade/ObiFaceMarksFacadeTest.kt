@@ -62,6 +62,17 @@ class ObiFaceMarksFacadeTest {
             c.speechMarks(" Right, done. "),
         )
         assertTrue(c.speechMarks("Something else.").isEmpty())
+        // Slice 4, the Mac: the same marks as a track asked at the player's position; none for other words.
+        val track = c.speechMouth("Right, done.", 400)
+        assertEquals(os.meka.core.domain.MouthShape.M, track?.at(200)?.over)
+        assertEquals(null, c.speechMouth("Something else.", 400))
+        // The track's patch names are the wire's allow-listed ones.
+        assertEquals(
+            os.meka.core.wire.FaceCodec.MOUTHS.toSet(),
+            os.meka.core.domain.MouthShape.entries.map { os.meka.core.domain.MouthMix.file(it) }.toSet(),
+        )
+        assertEquals(os.meka.core.wire.FaceCodec.FILES, os.meka.core.domain.FaceFileRules.FILES.toSet())
+        assertEquals(os.meka.core.wire.FaceCodec.LOOP, os.meka.core.domain.FaceFileRules.LOOP)
     }
 
     @Test

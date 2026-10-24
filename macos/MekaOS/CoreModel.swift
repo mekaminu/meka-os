@@ -2031,6 +2031,33 @@ final class CoreModel {
         return Data(base64Encoded: b64)
     }
 
+    /// Obi's face, slice 4: the server's list of the face's files (name → tag); nil when it couldn't be read (the Mac
+    /// keeps what it has and looks again later). Only Strings cross back.
+    func faceManifest() async -> [String: String]? {
+        guard let core else { return nil }
+        guard let offered = try? await core.faceManifest() else { return nil }
+        return offered
+    }
+
+    /// One of the face's seven files as bytes (nil when not there or offline); the core refuses any other name.
+    func faceFileData(_ name: String) async -> Data? {
+        guard let core else { return nil }
+        guard let b64 = try? await core.faceFileBase64(name: name) else { return nil }
+        return Data(base64Encoded: b64)
+    }
+
+    /// Obi's face, slice 4: while this Mac draws the face, Navilife's clips come with their mouth sounds.
+    func speechFaceMarks(_ on: Bool) async {
+        guard let core else { return }
+        _ = try? await core.speechFaceMarks(on: on)
+    }
+
+    /// The mouth for a clip of `text`, `clipMs` long, from its kept marks; nil without them (the loudness mouth then).
+    func speechMouth(_ text: String, clipMs: Int64) async -> MouthTrack? {
+        guard let core else { return nil }
+        return try? await core.speechMouth(text: text, clipMs: clipMs)
+    }
+
     /// The Mac's desktop News widget (news ticker slice 3b): the top three stories still, from the current News place.
     func deskNewsWidget() -> DeskNewsView? { core?.deskNewsWidget() }
 

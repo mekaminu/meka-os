@@ -175,6 +175,34 @@ struct VoiceSheet: View {
         .animation(MekaMotion.appear(reduced: reduceMotion), value: model.remembersChats)
     }
 
+    /// Obi's face, slice 4: Face On · Off (kept on this Mac, on by default); until the face's files are on this Mac, a
+    /// line says the orb stays. The line cross-fades; Reduce Motion: cross-fades.
+    private var face: some View {
+        let store = MacFaceStore.shared
+        return VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(FaceLook.shared.SETTING_TITLE.uppercased()).font(MekaType.sectionLabel).tracking(MekaType.sectionLabelTracking)
+                .foregroundStyle(palette.textSecondary)
+            Picker(FaceLook.shared.SETTING_TITLE, selection: Binding(get: { store.on }, set: { on in
+                MekaHaptics.tick()
+                store.setOn(on)
+            })) {
+                Text(FaceLook.shared.ON).tag(true).accessibilityLabel("Show the face when talking")
+                Text(FaceLook.shared.OFF).tag(false).accessibilityLabel("Show the orb when talking")
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 260)
+            if !store.ready {
+                Text(FaceLook.shared.WAITING_LINE).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
+            }
+        }
+        .padding(.vertical, MekaSpace.xs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: store.ready)
+        .task { await store.refresh(model) }
+    }
+
     /// The orb speed pass, slice 2: the last 20 hellos and answers, how long each took to start and where the wait
     /// went (this Mac only, times only), with Clear.
     private var speed: some View {
@@ -233,6 +261,7 @@ struct VoiceSheet: View {
                 .staggeredAppear(0)
             callMe.staggeredAppear(1)
             memory.staggeredAppear(2)
+            face.staggeredAppear(2)
             speed.staggeredAppear(3)
             if let lv = model.liveSettings { liveBlock(lv).staggeredAppear(4) }
             if let v = model.voicePicker {

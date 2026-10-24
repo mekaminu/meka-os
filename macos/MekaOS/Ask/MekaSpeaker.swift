@@ -150,7 +150,7 @@ final class MekaSpeaker {
                     if let p = await self.fetch(pieces, asked, reading: reading) { queue.append(p) }
                     asked += 1
                 }
-                if let clip, await self.play(clip) {
+                if let clip, await self.play(clip, saying: pieces[i]) {
                     self.lastMekaVoiceMs = Self.nowMs()
                     i += 1
                     continue
@@ -313,10 +313,26 @@ final class MekaSpeaker {
         }
     }
 
-    /// Plays one MP3 clip to the end. False when it can't be played (the Mac's voice takes over) or was stopped.
-    private func play(_ data: Data) async -> Bool {
+    /// Obi's face, slice 4: the playing clip's mouth from its own mouth sounds (`MouthTrack`), nil without them.
+    @ObservationIgnored private var mouthTrack: MouthTrack?
+
+    /// The mouth to draw now, at the playing clip's own position; nil when no clip with marks is playing (the face's
+    /// loudness mouth then). Read each frame by the face.
+    func mouth() -> MouthMix? {
+        guard let p = player, p.isPlaying, let track = mouthTrack else { return nil }
+        return track.at(tMs: Int64(p.currentTime * 1000))
+    }
+
+    /// Plays one MP3 clip to the end. False when it can't be played (the Mac's voice takes over) or was stopped. With
+    /// the face showing, the words `saying` bring the clip's kept mouth sounds (only the words cross to the core).
+    private func play(_ data: Data, saying: String? = nil) async -> Bool {
         guard let p = try? AVAudioPlayer(data: data) else { return false }
         p.isMeteringEnabled = true // "Hello, Navilife", slice 6: the orb reads the clip's loudness (a number only)
+        mouthTrack = nil
+        if let saying, MacFaceStore.shared.shows {
+            mouthTrack = await model?.speechMouth(saying, clipMs: Int64(p.duration * 1000))
+        }
+        guard !Task.isCancelled else { mouthTrack = nil; return false }
         player = p
         p.delegate = clipDone
         let key = ObjectIdentifier(p)
@@ -324,7 +340,7 @@ final class MekaSpeaker {
             clipDone.expect(key, c)
             if !p.play() { clipDone.finish(key, ok: false) }
         }
-        if player === p { player = nil }
+        if player === p { player = nil; mouthTrack = nil }
         return ok
     }
 

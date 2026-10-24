@@ -112,6 +112,8 @@ struct AskMekaSection: View {
         // Search everything closing clears its query; the field searches its own text again.
         .onChange(of: model.showSearch) { _, open in if !open && searching { model.search(text) } }
         .task { await model.refreshAiStatus() }
+        // Obi's face, slice 4: keep the face's files on this Mac (asks the server only when due: weekly once kept).
+        .task { await MacFaceStore.shared.refresh(model) }
         .onChange(of: model.askUndone) { _, u in
             if let u { withAnimation(MekaMotion.expand(reduced: reduceMotion)) { done.subtract(u.cards) } }
         }
@@ -467,8 +469,10 @@ private struct TalkPanel: View {
     var body: some View {
         VStack(spacing: MekaSpace.xs) {
             Button(action: onOrb) {
-                HelloOrbView(state: HelloOrb.shared.state(phase: talk.phase, needsYou: Int32(needsYou)), level: talk.level, palette: palette,
-                             entranceAt: talk.entranceAt)
+                // Obi's face, slice 4: while the conversation runs, the orb's points gather into his face (once its
+                // files are on this Mac and Face is on); his lips follow the clip's own mouth sounds.
+                ObiOrbOrFace(state: HelloOrb.shared.state(phase: talk.phase, needsYou: Int32(needsYou)), level: talk.level, palette: palette,
+                             entranceAt: talk.entranceAt, faceWanted: talk.active, mouth: { [talk] in talk.mouth() })
             }
             .buttonStyle(MekaPressStyle())
             // Resting after "Too noisy — click to talk": a click starts listening as the mic does.

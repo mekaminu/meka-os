@@ -67,6 +67,9 @@ final class TalkController {
 
     var active: Bool { phase != .ended }
 
+    /// Obi's face, slice 4: the mouth for the clip Navilife is saying now, from its own mouth sounds (nil without them).
+    func mouth() -> MouthMix? { speaker.mouth() }
+
     /// An answer arrived: Ask shows it (the words and the cards, which can still be clicked).
     var onAnswer: (String, AskOutcome) -> Void = { _, _ in }
     /// The places, in the answer on screen, of cards a spoken yes is doing.

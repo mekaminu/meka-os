@@ -12,6 +12,14 @@ object FaceFileRules {
     /** A look that failed, or found the folder empty or half there (he may be uploading): look again sooner. */
     const val RETRY_MS = 6L * 60 * 60 * 1000
 
+    /**
+     * Slice 4: the seven names for the Mac (Swift sees the domain, not the wire): the same list as
+     * [os.meka.core.wire.FaceCodec.FILES] (a facade test keeps them equal), the film first.
+     */
+    const val LOOP = "face-loop.mp4"
+    val FILES: List<String> = listOf(LOOP) + MouthShape.entries.map { MouthMix.file(it) }
+    fun allowed(name: String): Boolean = name in FILES
+
     /** The cache's index: which files are kept, by the tag the server gave them, and when the list was last read. */
     data class Index(val kept: Map<String, String> = emptyMap(), val checkedAtMs: Long = 0L, val complete: Boolean = false)
 

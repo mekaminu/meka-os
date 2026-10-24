@@ -51,6 +51,17 @@ object FaceGeometry {
         return Box(ox + m.x, oy + m.y, m.w, m.h)
     }
 
+    /**
+     * Slice 4, the Mac: where the whole film is drawn in a view [w]×[h] so that only its crop fills the crop's fitted,
+     * centred box (the view clips the rest away, the vendor's HUD with it). In view points, y down.
+     */
+    fun filmIn(w: Double, h: Double): Box {
+        val k = fit(w, h)
+        val ox = (w - CROP.w * k) / 2
+        val oy = (h - CROP.h * k) / 2
+        return Box(ox - CROP.x * k, oy - CROP.y * k, FILM_W * k, FILM_H * k)
+    }
+
     /** How much of the face shows at a point of the crop ([u], [v] in 0…1): 1 in the middle, 0 past the ellipse's edge. */
     fun fadeAlpha(u: Double, v: Double): Double {
         val rx = 0.5
@@ -124,6 +135,27 @@ object FaceGold {
             val c = tint(y, y, y)
             (c[0] * 255).roundToInt() shl 16 or ((c[1] * 255).roundToInt() shl 8) or (c[2] * 255).roundToInt()
         }
+    }
+
+    /**
+     * Slice 4, the Mac: [lut] as a Core Image colour cube (`CIColorCubeWithColorSpace`, sRGB): [dimension]³ entries of
+     * RGBA floats in 0…1, red changing fastest, then green, then blue. Each entry is the gold of that colour's
+     * luminance, its colour scaled by [brightness] (listening is a touch brighter), alpha 1.
+     */
+    fun cube(dimension: Int, brightness: Float = 1f): FloatArray {
+        require(dimension in 2..64)
+        val out = FloatArray(dimension * dimension * dimension * 4)
+        val step = 1.0 / (dimension - 1)
+        var o = 0
+        for (b in 0 until dimension) for (g in 0 until dimension) for (r in 0 until dimension) {
+            val y = (GRAY[0] * r * step + GRAY[1] * g * step + GRAY[2] * b * step).coerceIn(0.0, 1.0)
+            val c = lut[(y * 255).roundToInt()]
+            out[o++] = ((c shr 16 and 0xFF) / 255f * brightness).coerceIn(0f, 1f)
+            out[o++] = ((c shr 8 and 0xFF) / 255f * brightness).coerceIn(0f, 1f)
+            out[o++] = ((c and 0xFF) / 255f * brightness).coerceIn(0f, 1f)
+            out[o++] = 1f
+        }
+        return out
     }
 
     private fun mul(a: Array<DoubleArray>, b: Array<DoubleArray>) = Array(3) { r -> DoubleArray(3) { c -> (0..2).sumOf { a[r][it] * b[it][c] } } }
@@ -344,4 +376,46 @@ object FaceGather {
         val t = x.coerceIn(0f, 1f)
         return t * t * (3 - 2 * t)
     }
+}
+
+/**
+ * Obi's face, slice 4 (the Mac, and the rule the Fold draws by): one frame's mouth as at most two patches with their
+ * opacities. Fading out to the film's own face: the old shape alone, going; a change: the old shape full under the new
+ * one fading in; settled: the one shape. [NONE] draws nothing (the film's own blinking face).
+ */
+data class MouthMix(val under: MouthShape?, val underAlpha: Float, val over: MouthShape?, val overAlpha: Float) {
+    val empty: Boolean get() = (under == null || underAlpha <= 0f) && (over == null || overAlpha <= 0f)
+
+    companion object {
+        val NONE = MouthMix(null, 0f, null, 0f)
+
+        fun of(frame: LipSync.Frame): MouthMix {
+            val mix = frame.mix.toFloat().coerceIn(0f, 1f)
+            return when {
+                frame.to == null -> if (frame.from == null) NONE else MouthMix(frame.from, 1f - mix, null, 0f)
+                frame.from != null && frame.from != frame.to -> MouthMix(frame.from, 1f, frame.to, mix)
+                else -> MouthMix(null, 0f, frame.to, mix)
+            }
+        }
+
+        /** The patch's file for [shape] (`mouth-rest.png` …), the wire's allow-listed name. */
+        fun file(shape: MouthShape): String = "mouth-${shape.name.lowercase()}.png"
+    }
+}
+
+/**
+ * Slice 4, the Mac: one spoken clip's mouth from its Polly marks ([LipSync.fromPolly]), asked each frame at the clip's
+ * own position, so the lips stay with the sound however the player drifts.
+ */
+class MouthTrack(marks: List<LipSync.Mark>, clipMs: Long) {
+    private val cues = LipSync.fromPolly(marks, clipMs)
+    val empty: Boolean get() = cues.isEmpty()
+    fun at(tMs: Long): MouthMix = if (cues.isEmpty()) MouthMix.NONE else MouthMix.of(LipSync.at(cues, tMs))
+}
+
+/** Slice 4, the Mac: the mouth for a voice with no marks, from its loudness, held and cross-faded ([MouthFollower]). */
+class LiveMouth {
+    private val follower = MouthFollower()
+    fun at(state: OrbState, level: Float, tMs: Long): MouthMix =
+        MouthMix.of(follower.step(FaceLook.mouthFromLevel(state, level, tMs), tMs))
 }
