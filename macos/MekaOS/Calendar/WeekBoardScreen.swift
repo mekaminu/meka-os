@@ -116,8 +116,11 @@ struct WeekBoardScreen: View {
                 if !weekend.isEmpty {
                     dayRow(weekend, minHeight: CGFloat(layout.MIN_WEEKEND_DP))
                 }
-                HStack(alignment: .top, spacing: MekaSpace.xs) {
-                    ForEach(layout.lists(week: w, board: board), id: \.key) { column in
+                // Option B match, slice 2: a hairline, then the lists as the mockup's card columns, in its order
+                // (Someday, Side hustle, House, then No day yet).
+                Rectangle().fill(palette.hairline).frame(height: 1).accessibilityHidden(true)
+                HStack(alignment: .top, spacing: MekaSpace.m) {
+                    ForEach(BoardMatchRules.shared.lists(week: w, board: board), id: \.key) { column in
                         let key = listKey(column)
                         BoardListView(column: column, week: w, board: board, palette: palette, targeted: target == key) { on in
                             if on { target = key } else if target == key { target = nil }
@@ -132,7 +135,7 @@ struct WeekBoardScreen: View {
             .animation(MekaMotion.replan(reduced: reduceMotion), value: w.days.map { $0.cards.map(\.id) })
                 // Option B slice 5: today's timeline beside the week (the mockup's panel), sliding in from the right.
                 if showTimeline, let timeline = model.boardTimeline(board, epochDay: board.todayEpochDay) {
-                    BoardTimelineView(timeline: timeline, palette: palette)
+                    BoardTimelineView(timeline: timeline, palette: palette, board: board)
                         .frame(width: CGFloat(BoardTimelineRules.shared.PANEL_DP))
                         .transition(reduceMotion ? .opacity : .move(edge: .trailing).combined(with: .opacity))
                 }
@@ -262,6 +265,8 @@ private struct BoardTimelineView: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let timeline: BoardTimeline
     let palette: MekaPalette
+    /// Option B match, slice 2: the board the blocks' cards are on, so a task block wears its area's colour.
+    var board: WeekBoard? = nil
     private let labelWidth: CGFloat = 36
 
     var body: some View {
@@ -318,8 +323,9 @@ private struct BoardTimelineView: View {
 
     @ViewBuilder
     private func block(_ b: DayBlock) -> some View {
+        let area: BoardArea? = board.flatMap { BoardMatchRules.shared.blockArea(block: b, board: $0) }
         let tone: Color = b.kind == DayBlockKind.event ? palette.calendarTone(b.tone)
-            : (b.kind == DayBlockKind.task ? palette.accent : palette.calendar3)
+            : (b.kind == DayBlockKind.task ? (area.map { palette.areaTone($0) } ?? palette.accent) : palette.calendar3)
         let face = HStack(spacing: 0) {
             Rectangle().fill(tone).frame(width: 3)
             VStack(alignment: .leading, spacing: 0) {
@@ -629,6 +635,8 @@ private struct BoardCardView: View {
     let palette: MekaPalette
     /// Slice 8: on a narrow lane the title takes the design's card size (item meta, 12 pt) and up to three lines rather than be cut.
     var compact: Bool = false
+    /// Option B match, slice 2: a card in one of the lists at the foot (its top line only with a time or a length).
+    var inList: Bool = false
     @State private var over = false
     /// Slice 6: Block time for a day's card, read as the pointer reaches it (the menu can't wait for the core).
     @State private var offer: BlockOffer?
@@ -641,16 +649,21 @@ private struct BoardCardView: View {
         let planner = BoardPlannerRules.shared
         // Option B match: every card has its top line, the time chip (gold, or a quiet "Any time") and its length.
         let match = BoardMatchRules.shared
-        let time = match.timeChip(card: card)
+        let time = inList ? match.listTime(card: card) : match.timeChip(card: card)
         let timed = match.timed(card: card)
-        let duration = planner.durationLabel(card: card)
+        let listDuration = inList ? match.listDuration(card: card) : ""
+        let duration: String? = inList ? (listDuration.isEmpty ? nil : listDuration) : planner.durationLabel(card: card)
         let foot = planner.footChips(card: card)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            HStack(spacing: MekaSpace.xs) {
-                BoardTimeChip(time: time, ink: timed ? palette.accent : palette.textTertiary, quiet: !timed, palette: palette)
-                Spacer(minLength: 0)
-                if let duration {
-                    Text(duration).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
+            if !time.isEmpty || duration != nil {
+                HStack(spacing: MekaSpace.xs) {
+                    if !time.isEmpty {
+                        BoardTimeChip(time: time, ink: timed ? palette.accent : palette.textTertiary, quiet: !timed, palette: palette)
+                    }
+                    Spacer(minLength: 0)
+                    if let duration {
+                        Text(duration).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
                 }
             }
             Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body)
@@ -1001,29 +1014,32 @@ private struct BoardListView: View {
     var body: some View {
         let someday = column.tray == BoardTray.someday
         let cards = column.cards
+        // Option B match, slice 2: the mockup's heading, the name in serif (the day headers' type) and the count quiet
+        // in mono on the right; no box round the list, only a held card over it lifts it with the gold edge.
+        let head = BoardMatchRules.shared.listHead(column: column)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            HStack(spacing: MekaSpace.xs) {
-                // Option B slice 3: Side hustle and House wear their area's dot before the name.
-                if let area = column.area {
-                    Circle().fill(palette.areaTone(area)).frame(width: 8, height: 8)
+            HStack(alignment: .lastTextBaseline, spacing: MekaSpace.xs) {
+                Text(head.name).font(MekaType.nowTitle).fontDesign(.serif).foregroundStyle(palette.textPrimary).lineLimit(1)
+                Spacer(minLength: 0)
+                if let count = head.count {
+                    Text(count).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
-                Text(column.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(column.accessibilityLabel)
+            .accessibilityLabel(head.spoken)
             .accessibilityAddTraits(.isHeader)
             if cards.isEmpty {
                 Text(targeted ? WeekBoardRules.shared.DROP_HERE : column.empty).font(MekaType.caption)
                     .foregroundStyle(targeted ? palette.accent : palette.textTertiary)
             } else {
                 ForEach(cards, id: \.id) { card in
-                    BoardCardView(card: card, spot: someday ? .someday : .lane(week), board: board, palette: palette)
+                    BoardCardView(card: card, spot: someday ? .someday : .lane(week), board: board, palette: palette, inList: true)
                 }
             }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, minHeight: CGFloat(BoardWeekLayoutRules.shared.MIN_LISTS_DP), alignment: .topLeading)
-        .modifier(BoardZone(palette: palette, targeted: targeted))
+        .modifier(BoardListZone(palette: palette, targeted: targeted))
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
             if someday {
@@ -1074,18 +1090,19 @@ private struct BoardPastDayView: View {
     }
 }
 
-/// The lane's and the tray's frame: raised with a gold edge and a slight lift while a card is over it.
-private struct BoardZone: ViewModifier {
+/// Option B match, slice 2: a list at the board's foot sits on the page (no box); a held card over it lifts it to the
+/// raised tone with the gold edge (approve spring; Reduce Motion: no lift).
+private struct BoardListZone: ViewModifier {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let palette: MekaPalette
     let targeted: Bool
 
     func body(content: Content) -> some View {
         content
-            .padding(MekaSpace.xs)
+            .padding(.vertical, MekaSpace.xs)
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(targeted ? palette.surfaceRaised : palette.surface))
-            .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(targeted ? palette.accent : palette.hairline, lineWidth: targeted ? 1.5 : 1))
+            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(targeted ? palette.surfaceRaised : Color.clear))
+            .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(targeted ? palette.accent : Color.clear, lineWidth: 1.5))
             .scaleEffect(targeted && !reduceMotion ? 1.01 : 1)
             .animation(MekaMotion.approve(reduced: reduceMotion), value: targeted)
     }

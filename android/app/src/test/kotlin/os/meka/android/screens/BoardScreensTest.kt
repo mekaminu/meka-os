@@ -29,6 +29,8 @@ import os.meka.android.calendar.TIMELINE_TAG
 import os.meka.android.calendar.TIMELINE_TOGGLE_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.android.calendar.ADD_TAG
+import os.meka.android.calendar.LIST_TITLE_TAG
+import os.meka.android.calendar.LISTS_RULE_TAG
 import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -387,6 +389,37 @@ class BoardScreensTest {
             ?: throw AssertionError("no + add in today's column ($card vs $adds)")
         assertTrue("+ add sits under today's card ($todays vs $card)", todays.top >= card.bottom)
         if (compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes().isEmpty()) fail("no budget pill")
+    }
+
+    /**
+     * Option B match, slice 2: unfolded, the lists at the foot are the mockup's card columns: a hairline, then Someday,
+     * Side hustle, House and No day yet left to right with their names in serif (no " · 3" in the name), and a Someday
+     * card with no time or length is its title and foot only (no "Any time" chip below the hairline).
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theListsAreTheMockupsCardColumns() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val id = core.addOnBoardSized("Garden office quotes", core.weekBoard.value.todayEpochDay, null)!!
+            core.somedayOnBoard(id)
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-lists"))
+        ScreenShots.assertSensible(compose, "inner-dark-lists")
+        val titles = compose.onAllNodesWithTag(LIST_TITLE_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        val names = titles.sortedBy { it.boundsInRoot.left }.map { n ->
+            n.config.getOrNull(androidx.compose.ui.semantics.SemanticsProperties.Text)?.joinToString("") { it.text }.orEmpty()
+        }
+        assertEquals(listOf("Someday", "Side hustle", "House", "No day yet"), names)
+        val rule = compose.onAllNodesWithTag(LISTS_RULE_TAG, useUnmergedTree = true).fetchSemanticsNodes().singleOrNull()?.boundsInRoot
+            ?: throw AssertionError("no hairline above the lists")
+        val card = cardBounds("Garden office quotes")
+        assertTrue("the Someday card sits under the hairline ($card vs $rule)", card.top >= rule.bottom)
+        val anyTime = compose.onAllNodesWithText(os.meka.core.domain.BoardMatchRules.ANY_TIME, useUnmergedTree = true).fetchSemanticsNodes()
+        assertTrue("a list card wears no \"Any time\" chip", anyTime.none { it.boundsInRoot.top >= rule.bottom })
+        if (compose.onAllNodesWithContentDescription("Someday, 1 task").fetchSemanticsNodes().isEmpty()) fail("Someday's heading doesn't say its count")
     }
 
     /** Option B match: on a Saturday the unfolded board opens on next week; ‹ goes back to this week's Saturday. */

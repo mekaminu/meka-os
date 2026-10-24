@@ -29,6 +29,12 @@ data class BoardEventCard(
 )
 
 /**
+ * A list at the board's foot in the mockup's style (slice 2): its name in serif ("Someday") with the count quiet on the
+ * right ("3", none when empty), and what a screen reader hears for the heading.
+ */
+data class BoardListHead(val name: String, val count: String?, val spoken: String)
+
+/**
  * The Week board made to match the approved Option B mockup exactly (`docs/design/week-board/option-b.dc.html`; Meka
  * 2026-10-24 14:39 with screenshots, "doesn't look like the mock-up prototype"), slice 1: the columns. Non-AI and pure,
  * the same on the unfolded Fold, the cover screen and the Mac.
@@ -128,5 +134,43 @@ object BoardMatchRules {
             append(", ").append(calendar)
         }
         BoardEventCard(c.id, c.time, duration, c.title, c.tone, calendar, e, spoken)
+    }
+
+    // ---- Slice 2 (2026-10-24): the lists as card columns, the timeline's colours by area ----
+
+    /**
+     * The lists under the weekend in the mockup's order: Someday, Side hustle, House, then No day yet as a fourth (the
+     * mockup has the first three; the week's parked cards sit beside them rather than first).
+     */
+    fun lists(week: BoardWeek, board: WeekBoard): List<BoardListColumn> =
+        BoardWeekLayoutRules.lists(week, board).sortedBy { if (it.tray == BoardTray.NO_DAY) 1 else 0 }
+
+    /** A list's heading: the name alone in serif, the count beside it in mono ("Someday" · "3"). */
+    fun listHead(column: BoardListColumn): BoardListHead {
+        val name = column.title.substringBefore(" · ")
+        return BoardListHead(name, column.count.takeIf { it > 0 }?.toString(), column.accessibilityLabel)
+    }
+
+    /**
+     * A card's top line in one of the lists: the mockup's list cards are a title, then the tick and the area, so the
+     * top line shows only when the card has a time or a length (never the quiet "Any time" chip there).
+     */
+    fun listTop(card: BoardCard): PlannerCardTop? = BoardPlannerRules.top(card)
+
+    /** The words of [listTop]'s chip and length, for Swift ("" when there is none). */
+    fun listTime(card: BoardCard): String = listTop(card)?.time ?: ""
+    fun listDuration(card: BoardCard): String = listTop(card)?.duration ?: ""
+
+    /**
+     * The area a task block on the day's timeline is coloured by (the mockup's blocks wear their category's colour): the
+     * card's area on [board] (his pick, else the guess); null for an event, the commute or a task with no area (gold).
+     */
+    fun blockArea(block: DayBlock, board: WeekBoard): BoardArea? {
+        if (block.kind != DayBlockKind.TASK) return null
+        val id = block.taskId ?: return null
+        val card = board.days.firstNotNullOfOrNull { d -> d.cards.firstOrNull { it.id == id } }
+            ?: board.weeks.firstNotNullOfOrNull { w -> w.lane.firstOrNull { it.id == id } }
+            ?: return null
+        return BoardAreaRules.of(card)
     }
 }

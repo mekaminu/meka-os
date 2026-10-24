@@ -1642,6 +1642,14 @@ final class MekaCoreBridgeTests: XCTestCase {
                                  board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))
         XCTAssertEqual(lists.map(\.title), ["No day yet", "Someday", "Side hustle", "House"])
         XCTAssertEqual(lists.last?.area, BoardArea.house)
+        // Option B match, slice 2: the lists in the mockup's order with the name apart from the count; the timeline's colours.
+        let matchLists = match.lists(week: BoardWeek(startEpochDay: 0, title: "This week", range: "", days: [], lane: [], goals: []),
+                                     board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))
+        XCTAssertEqual(matchLists.map { match.listHead(column: $0).name }, ["Someday", "Side hustle", "House", "No day yet"])
+        XCTAssertNil(match.listHead(column: matchLists[0]).count)
+        let commute = DayBlock(key: "c:to", title: "Commute to work", startMinute: 480, endMinute: 540, kind: DayBlockKind.commute,
+                               done: false, taskId: nil, event: nil, tone: 0, column: 0, columns: 1)
+        XCTAssertNil(match.blockArea(block: commute, board: WeekBoard(todayEpochDay: 0, weeks: [], someday: [])))
         // Option B, slice 4: Obi's nudge in the header.
         let nudges = BoardNudgeRules.shared
         XCTAssertEqual(nudges.SPEAKER, "Obi")

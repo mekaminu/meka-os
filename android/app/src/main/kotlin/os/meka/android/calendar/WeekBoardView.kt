@@ -650,6 +650,7 @@ fun WeekBoardView(
                                 tl, onEvent,
                                 Modifier.wrapContentWidth(Alignment.Start, unbounded = true).width(panelDp + MekaSpace.gutter)
                                     .fillMaxHeight().padding(end = MekaSpace.gutter, bottom = MekaSpace.m).appear(rememberAppearance(4)),
+                                areaOf = { b -> BoardMatchRules.blockArea(b, board) },
                             )
                         }
                     }
@@ -663,6 +664,7 @@ fun WeekBoardView(
                     DayTimelineView(
                         tl, onEvent, Modifier.fillMaxSize().padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.m).appear(rememberAppearance(4)),
                         onSwipe = { step -> turnTo(board.days.indexOfFirst { it.epochDay == shownDay }.coerceAtLeast(0) + step) },
+                        areaOf = { b -> BoardMatchRules.blockArea(b, board) },
                     )
                 }
             } else {
@@ -994,6 +996,10 @@ internal const val ADD_TAG = "board-add"
 /** Timeline / Hide timeline in the header (Option B slice 5, UI tests). */
 internal const val TIMELINE_TOGGLE_TAG = "board-timeline-toggle"
 
+/** A list's serif name, and the hairline above the lists (Option B match slice 2, UI tests). */
+internal const val LIST_TITLE_TAG = "board-list-title"
+internal const val LISTS_RULE_TAG = "board-lists-rule"
+
 /** Obi's nudge line in the header (Option B slice 4, UI tests). */
 internal const val NUDGE_TAG = "board-nudge"
 
@@ -1154,6 +1160,8 @@ private fun DayColumn(
 
 /** By hand, slice 8: the lane being drawn is compact (BoardFitRules); trays and the folded page are roomy. */
 internal val LocalBoardCompact = staticCompositionLocalOf { false }
+/** Option B match, slice 2: a card in one of the lists at the board's foot (its top line only with a time or length). */
+internal val LocalBoardInList = staticCompositionLocalOf { false }
 
 /**
  * By hand, slice 4: a past day folded narrow, unfolded: its big number over the weekday and "3 done" (or "Nothing
@@ -1346,8 +1354,9 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
     val reduced = Meka.reducedMotion
     val compact = LocalBoardCompact.current
     val fade by animateFloatAsState(if (lifted) 1f else BoardPlannerRules.alpha(card), MekaMotion.appear(reduced), label = "card-fade")
-    // Option B match: every card has its top line, the time chip (gold, or a quiet "Any time") and its length.
-    val top = BoardMatchRules.top(card)
+    // Option B match: every card has its top line, the time chip (gold, or a quiet "Any time") and its length; in the
+    // lists at the foot (slice 2) only when it has a time or a length, as the mockup's list cards are title and foot.
+    val top = if (LocalBoardInList.current) BoardMatchRules.listTop(card) else BoardMatchRules.top(card)
     val timed = BoardMatchRules.timed(card)
     val foot = BoardPlannerRules.footChips(card)
     Column(
@@ -1358,7 +1367,7 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
             .testTag(PLANNER_CARD_TAG)
             .padding(start = MekaSpace.xs, end = MekaSpace.xs, top = MekaSpace.xs, bottom = MekaSpace.xxs),
     ) {
-        Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        if (top != null) Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             top.time?.let { TimeChip(it, if (timed) ChipTone.TASK else ChipTone.QUIET) }
             Spacer(Modifier.weight(1f))
             top.duration?.let { Text(it, style = BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
@@ -2203,8 +2212,11 @@ private fun WideWeek(
                         weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) } }
                     }
                 }
-                Row(Modifier.fillMaxWidth().height(tiers.lists.dp), horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
-                    BoardWeekLayoutRules.lists(w, board).forEach { column ->
+                // Option B match, slice 2: a hairline, then the lists as card columns in the mockup's order (Someday,
+                // Side hustle, House, then No day yet).
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Meka.colors.hairline).testTag(LISTS_RULE_TAG))
+                Row(Modifier.fillMaxWidth().height(tiers.lists.dp), horizontalArrangement = Arrangement.spacedBy(MekaSpace.m)) {
+                    BoardMatchRules.lists(w, board).forEach { column ->
                         key(column.key) { list(w, column, Modifier.weight(1f).fillMaxHeight()) }
                     }
                 }
@@ -2243,36 +2255,42 @@ private fun BoardList(
     val key = listKey(column)
     val lit = hovered == key
     val glow by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.hairline.copy(alpha = 0f), MekaMotion.appear(reduced), label = "board-list-glow-$key")
-    val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.background, MekaMotion.appear(reduced), label = "board-list-fill-$key")
+    // Option B match, slice 2: no box round a list (the mockup's columns sit on the page); only a held card over it
+    // blends in the raised tone with the gold edge.
+    val fill by animateColorAsState(if (lit) Meka.colors.surfaceRaised else Meka.colors.surfaceRaised.copy(alpha = 0f), MekaMotion.appear(reduced), label = "board-list-fill-$key")
+    val head = BoardMatchRules.listHead(column)
     androidx.compose.runtime.DisposableEffect(key) { onDispose { onGone(key) } }
     Column(
-        modifier.padding(horizontal = MekaSpace.xxs)
+        modifier
             .onGloballyPositioned { onBounds(key, it.boundsInRoot()) }
             .clip(RoundedCornerShape(MekaRadius.m)).background(fill)
             .border(1.dp, glow, RoundedCornerShape(MekaRadius.m))
-            .padding(MekaSpace.xs),
+            .padding(vertical = MekaSpace.xs),
         verticalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
+        // The mockup's heading: the name in serif (the day headers' type), the count quiet in mono on the right.
         Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clearAndSetSemantics { contentDescription = column.accessibilityLabel; heading() },
+            verticalAlignment = Alignment.Bottom,
+            modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = head.spoken; heading() },
         ) {
-            // Option B slice 3: Side hustle and House wear their area's dot before the name.
-            column.area?.let { a ->
-                Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.areaTone(a)))
-                Spacer(Modifier.width(MekaSpace.xs))
-            }
-            Text(column.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                head.name, style = BoardType.date, color = Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false).testTag(LIST_TITLE_TAG),
+            )
+            Spacer(Modifier.weight(1f))
+            head.count?.let { Text(it, style = BoardType.mono, color = Meka.colors.textTertiary, maxLines = 1) }
         }
         if (column.count == 0) {
             Text(if (lit) WeekBoardRules.DROP_HERE else column.empty, style = MekaType.caption, color = if (lit) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 2)
         } else {
-            TrayCards(
-                column.tray, week, board, stacked = true, cardWidth = 0.dp, dragging = dragging,
-                onCardBounds = onCardBounds, onPick = onPick, onDrag = onDrag, onDrop = onDrop, onCancel = onCancel,
-                onMoveTo = onMoveTo, onPark = onPark, onSomeday = onSomeday, onTag = onTag,
-                modifier = Modifier.fillMaxWidth().weight(1f), only = column.cards,
-            )
+            CompositionLocalProvider(LocalBoardInList provides true) {
+                TrayCards(
+                    column.tray, week, board, stacked = true, cardWidth = 0.dp, dragging = dragging,
+                    onCardBounds = onCardBounds, onPick = onPick, onDrag = onDrag, onDrop = onDrop, onCancel = onCancel,
+                    onMoveTo = onMoveTo, onPark = onPark, onSomeday = onSomeday, onTag = onTag,
+                    modifier = Modifier.fillMaxWidth().weight(1f), only = column.cards,
+                )
+            }
         }
     }
 }

@@ -109,4 +109,52 @@ class BoardMatchTest {
     fun theAddButtonIsQuiet() {
         assertEquals("+ add", BoardMatchRules.ADD)
     }
+
+    // ---- Slice 2: the lists as card columns, the timeline's colours by area ----
+
+    private fun withCards(epoch: Long, cards: List<BoardCard>) = day(epoch).copy(cards = cards)
+
+    @Test
+    fun theListsComeInTheMockupsOrderWithTheirNameAndCountApart() {
+        val w = week(mon26).copy(lane = listOf(card("a"), card("b")))
+        val house = card("h").copy(task = task("h").copy(area = BoardArea.HOUSE.name))
+        val board = WeekBoard(mon26, listOf(w), someday = listOf(card("s"), house))
+        val lists = BoardMatchRules.lists(w, board)
+        assertEquals(listOf("Someday", "Side hustle", "House", "No day yet"), lists.map { BoardMatchRules.listHead(it).name })
+        val noDay = BoardMatchRules.listHead(lists.last())
+        assertEquals("2", noDay.count)
+        assertEquals(lists.last().accessibilityLabel, noDay.spoken)
+        assertEquals("1", BoardMatchRules.listHead(lists[2]).count)
+        // An empty list has no count, never "0".
+        assertNull(BoardMatchRules.listHead(lists[1]).count)
+        assertTrue(lists.none { BoardMatchRules.listHead(it).name.contains("·") })
+    }
+
+    @Test
+    fun aListCardShowsItsTopLineOnlyWithATimeOrALength() {
+        assertNull(BoardMatchRules.listTop(card("a")))
+        assertEquals("", BoardMatchRules.listTime(card("a")))
+        assertEquals("", BoardMatchRules.listDuration(card("a")))
+        assertEquals("0:30", BoardMatchRules.listTop(card("b", estimate = 30))?.duration)
+        assertEquals("0:30", BoardMatchRules.listDuration(card("b", estimate = 30)))
+        assertEquals("09:00", BoardMatchRules.listTime(card("c", time = "09:00")))
+        // A day's card still always has its chip ("Any time").
+        assertEquals(BoardMatchRules.ANY_TIME, BoardMatchRules.top(card("a")).time)
+    }
+
+    @Test
+    fun aTaskBlockWearsItsCardsArea() {
+        val work = card("w").copy(task = task("w").copy(area = BoardArea.WORK.name))
+        val plain = card("p").copy(task = task("p").copy(area = "NONE"))
+        val parked = card("k").copy(task = task("k").copy(area = BoardArea.MONEY.name))
+        val w = week(mon26).let { wk -> wk.copy(days = listOf(withCards(mon26, listOf(work, plain))) + wk.days.drop(1), lane = listOf(parked)) }
+        val board = WeekBoard(mon26, listOf(w))
+        fun block(id: String?, kind: DayBlockKind = DayBlockKind.TASK) = DayBlock("t:$id", "x", 600, 630, kind, taskId = id)
+        assertEquals(BoardArea.WORK, BoardMatchRules.blockArea(block("w"), board))
+        assertNull(BoardMatchRules.blockArea(block("p"), board))
+        assertEquals(BoardArea.MONEY, BoardMatchRules.blockArea(block("k"), board))
+        assertNull(BoardMatchRules.blockArea(block("gone"), board))
+        assertNull(BoardMatchRules.blockArea(block(null, DayBlockKind.EVENT), board))
+        assertNull(BoardMatchRules.blockArea(block(null, DayBlockKind.COMMUTE), board))
+    }
 }

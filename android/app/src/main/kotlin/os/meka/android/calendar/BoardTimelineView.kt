@@ -50,6 +50,7 @@ import os.meka.android.designsystem.MekaSpace
 import os.meka.android.designsystem.MekaType
 import os.meka.android.designsystem.appear
 import os.meka.android.designsystem.calendarTone
+import os.meka.android.designsystem.areaTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BoardPlannerRules
@@ -80,6 +81,8 @@ internal fun DayTimelineView(
     onEvent: (CalendarEvent) -> Unit,
     modifier: Modifier = Modifier,
     onSwipe: ((Int) -> Unit)? = null,
+    /** Option B match, slice 2: a task block's area (its card's), so it wears the category's colour; null keeps gold. */
+    areaOf: (DayBlock) -> os.meka.core.domain.BoardArea? = { null },
 ) {
     val reduced = Meka.reducedMotion
     val density = LocalDensity.current
@@ -167,6 +170,7 @@ private fun Hours(timeline: BoardTimeline, onEvent: (CalendarEvent) -> Unit, mod
                             .width(colW - 2.dp).height(b.heightDp.dp)
                             .appear(rememberAppearance(minOf(i, 8))),
                         onEvent,
+                        areaOf(b),
                     )
                 }
                 timeline.nowTopDp?.let { top ->
@@ -182,10 +186,10 @@ private fun Hours(timeline: BoardTimeline, onEvent: (CalendarEvent) -> Unit, mod
 }
 
 @Composable
-private fun Block(b: DayBlock, modifier: Modifier, onEvent: (CalendarEvent) -> Unit) {
+private fun Block(b: DayBlock, modifier: Modifier, onEvent: (CalendarEvent) -> Unit, area: os.meka.core.domain.BoardArea? = null) {
     val tone = when (b.kind) {
         DayBlockKind.EVENT -> Meka.colors.calendarTone(b.tone)
-        DayBlockKind.TASK -> Meka.colors.accent
+        DayBlockKind.TASK -> area?.let { Meka.colors.areaTone(it) } ?: Meka.colors.accent
         DayBlockKind.COMMUTE -> Meka.colors.calendar3
     }
     val event = b.event
