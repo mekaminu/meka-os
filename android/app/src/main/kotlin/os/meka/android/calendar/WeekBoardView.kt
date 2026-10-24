@@ -131,6 +131,8 @@ import os.meka.android.designsystem.calendarTone
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.designsystem.rememberMekaHaptics
 import os.meka.core.domain.BoardCapacity
+import os.meka.core.domain.BoardNudge
+import os.meka.core.domain.BoardNudgeRules
 import os.meka.core.domain.BoardCard
 import os.meka.core.domain.BoardDay
 import os.meka.core.domain.BoardGoal
@@ -464,6 +466,13 @@ fun WeekBoardView(
 
         Column(Modifier.fillMaxSize()) {
             WeekHeader(board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview)
+            // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a tap, with Undo.
+            val nudge = remember(board, weekIndex) { board.weeks.getOrNull(weekIndex)?.let { core.boardNudge(board, it.startEpochDay) } }
+            if (nudge != null) {
+                ObiNudgeLine(
+                    nudge, Modifier.padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.xs).appear(rememberAppearance(2)),
+                ) { fix -> scope.launch { showLine(runCatching { core.easePressure(fix.taskId, fix.toDay) }.getOrNull()) } }
+            }
             board.weeks.getOrNull(weekIndex)?.let { week ->
                 // By hand, slice 4: the week's goals as small gold pills and the two trays as chips (unfolded on one
                 // row, folded on two); an open tray's cards unfolded in a lane under them.
@@ -814,6 +823,52 @@ private fun WeekHeader(
         StepButton("›", "Next week", week < board.weeks.size - 1) { go(week + 1) }
     }
 }
+
+/**
+ * Option B slice 4: Obi's one-line nudge under the week's title, the mockup's pill: a small gold orb, "Obi" and the
+ * line ("Mon is 1h over · move “Gym” to Fri?"), amber when a day is over or stacking up. A line with a fix is a button:
+ * a tap moves that card (light haptic, Undo on the bar). A new line cross-fades in (Reduced motion: a plain fade).
+ */
+@Composable
+private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix) -> Unit) {
+    val reduced = Meka.reducedMotion
+    val amber = Meka.colors.calendar3
+    val accent = Meka.colors.accent
+    val tone by animateColorAsState(if (n.warns) amber else Meka.colors.textSecondary, MekaMotion.appear(reduced), label = "nudge-tone")
+    val fix = n.fix
+    Row(
+        modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
+            .then(if (fix != null) Modifier.clickable(role = Role.Button) { onFix(fix) } else Modifier)
+            .heightIn(min = MekaSpace.touch)
+            .padding(start = MekaSpace.xs, end = MekaSpace.m)
+            .testTag(NUDGE_TAG)
+            .clearAndSetSemantics {
+                contentDescription = n.spoken
+                if (fix != null) role = Role.Button
+            },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(20.dp).clip(CircleShape).background(
+                androidx.compose.ui.graphics.Brush.radialGradient(
+                    0f to accent.copy(alpha = 0.45f).compositeOverWhite(), 0.4f to accent, 1f to accent.copy(alpha = 0.35f),
+                ),
+            ),
+        )
+        Spacer(Modifier.width(MekaSpace.xs))
+        Text(BoardNudgeRules.SPEAKER, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1)
+        Spacer(Modifier.width(MekaSpace.xs))
+        androidx.compose.animation.Crossfade(n.line, animationSpec = MekaMotion.appear(reduced), label = "nudge-line") { line ->
+            Text(line, style = MekaType.caption, color = tone, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** A lighter tint of a colour for the orb's highlight. */
+private fun Color.compositeOverWhite(): Color = Color(red + (1f - red) * 0.6f, green + (1f - green) * 0.6f, blue + (1f - blue) * 0.6f, 1f)
+
+/** Obi's nudge line in the header (Option B slice 4, UI tests). */
+internal const val NUDGE_TAG = "board-nudge"
 
 @Composable
 private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {

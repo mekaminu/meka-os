@@ -23,6 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import os.meka.android.calendar.AREA_DOT_TAG
 import os.meka.android.calendar.BUDGET_TAG
+import os.meka.android.calendar.NUDGE_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
 import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
@@ -266,6 +267,45 @@ class BoardScreensTest {
         runBlocking { core.areaOnBoard(id, os.meka.core.domain.BoardArea.FAMILY) }
         awaitCore("area") { core.weekBoard.value.find(id)?.card?.task?.area == "FAMILY" }
         if (compose.onAllNodesWithContentDescription("Someday, 1 task").fetchSemanticsNodes().isEmpty()) fail("the card didn't move to Someday's list")
+    }
+
+    /**
+     * Option B slice 4 (Obi's nudge): today (Wed from 17:15, under 4h free) holds five hours of cards, so the header
+     * says Today is over and offers to move one of them to another day; the line on screen is the core's, and a tap
+     * moves that card there.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun obisNudgeSaysTodayIsOverAndATapMovesACard() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            listOf("Fix the gate latch", "Batch cook for the week", "Paint the fence", "Order new bins", "Sort the loft")
+                .forEach { core.addOnBoardSized(it, today, 60) }
+        }
+        val board = core.weekBoard.value
+        val expected = core.boardNudge(board, board.weeks.first().startEpochDay)
+            ?: throw AssertionError("the core has no nudge for this week")
+        assertEquals(os.meka.core.domain.BoardNudgeKind.OVER, expected.kind)
+        assertTrue("Today is over: ${expected.line}", expected.line.startsWith("Today is ") && expected.line.contains(" over · move “"))
+        val fix = expected.fix ?: throw AssertionError("no card offered: ${expected.line}")
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        settle()
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-nudge"))
+        ScreenShots.assertSensible(compose, "inner-dark-nudge")
+        val nudge = compose.onAllNodesWithTag(NUDGE_TAG).fetchSemanticsNodes()
+        if (nudge.isEmpty()) fail("no nudge in the header")
+        assertEquals(expected.spoken, nudge.first().config[SemanticsProperties.ContentDescription].joinToString())
+        compose.onNodeWithTag(NUDGE_TAG).performClick()
+        awaitCore("nudge") { core.weekBoard.value.dayOf(fix.taskId)?.epochDay == fix.toDay }
     }
 
     private fun cardBounds(title: String): androidx.compose.ui.geometry.Rect {

@@ -79,6 +79,11 @@ struct WeekBoardScreen: View {
             }
             .buttonStyle(.borderless)
 
+            // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a click, with Undo.
+            if let nudge = model.boardNudge(board, weekStart: w.startEpochDay) {
+                ObiNudgeLine(nudge: nudge, palette: palette)
+            }
+
             // The week's goals as small gold pills across the top (Option B slice 2: the trays are lists below now).
             BoardGoalsView(week: w, palette: palette, target: $target)
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
@@ -173,6 +178,47 @@ struct WeekBoardScreen: View {
         }
         .opacity(0)
         .accessibilityHidden(true)
+    }
+}
+
+/// Option B slice 4: Obi's one-line nudge under the week's title, the mockup's pill: a small gold orb, "Obi" and the
+/// line ("Mon is 1h over · move “Gym” to Fri?"), amber when a day is over or stacking up. A line with a fix is a button
+/// (press style, light haptic, Undo on the bar). A new line cross-fades in (Reduce Motion: a plain fade).
+private struct ObiNudgeLine: View {
+    @Environment(CoreModel.self) private var model
+    @Environment(\.mekaReduceMotion) private var reduceMotion
+    let nudge: BoardNudge
+    let palette: MekaPalette
+
+    var body: some View {
+        let tone = nudge.warns ? palette.calendar3 : palette.textSecondary
+        let pill = HStack(spacing: MekaSpace.xs) {
+            Circle()
+                .fill(RadialGradient(
+                    colors: [palette.accent.opacity(0.45), palette.accent, palette.accent.opacity(0.35)],
+                    center: UnitPoint(x: 0.35, y: 0.35), startRadius: 0, endRadius: 12
+                ))
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+            Text(BoardNudgeRules.shared.SPEAKER).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+            Text(nudge.line).font(MekaType.caption).foregroundStyle(tone).lineLimit(2)
+                .id(nudge.line)
+                .transition(.opacity)
+        }
+        .padding(.leading, MekaSpace.xs).padding(.trailing, MekaSpace.m)
+        .frame(minHeight: 32)
+        .background(Capsule().fill(palette.surface))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: nudge.line)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(nudge.spoken)
+        if let task = nudge.fixTaskId {
+            let day = nudge.fixDay
+            Button { model.easePressure(taskId: task, toDay: day) } label: { pill }
+                .buttonStyle(MekaPressStyle())
+                .help("Move it there (Undo on the bar)")
+        } else {
+            pill
+        }
     }
 }
 

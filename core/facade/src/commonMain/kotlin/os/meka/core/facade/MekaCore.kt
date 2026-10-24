@@ -2146,6 +2146,16 @@ class MekaCore(
         fix?.doneLine ?: line
     }
 
+    /**
+     * Option B slice 4: Obi's one line in the Board's header for the week starting [weekStart] (its Monday) on [board]
+     * (the board the screen is drawing, so the line always matches it), or null for a week gone. A tap on a line with a
+     * fix is [easePressure] with its task and day.
+     */
+    fun boardNudge(board: os.meka.core.domain.WeekBoard, weekStart: Long): os.meka.core.domain.BoardNudge? {
+        val week = board.week(weekStart) ?: return null
+        return os.meka.core.domain.BoardNudgeRules.of(board, week, ZoneCalendar(timeZone))
+    }
+
     // ---- Week board, item (5) part 3: an overdue or due-today card in Needs you to a later day ----
 
     /** The chips To a day… offers under an overdue or due-today card in Needs you (tomorrow on). */

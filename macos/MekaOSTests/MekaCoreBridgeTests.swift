@@ -1633,6 +1633,19 @@ final class MekaCoreBridgeTests: XCTestCase {
                                  board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))
         XCTAssertEqual(lists.map(\.title), ["No day yet", "Someday", "Side hustle", "House"])
         XCTAssertEqual(lists.last?.area, BoardArea.house)
+        // Option B, slice 4: Obi's nudge in the header.
+        let nudges = BoardNudgeRules.shared
+        XCTAssertEqual(nudges.SPEAKER, "Obi")
+        XCTAssertEqual(nudges.spoken(line: "Mon is 1h over · move something?"), "Obi says: Mon is 1h over, move something?")
+        let fits = BoardNudge(kind: BoardNudgeKind.fits, line: "Everything fits this week", spoken: "", fix: nil)
+        XCTAssertFalse(fits.warns)
+        XCTAssertNil(fits.fixTaskId)
+        XCTAssertEqual(fits.fixDay, -1)
+        let move = PressureFix(taskId: "t", title: "Gym", toDay: 9, label: "Move “Gym” to Fri", earlier: false)
+        let over = BoardNudge(kind: BoardNudgeKind.over, line: "Mon is 1h over · move “Gym” to Fri?", spoken: "", fix: move)
+        XCTAssertTrue(over.warns)
+        XCTAssertEqual(over.fixTaskId, "t")
+        XCTAssertEqual(over.fixDay, 9)
         // Slice 4: the week's lane and the Someday tray.
         XCTAssertEqual(WeekBoardRules.shared.NO_DAY, "No day yet")
         XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")

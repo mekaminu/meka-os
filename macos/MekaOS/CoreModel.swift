@@ -3449,6 +3449,12 @@ final class CoreModel {
         }
     }
 
+    /// Option B slice 4: Obi's one line in the Board's header for the week starting [weekStart] on [board] (the board
+    /// the screen draws), or nil for a week gone. A line with a fix is easePressure with its task and day.
+    func boardNudge(_ board: WeekBoard, weekStart: Int64) -> BoardNudge? {
+        core?.boardNudge(board: board, weekStart: weekStart)
+    }
+
     /// ⌘← ⌘→ (a day earlier or later) and ⌘↑ ⌘↓ (a place up or down) on the selected card, and its menu.
     func nudgeOnBoard(_ id: String, days: Int, places: Int) {
         guard let core else { return }
