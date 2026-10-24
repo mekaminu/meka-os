@@ -97,7 +97,7 @@ internal fun DayTimelineView(
                 } else Modifier,
             ),
     ) {
-        Crossfade(timeline.epochDay, animationSpec = MekaMotion.appear(reduced), label = "timeline-day") { _ ->
+        Crossfade(timeline, animationSpec = MekaMotion.appear(reduced), label = "timeline-day", contentKey = { it.epochDay }) { timeline ->
             Column(Modifier.fillMaxSize()) {
                 Row(
                     Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs).semantics(mergeDescendants = true) {

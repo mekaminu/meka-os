@@ -559,13 +559,15 @@ class WeekBoardFacadeTest {
         fold.setEstimate(quote, 45)
         val tl = fold.boardTimeline(fold.weekBoard.value, today)!!
         assertEquals("Today", tl.title)
-        assertEquals(listOf("Send the quote 19:00–19:45"), tl.blocks.map { "${it.title} ${it.label}" })
+        // The task's block (an office day's commute is there too).
+        val tasks = tl.blocks.filter { it.kind == os.meka.core.domain.DayBlockKind.TASK }
+        assertEquals(listOf("Send the quote 19:00–19:45"), tasks.map { "${it.title} ${it.label}" })
         assertEquals(17 * 60 + 15, tl.nowMinute)
         fold.syncNow(); mac.syncNow()
         val onMac = mac.boardTimeline(mac.weekBoard.value, today)!!
         assertEquals(tl.blocks.map { it.label }, onMac.blocks.map { it.label })
-        // Tomorrow has nothing timed; a day off the board has no timeline.
-        assertEquals(os.meka.core.domain.BoardTimelineRules.EMPTY, fold.boardTimeline(fold.weekBoard.value, today + 1)!!.emptyLine)
+        // Tomorrow has no task at a time; a day off the board has no timeline.
+        assertTrue(fold.boardTimeline(fold.weekBoard.value, today + 1)!!.blocks.none { it.kind == os.meka.core.domain.DayBlockKind.TASK })
         assertNull(fold.boardTimeline(fold.weekBoard.value, today - 400))
     }
 }
