@@ -7,10 +7,11 @@ fold_where: Ask → Settings → Work mode → Call assistant
 mac: WORK
 mac_where: Ask → Settings → Work mode
 ---
-what: while you're at work, calls from people who aren't family, the always-ring list or a repeat caller go to a cloud voice assistant that says you're at work and takes a message.
+what: while you're at work, calls from people who aren't family, the always-ring list or a repeat caller go to Obi on a cloud phone number, who says you're at work and takes a message.
 how: Turn it on under Work mode → Call assistant, then set your network's forward-when-busy to the assistant's number (Setup lists it). The messages come to Needs you with a summary.
 mac_how: The Mac shows the messages and the settings; the screening itself happens on the Fold.
 tip: Family and the always-ring list always ring through, and a second call within 3 minutes rings.
 tip: It only takes messages: it never shares your details or agrees to anything.
+tip: Obi answers your calls as himself: he opens "Hi, this is Obi", says he is your AI assistant, and if a caller asks whether he's a robot or a real person he says plainly that he's an AI, then carries on.
 tip: Done on Needs you only clears the card: the caller's recording, words and summary stay in Activity → Calls for 7 days, then are deleted. To remove one sooner, open the call there and tap Delete recording (Undo for 5 seconds).
 tip: Ask "any calls today?", "who rang yesterday?" or "did the dentist call?" and Navilife answers from Activity → Calls on your device (the callers' words never go to the AI), with Open Calls under the answer.

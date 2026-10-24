@@ -20,6 +20,7 @@ import os.meka.core.domain.IntroJudgement
 import os.meka.core.domain.IntroVerdict
 import os.meka.core.domain.NumberLookupRules
 import os.meka.core.domain.NumberReputation
+import os.meka.core.domain.ObiCallRules
 import os.meka.core.domain.CaptureKind
 import os.meka.core.domain.EntityTypes
 import os.meka.core.domain.HeldMessageFields
@@ -101,19 +102,35 @@ sealed class VoiceReply {
      * Greet, ask for a message and record it (then [VoiceStep.RECORDED]; the transcript later to [VoiceStep.TRANSCRIBED]).
      * [atWork] picks the greeting ([CallAssistantScript.greeting]): outside work hours it doesn't say Meka is at work.
      */
-    data class TakeMessage(val atWork: Boolean = true, val greet: Boolean = true) : VoiceReply()
+    data class TakeMessage(
+        val atWork: Boolean = true, val greet: Boolean = true,
+        /** Obi slice 5: the caller asked if he's an AI; [ObiCallRules.AI_ANSWER] is said first. */
+        val aiAnswer: Boolean = false,
+    ) : VoiceReply()
     /**
      * Greet, then ask who's calling and what it's about ([CallIntroRules.INTRO_QUESTION]; the answer to
      * [VoiceStep.INTRODUCED], which then takes the message without greeting again, or ends a judged scam).
      */
-    data class AskWho(val atWork: Boolean = true) : VoiceReply()
+    data class AskWho(
+        val atWork: Boolean = true,
+        /**
+         * Obi slice 5: the caller's first words asked whether he's an AI: no greeting, [ObiCallRules.AI_ANSWER], then
+         * [ObiCallRules.ASK_WHO_AGAIN].
+         */
+        val aiAnswer: Boolean = false,
+    ) : VoiceReply()
     /**
      * Ask "is it urgent?" (answer to [VoiceStep.ANSWERED]); [atWork] picks the goodbye if nothing is answered. [again]
      * asks once more ([CallAssistantScript.URGENT_AGAIN], answer to [VoiceStep.ANSWERED_AGAIN]) after an answer the
      * assistant didn't understand.
      */
-    data class AskUrgent(val atWork: Boolean = true, val again: Boolean = false) : VoiceReply()
-    data class Goodbye(val text: String) : VoiceReply()
+    data class AskUrgent(
+        val atWork: Boolean = true, val again: Boolean = false,
+        /** Obi slice 5: asked if he's an AI: [ObiCallRules.AI_ANSWER], then [ObiCallRules.URGENT_AFTER_ANSWER]. */
+        val aiAnswer: Boolean = false,
+    ) : VoiceReply()
+    /** [aiAnswer]: the caller asked if he's an AI, so [ObiCallRules.AI_ANSWER] is said before [text] (Obi slice 5). */
+    data class Goodbye(val text: String, val aiAnswer: Boolean = false) : VoiceReply()
     /**
      * Item (c) slice 2: tell the caller to hold and ring [mobile] from [callerId] (the assistant's own number, so his
      * Fold lets it ring), playing the whisper when he answers ([VoiceStep.WHISPER]); then [VoiceStep.DIALED].
@@ -319,7 +336,7 @@ class CallClips(
             CallAssistantScript.THANKS, CallAssistantScript.THANKS_AWAY, CallAssistantScript.NO_MESSAGE,
             CallIntroRules.INTRO_QUESTION, CallIntroRules.RECORD_AFTER_INTRO, CallIntroRules.SCAM_CLOSE,
             PutThroughRules.HOLD, PutThroughRules.MISSED, PutThroughRules.CONNECTING,
-        )
+        ) + ObiCallRules.LINES
         /** A failed or partial warm-up is tried again no sooner than this (each call would otherwise ask Google). */
         const val RETRY_MS = 5 * 60_000L
         /** A few voices' worth; past it the cache starts again (a voice changed many times). */
@@ -400,6 +417,20 @@ class CallAssistant(
         if (intros.size < 500) intros[callId] = at to intro
     }
 
+    /**
+     * Calls Obi has already told he's an AI while asking who's calling (Obi slice 5), so a second asking goes on to the
+     * message rather than round again. Memory only, like [intros].
+     */
+    private val toldAi = java.util.concurrent.ConcurrentHashMap<String, Long>()
+
+    /** True the first time for [callId] (and records it). */
+    private fun firstAiAsk(callId: String): Boolean {
+        val at = now()
+        toldAi.entries.removeIf { at - it.value > INTRO_KEEP_MS }
+        if (toldAi.size >= 500) return false
+        return toldAi.putIfAbsent(callId, at) == null
+    }
+
     private fun introOf(callId: String): String? = intros[callId]?.takeIf { now() - it.first <= INTRO_KEEP_MS }?.second
 
     fun handle(provider: String, event: VoiceEvent): VoiceReply {
@@ -441,13 +472,16 @@ class CallAssistant(
                 VoiceReply.AskUrgent(atWork)
             }
             is VoiceEvent.Answered -> {
-                val answer = CallAssistantRules.isUrgentAnswer(event.digits, event.speech)
+                // Obi slice 5: "are you a robot?" is answered plainly; the rest of what they said is read as the answer.
+                val askedAi = event.digits.isNullOrBlank() && ObiCallRules.asksIfAi(event.speech)
+                val heard = if (askedAi) ObiCallRules.withoutQuestion(event.speech) else event.speech
+                val answer = CallAssistantRules.isUrgentAnswer(event.digits, heard)
                 val known = exists(hh, id)
                 // Not understood (or nothing said) the first time: ask once more rather than drop the urgency (8d).
                 val askAgain = answer == null && !event.again && known
                 // What it heard, in Activity, so Meka can see why a message was or wasn't marked urgent.
                 if (known) logAnswer(hh, id, event, answer, askAgain)
-                if (askAgain) return VoiceReply.AskUrgent(!away(hh, id), again = true)
+                if (askAgain) return VoiceReply.AskUrgent(!away(hh, id), again = true, aiAnswer = askedAi)
                 // Call notifications, slice 1: how it was answered, so "urgent" pressed by a robocall never breaks through.
                 if (known && answer != null) {
                     CallNoticeRules.answeredBy(event.digits, event.speech)?.let { by -> write(hh, id, mapOf(HeldMessageFields.URGENT_BY to by.fv())) }
@@ -458,7 +492,10 @@ class CallAssistant(
                     // Item (c) slice 2: a genuine urgent caller is offered to Meka on his mobile.
                     runCatching { putThrough(hh, id, event) }.getOrNull()?.let { return it }
                 }
-                VoiceReply.Goodbye(if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.thanks(!away(hh, id)))
+                VoiceReply.Goodbye(
+                    if (urgent) CallAssistantScript.THANKS_URGENT else CallAssistantScript.thanks(!away(hh, id)),
+                    aiAnswer = askedAi,
+                )
             }
             is VoiceEvent.Whisper -> {
                 val parent = event.parent?.takeIf { it.isNotBlank() } ?: return VoiceReply.HangUp
@@ -528,7 +565,13 @@ class CallAssistant(
      * call to see, its number on Suspected spam; anyone else goes on to leave a message.
      */
     private fun introduced(hh: String, id: String, event: VoiceEvent.Introduced): VoiceReply {
-        val intro = CallIntroRules.clean(event.speech)
+        // Obi slice 5: asked whether he's an AI, he says so plainly. A question and nothing else gets "who's calling?"
+        // once more (the first time); said with who they are, the rest is read as before.
+        val askedAi = ObiCallRules.asksIfAi(event.speech)
+        if (askedAi && !CallIntroRules.real(ObiCallRules.withoutQuestion(event.speech)) && firstAiAsk(event.callId)) {
+            return VoiceReply.AskWho(atWork(hh), aiAnswer = true)
+        }
+        val intro = CallIntroRules.clean(event.speech)?.takeUnless { askedAi && !CallIntroRules.real(ObiCallRules.withoutQuestion(it)) }
         intro?.let { keepIntro(event.callId, it) }
         val rep = event.from?.takeIf { NumberLookupRules.lookUpable(it) }?.let { n ->
             runCatching { reputation?.invoke(hh, n, REPUTATION_WAIT_MS) }.getOrNull()
@@ -536,9 +579,9 @@ class CallAssistant(
         val judged = CallIntroRules.judge(intro, rep)
         if (judged.verdict == IntroVerdict.SCAM) {
             runCatching { endAsScam(hh, id, event.from, intro, judged) }
-            return VoiceReply.Goodbye(CallIntroRules.SCAM_CLOSE)
+            return VoiceReply.Goodbye(CallIntroRules.SCAM_CLOSE, aiAnswer = askedAi)
         }
-        return VoiceReply.TakeMessage(atWork(hh), greet = false)
+        return VoiceReply.TakeMessage(atWork(hh), greet = false, aiAnswer = askedAi)
     }
 
     /**
@@ -965,12 +1008,12 @@ class TwilioVoice(
         val s = CallAssistantScript
         val body = when (reply) {
             // The call assistant talks to them (2026-10-17): greet, then ask who's calling; silence comes back too.
-            is VoiceReply.AskWho -> say(s.greeting(reply.atWork)) +
+            is VoiceReply.AskWho -> say(if (reply.aiAnswer) ObiCallRules.AI_ANSWER else s.greeting(reply.atWork)) +
                 """<Gather input="speech" timeout="${CallIntroRules.INTRO_SECONDS}" speechTimeout="auto" language="en-GB" """ +
                 """hints="${CallIntroRules.HINTS}" actionOnEmptyResult="true" action="${url(VoiceStep.INTRODUCED)}" method="POST">""" +
-                say(CallIntroRules.INTRO_QUESTION) + "</Gather>" +
+                say(if (reply.aiAnswer) ObiCallRules.ASK_WHO_AGAIN else CallIntroRules.INTRO_QUESTION) + "</Gather>" +
                 """<Redirect method="POST">${url(VoiceStep.INTRODUCED)}</Redirect>"""
-            is VoiceReply.TakeMessage -> (if (reply.greet) say(s.greeting(reply.atWork)) + say(s.RECORD_PROMPT) else say(CallIntroRules.RECORD_AFTER_INTRO)) +
+            is VoiceReply.TakeMessage -> (if (reply.aiAnswer) say(ObiCallRules.AI_ANSWER) else "") + (if (reply.greet) say(s.greeting(reply.atWork)) + say(s.RECORD_PROMPT) else say(CallIntroRules.RECORD_AFTER_INTRO)) +
                 """<Record action="${url(VoiceStep.RECORDED)}" method="POST" maxLength="${s.MAX_MESSAGE_SECONDS}" """ +
                 """timeout="${s.SILENCE_SECONDS}" finishOnKey="#" playBeep="true" transcribe="true" """ +
                 """transcribeCallback="${url(VoiceStep.TRANSCRIBED)}"/>""" +
@@ -981,9 +1024,10 @@ class TwilioVoice(
                 """<Gather input="dtmf speech" numDigits="1" timeout="${s.ANSWER_SECONDS}" speechTimeout="auto" language="en-GB" """ +
                     """hints="$URGENT_HINTS" actionOnEmptyResult="true" """ +
                     """action="${url(if (reply.again) VoiceStep.ANSWERED_AGAIN else VoiceStep.ANSWERED)}" method="POST">""" +
-                    say(if (reply.again) s.URGENT_AGAIN else s.URGENT_QUESTION) + "</Gather>" +
+                    (if (reply.aiAnswer) say(ObiCallRules.AI_ANSWER) + say(ObiCallRules.URGENT_AFTER_ANSWER)
+                    else say(if (reply.again) s.URGENT_AGAIN else s.URGENT_QUESTION)) + "</Gather>" +
                     say(s.thanks(reply.atWork)) + "<Hangup/>"
-            is VoiceReply.Goodbye -> say(reply.text) + "<Hangup/>"
+            is VoiceReply.Goodbye -> (if (reply.aiAnswer) say(ObiCallRules.AI_ANSWER) else "") + say(reply.text) + "<Hangup/>"
             // Item (c) slice 2: ring his mobile from the assistant's own number; the whisper plays when he answers.
             is VoiceReply.PutThrough -> say(PutThroughRules.HOLD) +
                 """<Dial timeout="${PutThroughRules.RING_SECONDS}" callerId="${xml(reply.callerId)}" action="${url(VoiceStep.DIALED)}" method="POST">""" +

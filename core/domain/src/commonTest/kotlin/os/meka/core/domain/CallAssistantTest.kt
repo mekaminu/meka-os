@@ -33,8 +33,8 @@ class CallAssistantTest {
     private fun syncAll() { server.sync(); a.sync(); m.sync() }
 
     @Test
-    fun theGreetingSaysItIsAnAutomatedAssistant() {
-        assertTrue("automated assistant" in CallAssistantScript.GREETING)
+    fun theGreetingSaysItIsAnAiAssistant() {
+        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, this is Obi, Meka's AI assistant."))
         assertTrue(CallAssistantScript.GREETING.endsWith("Can I take a message, and is it urgent?"))
     }
 
@@ -201,7 +201,7 @@ class CallAssistantTest {
 
     @Test
     fun outsideWorkTheGreetingAndTitleDontSayAtWork() {
-        assertTrue(CallAssistantScript.greeting(atWork = false).startsWith("Hi, this is Navilife, Meka's automated assistant. Meka can't take your call right now"))
+        assertTrue(CallAssistantScript.greeting(atWork = false).startsWith("Hi, this is Obi, Meka's AI assistant. Meka can't take your call right now"))
         assertFalse("at work" in CallAssistantScript.greeting(atWork = false))
         assertFalse("after work" in CallAssistantScript.thanks(atWork = false))
         assertEquals(CallAssistantScript.GREETING, CallAssistantScript.greeting(atWork = true))

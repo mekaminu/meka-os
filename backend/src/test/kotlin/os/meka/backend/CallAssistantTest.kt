@@ -88,6 +88,75 @@ class CallAssistantTest {
     private fun heldOps() = ops.after("hh", 0, 1000).map { it.op }.filter { it.entityType == EntityTypes.HELD_MESSAGE }
 
     @Test
+    fun askedIfHesARobotObiSaysPlainlyHesMekasAiAssistantAndCarriesOn() = testApplication {
+        // Obi slice 5, the honesty rule: the opening says he's an AI, and a caller who asks gets a plain yes.
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA700", "From" to "+447700900777", "To" to "+441234567890")
+        val answer = "I am, yes, Meka&apos;s AI assistant."
+
+        assertTrue("Hi, this is Obi, Meka&apos;s AI assistant." in hook(VoiceStep.INCOMING, *call).bodyAsText())
+        // A question and nothing else: the plain answer, then "who's calling?" once more, not the greeting again.
+        val first = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "Hello? Are you a robot?").bodyAsText()
+        assertTrue(answer in first, first)
+        assertTrue("So, may I ask who&apos;s calling" in first, first)
+        assertTrue("""action="$base/v1/voice/twilio/introduced"""" in first, first)
+        assertFalse("Hi, this is Obi" in first)
+        assertFalse("<Record" in first)
+        // Asked again: answered again, and on to the message (never round in circles).
+        val second = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "are you real").bodyAsText()
+        assertTrue(answer in second, second)
+        assertTrue("<Record" in second, second)
+        assertTrue(second.indexOf(answer) < second.indexOf("<Record"))
+
+        hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "9", "RecordingSid" to "RE7")
+        // "is it urgent?" answered with the question and a yes: answered, and the yes still counts.
+        val bye = hook(VoiceStep.ANSWERED, *call, "SpeechResult" to "Is this a recording? Yes it's urgent").bodyAsText()
+        assertTrue(answer in bye, bye)
+        assertTrue("I&apos;ll let Meka know straight away" in bye, bye)
+        assertTrue(fold().items().single().urgent)
+    }
+
+    @Test
+    fun aQuestionWithWhoTheyAreIsAnsweredAndTheirWordsKept() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA701", "From" to "+447700900778", "To" to "+441234567890")
+        hook(VoiceStep.INCOMING, *call)
+        val take = hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "Am I talking to a real person? It's Sam from the garage").bodyAsText()
+        assertTrue("I am, yes, Meka&apos;s AI assistant." in take, take)
+        assertTrue("<Record" in take, take)
+        hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "5", "RecordingSid" to "RE8")
+        assertEquals("Am I talking to a real person? It's Sam from the garage", fold().items().single().intro)
+        // Only asked "is it urgent?" and didn't understand: asked once more, without the answer.
+        val again = hook(VoiceStep.ANSWERED, *call, "SpeechResult" to "pardon").bodyAsText()
+        assertFalse("AI assistant" in again, again)
+        assertTrue("Sorry, is it urgent?" in again, again)
+        // Asked on the second go: answered, then urgency asked in its own words.
+        val asked = hook(VoiceStep.ANSWERED_AGAIN, *call, "SpeechResult" to "is this a machine").bodyAsText()
+        assertTrue("I am, yes, Meka&apos;s AI assistant." in asked, asked)
+        assertTrue("<Hangup/>" in asked)
+    }
+
+    @Test
+    fun askedWhileBeingAskedIfItsUrgentHeAnswersThenAsksAgain() = testApplication {
+        application { mekaSync(ops, devices, voice = voice) }
+        switch(true)
+        val call = arrayOf("CallSid" to "CA702", "From" to "+447700900779", "To" to "+441234567890")
+        hook(VoiceStep.INCOMING, *call)
+        hook(VoiceStep.INTRODUCED, *call, "SpeechResult" to "It's Alex about Saturday")
+        hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "6", "RecordingSid" to "RE9")
+        val asked = hook(VoiceStep.ANSWERED, *call, "SpeechResult" to "wait, are you AI?").bodyAsText()
+        assertTrue("I am, yes, Meka&apos;s AI assistant." in asked, asked)
+        assertTrue("And is your message urgent?" in asked, asked)
+        assertFalse("Sorry, is it urgent?" in asked)
+        assertTrue("""action="$base/v1/voice/twilio/answered-again"""" in asked, asked)
+        val bye = hook(VoiceStep.ANSWERED_AGAIN, *call, "Digits" to "2").bodyAsText()
+        assertFalse("AI assistant" in bye, bye)
+        assertFalse(fold().items().single().urgent)
+    }
+
+    @Test
     fun aCallerLeavesAnUrgentMessageThatReachesTheSummaryAndWakesTheFoldAtOnce() = testApplication {
         application { mekaSync(ops, devices, voice = voice) }
         switch(true)
@@ -97,7 +166,7 @@ class CallAssistantTest {
         assertEquals(HttpStatusCode.OK, greet.status)
         val twiml = greet.bodyAsText()
         assertTrue(twiml.startsWith("<?xml"))
-        assertTrue("Hi, this is Navilife, Meka&apos;s automated assistant." in twiml, twiml)
+        assertTrue("Hi, this is Obi, Meka&apos;s AI assistant." in twiml, twiml)
         // The assistant talks to them (2026-10-17): first it asks who's calling, then takes the message.
         assertTrue("""<Gather input="speech"""" in twiml, twiml)
         assertTrue("""action="$base/v1/voice/twilio/introduced"""" in twiml, twiml)
@@ -108,7 +177,7 @@ class CallAssistantTest {
         assertTrue("""transcribeCallback="$base/v1/voice/twilio/transcribed"""" in take, take)
         assertTrue("""maxLength="120"""" in take)
         assertTrue("Thank you. Please leave your message after the tone" in take, take)
-        assertFalse("Hi, this is Navilife" in take) // not greeted twice
+        assertFalse("Hi, this is Obi" in take) // not greeted twice
         assertTrue(heldOps().isEmpty())
 
         val asked = hook(VoiceStep.RECORDED, *call, "RecordingDuration" to "14", "RecordingSid" to "RE1").bodyAsText()
@@ -539,7 +608,7 @@ class CallAssistantTest {
         assertEquals("high", m["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
         assertEquals("sync", m["data"]!!.jsonObject["t"]!!.jsonPrimitive.content)
         assertEquals("normal", FcmSender.message("tok")["message"]!!.jsonObject["android"]!!.jsonObject["priority"]!!.jsonPrimitive.content)
-        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, this is Navilife, Meka's automated assistant."))
+        assertTrue(CallAssistantScript.GREETING.startsWith("Hi, this is Obi, Meka's AI assistant."))
     }
 
     @Test

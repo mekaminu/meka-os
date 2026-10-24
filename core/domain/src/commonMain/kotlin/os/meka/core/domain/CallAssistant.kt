@@ -14,8 +14,11 @@ import os.meka.core.sync.fv
  * keypad/"yes" answer to "is it urgent?" and the words "urgent"/"emergency" ([Urgency]) raise an alert.
  */
 object CallAssistantScript {
-    /** Meka's greeting (approved 2026-10-07), saying it is an automated assistant as the build plan requires. */
-    const val GREETING = "Hi, this is Navilife, Meka's automated assistant. Meka is at work right now and will call you back. " +
+    /**
+     * Meka's greeting (approved 2026-10-07), saying it is an automated assistant as the build plan requires; Obi's
+     * opening since slice 5 of "the assistant becomes Obi" ([ObiCallRules.OPENING]: his name, and that he's an AI).
+     */
+    const val GREETING = ObiCallRules.OPENING + " Meka is at work right now and will call you back. " +
         "Can I take a message, and is it urgent?"
     const val RECORD_PROMPT = "Please leave your message after the tone, then press the hash key or just hang up."
     const val URGENT_QUESTION = "Is it urgent? Press 1 or say yes if it is. Press 2 or say no if it can wait."
@@ -31,7 +34,7 @@ object CallAssistantScript {
      * Outside work hours (call assistant polish 6, Meka heard the at-work greeting at 20:50): calls only reach the
      * assistant then when Meka declines one, so it doesn't say he is at work.
      */
-    const val GREETING_AWAY = "Hi, this is Navilife, Meka's automated assistant. Meka can't take your call right now and will call you back. " +
+    const val GREETING_AWAY = ObiCallRules.OPENING + " Meka can't take your call right now and will call you back. " +
         "Can I take a message, and is it urgent?"
     const val THANKS_AWAY = "Thank you. Meka will get your message and call you back. Goodbye."
 
