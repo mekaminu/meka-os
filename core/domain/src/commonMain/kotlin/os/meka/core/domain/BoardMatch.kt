@@ -195,4 +195,40 @@ object BoardMatchRules {
 
     /** The orb's size in the pill (the mockup's 30 px at 1280, scaled to the app's header). */
     const val NUDGE_ORB = 24
+
+    // ---- Slice 4 (2026-10-24): the side-by-side check's gaps ----
+
+    /**
+     * The words beside a card's dot in its foot, on every lane, the narrow unfolded weekday columns included (the
+     * mockup's "● House"; they showed the dot alone): the area's name ("Family", "Side hustle"), else where the card
+     * came from ("Mail"); null when it has neither (no dot either). One line, cut short with "…" if a lane is tight.
+     */
+    fun footLabel(card: BoardCard): String? {
+        BoardAreaRules.of(card)?.let { return BoardAreaRules.label(it) }
+        return card.source?.let { BoardPlannerRules.sourceLabel(it) }
+    }
+
+    /** Whether the foot's words show on a lane: always now (the narrow lanes cut them short rather than drop them). */
+    fun footWords(compact: Boolean): Boolean = true
+
+    /**
+     * The budget pill's two parts on a lane: "planned" and the figures ("4h 05 / 3h"). A roomy lane draws them on one
+     * row, the label left and the figures right (the mockup); a narrow one ([compact]) stacks them, "planned" over the
+     * figures, so the word is never dropped and "nothing yet / 6h 15" still has its whole line.
+     */
+    fun pillLabel(b: PlannerBudget): String = b.label
+    fun pillStacked(compact: Boolean): Boolean = compact
+
+    /**
+     * The header's buttons as the mockup draws them (`.btn`): round, outlined in the hairline on the card surface, 40
+     * high and at least 40 wide; ‹ › are circles, Today a pill. The tap target stays at least the platform's minimum.
+     */
+    const val BUTTON = 40
+
+    /** The quiet line under a past day with nothing on it (no tasks, no events), so the column is never a bare date. */
+    const val NOTHING_PLANNED = "Nothing planned"
+
+    /** [NOTHING_PLANNED] for a past day with no cards and no events; null otherwise (today and later have "+ add"). */
+    fun pastEmpty(day: BoardDay): String? =
+        if (day.isPast && day.cards.isEmpty() && day.chips.isEmpty() && day.moreChips == 0) NOTHING_PLANNED else null
 }

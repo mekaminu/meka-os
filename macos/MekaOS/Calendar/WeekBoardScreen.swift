@@ -63,11 +63,17 @@ struct WeekBoardScreen: View {
 
     /// Today, Review, Timeline, Plan your week and ‹ › on the header's right.
     @ViewBuilder private var weekButtons: some View {
-        Button(BoardMatchRules.shared.TODAY) { MekaHaptics.tick(); goTo(0) }
-            .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
-            .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
-            .help("Back to this week")
+        // Match slice 4: the mockup's round buttons (`.btn`), 40 high, outlined on the card surface.
+        Button { MekaHaptics.tick(); goTo(0) } label: {
+            Text(BoardMatchRules.shared.TODAY).font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                .padding(.horizontal, MekaSpace.m)
+                .frame(height: CGFloat(BoardMatchRules.shared.BUTTON))
+                .background(Capsule().fill(palette.surface))
+                .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .help("Back to this week")
         // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
         if board.offersReview && week == 0 {
             Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
@@ -86,11 +92,15 @@ struct WeekBoardScreen: View {
             .foregroundStyle(palette.accent).font(MekaType.itemMeta)
             .keyboardShortcut("p", modifiers: [.command, .shift])
             .help("Plan your week (⇧⌘P)")
-        Button { step(-1) } label: { Image(systemName: "chevron.left") }
+        Button { step(-1) } label: { RoundStep(systemName: "chevron.left", palette: palette) }
+            .buttonStyle(.plain)
+            .opacity(week == 0 ? 0.3 : 1)
             .disabled(week == 0)
             .keyboardShortcut("[", modifiers: .command)
             .help("Previous week")
-        Button { step(1) } label: { Image(systemName: "chevron.right") }
+        Button { step(1) } label: { RoundStep(systemName: "chevron.right", palette: palette) }
+            .buttonStyle(.plain)
+            .opacity(week >= board.weeks.count - 1 ? 0.3 : 1)
             .disabled(week >= board.weeks.count - 1)
             .keyboardShortcut("]", modifiers: .command)
             .help("Next week")
@@ -472,6 +482,10 @@ private struct BoardColumnView: View {
             }
             // Option B match: "+ add" at the foot of every day from today, a quiet dashed button; the field opens there.
             if day.canDrop { BoardAddRow(day: day, palette: palette) }
+            // Match slice 4: a past day with nothing on it says so quietly under its date, never a bare column.
+            if let empty = BoardMatchRules.shared.pastEmpty(day: day) {
+                Text(empty).font(MekaType.caption).foregroundStyle(palette.textTertiary).lineLimit(1)
+            }
             Spacer(minLength: 0)
         }
         .padding(MekaSpace.xs)
@@ -712,17 +726,18 @@ private struct BoardCardView: View {
                 if let area = BoardAreaRules.shared.of(card: card) {
                     HStack(spacing: MekaSpace.xxs) {
                         Circle().fill(palette.areaTone(area)).frame(width: 8, height: 8)
-                        if !compact {
+                        // Match slice 4: the name shows on the narrow lanes too, cut short with "…" if it must be.
+                        if BoardMatchRules.shared.footWords(compact: compact) {
                             Text(BoardAreaRules.shared.label(area: area)).font(MekaType.micro)
-                                .foregroundStyle(palette.textSecondary).lineLimit(1)
+                                .foregroundStyle(palette.textSecondary).lineLimit(1).truncationMode(.tail)
                         }
                     }
                 } else if let source = card.source {
                     HStack(spacing: MekaSpace.xxs) {
                         Circle().fill(palette.calendarTone(source.tone)).frame(width: 8, height: 8)
-                        if !compact {
+                        if BoardMatchRules.shared.footWords(compact: compact) {
                             Text(planner.sourceLabel(source: source)).font(MekaType.micro)
-                                .foregroundStyle(palette.textSecondary).lineLimit(1)
+                                .foregroundStyle(palette.textSecondary).lineLimit(1).truncationMode(.tail)
                         }
                     }
                     .help(source.label)
@@ -922,6 +937,22 @@ private struct DayProgressBar: View {
     }
 }
 
+/// ‹ or › in the Board's header. Match slice 4: the mockup's round outlined button, a 40 pt circle on the card surface
+/// edged in the hairline.
+private struct RoundStep: View {
+    let systemName: String
+    let palette: MekaPalette
+
+    var body: some View {
+        let size = CGFloat(BoardMatchRules.shared.BUTTON)
+        Image(systemName: systemName).font(.system(size: 13, weight: .semibold)).foregroundStyle(palette.textPrimary)
+            .frame(width: size, height: size)
+            .background(Circle().fill(palette.surface))
+            .overlay(Circle().strokeBorder(palette.hairline, lineWidth: 1))
+            .contentShape(Circle())
+    }
+}
+
 /// Option B, slice 1: the day's budget pill under its header, "planned · 4h 05 / 3h" (a narrow lane: "4h 05 / 3h"),
 /// edged gold on today, its thin bar filling gold; amber when more is planned than the day has free, the bar breathing
 /// gently then; colours cross-fade and the width glides. Reduce Motion: steady, no glide.
@@ -939,9 +970,14 @@ private struct BudgetPill: View {
         let edge = b.over ? palette.calendar3.opacity(0.7) : (today ? palette.accent : palette.hairline)
         VStack(spacing: 0) {
             HStack(spacing: MekaSpace.xs) {
-                if compact {
-                    Text(BoardPlannerRules.shared.compactLine(b: b)).font(BoardFont.mono)
-                        .foregroundStyle(b.over ? palette.calendar3 : palette.textSecondary).lineLimit(2)
+                if BoardMatchRules.shared.pillStacked(compact: compact) {
+                    // Match slice 4: a narrow lane stacks "planned" over the figures, so the word is never dropped.
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text(BoardMatchRules.shared.pillLabel(b: b)).font(BoardFont.mono)
+                            .foregroundStyle(palette.textTertiary).lineLimit(1)
+                        Text(BoardPlannerRules.shared.compactLine(b: b)).font(BoardFont.mono)
+                            .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(2)
+                    }
                     Spacer(minLength: 0)
                 } else {
                     Text(b.label).font(BoardFont.mono).foregroundStyle(palette.textTertiary).lineLimit(1)
@@ -1301,8 +1337,9 @@ private struct BoardEventCardView: View {
                 HStack(spacing: MekaSpace.xxs) {
                     Spacer(minLength: 0)
                     CalendarDot(tone: card.tone, palette: palette)
-                    if !compact {
+                    if BoardMatchRules.shared.footWords(compact: compact) {
                         Text(card.calendar).font(MekaType.micro).foregroundStyle(palette.textSecondary).lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
             }

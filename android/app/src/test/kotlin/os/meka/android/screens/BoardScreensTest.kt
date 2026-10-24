@@ -434,6 +434,39 @@ class BoardScreensTest {
     }
 
     /**
+     * Option B match, slice 4 (the side-by-side check's gaps), unfolded on a Wednesday: a House card on today's narrow
+     * weekday column carries "House" beside its dot (it showed the dot alone); today's budget pill says "planned" over
+     * its figures; ‹ › are the mockup's round outlined buttons; empty Monday and Tuesday each say "Nothing planned".
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theChecksGapsAreClosed() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val id = core.addOnBoardSized("Fix the gate latch", core.weekBoard.value.todayEpochDay, 45)!!
+            core.areaOnBoard(id, os.meka.core.domain.BoardArea.HOUSE)
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-match-gaps"))
+        ScreenShots.assertSensible(compose, "inner-dark-match-gaps")
+        val card = cardBounds("Fix the gate latch")
+        val labels = compose.onAllNodesWithTag(AREA_LABEL_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        val house = labels.firstOrNull { it.boundsInRoot.top >= card.top && it.boundsInRoot.bottom <= card.bottom }
+            ?: throw AssertionError("no area name on today's card")
+        assertEquals("House", house.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text })
+        assertTrue("the area name has its width", house.boundsInRoot.width > 0f)
+        if (compose.onAllNodesWithText("planned", useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no \"planned\" in the pills")
+        // The narrow weekday lanes stack "planned" over the figures (the value's own tag only exists in that layout).
+        if (compose.onAllNodesWithTag(BUDGET_VALUE_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no stacked pill on the weekday lanes")
+        val steps = compose.onAllNodesWithTag(STEP_TAG).fetchSemanticsNodes()
+        assertEquals("‹ and ›", 2, steps.size)
+        val empty = compose.onAllNodesWithTag(PAST_EMPTY_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        assertEquals("Monday and Tuesday say Nothing planned", 2, empty.size)
+        assertTrue(empty.all { n -> n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } == os.meka.core.domain.BoardMatchRules.NOTHING_PLANNED })
+    }
+
+    /**
      * Option B match, slice 2: unfolded, the lists at the foot are the mockup's card columns: a hairline, then Someday,
      * Side hustle, House and No day yet left to right with their names in serif (no " · 3" in the name), and a Someday
      * card with no time or length is its title and foot only (no "Any time" chip below the hairline).

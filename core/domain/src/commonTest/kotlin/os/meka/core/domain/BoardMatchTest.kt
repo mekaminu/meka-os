@@ -165,4 +165,42 @@ class BoardMatchTest {
         assertTrue(BoardMatchRules.NUDGE_MAX_WIDTH in 300..480)
         assertTrue(BoardMatchRules.NUDGE_LINES >= 1)
     }
+
+    // ---- Slice 4: the side-by-side check's gaps ----
+
+    @Test
+    fun theFootNamesTheAreaOnEveryLaneTheNarrowOnesToo() {
+        val house = card("h").copy(task = task("h").copy(area = BoardArea.HOUSE.name))
+        val hustle = card("x").copy(task = task("x").copy(area = BoardArea.SIDE_HUSTLE.name))
+        val none = card("n").copy(task = task("n").copy(area = "NONE"))
+        assertEquals("House", BoardMatchRules.footLabel(house))
+        assertEquals("Side hustle", BoardMatchRules.footLabel(hustle))
+        assertNull(BoardMatchRules.footLabel(none))
+        assertTrue(BoardMatchRules.footWords(compact = true))
+        assertTrue(BoardMatchRules.footWords(compact = false))
+    }
+
+    @Test
+    fun theWordPlannedStaysInEveryPillStackedOnANarrowLane() {
+        val b = BoardPlannerRules.budget(BoardCapacity(245, 180, 0))
+        assertEquals("planned", BoardMatchRules.pillLabel(b))
+        assertEquals("4h 05 / 3h", b.value)
+        assertTrue(BoardMatchRules.pillStacked(compact = true))
+        assertFalse(BoardMatchRules.pillStacked(compact = false))
+    }
+
+    @Test
+    fun theHeadersButtonsAreTheMockupsRoundOnes() {
+        assertEquals(40, BoardMatchRules.BUTTON)
+    }
+
+    @Test
+    fun anEmptyPastDaySaysSoQuietly() {
+        assertEquals("Nothing planned", BoardMatchRules.pastEmpty(day(mon26, past = true)))
+        assertNull(BoardMatchRules.pastEmpty(day(mon26)))
+        assertNull(BoardMatchRules.pastEmpty(withCards(mon26, listOf(card("a"))).copy(isPast = true)))
+        val withEvent = day(mon26, listOf(BoardChip("s", "09:30", "Stand-up", 1, event("s", 570, 600))), past = true)
+        assertNull(BoardMatchRules.pastEmpty(withEvent))
+        assertNull(BoardMatchRules.pastEmpty(day(mon26, past = true).copy(moreChips = 2)))
+    }
 }

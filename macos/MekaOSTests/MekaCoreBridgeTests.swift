@@ -1646,6 +1646,13 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(match.nudgePlace(wide: true), BoardNudgePlace.besideToday)
         XCTAssertEqual(match.nudgePlace(wide: false), BoardNudgePlace.underTitle)
         XCTAssertEqual(match.NUDGE_MAX_WIDTH, 420)
+        // Option B match, slice 4: the check's gaps (area names on narrow lanes, "planned" stacked, round buttons, empty past days).
+        XCTAssertTrue(match.footWords(compact: true))
+        XCTAssertTrue(match.pillStacked(compact: true))
+        XCTAssertFalse(match.pillStacked(compact: false))
+        XCTAssertEqual(match.pillLabel(b: budget), "planned")
+        XCTAssertEqual(match.BUTTON, 40)
+        XCTAssertEqual(match.NOTHING_PLANNED, "Nothing planned")
         // Option B match, slice 2: the lists in the mockup's order with the name apart from the count; the timeline's colours.
         let matchLists = match.lists(week: BoardWeek(startEpochDay: 0, title: "This week", range: "", days: [], lane: [], goals: []),
                                      board: WeekBoard(todayEpochDay: 0, weeks: [], someday: []))

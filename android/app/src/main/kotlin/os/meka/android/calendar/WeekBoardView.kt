@@ -64,6 +64,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -873,13 +874,20 @@ private fun WeekHeader(
     }
     val buttons: @Composable () -> Unit = {
         // Folded, the day strip already takes him to today; unfolded, Today goes back to this week.
-        if (wide) Text(
-            BoardMatchRules.TODAY, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
-            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
-                .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
-                .clickable(role = Role.Button) { haptics.tick(); onToday() }
-                .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
-        )
+        // Match slice 4: the mockup's round button, 40 high, outlined on the card surface.
+        if (wide) Box(
+            Modifier.heightIn(min = MekaSpace.touch).clickable(role = Role.Button) { haptics.tick(); onToday() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                BoardMatchRules.TODAY, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
+                modifier = Modifier.height(BoardMatchRules.BUTTON.dp).clip(RoundedCornerShape(MekaRadius.pill))
+                    .background(Meka.colors.surface)
+                    .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
+                    .wrapContentHeight(Alignment.CenterVertically)
+                    .padding(horizontal = MekaSpace.m),
+            )
+        }
         // Item (8): from Friday, on this week, Review the week (tick haptic; Review slides in as a tab change).
         if (board.offersReview && week == 0) {
             Text(
@@ -1018,16 +1026,34 @@ internal const val LISTS_RULE_TAG = "board-lists-rule"
 /** Obi's nudge line in the header (Option B slice 4, UI tests). */
 internal const val NUDGE_TAG = "board-nudge"
 
+/**
+ * ‹ or › in the header. Match slice 4: the mockup's round outlined button (`.btn`), a 40 dp circle on the card surface
+ * edged in the hairline, inside the 48 dp touch target; dimmed when there's no week that way.
+ */
 @Composable
 private fun StepButton(glyph: String, label: String, enabled: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(MekaSpace.touch).clip(CircleShape)
             .then(if (enabled) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier)
             .alpha(if (enabled) 1f else 0.3f)
-            .semantics { contentDescription = label },
+            .semantics { contentDescription = label }
+            .testTag(STEP_TAG),
         contentAlignment = Alignment.Center,
-    ) { Text(glyph, style = MekaType.itemTitle, color = Meka.colors.textSecondary) }
+    ) {
+        Box(
+            Modifier.size(BoardMatchRules.BUTTON.dp).clip(CircleShape).background(Meka.colors.surface)
+                .border(1.dp, Meka.colors.hairline, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Text(glyph, style = MekaType.itemTitle, color = Meka.colors.textPrimary) }
+    }
 }
+
+/** ‹ and › in the header (Option B match slice 4, UI tests). */
+internal const val STEP_TAG = "board-step"
+/** The words beside a card's dot (Option B match slice 4, UI tests). */
+internal const val AREA_LABEL_TAG = "board-area-label"
+/** "Nothing planned" under an empty past day (Option B match slice 4, UI tests). */
+internal const val PAST_EMPTY_TAG = "board-past-empty"
 
 @Composable
 private fun DayColumn(
@@ -1169,6 +1195,10 @@ private fun DayColumn(
         }
         // Option B match: "+ add" at the foot of every day from today, a quiet dashed button; the field opens there.
         if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd)
+        // Match slice 4: a past day with nothing on it says so quietly under its date, never a bare column.
+        BoardMatchRules.pastEmpty(day)?.let {
+            Text(it, style = MekaType.caption, color = Meka.colors.textTertiary, maxLines = 1, modifier = Modifier.testTag(PAST_EMPTY_TAG))
+        }
     }
     }
 }
@@ -1395,29 +1425,31 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // The tick keeps its own target (Compose widens a small one's touch area to 48 dp past its edges).
             TickTarget(card.done, card.title, onTick, column = FOOT_TICK, height = FOOT_TICK)
-            Spacer(Modifier.weight(1f))
-            if (foot.isNotEmpty()) {
-                FlowRow(
-                    Modifier.weight(1f, fill = false).padding(vertical = MekaSpace.xxs),
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs, Alignment.End),
-                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-                ) { foot.forEach { CardChipPill(it) } }
-            }
-            // Option B slice 3: the area's colour dot and name ("● Family"); a card with no area keeps slice 5's dot for
-            // where it came from ("● Mail"). The screen reader hears either in the card's label.
-            val area = BoardAreaRules.of(card)
-            val src = card.source
-            if (area != null || src != null) {
-                Row(Modifier.padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-                    val dot = if (area != null) Meka.colors.areaTone(area) else Meka.colors.calendarTone(src!!.tone)
-                    Box(Modifier.size(8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
-                    if (!compact) {
-                        Spacer(Modifier.width(MekaSpace.xxs))
-                        Text(
-                            if (area != null) BoardAreaRules.label(area) else BoardPlannerRules.sourceLabel(src!!),
-                            style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
-                            modifier = Modifier.clearAndSetSemantics {},
-                        )
+            Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                if (foot.isNotEmpty()) {
+                    FlowRow(
+                        Modifier.weight(1f, fill = false).padding(vertical = MekaSpace.xxs),
+                        horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs, Alignment.End),
+                        verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                    ) { foot.forEach { CardChipPill(it) } }
+                }
+                // Option B slice 3: the area's colour dot and name ("● Family"); a card with no area keeps slice 5's dot
+                // for where it came from ("● Mail"). Match slice 4: the name shows on the narrow lanes too, cut short
+                // with "…" if it must be. The screen reader hears either in the card's label.
+                val area = BoardAreaRules.of(card)
+                val src = card.source
+                val words = BoardMatchRules.footLabel(card)
+                if (area != null || src != null) {
+                    Row(Modifier.weight(1f, fill = false).padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                        val dot = if (area != null) Meka.colors.areaTone(area) else Meka.colors.calendarTone(src!!.tone)
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
+                        if (words != null && BoardMatchRules.footWords(compact)) {
+                            Spacer(Modifier.width(MekaSpace.xxs))
+                            Text(
+                                words, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.clearAndSetSemantics {}.testTag(AREA_LABEL_TAG),
+                            )
+                        }
                     }
                 }
             }
@@ -1470,9 +1502,13 @@ private fun EventCard(e: os.meka.core.domain.BoardEventCard, onOpen: () -> Unit)
         Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
             Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.calendarTone(e.tone)))
-            if (!compact) {
+            // Match slice 4: the calendar's name on the narrow lanes too, cut short if it must be.
+            if (BoardMatchRules.footWords(compact)) {
                 Spacer(Modifier.width(MekaSpace.xxs))
-                Text(e.calendar, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    e.calendar, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
             }
         }
     }
@@ -1822,9 +1858,16 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
             .clearAndSetSemantics { contentDescription = b.spoken },
     ) {
         Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
-            if (compact) {
-                // A narrow lane lets "nothing yet / 6h 15" wrap rather than cut it short.
-                Text(BoardPlannerRules.compactLine(b), style = figures, color = if (b.over) amber else Meka.colors.textSecondary, maxLines = 2)
+            if (BoardMatchRules.pillStacked(compact)) {
+                // Match slice 4: a narrow lane stacks "planned" over the figures, so the word stays and "nothing yet /
+                // 6h 15" keeps its whole line (it may still wrap rather than be cut short).
+                Column {
+                    Text(BoardMatchRules.pillLabel(b), style = figures, color = Meka.colors.textTertiary, maxLines = 1)
+                    Text(
+                        BoardPlannerRules.compactLine(b), style = figures, color = if (b.over) amber else Meka.colors.textPrimary, maxLines = 2,
+                        modifier = Modifier.testTag(BUDGET_VALUE_TAG),
+                    )
+                }
             } else {
                 Text(b.label, style = figures, color = Meka.colors.textTertiary, maxLines = 1)
                 Spacer(Modifier.weight(1f))
@@ -1841,6 +1884,8 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
 
 /** The day's budget pill (Option B slice 1, UI tests). */
 internal const val BUDGET_TAG = "board-budget"
+/** The budget pill's figures on a narrow lane, under "planned" (Option B match slice 4, UI tests). */
+internal const val BUDGET_VALUE_TAG = "board-budget-value"
 
 /**
  * Item (10): "Stacking up: Trip form, Council tax and Gym" in amber under a day's capacity, with its one-tap fixes in
