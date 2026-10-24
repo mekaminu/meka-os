@@ -3221,6 +3221,8 @@ docs/screens/fold/shutdown/.
   notes, the reviewed line and Wins' week line keep their last words together (LoneWordGlue).
 - Design check: no design file covers Review. Balance and Reflect (null here) are shot in the next slice. No server
   change, no migration, Mac checked nightly.
+- 39b9d3a, then a817aca: run 1179's android job hung (the lazy list's scroll waited for a frame with the test clock
+  held); the clock now runs while it scrolls and types. CI run 1180 (40072329385) green; shots published ea9b35d.
 
 ### Quality gate — slice 60 (2026-10-24): Navilife's AI's shots and its first hand test
 
