@@ -60,7 +60,8 @@ object FaceFileRules {
     /** The index as text for the device's storage: `checkedAtMs`, then `name\ttag` per line. Unreadable lines are dropped. */
     fun encode(index: Index): String = buildString {
         append(index.checkedAtMs).append('\n')
-        index.kept.toSortedMap().forEach { (n, t) -> append(n).append('\t').append(t).append('\n') }
+        // Sorted by hand: toSortedMap is JVM-only and breaks the Mac's Kotlin/Native build (nightly run 1216).
+        index.kept.entries.sortedBy { it.key }.forEach { (n, t) -> append(n).append('\t').append(t).append('\n') }
     }
 
     fun decode(text: String?, allowed: Set<String>): Index {
