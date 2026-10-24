@@ -128,6 +128,16 @@ import os.meka.core.facade.MekaCore
  */
 @Composable
 fun BedsideClock(core: MekaCore, fold: FoldState, onBack: () -> Unit = {}) {
+    // The watch face reads the core's clock and zone, like the time beside it (quality gate slice 63: the shots' face
+    // showed the test machine's time). On a real phone the shift is nothing.
+    val faceClock = remember(core) { os.meka.android.today.FaceClock(core.clockShiftMs()) { core.zoneOffsetMs(it) } }
+    androidx.compose.runtime.CompositionLocalProvider(os.meka.android.today.LocalFaceClock provides faceClock) {
+        BedsideClockContent(core, fold, onBack)
+    }
+}
+
+@Composable
+private fun BedsideClockContent(core: MekaCore, fold: FoldState, onBack: () -> Unit) {
     val context = LocalContext.current
     val view = LocalView.current
     val activity = LocalActivity.current
@@ -482,6 +492,14 @@ private fun isCharging(context: Context): Boolean {
  */
 @Composable
 fun BedsideDream(core: MekaCore, onDim: (Boolean) -> Unit) {
+    val faceClock = remember(core) { os.meka.android.today.FaceClock(core.clockShiftMs()) { core.zoneOffsetMs(it) } }
+    androidx.compose.runtime.CompositionLocalProvider(os.meka.android.today.LocalFaceClock provides faceClock) {
+        BedsideDreamContent(core, onDim)
+    }
+}
+
+@Composable
+private fun BedsideDreamContent(core: MekaCore, onDim: (Boolean) -> Unit) {
     val context = LocalContext.current
     var v by remember { mutableStateOf(core.bedsideDream(nextAlarm(context))) }
     LaunchedEffect(core) {
