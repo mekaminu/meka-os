@@ -2039,6 +2039,11 @@ final class CoreModel {
         return offered
     }
 
+    /// Meka 2026-10-24 19:26: why the last look wasn't all seven (the server's note, its status or the failure); a String only.
+    func faceLastWhy() -> String? {
+        core?.faceLastWhy()
+    }
+
     /// One of the face's seven files as bytes (nil when not there or offline); the core refuses any other name.
     func faceFileData(_ name: String) async -> Data? {
         guard let core else { return nil }

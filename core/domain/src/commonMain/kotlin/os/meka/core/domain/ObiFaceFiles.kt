@@ -170,9 +170,11 @@ class MouthFollower {
 /**
  * Meka 2026-10-24 13:12: the face didn't show after he uploaded the files, and nothing said why. A device's last look
  * at the server's face list: when, what the server listed ([offered]; null when the look itself failed) and which of
- * those didn't come down ([notFetched]). Kept beside the cache's index; names only (the seven allowed ones).
+ * those didn't come down ([notFetched]). Kept beside the cache's index; names only (the seven allowed ones). [why]
+ * (Meka 2026-10-24 19:26): what the server said when it wasn't all seven: its own note on its storage, the status it
+ * answered ("server answered 404 to /v1/face/manifest") or the failure; one line, at most [FaceHealthRules.WHY_MAX].
  */
-data class FaceCheck(val atMs: Long, val offered: List<String>?, val notFetched: List<String> = emptyList())
+data class FaceCheck(val atMs: Long, val offered: List<String>?, val notFetched: List<String> = emptyList(), val why: String? = null)
 
 /** What Health shows about the face on this device: the Face setting, how many of the seven are kept, the last look. */
 data class FaceHealth(val on: Boolean, val kept: Int, val check: FaceCheck?)
@@ -192,9 +194,10 @@ object FaceHealthRules {
         if (h.kept >= total) return "Face · $total of $total files on $here"
         val c = h.check ?: return "Face · not looked for yet · ${h.kept} of $total on $here"
         val looked = "last looked ${HealthRules.at(c.atMs, nowMs, cal)}"
-        val offered = c.offered ?: return "Face · couldn't reach the server ($looked)"
+        val why = clean(c.why)?.let { ": $it" } ?: ""
+        val offered = c.offered ?: return "Face · couldn't reach the server$why ($looked)"
         val listed = offered.filter { FaceFileRules.allowed(it) }.toSet()
-        if (listed.isEmpty()) return "Face · waiting: 0 of $total on the server ($looked)"
+        if (listed.isEmpty()) return "Face · waiting: 0 of $total on the server$why ($looked)"
         if (listed.size < total) {
             val missing = FaceFileRules.FILES.filter { it !in listed }
             return "Face · server has ${listed.size} of $total: missing ${missing.joinToString(", ")} ($looked)"
@@ -213,6 +216,11 @@ object FaceHealthRules {
         return offered.filter { FaceFileRules.allowed(it) }.toSet().size >= TOTAL
     }
 
+    const val WHY_MAX = 160
+
+    private fun clean(s: String?): String? =
+        s?.map { if (it.isISOControl() || it == '\n') ' ' else it }?.joinToString("")?.trim()?.take(WHY_MAX)?.takeIf { it.isNotEmpty() }
+
     /** Look again shows while the face is on (it forces a look now, whatever [FaceFileRules.due] says). */
     fun lookAgain(h: FaceHealth?): Boolean = h != null && h.on
 
@@ -222,6 +230,7 @@ object FaceHealthRules {
         append(if (c.offered == null) "failed" else "ok").append('\n')
         append(c.offered.orEmpty().filter { FaceFileRules.allowed(it) }.sorted().joinToString(",")).append('\n')
         append(c.notFetched.filter { FaceFileRules.allowed(it) }.sorted().joinToString(",")).append('\n')
+        clean(c.why)?.let { append(it).append('\n') }
     }
 
     fun decode(text: String?): FaceCheck? {
@@ -234,6 +243,6 @@ object FaceHealthRules {
             "failed" -> null
             else -> return null
         }
-        return FaceCheck(at, offered, names(3))
+        return FaceCheck(at, offered, names(3), clean(lines.getOrNull(4)))
     }
 }

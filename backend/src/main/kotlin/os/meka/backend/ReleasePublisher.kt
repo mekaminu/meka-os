@@ -276,7 +276,7 @@ class ReleasePublisherClient(private val key: PrivateKey, private val post: Post
  * The private key comes from the environment (`MEKA_PUBLISHER_PRIVATE_KEY`), never an argument, and is never printed.
  */
 object ReleasePublisherCli {
-    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-speed", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms", "publisher-fuel")
+    val COMMANDS = setOf("publisher-keygen", "publisher-latest", "publisher-publish", "publisher-failures", "publisher-postures", "publisher-speed", "publisher-notifications", "publisher-calls", "publisher-assistant", "publisher-mail", "publisher-bank", "publisher-trains", "publisher-google", "publisher-spam", "publisher-kms", "publisher-fuel", "publisher-face")
     const val FAILURE_DAYS = 14
 
     fun run(args: List<String>): Int {
@@ -378,6 +378,12 @@ object ReleasePublisherCli {
                     println(kmsLine(l.kms))
                     0
                 }
+                "publisher-face" -> {
+                    val l = runCatching { client.notifications() }
+                        .getOrElse { println("::warning title=Obi's face (server)::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
+                    println(faceLine(l.face))
+                    0
+                }
                 "publisher-mail" -> {
                     val l = runCatching { client.notifications() }
                         .getOrElse { println("::notice title=Mail autopilot::couldn't read it (${it.message?.take(120)})"); return@runBlocking 0 }
@@ -398,6 +404,16 @@ object ReleasePublisherCli {
                 }
             }
         }
+    }
+
+    /**
+     * Obi's face (Meka 2026-10-24 19:26): the deployed server's own count of the seven files it can list, one notice;
+     * a warning unless it lists all seven under face/.
+     */
+    fun faceLine(line: String?): String {
+        if (line == null) return "::warning title=Obi's face (server)::the server doesn't report it yet"
+        val ok = line.startsWith("the server lists 7 of 7") && !line.contains(" · ")
+        return "::${if (ok) "notice" else "warning"} title=Obi's face (server)::$line".replace("%", "%25")
     }
 
     /** Money's bank sync: one notice (a warning unless it's syncing); counts only, never a name or an amount. */

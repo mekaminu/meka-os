@@ -111,6 +111,8 @@ object NotifyDiagnosticsCodec {
         val kms: String? = null,
         /** Fuel prices (Needs Meka #34): Fuel Finder's token and prices, forecourts per fuel; counts only. */
         val fuel: String? = null,
+        /** Obi's face (2026-10-24): the server's own look at its storage for the seven files; names and counts only. */
+        val face: String? = null,
     )
 
     fun encodeReport(r: Report): String = obj(r).toString()
@@ -164,6 +166,7 @@ object NotifyDiagnosticsCodec {
         l.spam?.let { put("spam", clean(it, MAIL_DETAIL_MAX)) }
         l.kms?.let { put("kms", clean(it, MAIL_DETAIL_MAX)) }
         l.fuel?.let { put("fuel", clean(it, MAIL_DETAIL_MAX)) }
+        l.face?.let { put("face", clean(it, MAIL_DETAIL_MAX)) }
     }.toString()
 
     fun decodeLatest(body: String): Latest = wrap("notification answer") {
@@ -191,6 +194,7 @@ object NotifyDiagnosticsCodec {
             spam = o.str("spam")?.let { clean(it, MAIL_DETAIL_MAX) },
             kms = o.str("kms")?.let { clean(it, MAIL_DETAIL_MAX) },
             fuel = o.str("fuel")?.let { clean(it, MAIL_DETAIL_MAX) },
+            face = o.str("face")?.let { clean(it, MAIL_DETAIL_MAX) },
         )
     }
 

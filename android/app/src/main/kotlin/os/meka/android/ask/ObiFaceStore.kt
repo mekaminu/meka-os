@@ -110,7 +110,7 @@ object ObiFaceStore {
         }
         val offered = core.faceManifest()
         if (offered == null) {
-            writeCheck(context, os.meka.core.domain.FaceCheck(now, null))
+            writeCheck(context, os.meka.core.domain.FaceCheck(now, null, why = core.faceLastWhy()))
             // With the face kept, the next open simply asks again; without it, not for another few hours.
             if (!index.complete) writeIndex(context, FaceFileRules.failed(index, now))
             _ready.value = index.complete
@@ -128,7 +128,7 @@ object ObiFaceStore {
             dest.delete()
             if (tmp.renameTo(dest)) fetched[name] = offered.getValue(name) else tmp.delete()
         }
-        writeCheck(context, os.meka.core.domain.FaceCheck(now, offered.keys.toList(), plan.fetch.filter { it !in fetched }))
+        writeCheck(context, os.meka.core.domain.FaceCheck(now, offered.keys.toList(), plan.fetch.filter { it !in fetched }, core.faceLastWhy()))
         val next = FaceFileRules.after(index, plan, fetched, allowed, now)
         writeIndex(context, next)
         _ready.value = next.complete

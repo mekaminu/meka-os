@@ -49,12 +49,30 @@ object FaceCodec {
 
     fun decodeManifestRequest(body: String) = wrap("face manifest request") { parse(body); Unit }
 
-    fun encodeManifest(entries: List<Entry>): String = buildJsonObject {
+    /** The longest [encodeManifest] note a device keeps (Health shows it on one line). */
+    const val NOTE_MAX = 160
+
+    /** One line, no control characters, at most [NOTE_MAX] characters; null when blank. */
+    fun cleanNote(s: String?): String? =
+        s?.map { if (it.isISOControl()) ' ' else it }?.joinToString("")?.trim()?.take(NOTE_MAX)?.takeIf { it.isNotEmpty() }
+
+    /**
+     * [note] (Meka 2026-10-24 19:26, "0 of 7 on the server" while the files were in the bucket): the server's own word
+     * on its look when it isn't all seven ("nothing under face/ · top-level folders: voice/, vault/", "couldn't list
+     * its storage: AccessDenied"); an older device ignores it.
+     */
+    fun encodeManifest(entries: List<Entry>, note: String? = null): String = buildJsonObject {
         put("w", WireCodec.VERSION)
         put("files", buildJsonArray {
             entries.forEach { e -> add(buildJsonObject { put("name", e.name); put("tag", e.tag); put("size", e.size) }) }
         })
+        cleanNote(note)?.let { put("note", it) }
     }.toString()
+
+    /** The manifest's note, or null (none, an older server, or a body that isn't a manifest). */
+    fun decodeManifestNote(body: String): String? = runCatching {
+        cleanNote((parse(body)["note"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull)
+    }.getOrNull()
 
     /** Unknown names, empty tags and impossible sizes are dropped, so a device only ever asks for an allowed file. */
     fun decodeManifest(body: String): List<Entry> = wrap("face manifest") {

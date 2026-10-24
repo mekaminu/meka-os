@@ -10509,9 +10509,20 @@ class MekaCore(
      * connected, offline, a failure): the device keeps what it has and looks again later ([os.meka.core.domain.FaceFileRules]).
      */
     suspend fun faceManifest(): Map<String, String>? {
-        val api = faceFilesApi ?: return null
-        return runCatchingNotCancel { api.faceManifest() }?.associate { it.name to it.tag }
+        val api = faceFilesApi ?: run { faceWhy = "not connected to Navilife's server"; return null }
+        var failure: String? = null
+        val got = runCatchingNotCancel {
+            try { api.faceManifestNoted() } catch (e: Exception) { failure = os.meka.core.wire.FaceCodec.cleanNote(e.message ?: e::class.simpleName); throw e }
+        }
+        faceWhy = if (got == null) failure else got.second
+        return got?.first?.associate { it.name to it.tag }
     }
+
+    /** Meka 2026-10-24 19:26: why the last [faceManifest] wasn't all seven (the server's note, its status, the failure). */
+    @kotlin.concurrent.Volatile private var faceWhy: String? = null
+
+    /** The reason behind the last look at the face's files, for Health's face line ([os.meka.core.domain.FaceCheck.why]). */
+    fun faceLastWhy(): String? = faceWhy
 
     /** One of the face's files, or null (not there, unusable, offline). Only the wire's allow-list is ever asked for. */
     suspend fun faceFile(name: String): ByteArray? {

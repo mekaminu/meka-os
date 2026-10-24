@@ -239,6 +239,7 @@ class HttpSyncTransportTest {
         val core = MekaCore("home", "fold", os.meka.core.sync.InMemoryReplicaStore(), t, kotlin.random.Random(1))
         // Only allowed names come through the list; a stray file in the folder is dropped.
         assertEquals(mapOf("mouth-m.png" to "t1"), core.faceManifest())
+        assertNull(core.faceLastWhy(), "no note from the server, nothing to say")
         assertTrue(requests.last().headers[RequestSigning.HEADER_SIGNATURE] != null)
         assertEquals(faceBytes.toList(), core.faceFile("mouth-m.png")?.toList())
         assertEquals("mouth-m.png", os.meka.core.wire.FaceCodec.decodeFileRequest((requests.last().body as TextContent).text))
@@ -253,9 +254,12 @@ class HttpSyncTransportTest {
         faceStatus = HttpStatusCode.NotFound
         assertNull(core.faceFile("mouth-m.png"))
         assertEquals(emptyMap<String, String>(), core.faceManifest())
+        // Meka 2026-10-24 19:26: Health says which it was, not just "0 of 7".
+        assertEquals("server answered 404 to /v1/face/manifest", core.faceLastWhy())
         // A failure → null: keep what's kept and look again later.
         faceStatus = HttpStatusCode.InternalServerError
         assertNull(core.faceManifest())
+        assertEquals("HTTP 500 from /v1/face/manifest", core.faceLastWhy())
     }
 
     @Test

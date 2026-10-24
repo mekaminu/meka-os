@@ -56,6 +56,27 @@ class FaceHealthTest {
         assertNull(FaceHealthRules.decode("12\nmaybe"))
     }
 
+    /** Meka 2026-10-24 19:26: "0 of 7 on the server" must say which: a 404, a refused storage listing, an empty folder. */
+    @Test
+    fun theLineSaysWhatTheServerAnsweredAndItSurvivesTheDevicesStorage() {
+        assertEquals(
+            "Face · waiting: 0 of 7 on the server: server answered 404 to /v1/face/manifest (last looked 13:05)",
+            line(FaceHealth(true, 0, FaceCheck(looked, emptyList(), why = "server answered 404 to /v1/face/manifest"))),
+        )
+        assertEquals(
+            "Face · waiting: 0 of 7 on the server: couldn't list its storage: AccessDenied (last looked 13:05)",
+            line(FaceHealth(true, 0, FaceCheck(looked, emptyList(), why = "couldn't list its storage: AccessDenied"))),
+        )
+        assertEquals(
+            "Face · couldn't reach the server: HTTP 502 from /v1/face/manifest (last looked 13:05)",
+            line(FaceHealth(true, 0, FaceCheck(looked, null, why = "HTTP 502 from /v1/face/manifest"))),
+        )
+        val c = FaceCheck(looked, emptyList(), why = "nothing under face/ in storage · top-level folders: voice/,\nvault/")
+        assertEquals(c.copy(why = "nothing under face/ in storage · top-level folders: voice/, vault/"), FaceHealthRules.decode(FaceHealthRules.encode(c)))
+        assertEquals(FaceCheck(looked, emptyList(), why = null), FaceHealthRules.decode(FaceHealthRules.encode(FaceCheck(looked, emptyList(), why = "  "))))
+        assertEquals(FaceHealthRules.WHY_MAX, FaceHealthRules.decode(FaceHealthRules.encode(FaceCheck(looked, emptyList(), why = "x".repeat(400))))!!.why!!.length)
+    }
+
     private val server = ServerHealth(ServerHealth.PUSH_ON, calls = true, speech = true, atMs = now)
 
     private fun view(device: DeviceHealth) = HealthRules.view(

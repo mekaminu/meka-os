@@ -212,6 +212,36 @@ jobs:
           fi
           echo "publish=true" >> "$GITHUB_OUTPUT"; echo "Publishing build $COUNT (published: $LATEST)"
 
+      # Obi's face (Meka 2026-10-24 13:12, 19:26): first the deployed server's own count of the seven files it can list
+      # (and why not, e.g. AccessDenied), then the bucket as this role sees it (names and sizes only, the whole bucket so
+      # a folder named "Face/" or files left at the top level show up), then any other "blobs" bucket holding the files.
+      # Early in the job, so its notices aren't lost behind the noisier steps' (GitHub keeps 10 a step, 50 a job).
+      - name: Obi's face files
+        if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
+        continue-on-error: true
+        run: |
+          CLI=backend/build/install/backend/bin/backend
+          MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" $CLI publisher-face "${{ steps.decide.outputs.url }}" || true
+          BUCKET=$(aws cloudformation describe-stack-resources --stack-name "MekaOs-$ENV_NAME" \
+            --query "StackResources[?ResourceType=='AWS::S3::Bucket' && starts_with(LogicalResourceId, 'Blobs')].PhysicalResourceId | [0]" --output text)
+          if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then echo "::warning title=Obi's face::couldn't find the Blobs bucket"; exit 0; fi
+          echo "The service reads the face from ${BUCKET:0:25}…"
+          if LISTING=$(aws s3api list-objects-v2 --bucket "$BUCKET" --max-items 20000 \
+              --query "Contents[].{Key:Key,Size:Size}" --output json 2>"$RUNNER_TEMP/face.err"); then
+            printf '%s' "$LISTING" | $CLI face-report
+          else
+            # An error isn't an empty bucket (the old step read both as "0 of 7").
+            echo "::warning title=Obi's face::this role couldn't list the bucket: $(grep -oE '\([A-Za-z]+\)' "$RUNNER_TEMP/face.err" | head -1)"
+          fi
+          for B in $(aws s3api list-buckets --query "Buckets[?contains(Name,'blobs')].Name" --output text 2>/dev/null); do
+            [ "$B" = "$BUCKET" ] && continue
+            N=$(aws s3api list-objects-v2 --bucket "$B" --max-items 20000 --query "Contents[].Key" --output text 2>/dev/null \
+              | tr '\t' '\n' | grep -ciE '(^|/)(face-loop\.mp4|mouth-(rest|m|f|ee|oh|ah)\.png)$' || true)
+            if [ "${N:-0}" -gt 0 ]; then
+              echo "::warning title=Obi's face::another bucket, ${B:0:25}…, holds $N of the face's files; the service reads ${BUCKET:0:25}…"
+            fi
+          done
+
       # Why the phone's last updates didn't install (build plan: phone updates sometimes fail to install): printed as
       # warnings on this job so a build run reads them from the check run's annotations. Never fails the job.
       - name: Phone update failures
@@ -300,18 +330,6 @@ jobs:
         if: steps.key.outputs.ok == 'true' && steps.decide.outputs.url != ''
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-kms "${{ steps.decide.outputs.url }}"
-
-      # Obi's face (Meka 2026-10-24 13:12): which of the face's seven files are in the Blobs bucket under face/ (names
-      # and sizes only), as a notice: "7 of 7 files", or which are missing, misplaced (e.g. under face/obi-face/) or too big.
-      - name: Obi's face files
-        if: steps.key.outputs.ok == 'true'
-        continue-on-error: true
-        run: |
-          BUCKET=$(aws cloudformation describe-stack-resources --stack-name "MekaOs-$ENV_NAME" \
-            --query "StackResources[?ResourceType=='AWS::S3::Bucket' && starts_with(LogicalResourceId, 'Blobs')].PhysicalResourceId | [0]" --output text)
-          if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then echo "::notice title=Obi's face::couldn't find the Blobs bucket"; exit 0; fi
-          aws s3api list-objects-v2 --bucket "$BUCKET" --prefix face/ --max-items 1000 \
-            --query "Contents[].{Key:Key,Size:Size}" --output json | backend/build/install/backend/bin/backend face-report
 
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'

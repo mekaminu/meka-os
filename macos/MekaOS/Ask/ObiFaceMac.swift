@@ -93,7 +93,7 @@ final class MacFaceStore {
             return
         }
         guard let offered = await model.faceManifest() else {
-            writeCheck(FaceCheck(atMs: now, offered: nil, notFetched: []))
+            writeCheck(FaceCheck(atMs: now, offered: nil, notFetched: [], why: model.faceLastWhy()))
             // With the face kept, the next open simply asks again; without it, not for another few hours.
             if !index.complete { writeIndex(rules.failed(index: index, nowMs: now)) }
             ready = index.complete
@@ -115,7 +115,7 @@ final class MacFaceStore {
                 Self.log.debug("face file not kept")
             }
         }
-        writeCheck(FaceCheck(atMs: now, offered: Array(offered.keys), notFetched: plan.fetch.filter { fetched[$0] == nil }))
+        writeCheck(FaceCheck(atMs: now, offered: Array(offered.keys), notFetched: plan.fetch.filter { fetched[$0] == nil }, why: model.faceLastWhy()))
         let next = rules.after(index: index, plan: plan, fetched: fetched, allowed: allowed, nowMs: now)
         writeIndex(next)
         ready = next.complete

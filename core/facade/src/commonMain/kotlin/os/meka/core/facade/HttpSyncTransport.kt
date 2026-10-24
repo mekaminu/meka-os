@@ -448,6 +448,11 @@ interface SpeechApi {
 interface FaceFilesApi {
     suspend fun faceManifest(): List<os.meka.core.wire.FaceCodec.Entry>
     suspend fun faceFile(name: String): ByteArray?
+    /**
+     * Meka 2026-10-24 19:26 ("0 of 7 on the server" covered a 404, a 403 and an empty bucket alike): [faceManifest] with
+     * the reason when it isn't all seven: the server's own note, or "server answered 404 to /v1/face/manifest".
+     */
+    suspend fun faceManifestNoted(): Pair<List<os.meka.core.wire.FaceCodec.Entry>, String?> = faceManifest() to null
 }
 
 /**
@@ -1157,17 +1162,21 @@ class HttpSyncTransport(
         return SpeechCodec.decodeResponse(resp.bodyAsText())
     }
 
-    override suspend fun faceManifest(): List<os.meka.core.wire.FaceCodec.Entry> {
+    override suspend fun faceManifest(): List<os.meka.core.wire.FaceCodec.Entry> = faceManifestNoted().first
+
+    override suspend fun faceManifestNoted(): Pair<List<os.meka.core.wire.FaceCodec.Entry>, String?> {
         val codec = os.meka.core.wire.FaceCodec
         prepare() // the face routes require the device's signing key on the server
         val resp = send(codec.MANIFEST_PATH, codec.encodeManifestRequest())
         when {
             resp.status.value == 401 -> throw AuthRejectedException("HTTP 401 from ${codec.MANIFEST_PATH}")
-            // An older server without the face, or a device it won't show it to: the orb stays.
-            resp.status.value == 404 || resp.status.value == 403 -> return emptyList()
+            // An older server without the face, or a device it won't show it to: the orb stays, and Health says which.
+            resp.status.value == 404 || resp.status.value == 403 ->
+                return emptyList<os.meka.core.wire.FaceCodec.Entry>() to "server answered ${resp.status.value} to ${codec.MANIFEST_PATH}"
             !resp.status.isSuccess() -> throw TransportException("HTTP ${resp.status.value} from ${codec.MANIFEST_PATH}")
         }
-        return codec.decodeManifest(resp.bodyAsText())
+        val body = resp.bodyAsText()
+        return codec.decodeManifest(body) to codec.decodeManifestNote(body)
     }
 
     override suspend fun faceFile(name: String): ByteArray? {

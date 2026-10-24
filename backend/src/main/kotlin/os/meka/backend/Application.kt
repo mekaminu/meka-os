@@ -1351,6 +1351,7 @@ fun main(args: Array<String>) {
                 ).also { startBankSync(it) }
             }
             // Trading tracker: his Hyperliquid accounts by public address only, read-only (no key exists to hold).
+            val faceFiles = FaceFiles.fromEnv()
             val tradingExports = if (System.getenv("MEKA_TRADING_TRACKER") == "off") null
                 else TradingExports({ hh, type -> opStore.latestFieldOps(hh, type) }, os.meka.backend.integrations.HyperliquidInfo.network(),
                     rates = os.meka.backend.integrations.HmrcMonthlyRates.network())
@@ -1393,7 +1394,8 @@ fun main(args: Array<String>) {
                         voice = { speech?.report() ?: "off · Navilife's voice isn't set up on this server" },
                         spam = { hh -> (numberLookup?.report(hh) ?: "off · the server has no Brave secret set") + (liveFacts?.let { " · " + it.report() } ?: "") },
                         kms = { os.meka.backend.integrations.KmsMeter.reportLine() },
-                        fuel = { fuelFinder?.report() ?: "off · the server has no Fuel Finder secret set" }),
+                        fuel = { fuelFinder?.report() ?: "off · the server has no Fuel Finder secret set" },
+                        face = { faceFiles?.report() ?: "off · the server has no blob bucket set" }),
                     approvals = approvalsFromEnv(opStore, onWritten = { hh -> push?.serverChanged(hh) }),
                     recovery = Recovery(PostgresRecoveryKeyStore(ds), PostgresDeviceRegistry(ds), verifier),
                     live = live,
@@ -1402,7 +1404,7 @@ fun main(args: Array<String>) {
                     liveFacts = liveFacts,
                     tradingExports = tradingExports,
                     vaultFiles = VaultFiles.fromEnv(),
-                    faceFiles = FaceFiles.fromEnv(),
+                    faceFiles = faceFiles,
                 )
             }.start(wait = true)
         }

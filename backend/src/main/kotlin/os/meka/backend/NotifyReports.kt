@@ -48,6 +48,8 @@ class NotifyReports(
     private val kms: (() -> String)? = null,
     /** Fuel prices (Needs Meka #34): [os.meka.backend.integrations.FuelFinder.report], counts only. */
     private val fuel: (() -> String)? = null,
+    /** Obi's face (2026-10-24): [FaceFiles.report], the deployed server's own look at its storage; names and counts. */
+    private val face: (() -> String)? = null,
     private val now: () -> Long = System::currentTimeMillis,
 ) {
     fun report(who: DeviceIdentity, report: NotifyDiagnosticsCodec.Report) {
@@ -75,6 +77,7 @@ class NotifyReports(
             spam = spam?.let { read -> runCatching { read(who.householdId) }.getOrNull() },
             kms = kms?.let { read -> runCatching { read() }.getOrNull() },
             fuel = fuel?.let { read -> runCatching { read() }.getOrNull() },
+            face = face?.let { read -> runCatching { read() }.getOrNull() },
         )
         val (deviceId, report) = store.latest(who.householdId) ?: return about
         val sender = DeviceIdentity(who.householdId, deviceId)
