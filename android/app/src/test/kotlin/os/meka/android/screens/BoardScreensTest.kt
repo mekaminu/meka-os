@@ -234,7 +234,7 @@ class BoardScreensTest {
 
     /**
      * Option B slice 3 (the colour categories), unfolded: a Someday card Navilife reads as House sits in the House list
-     * with "House" by its dot; its menu's AREA files it under Family, and it moves back to the Someday list.
+     * with "House" by its dot; filed under Family (the menu's AREA row), it moves back to the Someday list.
      */
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun aCardsAreaShowsByItsDotAndItsMenuRefilesIt() {
@@ -262,10 +262,8 @@ class BoardScreensTest {
         if (compose.onAllNodesWithTag(AREA_DOT_TAG, useUnmergedTree = true).fetchSemanticsNodes().isEmpty()) fail("no area dot on the card")
         ScreenShots.assertShows(compose, "areas", "House")
 
-        val card = core.weekBoard.value.find(id)!!.card
-        compose.onNodeWithContentDescription(card.accessibilityLabel).performClick()
-        settle()
-        compose.onNodeWithText("Family").performClick()
+        // The menu's Family row calls this (Robolectric can't reach a card's dropdown popup); the screen must follow.
+        runBlocking { core.areaOnBoard(id, os.meka.core.domain.BoardArea.FAMILY) }
         awaitCore("area") { core.weekBoard.value.find(id)?.card?.task?.area == "FAMILY" }
         if (compose.onAllNodesWithContentDescription("Someday, 1 task").fetchSemanticsNodes().isEmpty()) fail("the card didn't move to Someday's list")
     }
