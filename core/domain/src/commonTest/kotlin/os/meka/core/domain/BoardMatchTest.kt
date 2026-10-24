@@ -1,0 +1,112 @@
+package os.meka.core.domain
+
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
+
+/** The Week board made to match Option B exactly, slice 1: the columns (no folded days, headers, cards, events, "+ add"). */
+class BoardMatchTest {
+    private val mon26 = CivilDate.toEpochDay(2026, 10, 26)
+
+    private fun task(id: String, estimate: Int? = null) =
+        Task(id, id, null, Lifecycle.ACTIVE, null, null, null, 0, null, null, 0, null, false).copy(estimateMinutes = estimate)
+
+    private fun card(id: String, time: String? = null, estimate: Int? = null) = BoardCard(task(id, estimate), "Title $id", time, null, false, false)
+
+    private fun event(id: String, startMin: Int, endMin: Int, allDay: Boolean = false, calendar: String? = "Work") =
+        CalendarEvent(id, "Event $id", startMin * 60_000L, endMin * 60_000L, allDay, null, "google", null, calendar)
+
+    private fun day(epoch: Long, chips: List<BoardChip> = emptyList(), past: Boolean = false) = BoardDay(
+        epochDay = epoch, weekday = "Mon", number = "26", isToday = false, isPast = past, place = null, placeLabel = null,
+        chips = chips, moreChips = 0, cards = emptyList(), countLine = "", accessibilityLabel = "Monday 26 October",
+    )
+
+    private fun week(start: Long) = BoardWeek(start, "This week", "", (0L..6L).map { day(start + it) })
+
+    @Test
+    fun theWeeksHeaderIsTheMonthAndItsIsoWeek() {
+        val h = BoardMatchRules.weekHead(mon26)
+        assertEquals("October 2026", h.month)
+        assertEquals("W44", h.week)
+        assertEquals("October 2026, week 44", h.spoken)
+        assertEquals("Oct 2026", h.monthShort)
+        // A week across two months takes its Thursday's: Mon 28 Sep – Sun 4 Oct 2026 is October's (Thu 1 Oct).
+        assertEquals("October 2026", BoardMatchRules.weekHead(CivilDate.toEpochDay(2026, 9, 28)).month)
+        // The ISO edges: Thu 1 Jan 2026 is in week 1; Mon 29 Dec 2025 too; Sun 3 Jan 2027 is 2026's week 53.
+        assertEquals(1, BoardMatchRules.isoWeek(CivilDate.toEpochDay(2026, 1, 1)))
+        assertEquals(1, BoardMatchRules.isoWeek(CivilDate.toEpochDay(2025, 12, 29)))
+        assertEquals(53, BoardMatchRules.isoWeek(CivilDate.toEpochDay(2027, 1, 3)))
+        assertEquals(1, BoardMatchRules.isoWeek(CivilDate.toEpochDay(2027, 1, 4)))
+    }
+
+    @Test
+    fun aDaysHeaderIsItsDateAndWeekday() {
+        val h = BoardMatchRules.dayHead(day(mon26))
+        assertEquals("26 Oct", h.date)
+        assertEquals("Mon", h.weekday)
+    }
+
+    @Test
+    fun pastDaysNeverFold() {
+        assertFalse(BoardMatchRules.FOLDS_PAST)
+        assertFalse(BoardTidyRules.collapsed(day(mon26, past = true), emptySet()))
+    }
+
+    @Test
+    fun onAWeekendTheBoardOpensOnNextWeek() {
+        val weeks = listOf(week(mon26), week(mon26 + 7), week(mon26 + 14))
+        // Monday to Friday: this week, today.
+        (0L..4L).forEach { d ->
+            val b = WeekBoard(mon26 + d, weeks)
+            assertEquals(0, BoardMatchRules.opensOnWeek(b))
+            assertEquals(mon26 + d, BoardMatchRules.opensOnDay(b))
+        }
+        // Saturday and Sunday: next week, its Monday.
+        listOf(5L, 6L).forEach { d ->
+            val b = WeekBoard(mon26 + d, weeks)
+            assertEquals(1, BoardMatchRules.opensOnWeek(b))
+            assertEquals(mon26 + 7, BoardMatchRules.opensOnDay(b))
+        }
+        // A board with only this week stays on it.
+        assertEquals(0, BoardMatchRules.opensOnWeek(WeekBoard(mon26 + 5, weeks.take(1))))
+    }
+
+    @Test
+    fun everyCardHasItsTopLineNeverALoneDash() {
+        val timed = BoardMatchRules.top(card("a", time = "12:30", estimate = 45))
+        assertEquals("12:30", timed.time)
+        assertEquals("0:45", timed.duration)
+        val loose = BoardMatchRules.top(card("b"))
+        assertEquals("Any time", loose.time)
+        assertNull(loose.duration)
+        assertTrue(BoardMatchRules.timed(card("a", time = "12:30")))
+        assertFalse(BoardMatchRules.timed(card("b")))
+        assertEquals("Any time", BoardMatchRules.timeChip(card("b")))
+        assertTrue(ScreenSenseRules.problemsIn(loose.time!!).isEmpty())
+    }
+
+    @Test
+    fun eventsAreCardsWithTheirLengthAndCalendar() {
+        val standUp = event("s", 570, 600)
+        val trip = event("t", 0, 1440, allDay = true, calendar = null)
+        val d = day(
+            mon26,
+            listOf(BoardChip("t", "All day", "Half term", 2, trip), BoardChip("s", "09:30", "Team stand-up", 1, standUp)),
+        )
+        val cards = BoardMatchRules.eventCards(d)
+        assertEquals(listOf("All day", "09:30"), cards.map { it.time })
+        assertNull(cards[0].duration)
+        assertEquals("Calendar", cards[0].calendar)
+        assertEquals("0:30", cards[1].duration)
+        assertEquals("Work", cards[1].calendar)
+        assertEquals("Team stand-up, 09:30, 30m, Work", cards[1].spoken)
+        assertEquals("Half term, all day, Calendar", cards[0].spoken)
+    }
+
+    @Test
+    fun theAddButtonIsQuiet() {
+        assertEquals("+ add", BoardMatchRules.ADD)
+    }
+}

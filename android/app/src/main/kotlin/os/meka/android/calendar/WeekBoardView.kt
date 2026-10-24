@@ -118,6 +118,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import os.meka.android.designsystem.Meka
@@ -161,6 +164,9 @@ import os.meka.core.domain.BoardTimelineRules
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.wrapContentWidth
 import os.meka.core.facade.MekaCore
+import os.meka.core.domain.BoardMatchRules
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
 
 /**
  * Calendar's Board view on the Fold (Week board and roll-over, slice 2; core [WeekBoardRules]): a column per day from
@@ -359,8 +365,10 @@ fun WeekBoardView(
         // note of the day in view (folded: the page; unfolded: today in the week shown, else its Monday), and a tick as
         // each folded page settles.
         val daysNow by rememberUpdatedState(board.days)
+        val boardNow by rememberUpdatedState(board)
         LaunchedEffect(wide, colPx) {
-            val index = BoardFoldRules.focusAfterFold(daysNow, focusDay)
+            // Option B match: on a weekend the unfolded board opens on next week (‹ › still go back).
+            val index = BoardFoldRules.focusAfterFold(daysNow, focusDay ?: if (wide) BoardMatchRules.opensOnDay(boardNow) else null)
             if (wide) {
                 // Unfolded: the week holding that day, and the week in view's day kept as he steps weeks.
                 wideDir = 0
@@ -483,6 +491,10 @@ fun WeekBoardView(
                 board, weekIndex, goWeek, Modifier.padding(horizontal = MekaSpace.gutter).appear(rememberAppearance(2)), onPlanWeek, onReview,
                 timeline = if (wide) showTimeline else null,
                 onTimeline = { timelineOpen = !showTimeline },
+                wide = wide,
+                onToday = {
+                    if (wide) goWeek(0) else turnTo(board.days.indexOfFirst { it.isToday }.coerceAtLeast(0))
+                },
             )
             // Option B slice 4: Obi's one line for the week shown; a line with a fix moves that card on a tap, with Undo.
             val nudge = remember(board, weekIndex) { board.weeks.getOrNull(weekIndex)?.let { core.boardNudge(board, it.startEpochDay) } }
@@ -542,8 +554,9 @@ fun WeekBoardView(
                     DayColumn(
                         day = day,
                         width = width,
+                        // Option B match: no folded days; a past one is a full column, dimmed.
                         collapsed = wide && BoardTidyRules.collapsed(day, openedPast),
-                        onFold = if (wide && day.isPast) ({ haptics.tick(); openedPast = if (day.epochDay in openedPast) openedPast - day.epochDay else openedPast + day.epochDay }) else null,
+                        onFold = null,
                         gapAt = gap,
                         gapHeight = drag?.let { d -> cards[d.card.id]?.let { with(density) { it.height.toDp() } } } ?: MekaSpace.xxl,
                         held = settling.filterValues { it.first == day.epochDay }.mapValues { it.value.second },
@@ -834,7 +847,7 @@ private const val GOAL_KEY = -10L
 @Composable
 private fun WeekHeader(
     board: WeekBoard, week: Int, onGo: (Int) -> Unit, modifier: Modifier, onPlanWeek: (() -> Unit)?, onReview: () -> Unit,
-    timeline: Boolean? = null, onTimeline: () -> Unit = {},
+    timeline: Boolean? = null, onTimeline: () -> Unit = {}, wide: Boolean = true, onToday: () -> Unit = {},
 ) {
     val haptics = rememberMekaHaptics()
     val w = board.weeks[week]
@@ -842,13 +855,29 @@ private fun WeekHeader(
         haptics.tick()
         onGo(to)
     }
+    // Option B match: "October 2026  W44", the month in serif, the ISO week in mono, then Today and ‹ › on the right.
+    val head = BoardMatchRules.weekHead(w.startEpochDay)
     Row(modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-        Text(w.title, style = MekaType.itemTitle, color = Meka.colors.textPrimary)
-        if (w.title != w.range) {
+        Row(
+            Modifier.weight(1f, fill = false).clearAndSetSemantics { contentDescription = head.spoken + ", " + w.title },
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Text(
+                if (wide) head.month else head.monthShort, style = if (wide) BoardType.month else BoardType.monthFolded, color = Meka.colors.textPrimary,
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false).testTag(MONTH_TAG),
+            )
             Spacer(Modifier.width(MekaSpace.xs))
-            Text(w.range, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(head.week, style = BoardType.mono.copy(fontSize = if (wide) 18.sp else 14.sp), color = Meka.colors.textTertiary, maxLines = 1)
         }
         Spacer(Modifier.weight(1f))
+        // Folded, the day strip already takes him to today; unfolded, Today goes back to this week.
+        if (wide) Text(
+            BoardMatchRules.TODAY, style = MekaType.itemMeta, color = Meka.colors.textPrimary, maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
+                .border(1.dp, Meka.colors.hairline, RoundedCornerShape(MekaRadius.pill))
+                .clickable(role = Role.Button) { haptics.tick(); onToday() }
+                .padding(horizontal = MekaSpace.s, vertical = MekaSpace.xs),
+        )
         // Item (8): from Friday, on this week, Review the week (tick haptic; Review slides in as a tab change).
         if (board.offersReview && week == 0) {
             Text(
@@ -926,6 +955,28 @@ private fun ObiNudgeLine(n: BoardNudge, modifier: Modifier, onFix: (PressureFix)
 /** A lighter tint of a colour for the orb's highlight. */
 private fun Color.compositeOverWhite(): Color = Color(red + (1f - red) * 0.6f, green + (1f - green) * 0.6f, blue + (1f - blue) * 0.6f, 1f)
 
+/**
+ * Option B match: the mockup's type. Its serif (Fraunces) for the month and the dates is the platform's serif here (no
+ * font is bundled), its mono (JetBrains Mono) for times the platform's monospace; the weights and sizes are the mockup's.
+ */
+internal object BoardType {
+    val month = TextStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight(600), fontSize = 34.sp, lineHeight = 36.sp, letterSpacing = (-0.02).em)
+    val monthFolded = month.copy(fontSize = 22.sp, lineHeight = 26.sp)
+    val date = TextStyle(fontFamily = FontFamily.Serif, fontWeight = FontWeight(600), fontSize = 22.sp, lineHeight = 26.sp, letterSpacing = (-0.01).em)
+    val list = date.copy(fontSize = 20.sp, lineHeight = 24.sp)
+    val mono = TextStyle(fontFamily = FontFamily.Monospace, fontWeight = FontWeight(500), fontSize = 12.sp, lineHeight = 16.sp)
+    val monoSmall = mono.copy(fontWeight = FontWeight(400), fontSize = 11.sp, lineHeight = 14.sp)
+}
+
+/** The month in the Board's header (Option B match, UI tests). */
+internal const val MONTH_TAG = "board-month"
+/** A day's serif date (Option B match, UI tests). */
+internal const val DAY_DATE_TAG = "board-day-date"
+/** An event's card in a day's column (Option B match, UI tests). */
+internal const val EVENT_CARD_TAG = "board-event-card"
+/** The "+ add" button at the foot of a column (Option B match, UI tests). */
+internal const val ADD_TAG = "board-add"
+
 /** Timeline / Hide timeline in the header (Option B slice 5, UI tests). */
 internal const val TIMELINE_TOGGLE_TAG = "board-timeline-toggle"
 
@@ -1001,7 +1052,7 @@ private fun DayColumn(
     val fill by animateColorAsState(
         when {
             hovered -> Meka.colors.surfaceRaised
-            day.isToday -> Meka.colors.surface
+            // Option B match: no box round a day; its cards stand on the board (today is the gold date and pill).
             else -> Meka.colors.background
         },
         MekaMotion.appear(reduced), label = "board-fill",
@@ -1024,80 +1075,34 @@ private fun DayColumn(
             .verticalScroll(vScroll, enabled = dragging == null)
             .padding(horizontal = if (compact) MekaSpace.xxs else MekaSpace.xs, vertical = MekaSpace.xs),
     ) {
-        // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold, then
-        // "2 of 5 done" over a thin gold bar (a past day only what was done) and the day's capacity.
+        // Option B match (Meka 2026-10-24 14:39): the mockup's header, "27 Oct" in serif with "Mon" on the right (today
+        // in gold), the thin done bar under it without words, then the budget pill, always "planned · 4h 05 / 3h".
+        val head = BoardMatchRules.dayHead(day)
         Column(
-            Modifier.fillMaxWidth()
-                .then(if (onFold != null) Modifier.clip(RoundedCornerShape(MekaRadius.s)).clickable(role = Role.Button) { onFold() } else Modifier)
-                .clearAndSetSemantics {
-                    contentDescription = day.accessibilityLabel + if (onFold != null) ". Tap to fold it" else ""
-                    if (onFold != null) onClick { onFold(); true }
-                },
+            Modifier.fillMaxWidth().padding(bottom = MekaSpace.xxs)
+                .clearAndSetSemantics { contentDescription = day.accessibilityLabel },
         ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(day.number, style = MekaType.nowTitle, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1)
-                Spacer(Modifier.width(MekaSpace.xs))
-                Text(day.weekday, style = MekaType.metaStrong, color = if (day.isToday) Meka.colors.accent else Meka.colors.textSecondary, maxLines = 1)
-                if (!BoardFitRules.tagBelow(compact)) {
-                    Spacer(Modifier.weight(1f))
-                    BoardLookRules.tag(day)?.let {
-                        Text(it, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-            }
-            // Slice 9: a compact lane keeps the tag's line (blank on a day without one) and every lane the underline's
-            // slot (lit on today only), so the lanes' first cards start level.
-            BoardFitRules.tagLine(day, compact)?.let {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
                 Text(
-                    it.ifEmpty { " " }, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                    modifier = if (it.isEmpty()) Modifier.clearAndSetSemantics {} else Modifier,
+                    head.date, style = BoardType.date, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1,
+                    modifier = Modifier.testTag(DAY_DATE_TAG),
                 )
+                Spacer(Modifier.weight(1f))
+                Text(head.weekday, style = MekaType.itemMeta.copy(fontWeight = FontWeight(500)), color = Meka.colors.textTertiary, maxLines = 1)
             }
-            Box(
-                Modifier.padding(top = MekaSpace.xxs).width(MekaSpace.l).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill))
-                    .background(if (BoardFitRules.underlineLit(day)) Meka.colors.accent else Color.Transparent),
-            )
-            if (day.isPast) {
-                Text(BoardLookRules.pastLine(day), style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = 1)
-            } else {
-                BoardLookRules.progress(day)?.let { DayProgressBar(it) }
-            }
+            BoardLookRules.progress(day)?.let { DoneBar(it) }
         }
-        // Option B slice 1: the budget pill sits under the header as its own element (heard on its own by TalkBack).
         day.capacity?.let { BudgetPill(it, day.isToday) }
         day.pressure?.let { PressureNote(it, onEase) }
-        // By hand, slice 1: "+ Add a task" at the top of every day from today, always there.
-        if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd)
-        // The day's events as slim one-line chips: "09:30 · Dentist" (slice 2), a dot in the calendar's colour.
-        if (day.chips.isNotEmpty()) {
-            Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-                day.chips.forEach { chip ->
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surface)
-                            .clickable(role = Role.Button) { onEvent(chip.event) }
-                            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(Modifier.size(6.dp).clip(CircleShape).background(Meka.colors.calendarTone(chip.tone)))
-                        Spacer(Modifier.width(MekaSpace.xxs))
-                        Text(chip.time, style = MekaType.micro, color = Meka.colors.accent, maxLines = 1)
-                        Spacer(Modifier.width(MekaSpace.xxs))
-                        Text(chip.title, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
+        // The day's events are cards in the column too, a blue time chip and their length (the mockup's stand-up).
+        val events = BoardMatchRules.eventCards(day)
+        if (events.isNotEmpty()) {
+            Column(Modifier.padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+                events.forEach { e -> EventCard(e) { onEvent(e.event) } }
                 day.moreLabel?.let { Text(it, style = MekaType.micro, color = Meka.colors.textTertiary) }
             }
         }
-        // Free time: one quiet line; only while a card is held (unfolded) do the stretches open as drop targets.
-        BoardFitRules.freeLine(day.freeTimes, compact)?.let { free ->
-            if (!(showFree && dragging != null)) {
-                Text(
-                    free.label, style = MekaType.micro, color = Meka.colors.textTertiary, maxLines = BoardFitRules.freeLines(compact),
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = MekaSpace.xs).clearAndSetSemantics { contentDescription = free.spoken },
-                )
-            }
-        }
+        // Free time shows only while a card is held (unfolded), as the drop targets that block time.
         androidx.compose.animation.AnimatedVisibility(
             visible = showFree && dragging != null && day.freeTimes.isNotEmpty(),
             enter = if (reduced) androidx.compose.animation.fadeIn(MekaMotion.appear(true)) else androidx.compose.animation.expandVertically(spring(stiffness = 600f)) + androidx.compose.animation.fadeIn(),
@@ -1127,6 +1132,8 @@ private fun DayColumn(
                 if (openIndex == openIds.size - 1) GapSlot(gapAt != null && gapAt >= openIds.size, gapHeight)
             }
         }
+        // Option B match: "+ add" at the foot of every day from today, a quiet dashed button; the field opens there.
+        if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd)
     }
     }
 }
@@ -1325,7 +1332,9 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
     val reduced = Meka.reducedMotion
     val compact = LocalBoardCompact.current
     val fade by animateFloatAsState(if (lifted) 1f else BoardPlannerRules.alpha(card), MekaMotion.appear(reduced), label = "card-fade")
-    val top = BoardPlannerRules.top(card)
+    // Option B match: every card has its top line, the time chip (gold, or a quiet "Any time") and its length.
+    val top = BoardMatchRules.top(card)
+    val timed = BoardMatchRules.timed(card)
     val foot = BoardPlannerRules.footChips(card)
     Column(
         Modifier.fillMaxWidth()
@@ -1333,16 +1342,12 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
             .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, TILE) else Modifier)
             .alpha(fade)
             .testTag(PLANNER_CARD_TAG)
-            .padding(start = MekaSpace.xs, end = MekaSpace.xs, top = MekaSpace.xs),
+            .padding(start = MekaSpace.s, end = MekaSpace.s, top = MekaSpace.s, bottom = MekaSpace.xxs),
     ) {
-        top?.let { t ->
-            Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
-                t.time?.let { TimeChip(it) }
-                Spacer(Modifier.weight(1f))
-                t.duration?.let {
-                    Text(it, style = MekaType.micro.copy(fontFeatureSettings = "tnum"), color = Meka.colors.textTertiary, maxLines = 1)
-                }
-            }
+        Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            top.time?.let { TimeChip(it, if (timed) ChipTone.TASK else ChipTone.QUIET) }
+            Spacer(Modifier.weight(1f))
+            top.duration?.let { Text(it, style = BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
         }
         Text(
             card.title, style = if (compact) MekaType.caption else MekaType.body, maxLines = BoardFitRules.titleLines(compact),
@@ -1382,18 +1387,61 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
     }
 }
 
-/** The time chip on a planner card's top line: "12:30" in gold on a faint gold tint, tabular figures. */
+/** A time chip's colours: gold for a task's planned time, blue for an event, quiet for "Any time". */
+private enum class ChipTone { TASK, EVENT, QUIET }
+
+/** The time chip on a card's top line (the mockup's `.tm`): mono figures on a faint tint, gold, blue or quiet. */
 @Composable
-private fun TimeChip(time: String) {
+private fun TimeChip(time: String, tone: ChipTone = ChipTone.TASK) {
+    val ink = when (tone) {
+        ChipTone.TASK -> Meka.colors.accent
+        ChipTone.EVENT -> Meka.colors.calendar4
+        ChipTone.QUIET -> Meka.colors.textTertiary
+    }
     Text(
-        time, style = MekaType.micro.copy(fontFeatureSettings = "tnum"), color = Meka.colors.accent, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.accent.copy(alpha = 0.14f))
-            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+        time, style = BoardType.monoSmall, color = ink, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (tone == ChipTone.QUIET) Meka.colors.surface else ink.copy(alpha = 0.16f))
+            .padding(horizontal = 7.dp, vertical = 3.dp),
     )
 }
 
-/** The tick's drawn square in a planner card's foot (dp); its touch area is widened to 48 dp. */
-private val FOOT_TICK = 32.dp
+/**
+ * Option B match: one of the day's events as a card in its column (the mockup's stand-up): the blue time chip and its
+ * length on top, the title, then the calendar's dot and name in the foot. A tap opens the event.
+ */
+@Composable
+private fun EventCard(e: os.meka.core.domain.BoardEventCard, onOpen: () -> Unit) {
+    val compact = LocalBoardCompact.current
+    Column(
+        Modifier.fillMaxWidth().clip(TILE).background(Meka.colors.surfaceRaised)
+            .clickable(role = Role.Button, onClick = onOpen)
+            .testTag(EVENT_CARD_TAG)
+            .clearAndSetSemantics { contentDescription = e.spoken; role = Role.Button; onClick { onOpen(); true } }
+            .padding(horizontal = MekaSpace.s, vertical = MekaSpace.s),
+    ) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            TimeChip(e.time, ChipTone.EVENT)
+            Spacer(Modifier.weight(1f))
+            e.duration?.let { Text(it, style = BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
+        }
+        Text(
+            e.title, style = if (compact) MekaType.caption else MekaType.body, color = Meka.colors.textPrimary,
+            maxLines = BoardFitRules.titleLines(compact), overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = MekaSpace.xs),
+        )
+        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            Spacer(Modifier.weight(1f))
+            Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.calendarTone(e.tone)))
+            if (!compact) {
+                Spacer(Modifier.width(MekaSpace.xxs))
+                Text(e.calendar, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+}
+
+/** The tick's drawn square in a planner card's foot (dp); Compose widens its touch area to 48 dp past its edges. */
+private val FOOT_TICK = 24.dp
 
 /** The colour dot on a Board card that came from mail, Needs you, Discord or School (slice 5, UI tests). */
 internal const val SOURCE_DOT_TAG = "board-source-dot"
@@ -1422,17 +1470,13 @@ private fun CardChipPill(chip: CardChip) {
 }
 
 /**
- * "2 of 5 done" under a day's header with a thin bar that fills gold as cards are ticked (slice 2); the width glides
- * (Reduced motion: it steps).
+ * The thin done bar under a day's header (Option B match: no "2 of 5 done" words, the screen reader still hears them),
+ * filling gold as cards are ticked; the width glides (Reduced motion: it steps).
  */
 @Composable
-private fun DayProgressBar(p: DayProgress) {
+private fun DoneBar(p: DayProgress) {
     val reduced = Meka.reducedMotion
     val fill by animateFloatAsState(p.fill, MekaMotion.appear(reduced), label = "day-progress")
-    Text(
-        p.line, style = MekaType.micro, color = if (p.complete) Meka.colors.accent else Meka.colors.textTertiary, maxLines = 1,
-        modifier = Modifier.padding(top = MekaSpace.xxs),
-    )
     Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
         Box(Modifier.fillMaxWidth(fill).height(2.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
     }
@@ -1542,7 +1586,7 @@ private fun AddAtTop(
     ) { isOpen ->
         if (!isOpen) {
             Box(
-                Modifier.fillMaxWidth().height(40.dp)
+                Modifier.fillMaxWidth().height(40.dp).testTag(ADD_TAG)
                     .drawBehind {
                         drawRoundRect(
                             hairline, cornerRadius = androidx.compose.ui.geometry.CornerRadius(MekaRadius.m.toPx()),
@@ -1553,8 +1597,8 @@ private fun AddAtTop(
                     .clickable(role = Role.Button) { onOpen() }
                     .semantics { contentDescription = BoardHandRules.addLabel(day.title) }
                     .padding(horizontal = MekaSpace.m),
-                contentAlignment = Alignment.CenterStart,
-            ) { Text(BoardHandRules.ADD, style = MekaType.caption, color = Meka.colors.textTertiary) }
+                contentAlignment = Alignment.Center,
+            ) { Text(BoardMatchRules.ADD, style = MekaType.caption, color = Meka.colors.textTertiary) }
         } else {
             val focus = remember { FocusRequester() }
             val keyboard = LocalSoftwareKeyboardController.current
@@ -1731,16 +1775,18 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
         val t = rememberInfiniteTransition(label = "budget-breath")
         t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "budget-alpha").value
     } else 1f
-    val figures = MekaType.micro.copy(fontFeatureSettings = "tnum")
+    // Option B match: the mockup's mono figures in a 30 dp pill.
+    val figures = BoardType.mono.copy(fontWeight = FontWeight(400))
     Column(
-        Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+        Modifier.padding(top = MekaSpace.xs).heightIn(min = 30.dp).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
             .border(1.dp, edge, RoundedCornerShape(MekaRadius.s))
             .testTag(BUDGET_TAG)
             .clearAndSetSemantics { contentDescription = b.spoken },
     ) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (compact) {
-                Text(BoardPlannerRules.compactLine(b), style = figures, color = if (b.over) amber else Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                // A narrow lane lets "nothing yet / 6h 15" wrap rather than cut it short.
+                Text(BoardPlannerRules.compactLine(b), style = figures.copy(fontSize = 11.sp), color = if (b.over) amber else Meka.colors.textSecondary, maxLines = 2)
             } else {
                 Text(b.label, style = figures, color = Meka.colors.textTertiary, maxLines = 1)
                 Spacer(Modifier.weight(1f))

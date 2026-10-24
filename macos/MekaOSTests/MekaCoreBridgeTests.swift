@@ -1611,7 +1611,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(budget.label, "planned")
         XCTAssertEqual(budget.value, "4h 05 / 3h")
         XCTAssertTrue(budget.over)
-        XCTAssertEqual(planner.compactLine(b: planner.budget(c: BoardCapacity(plannedMin: 0, freeMin: 420, unsized: 0))), "7h free")
+        XCTAssertEqual(planner.compactLine(b: planner.budget(c: BoardCapacity(plannedMin: 0, freeMin: 420, unsized: 0))), "nothing yet / 7h")
+        // The Week board made to match Option B: the headers, no folded days, "Any time", "+ add", next week at the weekend.
+        let match = BoardMatchRules.shared
+        let monday = CivilDate.shared.toEpochDay(year: 2026, month: 10, day: 26)
+        XCTAssertEqual(match.weekHead(startEpochDay: monday).month, "October 2026")
+        XCTAssertEqual(match.weekHead(startEpochDay: monday).week, "W44")
+        XCTAssertFalse(match.FOLDS_PAST)
+        XCTAssertEqual(match.ANY_TIME, "Any time")
+        XCTAssertEqual(match.ADD, "+ add")
+        XCTAssertEqual(match.isoWeek(epochDay: monday), 44)
         XCTAssertFalse(planner.STRIKE_DONE)
         XCTAssertEqual(planner.sourceLabel(source: CardSource.mail), "Mail")
         // Option B, slice 2: the layout (Mon–Fri across, the weekend shorter underneath, the lists below).

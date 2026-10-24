@@ -50,22 +50,23 @@ class BoardTidyTest {
     }
 
     @Test
-    fun pastDaysFoldNarrowUnlessOpened() {
+    fun pastDaysNeverFoldNarrowAnyMore() {
+        // Option B (Meka 2026-10-24 14:39): Mon–Fri are five full columns every time, a past one only dimmed.
         val mon = day(20_000, past = true, cards = listOf(card("a", done = true), card("b", done = true), card("c")))
-        assertTrue(BoardTidyRules.collapsed(mon, emptySet()))
+        assertFalse(BoardTidyRules.collapsed(mon, emptySet()))
         assertFalse(BoardTidyRules.collapsed(mon, setOf(20_000)))
         assertFalse(BoardTidyRules.collapsed(day(20_002), emptySet()))
         assertEquals("Monday 19 October, 2 done. Tap to open", BoardTidyRules.collapsedLabel(mon))
     }
 
     @Test
-    fun theWeekSharesTheWidthPastDaysNarrowAndNoLaneTooWide() {
-        // Wednesday: Monday and Tuesday folded at 64, the other five share 800 - 128 = 672 → 134.4 each.
+    fun theWeekSharesTheWidthPastDaysTooAndNoLaneTooWide() {
+        // Wednesday: Monday and Tuesday are past but keep their full share (Option B: nothing folds).
         val week1 = (0 until 7).map { day(20_000L + it, past = it < 2) }
         val week2 = (7 until 14).map { day(20_000L + it) }
         val w = BoardTidyRules.laneWidths(week1 + week2, 800f, emptySet())
-        assertEquals(64f, w[0])
-        near(134.4f, w[2])
+        near(800f / 7, w[0])
+        near(800f / 7, w[2])
         // Next week's seven share it all.
         near(800f / 7, w[7])
         // On a very wide screen no lane is wider than 250; opening Monday widens it like the rest.
@@ -75,6 +76,6 @@ class BoardTidyTest {
         val starts = BoardTidyRules.starts(w)
         near(800f, starts[7])
         assertEquals(7, BoardTidyRules.indexAt(790f, w))
-        assertEquals(2, BoardTidyRules.columnAt(130f, w))
+        assertEquals(1, BoardTidyRules.columnAt(130f, w))
     }
 }

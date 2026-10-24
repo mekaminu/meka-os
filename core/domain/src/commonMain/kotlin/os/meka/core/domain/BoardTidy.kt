@@ -97,8 +97,12 @@ object BoardTidyRules {
     fun stillOpen(open: BoardTray?, chips: List<TrayChip>): BoardTray? =
         open?.takeIf { o -> chips.any { it.tray == o && it.canOpen } }
 
-    /** A past day shows narrow unless he opened it. */
-    fun collapsed(day: BoardDay, opened: Set<Long>): Boolean = day.isPast && day.epochDay !in opened
+    /**
+     * A past day shows narrow unless he opened it: never any more (Option B, [BoardMatchRules.FOLDS_PAST]; Meka
+     * 2026-10-24 14:39: Mon–Fri are five equal full columns every time, a past one only dimmed).
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun collapsed(day: BoardDay, opened: Set<Long>): Boolean = BoardMatchRules.FOLDS_PAST && day.isPast && day.epochDay !in opened
 
     /** Screen readers for a folded past day: "Monday 19 October, 3 done. Tap to open". */
     fun collapsedLabel(day: BoardDay): String =

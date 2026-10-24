@@ -77,11 +77,14 @@ struct CalendarScreen: View {
                     }
                 }
                 .staggeredAppear(0)
-                Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
-                    .staggeredAppear(1)
+                // Option B match: the Board has no "25 events in the next 30 days" line and no colour key.
+                if !model.calendarShowsBoard {
+                    Text(v.summary).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        .staggeredAppear(1)
+                }
                 EditLinesView(lines: model.editLines, palette: palette)
                     .staggeredAppear(1)
-                if !v.legend.isEmpty {
+                if !model.calendarShowsBoard && !v.legend.isEmpty {
                     CalendarKey(legend: v.legend, palette: palette)
                         .padding(.top, MekaSpace.xxs)
                         .staggeredAppear(1)

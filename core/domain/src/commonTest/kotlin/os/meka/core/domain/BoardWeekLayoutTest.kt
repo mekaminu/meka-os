@@ -26,12 +26,11 @@ class BoardWeekLayoutTest {
     }
 
     @Test
-    fun aRowsDaysShareItsWidthPastOnesNarrow() {
+    fun aRowsDaysShareItsWidthEquallyPastOnesToo() {
+        // Option B (Meka 2026-10-24 14:39): five equal columns, a past one never folds narrow.
         val w = BoardWeekLayoutRules.rowWidths(BoardWeekLayoutRules.weekdays(week), 800f, emptySet())
-        near(64f, w[0]); near(64f, w[1])
-        near((800f - 128f) / 3f, w[2])
+        w.forEach { near(160f, it) }
         near(800f, w.sum())
-        // Opened, a past day takes its full share again.
         val opened = BoardWeekLayoutRules.rowWidths(BoardWeekLayoutRules.weekdays(week), 800f, setOf(20_000L, 20_001L))
         opened.forEach { near(160f, it) }
         // The weekend's two share the row.

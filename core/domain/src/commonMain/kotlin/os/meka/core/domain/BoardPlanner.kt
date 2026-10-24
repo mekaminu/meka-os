@@ -82,19 +82,26 @@ object BoardPlannerRules {
 
     /**
      * The pill as one line on a compact lane (under [BoardFitRules.COMPACT_LANE_DP], where "planned" and its value
-     * don't fit side by side): "4h 05 / 3h", "7h free", "no free time".
+     * don't fit side by side): "4h 05 / 3h", "nothing yet / 7h".
      */
-    fun compactLine(b: PlannerBudget): String = when (b.label) {
-        PLANNED -> b.value
-        FREE -> "${b.value} $FREE"
-        else -> b.label
-    }
+    fun compactLine(b: PlannerBudget): String = b.value
 
-    /** The day's budget pill from its capacity. */
-    fun budget(c: BoardCapacity): PlannerBudget = when {
-        c.plannedMin <= 0 && c.freeMin <= 0 -> PlannerBudget(NO_FREE_TIME, "", false, 0f, c.spoken)
-        c.plannedMin <= 0 -> PlannerBudget(FREE, hours(c.freeMin), false, 0f, c.spoken)
-        c.freeMin <= 0 -> PlannerBudget(PLANNED, "${hours(c.plannedMin)} · $NO_FREE_TIME", true, 1f, c.spoken)
-        else -> PlannerBudget(PLANNED, "${hours(c.plannedMin)} / ${hours(c.freeMin)}", c.over, c.fill, c.spoken)
+    /** Nothing planned on the left of the pill's value ("nothing yet / 7h"): never "0h" or "0m". */
+    const val NOTHING_YET = "nothing yet"
+
+    /**
+     * The day's budget pill from its capacity, always "planned" against what is free, as the mockup draws it (Meka
+     * 2026-10-24 14:39: no "free 6h 15" pill): "4h 05 / 3h", "nothing yet / 7h", "1h / no free time".
+     */
+    fun budget(c: BoardCapacity): PlannerBudget {
+        val planned = if (c.plannedMin <= 0) NOTHING_YET else hours(c.plannedMin)
+        val free = if (c.freeMin <= 0) NO_FREE_TIME else hours(c.freeMin)
+        val over = c.plannedMin > 0 && c.plannedMin > c.freeMin
+        val fill = when {
+            c.plannedMin <= 0 -> 0f
+            c.freeMin <= 0 -> 1f
+            else -> c.fill
+        }
+        return PlannerBudget(PLANNED, "$planned / $free", over, fill, c.spoken)
     }
 }

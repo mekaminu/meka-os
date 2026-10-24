@@ -41,6 +41,8 @@ struct WeekBoardScreen: View {
     let board: WeekBoard
     let palette: MekaPalette
     @State private var week = 0
+    /// Option B match: the week chosen once as the board first appears (next week on a weekend).
+    @State private var opened = false
     @State private var direction = 0
     @State private var target: Int64?
     /// By hand, slice 4: the past days he opened (the rest fold narrow).
@@ -52,13 +54,20 @@ struct WeekBoardScreen: View {
         let w = board.weeks[min(week, board.weeks.count - 1)]
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             HStack {
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-                    Text(w.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary)
-                    if w.title != w.range {
-                        Text(w.range).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                    }
+                // Option B match: "October 2026  W44", the month in serif, the ISO week in mono.
+                let head = BoardMatchRules.shared.weekHead(startEpochDay: w.startEpochDay)
+                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.s) {
+                    Text(head.month).font(BoardFont.month).foregroundStyle(palette.textPrimary).lineLimit(1)
+                    Text(head.week).font(BoardFont.mono(16)).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(head.spoken + ", " + w.title)
                 Spacer()
+                Button(BoardMatchRules.shared.TODAY) { MekaHaptics.tick(); goTo(0) }
+                    .font(MekaType.itemMeta).foregroundStyle(palette.textPrimary)
+                    .padding(.horizontal, MekaSpace.s).padding(.vertical, MekaSpace.xxs)
+                    .overlay(Capsule().strokeBorder(palette.hairline, lineWidth: 1))
+                    .help("Back to this week")
                 // Item (8): from Friday, on this week, Review the week opens Review with the reflection open.
                 if board.offersReview && week == 0 {
                     Button(BoardReviewRules.shared.REVIEW) { MekaHaptics.tick(); model.openReflectionFromTalk() }
@@ -130,21 +139,26 @@ struct WeekBoardScreen: View {
             }
         }
         .background(keyboard)
+        .onAppear {
+            guard !opened else { return }
+            opened = true
+            week = Int(BoardMatchRules.shared.opensOnWeek(board: board))
+        }
+    }
+
+    private func goTo(_ target: Int) {
+        guard target != week else { return }
+        direction = target > week ? 1 : -1
+        withAnimation(MekaMotion.replan(reduced: reduceMotion)) { week = max(0, min(board.weeks.count - 1, target)) }
     }
 
     /// One row of the week's days: each opened day shares the row, a past one folds narrow.
     private func dayRow(_ days: [BoardDay], minHeight: CGFloat) -> some View {
         HStack(alignment: .top, spacing: MekaSpace.xs) {
+            // Option B match: every day a full column (a past one dimmed), never folded narrow.
             ForEach(days, id: \.epochDay) { d in
-                if d.isPast && !openedPast.contains(d.epochDay) {
-                    BoardPastDayView(day: d, palette: palette, minHeight: minHeight) {
-                        MekaHaptics.tick()
-                        withAnimation(MekaMotion.replan(reduced: reduceMotion)) { _ = openedPast.insert(d.epochDay) }
-                    }
-                } else {
-                    BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: foldAction(d), minHeight: minHeight) { on in
-                        if on { target = d.epochDay } else if target == d.epochDay { target = nil }
-                    }
+                BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: nil, minHeight: minHeight) { on in
+                    if on { target = d.epochDay } else if target == d.epochDay { target = nil }
                 }
             }
         }
@@ -373,30 +387,17 @@ private struct BoardColumnView: View {
         let compact = BoardFitRules.shared.compact(laneDp: Float(laneWidth))
         let tagBelow = BoardFitRules.shared.tagBelow(compact: compact)
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
-            // By hand, slice 2 (the look): a big day number over its weekday, a small tag, today underlined in gold,
-            // "2 of 5 done" over a thin gold bar (a past day only what was done), then the day's capacity.
+            // Option B match (Meka 2026-10-24 14:39): "27 Oct" in serif with "Mon" on the right (today in gold), the thin
+            // done bar without words, then the budget pill, always "planned · 4h 05 / 3h".
+            let head = BoardMatchRules.shared.dayHead(day: day)
             VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                HStack(alignment: .firstTextBaseline, spacing: MekaSpace.xs) {
-                    Text(day.number).font(MekaType.nowTitle)
-                        .foregroundStyle(day.isToday ? palette.accent : palette.textPrimary)
-                    Text(day.weekday).font(MekaType.metaStrong)
-                        .foregroundStyle(day.isToday ? palette.accent : palette.textSecondary)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(head.date).font(BoardFont.date)
+                        .foregroundStyle(day.isToday ? palette.accent : palette.textPrimary).lineLimit(1)
                     Spacer(minLength: 0)
-                    if !tagBelow, let tag = BoardLookRules.shared.tag(day: day) {
-                        Text(tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
-                    }
+                    Text(head.weekday).font(MekaType.itemMeta.weight(.medium)).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
-                // Slice 9: a compact lane keeps the tag's line (blank on a day without one) and every lane the
-                // underline's slot (lit on today only), so the lanes' first cards start level.
-                if let tag = BoardFitRules.shared.tagLine(day: day, compact: compact) {
-                    Text(tag.isEmpty ? " " : tag).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
-                        .accessibilityHidden(tag.isEmpty)
-                }
-                Capsule().fill(BoardFitRules.shared.underlineLit(day: day) ? palette.accent : Color.clear)
-                    .frame(width: MekaSpace.l, height: 2)
-                if day.isPast {
-                    Text(BoardLookRules.shared.pastLine(day: day)).font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                } else if let progress = BoardLookRules.shared.progress(day: day) {
+                if let progress = BoardLookRules.shared.progress(day: day) {
                     DayProgressBar(progress: progress, palette: palette)
                 }
                 if let capacity = day.capacity {
@@ -404,34 +405,19 @@ private struct BoardColumnView: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(day.accessibilityLabel + (onFold != nil ? ". Click to fold it" : ""))
-            .contentShape(Rectangle())
-            .onTapGesture { onFold?() }
+            .accessibilityLabel(day.accessibilityLabel)
 
             // Item (10): "Stacking up: Trip form, Council tax and Gym" in amber, with its one-tap fixes.
             if let pressure = day.pressure {
                 PressureNote(pressure: pressure, palette: palette)
             }
 
-            // By hand, slice 1: "+ Add a task" at the top of every day from today, always there.
-            if day.canDrop { BoardAddRow(day: day, palette: palette) }
-
-            if !day.chips.isEmpty {
-                VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                    // Slice 2: events as slim one-line chips, "09:30 · Dentist", a dot in the calendar's colour.
-                    ForEach(day.chips, id: \.id) { chip in
-                        Button { model.openEvent = chip.event } label: {
-                            HStack(spacing: MekaSpace.xxs) {
-                                CalendarDot(tone: chip.tone, palette: palette)
-                                Text(chip.time).font(MekaType.micro).foregroundStyle(palette.accent).lineLimit(1)
-                                Text(chip.title).font(MekaType.micro).foregroundStyle(palette.textSecondary).lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
-                            .background(Capsule().fill(palette.surface))
-                        }
-                        .buttonStyle(MekaPressStyle())
-                        .accessibilityLabel(BoardLookRules.shared.eventLine(chip: chip))
+            // Option B match: the day's events are cards too, a blue time chip and their length.
+            let events = BoardMatchRules.shared.eventCards(day: day)
+            if !events.isEmpty {
+                VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                    ForEach(events, id: \.id) { e in
+                        BoardEventCardView(card: e, palette: palette, compact: compact) { model.openEvent = e.event }
                     }
                     if let more = day.moreLabel {
                         Text(more).font(MekaType.micro).foregroundStyle(palette.textTertiary)
@@ -439,8 +425,8 @@ private struct BoardColumnView: View {
                 }
             }
 
-            // Slice 2: free time as quiet lines, never boxes; each is still a drop target that lights up gold.
-            if !day.freeTimes.isEmpty {
+            // Free time shows only while a card is held over the day, as the drop targets that block time.
+            if glow && !day.freeTimes.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(day.freeTimes, id: \.startMs) { free in
                         FreeTimeView(free: free, day: day, board: board, palette: palette, compact: compact)
@@ -455,6 +441,8 @@ private struct BoardColumnView: View {
             if glow && day.openCards.isEmpty {
                 Text(WeekBoardRules.shared.DROP_HERE).font(MekaType.caption).foregroundStyle(palette.accent)
             }
+            // Option B match: "+ add" at the foot of every day from today, a quiet dashed button; the field opens there.
+            if day.canDrop { BoardAddRow(day: day, palette: palette) }
             Spacer(minLength: 0)
         }
         .padding(MekaSpace.xs)
@@ -462,7 +450,8 @@ private struct BoardColumnView: View {
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { laneWidth = $0 }
         .background(
             RoundedRectangle(cornerRadius: MekaRadius.m)
-                .fill(glow ? palette.surfaceRaised : (day.isToday ? palette.surface : Color.clear))
+                // Option B match: no box round a day; today is the gold date and pill.
+                .fill(glow ? palette.surfaceRaised : Color.clear)
         )
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent, lineWidth: glow ? 1.5 : 0))
         // Item (10): a day stacking up wears an amber edge (the gold landing edge covers it while a card is held over).
@@ -548,8 +537,8 @@ private struct BoardAddRow: View {
                     MekaHaptics.tick()
                     withAnimation(MekaMotion.appear(reduced: reduceMotion)) { open = true }
                 } label: {
-                    Text(BoardHandRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
-                        .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
+                    Text(BoardMatchRules.shared.ADD).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .frame(maxWidth: .infinity, minHeight: 34, alignment: .center)
                         .padding(.horizontal, MekaSpace.m)
                         .contentShape(Rectangle())
                         .overlay(
@@ -650,21 +639,18 @@ private struct BoardCardView: View {
         // chip and the duration on top, the title across the whole card, the tick and the card's chips and source in the
         // foot. A done card fades (its words stay plain, never struck through); the fade glides (Reduce Motion: steps).
         let planner = BoardPlannerRules.shared
-        let time = planner.timeChip(card: card)
+        // Option B match: every card has its top line, the time chip (gold, or a quiet "Any time") and its length.
+        let match = BoardMatchRules.shared
+        let time = match.timeChip(card: card)
+        let timed = match.timed(card: card)
         let duration = planner.durationLabel(card: card)
         let foot = planner.footChips(card: card)
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            if time != nil || duration != nil {
-                HStack(spacing: MekaSpace.xs) {
-                    if let time {
-                        Text(time).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.accent).lineLimit(1)
-                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
-                            .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.accent.opacity(0.14)))
-                    }
-                    Spacer(minLength: 0)
-                    if let duration {
-                        Text(duration).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
-                    }
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            HStack(spacing: MekaSpace.xs) {
+                BoardTimeChip(time: time, ink: timed ? palette.accent : palette.textTertiary, quiet: !timed, palette: palette)
+                Spacer(minLength: 0)
+                if let duration {
+                    Text(duration).font(BoardFont.mono(11)).foregroundStyle(palette.textTertiary).lineLimit(1)
                 }
             }
             Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body)
@@ -707,7 +693,7 @@ private struct BoardCardView: View {
                 }
             }
         }
-        .padding(.horizontal, MekaSpace.xs).padding(.top, MekaSpace.xs).padding(.bottom, MekaSpace.xxs)
+        .padding(.horizontal, MekaSpace.s).padding(.top, MekaSpace.s).padding(.bottom, MekaSpace.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)
         // Refinement 3: a borderless tile on the lighter surface; a done one fades rather than sinking or striking through.
         .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
@@ -885,8 +871,7 @@ private struct DayProgressBar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(progress.line).font(MekaType.micro)
-                .foregroundStyle(progress.complete ? palette.accent : palette.textTertiary)
+            // Option B match: the bar only; the words stay for VoiceOver.
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(palette.hairline)
@@ -919,19 +904,19 @@ private struct BudgetPill: View {
         VStack(spacing: 0) {
             HStack(spacing: MekaSpace.xs) {
                 if compact {
-                    Text(BoardPlannerRules.shared.compactLine(b: b)).font(MekaType.micro).monospacedDigit()
-                        .foregroundStyle(b.over ? palette.calendar3 : palette.textSecondary).lineLimit(1)
+                    Text(BoardPlannerRules.shared.compactLine(b: b)).font(BoardFont.mono(11))
+                        .foregroundStyle(b.over ? palette.calendar3 : palette.textSecondary).lineLimit(2)
                     Spacer(minLength: 0)
                 } else {
-                    Text(b.label).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Text(b.label).font(BoardFont.mono(12)).foregroundStyle(palette.textTertiary).lineLimit(1)
                     Spacer(minLength: 0)
                     if !b.value.isEmpty {
-                        Text(b.value).font(MekaType.micro).monospacedDigit()
+                        Text(b.value).font(BoardFont.mono(12))
                             .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(1)
                     }
                 }
             }
-            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+            .padding(.horizontal, 10).padding(.vertical, 6)
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Rectangle().fill(palette.hairline)
@@ -1227,5 +1212,66 @@ extension MekaPalette {
         if area == BoardArea.sideHustle { return accent }
         if area == BoardArea.money { return success }
         return calendar2
+    }
+}
+
+/// Option B match: the mockup's type. Its serif (Fraunces) for the month and the dates is the system's serif (New York),
+/// its mono (JetBrains Mono) for times the system's monospaced; the sizes and weights are the mockup's.
+enum BoardFont {
+    static var month: Font { .system(size: MekaTextScale.size(32), weight: .semibold, design: .serif) }
+    static var date: Font { .system(size: MekaTextScale.size(19), weight: .semibold, design: .serif) }
+    static func mono(_ size: CGFloat) -> Font { .system(size: MekaTextScale.size(size), weight: .regular, design: .monospaced) }
+}
+
+/// The time chip on a card's top line (the mockup's `.tm`): mono figures on a faint tint, gold for a task's time, blue
+/// for an event, quiet for "Any time".
+private struct BoardTimeChip: View {
+    let time: String
+    let ink: Color
+    var quiet = false
+    let palette: MekaPalette
+
+    var body: some View {
+        Text(time).font(BoardFont.mono(11)).foregroundStyle(ink).lineLimit(1)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .background(RoundedRectangle(cornerRadius: 6).fill(quiet ? palette.surface : ink.opacity(0.16)))
+    }
+}
+
+/// Option B match: one of the day's events as a card in its column (the mockup's stand-up): the blue time chip and its
+/// length on top, the title, then the calendar's dot and name in the foot. A click opens the event.
+private struct BoardEventCardView: View {
+    let card: BoardEventCard
+    let palette: MekaPalette
+    var compact = false
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(alignment: .leading, spacing: MekaSpace.xs) {
+                HStack(spacing: MekaSpace.xs) {
+                    BoardTimeChip(time: card.time, ink: palette.calendar4, palette: palette)
+                    Spacer(minLength: 0)
+                    if let duration = card.duration {
+                        Text(duration).font(BoardFont.mono(11)).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
+                }
+                Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body).foregroundStyle(palette.textPrimary)
+                    .lineLimit(Int(BoardFitRules.shared.titleLines(compact: compact)))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: MekaSpace.xxs) {
+                    Spacer(minLength: 0)
+                    CalendarDot(tone: card.tone, palette: palette)
+                    if !compact {
+                        Text(card.calendar).font(MekaType.micro).foregroundStyle(palette.textSecondary).lineLimit(1)
+                    }
+                }
+            }
+            .padding(MekaSpace.s)
+            .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+            .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+        }
+        .buttonStyle(MekaPressStyle())
+        .accessibilityLabel(card.spoken)
     }
 }

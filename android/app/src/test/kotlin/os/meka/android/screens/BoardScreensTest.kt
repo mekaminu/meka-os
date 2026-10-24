@@ -28,6 +28,7 @@ import os.meka.android.calendar.TIMELINE_TAB_TAG
 import os.meka.android.calendar.TIMELINE_TAG
 import os.meka.android.calendar.TIMELINE_TOGGLE_TAG
 import os.meka.android.calendar.PLANNER_CARD_TAG
+import os.meka.android.calendar.ADD_TAG
 import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -64,9 +65,9 @@ class BoardScreensTest {
 
     private val now = 1_792_599_300_000L // Wed 21 Oct 2026, 17:15 in London
 
-    private fun core(): MekaCore = MekaCore(
+    private fun core(at: Long = now): MekaCore = MekaCore(
         householdId = "hh", deviceId = "android", store = InMemoryReplicaStore(), transport = null,
-        secureRandom = Random(7), timeZone = { TimeZone.of("Europe/London") }, nowMs = { now },
+        secureRandom = Random(7), timeZone = { TimeZone.of("Europe/London") }, nowMs = { at },
     )
 
     private companion object { const val SETTLE_MS = 2_000L }
@@ -349,6 +350,63 @@ class BoardScreensTest {
         settle()
         assertTrue("the timeline stayed", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
         assertTrue("the cards didn't come back", compose.onAllNodesWithText("Send the quote").fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /**
+     * The Week board made to match Option B (Meka 2026-10-24 14:39, "doesn't look like the mock-up prototype"), slice 1,
+     * unfolded on a Wednesday: "October 2026" with W43 in the header; Monday and Tuesday are full columns with their
+     * dates (never folded into empty pills); a card with no time says "Any time" on its chip; "+ add" sits at the foot
+     * of the day, under its cards; the budget pill says "planned" against what is free.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theColumnsMatchTheMockup() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            core.addOnBoardSized("Fix the gate latch", core.weekBoard.value.todayEpochDay, 60)
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-option-b"))
+        ScreenShots.assertSensible(compose, "inner-dark-option-b")
+        ScreenShots.assertShows(compose, "match", "October 2026")
+        ScreenShots.assertShows(compose, "match", "W43")
+        ScreenShots.assertShows(compose, "match", "Monday 19 October")
+        ScreenShots.assertShows(compose, "match", "Tuesday 20 October")
+        ScreenShots.assertShows(compose, "match", os.meka.core.domain.BoardMatchRules.ANY_TIME)
+        if (compose.onAllNodesWithContentDescription("Tap to open", substring = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("a past day is still folded narrow")
+        }
+        if (compose.onAllNodesWithText("Nothing done", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("a past day still shows the folded pill's \"Nothing done\"")
+        }
+        val card = cardBounds("Fix the gate latch")
+        val adds = compose.onAllNodesWithTag(ADD_TAG, useUnmergedTree = true).fetchSemanticsNodes().map { it.boundsInRoot }
+        if (adds.isEmpty()) fail("no + add at the foot of the days")
+        val todays = adds.firstOrNull { it.left < card.right && it.right > card.left }
+            ?: throw AssertionError("no + add in today's column ($card vs $adds)")
+        assertTrue("+ add sits under today's card ($todays vs $card)", todays.top >= card.bottom)
+        if (compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes().isEmpty()) fail("no budget pill")
+    }
+
+    /** Option B match: on a Saturday the unfolded board opens on next week; ‹ goes back to this week's Saturday. */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun onASaturdayTheBoardOpensOnNextWeek() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core(now + 3 * 86_400_000L) // Sat 24 Oct 2026, 17:15
+        runBlocking {
+            core.tick()
+            core.addOnBoardSized("Batch cook for the week", core.weekBoard.value.todayEpochDay, 60)
+        }
+        show(core)
+        ScreenShots.assertShows(compose, "saturday", "week 44")
+        assertTrue(
+            "this week's Saturday card shows on next week",
+            compose.onAllNodesWithText("Batch cook for the week", useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+        )
+        compose.onNodeWithContentDescription("Previous week").performClick()
+        settle()
+        cardBounds("Batch cook for the week")
     }
 
     /** A core with "Send the quote" planned today at 19:00 for 45 minutes, and its block's spoken label from the core. */

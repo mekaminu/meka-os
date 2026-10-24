@@ -85,21 +85,25 @@ class BoardPlannerTest {
         val small = BoardPlannerRules.budget(BoardCapacity(45, 30, 0))
         assertEquals("45m / 30m", small.value)
         assertTrue(small.over)
-        // Nothing planned: how much is free. No free time either: says so, nothing on the right.
+        // Always "planned" against free (Meka 2026-10-24 14:39: no "free 7h" pill); never "0h", never empty.
         val free = BoardPlannerRules.budget(BoardCapacity(0, 420, 2))
-        assertEquals("free", free.label)
-        assertEquals("7h", free.value)
+        assertEquals("planned", free.label)
+        assertEquals("nothing yet / 7h", free.value)
+        assertFalse(free.over)
+        assertEquals(0f, free.fill)
         val none = BoardPlannerRules.budget(BoardCapacity(0, 0, 0))
-        assertEquals("no free time", none.label)
-        assertEquals("", none.value)
+        assertEquals("planned", none.label)
+        assertEquals("nothing yet / no free time", none.value)
+        assertFalse(none.over)
         val packed = BoardPlannerRules.budget(BoardCapacity(60, 0, 0))
-        assertEquals("1h · no free time", packed.value)
+        assertEquals("1h / no free time", packed.value)
         assertTrue(packed.over)
-        // A compact lane draws it as one line.
+        assertEquals(1f, packed.fill)
+        // A compact lane draws it as one line: the value.
         assertEquals("1h 20 / 3h", BoardPlannerRules.compactLine(under))
-        assertEquals("7h free", BoardPlannerRules.compactLine(free))
-        assertEquals("no free time", BoardPlannerRules.compactLine(none))
-        assertEquals("1h · no free time", BoardPlannerRules.compactLine(packed))
+        assertEquals("nothing yet / 7h", BoardPlannerRules.compactLine(free))
+        assertEquals("nothing yet / no free time", BoardPlannerRules.compactLine(none))
+        assertEquals("1h / no free time", BoardPlannerRules.compactLine(packed))
         // The quality gate's nonsense check finds nothing in any of them.
         listOf(under, over, small, free, none, packed).forEach {
             assertTrue(ScreenSenseRules.problemsIn("${it.label} ${it.value}").isEmpty(), "${it.label} ${it.value}")

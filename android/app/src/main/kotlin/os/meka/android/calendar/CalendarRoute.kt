@@ -254,9 +254,10 @@ private fun Agenda(
                 Text("Calendar", style = MekaType.greeting, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
                 if (add.canAdd) AddEventButton(onClick = { add.onAdd(lit) })
             }
-            Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
+            // Option B match: the Board has no "25 events in the next 30 days" line and no colour key (the Agenda keeps them).
+            if (!board) Text(v.summary, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
             EditLines(add.lines, Modifier.padding(top = MekaSpace.xxs).appear(rememberAppearance(1)))
-            if (v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
+            if (!board && v.legend.isNotEmpty()) CalendarKey(v.legend, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)))
             CalendarViewSwitch(board, Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(1)), onBoard)
             Spacer(Modifier.height(MekaSpace.m))
             if (!board) WeekTitle(v, pager.currentPage, Modifier.appear(rememberAppearance(2)))
