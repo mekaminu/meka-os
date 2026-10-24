@@ -1614,6 +1614,14 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(planner.compactLine(b: planner.budget(c: BoardCapacity(plannedMin: 0, freeMin: 420, unsized: 0))), "7h free")
         XCTAssertFalse(planner.STRIKE_DONE)
         XCTAssertEqual(planner.sourceLabel(source: CardSource.mail), "Mail")
+        // Option B, slice 2: the layout (Mon–Fri across, the weekend shorter underneath, the lists below).
+        let layout = BoardWeekLayoutRules.shared
+        XCTAssertEqual(layout.WEEKDAYS, 5)
+        let tiers = layout.heights(viewportHeight: 1000)
+        XCTAssertEqual(tiers.weekdays, 620, accuracy: 0.01)
+        XCTAssertLessThan(tiers.weekend, tiers.weekdays)
+        XCTAssertEqual(layout.heights(viewportHeight: 100).weekend, layout.MIN_WEEKEND_DP, accuracy: 0.01)
+        XCTAssertEqual(layout.NO_DAY_EMPTY, "Nothing waiting for a day")
         // Slice 4: the week's lane and the Someday tray.
         XCTAssertEqual(WeekBoardRules.shared.NO_DAY, "No day yet")
         XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")

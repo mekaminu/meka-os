@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -74,8 +75,12 @@ class BoardScreensTest {
         )
     }
 
-    /** Each open lane's first card in the full week (unfolded, all lanes are side by side). */
-    private val firstCards = listOf("Fix the gate latch", "Order new bins", "Plan Saturday's football run with Alex", "Renew the car insurance", "Batch cook for the week")
+    /**
+     * Each open lane's first card in the full week, row by row (Option B slice 2, unfolded: Wed–Fri across with Mon and
+     * Tue folded narrow, the weekend underneath).
+     */
+    private val firstWeekdayCards = listOf("Fix the gate latch", "Order new bins", "Plan Saturday's football run with Alex")
+    private val firstWeekendCards = listOf("Renew the car insurance", "Batch cook for the week")
 
     private fun shoot(name: String, fill: Fill, theme: ThemeChoice = ThemeChoice.DARK, level: Boolean = false) {
         ThemeChoice.save(ApplicationProvider.getApplicationContext(), theme)
@@ -117,7 +122,11 @@ class BoardScreensTest {
         ScreenShots.assertReadable(compose, name, titles(fill))
         // Slice 9 (the re-shot of slice 8): every lane's first card starts level, tag or no tag, today or not.
         // Option B slice 1: measured by the planner card around each title (some cards have a time line above it).
-        if (level) ScreenShots.assertLevelBy(compose, name, firstCards, PLANNER_CARD_TAG)
+        // Option B slice 2: level along each row (the weekend's row sits under the weekdays').
+        if (level) {
+            ScreenShots.assertLevelBy(compose, name, firstWeekdayCards, PLANNER_CARD_TAG)
+            ScreenShots.assertLevelBy(compose, name, firstWeekendCards, PLANNER_CARD_TAG)
+        }
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)
@@ -179,6 +188,52 @@ class BoardScreensTest {
 
         compose.onNodeWithContentDescription(BoardHandRules.tickLabel("Book the MOT", true)).performClick()
         awaitCore("un-tick") { core.weekBoard.value.days.flatMap { it.cards }.any { it.id == id && !it.done } }
+    }
+
+    /**
+     * Option B slice 2 (the layout), unfolded: Monday to Friday across, the weekend's columns underneath and shorter,
+     * then No day yet and Someday as lists below them; ‹ › steps a week and back.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theWeekendSitsUnderTheWeekdaysWithTheListsBelow() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            core.addOnBoardSized("Fix the gate latch", today, 60)
+            core.addOnBoardSized("Renew the car insurance", today + 3, 30)
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        settle()
+        val weekday = cardBounds("Fix the gate latch")
+        val weekend = cardBounds("Renew the car insurance")
+        assertTrue("the weekend's card sits under the weekdays' ($weekend vs $weekday)", weekend.top >= weekday.bottom)
+        ScreenShots.assertShows(compose, "layout", "No day yet")
+        ScreenShots.assertShows(compose, "layout", "Nothing on Someday")
+        compose.onNodeWithContentDescription("Next week").performClick()
+        settle()
+        assertTrue(
+            "next week shows its own days, not this week's card",
+            compose.onAllNodesWithText("Fix the gate latch", useUnmergedTree = true).fetchSemanticsNodes().isEmpty(),
+        )
+        compose.onNodeWithContentDescription("Previous week").performClick()
+        settle()
+        cardBounds("Fix the gate latch")
+    }
+
+    private fun cardBounds(title: String): androidx.compose.ui.geometry.Rect {
+        val cards = compose.onAllNodesWithTag(PLANNER_CARD_TAG, useUnmergedTree = true).fetchSemanticsNodes()
+        fun holds(n: androidx.compose.ui.semantics.SemanticsNode): Boolean =
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } == title || n.children.any { holds(it) }
+        return cards.firstOrNull { holds(it) }?.boundsInRoot ?: throw AssertionError("no card holds \"$title\"")
     }
 
     private fun titleDecoration(title: String): TextDecoration? {

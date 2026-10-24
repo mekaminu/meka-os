@@ -29,6 +29,10 @@ import SwiftUI
 /// it was elsewhere, its block going to the calendar as busy time with Undo; a stretch too short says so. The targeted
 /// free time glows gold and says "Drop to block here".
 ///
+/// Option B slice 2 (the layout): Monday to Friday as five columns across, Saturday and Sunday as two shorter columns
+/// underneath, then No day yet and Someday as always-open lists (drop a card on either, drag one out onto a day); the
+/// tray chips and their lane are gone from the Mac (the cover screen of the Fold keeps them).
+///
 /// Motion: weeks push across the way you moved; a targeted column lifts (scale 1.01) and its edge blends to gold on the
 /// approve spring; cards glide to their new places (replan). Reduce Motion: cross-fades, no lift.
 struct WeekBoardScreen: View {
@@ -39,8 +43,7 @@ struct WeekBoardScreen: View {
     @State private var week = 0
     @State private var direction = 0
     @State private var target: Int64?
-    /// By hand, slice 4: the tray open under its chip, and the past days he opened (the rest fold narrow).
-    @State private var openTray: BoardTray?
+    /// By hand, slice 4: the past days he opened (the rest fold narrow).
     @State private var openedPast: Set<Int64> = []
 
     var body: some View {
@@ -76,63 +79,53 @@ struct WeekBoardScreen: View {
             }
             .buttonStyle(.borderless)
 
-            // By hand, slice 4: the week's goals as small gold pills and the two trays as chips on one row; an open
-            // tray's cards in a lane under them.
-            let chips = BoardTidyRules.shared.trayChips(week: w, board: board, open: openTray)
-            HStack(alignment: .center, spacing: MekaSpace.xs) {
-                BoardGoalsView(week: w, palette: palette, target: $target)
-                    .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
-                ForEach(chips, id: \.label) { chip in
-                    let key = chip.tray == BoardTray.noDay ? laneKey : trayKey
-                    BoardTrayChip(chip: chip, week: w, board: board, palette: palette, isOpen: openTray == chip.tray, targeted: target == key) {
-                        MekaHaptics.tick()
-                        withAnimation(MekaMotion.appear(reduced: reduceMotion)) { openTray = BoardTidyRules.shared.toggle(open: openTray, tapped: chip) }
-                    } onTarget: { on in
-                        if on { target = key } else if target == key { target = nil }
+            // The week's goals as small gold pills across the top (Option B slice 2: the trays are lists below now).
+            BoardGoalsView(week: w, palette: palette, target: $target)
+                .animation(MekaMotion.replan(reduced: reduceMotion), value: w.goals.map(\.goalId))
+
+            // Option B slice 2 (the layout; Meka's refinement 1): Monday to Friday as five columns across, the weekend
+            // as two shorter columns underneath, then No day yet and Someday as lists, each a place to drop a card.
+            let layout = BoardWeekLayoutRules.shared
+            VStack(alignment: .leading, spacing: MekaSpace.m) {
+                dayRow(layout.weekdays(week: w), minHeight: CGFloat(layout.MIN_WEEKDAYS_DP))
+                let weekend = layout.weekend(week: w)
+                if !weekend.isEmpty {
+                    dayRow(weekend, minHeight: CGFloat(layout.MIN_WEEKEND_DP))
+                }
+                HStack(alignment: .top, spacing: MekaSpace.xs) {
+                    ForEach(layout.lists(week: w, board: board), id: \.title) { column in
+                        let key = column.tray == BoardTray.noDay ? laneKey : trayKey
+                        BoardListView(column: column, week: w, board: board, palette: palette, targeted: target == key) { on in
+                            if on { target = key } else if target == key { target = nil }
+                        }
                     }
                 }
-            }
-            if let tray = openTray {
-                BoardTrayLane(tray: tray, week: w, board: board, palette: palette, targeted: target == laneKey || target == trayKey) { on in
-                    let key = tray == BoardTray.noDay ? laneKey : trayKey
-                    if on { target = key } else if target == key { target = nil }
-                }
-                .transition(reduceMotion ? .opacity : .move(edge: .top).combined(with: .opacity))
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: w.lane.map(\.id))
                 .animation(MekaMotion.replan(reduced: reduceMotion), value: board.someday.map(\.id))
-            }
-
-            HStack(alignment: .top, spacing: MekaSpace.xs) {
-                ForEach(w.days, id: \.epochDay) { d in
-                    if d.isPast && !openedPast.contains(d.epochDay) {
-                        BoardPastDayView(day: d, palette: palette) {
-                            MekaHaptics.tick()
-                            withAnimation(MekaMotion.replan(reduced: reduceMotion)) { _ = openedPast.insert(d.epochDay) }
-                        }
-                    } else {
-                        BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: foldAction(d)) { on in
-                            if on { target = d.epochDay } else if target == d.epochDay { target = nil }
-                        }
-                        .frame(maxWidth: CGFloat(BoardTidyRules.shared.MAX_LANE_DP))
-                    }
-                }
             }
             .id(w.startEpochDay)
             .transition(weekTransition)
             .animation(MekaMotion.replan(reduced: reduceMotion), value: w.days.map { $0.cards.map(\.id) })
         }
         .background(keyboard)
-        // An open tray closes once its last card has gone (never an empty box).
-        .onChange(of: trayCounts) {
-            let w = board.weeks[min(week, board.weeks.count - 1)]
-            openTray = BoardTidyRules.shared.stillOpen(open: openTray, chips: BoardTidyRules.shared.trayChips(week: w, board: board, open: openTray))
-        }
     }
 
-    /// The visible week's No day yet count and Someday's, so an open tray closes once it empties.
-    private var trayCounts: [Int] {
-        let w = board.weeks[min(week, board.weeks.count - 1)]
-        return [w.lane.count, board.someday.count, week]
+    /// One row of the week's days: each opened day shares the row, a past one folds narrow.
+    private func dayRow(_ days: [BoardDay], minHeight: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: MekaSpace.xs) {
+            ForEach(days, id: \.epochDay) { d in
+                if d.isPast && !openedPast.contains(d.epochDay) {
+                    BoardPastDayView(day: d, palette: palette, minHeight: minHeight) {
+                        MekaHaptics.tick()
+                        withAnimation(MekaMotion.replan(reduced: reduceMotion)) { _ = openedPast.insert(d.epochDay) }
+                    }
+                } else {
+                    BoardColumnView(day: d, board: board, palette: palette, targeted: target == d.epochDay, onFold: foldAction(d), minHeight: minHeight) { on in
+                        if on { target = d.epochDay } else if target == d.epochDay { target = nil }
+                    }
+                }
+            }
+        }
     }
 
     /// By hand, slice 4: an opened past day folds narrow again; other days have nothing to fold.
@@ -205,6 +198,8 @@ private struct BoardColumnView: View {
     let targeted: Bool
     /// By hand, slice 4: an opened past day folds narrow again with a click on its header.
     var onFold: (() -> Void)? = nil
+    /// Option B slice 2: the weekend's row is shorter than the weekdays'.
+    var minHeight: CGFloat = 320
     let onTarget: (Bool) -> Void
     /// By hand, slice 8 (the quality gate's findings): how wide the lane is drawn, so a narrow one fits its words.
     @State private var laneWidth: CGFloat = CGFloat(BoardTidyRules.shared.MAX_LANE_DP)
@@ -299,7 +294,7 @@ private struct BoardColumnView: View {
             Spacer(minLength: 0)
         }
         .padding(MekaSpace.xs)
-        .frame(maxWidth: .infinity, minHeight: 320, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { laneWidth = $0 }
         .background(
             RoundedRectangle(cornerRadius: MekaRadius.m)
@@ -823,64 +818,13 @@ private struct BoardDrag: ViewModifier {
     }
 }
 
-/// By hand, slice 4: "No day yet · 3" or "Someday · 12" as a small chip; click one with cards to open it (one at a time,
-/// an empty one never opens). Each is a drop target that lifts with a gold edge: a card dropped on No day yet is parked
-/// in the week, on Someday it goes to Someday.
-private struct BoardTrayChip: View {
+/// Option B slice 2: one of the lists under the weekend ("No day yet · 3", "Someday · 12"): its title in the day
+/// headers' weight, its cards stacked (they drag out onto a day and have the same context menu as a day's), or a quiet
+/// line when empty. A card dropped on it is parked in the week or put on Someday; it lifts with a gold edge while
+/// targeted (approve spring; Reduce Motion: no lift).
+private struct BoardListView: View {
     @Environment(CoreModel.self) private var model
-    @Environment(\.mekaReduceMotion) private var reduceMotion
-    let chip: TrayChip
-    let week: BoardWeek
-    let board: WeekBoard
-    let palette: MekaPalette
-    let isOpen: Bool
-    let targeted: Bool
-    let onTap: () -> Void
-    let onTarget: (Bool) -> Void
-
-    var body: some View {
-        let lit = targeted || isOpen
-        Button(action: onTap) {
-            HStack(spacing: MekaSpace.xxs) {
-                Text(chip.label).font(MekaType.caption)
-                    .foregroundStyle(isOpen ? palette.accent : (chip.canOpen ? palette.textPrimary : palette.textTertiary))
-                    .lineLimit(1)
-                if chip.canOpen {
-                    Image(systemName: isOpen ? "chevron.up" : "chevron.down").font(MekaType.micro).foregroundStyle(palette.textTertiary)
-                }
-            }
-            .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xxs)
-            .frame(minHeight: 28)
-            .background(Capsule().fill(lit ? palette.surfaceRaised : palette.surface))
-            .overlay(Capsule().strokeBorder(lit ? palette.accent : palette.hairline, lineWidth: targeted ? 1.5 : 1))
-        }
-        .buttonStyle(MekaPressStyle())
-        // Never disabled: an empty chip is still a place to drop a card (a click on it simply does nothing).
-        .fixedSize()
-        .scaleEffect(targeted && !reduceMotion ? CGFloat(BoardFoldRules.shared.PILL_SWELL) : 1)
-        .animation(MekaMotion.approve(reduced: reduceMotion), value: targeted)
-        .accessibilityLabel(chip.accessibilityLabel)
-        .dropDestination(for: String.self) { ids, _ in drop(ids) } isTargeted: { onTarget($0) }
-    }
-
-    private func drop(_ ids: [String]) -> Bool {
-        guard let id = ids.first else { return false }
-        if chip.tray == BoardTray.noDay {
-            guard board.find(taskId: id) != nil else { return false }
-            model.parkOnBoard(id, week: week.startEpochDay, index: Int.max / 2)
-        } else {
-            guard WeekBoardRules.shared.canSomeday(board: board, taskId: id) else { return false }
-            model.somedayOnBoard(id)
-        }
-        return true
-    }
-}
-
-/// By hand, slice 4: an open tray's cards side by side under the chips (No day yet in his order, Someday newest first);
-/// they drag out onto a day and have the same context menu as a day's. Also a drop target, like its chip.
-private struct BoardTrayLane: View {
-    @Environment(CoreModel.self) private var model
-    let tray: BoardTray
+    let column: BoardListColumn
     let week: BoardWeek
     let board: WeekBoard
     let palette: MekaPalette
@@ -888,17 +832,23 @@ private struct BoardTrayLane: View {
     let onTarget: (Bool) -> Void
 
     var body: some View {
-        let someday = tray == BoardTray.someday
+        let someday = column.tray == BoardTray.someday
         let cards = someday ? board.someday : week.lane
-        ScrollView(.horizontal) {
-            HStack(alignment: .top, spacing: MekaSpace.xs) {
+        VStack(alignment: .leading, spacing: MekaSpace.xs) {
+            Text(column.title).font(MekaType.itemTitle).foregroundStyle(palette.textPrimary).lineLimit(1)
+                .accessibilityLabel(column.accessibilityLabel)
+                .accessibilityAddTraits(.isHeader)
+            if cards.isEmpty {
+                Text(targeted ? WeekBoardRules.shared.DROP_HERE : column.empty).font(MekaType.caption)
+                    .foregroundStyle(targeted ? palette.accent : palette.textTertiary)
+            } else {
                 ForEach(cards, id: \.id) { card in
                     BoardCardView(card: card, spot: someday ? .someday : .lane(week), board: board, palette: palette)
-                        .frame(width: 200)
                 }
             }
+            Spacer(minLength: 0)
         }
-        .scrollIndicators(.never)
+        .frame(maxWidth: .infinity, minHeight: CGFloat(BoardWeekLayoutRules.shared.MIN_LISTS_DP), alignment: .topLeading)
         .modifier(BoardZone(palette: palette, targeted: targeted))
         .dropDestination(for: String.self) { ids, _ in
             guard let id = ids.first else { return false }
@@ -919,6 +869,7 @@ private struct BoardTrayLane: View {
 private struct BoardPastDayView: View {
     let day: BoardDay
     let palette: MekaPalette
+    var minHeight: CGFloat = 320
     let onOpen: () -> Void
 
     var body: some View {
@@ -938,7 +889,7 @@ private struct BoardPastDayView: View {
             }
             .padding(.vertical, MekaSpace.m)
             .frame(width: CGFloat(BoardTidyRules.shared.PAST_DP))
-            .frame(minHeight: 320)
+            .frame(minHeight: minHeight)
             .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.hairline, lineWidth: 1))
             .contentShape(Rectangle())
         }
