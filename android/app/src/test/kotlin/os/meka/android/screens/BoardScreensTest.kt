@@ -7,6 +7,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.TextDecoration
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
+import os.meka.android.calendar.BUDGET_TAG
+import os.meka.android.calendar.PLANNER_CARD_TAG
+import os.meka.core.domain.BoardHandRules
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.runBlocking
@@ -128,4 +142,65 @@ class BoardScreensTest {
 
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun innerManyLight() = shoot("inner-light-many", Fill.MANY, ThemeChoice.LIGHT, level = true)
+
+    /**
+     * Works by hand (quality gate 3), Option B slice 1: a planner card shows its duration on top ("0:30") and the day's
+     * budget pill says "planned"; ticking the card marks it done, and its title stays plain (faded, never struck
+     * through); ticking again un-ticks it.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun aPlannerCardTicksAndFadesWithoutStrikingThrough() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        val id = runBlocking {
+            core.tick()
+            core.addOnBoardSized("Book the MOT", core.weekBoard.value.todayEpochDay, 30)
+        }
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            MekaTheme {
+                Box(Modifier.fillMaxSize().background(Meka.colors.background).testTag("screen")) {
+                    WeekBoardView(core, EventUndo(), onEvent = {}, Modifier.fillMaxSize())
+                }
+            }
+        }
+        settle()
+        ScreenShots.assertShows(compose, "planner", "0:30")
+        if (compose.onAllNodesWithTag(PLANNER_CARD_TAG).fetchSemanticsNodes().isEmpty()) fail("no planner card drawn")
+        val budget = compose.onAllNodesWithTag(BUDGET_TAG).fetchSemanticsNodes()
+        if (budget.isEmpty()) fail("no budget pill under today's header")
+        val spoken = budget.first().config[SemanticsProperties.ContentDescription].joinToString()
+        assertTrue("the budget pill says what is planned: $spoken", spoken.contains("planned"))
+
+        compose.onNodeWithContentDescription(BoardHandRules.tickLabel("Book the MOT", false)).performClick()
+        awaitCore("tick") { core.weekBoard.value.days.flatMap { it.cards }.any { it.id == id && it.done } }
+        assertEquals("a done card's title is not struck through", null, titleDecoration("Book the MOT"))
+
+        compose.onNodeWithContentDescription(BoardHandRules.tickLabel("Book the MOT", true)).performClick()
+        awaitCore("un-tick") { core.weekBoard.value.days.flatMap { it.cards }.any { it.id == id && !it.done } }
+    }
+
+    private fun titleDecoration(title: String): TextDecoration? {
+        val node = compose.onNodeWithText(title).fetchSemanticsNode()
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        return layouts.firstOrNull()?.layoutInput?.style?.textDecoration?.takeIf { it != TextDecoration.None }
+    }
+
+    private fun settle() {
+        compose.mainClock.advanceTimeBy(SETTLE_MS)
+        compose.waitForIdle()
+    }
+
+    /** A command runs on the core's own thread, off the paused test clock: wait for it in real time (up to 3 s). */
+    private fun awaitCore(what: String, done: () -> Boolean) {
+        var waited = 0
+        while (!done() && waited < 3_000) {
+            Thread.sleep(20)
+            waited += 20
+            compose.mainClock.advanceTimeBy(16)
+        }
+        if (!done()) fail("$what: the core never did it")
+        settle()
+    }
 }

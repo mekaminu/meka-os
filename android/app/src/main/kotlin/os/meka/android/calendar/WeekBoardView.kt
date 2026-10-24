@@ -51,6 +51,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.semantics.selected
 import os.meka.core.domain.BoardLookRules
 import os.meka.core.domain.BoardFitRules
+import os.meka.core.domain.BoardPlannerRules
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
 import os.meka.core.domain.CardChip
@@ -888,7 +889,7 @@ private fun DayColumn(
             } else {
                 BoardLookRules.progress(day)?.let { DayProgressBar(it) }
             }
-            day.capacity?.let { CapacityBar(it) }
+            day.capacity?.let { BudgetPill(it, day.isToday) }
         }
         day.pressure?.let { PressureNote(it, onEase) }
         // By hand, slice 1: "+ Add a task" at the top of every day from today, always there.
@@ -1134,45 +1135,83 @@ private fun BoardCardRow(
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = null) {
-    val chips = BoardLookRules.chips(card)
+    // Option B, slice 1 (the planner cards, BoardPlannerRules): a borderless tile on the lighter surface; the time chip
+    // and the duration on top, the title across the whole card, the tick and the card's chips and source in the foot. A
+    // done card fades (its words stay plain, never struck through); the fade glides (Reduced motion: it steps).
+    val reduced = Meka.reducedMotion
     val compact = LocalBoardCompact.current
-    Row(
+    val fade by animateFloatAsState(if (lifted) 1f else BoardPlannerRules.alpha(card), MekaMotion.appear(reduced), label = "card-fade")
+    val top = BoardPlannerRules.top(card)
+    val foot = BoardPlannerRules.footChips(card)
+    Column(
         Modifier.fillMaxWidth()
-            .background(if (card.done && !lifted) Meka.colors.surface else Meka.colors.surfaceRaised)
+            .background(Meka.colors.surfaceRaised)
             .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, TILE) else Modifier)
-            .padding(end = if (compact) MekaSpace.xxs else MekaSpace.xs),
-        verticalAlignment = Alignment.Top,
+            .alpha(fade)
+            .testTag(PLANNER_CARD_TAG)
+            .padding(start = MekaSpace.xs, end = MekaSpace.xs, top = MekaSpace.xs),
     ) {
-        TickTarget(card.done, card.title, onTick, column = BoardFitRules.tickColumn(compact).dp)
-        Column(Modifier.weight(1f).padding(vertical = MekaSpace.xs)) {
-            Text(
-                card.title, style = if (compact) MekaType.caption else MekaType.body, maxLines = BoardFitRules.titleLines(compact),
-                overflow = TextOverflow.Ellipsis,
-                color = if (card.done) Meka.colors.textTertiary else Meka.colors.textPrimary,
-                textDecoration = if (card.done) TextDecoration.LineThrough else null,
-            )
-            if (chips.isNotEmpty()) {
-                FlowRow(
-                    Modifier.padding(top = MekaSpace.xxs),
-                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
-                ) { chips.forEach { CardChipPill(it) } }
+        top?.let { t ->
+            Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+                t.time?.let { TimeChip(it) }
+                Spacer(Modifier.weight(1f))
+                t.duration?.let {
+                    Text(it, style = MekaType.micro.copy(fontFeatureSettings = "tnum"), color = Meka.colors.textTertiary, maxLines = 1)
+                }
             }
         }
-        // Slice 5: a small colour dot for where it came from (mail, Needs you, Discord, School); the screen reader hears
-        // it in the card's label. Dimmed with the rest of a done card.
-        card.source?.let { src ->
-            Box(
-                Modifier.padding(top = MekaSpace.m, start = MekaSpace.xxs).size(6.dp).clip(CircleShape)
-                    .background(Meka.colors.calendarTone(src.tone).copy(alpha = if (card.done) 0.4f else 1f))
-                    .testTag(SOURCE_DOT_TAG),
-            )
+        Text(
+            card.title, style = if (compact) MekaType.caption else MekaType.body, maxLines = BoardFitRules.titleLines(compact),
+            overflow = TextOverflow.Ellipsis, color = Meka.colors.textPrimary,
+            textDecoration = if (card.done && BoardPlannerRules.STRIKE_DONE) TextDecoration.LineThrough else null,
+        )
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            // The tick keeps its own target (Compose widens a small one's touch area to 48 dp past its edges).
+            TickTarget(card.done, card.title, onTick, column = FOOT_TICK, height = FOOT_TICK)
+            Spacer(Modifier.weight(1f))
+            if (foot.isNotEmpty()) {
+                FlowRow(
+                    Modifier.weight(1f, fill = false).padding(vertical = MekaSpace.xxs),
+                    horizontalArrangement = Arrangement.spacedBy(MekaSpace.xxs, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs),
+                ) { foot.forEach { CardChipPill(it) } }
+            }
+            // Slice 5: a small colour dot for where it came from, now with its short name ("● Mail"); the screen reader
+            // hears it in the card's label.
+            card.source?.let { src ->
+                Row(Modifier.padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.calendarTone(src.tone)).testTag(SOURCE_DOT_TAG))
+                    if (!compact) {
+                        Spacer(Modifier.width(MekaSpace.xxs))
+                        Text(
+                            BoardPlannerRules.sourceLabel(src), style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1,
+                            modifier = Modifier.clearAndSetSemantics {},
+                        )
+                    }
+                }
+            }
         }
     }
 }
 
+/** The time chip on a planner card's top line: "12:30" in gold on a faint gold tint, tabular figures. */
+@Composable
+private fun TimeChip(time: String) {
+    Text(
+        time, style = MekaType.micro.copy(fontFeatureSettings = "tnum"), color = Meka.colors.accent, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.accent.copy(alpha = 0.14f))
+            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+    )
+}
+
+/** The tick's drawn square in a planner card's foot (dp); its touch area is widened to 48 dp. */
+private val FOOT_TICK = 32.dp
+
 /** The colour dot on a Board card that came from mail, Needs you, Discord or School (slice 5, UI tests). */
 internal const val SOURCE_DOT_TAG = "board-source-dot"
+
+/** A Board card's face (Option B slice 1, UI tests read its fade). */
+internal const val PLANNER_CARD_TAG = "board-planner-card"
 
 /** The tile's shape (slice 2): rounded like the design's cards. */
 private val TILE = RoundedCornerShape(MekaRadius.m)
@@ -1214,7 +1253,10 @@ private fun DayProgressBar(p: DayProgress) {
  * that grows and fades (600 ms); tapped again it empties. Reduced motion: the fill cross-fades, no spark.
  */
 @Composable
-private fun TickTarget(done: Boolean, title: String, onTick: (() -> Unit)?, column: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp) {
+private fun TickTarget(
+    done: Boolean, title: String, onTick: (() -> Unit)?, column: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp,
+    height: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp,
+) {
     val reduced = Meka.reducedMotion
     val gold = Meka.colors.accent
     val ink = Meka.colors.background
@@ -1229,7 +1271,7 @@ private fun TickTarget(done: Boolean, title: String, onTick: (() -> Unit)?, colu
     Box(
         // Slice 8: on a compact lane the column is 28 dp wide (48 tall); Compose widens a small clickable's touch area to
         // the 48 dp minimum past its edges, so the tick stays as easy to hit while the title gets the width.
-        Modifier.width(column).height(BoardHandRules.CHECK_TARGET.dp)
+        Modifier.width(column).height(height)
             .then(if (onTick != null) Modifier.clip(CircleShape).clickable(role = Role.Checkbox) { onTick() } else Modifier)
             .semantics { contentDescription = BoardHandRules.tickLabel(title, done) },
         contentAlignment = Alignment.Center,
@@ -1478,24 +1520,53 @@ private fun FreeTimeline(free: List<BoardFreeTime>, holding: Boolean, hovered: L
 private val FREE_MIN_H = 24.dp
 private val FREE_MAX_H = 64.dp
 
+/**
+ * Option B, slice 1: the day's budget pill under its header, "planned · 4h 05 / 3h" (a compact lane: "4h 05 / 3h"),
+ * edged gold on today, its thin bar filling gold; amber when more is planned than the day has free, the bar breathing
+ * gently then (Reduced motion: steady). Colours cross-fade and the bar's width glides as estimates change.
+ */
 @Composable
-private fun CapacityBar(c: BoardCapacity) {
+private fun BudgetPill(c: BoardCapacity, today: Boolean) {
     val reduced = Meka.reducedMotion
     val amber = Meka.colors.calendar3
-    val fill by animateFloatAsState(c.fill, MekaMotion.appear(reduced), label = "capacity-fill")
-    val tone by animateColorAsState(if (c.over) amber else Meka.colors.accent, MekaMotion.appear(reduced), label = "capacity-tone")
-    val breath = if (c.over && !reduced) {
-        val t = rememberInfiniteTransition(label = "capacity-breath")
-        t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "capacity-alpha").value
-    } else 1f
-    Text(
-        BoardFitRules.capacityLine(c, LocalBoardCompact.current), style = MekaType.micro,
-        color = if (c.over) amber else Meka.colors.textTertiary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+    val b = BoardPlannerRules.budget(c)
+    val compact = LocalBoardCompact.current
+    val fill by animateFloatAsState(b.fill, MekaMotion.appear(reduced), label = "budget-fill")
+    val tone by animateColorAsState(if (b.over) amber else Meka.colors.accent, MekaMotion.appear(reduced), label = "budget-tone")
+    val edge by animateColorAsState(
+        when { b.over -> amber.copy(alpha = 0.7f); today -> Meka.colors.accent; else -> Meka.colors.hairline },
+        MekaMotion.appear(reduced), label = "budget-edge",
     )
-    Box(Modifier.padding(top = MekaSpace.xxs).fillMaxWidth().height(3.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.hairline)) {
-        Box(Modifier.fillMaxWidth(fill).height(3.dp).alpha(breath).clip(RoundedCornerShape(MekaRadius.pill)).background(tone))
+    val breath = if (b.over && !reduced) {
+        val t = rememberInfiniteTransition(label = "budget-breath")
+        t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "budget-alpha").value
+    } else 1f
+    val figures = MekaType.micro.copy(fontFeatureSettings = "tnum")
+    Column(
+        Modifier.padding(top = MekaSpace.xs).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
+            .border(1.dp, edge, RoundedCornerShape(MekaRadius.s))
+            .testTag(BUDGET_TAG)
+            .clearAndSetSemantics { contentDescription = b.spoken },
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs), verticalAlignment = Alignment.CenterVertically) {
+            if (compact) {
+                Text(BoardPlannerRules.compactLine(b), style = figures, color = if (b.over) amber else Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            } else {
+                Text(b.label, style = figures, color = Meka.colors.textTertiary, maxLines = 1)
+                Spacer(Modifier.weight(1f))
+                if (b.value.isNotEmpty()) {
+                    Text(b.value, style = figures, color = if (b.over) amber else Meka.colors.textPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+        Box(Modifier.fillMaxWidth().height(2.dp).background(Meka.colors.hairline)) {
+            Box(Modifier.fillMaxWidth(fill).height(2.dp).alpha(breath).background(tone))
+        }
     }
 }
+
+/** The day's budget pill (Option B slice 1, UI tests). */
+internal const val BUDGET_TAG = "board-budget"
 
 /**
  * Item (10): "Stacking up: Trip form, Council tax and Gym" in amber under a day's capacity, with its one-tap fixes in

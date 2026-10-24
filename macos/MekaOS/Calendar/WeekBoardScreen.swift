@@ -241,7 +241,7 @@ private struct BoardColumnView: View {
                     DayProgressBar(progress: progress, palette: palette)
                 }
                 if let capacity = day.capacity {
-                    CapacityBar(capacity: capacity, palette: palette, compact: compact)
+                    BudgetPill(capacity: capacity, today: day.isToday, palette: palette, compact: compact)
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -487,41 +487,64 @@ private struct BoardCardView: View {
 
     var body: some View {
         let selected = model.boardSelectedID == card.id
-        HStack(alignment: .top, spacing: MekaSpace.xs) {
-            BoardTick(done: card.done, palette: palette) {
-                if card.done { model.reopenOnBoard(card.id, title: card.title) } else { model.completeOnBoard(card.id, title: card.title) }
+        // Option B, slice 1 (the planner cards, BoardPlannerRules): a borderless tile on the lighter surface; the time
+        // chip and the duration on top, the title across the whole card, the tick and the card's chips and source in the
+        // foot. A done card fades (its words stay plain, never struck through); the fade glides (Reduce Motion: steps).
+        let planner = BoardPlannerRules.shared
+        let time = planner.timeChip(card: card)
+        let duration = planner.durationLabel(card: card)
+        let foot = planner.footChips(card: card)
+        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
+            if time != nil || duration != nil {
+                HStack(spacing: MekaSpace.xs) {
+                    if let time {
+                        Text(time).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.accent).lineLimit(1)
+                            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+                            .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.accent.opacity(0.14)))
+                    }
+                    Spacer(minLength: 0)
+                    if let duration {
+                        Text(duration).font(MekaType.micro).monospacedDigit().foregroundStyle(palette.textTertiary).lineLimit(1)
+                    }
+                }
             }
-            .accessibilityLabel(BoardHandRules.shared.tickLabel(title: card.title, done: card.done))
-            VStack(alignment: .leading, spacing: 0) {
-                Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body)
-                    .foregroundStyle(card.done ? palette.textTertiary : palette.textPrimary)
-                    .strikethrough(card.done, color: palette.textTertiary)
-                    .lineLimit(Int(BoardFitRules.shared.titleLines(compact: compact)))
-                // Slice 2: small chips under the title (time, estimate, carried in amber, repeat, goal in gold).
-                let chips = BoardLookRules.shared.chips(card: card)
-                if !chips.isEmpty {
+            Text(card.title).font(compact ? MekaType.itemMeta : MekaType.body)
+                .foregroundStyle(palette.textPrimary)
+                .strikethrough(card.done && planner.STRIKE_DONE, color: palette.textTertiary)
+                .lineLimit(Int(BoardFitRules.shared.titleLines(compact: compact)))
+            HStack(spacing: MekaSpace.xs) {
+                BoardTick(done: card.done, palette: palette) {
+                    if card.done { model.reopenOnBoard(card.id, title: card.title) } else { model.completeOnBoard(card.id, title: card.title) }
+                }
+                .accessibilityLabel(BoardHandRules.shared.tickLabel(title: card.title, done: card.done))
+                Spacer(minLength: 0)
+                // Slice 2: the small chips (carried in amber, repeat, goal in gold); time and estimate are on top.
+                if !foot.isEmpty {
                     HStack(spacing: MekaSpace.xxs) {
-                        ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                        ForEach(Array(foot.enumerated()), id: \.offset) { _, chip in
                             CardChipPill(chip: chip, palette: palette)
                         }
                     }
-                    .padding(.top, MekaSpace.xxs)
+                }
+                // Slice 5: a small colour dot for where it came from, now with its short name ("● Mail").
+                if let source = card.source {
+                    HStack(spacing: MekaSpace.xxs) {
+                        Circle().fill(palette.calendarTone(source.tone)).frame(width: 8, height: 8)
+                        if !compact {
+                            Text(planner.sourceLabel(source: source)).font(MekaType.micro)
+                                .foregroundStyle(palette.textSecondary).lineLimit(1)
+                        }
+                    }
+                    .help(source.label)
                 }
             }
-            Spacer(minLength: 0)
-            // Slice 5: a small colour dot for where it came from (mail, Needs you, Discord, School).
-            if let source = card.source {
-                Circle()
-                    .fill(palette.calendarTone(source.tone).opacity(card.done ? 0.4 : 1))
-                    .frame(width: 6, height: 6)
-                    .padding(.top, MekaSpace.xs)
-                    .help(source.label)
-            }
         }
-        .padding(MekaSpace.xs)
+        .padding(.horizontal, MekaSpace.xs).padding(.top, MekaSpace.xs).padding(.bottom, MekaSpace.xxs)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // Slice 2: a raised tile; a done one sinks to the lane's colour.
-        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(card.done ? palette.surface : palette.surfaceRaised))
+        // Refinement 3: a borderless tile on the lighter surface; a done one fades rather than sinking or striking through.
+        .background(RoundedRectangle(cornerRadius: MekaRadius.m).fill(palette.surfaceRaised))
+        .opacity(Double(planner.alpha(card: card)))
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: card.done)
         .overlay(RoundedRectangle(cornerRadius: MekaRadius.m).strokeBorder(palette.accent.opacity(selected ? 0.8 : (over ? 0.4 : 0)), lineWidth: 1))
         .overlay(alignment: .top) {
             // Where a held card would land: a gold line above this one.
@@ -702,41 +725,62 @@ private struct DayProgressBar: View {
     }
 }
 
-/// "3h planned · 4h free" with a slim bar under a column's date (slice 3): gold as it fills, amber when over-planned,
-/// breathing gently then; the width glides as estimates change. Reduce Motion: steady, no glide.
-private struct CapacityBar: View {
+/// Option B, slice 1: the day's budget pill under its header, "planned · 4h 05 / 3h" (a narrow lane: "4h 05 / 3h"),
+/// edged gold on today, its thin bar filling gold; amber when more is planned than the day has free, the bar breathing
+/// gently then; colours cross-fade and the width glides. Reduce Motion: steady, no glide.
+private struct BudgetPill: View {
     @Environment(\.mekaReduceMotion) private var reduceMotion
     let capacity: BoardCapacity
+    let today: Bool
     let palette: MekaPalette
-    /// Slice 8: "1h 30m of 2h" (planned of free) on a narrow lane.
     var compact: Bool = false
     @State private var breathe = false
 
     var body: some View {
-        let tone = capacity.over ? palette.calendar3 : palette.accent
-        VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-            Text(BoardFitRules.shared.capacityLine(c: capacity, compact: compact)).font(MekaType.micro)
-                .foregroundStyle(capacity.over ? palette.calendar3 : palette.textTertiary)
-                .lineLimit(1)
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(palette.hairline)
-                    Capsule().fill(tone)
-                        .frame(width: geo.size.width * CGFloat(capacity.fill))
-                        .opacity(capacity.over && breathe ? 0.55 : 1)
+        let b = BoardPlannerRules.shared.budget(c: capacity)
+        let tone = b.over ? palette.calendar3 : palette.accent
+        let edge = b.over ? palette.calendar3.opacity(0.7) : (today ? palette.accent : palette.hairline)
+        VStack(spacing: 0) {
+            HStack(spacing: MekaSpace.xs) {
+                if compact {
+                    Text(BoardPlannerRules.shared.compactLine(b: b)).font(MekaType.micro).monospacedDigit()
+                        .foregroundStyle(b.over ? palette.calendar3 : palette.textSecondary).lineLimit(1)
+                    Spacer(minLength: 0)
+                } else {
+                    Text(b.label).font(MekaType.micro).foregroundStyle(palette.textTertiary).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if !b.value.isEmpty {
+                        Text(b.value).font(MekaType.micro).monospacedDigit()
+                            .foregroundStyle(b.over ? palette.calendar3 : palette.textPrimary).lineLimit(1)
+                    }
                 }
             }
-            .frame(height: 3)
+            .padding(.horizontal, MekaSpace.xs).padding(.vertical, MekaSpace.xxs)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Rectangle().fill(palette.hairline)
+                    Rectangle().fill(tone)
+                        .frame(width: geo.size.width * CGFloat(b.fill))
+                        .opacity(b.over && breathe ? 0.55 : 1)
+                }
+            }
+            .frame(height: 2)
         }
-        .animation(MekaMotion.appear(reduced: reduceMotion), value: capacity.fill)
+        .background(RoundedRectangle(cornerRadius: MekaRadius.s).fill(palette.surface))
+        .clipShape(RoundedRectangle(cornerRadius: MekaRadius.s))
+        .overlay(RoundedRectangle(cornerRadius: MekaRadius.s).strokeBorder(edge, lineWidth: 1))
+        .padding(.top, MekaSpace.xxs)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: b.fill)
+        .animation(MekaMotion.appear(reduced: reduceMotion), value: b.over)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(capacity.spoken)
+        .accessibilityLabel(b.spoken)
         .onAppear { startBreathing() }
-        .onChange(of: capacity.over) { _, _ in startBreathing() }
+        .onChange(of: b.over) { _, _ in startBreathing() }
     }
 
     private func startBreathing() {
-        guard capacity.over, !reduceMotion else { breathe = false; return }
+        let over = BoardPlannerRules.shared.budget(c: capacity).over
+        guard over, !reduceMotion else { breathe = false; return }
         withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) { breathe = true }
     }
 }

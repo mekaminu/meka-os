@@ -1604,6 +1604,16 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(TaskEstimateRules.shared.MENU_TITLE, "How long?")
         XCTAssertEqual(TaskEstimateRules.shared.choices(estimate: nil, suggested: KotlinInt(int: 30)).map(\.menuLabel), ["15m", "30m · suggested", "1h", "2h"])
         XCTAssertEqual(BoardCapacity(plannedMin: 300, freeMin: 240, unsized: 0).line, "5h planned · 1h over")
+        // Option B, slice 1: the planner cards' durations and the day's budget pill.
+        let planner = BoardPlannerRules.shared
+        XCTAssertEqual(planner.duration(minutes: 45), "0:45")
+        let budget = planner.budget(c: BoardCapacity(plannedMin: 245, freeMin: 180, unsized: 0))
+        XCTAssertEqual(budget.label, "planned")
+        XCTAssertEqual(budget.value, "4h 05 / 3h")
+        XCTAssertTrue(budget.over)
+        XCTAssertEqual(planner.compactLine(b: planner.budget(c: BoardCapacity(plannedMin: 0, freeMin: 420, unsized: 0))), "7h free")
+        XCTAssertFalse(planner.STRIKE_DONE)
+        XCTAssertEqual(planner.sourceLabel(source: CardSource.mail), "Mail")
         // Slice 4: the week's lane and the Someday tray.
         XCTAssertEqual(WeekBoardRules.shared.NO_DAY, "No day yet")
         XCTAssertEqual(WeekBoardRules.shared.TO_WEEK, "No day this week")
