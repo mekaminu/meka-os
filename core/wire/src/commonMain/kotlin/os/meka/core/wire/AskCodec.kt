@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -138,6 +139,11 @@ object AskCodec {
         val note: String? = null,
         /** Obi's face, slice 2: [firstAudio]'s mouth sounds ([SpeechCodec.encodeMarks]); only with a first clip. */
         val firstVisemes: String? = null,
+        /**
+         * The assistant becomes Obi, slice 3: a spoken answer's detail, shown under its words and never said (at most
+         * [MAX_SHOWN] lines of at most [MAX_SHOWN_LINE]). Left out of the JSON when empty; an older device ignores it.
+         */
+        val shown: List<String> = emptyList(),
     ) {
         companion object {
             const val ANSWERED = "answered"
@@ -172,6 +178,14 @@ object AskCodec {
     /** The companion, slice 5: notes of earlier chats sent with a question, and the longest note an answer carries. */
     const val MAX_RECALL = 6
     const val MAX_NOTE = 200
+
+    /** The assistant becomes Obi, slice 3: [Response.shown]'s most lines and longest line. */
+    const val MAX_SHOWN = 8
+    const val MAX_SHOWN_LINE = 200
+
+    /** [Response.shown] as sent and read: blank lines and lines over [MAX_SHOWN_LINE] dropped, at most [MAX_SHOWN]. */
+    fun checkedShown(lines: List<String>): List<String> =
+        lines.map { it.trim() }.filter { it.isNotEmpty() && it.length <= MAX_SHOWN_LINE }.take(MAX_SHOWN)
 
     fun encodeRequest(r: Request): String = buildJsonObject {
         put("w", WireCodec.VERSION)
@@ -281,6 +295,7 @@ object AskCodec {
             putJsonArray("sources") { r.sources.take(MAX_SOURCES).forEach { src -> addJsonObject { put("title", src.title); put("url", src.url) } } }
         }
         r.note?.takeIf { it.isNotBlank() && it.length <= MAX_NOTE }?.let { put("note", it) }
+        checkedShown(r.shown).takeIf { it.isNotEmpty() }?.let { lines -> putJsonArray("shown") { lines.forEach { add(it) } } }
     }.toString()
 
     fun decodeResponse(body: String): Response = wrap("ask response") {
@@ -293,6 +308,7 @@ object AskCodec {
             reason = o.optStr("reason"),
             sources = sourcesOf(o),
             note = o.optStr("note")?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_NOTE },
+            shown = shownOf(o["shown"]),
         ).let { r ->
             // The first piece's clip: kept only whole and within SpeechCodec's limits, else simply not there.
             val text = o.optStr("firstText")?.takeIf { it.isNotBlank() && it.length <= SpeechCodec.MAX_TEXT }
@@ -429,6 +445,25 @@ object AskCodec {
         val o = runCatching { json.parseToJsonElement(text.substring(start, end + 1)).jsonObject }.getOrNull() ?: return null
         return o.optStr("note")?.replace(Regex("""\s+"""), " ")?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_NOTE }
     }
+
+    /**
+     * The assistant becomes Obi, slice 3: the `"show"` in a model's answer (the detail for the screen, never said), as
+     * lines: a string is split at its line breaks, an array's strings kept; anything else is no lines.
+     */
+    fun modelShow(text: String): List<String> {
+        val start = text.indexOf('{')
+        val end = text.lastIndexOf('}')
+        if (start < 0 || end <= start) return emptyList()
+        val o = runCatching { json.parseToJsonElement(text.substring(start, end + 1)).jsonObject }.getOrNull() ?: return emptyList()
+        return when (val v = o["show"]) {
+            is JsonPrimitive -> if (v.isString) v.content.split('\n') else emptyList()
+            is JsonArray -> v.mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+            else -> emptyList()
+        }.map { it.trim() }.filter { it.isNotEmpty() }.take(MAX_SHOWN * 2)
+    }
+
+    private fun shownOf(e: kotlinx.serialization.json.JsonElement?): List<String> =
+        checkedShown((e as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content })
 
     /**
      * An earlier answer as the model wrote it, for the conversation's turns: `{"answer":"…","actions":[]}`, or for a

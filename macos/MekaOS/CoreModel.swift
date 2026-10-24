@@ -2291,7 +2291,7 @@ final class CoreModel {
         if let out = asked {
             switch onEnum(of: out) {
             case .answered(let a):
-                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney, sources: a.answer.sources)
+                reply = AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney, sources: a.answer.sources, shown: a.answer.shown)
             case .unavailable(let u):
                 reply = AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
@@ -6797,6 +6797,8 @@ struct AskReplyView {
     var unlockMoney: String? = nil
     /// The companion, slice 2: the web results a live answer drew on, each a card that opens in the browser.
     var sources: [AskSource] = []
+    /// The assistant becomes Obi, slice 3: a spoken answer's detail, shown under its words and not said.
+    var shown: [String] = []
 }
 
 /// Ask cards taken back with Undo: `n` counts, `cards` are their places in the answer.

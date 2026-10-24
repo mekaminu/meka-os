@@ -190,6 +190,12 @@ struct AskMekaSection: View {
                             .textSelection(.enabled)
                             .staggeredAppear(i)
                     }
+                    // The assistant becomes Obi, slice 3: a spoken answer's detail, shown here and not said.
+                    ForEach(Array(reply.shown.enumerated()), id: \.offset) { i, line in
+                        Text(line).font(MekaType.body).foregroundStyle(palette.textSecondary)
+                            .textSelection(.enabled)
+                            .staggeredAppear(reply.lines.count + i)
+                    }
                     // Earned trust: what MEKA already did on its own, each with Undo; an undone one folds away.
                     ForEach(Array(reply.did.enumerated()), id: \.offset) { k, auto in
                         if !autoUndone.contains(auto.activityId) {
@@ -352,7 +358,7 @@ struct AskMekaSection: View {
         talk.attach(model)
         talk.onAnswer = { q, out in
             let r: AskReplyView = switch onEnum(of: out) {
-            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney, sources: a.answer.sources)
+            case .answered(let a): AskReplyView(lines: AskRules.shared.answerLines(text: a.answer.text), cards: a.answer.cards, unavailable: nil, did: a.answer.did, help: a.answer.help, stillStuck: a.answer.stillStuck, unlockMoney: a.answer.unlockMoney, sources: a.answer.sources, shown: a.answer.shown)
             case .unavailable(let u): AskReplyView(lines: [], cards: [], unavailable: u.line)
             }
             asked = q

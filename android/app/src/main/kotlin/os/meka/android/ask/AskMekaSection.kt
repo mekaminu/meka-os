@@ -162,7 +162,7 @@ fun AskMekaSection(
                     a.helloGreeting.value = null
                     a.talkCardsDone.value = emptySet()
                     a.talkAnswerCards.value = ans?.cards.orEmpty()
-                    a.talkNeedsAsk.value = ans != null && (ans.help != null || ans.stillStuck != null || ans.unlockMoney != null || ans.sources.isNotEmpty())
+                    a.talkNeedsAsk.value = ans != null && (ans.help != null || ans.stillStuck != null || ans.unlockMoney != null || ans.sources.isNotEmpty() || ans.shown.isNotEmpty())
                 }
             },
             onDid = { did, cards ->
@@ -471,6 +471,10 @@ fun AskMekaSection(
                             val lines = AskRules.answerLines(o.answer.text)
                             lines.forEachIndexed { i, line ->
                                 Text(line, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.appear(rememberAppearance(i)))
+                            }
+                            // The assistant becomes Obi, slice 3: a spoken answer's detail, shown here and not said.
+                            o.answer.shown.forEachIndexed { i, line ->
+                                Text(line, style = MekaType.body, color = Meka.colors.textSecondary, modifier = Modifier.appear(rememberAppearance(lines.size + i)))
                             }
                             // Earned trust: what MEKA already did on its own, each with Undo; an undone one folds away.
                             o.answer.did.forEachIndexed { k, a ->

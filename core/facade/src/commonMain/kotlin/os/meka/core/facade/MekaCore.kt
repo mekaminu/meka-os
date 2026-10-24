@@ -9351,7 +9351,9 @@ class MekaCore(
                 // other people's words, nor from an answer that read the web: the server sends none then).
                 if (!context.untrusted && reply.sources.isEmpty()) companionMemory.keep(reply.note, cal.epochDayOf(nowMs()))
                 // The companion, slice 2: the web results the answer drew on, as source cards (https only, no site twice).
-                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did, sources = os.meka.core.domain.LiveFactsRules.sources(reply.sources)))
+                // The assistant becomes Obi, slice 3: a spoken answer's detail, shown under its words and not said.
+                val shown = reply.shown.map { os.meka.core.domain.ObiCharacter.line(it) }.filter { it.isNotEmpty() }.distinct().take(os.meka.core.domain.ObiCharacter.MAX_SHOWN)
+                os.meka.core.domain.AskOutcome.Answered(answer.copy(cards = cards, did = did, sources = os.meka.core.domain.LiveFactsRules.sources(reply.sources), shown = shown))
             }
         }
     }

@@ -236,11 +236,15 @@ object TalkRules {
         return SpeechRules.pieces(words).firstOrNull()?.takeIf { it.isNotBlank() && it.length <= SpeechRules.MAX_PIECE }
     }
 
-    /** After Meka's yes: "Added Call the dentist for tomorrow at 09:00. Anything else?" (failures said plainly). */
+    /**
+     * After Meka's yes: "Right, done. Added Call the dentist for tomorrow at 09:00. Anything else?" (failures said
+     * plainly, and then no "Right, done": the assistant becomes Obi, slice 3, [ObiCharacter.DONE]).
+     */
     fun spokenDone(done: List<AskProposal>, failed: Int, today: Long): String {
         val said = done.map { phrase(it, today, past = true).replaceFirstChar { c -> c.uppercase() } + "." }
         val fail = if (failed > 0) listOf(if (failed == 1 && done.isEmpty()) "That couldn't be done any more." else "$failed couldn't be done any more.") else emptyList()
-        return (said + fail + ANYTHING_ELSE).joinToString(" ")
+        val right = if (done.isNotEmpty() && failed == 0) listOf(ObiCharacter.DONE) else emptyList()
+        return (right + said + fail + ANYTHING_ELSE).joinToString(" ")
     }
 
     /** "Which one? Say the first, the second or both." */

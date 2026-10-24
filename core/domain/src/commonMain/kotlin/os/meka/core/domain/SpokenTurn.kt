@@ -77,6 +77,9 @@ object SpokenTurnRules {
         return out.joinToString(" ")
     }
 
+    /** The assistant becomes Obi, slice 3: one line with its list mark, heading marks and markdown gone, spaces collapsed. */
+    fun plainLine(line: String): String = collapse(unmark(stripItem(line.trim())))
+
     private fun isItem(line: String): Boolean {
         if (line.startsWith("- ") || line.startsWith("• ") || line.startsWith("* ") || line.startsWith("– ")) return true
         var i = 0
@@ -112,7 +115,7 @@ object SpokenTurnRules {
     }
 
     /** [text] cut after each . ! ? or … (with a closing quote or bracket) that a space follows. */
-    private fun sentences(text: String): List<String> {
+    fun sentences(text: String): List<String> {
         val out = mutableListOf<String>()
         var start = 0
         var i = 0

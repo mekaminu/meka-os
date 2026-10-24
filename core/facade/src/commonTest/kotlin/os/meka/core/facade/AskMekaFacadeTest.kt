@@ -1198,7 +1198,7 @@ class AskMekaFacadeTest {
         val done = todo.cards.map { c.doAsk(it) }
         assertTrue((listOfNotNull(c.today.value.upNext) + c.today.value.yourDay).none { it.id == id })
         step = TalkFlow.did(step.session, todo.cards.map { it.proposal }, done.map { it.line }, 0, c.todayEpochDay())
-        assertEquals(TalkEffect.Speak("Moved Book dentist to tomorrow at 09:00. Anything else?"), step.effects.single())
+        assertEquals(TalkEffect.Speak("Right, done. Moved Book dentist to tomorrow at 09:00. Anything else?"), step.effects.single())
         assertEquals(listOf("Moved “Book dentist” to Tomorrow · 09:00"), step.session.conversation.turns.last().done)
         // The undo chip still takes it back.
         assertTrue(c.undoAsk(done.single().undo!!))

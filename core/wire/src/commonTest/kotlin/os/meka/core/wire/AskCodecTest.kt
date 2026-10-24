@@ -354,4 +354,19 @@ class AskCodecTest {
         // Marks without a clip aren't sent.
         assertFalse("firstVisemes" in AskCodec.encodeResponse(answer.copy(firstAudio = null)))
     }
+
+    @Test
+    fun aSpokenAnswersShownDetailTravelsAndIsCheckedBothWays() {
+        // The assistant becomes Obi, slice 3: the detail for the screen, never said.
+        val r = AskCodec.Response(AskCodec.Response.ANSWERED, "Three things tomorrow.", shown = listOf(" 10:00 Dentist ", "", "x".repeat(AskCodec.MAX_SHOWN_LINE + 1), "14:30 Parents' evening"))
+        val body = AskCodec.encodeResponse(r)
+        assertEquals(listOf("10:00 Dentist", "14:30 Parents' evening"), AskCodec.decodeResponse(body).shown)
+        assertFalse("shown" in AskCodec.encodeResponse(r.copy(shown = emptyList())))
+        // The model's "show": a string with line breaks or an array; carried through a spoken answer's after-block.
+        val spoken = AskCodec.normaliseModelAnswer("Three things tomorrow.\n<after>{\"show\":\"10:00 Dentist\\n14:30 Parents' evening\"}</after>")
+        assertEquals(listOf("10:00 Dentist", "14:30 Parents' evening"), AskCodec.modelShow(spoken))
+        assertEquals(listOf("a", "b"), AskCodec.modelShow("""{"answer":"x","show":["a"," b ",3]}"""))
+        assertEquals(emptyList(), AskCodec.modelShow("""{"answer":"x","show":7}"""))
+        assertEquals(emptyList(), AskCodec.modelShow("plain words"))
+    }
 }

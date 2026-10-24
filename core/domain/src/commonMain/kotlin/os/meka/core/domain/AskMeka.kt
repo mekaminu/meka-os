@@ -158,6 +158,11 @@ data class AskAnswer(
      * [LiveFactsRules.MAX_SOURCES], each a card that opens in the browser on his tap. Empty for every other answer.
      */
     val sources: List<AskSource> = emptyList(),
+    /**
+     * The assistant becomes Obi, slice 3 (spoken vs shown): a spoken answer's detail, shown under its words and never
+     * said ([ObiCharacter.shown]); at most [ObiCharacter.MAX_SHOWN] lines. Empty for a typed answer and most spoken ones.
+     */
+    val shown: List<String> = emptyList(),
 )
 
 /** What asking came to: an answer, or why there is none (AI off, the month's budget spent, offline, a failure). */

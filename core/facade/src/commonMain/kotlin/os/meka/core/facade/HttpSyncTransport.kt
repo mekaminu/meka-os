@@ -115,6 +115,8 @@ sealed class AskReply {
         val note: String? = null,
         /** Obi's face, slice 3c: [firstAudio]'s mouth sounds ([os.meka.core.wire.SpeechCodec.encodeMarks] text), when asked. */
         val firstVisemes: String? = null,
+        /** The assistant becomes Obi, slice 3: a spoken answer's detail for the screen; checked again on the core. */
+        val shown: List<String> = emptyList(),
     ) : AskReply()
     /** [state]: off · over (the month's budget) · failed, with the server's [reason]. */
     data class Unavailable(val state: String, val reason: String?) : AskReply()
@@ -933,7 +935,7 @@ class HttpSyncTransport(
         if (r.state == AskCodec.Response.ANSWERED) {
             AskReply.Answered(
                 r.answer.orEmpty(), r.actions.map { os.meka.core.domain.AskRawAction(it.kind, it.ref, it.title, it.date, it.time, it.hours, it.minutes) },
-                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note, r.firstVisemes,
+                r.firstText, r.firstAudio, r.sources.map { it.title to it.url }, r.note, r.firstVisemes, r.shown,
             )
         } else {
             AskReply.Unavailable(r.state, r.reason)

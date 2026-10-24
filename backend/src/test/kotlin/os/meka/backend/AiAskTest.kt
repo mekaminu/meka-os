@@ -632,4 +632,34 @@ class AiAskTest {
         assertEquals("0:p", one.ask(spoken).firstVisemes)
         assertEquals(null, one.ask(spoken.copy(speakVisemes = false)).firstVisemes)
     }
+
+    @Test
+    fun obisCharacterIsInEveryPromptAndASpokenAnswersDetailIsShownNotSaid() {
+        // The assistant becomes Obi, slice 3: one character for Ask, Talk and Live.
+        val model = FakeModel(answered("You've got three things on, the dentist first at ten.\n<after>{\"show\":\"10:00 Dentist\\n- 14:30 Parents' evening\\n**18:00 Football**\"}</after>"))
+        val r = AskService(model).ask(request.copy(question = "what's on tomorrow?", voice = true))
+        val system = model.asked.single().system
+        listOf("Your character:", "Igbo word for \"heart\"", "Right, done.", "great question", "Say the gist; show the detail", "\"show\":\"…\"").forEach {
+            assertTrue(it in system, it)
+        }
+        assertTrue("Your character:" in LivePrompt.instruction(null))
+        assertTrue("one or two sentences" in LivePrompt.PERSONA)
+        assertEquals("You've got three things on, the dentist first at ten.", r.answer)
+        assertEquals(listOf("10:00 Dentist", "14:30 Parents' evening", "18:00 Football"), r.shown)
+        // The wire carries it to the device.
+        assertEquals(r.shown, AskCodec.decodeResponse(AskCodec.encodeResponse(r)).shown)
+        // A turn cut to its spoken length shows what was cut, so nothing is lost.
+        val long = "Ha, fair. A heat pump moves warmth from the outside air into the house, a bit like a fridge in reverse. " +
+            "It runs on electricity and works best with good insulation and bigger radiators. " +
+            "Running costs depend a lot on your tariff and how well the house holds heat."
+        model.outcome = answered(long)
+        val cut = AskService(model).ask(request.copy(question = "what's a heat pump?", voice = true))
+        assertFalse("Running costs" in cut.answer!!)
+        assertTrue(cut.shown.any { it.startsWith("Running costs") }, cut.shown.toString())
+        // A typed answer shows nothing extra, and a spoken one said whole shows nothing.
+        model.outcome = answered("""{"answer":"$long","actions":[],"show":"x"}""")
+        assertEquals(emptyList(), AskService(model).ask(request.copy(question = "what's a heat pump?")).shown)
+        model.outcome = answered("Nothing else today.")
+        assertEquals(emptyList(), AskService(model).ask(request.copy(voice = true)).shown)
+    }
 }

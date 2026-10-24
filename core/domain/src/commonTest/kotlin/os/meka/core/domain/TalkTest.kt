@@ -65,7 +65,7 @@ class TalkTest {
         )
         assertEquals("Nothing else today.", TalkRules.spoken(AskAnswer("Nothing else today.", emptyList()), today))
         assertEquals(
-            "Moved Book dentist to Monday 12 October. Anything else?",
+            "Right, done. Moved Book dentist to Monday 12 October. Anything else?",
             TalkRules.spokenDone(listOf(AskProposal.MoveTask("x", "Book dentist", today + 4, null)), 0, today),
         )
         assertEquals("That couldn't be done any more. Anything else?", TalkRules.spokenDone(emptyList(), 1, today))
@@ -97,7 +97,7 @@ class TalkTest {
         step = TalkFlow.heard(step.session, "yes")
         assertEquals(TalkEffect.Do(listOf(add)), step.effects.single())
         step = TalkFlow.did(step.session, listOf(add.proposal), listOf("Added “Call the dentist”"), 0, today)
-        assertEquals(TalkEffect.Speak("Added Call the dentist for tomorrow at 09:00. Anything else?"), step.effects.single())
+        assertEquals(TalkEffect.Speak("Right, done. Added Call the dentist for tomorrow at 09:00. Anything else?"), step.effects.single())
         assertTrue(step.session.pending.isEmpty())
         step = TalkFlow.spoke(step.session)
         assertEquals(listOf(TalkEffect.Listen), step.effects)
