@@ -17,7 +17,15 @@ enum class HealthFix {
     NOTIFICATIONS_ON,
     /** Spam calls still ring, slice 5: ask for the contacts and call-log permissions (else open the app's page). */
     CALLER_LOOKUPS,
+    /** Meka 2026-10-24 13:12: Obi's face, look at the server's list now (ignoring the wait) and fetch what's there. */
+    FACE_LOOK_AGAIN,
 }
+
+/**
+ * Meka 2026-10-24 13:12 ("Health's rows do nothing when tapped"): the screen a row opens on a tap. Null: nowhere to go,
+ * and the row isn't drawn as tappable. The system ones open Android's own page (the Fold only).
+ */
+enum class HealthPlace { VOICE, CALENDARS, MAIL, MONEY, ABOUT_YOU, WORK, NOTIFICATIONS, SYSTEM_BATTERY, SYSTEM_LISTENER }
 
 data class HealthRow(
     /** Stable: "server", "push", "notifications", "calendar:<provider>:<account>", "feeds", "messages", "calls", "ai", "voice", "battery", "update". */
@@ -31,6 +39,10 @@ data class HealthRow(
     val provider: String? = null,
     val account: String? = null,
     val editing: Boolean = false,
+    /** A second line under [line] (Obi's voice: the face's files). */
+    val detail: String? = null,
+    /** Where a tap on the row goes ([HealthRules.place]). */
+    val place: HealthPlace? = null,
 ) {
     val needsLook: Boolean get() = state == HealthState.WARN || state == HealthState.BAD
 }
@@ -116,6 +128,8 @@ data class DeviceHealth(
      * blocked. Null: not on this device (the Mac).
      */
     val callerLookups: Boolean? = null,
+    /** Obi's face on this device (Meka 2026-10-24 13:12); null leaves the face line out. */
+    val face: FaceHealth? = null,
 )
 
 data class HealthFacts(
@@ -207,7 +221,7 @@ object HealthRules {
             MoneyBank.healthRow(f.bankSync, f.nowMs, cal)?.let(::add)
             f.trains?.let { RouteRules.healthRow(it, f.nowMs, cal) }?.let(::add)
             f.mail?.let { addAll(MailHealthRules.healthRows(it, f.mailBacklogs, f.mailTidies, f.nowMs, cal)) }
-        }
+        }.map { r -> if (r.place != null) r else r.copy(place = place(r.key, f.device.mac)) }
         val attention = rows.count { it.needsLook }
         val critical = rows.any { it.state == HealthState.BAD }
         val summary = when (attention) {
@@ -342,10 +356,34 @@ object HealthRules {
         return HealthRow("ai", "Navilife's AI", ai.line, state)
     }
 
-    private fun voice(f: HealthFacts, cal: LocalCalendar): HealthRow = when (f.server?.speech) {
-        null -> HealthRow("voice", "Obi's voice", "Couldn't check", HealthState.UNKNOWN)
-        true -> HealthRow("voice", "Obi's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
-        false -> HealthRow("voice", "Obi's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
+    private fun voice(f: HealthFacts, cal: LocalCalendar): HealthRow {
+        val row = when (f.server?.speech) {
+            null -> HealthRow("voice", "Obi's voice", "Couldn't check", HealthState.UNKNOWN)
+            true -> HealthRow("voice", "Obi's voice", voiceLine(f.server, f.nowMs, cal), HealthState.OK)
+            false -> HealthRow("voice", "Obi's voice", "Not set up · the device's own voice speaks", HealthState.WARN)
+        }
+        val face = f.device.face ?: return row
+        val withFace = row.copy(detail = FaceHealthRules.line(face, f.device.mac, f.nowMs, cal))
+        val fixed = if (FaceHealthRules.lookAgain(face)) withFace.copy(fix = HealthFix.FACE_LOOK_AGAIN, fixLabel = FaceHealthRules.LOOK_AGAIN) else withFace
+        // The server has all seven but this device didn't keep them: worth a look (waiting for an upload isn't).
+        return if (FaceHealthRules.fault(face) && fixed.state == HealthState.OK) fixed.copy(state = HealthState.WARN) else fixed
+    }
+
+    /**
+     * Where each row opens on a tap (Meka 2026-10-24 13:12). The server, push, the AI and updates have no screen of
+     * their own (their button, if any, is the fix). Trains open About you, where the home station and train lines are.
+     */
+    fun place(key: String, mac: Boolean): HealthPlace? = when {
+        key == "voice" -> HealthPlace.VOICE
+        key.startsWith("calendar:") || key == "feeds" -> HealthPlace.CALENDARS
+        key.startsWith(MailHealthRules.KEY_PREFIX) -> HealthPlace.MAIL
+        key == MoneyBank.HEALTH_KEY -> HealthPlace.MONEY
+        key == AboutYouRules.HEALTH_KEY || key == RouteRules.HEALTH_KEY -> HealthPlace.ABOUT_YOU
+        key == "calls" || key == SpamProtectionRules.HEALTH_KEY -> HealthPlace.WORK
+        key == "notifications" -> HealthPlace.NOTIFICATIONS
+        key == "battery" -> if (mac) null else HealthPlace.SYSTEM_BATTERY
+        key == "messages" -> if (mac) null else HealthPlace.SYSTEM_LISTENER
+        else -> null
     }
 
     /**

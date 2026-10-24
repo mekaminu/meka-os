@@ -1293,6 +1293,8 @@ fun dataSourceFromEnv(): HikariDataSource = HikariDataSource(
 fun main(args: Array<String>) {
     // The GitHub publish job's commands need no database (build plan: hands-free phone updates).
     if (args.firstOrNull() in ReleasePublisherCli.COMMANDS) kotlin.system.exitProcess(ReleasePublisherCli.run(args.toList()))
+    // The deploy's line about Obi's face files (the bucket's listing on stdin; names and sizes only).
+    if (args.firstOrNull() == "face-report") kotlin.system.exitProcess(FaceLayout.cli())
     val ds = dataSourceFromEnv()
     Migrations.apply(ds)
     when (args.firstOrNull()) {

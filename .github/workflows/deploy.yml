@@ -301,6 +301,18 @@ jobs:
         continue-on-error: true
         run: MEKA_PUBLISHER_PRIVATE_KEY="$(cat "$RUNNER_TEMP/publisher.key")" backend/build/install/backend/bin/backend publisher-kms "${{ steps.decide.outputs.url }}"
 
+      # Obi's face (Meka 2026-10-24 13:12): which of the face's seven files are in the Blobs bucket under face/ (names
+      # and sizes only), as a notice: "7 of 7 files", or which are missing, misplaced (e.g. under face/obi-face/) or too big.
+      - name: Obi's face files
+        if: steps.key.outputs.ok == 'true'
+        continue-on-error: true
+        run: |
+          BUCKET=$(aws cloudformation describe-stack-resources --stack-name "MekaOs-$ENV_NAME" \
+            --query "StackResources[?ResourceType=='AWS::S3::Bucket' && starts_with(LogicalResourceId, 'Blobs')].PhysicalResourceId | [0]" --output text)
+          if [ -z "$BUCKET" ] || [ "$BUCKET" = "None" ]; then echo "::notice title=Obi's face::couldn't find the Blobs bucket"; exit 0; fi
+          aws s3api list-objects-v2 --bucket "$BUCKET" --prefix face/ --max-items 1000 \
+            --query "Contents[].{Key:Key,Size:Size}" --output json | backend/build/install/backend/bin/backend face-report
+
       - name: Build the phone app with the Mac's debug key
         if: steps.decide.outputs.publish == 'true'
         env:

@@ -111,6 +111,7 @@ object HealthDevice {
             previousSizeBytes = updater?.previousSizeBytes,
             notifications = os.meka.android.notify.NotifyTraceStore.health(context),
             callerLookups = os.meka.android.work.CallerLookup.allowed(context),
+            face = runCatching { ObiFaceStore.health(context) }.getOrNull(),
         )
     }
 }
@@ -165,6 +166,8 @@ fun rememberHealthFixer(core: MekaCore, openPane: ((HealthFix) -> Unit)? = null,
                     else openMekaNotificationSettings(context)
                 }
                 HealthFix.CALLER_LOOKUPS -> runCatching { askLookups.launch(os.meka.android.work.CallerLookup.PERMISSIONS) }
+                // Obi's face: look at the server's list now, then check again so the face line says what it found.
+                HealthFix.FACE_LOOK_AGAIN -> scope.launch { ObiFaceStore.refresh(context, core, force = true); after() }
                 HealthFix.CALENDARS, HealthFix.WORK -> f?.let { openPane?.invoke(it) }
                 null -> Unit
             }
@@ -195,7 +198,7 @@ fun HealthRow.fixHere(panes: Boolean): Boolean = fix != null && (panes || (fix !
  * changes; a fix presses in with a light haptic and hands over to the system's screen. Reduced motion: cross-fades.
  */
 @Composable
-fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Unit) {
+fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Unit, openPlace: (os.meka.core.domain.HealthPlace) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val view by core.healthView.collectAsState()
@@ -239,8 +242,19 @@ fun HealthPane(core: MekaCore, onClose: () -> Unit, openPane: (HealthFix) -> Uni
             Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "health-checked") { t ->
                 Text(t, style = MekaType.caption, color = Meka.colors.textTertiary)
             }
+            val haptics = rememberMekaHaptics()
+            // Meka 2026-10-24 13:12: a tap on a row opens its screen; a row with nowhere to go isn't tappable.
+            val go: (os.meka.core.domain.HealthPlace) -> Unit = { p ->
+                haptics.light()
+                when (p) {
+                    os.meka.core.domain.HealthPlace.SYSTEM_BATTERY ->
+                        if (BatteryCare.facts(context).exempt) BatteryCare.openSamsung(context) else BatteryCare.allowInAndroid(context)
+                    os.meka.core.domain.HealthPlace.SYSTEM_LISTENER -> openListenerSettings(context)
+                    else -> openPlace(p)
+                }
+            }
             v.rows.forEachIndexed { i, row ->
-                HealthRowView(row, row.fixHere(panes = true), Modifier.appear(rememberAppearance(i + 1))) { fix(row) }
+                HealthRowView(row, row.fixHere(panes = true), Modifier.appear(rememberAppearance(i + 1)), row.place?.let { p -> { go(p) } }) { fix(row) }
             }
         } else {
             SkeletonRows(6, Modifier.padding(top = MekaSpace.xs))
@@ -297,13 +311,14 @@ private fun spokenState(state: HealthState) = when (state) {
 }
 
 @Composable
-private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, onFix: () -> Unit) {
+private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, onOpen: (() -> Unit)?, onFix: () -> Unit) {
     val reduced = Meka.reducedMotion
     val dot by animateColorAsState(healthColor(row.state), MekaMotion.appear(reduced), label = "health-dot")
     Row(
         modifier.fillMaxWidth().clip(RoundedCornerShape(MekaRadius.m)).background(Meka.colors.surface)
+            .then(if (onOpen != null) Modifier.clickable(role = Role.Button, onClick = onOpen) else Modifier)
             .minTouch().padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs)
-            .semantics(mergeDescendants = true) { contentDescription = "${row.title}, ${spokenState(row.state)}. ${row.line}" },
+            .semantics(mergeDescendants = true) { contentDescription = "${row.title}, ${spokenState(row.state)}. ${row.line}" + (row.detail?.let { " $it" } ?: "") },
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs),
     ) {
@@ -313,6 +328,15 @@ private fun HealthRowView(row: HealthRow, showFix: Boolean, modifier: Modifier, 
             Crossfade(row.line, animationSpec = MekaMotion.appear(reduced), label = "health-line") { l ->
                 Text(os.meka.core.domain.LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
+            val detail = row.detail
+            if (detail != null) {
+                Crossfade(detail, animationSpec = MekaMotion.appear(reduced), label = "health-detail") { d ->
+                    Text(os.meka.core.domain.LoneWordGlue.kept(d), style = MekaType.caption, color = Meka.colors.textTertiary)
+                }
+            }
+        }
+        if (onOpen != null && !(showFix && row.fixLabel != null)) {
+            Text("›", style = MekaType.body, color = Meka.colors.textTertiary)
         }
         val label = row.fixLabel
         if (showFix && label != null) {

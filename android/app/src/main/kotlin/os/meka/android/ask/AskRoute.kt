@@ -419,6 +419,17 @@ fun AskRoute(
                     os.meka.core.domain.HealthFix.WORK -> MoreItem.WORK
                     else -> pane
                 }
+            }, openPlace = { p ->
+                pane = when (p) {
+                    os.meka.core.domain.HealthPlace.VOICE -> MoreItem.VOICE
+                    os.meka.core.domain.HealthPlace.CALENDARS -> MoreItem.CALENDARS
+                    os.meka.core.domain.HealthPlace.MAIL -> MoreItem.MAIL
+                    os.meka.core.domain.HealthPlace.MONEY -> MoreItem.MONEY
+                    os.meka.core.domain.HealthPlace.ABOUT_YOU -> MoreItem.ABOUT_YOU
+                    os.meka.core.domain.HealthPlace.WORK -> MoreItem.WORK
+                    os.meka.core.domain.HealthPlace.NOTIFICATIONS -> MoreItem.NOTIFICATIONS
+                    os.meka.core.domain.HealthPlace.SYSTEM_BATTERY, os.meka.core.domain.HealthPlace.SYSTEM_LISTENER -> pane
+                }
             })
         }
         MekaPane(visible = pane == MoreItem.SETUP) {

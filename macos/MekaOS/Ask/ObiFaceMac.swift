@@ -59,8 +59,25 @@ final class MacFaceStore {
         Task { await tellCore() }
     }
 
-    /// Looks at the server's list when it's due; never throws (a failure keeps what's kept and looks again later).
-    func refresh(_ model: CoreModel) async {
+    /// Health → Obi's voice's face line (Meka 2026-10-24 13:12): the setting, how many are kept, the last look.
+    func health() -> FaceHealth {
+        load()
+        let kept = Int32(readIndex().kept.count)
+        let text = try? String(contentsOf: Self.folder().appendingPathComponent(Self.checkName), encoding: .utf8)
+        return FaceHealth(on: on, kept: kept, check: FaceHealthRules.shared.decode(text: text))
+    }
+
+    private static let checkName = "check.txt"
+
+    private func writeCheck(_ check: FaceCheck) {
+        ensureFolder()
+        let text = FaceHealthRules.shared.encode(c: check)
+        try? text.write(to: Self.folder().appendingPathComponent(Self.checkName), atomically: true, encoding: .utf8)
+    }
+
+    /// Looks at the server's list when it's due, or now with `force` (Health's Look again); never throws (a failure
+    /// keeps what's kept and looks again later).
+    func refresh(_ model: CoreModel, force: Bool = false) async {
         self.model = model
         load()
         guard !refreshing else { return }
@@ -70,12 +87,13 @@ final class MacFaceStore {
         let allowed = Set(rules.FILES)
         let index = readIndex()
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        guard rules.due(index: index, nowMs: now) else {
+        guard force || rules.due(index: index, nowMs: now) else {
             ready = index.complete
             await tellCore()
             return
         }
         guard let offered = await model.faceManifest() else {
+            writeCheck(FaceCheck(atMs: now, offered: nil, notFetched: []))
             // With the face kept, the next open simply asks again; without it, not for another few hours.
             if !index.complete { writeIndex(rules.failed(index: index, nowMs: now)) }
             ready = index.complete
@@ -97,6 +115,7 @@ final class MacFaceStore {
                 Self.log.debug("face file not kept")
             }
         }
+        writeCheck(FaceCheck(atMs: now, offered: Array(offered.keys), notFetched: plan.fetch.filter { fetched[$0] == nil }))
         let next = rules.after(index: index, plan: plan, fetched: fetched, allowed: allowed, nowMs: now)
         writeIndex(next)
         ready = next.complete

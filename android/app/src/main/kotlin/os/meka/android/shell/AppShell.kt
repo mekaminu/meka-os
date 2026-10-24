@@ -95,6 +95,7 @@ import os.meka.core.domain.DockTap
 import os.meka.core.domain.HelloDock
 import os.meka.core.domain.TalkStart
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import os.meka.android.MekaApplication
 import androidx.compose.ui.platform.LocalContext
 
@@ -184,7 +185,11 @@ fun AppShell(core: MekaCore, connect: ConnectHook?) {
     val shellContext = LocalContext.current
     val reducedShell = Meka.reducedMotion
     // Obi's face, slice 3: keep the face's files on this phone (asked about weekly; nothing shows until all seven are here).
-    LaunchedEffect(Unit) { os.meka.android.ask.ObiFaceStore.refresh(shellContext, core) }
+    // Meka 2026-10-24 13:12: on every return to the app, not just its first open (FaceFileRules.due keeps it cheap).
+    val faceScope = androidx.compose.runtime.rememberCoroutineScope()
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        faceScope.launch { os.meka.android.ask.ObiFaceStore.refresh(shellContext, core) }
+    }
     // Slice 3b: while the face is drawn, Obi's clips come with their mouth sounds (so his lips follow each word).
     LaunchedEffect(Unit) {
         os.meka.android.ask.ObiFaceStore.load(shellContext)

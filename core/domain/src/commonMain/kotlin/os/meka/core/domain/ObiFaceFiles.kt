@@ -166,3 +166,74 @@ class MouthFollower {
         return if (mix >= 1.0) LipSync.Frame(to, to, 1.0) else LipSync.Frame(from, to, mix)
     }
 }
+
+/**
+ * Meka 2026-10-24 13:12: the face didn't show after he uploaded the files, and nothing said why. A device's last look
+ * at the server's face list: when, what the server listed ([offered]; null when the look itself failed) and which of
+ * those didn't come down ([notFetched]). Kept beside the cache's index; names only (the seven allowed ones).
+ */
+data class FaceCheck(val atMs: Long, val offered: List<String>?, val notFetched: List<String> = emptyList())
+
+/** What Health shows about the face on this device: the Face setting, how many of the seven are kept, the last look. */
+data class FaceHealth(val on: Boolean, val kept: Int, val check: FaceCheck?)
+
+object FaceHealthRules {
+    val TOTAL: Int get() = FaceFileRules.FILES.size
+    const val LOOK_AGAIN = "Look again"
+
+    /**
+     * Health → Obi's voice's face line: "Face · 7 of 7 files on this phone" · "Face · waiting: 0 of 7 on the server
+     * (last looked 13:05)" · "Face · server has 3 of 7: missing mouth-oh.png, mouth-ah.png" · "Face · off".
+     */
+    fun line(h: FaceHealth, mac: Boolean, nowMs: Long, cal: LocalCalendar): String {
+        val here = if (mac) "this Mac" else "this phone"
+        val total = TOTAL
+        if (!h.on) return "Face · off"
+        if (h.kept >= total) return "Face · $total of $total files on $here"
+        val c = h.check ?: return "Face · not looked for yet · ${h.kept} of $total on $here"
+        val looked = "last looked ${HealthRules.at(c.atMs, nowMs, cal)}"
+        val offered = c.offered ?: return "Face · couldn't reach the server ($looked)"
+        val listed = offered.filter { FaceFileRules.allowed(it) }.toSet()
+        if (listed.isEmpty()) return "Face · waiting: 0 of $total on the server ($looked)"
+        if (listed.size < total) {
+            val missing = FaceFileRules.FILES.filter { it !in listed }
+            return "Face · server has ${listed.size} of $total: missing ${missing.joinToString(", ")} ($looked)"
+        }
+        val failed = c.notFetched.filter { FaceFileRules.allowed(it) }
+        if (failed.isNotEmpty()) {
+            return "Face · server has $total of $total, ${h.kept} on $here: ${failed.joinToString(", ")} didn't download ($looked)"
+        }
+        return "Face · server has $total of $total, ${h.kept} on $here ($looked)"
+    }
+
+    /** The server has every file but this device didn't keep them all: a fault worth a look (not just waiting for him). */
+    fun fault(h: FaceHealth): Boolean {
+        if (!h.on || h.kept >= TOTAL) return false
+        val offered = h.check?.offered ?: return false
+        return offered.filter { FaceFileRules.allowed(it) }.toSet().size >= TOTAL
+    }
+
+    /** Look again shows while the face is on (it forces a look now, whatever [FaceFileRules.due] says). */
+    fun lookAgain(h: FaceHealth?): Boolean = h != null && h.on
+
+    /** The check as text for the device's storage: `atMs`, `ok`|`failed`, the listed names, the names not fetched. */
+    fun encode(c: FaceCheck): String = buildString {
+        append(c.atMs).append('\n')
+        append(if (c.offered == null) "failed" else "ok").append('\n')
+        append(c.offered.orEmpty().filter { FaceFileRules.allowed(it) }.sorted().joinToString(",")).append('\n')
+        append(c.notFetched.filter { FaceFileRules.allowed(it) }.sorted().joinToString(",")).append('\n')
+    }
+
+    fun decode(text: String?): FaceCheck? {
+        if (text.isNullOrBlank()) return null
+        val lines = text.lines()
+        val at = lines.getOrNull(0)?.trim()?.toLongOrNull() ?: return null
+        fun names(i: Int) = lines.getOrNull(i).orEmpty().split(',').map { it.trim() }.filter { FaceFileRules.allowed(it) }.distinct()
+        val offered = when (lines.getOrNull(1)?.trim()) {
+            "ok" -> names(2)
+            "failed" -> null
+            else -> return null
+        }
+        return FaceCheck(at, offered, names(3))
+    }
+}

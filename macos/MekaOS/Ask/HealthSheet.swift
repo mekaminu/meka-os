@@ -29,7 +29,7 @@ struct HealthSheet: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: MekaSpace.xs) {
                         ForEach(Array(view.rows.enumerated()), id: \.element.key) { i, row in
-                            HealthRowView(row: row, palette: palette) { fix(row) }
+                            HealthRowView(row: row, palette: palette, onOpen: row.place.flatMap { opener($0) }) { fix(row) }
                                 .staggeredAppear(i + 1)
                         }
                     }
@@ -54,6 +54,27 @@ struct HealthSheet: View {
         .task { await model.refreshHealth() }
     }
 
+    /// Meka 2026-10-24 13:12: a click on a row opens its screen; nil (nowhere to go here) leaves the row plain.
+    private func opener(_ place: HealthPlace) -> (() -> Void)? {
+        let open: (() -> Void)?
+        switch place {
+        case .voice: open = { model.showVoice = true }
+        case .calendars: open = { model.showCalendars = true }
+        case .mail: open = { model.showMail = true }
+        case .money: open = { model.showMoney = true }
+        case .aboutYou: open = { model.showAboutYou = true }
+        case .work: open = { model.showWork = true }
+        case .notifications: open = { model.showNotifications = true }
+        case .systemBattery, .systemListener: open = nil
+        }
+        guard let open else { return nil }
+        return {
+            MekaHaptics.light()
+            dismiss()
+            open()
+        }
+    }
+
     /// What a row's button does on the Mac. Only the strings cross into the core.
     private func fix(_ row: HealthRow) {
         MekaHaptics.light()
@@ -68,6 +89,8 @@ struct HealthSheet: View {
         case .work: dismiss(); model.showWork = true
         // Notifications never seen, the Mac's half: asks macOS the first time, else opens System Settings.
         case .notificationsOn: model.turnOnNotifications()
+        // Obi's face: look at the server's list now, then check again so the face line says what it found.
+        case .faceLookAgain: Task { await MacFaceStore.shared.refresh(model, force: true); await model.refreshHealth() }
         case .battery, .notificationAccess, .callRole, .installUpdate, .callerLookups: break
         }
     }
@@ -76,7 +99,7 @@ struct HealthSheet: View {
     static func fixHere(_ row: HealthRow) -> Bool {
         guard let f = row.fix else { return false }
         switch f {
-        case .syncNow, .reconnect, .calendars, .work, .notificationsOn: return true
+        case .syncNow, .reconnect, .calendars, .work, .notificationsOn, .faceLookAgain: return true
         case .battery, .notificationAccess, .callRole, .installUpdate, .callerLookups: return false
         }
     }
@@ -85,6 +108,7 @@ struct HealthSheet: View {
 private struct HealthRowView: View {
     let row: HealthRow
     let palette: MekaPalette
+    let onOpen: (() -> Void)?
     let onFix: () -> Void
     @Environment(\.mekaReduceMotion) private var reduceMotion
 
@@ -116,6 +140,12 @@ private struct HealthRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: row.line)
+                if let detail = row.detail {
+                    Text(LoneWordGlue.shared.kept(line: detail)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .contentTransition(.opacity)
+                        .animation(MekaMotion.appear(reduced: reduceMotion), value: detail)
+                }
             }
             Spacer()
             if HealthSheet.fixHere(row), let label = row.fixLabel {
@@ -125,13 +155,18 @@ private struct HealthRowView: View {
                     .foregroundStyle(palette.accent)
                     .padding(.horizontal, MekaSpace.m).padding(.vertical, MekaSpace.xs)
                     .background(palette.surfaceRaised, in: Capsule())
+            } else if onOpen != nil {
+                Image(systemName: "chevron.right").font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
         }
         .padding(.horizontal, MekaSpace.m)
         .padding(.vertical, MekaSpace.xs)
         .background(palette.background, in: RoundedRectangle(cornerRadius: MekaRadius.m))
+        .contentShape(RoundedRectangle(cornerRadius: MekaRadius.m))
+        .onTapGesture { onOpen?() }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(row.title), \(spoken). \(row.line)")
+        .accessibilityLabel("\(row.title), \(spoken). \(row.line)" + (row.detail.map { " \($0)" } ?? ""))
+        .accessibilityAddTraits(onOpen != nil ? .isButton : [])
     }
 }
 

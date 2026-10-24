@@ -22,6 +22,8 @@ import java.io.File
 object ObiFaceStore {
     private const val DIR = "obi-face"
     private const val INDEX = "index.txt"
+    /** The last look at the server's list (Health's face line, Meka 2026-10-24 13:12). */
+    private const val CHECK = "check.txt"
     private const val PREFS = "obi_face"
     private const val ON_KEY = "on"
 
@@ -48,6 +50,23 @@ object ObiFaceStore {
         _ready.value = readIndex(context).complete
     }
 
+    /** Health → Obi's voice's face line: the setting, how many are kept, the last look. */
+    fun health(context: Context): os.meka.core.domain.FaceHealth {
+        load(context)
+        val kept = readIndex(context).kept.size
+        val check = runCatching { File(dir(context), CHECK).takeIf { it.isFile }?.readText() }.getOrNull()
+        return os.meka.core.domain.FaceHealth(_on.value, kept, os.meka.core.domain.FaceHealthRules.decode(check))
+    }
+
+    private fun writeCheck(context: Context, check: os.meka.core.domain.FaceCheck) {
+        runCatching {
+            val d = dir(context).apply { mkdirs() }
+            val tmp = File(d, "$CHECK.part")
+            tmp.writeText(os.meka.core.domain.FaceHealthRules.encode(check))
+            if (!tmp.renameTo(File(d, CHECK))) tmp.delete()
+        }
+    }
+
     fun setOn(context: Context, on: Boolean) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(ON_KEY, on).apply()
         _on.value = on
@@ -68,25 +87,30 @@ object ObiFaceStore {
         if (!tmp.renameTo(File(d, INDEX))) tmp.delete()
     }
 
-    /** Looks at the server's list when it's due; never throws (a failure keeps what's kept and looks again later). */
-    suspend fun refresh(context: Context, core: MekaCore) {
+    /**
+     * Looks at the server's list when it's due, or now with [force] (Health's Look again); never throws (a failure keeps
+     * what's kept and looks again later). Called at every return to the app (Meka 2026-10-24 13:12: it ran only when
+     * the app was first opened, so a phone that kept Navilife in memory never looked again after he uploaded the files).
+     */
+    suspend fun refresh(context: Context, core: MekaCore, force: Boolean = false) {
         load(context)
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                runCatching { refreshLocked(context, core) }
+                runCatching { refreshLocked(context, core, force) }
             }
         }
     }
 
-    private suspend fun refreshLocked(context: Context, core: MekaCore) {
+    private suspend fun refreshLocked(context: Context, core: MekaCore, force: Boolean) {
         val index = readIndex(context)
         val now = System.currentTimeMillis()
-        if (!FaceFileRules.due(index, now)) {
+        if (!force && !FaceFileRules.due(index, now)) {
             _ready.value = index.complete
             return
         }
         val offered = core.faceManifest()
         if (offered == null) {
+            writeCheck(context, os.meka.core.domain.FaceCheck(now, null))
             // With the face kept, the next open simply asks again; without it, not for another few hours.
             if (!index.complete) writeIndex(context, FaceFileRules.failed(index, now))
             _ready.value = index.complete
@@ -104,6 +128,7 @@ object ObiFaceStore {
             dest.delete()
             if (tmp.renameTo(dest)) fetched[name] = offered.getValue(name) else tmp.delete()
         }
+        writeCheck(context, os.meka.core.domain.FaceCheck(now, offered.keys.toList(), plan.fetch.filter { it !in fetched }))
         val next = FaceFileRules.after(index, plan, fetched, allowed, now)
         writeIndex(context, next)
         _ready.value = next.complete
