@@ -136,7 +136,8 @@ class BedsideScreensTest {
                 place?.let { put(EventFields.LOCATION, it.fv()) }
             })
         event("ev1", "Quarterly planning with the design and engineering leads", at(10, 0), at(11, 30), place = "Harbour House, Dock Street")
-        event("ev2", "Dentist", at(14, 30), at(15, 0), place = "Oakfield Dental")
+        // Within the hour, so it is what Up next names (Today's next event looks an hour ahead, TimelineRules.UP_NEXT_WINDOW_MIN).
+        event("ev2", "Dentist", at(13, 45), at(14, 15), place = "Oakfield Dental")
         event("ev3", "Swimming lesson", at(18, 30), at(19, 15), place = "Oakfield Leisure Centre")
         event("ev4", "Parents' evening at Oakfield School", at(9, 30, day = 22), at(10, 0, day = 22))
         headline("top-0", "Rail fares to rise less than expected next year", "top", 40, "BBC News")
@@ -258,7 +259,7 @@ class BedsideScreensTest {
                 if (v.alarmLine != FoldModeRules.NO_ALARM) fail("$name: no alarm, but \"${v.alarmLine}\"")
             }
             Scene.MORNING -> ScreenShots.assertShows(compose, name, "Open the brief ›")
-            Scene.DAY -> if (v.lines.none { "Dentist" in it }) fail("$name: the dentist at 14:30 isn't what's next (${v.lines})")
+            Scene.DAY -> if (v.lines.none { "Dentist" in it }) fail("$name: the dentist at 13:45 isn't what's next (${v.lines})")
             Scene.EVENING -> {
                 if (!v.alarmSet || !v.alarmLine.startsWith("Alarm 06:30")) fail("$name: the alarm reads \"${v.alarmLine}\"")
                 ScreenShots.assertShows(compose, name, "See tomorrow ›")
