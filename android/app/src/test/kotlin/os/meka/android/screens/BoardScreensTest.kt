@@ -116,7 +116,8 @@ class BoardScreensTest {
         // Slice 8 of the Week board (the gate's first findings): no title cut to a word or two, no header line clipped.
         ScreenShots.assertReadable(compose, name, titles(fill))
         // Slice 9 (the re-shot of slice 8): every lane's first card starts level, tag or no tag, today or not.
-        if (level) ScreenShots.assertLevel(compose, name, firstCards)
+        // Option B slice 1: measured by the planner card around each title (some cards have a time line above it).
+        if (level) ScreenShots.assertLevelBy(compose, name, firstCards, PLANNER_CARD_TAG)
     }
 
     @Test @Config(qualifiers = ScreenShots.COVER)

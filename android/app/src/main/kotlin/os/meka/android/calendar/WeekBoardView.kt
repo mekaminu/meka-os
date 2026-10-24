@@ -889,8 +889,9 @@ private fun DayColumn(
             } else {
                 BoardLookRules.progress(day)?.let { DayProgressBar(it) }
             }
-            day.capacity?.let { BudgetPill(it, day.isToday) }
         }
+        // Option B slice 1: the budget pill sits under the header as its own element (heard on its own by TalkBack).
+        day.capacity?.let { BudgetPill(it, day.isToday) }
         day.pressure?.let { PressureNote(it, onEase) }
         // By hand, slice 1: "+ Add a task" at the top of every day from today, always there.
         if (day.canDrop) AddAtTop(day, adding, onAddOpen, onAddClose, onAddBounds, onAdd)

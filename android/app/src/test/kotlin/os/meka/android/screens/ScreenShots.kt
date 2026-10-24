@@ -123,6 +123,28 @@ object ScreenShots {
     }
 
     /**
+     * The same "lanes line up", measured by the card that holds each of [texts] (the node tagged [tag] around it) rather
+     * than the text itself: the Week board's planner cards (Option B, slice 1) put a time and duration line above some
+     * titles and not others, so the cards' tops are what must be level.
+     */
+    fun assertLevelBy(compose: ComposeContentTestRule, name: String, texts: List<String>, tag: String) {
+        val cards = mutableListOf<SemanticsNode>()
+        fun walk(n: SemanticsNode) {
+            if (n.config.getOrNull(SemanticsProperties.TestTag) == tag) cards += n
+            n.children.forEach { walk(it) }
+        }
+        walk(compose.onRoot(useUnmergedTree = true).fetchSemanticsNode())
+        fun holds(n: SemanticsNode, t: String): Boolean =
+            n.config.getOrNull(SemanticsProperties.Text)?.joinToString("") { it.text } == t || n.children.any { holds(it, t) }
+        val tops = texts.associateWith { t ->
+            cards.firstOrNull { holds(it, t) }?.boundsInRoot?.top ?: fail("$name: no card holds \"$t\"")
+        }
+        val highest = tops.values.min()
+        val off = tops.filterValues { it - highest > 1f }
+        if (off.isNotEmpty()) fail("$name: the lanes' first cards don't line up:\n" + tops.entries.joinToString("\n") { "- \"${it.key}\" at ${it.value} px" })
+    }
+
+    /**
      * The quality gate's "one row" (Today's re-shot, 2026-10-22: on the cover screen Up next's Open wrapped alone under
      * Done and Tomorrow): fails when the nodes tagged [tag] don't all start at the same height.
      */
