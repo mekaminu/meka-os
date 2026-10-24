@@ -52,6 +52,11 @@ import os.meka.core.domain.BalanceArea
 import os.meka.core.domain.BalanceRow
 import os.meka.core.domain.BalanceRules
 import os.meka.core.domain.BalanceView
+import os.meka.core.domain.DurationGlue
+import os.meka.core.domain.LoneWordGlue
+
+/** A grey line as drawn: durations and the last words kept together (quality gate slice 62). */
+private fun shown(line: String): String = LoneWordGlue.kept(DurationGlue.kept(line))
 
 /**
  * Balance view in the weekly review (V2, slice 1): the reviewed week's time across Work, Family, Health and Self, each
@@ -81,16 +86,16 @@ internal fun LazyListScope.balanceItems(
         Column(Modifier.padding(top = MekaSpace.l).appear(rememberAppearance(index))) {
             SectionLabel(BalanceRules.TITLE)
             Crossfade(balance.line, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "balance-line") { l ->
-                Text(l, style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
+                Text(shown(l), style = MekaType.itemMeta, color = Meka.colors.textSecondary, modifier = Modifier.padding(bottom = MekaSpace.xs))
             }
         }
     }
     items(balance.rows, key = { "bal-" + it.area.name }) { r -> BalanceLine(r, Modifier.appear(rememberAppearance(index))) }
     item(key = "balance-foot") {
         Column(Modifier.padding(top = MekaSpace.xs).appear(rememberAppearance(index)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
-            balance.uncounted?.let { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+            balance.uncounted?.let { Text(shown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
             CountAs(balance, countSaid, onCountAs, onUndoCount)
-            Text(balance.sources, style = MekaType.caption, color = Meka.colors.textTertiary)
+            Text(shown(balance.sources), style = MekaType.caption, color = Meka.colors.textTertiary)
             Targets(balance, said, onTarget, onToggle, onCountAs)
         }
     }
@@ -116,13 +121,13 @@ private fun BalanceLine(r: BalanceRow, modifier: Modifier) {
         Box(Modifier.padding(vertical = MekaSpace.xs).fillMaxWidth().height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.surfaceRaised)) {
             Box(Modifier.fillMaxWidth(fill.value.coerceIn(0f, 1f)).height(6.dp).clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent))
         }
-        Text(r.line, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
-        r.items.forEach { Text(it, style = MekaType.caption, color = Meka.colors.textTertiary) }
+        Text(shown(r.line), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+        r.items.forEach { Text(shown(it), style = MekaType.caption, color = Meka.colors.textTertiary) }
         if (r.moreItems > 0) Text("and ${r.moreItems} more", style = MekaType.caption, color = Meka.colors.textTertiary)
         r.trendLine?.let { line ->
             TrendBars(r)
             Crossfade(line, animationSpec = MekaMotion.appear(reduced), label = "balance-trend") {
-                Text(it, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(shown(it), style = MekaType.caption, color = Meka.colors.textSecondary)
             }
         }
     }
@@ -180,7 +185,7 @@ private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, Str
                 Column(Modifier.appear(rememberAppearance(i)), verticalArrangement = Arrangement.spacedBy(MekaSpace.xxs)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(u.title, style = MekaType.body, color = Meka.colors.textPrimary, modifier = Modifier.weight(1f))
-                        Text(u.line, style = MekaType.caption, color = Meka.colors.textTertiary)
+                        Text(shown(u.line), style = MekaType.caption, color = Meka.colors.textTertiary)
                     }
                     Text("Count as", style = MekaType.caption, color = Meka.colors.textTertiary)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
@@ -194,7 +199,7 @@ private fun CountAs(balance: BalanceView, said: String?, onCountAs: (String, Str
         Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "balance-count-said") { l ->
             l?.let {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(it, style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
+                    Text(shown(it), style = MekaType.caption, color = Meka.colors.textSecondary, modifier = Modifier.weight(1f))
                     Text(
                         "Undo", style = MekaType.itemMeta, color = Meka.colors.accent,
                         modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button, onClickLabel = "Undo") { onUndo() }
@@ -264,7 +269,7 @@ private fun Targets(
                     }
                 }
                 Crossfade(said, animationSpec = MekaMotion.appear(reduced), label = "balance-said") { l ->
-                    l?.let { Text(it, style = MekaType.caption, color = Meka.colors.textSecondary) }
+                    l?.let { Text(shown(it), style = MekaType.caption, color = Meka.colors.textSecondary) }
                 }
             }
         }
@@ -277,10 +282,11 @@ private fun TargetChip(label: String, chosen: Boolean, choose: () -> Unit) {
     val fg by animateColorAsState(if (chosen) Meka.colors.onAccent else Meka.colors.textPrimary, MekaMotion.themeBlend(Meka.reducedMotion), label = "target-fg")
     Text(
         label, style = MekaType.caption, color = fg,
-        modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+        // Quality gate slice 62: the pill drawn slim (it was the whole 48 dp tall), the 48 dp touch outside it.
+        modifier = Modifier.semantics { selected = chosen }.clip(RoundedCornerShape(MekaRadius.pill))
             .clickable(role = Role.RadioButton) { if (!chosen) choose() }
-            .semantics { selected = chosen }
             .minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
             .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
     )
 }

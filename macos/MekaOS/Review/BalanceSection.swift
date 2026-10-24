@@ -1,6 +1,11 @@
 @preconcurrency import MekaKit
 import SwiftUI
 
+/// A grey line as drawn: durations and the last words kept together, as on the Fold (quality gate slice 62).
+private func balanceShown(_ line: String) -> String {
+    LoneWordGlue.shared.kept(line: DurationGlue.shared.kept(line: line))
+}
+
 /// Balance view in Review on the Mac (V2, slice 1), like the Fold's: the reviewed week's time across Work, Family,
 /// Health and Self, each with its bar against his target, a status ("Met" or work's "3 h over" in the accent) and what
 /// counted; "Targets ›" unfolds a row of chips per area (synced with the Fold). Only Strings and Ints cross to the core.
@@ -24,15 +29,15 @@ struct BalanceSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: MekaSpace.xs) {
             SectionLabel(BalanceRules.shared.TITLE, palette)
-            Text(balance.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            Text(balanceShown(balance.line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: balance.line)
             ForEach(balance.rows, id: \.area.name) { r in BalanceRowView(row: r, palette: palette) }
             if let u = balance.uncounted {
-                Text(u).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(balanceShown(u)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             countAs
-            Text(balance.sources).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(balanceShown(balance.sources)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .fixedSize(horizontal: false, vertical: true)
             targets
         }
@@ -47,7 +52,7 @@ struct BalanceSection: View {
                 HStack {
                     Text(u.title).font(MekaType.body).foregroundStyle(palette.textPrimary)
                     Spacer()
-                    Text(u.line).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                    Text(balanceShown(u.line)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 }
                 HStack(spacing: MekaSpace.xs) {
                     Text("Count as").font(MekaType.caption).foregroundStyle(palette.textTertiary)
@@ -62,7 +67,7 @@ struct BalanceSection: View {
         .animation(MekaMotion.expand(reduced: reduceMotion), value: balance.unclear.map(\.key))
         if let s = countSaid {
             HStack {
-                Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(balanceShown(s)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                 Spacer()
                 Button("Undo") {
                     Task { if await model.balanceUndoCountAs() { countSaid = nil } }
@@ -136,7 +141,7 @@ struct BalanceSection: View {
                 }
                 choices
                 if let s = said {
-                    Text(s).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                    Text(balanceShown(s)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         .contentTransition(.opacity)
                         .animation(MekaMotion.appear(reduced: reduceMotion), value: s)
                 }
@@ -206,14 +211,14 @@ private struct BalanceRowView: View {
             }
             .frame(height: 6)
             .padding(.vertical, MekaSpace.xxs)
-            Text(row.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
-            ForEach(row.items, id: \.self) { Text($0).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
+            Text(balanceShown(row.line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+            ForEach(row.items, id: \.self) { Text(balanceShown($0)).font(MekaType.caption).foregroundStyle(palette.textTertiary) }
             if row.moreItems > 0 {
                 Text("and \(row.moreItems) more").font(MekaType.caption).foregroundStyle(palette.textTertiary)
             }
             if let line = row.trendLine {
                 BalanceTrendView(row: row, palette: palette)
-                Text(line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                Text(balanceShown(line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: line)
             }

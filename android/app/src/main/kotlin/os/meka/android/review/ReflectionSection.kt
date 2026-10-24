@@ -32,6 +32,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
@@ -45,8 +46,8 @@ import os.meka.android.designsystem.minTouch
 import os.meka.android.designsystem.rememberAppearance
 import os.meka.android.goals.fold
 import os.meka.android.goals.unfold
-import os.meka.android.lists.Chip
 import os.meka.android.today.SectionLabel
+import os.meka.core.domain.LoneWordGlue
 import os.meka.core.domain.ReflectionEntry
 import os.meka.core.domain.ReflectionHint
 import os.meka.core.domain.ReflectionRules
@@ -119,13 +120,13 @@ private fun ReflectionCard(r: ReflectionView, said: ReflectionSaved?, modifier: 
             }
         }
         Crossfade(r.line, animationSpec = MekaMotion.appear(reduced), label = "reflect-line") { l ->
-            Text(l, style = MekaType.itemMeta, color = Meka.colors.textSecondary)
+            Text(LoneWordGlue.kept(l), style = MekaType.itemMeta, color = Meka.colors.textSecondary)
         }
-        Text(r.facts, style = MekaType.caption, color = Meka.colors.textTertiary)
+        Text(LoneWordGlue.kept(r.facts), style = MekaType.caption, color = Meka.colors.textTertiary)
         // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
         if (r.board.planned > 0) {
             Column(Modifier.fillMaxWidth().semantics(mergeDescendants = true) {}) {
-                Text(r.board.line, style = MekaType.caption, color = Meka.colors.textSecondary)
+                Text(LoneWordGlue.kept(r.board.line), style = MekaType.caption, color = Meka.colors.textSecondary)
                 r.board.slippingLine?.let { Text(it, style = MekaType.caption, color = Meka.colors.accent) }
             }
         }
@@ -145,7 +146,7 @@ private fun ReflectionCard(r: ReflectionView, said: ReflectionSaved?, modifier: 
             Form(r, act) { editing = false }
         }
         Crossfade(said?.line, animationSpec = MekaMotion.appear(reduced), label = "reflect-said") { l ->
-            l?.let { Text(it, style = MekaType.caption, color = if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary) }
+            l?.let { Text(LoneWordGlue.kept(it), style = MekaType.caption, color = if (said?.refused == true) Meka.colors.accent else Meka.colors.textSecondary) }
         }
         WhenRow(r, act)
     }
@@ -162,7 +163,7 @@ private fun WhenRow(r: ReflectionView, act: ReflectionActions) {
     Column(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Crossfade(r.whenLine, animationSpec = MekaMotion.appear(Meka.reducedMotion), label = "reflect-when", modifier = Modifier.weight(1f)) { l ->
-                Text(l, style = MekaType.caption, color = Meka.colors.textTertiary)
+                Text(LoneWordGlue.kept(l), style = MekaType.caption, color = Meka.colors.textTertiary)
             }
             Text(
                 if (open) "Done" else "Change", style = MekaType.caption, color = Meka.colors.accent,
@@ -175,7 +176,7 @@ private fun WhenRow(r: ReflectionView, act: ReflectionActions) {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 r.timeChoices.forEachIndexed { i, m ->
                     val on = m == r.startMinute
-                    Chip(r.timeLabels.getOrElse(i) { "" }, on) { if (!on) { act.setTime(m); open = false } }
+                    ReflectChip(r.timeLabels.getOrElse(i) { "" }, on) { if (!on) { act.setTime(m); open = false } }
                 }
             }
         }
@@ -200,16 +201,19 @@ private fun Form(r: ReflectionView, act: ReflectionActions, onSaved: () -> Unit)
             act.tick(); matters = ReflectionRules.withHint(matters, h.text); goalId = h.goalId
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-            Chip("Also keep in Wins", keepWins) { act.tick(); keepWins = !keepWins }
+            ReflectChip("Also keep in Wins", keepWins) { act.tick(); keepWins = !keepWins }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(MekaSpace.m), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Save", style = MekaType.itemTitle, color = Meka.colors.onAccent,
-                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
+                // Quality gate slice 62: a 48 dp touch around the same pill.
+                modifier = Modifier.clip(RoundedCornerShape(MekaRadius.pill))
                     .clickable(role = Role.Button) {
                         act.save(wentWell, drop, matters, goalId, keepWins)
                         if (wentWell.isNotBlank() || drop.isNotBlank() || matters.isNotBlank()) onSaved()
                     }
+                    .minTouch()
+                    .clip(RoundedCornerShape(MekaRadius.pill)).background(Meka.colors.accent)
                     .padding(horizontal = MekaSpace.l, vertical = MekaSpace.xs),
             )
             if (!r.saved) TextAction("Skip this week") { act.tick(); act.skip(true) }
@@ -240,7 +244,7 @@ private fun Prompt(label: String, value: String, onValue: (String) -> Unit, hint
             FlowRow(horizontalArrangement = Arrangement.spacedBy(MekaSpace.xs), verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
                 hints.forEach { h ->
                     val added = value.lines().any { os.meka.core.domain.WinRules.key(it) == os.meka.core.domain.WinRules.key(h.text) }
-                    Chip((if (added) "✓ " else "+ ") + h.text, added) { if (!added) onHint(h) }
+                    ReflectChip((if (added) "✓ " else "+ ") + h.text, added) { if (!added) onHint(h) }
                 }
             }
         }
@@ -299,7 +303,8 @@ private fun Journal(r: ReflectionView, removed: ReflectionEntry?, modifier: Modi
                             Text(
                                 "Remove", style = MekaType.caption, color = Meka.colors.textTertiary,
                                 modifier = Modifier.clip(RoundedCornerShape(MekaRadius.m)).clickable(role = Role.Button) { act.remove(e) }
-                                    .semantics { contentDescription = "Remove ${e.label}'s reflection" }.padding(MekaSpace.xs),
+                                    .semantics { contentDescription = "Remove ${e.label}'s reflection" }
+                                    .minTouch().padding(horizontal = MekaSpace.xs),
                             )
                         }
                         Column(Modifier.semantics(mergeDescendants = true) { contentDescription = e.spoken }) {
@@ -312,4 +317,20 @@ private fun Journal(r: ReflectionView, removed: ReflectionEntry?, modifier: Modi
             }
         }
     }
+}
+
+/**
+ * A choice chip in the reflection (the suggestions, Also keep in Wins, the times): the pill drawn as Lists' chips,
+ * answering a 48 dp touch (quality gate slice 62; Lists' Chip is ~32 dp to tap); a long suggestion takes two lines.
+ */
+@Composable
+private fun ReflectChip(label: String, lit: Boolean, onClick: () -> Unit) {
+    val bg by animateColorAsState(if (lit) Meka.colors.accent else Meka.colors.surfaceRaised, MekaMotion.appear(Meka.reducedMotion), label = "reflect-chip")
+    Text(
+        label, style = MekaType.caption, color = if (lit) Meka.colors.onAccent else Meka.colors.textPrimary, maxLines = 2,
+        modifier = Modifier.semantics { selected = lit }.clip(RoundedCornerShape(MekaRadius.pill))
+            .clickable(role = Role.Button) { onClick() }.minTouch()
+            .clip(RoundedCornerShape(MekaRadius.pill)).background(bg)
+            .padding(horizontal = MekaSpace.m, vertical = MekaSpace.xs),
+    )
 }

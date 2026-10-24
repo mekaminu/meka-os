@@ -3202,6 +3202,30 @@ docs/screens/fold/shutdown/.
   centring and band checks measured the button's padding and the list's 8 dp item gap); CI run 1145 (39976635873)
   green, published cad03ec.
 
+### Quality gate — slice 62 (2026-10-24): Review's Balance and Reflect shots and their hand tests
+
+- ReviewBalanceReflectScreensTest (8, Robolectric + Roborazzi) draws the review's Balance section and Reflect card
+  from invented weeks counted by the core's own rules (BalanceRules.view, ReflectionRules.view): this week with
+  nothing counted (a quiet week, the reflection folded behind Reflect now), last week with one of each area, an event to
+  count and its reflection saved, and a full week (every area, Family's target set to 10 h, the four-week trend, four
+  events with no clear area, a choice of his, the reflection asked for with suggestions from the week, three earlier
+  weeks in the journal), on the cover and inner sizes, Dark and Light, shot at Balance, its foot, Reflect, the
+  questions and the journal, under docs/screens/fold/review/; read for nonsense, cut lines, broken words, split
+  numbers, dates and durations, lone words, dots starting or ending a line, each "Count as" event's days and hours
+  and each status on one line, and every button and chip a 48 dp touch.
+- By hand: Targets opens the chips and 14 h sets Family's target; his choice reads "Quiz night · Self"; Count as
+  Health counts the biggest event; Undo; a went-well suggestion goes into its field; typing What to drop and Save keep
+  the three answers; Skip this week; the journal opens and Remove removes that week; Change offers the times and 19:00
+  sets when it comes; on a folded week Reflect now opens the questions.
+- Fixed first: the Targets and Count as chips were drawn the full 48 dp tall, now slim pills with the 48 dp touch
+  outside them (Fold); the reflection's chips (suggestions, Also keep in Wins, the times) were ~32 dp to tap and cut a
+  long suggestion at one line, now a 48 dp touch around the same pill and up to two lines (Fold); Save was ~40 dp and
+  a journal week's Remove ~32 dp, now 48 dp touches (Fold); Balance's lines (the summary, each row's line, what
+  counted, the trend line, not counted, the sources, an event's days and hours, what a tap said) keep their durations
+  and last words together (DurationGlue + LoneWordGlue), and the reflection's line, facts, Board line, saved line and
+  when-it-comes line their last words (LoneWordGlue), Fold and Mac.
+- Design check: no design file covers Review. No core change, no server change, no migration, Mac checked nightly.
+
 ### Quality gate — slice 61 (2026-10-24): Review's shots and its hand tests
 
 - ReviewScreensTest (8, Robolectric + Roborazzi) draws Ask → Daily → Review (the review's `Week`, now internal) from

@@ -35,15 +35,15 @@ struct ReflectionSection: View {
             VStack(alignment: .leading, spacing: MekaSpace.xs) {
                 SectionLabel("Reflect", palette)
                 header
-                Text(r.line).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
+                Text(LoneWordGlue.shared.kept(line: r.line)).font(MekaType.itemMeta).foregroundStyle(palette.textSecondary)
                     .contentTransition(.opacity)
                     .animation(MekaMotion.appear(reduced: reduceMotion), value: r.line)
-                Text(r.facts).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+                Text(LoneWordGlue.shared.kept(line: r.facts)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 // Week board item (8), the Friday review: planned against done on the Board, and what kept slipping.
                 if r.board.planned > 0 {
                     VStack(alignment: .leading, spacing: MekaSpace.xxs) {
-                        Text(r.board.line).font(MekaType.caption).foregroundStyle(palette.textSecondary)
+                        Text(LoneWordGlue.shared.kept(line: r.board.line)).font(MekaType.caption).foregroundStyle(palette.textSecondary)
                         if let slip = r.board.slippingLine {
                             Text(slip).font(MekaType.caption).foregroundStyle(palette.accent)
                         }
@@ -73,7 +73,7 @@ struct ReflectionSection: View {
                     form.transition(reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
                 }
                 if let s = said, s.week == r.weekStart {
-                    Text(s.said.line).font(MekaType.caption)
+                    Text(LoneWordGlue.shared.kept(line: s.said.line)).font(MekaType.caption)
                         .foregroundStyle(s.said.refused ? palette.accent : palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
@@ -97,7 +97,7 @@ struct ReflectionSection: View {
         let start = Int(r.startMinute)
         let choices = r.timeChoices.map { Int($0.int32Value) }
         return HStack(spacing: MekaSpace.m) {
-            Text(r.whenLine).font(MekaType.caption).foregroundStyle(palette.textTertiary)
+            Text(LoneWordGlue.shared.kept(line: r.whenLine)).font(MekaType.caption).foregroundStyle(palette.textTertiary)
                 .contentTransition(.opacity)
                 .animation(MekaMotion.appear(reduced: reduceMotion), value: r.whenLine)
             Spacer()
