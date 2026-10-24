@@ -63,7 +63,7 @@ object BoardMatchRules {
     /** The quiet button at the foot of a column. */
     const val ADD = "+ add"
 
-    /** The time chip of a card with no time planned (the mockup's "—", in words so it's never a lone dash). */
+    /** The chip a card with no time once wore; since the density pass it wears none (kept so tests can check it's gone). */
     const val ANY_TIME = "Any time"
 
     /** An event's foot when its calendar has no name. */
@@ -112,14 +112,14 @@ object BoardMatchRules {
         return if (w == 0) board.todayEpochDay else board.weeks[w].startEpochDay
     }
 
-    /** A task card's top line: its time (or "Any time") and its duration when it has an estimate. */
-    fun top(card: BoardCard): PlannerCardTop {
-        val t = BoardPlannerRules.top(card)
-        return PlannerCardTop(t?.time ?: ANY_TIME, t?.duration)
-    }
+    /**
+     * A task card's top line: its time and its duration when it has an estimate. The density pass (2026-10-24 18:10):
+     * no "Any time" chip any more ([BoardDenseRules.top]); a card with neither has no top line.
+     */
+    fun top(card: BoardCard): PlannerCardTop? = BoardDenseRules.top(card)
 
-    /** The time chip's words ("12:30" or "Any time"), for Swift. */
-    fun timeChip(card: BoardCard): String = top(card).time ?: ANY_TIME
+    /** The time chip's words ("12:30"), "" when it has no time (no chip), for Swift. */
+    fun timeChip(card: BoardCard): String = BoardDenseRules.chip(card)
 
     /** Whether the chip is a planned time (gold) rather than "Any time" (quiet). */
     fun timed(card: BoardCard): Boolean = card.time != null

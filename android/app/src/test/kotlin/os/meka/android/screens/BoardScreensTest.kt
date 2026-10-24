@@ -12,6 +12,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -361,26 +362,63 @@ class BoardScreensTest {
     }
 
     /**
-     * Option B slice 5 (the day timeline, refinement 2): unfolded, Timeline in the header opens today's timeline beside
-     * the week (on the Fold's 829 dp it starts closed, so the five days keep their width); a task planned at 19:00 for
-     * 45 minutes is a block there, read out as the core says.
+     * Option B slice 5 (the day timeline, refinement 2), with the density pass: unfolded, today's timeline is there beside
+     * the week from the start (the mockup always has it; on the Fold's 829 dp the five days keep about 116 dp each); a
+     * task planned at 19:00 for 45 minutes is a block there, read out as the core says. Hide timeline shuts it, and
+     * Timeline opens it again.
      */
     @Test @Config(qualifiers = ScreenShots.INNER)
     fun unfoldedTheTimelineOpensBesideTheWeekWithTodaysTimedTask() {
         val (core, spoken) = timedCore()
         show(core)
         assertTrue("no Timeline in the header", compose.onAllNodesWithTag(TIMELINE_TOGGLE_TAG).fetchSemanticsNodes().isNotEmpty())
-        assertTrue("open before it was asked", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
-        compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
-        settle()
         compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-timeline"))
         ScreenShots.assertSensible(compose, "inner-dark-timeline")
-        assertTrue("no timeline beside the week", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())
+        assertTrue("no timeline beside the week by default", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())
         assertTrue("no block for the timed task: $spoken", compose.onAllNodesWithContentDescription(spoken).fetchSemanticsNodes().isNotEmpty())
-        // Hide timeline shuts it again.
+        // Hide timeline shuts it, Timeline opens it again.
         compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
         settle()
         assertTrue("still open", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithTag(TIMELINE_TOGGLE_TAG).performClick()
+        settle()
+        assertTrue("didn't open again", compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    /**
+     * The density pass (Claude's check 2026-10-24 18:10: "Option B is closer but still not the mockup on the open Fold"),
+     * unfolded on a Wednesday: the five weekday columns and today's timeline fit together (each day's card 90–140 dp
+     * wide, the timeline to their right); a card with no time wears no "Any time" chip, its length alone on the right; a
+     * timed card keeps its gold chip; the day's date is the mockup's 19 sp. The shot is `inner-dark-dense` (screens
+     * branch), for docs/screens/week-board beside design-1280.png.
+     */
+    @Test @Config(qualifiers = ScreenShots.INNER)
+    fun theBoardHasTheMockupsProportions() {
+        ThemeChoice.save(ApplicationProvider.getApplicationContext(), ThemeChoice.DARK)
+        val core = core()
+        runBlocking {
+            core.tick()
+            val today = core.weekBoard.value.todayEpochDay
+            val id = core.addOnBoardSized("Fix the gate latch", today, 45)!!
+            core.areaOnBoard(id, os.meka.core.domain.BoardArea.HOUSE)
+            core.addOnBoardSized("Order new bins", today + 1, null)
+        }
+        show(core)
+        compose.onNodeWithTag("screen").captureRoboImage(ScreenShots.path("board", "inner-dark-dense"))
+        ScreenShots.assertSensible(compose, "inner-dark-dense")
+        if (compose.onAllNodesWithText(os.meka.core.domain.BoardMatchRules.ANY_TIME, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()) {
+            fail("a card still wears an \"Any time\" chip")
+        }
+        ScreenShots.assertShows(compose, "dense", "0:45")
+        val timeline = compose.onAllNodesWithTag(TIMELINE_TAG).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            ?: throw AssertionError("the timeline isn't beside the week")
+        val density = compose.onRoot().fetchSemanticsNode().layoutInfo.density.density
+        val card = cardBounds("Fix the gate latch")
+        val wide = card.width / density
+        assertTrue("a weekday card is ${wide} dp wide (want 90–140)", wide in 90f..140f)
+        assertTrue("the timeline sits right of today's card ($timeline vs $card)", timeline.left >= card.right)
+        val bins = cardBounds("Order new bins")
+        assertTrue("tomorrow's card is beside today's, not off screen ($bins)", bins.right <= timeline.left + 1f)
     }
 
     /** Option B slice 5: folded, the Cards · Timeline tab shows the day in view as a timeline, and back. */
@@ -403,7 +441,7 @@ class BoardScreensTest {
     /**
      * The Week board made to match Option B (Meka 2026-10-24 14:39, "doesn't look like the mock-up prototype"), slice 1,
      * unfolded on a Wednesday: "October 2026" with W43 in the header; Monday and Tuesday are full columns with their
-     * dates (never folded into empty pills); a card with no time says "Any time" on its chip; "+ add" sits at the foot
+     * dates (never folded into empty pills); a card with no time shows its length alone (no "Any time" chip since the density pass); "+ add" sits at the foot
      * of the day, under its cards; the budget pill says "planned" against what is free.
      */
     @Test @Config(qualifiers = ScreenShots.INNER)
@@ -421,7 +459,8 @@ class BoardScreensTest {
         ScreenShots.assertShows(compose, "match", "W43")
         ScreenShots.assertShows(compose, "match", "Monday 19 October")
         ScreenShots.assertShows(compose, "match", "Tuesday 20 October")
-        ScreenShots.assertShows(compose, "match", os.meka.core.domain.BoardMatchRules.ANY_TIME)
+        // The density pass: no "Any time" chip; the card's length alone on the right.
+        ScreenShots.assertShows(compose, "match", "1:00")
         if (compose.onAllNodesWithContentDescription("Tap to open", substring = true).fetchSemanticsNodes().isNotEmpty()) {
             fail("a past day is still folded narrow")
         }

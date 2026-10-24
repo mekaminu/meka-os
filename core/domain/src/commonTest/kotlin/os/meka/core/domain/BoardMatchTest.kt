@@ -76,15 +76,16 @@ class BoardMatchTest {
     @Test
     fun everyCardHasItsTopLineNeverALoneDash() {
         val timed = BoardMatchRules.top(card("a", time = "12:30", estimate = 45))
-        assertEquals("12:30", timed.time)
+        assertEquals("12:30", timed!!.time)
         assertEquals("0:45", timed.duration)
-        val loose = BoardMatchRules.top(card("b"))
-        assertEquals("Any time", loose.time)
-        assertNull(loose.duration)
+        // The density pass: no "Any time" chip; no time and no length, no top line at all.
+        assertNull(BoardMatchRules.top(card("b")))
+        val sized = BoardMatchRules.top(card("c", estimate = 30))!!
+        assertNull(sized.time)
+        assertEquals("0:30", sized.duration)
         assertTrue(BoardMatchRules.timed(card("a", time = "12:30")))
         assertFalse(BoardMatchRules.timed(card("b")))
-        assertEquals("Any time", BoardMatchRules.timeChip(card("b")))
-        assertTrue(ScreenSenseRules.problemsIn(loose.time!!).isEmpty())
+        assertEquals("", BoardMatchRules.timeChip(card("b")))
     }
 
     @Test
@@ -138,8 +139,8 @@ class BoardMatchTest {
         assertEquals("0:30", BoardMatchRules.listTop(card("b", estimate = 30))?.duration)
         assertEquals("0:30", BoardMatchRules.listDuration(card("b", estimate = 30)))
         assertEquals("09:00", BoardMatchRules.listTime(card("c", time = "09:00")))
-        // A day's card still always has its chip ("Any time").
-        assertEquals(BoardMatchRules.ANY_TIME, BoardMatchRules.top(card("a")).time)
+        // The density pass: a day's card has no "Any time" chip either.
+        assertNull(BoardMatchRules.top(card("a")))
     }
 
     @Test

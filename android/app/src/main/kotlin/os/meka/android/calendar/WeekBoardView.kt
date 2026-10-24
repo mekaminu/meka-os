@@ -165,6 +165,8 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.layout.wrapContentWidth
 import os.meka.core.facade.MekaCore
 import os.meka.core.domain.BoardMatchRules
+import os.meka.core.domain.BoardDenseRules
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontFamily
 
 /**
@@ -1006,7 +1008,17 @@ internal object BoardType {
     /** Times, lengths and the budget's figures: the micro token in mono. */
     val mono = MekaType.micro.copy(fontFamily = FontFamily.Monospace)
     val monoSmall = mono
+
+    // The density pass (BoardDenseRules): the unfolded board and its lists in the mockup's proportions.
+    val dateDense = date.copy(fontSize = BoardDenseRules.DATE_SP.sp, lineHeight = (BoardDenseRules.DATE_SP * 1.2f).sp)
+    val weekdayDense = MekaType.micro.copy(fontSize = BoardDenseRules.WEEKDAY_SP.sp, lineHeight = (BoardDenseRules.WEEKDAY_SP * 1.3f).sp)
+    val titleDense = MekaType.caption.copy(fontSize = BoardDenseRules.TITLE_SP.sp, lineHeight = (BoardDenseRules.TITLE_SP * 1.3f).sp)
+    val monoDense = mono.copy(fontSize = BoardDenseRules.CHIP_SP.sp, lineHeight = (BoardDenseRules.CHIP_SP * 1.3f).sp)
+    val footDense = MekaType.micro.copy(fontSize = BoardDenseRules.FOOT_SP.sp, lineHeight = (BoardDenseRules.FOOT_SP * 1.3f).sp)
 }
+
+/** The density pass: the lane being drawn is on the unfolded board or the Mac-sized layout (BoardDenseRules). */
+internal val LocalBoardDense = staticCompositionLocalOf { false }
 
 /** The month in the Board's header (Option B match, UI tests). */
 internal const val MONTH_TAG = "board-month"
@@ -1145,12 +1157,14 @@ private fun DayColumn(
                 .clearAndSetSemantics { contentDescription = day.accessibilityLabel },
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                val dense = LocalBoardDense.current
                 Text(
-                    head.date, style = BoardType.date, color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1,
+                    head.date, style = if (dense) BoardType.dateDense else BoardType.date,
+                    color = if (day.isToday) Meka.colors.accent else Meka.colors.textPrimary, maxLines = 1,
                     modifier = Modifier.testTag(DAY_DATE_TAG),
                 )
                 Spacer(Modifier.weight(1f))
-                Text(head.weekday, style = MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1)
+                Text(head.weekday, style = if (dense) BoardType.weekdayDense else MekaType.itemMeta, color = Meka.colors.textTertiary, maxLines = 1)
             }
             BoardLookRules.progress(day)?.let { DoneBar(it) }
         }
@@ -1178,7 +1192,7 @@ private fun DayColumn(
         val byId = day.cards.associateBy { it.id }
         val shown = BoardHandRules.settleOrder(day.cards.map { it.id }, held).mapNotNull(byId::get)
         val openIds = day.openCards.map { it.id }
-        Column(verticalArrangement = Arrangement.spacedBy(MekaSpace.xs)) {
+        Column(verticalArrangement = Arrangement.spacedBy(if (LocalBoardDense.current) BoardDenseRules.CARD_GAP.dp else MekaSpace.xs)) {
             if (openIds.isEmpty()) GapSlot(gapAt != null, gapHeight)
             shown.forEach { card ->
                 val openIndex = openIds.indexOf(card.id)
@@ -1402,30 +1416,35 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
     val fade by animateFloatAsState(if (lifted) 1f else BoardPlannerRules.alpha(card), MekaMotion.appear(reduced), label = "card-fade")
     // Option B match: every card has its top line, the time chip (gold, or a quiet "Any time") and its length; in the
     // lists at the foot (slice 2) only when it has a time or a length, as the mockup's list cards are title and foot.
+    // The density pass: no "Any time" chip; a card with no time shows its length alone, with neither no top line.
     val top = if (LocalBoardInList.current) BoardMatchRules.listTop(card) else BoardMatchRules.top(card)
-    val timed = BoardMatchRules.timed(card)
     val foot = BoardPlannerRules.footChips(card)
+    val dense = LocalBoardDense.current
+    val pad = if (dense) BoardDenseRules.CARD_PAD.dp else MekaSpace.xs
     Column(
         Modifier.fillMaxWidth()
             .background(Meka.colors.surfaceRaised)
             .then(if (lifted) Modifier.border(1.5.dp, Meka.colors.accent, TILE) else Modifier)
             .alpha(fade)
             .testTag(PLANNER_CARD_TAG)
-            .padding(start = MekaSpace.xs, end = MekaSpace.xs, top = MekaSpace.xs, bottom = MekaSpace.xxs),
+            .padding(start = pad, end = pad, top = pad, bottom = if (dense) MekaSpace.xxs + 2.dp else MekaSpace.xxs),
     ) {
-        if (top != null) Row(Modifier.fillMaxWidth().padding(bottom = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
-            top.time?.let { TimeChip(it, if (timed) ChipTone.TASK else ChipTone.QUIET) }
+        if (top != null) Row(Modifier.fillMaxWidth().padding(bottom = if (dense) 6.dp else MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+            top.time?.let { TimeChip(it, ChipTone.TASK) }
             Spacer(Modifier.weight(1f))
-            top.duration?.let { Text(it, style = BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
+            top.duration?.let { Text(it, style = if (dense) BoardType.monoDense else BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
         }
         Text(
-            card.title, style = if (compact) MekaType.caption else MekaType.body, maxLines = BoardFitRules.titleLines(compact),
+            card.title, style = when { dense -> BoardType.titleDense; compact -> MekaType.caption; else -> MekaType.body }, maxLines = BoardFitRules.titleLines(compact),
             overflow = TextOverflow.Ellipsis, color = Meka.colors.textPrimary,
             textDecoration = if (card.done && BoardPlannerRules.STRIKE_DONE) TextDecoration.LineThrough else null,
         )
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             // The tick keeps its own target (Compose widens a small one's touch area to 48 dp past its edges).
-            TickTarget(card.done, card.title, onTick, column = FOOT_TICK, height = FOOT_TICK)
+            TickTarget(
+                card.done, card.title, onTick, column = if (dense) DENSE_TICK_COLUMN else FOOT_TICK, height = if (dense) DENSE_TICK_COLUMN else FOOT_TICK,
+                circle = if (dense) BoardDenseRules.TICK.dp else 20.dp,
+            )
             Row(Modifier.weight(1f), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 if (foot.isNotEmpty()) {
                     FlowRow(
@@ -1443,11 +1462,11 @@ private fun CardFace(card: BoardCard, lifted: Boolean, onTick: (() -> Unit)? = n
                 if (area != null || src != null) {
                     Row(Modifier.weight(1f, fill = false).padding(start = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
                         val dot = if (area != null) Meka.colors.areaTone(area) else Meka.colors.calendarTone(src!!.tone)
-                        Box(Modifier.size(8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
+                        Box(Modifier.size(if (dense) BoardDenseRules.DOT.dp else 8.dp).clip(CircleShape).background(dot).testTag(if (area != null) AREA_DOT_TAG else SOURCE_DOT_TAG))
                         if (words != null && BoardMatchRules.footWords(compact)) {
-                            Spacer(Modifier.width(MekaSpace.xxs))
+                            Spacer(Modifier.width(if (dense) 5.dp else MekaSpace.xxs))
                             Text(
-                                words, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                words, style = if (dense) BoardType.footDense else MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                 // Silent (the card's label says it); only the tag, for the UI tests.
                                 modifier = Modifier.clearAndSetSemantics { testTag = AREA_LABEL_TAG },
                             )
@@ -1465,15 +1484,16 @@ private enum class ChipTone { TASK, EVENT, QUIET }
 /** The time chip on a card's top line (the mockup's `.tm`): mono figures on a faint tint, gold, blue or quiet. */
 @Composable
 private fun TimeChip(time: String, tone: ChipTone = ChipTone.TASK) {
+    val dense = LocalBoardDense.current
     val ink = when (tone) {
         ChipTone.TASK -> Meka.colors.accent
         ChipTone.EVENT -> Meka.colors.calendar4
         ChipTone.QUIET -> Meka.colors.textTertiary
     }
     Text(
-        time, style = BoardType.monoSmall, color = ink, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(6.dp)).background(if (tone == ChipTone.QUIET) Meka.colors.surface else ink.copy(alpha = 0.16f))
-            .padding(horizontal = MekaSpace.xs, vertical = MekaSpace.xxs),
+        time, style = if (dense) BoardType.monoDense else BoardType.monoSmall, color = ink, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(if (dense) 4.dp else 6.dp)).background(if (tone == ChipTone.QUIET) Meka.colors.surface else ink.copy(alpha = 0.16f))
+            .padding(horizontal = if (dense) 6.dp else MekaSpace.xs, vertical = if (dense) 2.dp else MekaSpace.xxs),
     )
 }
 
@@ -1484,31 +1504,32 @@ private fun TimeChip(time: String, tone: ChipTone = ChipTone.TASK) {
 @Composable
 private fun EventCard(e: os.meka.core.domain.BoardEventCard, onOpen: () -> Unit) {
     val compact = LocalBoardCompact.current
+    val dense = LocalBoardDense.current
     Column(
         Modifier.fillMaxWidth().clip(TILE).background(Meka.colors.surfaceRaised)
             .clickable(role = Role.Button, onClick = onOpen)
             .testTag(EVENT_CARD_TAG)
             .clearAndSetSemantics { contentDescription = e.spoken; role = Role.Button; onClick { onOpen(); true } }
-            .padding(MekaSpace.xs),
+            .padding(if (dense) BoardDenseRules.CARD_PAD.dp else MekaSpace.xs),
     ) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TimeChip(e.time, ChipTone.EVENT)
             Spacer(Modifier.weight(1f))
-            e.duration?.let { Text(it, style = BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
+            e.duration?.let { Text(it, style = if (dense) BoardType.monoDense else BoardType.monoSmall, color = Meka.colors.textTertiary, maxLines = 1) }
         }
         Text(
-            e.title, style = if (compact) MekaType.caption else MekaType.body, color = Meka.colors.textPrimary,
+            e.title, style = when { dense -> BoardType.titleDense; compact -> MekaType.caption; else -> MekaType.body }, color = Meka.colors.textPrimary,
             maxLines = BoardFitRules.titleLines(compact), overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = MekaSpace.xs),
+            modifier = Modifier.padding(top = if (dense) 6.dp else MekaSpace.xs),
         )
-        Row(Modifier.fillMaxWidth().padding(top = MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().padding(top = if (dense) 6.dp else MekaSpace.xs), verticalAlignment = Alignment.CenterVertically) {
             Spacer(Modifier.weight(1f))
-            Box(Modifier.size(8.dp).clip(CircleShape).background(Meka.colors.calendarTone(e.tone)))
+            Box(Modifier.size(if (dense) BoardDenseRules.DOT.dp else 8.dp).clip(CircleShape).background(Meka.colors.calendarTone(e.tone)))
             // Match slice 4: the calendar's name on the narrow lanes too, cut short if it must be.
             if (BoardMatchRules.footWords(compact)) {
                 Spacer(Modifier.width(MekaSpace.xxs))
                 Text(
-                    e.calendar, style = MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    e.calendar, style = if (dense) BoardType.footDense else MekaType.micro, color = Meka.colors.textSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
             }
@@ -1518,6 +1539,8 @@ private fun EventCard(e: os.meka.core.domain.BoardEventCard, onOpen: () -> Unit)
 
 /** The tick's drawn square in a planner card's foot (dp); Compose widens its touch area to 48 dp past its edges. */
 private val FOOT_TICK = 24.dp
+/** The density pass: the tick's column on the unfolded board (its touch area still widened to 48 dp). */
+private val DENSE_TICK_COLUMN = 20.dp
 
 /** The colour dot on a Board card that came from mail, Needs you, Discord or School (slice 5, UI tests). */
 internal const val SOURCE_DOT_TAG = "board-source-dot"
@@ -1566,6 +1589,8 @@ private fun DoneBar(p: DayProgress) {
 private fun TickTarget(
     done: Boolean, title: String, onTick: (() -> Unit)?, column: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp,
     height: androidx.compose.ui.unit.Dp = BoardHandRules.CHECK_TARGET.dp,
+    /** The drawn circle (the density pass draws 18 dp on the unfolded board). */
+    circle: androidx.compose.ui.unit.Dp = 20.dp,
 ) {
     val reduced = Meka.reducedMotion
     val gold = Meka.colors.accent
@@ -1588,15 +1613,15 @@ private fun TickTarget(
     ) {
         if (spark.value < 1f) {
             Box(
-                Modifier.size(20.dp).graphicsLayer {
+                Modifier.size(circle).graphicsLayer {
                     val p = spark.value
                     scaleX = 0.4f + 2f * p; scaleY = 0.4f + 2f * p; alpha = 1f - p
                 }.border(2.dp, gold, CircleShape),
             )
         }
-        Box(Modifier.size(20.dp).clip(CircleShape).background(fill).border(1.5.dp, edge, CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(circle).clip(CircleShape).background(fill).border(1.5.dp, edge, CircleShape), contentAlignment = Alignment.Center) {
             if (done) {
-                Canvas(Modifier.size(12.dp)) {
+                Canvas(Modifier.size(circle * 0.6f)) {
                     val w = size.width
                     val path = Path().apply { moveTo(w * 0.21f, w * 0.52f); lineTo(w * 0.40f, w * 0.71f); lineTo(w * 0.79f, w * 0.29f) }
                     drawPath(path, ink, style = Stroke(width = 1.8.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
@@ -1852,7 +1877,7 @@ private fun BudgetPill(c: BoardCapacity, today: Boolean) {
         t.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1600), RepeatMode.Reverse), label = "budget-alpha").value
     } else 1f
     // Option B match: the mockup's mono figures in a 30 dp pill.
-    val figures = BoardType.mono
+    val figures = if (LocalBoardDense.current) BoardType.monoDense else BoardType.mono
     Column(
         Modifier.padding(top = MekaSpace.xs).heightIn(min = 30.dp).fillMaxWidth().clip(RoundedCornerShape(MekaRadius.s)).background(Meka.colors.surface)
             .border(1.dp, edge, RoundedCornerShape(MekaRadius.s))
@@ -2257,6 +2282,8 @@ private fun WideWeek(
             label = "board-week",
         ) { shown ->
             val w = board.weeks.getOrNull(shown) ?: return@AnimatedContent
+            // The density pass: the unfolded board in the mockup's proportions (BoardDenseRules).
+            CompositionLocalProvider(LocalBoardDense provides true) {
             Column(
                 Modifier.fillMaxSize().verticalScroll(scroll, enabled = !dragging)
                     .padding(horizontal = MekaSpace.gutter).padding(bottom = MekaSpace.m),
@@ -2269,7 +2296,8 @@ private fun WideWeek(
                 }
                 val weekend = BoardWeekLayoutRules.weekend(w)
                 if (weekend.isNotEmpty()) {
-                    val weekendWidths = BoardWeekLayoutRules.rowWidths(weekend, rowWidth.value, openedPast)
+                    // The density pass: Saturday and Sunday no wider than one and a half weekdays, left-aligned.
+                    val weekendWidths = BoardDenseRules.weekendWidths(weekend, rowWidth.value, weekdayWidths.maxOrNull() ?: 0f, openedPast)
                     Row(Modifier.fillMaxWidth().height(tiers.weekend.dp)) {
                         weekend.forEachIndexed { i, d -> key(d.epochDay) { day(d, weekendWidths[i].dp) } }
                     }
@@ -2282,6 +2310,7 @@ private fun WideWeek(
                         key(column.key) { list(w, column, Modifier.weight(1f).fillMaxHeight()) }
                     }
                 }
+            }
             }
         }
     }

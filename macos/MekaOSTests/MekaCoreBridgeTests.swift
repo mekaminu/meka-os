@@ -1679,6 +1679,12 @@ final class MekaCoreBridgeTests: XCTestCase {
         XCTAssertEqual(tl.panelDp(boardDp: 1280), 260, accuracy: 0.01)
         XCTAssertTrue(tl.opensByDefault(boardDp: 1280, spareDp: 48))
         XCTAssertEqual(tl.HIDE, "Hide timeline")
+        // The density pass: the mockup's proportions, no "Any time" chip, the weekend at most 1.5 weekdays wide.
+        let dense = BoardDenseRules.shared
+        XCTAssertTrue(dense.timelineByDefault(boardDp: 829, spareDp: 48))
+        XCTAssertEqual(dense.DATE_SP, 19, accuracy: 0.01)
+        XCTAssertEqual(dense.CARD_PAD, 10)
+        XCTAssertEqual(dense.WEEKEND_SCALE, 1.5, accuracy: 0.01)
         let block = DayBlock(key: "t:a", title: "Send the quote", startMinute: 750, endMinute: 795, kind: DayBlockKind.task,
                              done: false, taskId: "a", event: nil, tone: 0, column: 0, columns: 1)
         XCTAssertEqual(block.label, "12:30–13:15")

@@ -116,8 +116,8 @@ object BoardTimelineRules {
     const val NARROW_PANEL_DP = 200f
     /** Below this the panel is the narrow one. */
     const val WIDE_BOARD_DP = 1000f
-    /** The panel opens by itself only while each weekday column keeps at least this much width. */
-    const val MIN_COLUMN_DP = 120f
+    /** The panel opens by itself only while each weekday column keeps at least this much width (the density pass). */
+    const val MIN_COLUMN_DP = BoardDenseRules.MIN_COLUMN_DP
     const val EMPTY = "Nothing timed yet"
     const val TAB_CARDS = "Cards"
     const val TAB_TIMELINE = "Timeline"
@@ -133,8 +133,7 @@ object BoardTimelineRules {
      * Whether the panel starts open on a board [boardDp] wide (the gutters and gap [spareDp] aside): only when the five
      * weekday columns keep [MIN_COLUMN_DP] each beside it. He can open or close it either way.
      */
-    fun opensByDefault(boardDp: Float, spareDp: Float): Boolean =
-        (boardDp - spareDp - panelDp(boardDp)) / BoardWeekLayoutRules.WEEKDAYS >= MIN_COLUMN_DP
+    fun opensByDefault(boardDp: Float, spareDp: Float): Boolean = BoardDenseRules.timelineByDefault(boardDp, spareDp)
 
     /**
      * The timeline of [day] (its cards are the board's): [events] are the board's (already merged and filtered), [work]

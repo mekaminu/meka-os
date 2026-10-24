@@ -121,8 +121,10 @@ class BoardTimelineTest {
         assertEquals(200f, BoardTimelineRules.panelDp(840f))
         // The Mac's window: plenty of room.
         assertTrue(BoardTimelineRules.opensByDefault(1280f, 48f))
-        // The unfolded Fold (about 690 dp across): the columns would drop under 120 dp, so it starts closed.
+        // A board about 690 dp across: the columns would drop under 100 dp, so it starts closed.
         assertFalse(BoardTimelineRules.opensByDefault(690f, 48f))
+        // The density pass: the unfolded Fold (about 830 dp) opens it, the columns about 116 dp each.
+        assertTrue(BoardTimelineRules.opensByDefault(829f, 48f))
         assertTrue(BoardTimelineRules.opensByDefault(860f, 48f))
     }
 
